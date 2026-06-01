@@ -1,0 +1,134 @@
+{
+  "AlertsPage": {
+    "header": {
+      "title": "Alerts",
+      "description": "Unified alert console · rule-based alerts, correlated incidents, and security events"
+    },
+    "actions": {
+      "markAllRead": "Mark All Read",
+      "evaluateRules": "Evaluate Rules",
+      "correlate": "Correlate",
+      "manageRules": "Manage Rules"
+    },
+    "stats": {
+      "activeAlerts": "Active Alerts",
+      "critical": "Critical",
+      "firingRules": "Firing Rules",
+      "openIncidents": "Open Incidents",
+      "failedSecurity": "Failed Security"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "search": {
+      "placeholder": "Search alerts by title, description, source..."
+    },
+    "filters": {
+      "severityPlaceholder": "Severity",
+      "allSeverities": "All Severities",
+      "critical": "Critical",
+      "high": "High",
+      "warningMedium": "Warning / Medium",
+      "low": "Low",
+      "info": "Info",
+      "statusPlaceholder": "Status",
+      "allStatus": "All Status",
+      "active": "Active",
+      "resolved": "Resolved"
+    },
+    "bulk": {
+      "itemName": "alert",
+      "acknowledge": "Acknowledge",
+      "resolve": "Resolve",
+      "suppress1h": "Suppress (1h)"
+    },
+    "tabs": {
+      "all": "All ({{count}})",
+      "rules": "Rule Alerts ({{count}})",
+      "incidents": "Incidents ({{count}})",
+      "security": "Security ({{count}})"
+    },
+    "columns": {
+      "severity": "Severity",
+      "source": "Source",
+      "title": "Title",
+      "status": "Status",
+      "time": "Time"
+    },
+    "sources": {
+      "rule": "Alert Rule",
+      "incident": "Incident",
+      "security": "Security"
+    },
+    "empty": {
+      "title": "All Clear",
+      "filtered": "No alerts match your current filters.",
+      "none": "No alerts in this category."
+    },
+    "dataTable": {
+      "itemName": "alerts"
+    },
+    "engineCard": {
+      "title": "Alert Rules Engine",
+      "description": "Configure rules, notification channels (Email, Slack, SMS, Webhook), and severity thresholds",
+      "activeRules": "{{count}} active rules"
+    },
+    "detail": {
+      "status": "Status",
+      "source": "Source",
+      "description": "Description",
+      "suppress": "Suppress",
+      "investigate": "Investigate",
+      "acknowledge": "Acknowledge",
+      "resolve": "Resolve",
+      "close": "Close"
+    },
+    "suppress": {
+      "title": "Suppress Alert",
+      "durationLabel": "Duration (minutes)",
+      "reasonLabel": "Reason (optional)",
+      "reasonPlaceholder": "Maintenance window...",
+      "cancel": "Cancel",
+      "confirm": "Confirm Suppress"
+    },
+    "ruleDetail": {
+      "occurrences": "Occurrences",
+      "notificationsSent": "Notifications Sent",
+      "acknowledged": "Acknowledged",
+      "resolved": "Resolved",
+      "suppressedUntil": "Suppressed Until",
+      "tags": "Tags",
+      "details": "Details"
+    },
+    "incidentDetail": {
+      "eventCount": "Event Count",
+      "affectedDevices": "Affected Devices",
+      "assignedTo": "Assigned To",
+      "resolved": "Resolved",
+      "rootCause": "Root Cause",
+      "resolutionNotes": "Resolution Notes",
+      "tags": "Tags",
+      "linkedEvents": "Linked Events",
+      "noLinkedEvents": "No linked events.",
+      "unknownEventType": "unknown",
+      "pattern": "pattern: {{pattern}}"
+    },
+    "securityDetail": {
+      "eventType": "Event Type",
+      "status": "Status",
+      "success": "Success",
+      "failed": "Failed",
+      "userEmail": "User Email",
+      "ipAddress": "IP Address",
+      "userId": "User ID",
+      "timestamp": "Timestamp",
+      "riskScore": "Risk Score",
+      "additionalDetails": "Additional Details"
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "operationFailed": "Operation failed",
+      "securityReviewUnavailable": "Security event review isn't available yet"
+    }
+  }
+}

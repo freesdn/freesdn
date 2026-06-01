@@ -1,0 +1,166 @@
+{
+  "DiscoveryPage": {
+    "header": {
+      "title": "设备发现",
+      "subtitle": "扫描您的网络、查询控制器或派发代理探测以发现并接管设备"
+    },
+    "status": {
+      "live": "实时",
+      "connecting": "连接中..."
+    },
+    "tabs": {
+      "network": "网络扫描",
+      "controllers": "控制器",
+      "agent": "代理扫描",
+      "discovered": "已发现主机",
+      "topology": "拓扑"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败，结果可能不完整。",
+      "startDiscovery": "启动发现失败"
+    },
+    "ws": {
+      "discovering": "正在发现 {{target}}...",
+      "devices": "设备",
+      "inProgress": "进行中...",
+      "discoveryFailed": "发现失败"
+    },
+    "networkScan": {
+      "title": "网络扫描",
+      "description": "输入 IP 地址、CIDR 子网或范围以扫描您的网络",
+      "targetsPlaceholder": "例如 192.168.1.0/24、10.0.0.1-50",
+      "fillFromSite": "从站点填充...",
+      "scan": "扫描",
+      "cancel": "取消",
+      "wizard": "向导",
+      "probeServices": "探测服务",
+      "resolveHostnames": "解析主机名",
+      "ports": "端口："
+    },
+    "scanProgress": {
+      "scanning": "扫描中..."
+    },
+    "results": {
+      "discovered": "已发现",
+      "manageable": "可管理",
+      "status": "状态",
+      "duration": "耗时",
+      "devicesTitle": "已发现设备 ({{count}})",
+      "searchPlaceholder": "搜索结果...",
+      "select": "选择",
+      "selectedOne": "已选择 {{count}} 个设备",
+      "selectedOther": "已选择 {{count}} 个设备",
+      "bulkAdopt": "批量接管",
+      "emptyTitle": "未找到设备",
+      "emptyDescription": "未找到符合条件的设备。请尝试调整筛选条件或运行新的扫描。"
+    },
+    "ready": {
+      "title": "准备扫描",
+      "description": "在上方输入目标子网或 IP 范围并点击扫描。扫描器会探测端口、识别服务并对设备进行分类。"
+    },
+    "controllerStats": {
+      "totalFound": "共发现",
+      "newDevices": "新设备",
+      "updated": "已更新",
+      "failed": "失败"
+    },
+    "controllerDiscovery": {
+      "title": "控制器发现",
+      "description": "从已注册的控制器发现设备（Omada、Hikvision、OPNsense、pfSense、MikroTik）",
+      "allControllers": "所有控制器",
+      "searchPlaceholder": "搜索控制器...",
+      "discovering": "发现中...",
+      "startDiscovery": "开始发现",
+      "refresh": "刷新"
+    },
+    "controllersTable": {
+      "title": "控制器 ({{count}})",
+      "empty": "未找到控制器。请添加控制器以开始发现设备。",
+      "never": "从不",
+      "columns": {
+        "name": "名称",
+        "type": "类型",
+        "host": "主机",
+        "status": "状态",
+        "lastSync": "上次同步",
+        "actions": "操作"
+      }
+    },
+    "drivers": {
+      "title": "可用驱动 ({{count}})",
+      "description": "用于控制器发现的受支持设备驱动"
+    },
+    "agentScan": {
+      "title": "基于代理的深度扫描",
+      "description": "向远程代理派发扫描任务，进行 L2/L3 操作系统级探测，包括 ARP、NDP、LLDP、CDP 和被动监听。提供最完整的设备发现。",
+      "targetPlaceholder": "例如 192.168.1.0/24",
+      "agentLabel": "代理",
+      "agentPlaceholder": "选择一个在线代理...",
+      "noAgentsTitle": "没有在线代理",
+      "noAgentsDescription": "代理扫描需要一个在线代理。请为该站点安装并连接代理后重试。",
+      "dispatch": "派发代理扫描",
+      "inProgress": "代理扫描进行中",
+      "taskId": "任务 ID：{{id}}",
+      "l2Probes": {
+        "title": "L2 探测",
+        "description": "ARP 扫描、用于 IPv6 的 NDP、被动 MAC 地址表收集"
+      },
+      "protocolDiscovery": {
+        "title": "协议发现",
+        "description": "LLDP、CDP、mDNS、SSDP 和 UPnP 用于自动设备识别"
+      },
+      "deepFingerprint": {
+        "title": "深度指纹识别",
+        "description": "操作系统检测、服务版本探测、横幅抓取、TLS 证书检查"
+      }
+    },
+    "toast": {
+      "scanComplete": {
+        "title": "扫描完成",
+        "description": "已发现 {{count}} 个设备"
+      },
+      "scanStarted": {
+        "title": "扫描已开始"
+      },
+      "scanFailed": {
+        "title": "扫描失败",
+        "description": "无法启动扫描"
+      },
+      "scanCancelled": {
+        "title": "扫描已取消"
+      },
+      "cancelFailed": {
+        "title": "取消失败",
+        "description": "无法取消扫描"
+      },
+      "agentScanStarted": {
+        "title": "代理扫描已开始",
+        "description": "深度扫描已派发至代理"
+      },
+      "agentScanFailed": {
+        "title": "代理扫描失败",
+        "description": "无法派发代理扫描"
+      },
+      "agentScanComplete": {
+        "title": "代理扫描完成",
+        "description": "已发现的主机可在“已发现”选项卡中查看"
+      },
+      "bulkAdoptComplete": {
+        "title": "批量接管完成",
+        "description": "{{succeeded}} 个已接管，{{failed}} 个失败"
+      },
+      "bulkAdoptFailed": {
+        "title": "批量接管失败",
+        "description": "无法接管设备"
+      },
+      "noTargets": {
+        "title": "无目标",
+        "description": "请输入至少一个 IP、CIDR 或范围"
+      },
+      "deviceAdopted": {
+        "title": "设备已接管",
+        "description": "{{ip}} 已成功接管"
+      }
+    }
+  }
+}

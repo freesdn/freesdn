@@ -1,0 +1,1468 @@
+{
+  "BackupAgeTab": {
+    "thresholds": {
+      "12h": "12 小时",
+      "24h": "24 小时",
+      "48h": "48 小时",
+      "72h": "72 小时",
+      "7d": "7 天"
+    },
+    "age": {
+      "never": "从未"
+    },
+    "labels": {
+      "threshold": "阈值："
+    },
+    "summary": {
+      "totalVMs": "虚拟机总数",
+      "backedUpOk": "已备份（正常）",
+      "stale": "过期",
+      "neverBackedUp": "从未备份"
+    },
+    "table": {
+      "vmid": "VMID",
+      "name": "名称",
+      "node": "节点",
+      "lastBackup": "上次备份",
+      "age": "时长",
+      "status": "状态"
+    },
+    "status": {
+      "ok": "正常",
+      "stale": "过期",
+      "never": "从未"
+    },
+    "empty": {
+      "noVMs": "备份时长报告中未找到虚拟机。",
+      "noBackups": "未找到符合所选条件的备份。"
+    },
+    "errors": {
+      "loadBanner": "无法加载备份时长报告。下方数据可能已过期或为空。",
+      "loadReport": "无法加载备份时长报告",
+      "selectNodeStorage": "请选择节点和存储"
+    },
+    "actions": {
+      "retry": "重试",
+      "preview": "预览",
+      "pruneNow": "立即清理"
+    },
+    "prune": {
+      "title": "清理备份",
+      "node": "节点",
+      "selectNode": "选择节点",
+      "storage": "存储（支持备份）",
+      "selectStorage": "选择存储",
+      "keepLast": "保留最近",
+      "keepHourly": "保留每小时",
+      "keepDaily": "保留每日",
+      "keepWeekly": "保留每周",
+      "keepMonthly": "保留每月",
+      "keepYearly": "保留每年",
+      "vmidFilter": "VMID 筛选（可选）",
+      "allVMs": "所有虚拟机"
+    },
+    "dialog": {
+      "title": "清理备份",
+      "description": "此操作将永久删除 {{storage}}（节点 {{node}}）上所有不符合以下保留策略的备份。被清理的备份无法恢复。",
+      "confirmLabel": "清理备份"
+    },
+    "previewTable": {
+      "backup": "备份",
+      "vmid": "VMID",
+      "size": "大小",
+      "date": "日期",
+      "action": "操作",
+      "remove": "删除",
+      "keep": "保留"
+    },
+    "toast": {
+      "previewFailed": "预览失败",
+      "pruneCompleted": "清理完成",
+      "pruneFailed": "清理失败"
+    }
+  },
+  "CephTab": {
+    "status": {
+      "unknown": "未知",
+      "clusterStatus": "集群状态",
+      "osds": "OSD",
+      "osdSummary": "共 {{total}} 个 · {{up}} 个在线 · {{in}} 个加入",
+      "pgs": "PG",
+      "pools": "存储池",
+      "usage": "使用率"
+    },
+    "storage": {
+      "title": "存储",
+      "used": "已用",
+      "available": "可用",
+      "total": "总计",
+      "capacity": "容量"
+    },
+    "empty": {
+      "noNodes": {
+        "title": "没有可用节点",
+        "description": "添加节点以查询 Ceph 状态。"
+      },
+      "notAvailable": {
+        "title": "Ceph 不可用",
+        "description": "此集群似乎未配置 Ceph。请在 Proxmox 节点上安装并配置 Ceph 以启用分布式存储。"
+      },
+      "statusUnavailable": {
+        "title": "Ceph 状态不可用",
+        "description": "无法获取 Ceph 状态。此集群可能未配置 Ceph。"
+      }
+    },
+    "osds": {
+      "title": "OSD",
+      "up": "在线",
+      "down": "离线",
+      "yes": "是",
+      "no": "否",
+      "columns": {
+        "id": "ID",
+        "name": "名称",
+        "status": "状态",
+        "in": "加入",
+        "size": "大小",
+        "used": "已用",
+        "available": "可用",
+        "crushWeight": "Crush 权重"
+      }
+    },
+    "pools": {
+      "title": "存储池",
+      "columns": {
+        "name": "名称",
+        "size": "大小（副本数）",
+        "pgNum": "PG 数量",
+        "crushRule": "Crush 规则",
+        "usage": "使用率"
+      }
+    },
+    "monitors": {
+      "title": "监视器",
+      "columns": {
+        "name": "名称",
+        "address": "地址",
+        "rank": "排名"
+      }
+    }
+  },
+  "CertificatesTab": {
+    "title": "节点证书",
+    "status": {
+      "unknown": "未知",
+      "expired": "已过期",
+      "daysLeft": "剩余 {{days}} 天"
+    },
+    "error": {
+      "fetchFailed": "无法从一个或多个节点获取证书数据。"
+    },
+    "empty": {
+      "title": "未找到证书",
+      "description": "集群节点没有可用的证书数据。"
+    },
+    "columns": {
+      "node": "节点",
+      "subject": "主题",
+      "issuer": "颁发者",
+      "fingerprint": "指纹",
+      "validFrom": "生效时间",
+      "expires": "过期时间",
+      "status": "状态",
+      "actions": "操作"
+    },
+    "actions": {
+      "renew": "续订",
+      "upload": "上传",
+      "cancel": "取消",
+      "uploadCertificate": "上传证书"
+    },
+    "confirm": {
+      "renew": "在 {{node}} 上续订 ACME 证书？这可能会短暂中断 HTTPS。"
+    },
+    "dialog": {
+      "title": "上传自定义证书",
+      "description": "为节点 {{node}} 上传自定义 TLS 证书。",
+      "certLabel": "证书 (PEM)",
+      "keyLabel": "私钥 (PEM)",
+      "forceOverwrite": "强制覆盖",
+      "restartServices": "重启服务"
+    },
+    "toast": {
+      "renewStarted": {
+        "title": "ACME 续订已启动",
+        "description": "已在 {{node}} 上启动证书续订"
+      },
+      "renewFailed": {
+        "title": "续订失败",
+        "description": "无法启动 ACME 续订"
+      },
+      "uploadSuccess": {
+        "title": "证书已上传",
+        "description": "已在 {{node}} 上安装自定义证书"
+      },
+      "uploadFailed": {
+        "title": "上传失败",
+        "description": "无法上传自定义证书"
+      }
+    }
+  },
+  "ClusterLogTab": {
+    "title": "集群日志",
+    "entriesCount": "{{count}} 条记录",
+    "autoRefresh": "自动刷新：15 秒",
+    "error": {
+      "fetch": "无法获取集群日志记录。"
+    },
+    "empty": {
+      "title": "无日志记录",
+      "description": "未找到集群日志记录。"
+    },
+    "columns": {
+      "time": "时间",
+      "node": "节点",
+      "severity": "严重程度",
+      "tag": "标签",
+      "user": "用户",
+      "message": "消息"
+    },
+    "severity": {
+      "error": "错误",
+      "warning": "警告",
+      "info": "信息"
+    }
+  },
+  "AddHypervisorDialog": {
+    "title": "添加虚拟机管理程序",
+    "description": "连接 Proxmox VE 服务器以管理虚拟机和容器。",
+    "submitLabel": "添加虚拟机管理程序",
+    "proxmoxVe": "Proxmox VE",
+    "tokenIdFormatPrefix": "格式：",
+    "fields": {
+      "name": "名称 *",
+      "site": "站点 *",
+      "host": "主机地址 *",
+      "port": "端口 *",
+      "authMethod": "身份验证方式",
+      "tokenId": "API 令牌 ID *",
+      "tokenSecret": "API 令牌密钥 *",
+      "username": "用户名 *",
+      "password": "密码 *",
+      "realm": "认证域",
+      "useSsl": "使用 SSL/TLS",
+      "useSslHint": "使用 HTTPS 连接",
+      "verifySsl": "验证 SSL 证书",
+      "verifySslHint": "对于自签名证书请禁用（Proxmox 常见）"
+    },
+    "placeholders": {
+      "name": "例如：生产 Proxmox 集群",
+      "site": "选择站点",
+      "host": "例如：192.168.1.100 或 pve.local",
+      "tokenId": "例如：root@pam!freesdn"
+    },
+    "authModes": {
+      "token": "API 令牌",
+      "password": "用户名 / 密码"
+    },
+    "authDescriptions": {
+      "token": "推荐使用 API 令牌。可在 Proxmox → 数据中心 → 权限 → API 令牌 中创建。",
+      "password": "使用 Proxmox 用户账户。安全性低于 API 令牌。"
+    },
+    "realms": {
+      "pam": "Linux PAM (pam)",
+      "pve": "Proxmox VE (pve)",
+      "ldap": "LDAP",
+      "ad": "Active Directory"
+    },
+    "test": {
+      "heading": "连接测试",
+      "hint": "添加前验证连通性",
+      "button": "测试连接",
+      "testing": "测试中...",
+      "successful": "连接成功",
+      "failedLabel": "连接失败",
+      "failed": "连接测试失败",
+      "latency": "延迟",
+      "latencyValue": "{{value}} 毫秒",
+      "version": "版本"
+    },
+    "validation": {
+      "nameRequired": "名称为必填项",
+      "siteRequired": "请选择站点",
+      "hostRequired": "主机地址为必填项",
+      "tokenIdRequired": "API 令牌 ID 为必填项",
+      "tokenSecretRequired": "API 令牌密钥为必填项",
+      "usernameRequired": "用户名为必填项",
+      "passwordRequired": "密码为必填项",
+      "tokenIdAndSecretRequired": "需要 API 令牌 ID 和密钥",
+      "usernameAndPasswordRequired": "需要用户名和密码"
+    }
+  },
+  "BackupJobDialog": {
+    "validation": {
+      "timeRequired": "请填写时间",
+      "storageRequired": "请填写存储"
+    },
+    "toasts": {
+      "created": "已创建备份任务",
+      "updated": "已更新备份任务"
+    },
+    "title": {
+      "edit": "编辑备份任务",
+      "create": "创建备份任务"
+    },
+    "description": {
+      "edit": "正在编辑备份任务 {{id}}",
+      "create": "配置一个新的计划备份任务。"
+    },
+    "submit": {
+      "update": "更新任务",
+      "create": "创建任务"
+    },
+    "days": {
+      "mon": "周一",
+      "tue": "周二",
+      "wed": "周三",
+      "thu": "周四",
+      "fri": "周五",
+      "sat": "周六",
+      "sun": "周日"
+    },
+    "fields": {
+      "day": {
+        "label": "日期",
+        "placeholder": "日期",
+        "everyDay": "每天"
+      },
+      "time": {
+        "label": "时间"
+      },
+      "storage": {
+        "label": "存储"
+      },
+      "vmid": {
+        "label": "VM ID（可选）",
+        "placeholder": "100,101,200（留空 = 全部）",
+        "description": "以逗号分隔的 VMID。留空则备份全部。"
+      },
+      "node": {
+        "label": "节点（可选）",
+        "allNodes": "所有节点"
+      },
+      "mode": {
+        "label": "模式",
+        "snapshot": "快照",
+        "suspend": "挂起",
+        "stop": "停止"
+      },
+      "compress": {
+        "label": "压缩",
+        "none": "无"
+      },
+      "mailto": {
+        "label": "邮件通知至（可选）"
+      },
+      "enabled": {
+        "label": "已启用"
+      }
+    }
+  },
+  "BulkActionBar": {
+    "selectedCount": "已选择 {{count}} 项",
+    "actions": {
+      "start": "启动",
+      "shutdown": "关机",
+      "forceStop": "强制停止",
+      "reboot": "重启",
+      "migrate": "迁移",
+      "delete": "删除"
+    },
+    "confirm": {
+      "start": "启动 {{count}} 个 VM/CT？",
+      "shutdown": "关闭 {{count}} 个 VM/CT？",
+      "stop": "强制停止 {{count}} 个 VM/CT？",
+      "reboot": "重启 {{count}} 个 VM/CT？",
+      "delete": "删除 {{count}} 个 VM/CT？此操作无法撤销。请确保全部已停止。"
+    },
+    "toast": {
+      "actionCompleteTitle": "批量操作完成",
+      "actionCompleteDescription": "{{succeeded}} 成功，{{failed}} 失败",
+      "actionFailedTitle": "批量操作失败",
+      "migrationStarted": "已为 {{count}} 个 VM 启动迁移"
+    },
+    "results": {
+      "title": "批量操作结果",
+      "close": "关闭"
+    },
+    "migrate": {
+      "title": "批量迁移 {{count}} 个 VM/CT",
+      "description": "将所选项迁移到目标节点。",
+      "submit": "迁移 {{count}} 项",
+      "targetNodeLabel": "目标节点",
+      "targetNodePlaceholder": "选择目标节点",
+      "targetNodeRequired": "请选择目标节点",
+      "onlineLabel": "在线迁移（实时）"
+    }
+  },
+  "EditConfigDialog": {
+    "vm": "VM",
+    "ct": "CT",
+    "dialogDescription": "在 {{node}} 上编辑配置。更改可能需要重启才能生效。",
+    "submit": {
+      "saving": "保存中...",
+      "save": "保存更改"
+    },
+    "toast": {
+      "updated": "配置已更新",
+      "noChanges": "没有可保存的更改",
+      "updateFailed": "更新失败"
+    },
+    "tabs": {
+      "general": "常规",
+      "disks": "磁盘 ({{count}})",
+      "network": "网络 ({{count}})",
+      "guestAgent": "客户机代理"
+    },
+    "fields": {
+      "cpuCores": "CPU 核心数",
+      "memory": "内存 (MB)",
+      "memoryGb": "{{gb}} GB",
+      "balloon": "气球内存 (MB)",
+      "balloonHelp": "0 = 禁用。KSM/气球技术允许动态内存分配。",
+      "tags": "标签",
+      "tagsHelp": "以分号分隔的标签",
+      "description": "描述",
+      "descriptionPlaceholder": "VM 描述...",
+      "startOnBoot": "开机启动"
+    },
+    "disks": {
+      "empty": "未找到磁盘配置。",
+      "disk": "磁盘",
+      "configuration": "配置"
+    },
+    "network": {
+      "empty": "未配置网络接口。",
+      "interface": "接口",
+      "configuration": "配置"
+    },
+    "agent": {
+      "unavailable": "客户机代理不可用。请在 VM 内安装 qemu-guest-agent。",
+      "hostname": "主机名",
+      "os": "操作系统",
+      "interface": "接口",
+      "mac": "MAC",
+      "ipAddresses": "IP 地址"
+    }
+  },
+  "UploadDialog": {
+    "title": "上传到存储",
+    "description": "将 ISO 镜像或容器模板上传到 {{node}} 上的 {{storage}}",
+    "toast": {
+      "startedTitle": "上传已开始",
+      "startedDescription": "正在将 {{fileName}} 上传到 {{storage}}",
+      "failedTitle": "上传失败"
+    },
+    "submit": {
+      "upload": "上传",
+      "uploading": "上传中..."
+    },
+    "errors": {
+      "noFileSelected": "未选择文件"
+    },
+    "fields": {
+      "contentType": "内容类型",
+      "file": "文件"
+    },
+    "contentTypes": {
+      "iso": "ISO 镜像",
+      "vztmpl": "容器模板"
+    },
+    "dropzone": {
+      "selectFile": "点击选择文件",
+      "isoHint": ".iso、.img 文件",
+      "tmplHint": ".tar.gz、.tar.xz、.tar.zst 文件"
+    }
+  },
+  "GuestDetailDrawer": {
+    "header": {
+      "vmFallback": "VM {{vmid}}",
+      "ct": "CT",
+      "vm": "VM",
+      "nodeUptime": "节点：{{node}} · 运行时间：{{uptime}}",
+      "ipSuffix": " · IP：{{ip}}"
+    },
+    "tabs": {
+      "overview": "概览",
+      "firewall": "防火墙",
+      "config": "配置",
+      "cloudInit": "Cloud-Init"
+    },
+    "actions": {
+      "start": "启动",
+      "shutdown": "关机",
+      "reboot": "重启"
+    },
+    "confirms": {
+      "shutdown": "关闭 {{kind}} {{vmid}}？",
+      "reboot": "重启 {{kind}} {{vmid}}？",
+      "deleteRule": "删除防火墙规则 #{{pos}}？",
+      "regenerate": "重新生成 Cloud-Init 驱动？这将使用当前设置重新创建驱动镜像。"
+    },
+    "overview": {
+      "cpu": "CPU",
+      "cpuValue": "{{percent}}%，共 {{cores}} 个核心",
+      "memory": "内存",
+      "memoryValue": "{{used}} MB / {{total}} MB",
+      "disk": "磁盘",
+      "diskValue": "{{used}} GB / {{total}} GB",
+      "node": "节点",
+      "uptime": "运行时间：{{uptime}}",
+      "networkIn": "网络入流量",
+      "networkOut": "网络出流量",
+      "ipAddress": "IP 地址",
+      "osType": "操作系统类型",
+      "haState": "HA 状态",
+      "lock": "锁定",
+      "tags": "标签"
+    },
+    "firewall": {
+      "heading": "客机防火墙规则",
+      "addRule": "添加规则",
+      "cancel": "取消",
+      "action": "动作",
+      "direction": "方向",
+      "inbound": "入站",
+      "outbound": "出站",
+      "protocol": "协议",
+      "destPort": "目标端口",
+      "sourceOptional": "源（可选）",
+      "commentOptional": "备注（可选）",
+      "commentPlaceholder": "允许 HTTP",
+      "createRule": "创建规则",
+      "loadError": "无法加载防火墙规则。",
+      "empty": "此客机未配置防火墙规则。",
+      "colDir": "方向",
+      "colAction": "动作",
+      "colProto": "协议",
+      "colSource": "源",
+      "colDport": "目标端口",
+      "colComment": "备注"
+    },
+    "config": {
+      "heading": "配置",
+      "loadError": "无法加载配置。",
+      "empty": "没有可用的配置数据。",
+      "colKey": "键",
+      "colValue": "值",
+      "pending": "待处理"
+    },
+    "cloudInit": {
+      "heading": "Cloud-Init 配置",
+      "loadError": "无法加载 Cloud-Init 配置。",
+      "user": "用户",
+      "password": "密码",
+      "passwordPlaceholder": "留空以保留当前值, 输入新值以更改",
+      "sshKeys": "SSH 公钥",
+      "sshKeysPlaceholder": "留空以保留当前值, 粘贴新钥匠以替换",
+      "ipConfig": "IP 配置（ipconfig0）",
+      "ipConfigPlaceholder": "留空以保留, 或：ip=dhcp / ip=10.0.0.1/24,gw=10.0.0.1",
+      "nameserver": "DNS 服务器",
+      "searchDomain": "搜索域",
+      "save": "保存",
+      "regenerateDrive": "重新生成驱动"
+    },
+    "toasts": {
+      "cloudInitSaved": "Cloud-Init 配置已保存",
+      "saveFailed": "保存失败",
+      "cloudInitRegenerated": "Cloud-Init 驱动已重新生成",
+      "regenerateFailed": "重新生成失败",
+      "ruleCreated": "防火墙规则已创建",
+      "createRuleFailed": "创建规则失败",
+      "ruleDeleted": "防火墙规则已删除",
+      "deleteRuleFailed": "删除规则失败"
+    }
+  },
+  "KioskMode": {
+    "header": {
+      "title": "FreeSDN Hypervisor"
+    },
+    "error": {
+      "connectionLost": "连接已断开 · 仪表板数据不可用",
+      "autoRetrying": "每 10 秒自动重试..."
+    },
+    "metrics": {
+      "cpuUsage": "CPU 使用率",
+      "memoryUsage": "内存使用率",
+      "storageUsage": "存储使用率",
+      "cores": "{{count}} 个核心",
+      "total": "共 {{value}}",
+      "nodeStatus": "节点状态",
+      "nodesOnline": "{{online}} / {{total}} 在线",
+      "virtualMachines": "虚拟机",
+      "containers": "容器",
+      "running": "运行中"
+    }
+  },
+  "MonitoringTab": {
+    "noData": "暂无数据",
+    "errorState": "无法加载监控数据。节点或 VM 可能无法访问。",
+    "timeframes": {
+      "hour": "最近一小时",
+      "day": "最近一天",
+      "week": "最近一周",
+      "month": "最近一个月"
+    },
+    "controls": {
+      "timeframe": "时间范围：",
+      "node": "节点：",
+      "vmCt": "VM/CT：",
+      "nodeMetricsPlaceholder": "节点指标",
+      "nodeOption": "节点：{{node}}"
+    },
+    "charts": {
+      "cpu": {
+        "title": "CPU 使用率",
+        "cpu": "CPU"
+      },
+      "memory": {
+        "title": "内存使用",
+        "used": "已用",
+        "total": "总计"
+      },
+      "network": {
+        "title": "网络 I/O",
+        "in": "入站",
+        "out": "出站"
+      },
+      "disk": {
+        "title": "磁盘 I/O",
+        "read": "读取",
+        "write": "写入"
+      }
+    },
+    "alerts": {
+      "title": "告警设置",
+      "cpuThreshold": "CPU 阈值 (%)",
+      "memoryThreshold": "内存阈值 (%)",
+      "fireAfter": "连续 N 次超限后触发",
+      "resolveAfter": "连续 N 次正常后解除",
+      "hysteresisInfo": "迟滞机制可防止告警频繁抖动。仅当阈值连续 N 次读数被突破时才触发告警，并仅在连续 N 次正常读数后才解除。"
+    }
+  },
+  "PBSTab": {
+    "toast": {
+      "pruneStarted": {
+        "title": "已开始清理",
+        "description": "备份清理已启动。"
+      },
+      "pruneFailed": {
+        "title": "清理失败",
+        "description": "清理备份失败"
+      }
+    },
+    "storageError": {
+      "prefix": "加载存储池失败：",
+      "unknown": "未知错误",
+      "suffix": "下方显示的备份配置可能不完整。"
+    },
+    "controls": {
+      "nodeLabel": "节点：",
+      "nodePlaceholder": "选择节点",
+      "storageLabel": "存储：",
+      "storagePlaceholder": "选择存储",
+      "noBackupStorage": "未找到备份存储",
+      "vmidLabel": "VMID：",
+      "vmidPlaceholder": "全部"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "pruneBackups": "清理备份",
+      "cancel": "取消",
+      "pruneNow": "立即清理"
+    },
+    "summary": {
+      "totalBackups": "备份总数",
+      "keep": "保留",
+      "remove": "移除"
+    },
+    "empty": {
+      "noStorage": {
+        "title": "未找到备份存储",
+        "description": "此节点未配置 PBS 或支持备份的存储。请添加 Proxmox Backup Server 存储以启用备份管理。"
+      },
+      "notPbs": {
+        "title": "此存储不支持清理",
+        "description": "不支持清理预览。仅 Proxmox Backup Server (PBS) 存储支持备份清理。",
+        "noPbsConfigured": "此节点上未配置 PBS 存储。"
+      },
+      "noStorageOnNode": "此节点上未找到支持备份的存储。",
+      "noSnapshots": "此存储中未找到备份快照。"
+    },
+    "pruneError": "加载清理预览失败。该存储可能不支持清理操作。",
+    "table": {
+      "title": "备份清理预览",
+      "vmid": "VMID",
+      "type": "类型",
+      "created": "创建时间",
+      "size": "大小",
+      "mark": "标记"
+    },
+    "mark": {
+      "keep": "保留",
+      "remove": "移除"
+    },
+    "dialog": {
+      "title": "清理备份",
+      "descriptionPrefix": "配置保留策略并清理以下存储上的备份：",
+      "descriptionSuffix": "此操作将永久删除标记为移除的备份。",
+      "keepLast": "保留最近",
+      "keepDaily": "保留每日",
+      "keepWeekly": "保留每周",
+      "keepMonthly": "保留每月",
+      "filteringToVmid": "筛选 VMID："
+    }
+  },
+  "ReplicationTab": {
+    "title": "复制任务",
+    "jobCount": {
+      "one": "{{count}} 个任务",
+      "other": "{{count}} 个任务"
+    },
+    "status": {
+      "disabled": "已禁用",
+      "error": "错误",
+      "degraded": "降级",
+      "ok": "正常"
+    },
+    "columns": {
+      "id": "ID",
+      "type": "类型",
+      "source": "源",
+      "target": "目标",
+      "guest": "虚拟机",
+      "schedule": "计划",
+      "rate": "速率",
+      "status": "状态",
+      "lastSync": "上次同步"
+    },
+    "empty": {
+      "title": "无复制任务",
+      "description": "此集群未配置任何复制任务。"
+    },
+    "log": {
+      "empty": "无可用日志条目。"
+    },
+    "error": {
+      "fetch": "无法从集群获取复制数据。"
+    }
+  },
+  "SdnTab": {
+    "heading": "软件定义网络",
+    "errorState": {
+      "message": "无法从集群获取 SDN 数据。"
+    },
+    "common": {
+      "yes": "是",
+      "no": "否"
+    },
+    "actions": {
+      "createZone": "创建区域",
+      "createVnet": "创建 VNet",
+      "applySdn": "应用 SDN",
+      "cancel": "取消"
+    },
+    "confirms": {
+      "applySdn": "应用 SDN 配置？这将更新整个集群的网络配置。",
+      "deleteZone": "删除区域 {{zone}}？",
+      "deleteVnet": "删除 VNet {{vnet}}？"
+    },
+    "toasts": {
+      "sdnApplied": {
+        "title": "已应用 SDN",
+        "description": "SDN 配置已应用到集群。"
+      },
+      "applyFailed": {
+        "title": "应用失败",
+        "description": "无法应用 SDN 配置"
+      },
+      "zoneCreated": {
+        "title": "区域已创建"
+      },
+      "vnetCreated": {
+        "title": "VNet 已创建"
+      },
+      "createFailed": {
+        "title": "创建失败"
+      },
+      "createZoneFailed": {
+        "description": "无法创建 SDN 区域"
+      },
+      "createVnetFailed": {
+        "description": "无法创建 SDN VNet"
+      },
+      "zoneDeleted": {
+        "title": "区域已删除"
+      },
+      "vnetDeleted": {
+        "title": "VNet 已删除"
+      },
+      "deleteFailed": {
+        "title": "删除失败"
+      }
+    },
+    "zones": {
+      "title": "区域",
+      "empty": {
+        "title": "无 SDN 区域",
+        "description": "此集群未配置 SDN 区域。"
+      },
+      "columns": {
+        "zone": "区域",
+        "type": "类型",
+        "nodes": "节点",
+        "mtu": "MTU",
+        "bridge": "网桥",
+        "state": "状态",
+        "actions": "操作"
+      }
+    },
+    "vnets": {
+      "title": "VNets",
+      "empty": {
+        "title": "无 SDN VNet",
+        "description": "此集群未配置 SDN VNet。"
+      },
+      "columns": {
+        "vnet": "VNet",
+        "zone": "区域",
+        "tag": "标签",
+        "vlanAware": "VLAN 感知",
+        "state": "状态",
+        "actions": "操作"
+      }
+    },
+    "controllers": {
+      "title": "SDN 控制器",
+      "empty": {
+        "title": "无 SDN 控制器",
+        "description": "此集群未配置 SDN 控制器。"
+      },
+      "columns": {
+        "controller": "控制器",
+        "type": "类型",
+        "node": "节点",
+        "state": "状态"
+      }
+    },
+    "zoneDialog": {
+      "title": "创建 SDN 区域",
+      "description": "为集群创建新的 SDN 区域。",
+      "fields": {
+        "name": "区域名称",
+        "type": "类型",
+        "nodes": "节点（以逗号分隔，可选）",
+        "bridge": "网桥（可选）",
+        "mtu": "MTU（可选）"
+      }
+    },
+    "vnetDialog": {
+      "title": "创建 SDN VNet",
+      "description": "在 SDN 区域中创建新的虚拟网络。",
+      "fields": {
+        "name": "VNet 名称",
+        "zone": "区域",
+        "zonePlaceholder": "选择区域",
+        "alias": "别名（可选）",
+        "tag": "VLAN 标签（可选）",
+        "vlanAware": "VLAN 感知"
+      }
+    }
+  },
+  "SubscriptionsTab": {
+    "status": {
+      "active": "有效",
+      "expired": "已过期",
+      "none": "无订阅",
+      "unknown": "未知"
+    },
+    "errors": {
+      "fetchFailed": "无法从一个或多个节点获取订阅数据。",
+      "partialBanner": "一个或多个订阅查询失败, 下方的计数可能不完整。受影响的节点在表中显示为“未知”状态。"
+    },
+    "table": {
+      "title": "节点订阅",
+      "node": "节点",
+      "status": "状态",
+      "level": "级别",
+      "product": "产品",
+      "serverId": "服务器 ID",
+      "key": "密钥",
+      "nextDueDate": "下次到期日期"
+    }
+  },
+  "TemplatesTab": {
+    "actions": {
+      "deploy": "部署",
+      "deploying": "正在部署...",
+      "cancel": "取消"
+    },
+    "error": {
+      "fetch": "无法从集群获取模板数据。"
+    },
+    "empty": {
+      "title": "未找到模板",
+      "description": "将 VM 或容器转换为模板后即可在此使用。右键点击任意已停止的 VM/CT 并选择“转换为模板”。"
+    },
+    "card": {
+      "fallbackName": "模板 {{vmid}}",
+      "cores": "{{count}} 核",
+      "memoryMb": "{{value}} MB",
+      "diskGb": "{{value}} GB"
+    },
+    "dialog": {
+      "title": "从模板部署",
+      "description": "将“{{name}}”(#{{vmid}})克隆为新的{{target}}",
+      "targetContainer": "容器",
+      "targetVm": "VM",
+      "newVmid": "新 VMID",
+      "nextPlaceholder": "下一个：{{vmid}}",
+      "name": "名称",
+      "targetNode": "目标节点",
+      "sameNode": "同一节点",
+      "fullClone": "完整克隆(独立副本)"
+    },
+    "toast": {
+      "deployStarted": {
+        "title": "部署已开始",
+        "description": "正在克隆模板 {{name}}"
+      },
+      "deployFailed": {
+        "title": "部署失败"
+      }
+    }
+  },
+  "UpdatesTab": {
+    "toast": {
+      "refreshed": {
+        "title": "APT 已刷新",
+        "description": "已在 {{node}} 上刷新软件包索引"
+      },
+      "refreshFailed": {
+        "title": "刷新失败",
+        "description": "无法在 {{node}} 上刷新 APT"
+      }
+    },
+    "error": {
+      "fetch": "无法从一个或多个节点获取 APT 更新数据。"
+    },
+    "summary": {
+      "title": "更新摘要",
+      "updatesAvailable": "个可用更新",
+      "ofNodes": "共 {{total}} 个节点"
+    },
+    "actions": {
+      "refreshNode": "刷新 {{node}}"
+    },
+    "empty": {
+      "upToDate": "所有节点均为最新。"
+    },
+    "table": {
+      "node": "节点",
+      "package": "软件包",
+      "currentVersion": "当前版本",
+      "availableVersion": "可用版本",
+      "origin": "来源"
+    }
+  },
+  "HypervisorPage": {
+    "header": {
+      "title": "虚拟化平台",
+      "subtitle": "Proxmox VE 集群管理"
+    },
+    "selectCluster": "选择集群",
+    "noController": {
+      "title": "未找到 Proxmox 虚拟化平台",
+      "description": "添加 Proxmox VE 虚拟化平台以管理虚拟机和容器。"
+    },
+    "common": {
+      "unknown": "未知",
+      "unknownLower": "未知",
+      "all": "全部",
+      "yes": "是",
+      "no": "否",
+      "nodeLabel": "节点：",
+      "virtualMachines": "虚拟机",
+      "containers": "容器",
+      "containerLower": "容器"
+    },
+    "actions": {
+      "create": "创建",
+      "newVm": "新建虚拟机",
+      "newContainer": "新建容器",
+      "kiosk": "信息亭",
+      "kioskTooltip": "信息亭模式（NOC 显示）",
+      "addHypervisor": "添加虚拟化平台",
+      "refresh": "刷新",
+      "edit": "编辑",
+      "delete": "删除",
+      "cancel": "取消",
+      "close": "关闭",
+      "creating": "正在创建..."
+    },
+    "tabs": {
+      "fleet": "集群总览",
+      "dashboard": "仪表板",
+      "nodes": "节点",
+      "vms": "虚拟机",
+      "containers": "容器",
+      "storage": "存储",
+      "tasks": "任务",
+      "backup": "备份",
+      "firewall": "防火墙",
+      "ha": "HA",
+      "pools": "资源池",
+      "templates": "模板",
+      "monitoring": "监控",
+      "updates": "更新",
+      "certificates": "证书",
+      "subscriptions": "订阅",
+      "sdn": "SDN",
+      "replication": "复制",
+      "clusterLog": "集群日志",
+      "ceph": "Ceph",
+      "backupAge": "备份时效",
+      "pbs": "PBS"
+    },
+    "stats": {
+      "clusters": "集群",
+      "nodes": "节点",
+      "vms": "VM",
+      "containers": "容器",
+      "cpu": "CPU",
+      "memory": "内存",
+      "storage": "存储",
+      "cluster": "集群",
+      "ha": "HA",
+      "coresCount": "{{count}} 核",
+      "quorate": "已达到法定人数",
+      "noQuorum": "无法定人数",
+      "active": "活动",
+      "inactive": "非活动"
+    },
+    "taskStatus": {
+      "completed": "已完成",
+      "running": "运行中",
+      "warning": "警告",
+      "error": "错误"
+    },
+    "tableHeaders": {
+      "name": "名称",
+      "type": "类型",
+      "status": "状态",
+      "node": "节点",
+      "disk": "磁盘",
+      "tags": "标签",
+      "actions": "操作",
+      "description": "描述",
+      "size": "大小",
+      "storage": "存储"
+    },
+    "fleet": {
+      "loadError": "加载集群仪表板失败",
+      "emptyTitle": "没有 Proxmox 集群",
+      "emptyDescription": "添加 Proxmox 控制器以查看集群总览。",
+      "taskStatistics": "任务统计",
+      "nodeCount": "{{count}} 个节点",
+      "noQuorumSuffix": "（无法定人数！）",
+      "vmsCts": "VM/CT"
+    },
+    "dashboard": {
+      "loadError": "加载仪表板失败",
+      "cpuUsage": "CPU 使用率",
+      "memoryUsage": "内存使用率",
+      "storageUsage": "存储使用率"
+    },
+    "nodes": {
+      "loadError": "加载节点失败",
+      "emptyTitle": "未找到节点",
+      "unknownCpu": "未知 CPU",
+      "reboot": "重启",
+      "shutdown": "关机",
+      "cpuCores": "CPU（{{count}} 核）",
+      "uptime": "运行时间",
+      "guests": "客户机",
+      "version": "版本",
+      "memoryByGuest": "按客户机的内存（{{count}} 个运行中）",
+      "rebootConfirm": {
+        "title": "重启节点 {{node}}",
+        "description": "重启节点“{{node}}”会重启其上运行的每个虚拟机和容器。操作员应已配置 HA 故障转移或维护窗口。",
+        "confirmLabel": "重启节点"
+      },
+      "shutdownConfirm": {
+        "title": "关闭节点 {{node}}",
+        "description": "关闭节点“{{node}}”会停止其上的所有虚拟机和容器。该节点将需要手动开机（或带外 IPMI）才能恢复。继续前请确认已配置 HA 故障转移。",
+        "confirmLabel": "关闭节点"
+      }
+    },
+    "nodeDetail": {
+      "overview": "概览",
+      "services": "服务",
+      "disks": "磁盘",
+      "network": "网络",
+      "sensors": "传感器",
+      "processor": "处理器",
+      "rootFilesystem": "根文件系统",
+      "coresUsed": "{{count}} 核 · 已用 {{percent}}%",
+      "usedPercent": "已用 {{value}}（{{percent}}%）",
+      "vmsRunning": "{{total}} 个 VM · {{running}} 个运行中",
+      "ctsRunning": "{{total}} 个 CT · {{running}} 个运行中",
+      "pveVersion": "PVE 版本",
+      "topGuestsByMemory": "按内存排名的客户机",
+      "noServices": "无可用服务数据。",
+      "service": "服务",
+      "state": "状态",
+      "noDisks": "无可用磁盘信息。",
+      "device": "设备",
+      "model": "型号",
+      "serial": "序列号",
+      "health": "健康状况",
+      "noSmart": "此磁盘无可用 SMART 属性。",
+      "smartAttributes": "SMART 属性",
+      "attribute": "属性",
+      "value": "值",
+      "worst": "最差",
+      "threshold": "阈值",
+      "raw": "原始值",
+      "noInterfaces": "未找到网络接口。",
+      "interface": "接口",
+      "address": "地址",
+      "gateway": "网关",
+      "bridgePorts": "桥接端口",
+      "active": "活动",
+      "noGuestsOnNode": "此节点上没有{{type}}",
+      "noSensors": "此节点无可用传感器数据。",
+      "sensorIndex": "传感器 {{index}}"
+    },
+    "vmTable": {
+      "loadError": "加载{{label}}失败",
+      "emptyTitle": "未找到{{label}}",
+      "deleteConfirm": {
+        "title": "删除 {{kind}} {{vmid}}",
+        "description": "这将永久删除节点 {{node}} 上的 {{kind}} {{vmid}}（{{name}}），包括其所有磁盘。此操作无法撤销。",
+        "confirmLabel": "删除 {{kind}}"
+      }
+    },
+    "vmActions": {
+      "start": "启动",
+      "shutdown": "关机",
+      "reboot": "重启",
+      "suspend": "挂起",
+      "forceStop": "强制停止",
+      "forceStopMenu": "强制停止",
+      "resume": "恢复",
+      "createSnapshot": "创建快照",
+      "snapshots": "快照",
+      "clone": "克隆",
+      "migrate": "迁移",
+      "resizeDisk": "调整磁盘大小",
+      "backupNow": "立即备份",
+      "editConfig": "编辑配置",
+      "console": "控制台 (VNC)",
+      "delete": "删除",
+      "rollback": "回滚"
+    },
+    "vmConfirm": {
+      "shutdown": {
+        "title": "关闭 VM {{vmid}}",
+        "description": "向节点 {{node}} 上的 {{name}}（{{kind}} {{vmid}}）发送正常关机信号。客户机操作系统有机会刷新数据并干净退出。如果它忽略该信号，VM 将保持运行。"
+      },
+      "reboot": {
+        "title": "重启 VM {{vmid}}",
+        "description": "重启节点 {{node}} 上的 {{name}}（{{kind}} {{vmid}}）。客户机操作系统执行其正常的重启周期。"
+      },
+      "suspend": {
+        "title": "挂起 VM {{vmid}}",
+        "description": "暂停节点 {{node}} 上的 {{name}}（{{kind}} {{vmid}}）。网络连接断开；客户机在内存中冻结直至恢复。"
+      },
+      "forceStop": {
+        "title": "强制停止 VM {{vmid}}",
+        "description": "立即终止节点 {{node}} 上 {{name}}（{{kind}} {{vmid}}）的 qemu/lxc 进程。相当于拔掉电源线--未刷新的磁盘写入将丢失；客户机内的数据库可能损坏。除非客户机已挂起，否则优先使用关机。"
+      }
+    },
+    "storage": {
+      "loadError": "加载存储失败",
+      "emptyTitle": "未找到存储池",
+      "uploadIso": "上传 ISO/模板",
+      "shared": "共享",
+      "nodeColon": "节点：{{node}}",
+      "contentColon": "内容：{{content}}",
+      "contentLabel": "内容：",
+      "noContentMatch": "没有符合筛选条件的内容。",
+      "empty": "存储为空。",
+      "format": "格式",
+      "content": "内容",
+      "restore": "恢复",
+      "contentTypes": {
+        "all": "全部",
+        "templates": "模板",
+        "backups": "备份",
+        "diskImages": "磁盘镜像",
+        "snippets": "代码片段"
+      }
+    },
+    "tasks": {
+      "loadError": "加载任务失败",
+      "emptyTitle": "没有近期任务",
+      "user": "用户",
+      "started": "开始时间",
+      "ended": "结束时间",
+      "taskWord": "任务",
+      "stopConfirm": {
+        "title": "停止正在运行的任务",
+        "description": "在执行过程中取消 {{type}} {{upid}}…。该操作可能留下部分状态（半应用的快照、中断的备份等），需要手动清理。",
+        "confirmLabel": "停止任务"
+      }
+    },
+    "backup": {
+      "heading": "备份作业",
+      "createJob": "创建作业",
+      "loadError": "加载备份作业失败",
+      "emptyTitle": "未配置备份作业",
+      "emptyDescription": "创建备份作业以保护您的虚拟机和容器。",
+      "schedule": "计划",
+      "mode": "模式",
+      "compress": "压缩",
+      "enabled": "已启用",
+      "deleteConfirm": {
+        "title": "删除备份作业",
+        "description": "删除备份作业定义“{{id}}”。不会删除已创建的备份，但计划作业将停止运行。如需同时删除现有备份，请之后从存储选项卡清理。",
+        "confirmLabel": "删除作业"
+      }
+    },
+    "firewall": {
+      "heading": "集群防火墙规则",
+      "addRule": "添加规则",
+      "createRule": "创建规则",
+      "loadError": "加载防火墙规则失败",
+      "emptyTitle": "没有防火墙规则",
+      "emptyDescription": "集群级别的防火墙规则将显示在此处。",
+      "action": "操作",
+      "protocol": "协议",
+      "source": "源",
+      "dest": "目标",
+      "dport": "目标端口",
+      "comment": "备注",
+      "ruleWord": "规则",
+      "deleteConfirm": {
+        "title": "删除防火墙规则 #{{pos}}",
+        "description": "删除位于位置 {{pos}} 的集群防火墙规则（操作={{action}}，类型={{type}}）。此规则原本允许的网络流量将开始匹配其下方的规则--删除后请验证规则链。",
+        "confirmLabel": "删除规则"
+      }
+    },
+    "ha": {
+      "loadError": "加载 HA 资源失败",
+      "resourcesHeading": "HA 资源",
+      "addResource": "添加资源",
+      "resourcesEmptyTitle": "没有 HA 资源",
+      "resourcesEmptyDescription": "将 VM/CT 添加到 HA 以实现自动故障转移和恢复。",
+      "state": "状态",
+      "group": "组",
+      "request": "请求",
+      "maxRelocate": "最大重定位次数",
+      "maxRestart": "最大重启次数",
+      "groupsHeading": "HA 组",
+      "addGroup": "添加组",
+      "noGroups": "未配置 HA 组。",
+      "nodes": "节点",
+      "noFailback": "不回切",
+      "restricted": "受限",
+      "removeResourceConfirm": {
+        "title": "移除 HA 管理",
+        "description": "停止 HA 对 {{sid}} 的管理。VM/CT 本身继续运行，但自动故障转移和崩溃后重启将停止生效。如果主机崩溃，客户机将不会自动迁移。",
+        "confirmLabel": "从 HA 移除"
+      },
+      "deleteGroupConfirm": {
+        "title": "删除 HA 组 {{group}}",
+        "description": "删除 HA 组“{{group}}”。任何引用此组的 HA 托管 VM/CT 将失去其首选节点/优先级配置，可能无法在正确的主机上迁移或重启。删除前请确认没有 HA 资源引用此组。",
+        "confirmLabel": "删除组"
+      }
+    },
+    "pools": {
+      "loadError": "加载资源池失败",
+      "emptyTitle": "没有资源池",
+      "emptyDescription": "在 Proxmox VE 数据中心 → 权限 → 池中创建资源池。",
+      "noDescription": "无描述",
+      "membersCount": "{{count}} 个成员"
+    },
+    "toast": {
+      "vmCreationStarted": "已开始创建 VM",
+      "vmCreationFailed": "创建 VM 失败",
+      "containerCreationStarted": "已开始创建容器",
+      "containerCreationFailed": "创建容器失败",
+      "deletionStarted": "已开始删除",
+      "deleteFailed": "删除失败",
+      "haResourceCreated": "已创建 HA 资源",
+      "haResourceCreationFailed": "创建 HA 资源失败",
+      "haResourceRemoved": "已移除 HA 资源",
+      "haResourceRemoveFailed": "移除 HA 资源失败",
+      "haGroupCreated": "已创建 HA 组",
+      "haGroupCreationFailed": "创建 HA 组失败",
+      "haGroupDeleted": "已删除 HA 组",
+      "haGroupDeleteFailed": "删除 HA 组失败",
+      "actionSent": "已发送{{action}}",
+      "vmOnNode": "{{node}} 上的 VM {{vmid}}",
+      "actionFailed": "操作失败",
+      "shutdownInitiated": "已启动关机",
+      "shutdownFailed": "关机失败",
+      "rebootInitiated": "已启动重启",
+      "rebootFailed": "重启失败",
+      "cloneStarted": "已开始克隆",
+      "cloneFailed": "克隆失败",
+      "migrationStarted": "已开始迁移",
+      "migrationFailed": "迁移失败",
+      "diskResized": "磁盘已调整大小",
+      "resizeFailed": "调整大小失败",
+      "snapshotCreated": "已创建快照",
+      "snapshotFailed": "快照失败",
+      "rollbackStarted": "已开始回滚",
+      "snapshotLabel": "快照：{{name}}",
+      "rollbackFailed": "回滚失败",
+      "snapshotDeleted": "已删除快照",
+      "firewallRuleCreated": "已创建防火墙规则",
+      "createFailed": "创建失败",
+      "taskStopRequested": "已请求停止任务",
+      "stopFailed": "停止失败",
+      "backupStarted": "已开始备份",
+      "backupFailed": "备份失败",
+      "backupJobDeleted": "已删除备份作业",
+      "firewallRuleDeleted": "已删除防火墙规则",
+      "restoreStarted": "已开始恢复",
+      "restoreFailed": "恢复失败",
+      "consoleOpened": "控制台已在新窗口中打开",
+      "consoleFailed": "控制台失败"
+    },
+    "snapshotDialog": {
+      "title": "创建快照",
+      "description": "为 {{node}} 上的 VM {{vmid}} 创建时间点快照",
+      "nameLabel": "快照名称",
+      "descLabel": "描述（可选）",
+      "descPlaceholder": "升级前..."
+    },
+    "snapshotListDialog": {
+      "title": "快照 · VM {{vmid}}",
+      "description": "管理 {{node}} 上 VM {{vmid}} 的快照",
+      "empty": "未找到快照。",
+      "created": "创建时间",
+      "rollbackConfirm": {
+        "title": "回滚到快照 {{name}}",
+        "description": "将节点 {{node}} 上的 {{kind}} {{vmid}} 还原到快照“{{name}}”所捕获的状态。当前运行状态--包括自拍摄此快照以来的所有更改--将被丢弃。操作员应先停止 VM 以避免文件系统损坏。"
+      },
+      "deleteConfirm": {
+        "title": "删除快照 {{name}}",
+        "description": "从节点 {{node}} 上的 {{kind}} {{vmid}} 永久删除快照“{{name}}”。完成后快照存储的状态将无法恢复。如果您计划回滚到此快照，请先执行回滚。",
+        "confirmLabel": "删除快照"
+      }
+    },
+    "cloneDialog": {
+      "title": "克隆 VM {{vmid}}",
+      "description": "从 {{node}} 克隆“{{name}}”",
+      "newVmid": "新 VMID",
+      "vmidPlaceholder": "例如 200",
+      "fullClone": "完整克隆（独立副本）",
+      "cloning": "正在克隆..."
+    },
+    "migrateDialog": {
+      "title": "迁移 VM {{vmid}}",
+      "description": "从 {{node}} 迁移到另一个节点",
+      "targetNode": "目标节点",
+      "selectTargetNode": "选择目标节点",
+      "onlineMigration": "在线迁移（实时）",
+      "migrating": "正在迁移..."
+    },
+    "resizeDialog": {
+      "title": "调整磁盘大小 · VM {{vmid}}",
+      "description": "扩展 {{node}} 上的磁盘大小",
+      "sizeHint": "使用 +10G 增加 10GB，或使用 50G 设置绝对大小",
+      "resizing": "正在调整大小...",
+      "resize": "调整大小"
+    },
+    "backupDialog": {
+      "title": "备份 VM {{vmid}}",
+      "description": "在 {{node}} 上运行手动备份",
+      "compression": "压缩",
+      "modeSnapshot": "快照",
+      "modeSuspend": "挂起",
+      "modeStop": "停止",
+      "compressNone": "无",
+      "starting": "正在启动...",
+      "startBackup": "开始备份"
+    },
+    "firewallDialog": {
+      "title": "添加防火墙规则",
+      "description": "在 {{node}} 上创建新的防火墙规则",
+      "direction": "方向",
+      "inbound": "入站",
+      "outbound": "出站",
+      "sourceOptional": "源（可选）",
+      "destOptional": "目标（可选）",
+      "dportOptional": "目标端口（可选）",
+      "commentOptional": "备注（可选）",
+      "commentPlaceholder": "允许 HTTP"
+    },
+    "taskLogDialog": {
+      "title": "任务日志",
+      "empty": "没有日志条目。"
+    },
+    "createDialog": {
+      "titleVm": "创建虚拟机",
+      "titleCt": "创建容器",
+      "descriptionVm": "在所选节点上创建新的 QEMU/KVM 虚拟机。",
+      "descriptionCt": "在所选节点上创建新的 LXC 容器。",
+      "hostname": "主机名",
+      "selectNode": "选择节点",
+      "osTemplate": "操作系统模板",
+      "osTemplateHint": "容器模板的完整路径（storage:vztmpl/文件名）",
+      "isoImage": "ISO 镜像（可选）",
+      "isoHint": "ISO 文件的完整路径（storage:iso/文件名）",
+      "cpuCores": "CPU 核心",
+      "memoryMb": "内存 (MB)",
+      "rootDiskSize": "根磁盘大小",
+      "diskSize": "磁盘大小",
+      "diskHintCt": "大小（GB，仅数字）",
+      "diskHintVm": "例如 32G、100G",
+      "startAfterCreation": "创建后启动",
+      "createVm": "创建 VM",
+      "createCt": "创建容器"
+    },
+    "haResourceDialog": {
+      "description": "将 VM 或容器添加到高可用性管理。",
+      "serviceId": "服务 ID (SID)",
+      "sidHint": "格式：vm:VMID 或 ct:VMID",
+      "haGroupOptional": "HA 组（可选）",
+      "noneAnyNode": "无（任意节点）",
+      "none": "无",
+      "emptyForNoGroup": "留空表示无组",
+      "adding": "正在添加..."
+    },
+    "haGroupDialog": {
+      "title": "创建 HA 组",
+      "description": "定义一组用于 HA 资源放置的节点。",
+      "groupName": "组名称",
+      "nodesHint": "以逗号分隔的节点列表，可带可选优先级（节点:优先级）",
+      "noFailback": "不回切",
+      "restricted": "受限（仅在组内节点上运行）",
+      "commentPlaceholder": "生产集群节点",
+      "createGroup": "创建组"
+    },
+    "restoreDialog": {
+      "title": "从备份恢复",
+      "description": "从备份归档恢复 VM/CT。",
+      "archive": "归档",
+      "vmidRequired": "VMID（必填）",
+      "targetStorage": "目标存储",
+      "startAfterRestore": "恢复后启动",
+      "uniqueMac": "唯一 MAC 地址"
+    }
+  }
+}

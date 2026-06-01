@@ -1,0 +1,126 @@
+{
+  "UsersPage": {
+    "header": {
+      "title": "Users",
+      "description": "Manage user accounts, roles, and access permissions.",
+      "export": "Export",
+      "addUser": "Add User"
+    },
+    "loadError": "Failed to load users",
+    "itemNameSingular": "user",
+    "itemNamePlural": "users",
+    "roles": {
+      "super_admin": "Super Admin",
+      "org_admin": "Org Admin",
+      "operator": "Operator",
+      "viewer": "Viewer",
+      "api_key": "API Key"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "pending": "Pending"
+    },
+    "mfa": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "time": {
+      "never": "Never",
+      "justNow": "Just now",
+      "minutesAgo": "{{n}}m ago",
+      "hoursAgo": "{{n}}h ago",
+      "daysAgo": "{{n}}d ago"
+    },
+    "columns": {
+      "user": "User",
+      "role": "Role",
+      "status": "Status",
+      "mfa": "MFA",
+      "lastLogin": "Last Login"
+    },
+    "stats": {
+      "totalUsers": "Total Users",
+      "registeredAccounts": "Registered accounts",
+      "active": "Active",
+      "percentActive": "{{percent}}% active",
+      "administrators": "Administrators",
+      "orgSuperAdmins": "Org/super admins",
+      "mfaEnabled": "MFA Enabled",
+      "percentSecured": "{{percent}}% secured",
+      "noUsers": "No users"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search users by name, email, or username…",
+      "allRoles": "All Roles",
+      "allStatuses": "All statuses",
+      "clearFilters": "Clear filters"
+    },
+    "actions": {
+      "menuLabel": "Actions for {{name}}",
+      "edit": "Edit User",
+      "manageSiteAccess": "Manage Site Access",
+      "sendPasswordReset": "Send Password Reset",
+      "enableAccount": "Enable Account",
+      "disableAccount": "Disable Account",
+      "delete": "Delete User",
+      "deleteConfirm": "Delete user \"{{name}}\"? This action cannot be undone."
+    },
+    "bulk": {
+      "sendInvite": "Send Invite",
+      "inviteTitle": "Bulk Invite",
+      "inviteDescription": "Bulk invite: not yet implemented.",
+      "disable": "Disable",
+      "disableTitle": "Bulk Disable",
+      "disableDescription": "Bulk disable: not yet implemented.",
+      "delete": "Delete",
+      "deleteTitle": "Bulk Delete",
+      "deleteDescription": "Please delete users individually for safety."
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "createError": "Failed to create user",
+      "deleteError": "Failed to delete user",
+      "updateError": "Failed to update user"
+    },
+    "siteAccess": {
+      "title": "Site Access · {{name}}",
+      "adminDescription": "Admins have implicit access to all sites. These selections are informational only.",
+      "userDescription": "Select which sites this user can access. If no sites are selected, the user has no site-level restrictions (legacy open access).",
+      "noSites": "No sites available.",
+      "selectedCount": "{{selected}} of {{total}} selected",
+      "selectAll": "Select all",
+      "clear": "Clear",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "save": "Save Access",
+      "saveError": "Failed to save site access",
+      "loadError": "Failed to load sites. Please try again."
+    },
+    "addUser": {
+      "title": "Add New User",
+      "description": "Create a new user account. They will receive an email to set their password.",
+      "submit": "Create User",
+      "fields": {
+        "email": "Email",
+        "username": "Username",
+        "fullName": "Full Name",
+        "password": "Password",
+        "passwordPlaceholder": "Min 12 characters",
+        "role": "Role",
+        "rolePlaceholder": "Select role"
+      },
+      "roleOptions": {
+        "super_admin": "Super Admin - Full access",
+        "org_admin": "Org Admin - Organization management",
+        "operator": "Operator - Manage devices",
+        "viewer": "Viewer - Read only"
+      },
+      "validation": {
+        "email": "Valid email required",
+        "username": "Username is required",
+        "password": "Password must be at least 12 characters"
+      }
+    }
+  }
+}

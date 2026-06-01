@@ -1,0 +1,126 @@
+{
+  "UsersPage": {
+    "header": {
+      "title": "用户",
+      "description": "管理用户账户、角色和访问权限。",
+      "export": "导出",
+      "addUser": "添加用户"
+    },
+    "loadError": "加载用户失败",
+    "itemNameSingular": "用户",
+    "itemNamePlural": "用户",
+    "roles": {
+      "super_admin": "超级管理员",
+      "org_admin": "组织管理员",
+      "operator": "操作员",
+      "viewer": "查看者",
+      "api_key": "API 密钥"
+    },
+    "status": {
+      "active": "活跃",
+      "inactive": "未激活",
+      "pending": "待处理"
+    },
+    "mfa": {
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    },
+    "time": {
+      "never": "从不",
+      "justNow": "刚刚",
+      "minutesAgo": "{{n}} 分钟前",
+      "hoursAgo": "{{n}} 小时前",
+      "daysAgo": "{{n}} 天前"
+    },
+    "columns": {
+      "user": "用户",
+      "role": "角色",
+      "status": "状态",
+      "mfa": "MFA",
+      "lastLogin": "上次登录"
+    },
+    "stats": {
+      "totalUsers": "用户总数",
+      "registeredAccounts": "已注册账户",
+      "active": "活跃",
+      "percentActive": "{{percent}}% 活跃",
+      "administrators": "管理员",
+      "orgSuperAdmins": "组织/超级管理员",
+      "mfaEnabled": "已启用 MFA",
+      "percentSecured": "{{percent}}% 已加固",
+      "noUsers": "无用户"
+    },
+    "toolbar": {
+      "searchPlaceholder": "按姓名、邮箱或用户名搜索用户…",
+      "allRoles": "所有角色",
+      "allStatuses": "所有状态",
+      "clearFilters": "清除筛选"
+    },
+    "actions": {
+      "menuLabel": "{{name}} 的操作",
+      "edit": "编辑用户",
+      "manageSiteAccess": "管理站点访问",
+      "sendPasswordReset": "发送密码重置",
+      "enableAccount": "启用账户",
+      "disableAccount": "禁用账户",
+      "delete": "删除用户",
+      "deleteConfirm": "删除用户“{{name}}”？此操作无法撤消。"
+    },
+    "bulk": {
+      "sendInvite": "发送邀请",
+      "inviteTitle": "批量邀请",
+      "inviteDescription": "批量邀请：尚未实现。",
+      "disable": "禁用",
+      "disableTitle": "批量禁用",
+      "disableDescription": "批量禁用：尚未实现。",
+      "delete": "删除",
+      "deleteTitle": "批量删除",
+      "deleteDescription": "为安全起见，请逐个删除用户。"
+    },
+    "toast": {
+      "errorTitle": "错误",
+      "createError": "创建用户失败",
+      "deleteError": "删除用户失败",
+      "updateError": "更新用户失败"
+    },
+    "siteAccess": {
+      "title": "站点访问 · {{name}}",
+      "adminDescription": "管理员对所有站点拥有隐式访问权限。这些选择仅供参考。",
+      "userDescription": "选择此用户可以访问的站点。如果未选择任何站点，则该用户没有站点级别的限制（旧版开放访问）。",
+      "noSites": "没有可用的站点。",
+      "selectedCount": "已选择 {{selected}}/{{total}}",
+      "selectAll": "全选",
+      "clear": "清除",
+      "cancel": "取消",
+      "saving": "正在保存…",
+      "save": "保存访问权限",
+      "saveError": "保存站点访问权限失败",
+      "loadError": "加载站点失败。请重试。"
+    },
+    "addUser": {
+      "title": "添加新用户",
+      "description": "创建新的用户账户。系统将向他们发送电子邮件以设置密码。",
+      "submit": "创建用户",
+      "fields": {
+        "email": "邮箱",
+        "username": "用户名",
+        "fullName": "全名",
+        "password": "密码",
+        "passwordPlaceholder": "至少 12 个字符",
+        "role": "角色",
+        "rolePlaceholder": "选择角色"
+      },
+      "roleOptions": {
+        "super_admin": "超级管理员 - 完全访问",
+        "org_admin": "组织管理员 - 组织管理",
+        "operator": "操作员 - 管理设备",
+        "viewer": "查看者 - 只读"
+      },
+      "validation": {
+        "email": "需要有效的邮箱",
+        "username": "用户名为必填项",
+        "password": "密码长度至少为 12 个字符"
+      }
+    }
+  }
+}

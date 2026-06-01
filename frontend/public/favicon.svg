@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FreeSDN favicon (32×32 viewBox).
+
+  Matches the in-app Sidebar logo (Sidebar.tsx:345-347):
+    - Rounded blue square = Tailwind ``primary`` ≈ hsl(217 91% 45%) ≈ #1E63E8
+    - Three-node network topology = simplified lucide-react Network icon
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="FreeSDN">
+  <rect width="32" height="32" rx="6" fill="#1E63E8"/>
+  <rect x="13" y="5" width="6" height="5" rx="1.2" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <rect x="4.5" y="21.5" width="6" height="5" rx="1.2" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <rect x="21.5" y="21.5" width="6" height="5" rx="1.2" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <line x1="16" y1="10" x2="7.5" y2="21.5" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+  <line x1="16" y1="10" x2="24.5" y2="21.5" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

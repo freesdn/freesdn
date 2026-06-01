@@ -1,0 +1,86 @@
+# FreeSDN - Dependabot configuration
+# Automated dependency update PRs for security patches and version bumps.
+# https://docs.github.com/en/code-security/dependabot
+#
+# NOTE: external code PRs are not accepted (see CONTRIBUTING.md), but Dependabot
+# PRs are maintainer-reviewed dependency bumps, not community contributions -
+# this is the managed path for keeping pinned actions and libraries current.
+
+version: 2
+updates:
+  # GitHub Actions pinned in .github/workflows. Surfaces bumps to the pinned
+  # commit SHAs through review rather than trusting mutable tags silently.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "ci"
+
+  # Python backend (Poetry)
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "security"
+
+  # Frontend (npm)
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "security"
+
+  # Container base images (Dockerfiles at the repo root)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "security"
+
+  # Container base images (LogDB custom Dockerfile)
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "security"
+
+  # NOTE: the agent lives in the separate freesdn-agent repo, monitored by that
+  # repo's own dependabot.yml — do NOT add a /agent entry here (this repo has no
+  # /agent dir, so Dependabot would error on it).
+
+  # Container base image — backend service Dockerfile FROM lines
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "security"
+
+  # Container base image — frontend/edge Dockerfile FROM lines
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "security"

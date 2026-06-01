@@ -1,0 +1,455 @@
+{
+  "SetupPage": {
+    "errors": {
+      "checkStatus": "检查设置状态失败",
+      "title": "设置错误"
+    },
+    "actions": {
+      "retry": "重试"
+    },
+    "header": {
+      "mobileTitle": "FreeSDN 设置",
+      "mobileStep": "第 {{current}}/{{total}} 步 · {{step}}",
+      "wizard": "设置向导",
+      "stepOf": "第 {{current}} 步，共 {{total}} 步"
+    },
+    "environment": {
+      "production": "生产环境",
+      "development": "开发环境"
+    },
+    "steps": {
+      "welcome": {
+        "name": "欢迎",
+        "description": "系统要求"
+      },
+      "database": {
+        "name": "数据库",
+        "description": "数据库连接"
+      },
+      "organization": {
+        "name": "组织",
+        "description": "第一个组织"
+      },
+      "admin": {
+        "name": "管理员",
+        "description": "创建管理员用户"
+      },
+      "modules": {
+        "name": "模块",
+        "description": "启用功能"
+      },
+      "accessMode": {
+        "name": "访问模式",
+        "description": "管理或仅监控"
+      },
+      "controllers": {
+        "name": "控制器",
+        "description": "添加设备（可选）"
+      },
+      "complete": {
+        "name": "完成",
+        "description": "完成设置"
+      }
+    }
+  },
+  "AdminStep": {
+    "title": "创建管理员账户",
+    "subtitle": "设置用于管理 FreeSDN 的管理员账户",
+    "card": {
+      "title": "管理员信息",
+      "description": "此账户将拥有所有功能的完全访问权限"
+    },
+    "banner": {
+      "emailLabel": "您的电子邮件地址",
+      "text": "用于登录 FreeSDN。用户名是在界面中显示的名称。"
+    },
+    "fields": {
+      "email": {
+        "label": "电子邮件地址 *",
+        "placeholder": "admin@example.com",
+        "helper": "您将使用此电子邮件登录"
+      },
+      "firstName": {
+        "label": "名字"
+      },
+      "lastName": {
+        "label": "姓氏"
+      },
+      "username": {
+        "label": "用户名 *",
+        "helper": "在界面中显示的名称（不用于登录）"
+      },
+      "password": {
+        "label": "密码 *",
+        "strengthLabel": "密码强度"
+      },
+      "confirmPassword": {
+        "label": "确认密码 *",
+        "match": "密码一致",
+        "mismatch": "密码不一致"
+      }
+    },
+    "rules": {
+      "length": "至少 12 个字符",
+      "lower": "至少一个小写字母",
+      "upper": "至少一个大写字母",
+      "digit": "至少一个数字",
+      "special": "至少一个特殊字符"
+    },
+    "strength": {
+      "veryWeak": "非常弱",
+      "weak": "弱",
+      "fair": "一般",
+      "strong": "强",
+      "veryStrong": "非常强"
+    },
+    "actions": {
+      "previous": "上一步",
+      "continue": "继续"
+    },
+    "errors": {
+      "emailRequired": "电子邮件为必填项",
+      "emailInvalid": "请输入有效的电子邮件地址",
+      "usernameTooShort": "用户名至少需要 3 个字符",
+      "passwordRequirements": "密码不符合所有要求",
+      "passwordMismatch": "密码不一致",
+      "createFailed": "创建管理员用户失败"
+    }
+  },
+  "AccessModeStep": {
+    "title": "访问模式",
+    "subtitle": "选择 FreeSDN 如何与您的设备交互。您可以稍后在“设置”中更改。",
+    "defaultBadge": "默认",
+    "hint": "对于全新安装，“仅监控”是安全的选择——FreeSDN 读取设备状态，但绝不写入更改。准备就绪后可随时切换到“管理”。",
+    "modes": {
+      "manage": {
+        "title": "管理（读写）",
+        "description": "FreeSDN 可以读取设备状态，并向您的控制器和设备推送配置更改。"
+      },
+      "monitor": {
+        "title": "仅监控（只读）",
+        "description": "FreeSDN 读取设备状态以用于监控和仪表板，但拒绝对设备的所有写入。不会更改您网络中的任何内容。"
+      }
+    },
+    "actions": {
+      "previous": "上一步",
+      "continue": "继续"
+    }
+  },
+  "CompleteStep": {
+    "progress": {
+      "finalizing": "正在完成配置...",
+      "installingSampleData": "正在安装示例数据（可能需要一些时间）...",
+      "installingAndDiscovery": "正在安装示例数据并启动发现...",
+      "startingDiscovery": "正在启动设备发现...",
+      "enablingMonitorOnly": "正在启用仅监控（只读）模式..."
+    },
+    "errors": {
+      "failed": "无法完成设置",
+      "monitorOnlyFailed": "无法启用仅监控模式"
+    },
+    "done": {
+      "heading": "设置完成！",
+      "subtitle": "FreeSDN 已可使用",
+      "monitorOnlyWarning": "设置已完成，但无法启用仅监控（只读）模式：{{error}}。您可以在“设置”中启用它。"
+    },
+    "summary": {
+      "title": "设置摘要",
+      "description": "以下是您已配置的内容",
+      "adminAccount": "管理员账户",
+      "organization": "组织",
+      "modulesEnabled": "已启用模块",
+      "controllersAdded": "已添加控制器",
+      "devicesCount": "（{{count}} 台设备）"
+    },
+    "review": {
+      "heading": "即将完成！",
+      "subtitle": "检查您的设置并完成向导",
+      "administrator": "管理员",
+      "enabledModules": "已启用模块",
+      "controllers": "控制器",
+      "controllersFound": "已找到 {{controllers}} 个控制器，{{devices}} 台设备",
+      "noControllers": "未添加（您可以稍后添加）",
+      "accessMode": "访问模式",
+      "accessModeManage": "管理（读写）",
+      "accessModeMonitor": "仅监控（只读）"
+    },
+    "options": {
+      "title": "最终选项",
+      "installSampleData": "安装示例数据",
+      "installSampleDataHelp": "用演示设备、网络、告警、事件、审计日志、备份和固件数据填充系统",
+      "startDiscovery": "设置完成后启动设备发现",
+      "sendWelcomeEmail": "发送包含登录说明的欢迎邮件"
+    },
+    "actions": {
+      "goToLogin": "前往登录",
+      "completing": "正在完成设置...",
+      "complete": "完成设置"
+    }
+  },
+  "ControllersStep": {
+    "title": "添加控制器",
+    "subtitle": "连接到设备控制器以开始管理您的网络（可选）",
+    "addedControllers": "已添加的控制器",
+    "devicesCount": "{{count}} 个设备",
+    "testSuccess": "连接成功！找到 {{count}} 个设备",
+    "cloud": "云端",
+    "regionCloud": "{{region}} 云端",
+    "errors": {
+      "loadTypes": "无法加载控制器类型",
+      "requiredCloudFields": "请填写所有必填的云端字段",
+      "requiredFields": "请填写所有必填字段",
+      "connectionTestFailed": "连接测试失败",
+      "testFirst": "请先测试连接",
+      "probeFailed": "无法探测远程站点。请查看浏览器控制台和后端日志以获取更多详细信息。",
+      "addFailed": "无法添加控制器"
+    },
+    "form": {
+      "newController": "新建控制器",
+      "bindSites": "绑定站点",
+      "connectionDescription": "连接到网络控制器或管理平台",
+      "bindSitesDescription": "将每个 Omada 站点映射到 FreeSDN 站点。您可以使用现有站点或跳过。"
+    },
+    "fields": {
+      "controllerType": "控制器类型 *",
+      "controllerTypePlaceholder": "选择控制器类型",
+      "connectionMode": "连接模式",
+      "modeLocal": "本地",
+      "modeCloud": "云端",
+      "modeCloudHint": "通过 TP-Link Cloud OpenAPI (OAuth2) 连接。请在 Omada → 设置 → 平台集成 → OpenAPI 中获取凭据。",
+      "modeLocalHint": "直接连接到本地 Omada 控制器。",
+      "displayName": "显示名称 *",
+      "displayNamePlaceholder": "主办公室控制器",
+      "host": "主机/URL *",
+      "username": "用户名 *",
+      "usernamePlaceholder": "admin",
+      "password": "密码 *",
+      "cloudRegion": "云端区域 *",
+      "cloudRegionPlaceholder": "选择云端区域",
+      "regionUsEast": "美国东部 (use1)",
+      "regionEuWest": "欧洲西部 (euw1)",
+      "regionAsiaPacific": "亚太地区 (aps1)",
+      "clientId": "Client ID *",
+      "clientIdPlaceholder": "来自 Omada → 平台集成 → OpenAPI",
+      "clientSecret": "Client Secret *",
+      "omadaId": "Omada 控制器 ID (omadacId) *",
+      "omadaIdPlaceholder": "例如：7f1346dcd01b17a65ad23024e55effe5",
+      "omadaIdHintBefore": "在您的 Omada Cloud URL 中以 ",
+      "omadaIdHintAfter": " 参数的形式查找。",
+      "siteId": "站点 ID（可选）",
+      "siteIdPlaceholder": "留空以使用默认值",
+      "verifySsl": "验证 SSL 证书"
+    },
+    "actions": {
+      "testConnection": "测试连接",
+      "probingSites": "正在探测站点...",
+      "nextBindSites": "下一步：绑定站点",
+      "addController": "添加控制器",
+      "cancel": "取消",
+      "back": "返回",
+      "previous": "上一步",
+      "continue": "继续",
+      "skipForNow": "暂时跳过"
+    },
+    "binding": {
+      "intro": {
+        "before": "您的 Omada 控制器有 ",
+        "after": " 个站点。请将每个站点映射到现有的 FreeSDN 站点，或保持未映射。"
+      },
+      "selectSitePlaceholder": "选择一个 FreeSDN 站点",
+      "skipOption": "- 跳过（不导入设备）-",
+      "noSites": "在控制器上未找到站点。您仍可以添加该控制器。"
+    },
+    "empty": {
+      "addAnother": "添加另一个控制器？",
+      "none": "尚未添加控制器"
+    },
+    "note": {
+      "label": "注意：",
+      "text": "您可以跳过此步骤，稍后从仪表板添加控制器。"
+    }
+  },
+  "DatabaseStep": {
+    "title": "数据库设置",
+    "subtitle": "验证数据库连接并运行迁移",
+    "errors": {
+      "checkFailed": "检查数据库失败",
+      "migrationsFailed": "运行迁移失败。请查看后端日志了解详情。"
+    },
+    "status": {
+      "heading": "数据库状态",
+      "description": "连接和迁移状态"
+    },
+    "connection": {
+      "label": "连接",
+      "connected": "已连接到数据库",
+      "failed": "连接失败"
+    },
+    "databaseType": {
+      "label": "数据库类型"
+    },
+    "timescale": {
+      "enabledDetail": "v{{version}}，位于{{location}}",
+      "locationLog": "日志数据库",
+      "locationMain": "主数据库",
+      "required": "必需 · 用于指标、健康检查和事件的时序扩展"
+    },
+    "logDatabase": {
+      "label": "日志数据库",
+      "connectedDetail": "用于时序数据的独立 TimescaleDB 实例",
+      "required": "必需 · 用于指标、健康检查、心跳和事件的独立 TimescaleDB"
+    },
+    "migrations": {
+      "label": "迁移",
+      "upToDate": "架构已是最新",
+      "countDetail": "已应用 {{applied}} 个，待处理 {{pending}} 个",
+      "running": "正在运行...",
+      "runningBanner": {
+        "title": "正在运行数据库迁移...",
+        "description": "此操作将创建所有架构和表，最长可能需要一分钟。"
+      }
+    },
+    "badges": {
+      "ok": "正常",
+      "error": "错误",
+      "enabled": "已启用",
+      "required": "必需",
+      "connected": "已连接",
+      "upToDate": "已是最新"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "runMigrations": "运行迁移",
+      "previous": "上一步",
+      "continue": "继续"
+    }
+  },
+  "ModulesStep": {
+    "title": "启用模块",
+    "subtitle": "选择要启用的功能",
+    "badges": {
+      "recommended": "推荐",
+      "required": "必需"
+    },
+    "requires": "需要：{{modules}}",
+    "selected": {
+      "label": "已选择：",
+      "count": "{{count}} 个模块",
+      "hint": "您稍后可以在“设置”中启用或禁用模块"
+    },
+    "actions": {
+      "previous": "上一步",
+      "continue": "继续"
+    },
+    "errors": {
+      "loadFailed": "加载模块失败",
+      "enableFailed": "启用模块失败",
+      "cannotDisable": "无法禁用：{{dependents}} 依赖此模块"
+    }
+  },
+  "OrganizationStep": {
+    "title": "创建组织",
+    "subtitle": "设置您的第一个组织以管理站点和设备",
+    "card": {
+      "title": "组织详情",
+      "description": "组织可帮助您整理站点、设备和用户"
+    },
+    "fields": {
+      "name": {
+        "label": "组织名称 *",
+        "placeholder": "我的公司"
+      },
+      "slug": {
+        "label": "URL 标识 *",
+        "placeholder": "my-company",
+        "helper": "用于 URL 和 API 请求"
+      },
+      "timezone": {
+        "label": "时区",
+        "placeholder": "选择时区"
+      },
+      "locale": {
+        "label": "语言",
+        "placeholder": "选择语言"
+      },
+      "timeFormat": {
+        "label": "时间格式",
+        "placeholder": "选择时间格式"
+      },
+      "dateFormat": {
+        "label": "日期格式",
+        "placeholder": "选择日期格式"
+      }
+    },
+    "locales": {
+      "enUS": "英语（美国）",
+      "enGB": "英语（英国）",
+      "esES": "西班牙语",
+      "frFR": "法语",
+      "deDE": "德语",
+      "jaJP": "日语",
+      "zhCN": "中文（简体）"
+    },
+    "timeFormats": {
+      "h24": "24 小时制 (14:30)",
+      "h12": "12 小时制 (2:30 PM)"
+    },
+    "dateFormats": {
+      "iso": "YYYY-MM-DD (ISO)",
+      "us": "MM/DD/YYYY (US)",
+      "eu": "DD/MM/YYYY (EU)",
+      "de": "DD.MM.YYYY (DE)"
+    },
+    "validation": {
+      "nameMin": "组织名称至少需要 2 个字符",
+      "slugMin": "标识至少需要 2 个字符",
+      "slugPattern": "标识只能包含小写字母、数字和连字符"
+    },
+    "errors": {
+      "capture": "无法获取组织详情"
+    },
+    "actions": {
+      "previous": "上一步",
+      "continue": "继续"
+    }
+  },
+  "WelcomeStep": {
+    "errors": {
+      "checkFailed": "检查系统要求失败",
+      "title": "错误",
+      "unknown": "发生未知错误"
+    },
+    "actions": {
+      "retry": "重试",
+      "continue": "继续"
+    },
+    "restore": {
+      "toggle": "改为从备份还原",
+      "help": "已有来自其他实例的完整备份（.fsdnvault）？在此还原以重建本实例——站点、设备、账户和凭据都会恢复，并可用现有密码登录。（配置快照 .fsdn 不能在此使用——它不含账户。）",
+      "fileLabel": "备份文件（.fsdnvault）",
+      "passLabel": "备份口令",
+      "passPlaceholder": "创建该备份时使用的口令",
+      "submit": "还原此实例",
+      "failed": "还原失败——请检查文件和口令。"
+    },
+    "hero": {
+      "title": "欢迎使用 {{appName}}",
+      "subtitle": "让我们来设置您的网络管理平台",
+      "version": "版本 {{version}}"
+    },
+    "requirements": {
+      "title": "系统要求",
+      "description": "正在检查您的系统是否满足要求",
+      "required": "要求：{{value}}",
+      "allMet": "已满足所有系统要求，您可以继续了！",
+      "notMet": "部分要求未满足。请先解决后再继续。"
+    },
+    "stack": {
+      "title": "技术栈信息",
+      "backend": "后端",
+      "frontend": "前端",
+      "dockerServices": "Docker 服务",
+      "unreachable": "无法访问"
+    }
+  }
+}

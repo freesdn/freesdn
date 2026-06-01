@@ -1,0 +1,31 @@
+{
+    "errorCode": 0,
+    "msg": "Success.",
+    "result": {
+        "data": [
+            {
+                "siteId": "site-001",
+                "id": "site-001",
+                "name": "Default",
+                "region": "US",
+                "deviceCount": 5,
+                "gatewayNum": 1,
+                "switchNum": 2,
+                "apNum": 2
+            },
+            {
+                "siteId": "site-002",
+                "id": "site-002",
+                "name": "Branch Office",
+                "region": "EU",
+                "deviceCount": 3,
+                "gatewayNum": 1,
+                "switchNum": 1,
+                "apNum": 1
+            }
+        ],
+        "totalRows": 2,
+        "currentPage": 1,
+        "currentSize": 2
+    }
+}

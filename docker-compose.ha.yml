@@ -1,0 +1,180 @@
+# =============================================================================
+# FreeSDN HA Overlay  (max/enterprise)
+# =============================================================================
+# Adds the high-availability topology on top of the base docker-compose.yml:
+#   - Postgres primary + streaming standby (promotion still MANUAL - Patroni is
+#     a separate roadmap item)
+#   - Valkey master + replica + 3 Sentinels (AUTOMATIC failover) - and the
+#     backend services are wired to consume Sentinel, so the app/Celery/WS
+#     actually FOLLOW a Valkey master failover (not just observe it)
+#   - 2 API replicas behind an nginx round-robin LB (cross-instance WS pubsub)
+#
+# Usage (with the max tier env):
+#   docker compose --env-file .env.max -f docker-compose.yml -f docker-compose.ha.yml up -d
+#
+# Failover drill: scripts/redis_failover_drill.sh (kill master → assert promote
+# + app follows). RTO/RPO for the Postgres path: scripts/ha_drill.py.
+
+# Wire every backend service to Sentinel (merged into each service's base env).
+x-sentinel-env: &sentinel-env
+  REDIS_SENTINELS: "redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379"
+  REDIS_MASTER_NAME: "freesdn-master"
+  CELERY_BROKER_URL: "sentinel://:${REDIS_PASSWORD}@redis-sentinel-1:26379;sentinel://:${REDIS_PASSWORD}@redis-sentinel-2:26379;sentinel://:${REDIS_PASSWORD}@redis-sentinel-3:26379/1"
+  CELERY_RESULT_BACKEND: "sentinel://:${REDIS_PASSWORD}@redis-sentinel-1:26379;sentinel://:${REDIS_PASSWORD}@redis-sentinel-2:26379;sentinel://:${REDIS_PASSWORD}@redis-sentinel-3:26379/2"
+
+services:
+  # ── Backend services consume Sentinel in HA (env merges with the base) ──────
+  api:
+    environment: *sentinel-env
+  worker:
+    environment: *sentinel-env
+  worker-io:
+    environment: *sentinel-env
+  scheduler:
+    environment: *sentinel-env
+  flower:
+    environment: *sentinel-env
+
+  # ── Valkey replica - Sentinel's promotion target ───────────────────────────
+  # Replicates the base `redis` master. On a master failure Sentinel promotes
+  # this node; the app (master_for) re-resolves and follows it.
+  redis-replica:
+    image: valkey/valkey:${VALKEY_VERSION:-8.1.8-trixie}
+    container_name: freesdn-redis-replica
+    restart: unless-stopped
+    init: true
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: >-
+      valkey-server
+      --replicaof redis 6379
+      --masterauth ${REDIS_PASSWORD}
+      --requirepass ${REDIS_PASSWORD}
+      --appendonly yes
+      --maxmemory-policy volatile-lru
+      --replica-announce-ip redis-replica
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -a $$REDIS_PASSWORD ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    security_opt: [no-new-privileges:true]
+    networks: [default]
+
+  # ── PostgreSQL standby (streaming replica of the primary) ───────────────────
+  postgres-standby:
+    image: postgres:${POSTGRES_VERSION:-18.4-trixie}
+    container_name: freesdn-postgres-standby
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-freesdn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-freesdn}
+      PRIMARY_HOST: postgres
+      PRIMARY_PORT: 5432
+      REPL_USER: ${POSTGRES_REPL_USER:-repl}
+      REPL_PASSWORD: ${POSTGRES_REPL_PASSWORD}
+    volumes:
+      - postgres_standby_data:/var/lib/postgresql/data
+      - ./docker/postgres/standby-entrypoint.sh:/standby-entrypoint.sh:ro
+    entrypoint: ["/standby-entrypoint.sh"]
+    ports:
+      - "127.0.0.1:${POSTGRES_STANDBY_HOST_PORT:-15434}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks: [default]
+
+  # ── Valkey Sentinels - 3-node quorum, AUTH + hostname-aware (Docker) ────────
+  # The config is built with printf (NOT a heredoc): a heredoc inside a YAML
+  # folded `>-` scalar collapses to one line and breaks. resolve/announce-
+  # hostnames make Sentinel address master+replica by their Docker service
+  # names rather than ephemeral IPs. requirepass lets the app's Sentinel client
+  # AUTH to the sentinels.
+  redis-sentinel-1: &sentinel
+    image: valkey/valkey:${VALKEY_VERSION:-8.1.8-trixie}
+    container_name: freesdn-redis-sentinel-1
+    restart: unless-stopped
+    init: true
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: >-
+      sh -c "printf '%s\n'
+      'port 26379'
+      'sentinel resolve-hostnames yes'
+      'sentinel announce-hostnames yes'
+      'sentinel monitor freesdn-master redis 6379 2'
+      'sentinel auth-pass freesdn-master ${REDIS_PASSWORD}'
+      'requirepass ${REDIS_PASSWORD}'
+      'sentinel down-after-milliseconds freesdn-master 5000'
+      'sentinel failover-timeout freesdn-master 10000'
+      'sentinel parallel-syncs freesdn-master 1'
+      > /tmp/sentinel.conf && exec valkey-sentinel /tmp/sentinel.conf"
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -p 26379 -a $$REDIS_PASSWORD ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    security_opt: [no-new-privileges:true]
+    networks: [default]
+
+  redis-sentinel-2:
+    <<: *sentinel
+    container_name: freesdn-redis-sentinel-2
+
+  redis-sentinel-3:
+    <<: *sentinel
+    container_name: freesdn-redis-sentinel-3
+
+  # ── Second API replica - proves cross-instance WS pubsub ────────────────────
+  api-2:
+    extends:
+      file: docker-compose.yml
+      service: api
+    container_name: freesdn-api-2
+    environment: *sentinel-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${API_2_HOST_PORT:-18001}:8000"
+
+  # ── nginx round-robin LB across the two API replicas ────────────────────────
+  ha-lb:
+    image: nginx:1.31.2-alpine
+    container_name: freesdn-ha-lb
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      api-2:
+        condition: service_healthy
+    volumes:
+      - ./docker/ha-lb/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "127.0.0.1:${HA_LB_HOST_PORT:-18080}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [default]
+
+volumes:
+  postgres_standby_data:

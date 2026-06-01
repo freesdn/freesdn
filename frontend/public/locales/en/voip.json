@@ -1,0 +1,2009 @@
+{
+  "PBXDetailPage": {
+    "pbxFallbackName": "PBX",
+    "common": {
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "active": "Active",
+      "inactive": "Inactive",
+      "yes": "Yes",
+      "no": "No",
+      "unknown": "Unknown",
+      "any": "any",
+      "default": "default",
+      "cancel": "Cancel",
+      "create": "Create",
+      "delete": "Delete",
+      "edit": "Edit",
+      "view": "View",
+      "saveChanges": "Save Changes",
+      "unlimited": "Unlimited",
+      "auto": "Auto",
+      "live": "Live",
+      "cached": "Cached",
+      "unnamed": "Unnamed"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "extensions": "Extensions",
+      "trunks": "Trunks",
+      "ringGroups": "Ring Groups",
+      "queues": "Queues",
+      "ivr": "IVR",
+      "dids": "DIDs",
+      "activeCalls": "Active Calls",
+      "voicemail": "Voicemail",
+      "config": "PBX Config",
+      "settings": "Settings"
+    },
+    "breadcrumb": {
+      "pbxSystems": "PBX Systems"
+    },
+    "header": {
+      "withAsterisk": "{{host}} · Asterisk {{version}}"
+    },
+    "actions": {
+      "testConnection": "Test Connection",
+      "applyConfig": "Apply Config",
+      "pendingChanges": "Pending Changes",
+      "webUi": "Web UI",
+      "backToPbx": "Back to PBX"
+    },
+    "editExt": {
+      "button": "Edit",
+      "title": "Edit extension {{number}}",
+      "description": "Stages a change for review. Nothing is written to the PBX until you apply it from Pending Changes.",
+      "outboundCid": "Outbound Caller ID",
+      "outboundCidPlaceholder": "\"Name\" <100>",
+      "stageButton": "Stage change",
+      "staged": "Change staged - review and apply it in Pending Changes",
+      "stageFailed": "Failed to stage change"
+    },
+    "editRg": {
+      "title": "Edit ring group {{number}}",
+      "descLabel": "Description"
+    },
+    "createRg": {
+      "title": "New ring group",
+      "groupNumber": "Group number",
+      "members": "Members (extensions, dash-separated)"
+    },
+    "createDid": {
+      "title": "New inbound route",
+      "did": "DID number",
+      "cid": "CID match",
+      "destination": "Destination",
+      "destinationHint": "Where matching calls go, e.g. from-did-direct,200,1 to ring extension 200."
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "sync": {
+      "started": "Sync started",
+      "failed": "Sync failed",
+      "complete": "Sync complete",
+      "completeDescription": "Extensions, trunks, ring groups and IVRs are up to date.",
+      "queuedConnecting": "Sync queued, connecting to PBX...",
+      "watchingProgress": "Watching live progress...",
+      "connecting": "Connecting to PBX...",
+      "unknownError": "Unknown error",
+      "queuedWaiting": "Queued, waiting for worker...",
+      "syncingStep": "Syncing, step {{current}} of {{total}}"
+    },
+    "syncStages": {
+      "connect": "Connect",
+      "extensions": "Extensions",
+      "ringGroups": "Ring Groups",
+      "liveData": "Live Data",
+      "save": "Save",
+      "done": "Done"
+    },
+    "toast": {
+      "pbxConnected": "PBX connected successfully",
+      "connectionFailed": "Connection failed",
+      "connectionTestFailed": "Connection test failed",
+      "configReloaded": "PBX configuration reloaded",
+      "reloadFailed": "Reload failed",
+      "callTerminated": "Call terminated",
+      "hangupFailed": "Failed to hang up call",
+      "pbxDeleted": "PBX deleted",
+      "settingsSaved": "PBX settings saved",
+      "settingsSaveFailed": "Failed to save settings",
+      "extensionCreated": "Extension created",
+      "extensionCreateFailed": "Failed to create extension",
+      "extensionDeleted": "Extension deleted",
+      "extensionDeleteFailed": "Failed to delete extension",
+      "trunkSettingsSaved": "Trunk settings saved",
+      "trunkUpdateFailed": "Failed to update trunk · write API may not be available",
+      "trunkDeleted": "Trunk deleted",
+      "trunkDeleteFailed": "Failed to delete trunk · write API may not be available",
+      "trunkCreated": "Trunk created",
+      "trunkCreateFailed": "Failed to create trunk · write API may not be available",
+      "callOriginated": "Call originated",
+      "callOriginateFailed": "Failed to originate call"
+    },
+    "confirm": {
+      "deleteExtension": "Delete extension {{number}}?",
+      "deleteRingGroup": "Delete ring group {{number}}? This stages a delete for review.",
+      "deleteInboundRoute": "Delete inbound route {{route}}? This stages a delete for review.",
+      "deleteTrunk": "Delete trunk \"{{name}}\"? This cannot be undone."
+    },
+    "columns": {
+      "extension": "Extension",
+      "name": "Name",
+      "callerId": "Caller ID",
+      "voicemail": "Voicemail",
+      "phone": "Phone",
+      "tech": "Tech",
+      "recording": "Recording",
+      "status": "Status",
+      "trunk": "Trunk",
+      "sipServer": "SIP Server",
+      "outboundCid": "Outbound CID",
+      "channels": "Channels",
+      "queue": "Queue",
+      "members": "Members",
+      "waiting": "Waiting",
+      "completed": "Completed",
+      "abandoned": "Abandoned",
+      "serviceLevel": "SL%",
+      "ivrMenu": "IVR Menu",
+      "timeout": "Timeout",
+      "directDial": "Direct Dial",
+      "options": "Options",
+      "channel": "Channel",
+      "caller": "Caller",
+      "connectedTo": "Connected To",
+      "state": "State",
+      "duration": "Duration",
+      "mailbox": "Mailbox",
+      "email": "Email",
+      "new": "New",
+      "old": "Old",
+      "didRoute": "DID / Route",
+      "cidMatch": "CID Match",
+      "destination": "Destination",
+      "cidPrefix": "CID Prefix",
+      "alertInfo": "Alert Info",
+      "moh": "MOH",
+      "privacy": "Privacy",
+      "ringGroup": "Ring Group",
+      "strategy": "Strategy",
+      "ringTime": "Ring Time"
+    },
+    "trunkStatus": {
+      "registered": "Registered",
+      "disabled": "Disabled",
+      "configured": "Configured"
+    },
+    "callState": {
+      "up": "Up",
+      "ringing": "Ringing"
+    },
+    "extDialog": {
+      "title": "Create Extension",
+      "description": "Create a new extension on the PBX. This will be created via the FreePBX adapter and saved locally.",
+      "extensionNumber": "Extension Number",
+      "displayName": "Display Name",
+      "namePlaceholder": "John Doe",
+      "callerIdName": "Caller ID Name",
+      "callerIdNumber": "Caller ID Number",
+      "sipPassword": "SIP Password",
+      "voicemailPin": "Voicemail PIN"
+    },
+    "trunkDialog": {
+      "title": "Create SIP Trunk",
+      "description": "Add a new SIP trunk to the PBX. Configure the connection and authentication settings.",
+      "trunkName": "Trunk Name",
+      "trunkNamePlaceholder": "My SIP Trunk",
+      "technology": "Technology",
+      "sipLegacy": "SIP (Legacy)",
+      "hostSipServer": "Host / SIP Server",
+      "port": "Port",
+      "username": "Username",
+      "secretPassword": "Secret / Password",
+      "outboundCid": "Outbound CID",
+      "maxChannels": "Max Channels",
+      "codecs": "Codecs",
+      "transport": "Transport",
+      "provider": "Provider",
+      "providerPlaceholder": "Provider name (optional)",
+      "createTrunk": "Create Trunk"
+    },
+    "callDialog": {
+      "title": "Originate Call",
+      "description": "Place a call from one extension to another or an external number.",
+      "fromExtension": "From Extension",
+      "destination": "Destination",
+      "destinationPlaceholder": "200 or external number",
+      "callButton": "Call"
+    },
+    "extSheet": {
+      "unnamed": "Unnamed Extension",
+      "description": "Full enterprise extension configuration",
+      "extPrefix": "Ext"
+    },
+    "trunkSheet": {
+      "techTrunk": "{{tech}} Trunk",
+      "editDescription": "Edit trunk settings · changes are pushed to the PBX",
+      "viewDescription": "Trunk registration and configuration details",
+      "activeChannels": "Active channels",
+      "editSettings": "Edit Settings",
+      "readOnlyNote": "Trunks are read-only here — FreePBX exposes no trunk write API. Manage trunks in the FreePBX admin UI."
+    },
+    "reloadBanner": {
+      "message": "Configuration changes are staged on the PBX but not yet live. Apply Config to activate them (this reloads Asterisk)."
+    },
+    "queueSheet": {
+      "strategyLabel": "{{strategy}} strategy",
+      "description": "Queue performance metrics and agent configuration",
+      "agents": "Agents",
+      "queueMembers": "Queue Members ({{count}})",
+      "noMembers": "No members in this queue"
+    },
+    "ringGroupSheet": {
+      "description": "Ring group configuration and members",
+      "membersCount": "Members ({{count}})",
+      "noMembers": "No members in this ring group"
+    },
+    "ivrSheet": {
+      "description": "IVR menu structure and routing options",
+      "menuOptions": "Menu Options ({{count}})",
+      "noDestination": "No destination",
+      "returnLabel": "Return: {{value}}",
+      "noMenuOptions": "No menu options configured"
+    },
+    "voicemailSheet": {
+      "description": "Voicemail box details and message counts",
+      "newMessages": "New Messages",
+      "oldMessages": "Old Messages"
+    },
+    "trunkEdit": {
+      "callerIdNumberOnly": "CallerID Number Only",
+      "yesDisabled": "Yes (Disabled)",
+      "dialOutPrefixPlaceholder": "e.g. 9",
+      "providerNamePlaceholder": "Provider name",
+      "failoverPlaceholder": "Trunk name or ID"
+    },
+    "sections": {
+      "identity": "Identity",
+      "credentials": "Credentials",
+      "callerId": "Caller ID",
+      "callRouting": "Call Routing",
+      "recording": "Recording",
+      "features": "Features",
+      "liveFreepbxData": "Live FreePBX Data",
+      "connection": "Connection",
+      "authentication": "Authentication",
+      "mediaCodecs": "Media & Codecs",
+      "advanced": "Advanced",
+      "channels": "Channels",
+      "rawSettings": "Raw Settings",
+      "general": "General",
+      "connectionSip": "Connection / SIP",
+      "pjsipRegistration": "PJSIP / Registration",
+      "performance": "Performance",
+      "settings": "Settings",
+      "configuration": "Configuration",
+      "description": "Description",
+      "details": "Details"
+    },
+    "fields": {
+      "extension": "Extension",
+      "displayName": "Display Name",
+      "sipName": "SIP Name",
+      "description": "Description",
+      "user": "User",
+      "technology": "Technology",
+      "dialString": "Dial String",
+      "sipPassword": "SIP Password",
+      "voicemail": "Voicemail",
+      "outboundCid": "Outbound CID",
+      "emergencyCid": "Emergency CID",
+      "noAnswerCid": "No Answer CID",
+      "busyCid": "Busy CID",
+      "unavailableCid": "Unavailable CID",
+      "ringTimer": "Ring Timer",
+      "noAnswerDest": "No Answer Dest",
+      "busyDest": "Busy Dest",
+      "unavailDest": "Unavail Dest",
+      "noAnswerAction": "No Answer Action",
+      "mohClass": "MOH Class",
+      "policy": "Policy",
+      "onDemand": "On Demand",
+      "priority": "Priority",
+      "inboundExternal": "Inbound External",
+      "outboundExternal": "Outbound External",
+      "inboundInternal": "Inbound Internal",
+      "outboundInternal": "Outbound Internal",
+      "answerMode": "Answer Mode",
+      "intercom": "Intercom",
+      "cwTone": "CW Tone",
+      "hintOverride": "Hint Override",
+      "trunkName": "Trunk Name",
+      "trunkId": "Trunk ID",
+      "provider": "Provider",
+      "keepCid": "Keep CID",
+      "disabled": "Disabled",
+      "failoverTrunk": "Failover Trunk",
+      "dialOutPrefix": "Dial-out Prefix",
+      "sipServer": "SIP Server",
+      "port": "Port",
+      "username": "Username",
+      "secret": "Secret",
+      "transport": "Transport",
+      "context": "Context",
+      "fromDomain": "From Domain",
+      "fromUser": "From User",
+      "registration": "Registration",
+      "pjsipLine": "PJSIP Line",
+      "authRejectionPermanent": "Auth Rejection Permanent",
+      "expiration": "Expiration",
+      "identifyBy": "Identify By",
+      "codecs": "Codecs",
+      "dtmfMode": "DTMF Mode",
+      "mediaEncryption": "Media Encryption",
+      "rtpSymmetric": "RTP Symmetric",
+      "forceRport": "Force RPort",
+      "t38Udptl": "T.38 UDPTL",
+      "qualifyFrequency": "Qualify Frequency",
+      "sendConnectedLine": "Send Connected Line",
+      "trustRpid": "Trust RPID",
+      "sendRpid": "Send RPID",
+      "faxDetect": "Fax Detect",
+      "allowUnauthOptions": "Allow Unauth Options",
+      "maxRetries": "Max Retries",
+      "retryInterval": "Retry Interval",
+      "registrationString": "Registration String",
+      "aorContact": "AOR Contact",
+      "matchIpCidr": "Match (IP/CIDR)",
+      "contactUser": "Contact User",
+      "avgHoldTime": "Avg Hold Time",
+      "avgTalkTime": "Avg Talk Time",
+      "callsTaken": "Calls Taken",
+      "groupNumber": "Group Number",
+      "announcement": "Announcement",
+      "authentication": "Authentication"
+    }
+  },
+  "PhoneDetailPage": {
+    "common": {
+      "cancel": "Cancel",
+      "previewPlan": "Preview Plan"
+    },
+    "values": {
+      "assigned": "Assigned",
+      "none": "None",
+      "unknown": "Unknown"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "onboard": "Onboard",
+      "provision": "Provision",
+      "copy": "Copy",
+      "firmwareManagement": "Firmware Management"
+    },
+    "errorBanner": "Some data failed to load. Results may be incomplete.",
+    "notFound": {
+      "title": "Phone not found",
+      "back": "Back to Phones"
+    },
+    "liveState": {
+      "label": "Live state:",
+      "lines": "Lines:",
+      "linesValue": "{{active}} active / {{total}} total",
+      "lockout": "Lockout: {{lockout}}",
+      "refresh": "refreshes every 5s"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "config": "Configuration",
+      "provisioning": "Provisioning",
+      "network": "Network",
+      "actions": "Actions"
+    },
+    "overview": {
+      "deviceInfo": "Device Information",
+      "statusHealth": "Status & Health",
+      "pbxAssociation": "PBX Association",
+      "tagsMetadata": "Tags & Metadata",
+      "noTags": "No tags"
+    },
+    "fields": {
+      "name": "Name",
+      "vendor": "Vendor",
+      "model": "Model",
+      "macAddress": "MAC Address",
+      "serialNumber": "Serial Number",
+      "firmware": "Firmware",
+      "location": "Location",
+      "status": "Status",
+      "lifecycle": "Lifecycle",
+      "sipRegistration": "SIP Registration",
+      "uptime": "Uptime",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "lastSeen": "Last Seen",
+      "lastPolled": "Last Polled",
+      "pbxSystem": "PBX System",
+      "extension": "Extension",
+      "sipUser": "SIP User",
+      "discoveryMethod": "Discovery Method",
+      "created": "Created",
+      "updated": "Updated",
+      "configTemplate": "Config Template",
+      "currentStatus": "Current Status",
+      "autoProvisionUrl": "Auto-Provision URL",
+      "template": "Template",
+      "currentVersion": "Current Version",
+      "ipAddress": "IP Address",
+      "subnet": "Subnet",
+      "vlan": "VLAN",
+      "sipRegistrar": "SIP Registrar",
+      "pbx": "PBX"
+    },
+    "config": {
+      "templateAssignment": "Template Assignment",
+      "noTemplateAssigned": "No template assigned",
+      "manageTemplates": "Manage Templates",
+      "provisioningInfo": "Provisioning Info",
+      "configPreview": "Config Preview",
+      "configPreviewDesc": "Generated provisioning configuration",
+      "assignTemplateHint": "Assign a template to generate configuration"
+    },
+    "provisioning": {
+      "statusTitle": "Provisioning Status",
+      "statusDesc": "Current provisioning state and history",
+      "provisioning": "Provisioning...",
+      "provisionNow": "Provision Now",
+      "firmware": "Firmware",
+      "firmwareDesc": "Current firmware version and compliance"
+    },
+    "network": {
+      "detailsTitle": "Network Details"
+    },
+    "connTest": {
+      "title": "Phone Login Test",
+      "description": "Test connectivity and login to the phone's web interface · retrieves device info, SIP registration, and verifies credentials",
+      "username": "Username",
+      "password": "Password",
+      "saveCreds": "Save credentials on successful login",
+      "testing": "Testing...",
+      "testConnection": "Test Connection",
+      "testFailed": "Connection test failed",
+      "result": {
+        "authenticated": "Connected & Authenticated",
+        "configReadable": "Device Connected (Config Readable)",
+        "identified": "Device Identified",
+        "reachable": "Reachable (identity unknown)",
+        "lockedOut": "Phone is Locked Out",
+        "unreachable": "Phone Unreachable",
+        "error": "Error: {{error}}",
+        "statusIp": "Status: {{status}} · IP: {{ip}}",
+        "apiAccessibleSuffix": " · API accessible",
+        "vendor": "Vendor:",
+        "model": "Model:",
+        "mac": "MAC:",
+        "firmware": "Firmware:",
+        "configItems": "Config Items:",
+        "lockout": "Lockout:",
+        "notLocked": "Not Locked",
+        "sip": "SIP:",
+        "registered": "Registered",
+        "notRegistered": "Not Registered",
+        "account": "Account {{account}}:",
+        "active": "Active",
+        "notConfigured": "Not Configured",
+        "rawPValues": "Raw P-values ({{count}} items)"
+      }
+    },
+    "lifecycle": {
+      "title": "Lifecycle Management",
+      "description": "Change the lifecycle state of this device",
+      "onboardDevice": "Onboard Device",
+      "enterMaintenance": "Enter Maintenance Mode",
+      "exitMaintenance": "Exit Maintenance Mode",
+      "decommissionDevice": "Decommission Device"
+    },
+    "quickActions": {
+      "title": "Quick Actions",
+      "description": "Device operations",
+      "testConnection": "Test Phone Connection",
+      "pushSipTooltipLinked": "Push extension {{extension}} credentials to phone",
+      "pushSipTooltipUnlinked": "Not linked to a PBX extension, run Auto-link first",
+      "pushSipConfig": "Push SIP Config from PBX",
+      "reprovisionConfig": "Re-provision Config",
+      "rebootPhone": "Reboot Phone",
+      "moveToSite": "Move to Site",
+      "factoryReset": "Factory Reset",
+      "discoveryScans": "Discovery Scans",
+      "configTemplates": "Config Templates"
+    },
+    "pushSip": {
+      "title": "Push SIP Config from FreePBX",
+      "descPrefix": "Pushes extension",
+      "descFrom": "from",
+      "linkedPbx": "the linked PBX",
+      "descSuffix": "down to this phone as Account 1. FreeSDN doesn't cache SIP secrets, enter the password from FreePBX once and it goes straight to the phone.",
+      "passwordLabel": "SIP Password (from FreePBX extension)",
+      "passwordPlaceholder": "Enter the SIP secret",
+      "secretHint": "In FreePBX: Applications → Extensions → {{extension}} → Edit → \"Secret\".",
+      "plan": "Plan (Account 1):",
+      "pushToPhone": "Push to Phone"
+    },
+    "migrate": {
+      "title": "Move phone to a different site",
+      "description": "Moves {{ip}} ({{model}}) from its current site to the one you pick. The shadow device row + firmware history follow automatically. Re-run Auto-link to PBX at the destination after the move.",
+      "destinationSite": "Destination site",
+      "pickSite": "Pick a site…",
+      "noOtherSites": "No other sites in your organization. Create one in Settings → Sites first.",
+      "followLinks": "Follow PBX/extension links",
+      "followLinksHint": "Try to rebind the phone to an equivalent PBX at the new site (matched by host + extension number). Off by default, links are cleared so Auto-link can pick the right destination.",
+      "planTitle": "Migration plan:",
+      "fromTo": "From → To:",
+      "shadowDeviceRow": "Shadow device row:",
+      "willFollow": "✓ will follow",
+      "notPresent": ", not present",
+      "firmwareHistoryRows": "Firmware history rows:",
+      "pbxLink": "PBX link:",
+      "rebound": "✓ rebound",
+      "willBeCleared": "⚠ will be cleared",
+      "noneDash": ", none",
+      "extensionLink": "Extension link:",
+      "configTemplate": "Config template:",
+      "movePhone": "Move Phone"
+    },
+    "reboot": {
+      "title": "Reboot this phone?",
+      "description": "{{ip}} ({{model}}) will be unreachable for ~30 seconds while it restarts. Active calls on this device will drop.",
+      "confirm": "Reboot"
+    },
+    "factoryReset": {
+      "title": "Factory reset this phone?",
+      "destructive": "This is destructive.",
+      "description": "The phone at {{ip}} will lose ALL configuration, SIP accounts, line keys, voicemail PIN, admin password. It will reboot with default settings and need to be re-onboarded."
+    },
+    "onboard": {
+      "title": "Onboard Device",
+      "description": "Onboard {{name}} into active managed state",
+      "deviceName": "Device Name",
+      "selectTemplate": "Select template..."
+    },
+    "toasts": {
+      "previewFailed": "Preview failed",
+      "sipConfigPushed": "SIP config pushed",
+      "pushFailed": "Push failed",
+      "migrationPreviewFailed": "Migration preview failed",
+      "phoneMigrated": "Phone migrated",
+      "migrationFailed": "Migration failed",
+      "rebootSent": "Reboot sent",
+      "rebootFailed": "Reboot failed",
+      "factoryResetSent": "Factory reset sent",
+      "factoryResetFailed": "Factory reset failed"
+    }
+  },
+  "PBXPage": {
+    "status": {
+      "online": "Online",
+      "error": "Error",
+      "unknown": "Unknown"
+    },
+    "header": {
+      "title": "PBX Systems",
+      "description": "{{count}} PBX systems · {{online}} online"
+    },
+    "actions": {
+      "export": "Export",
+      "addPBX": "Add PBX"
+    },
+    "errorBanner": "Some data failed to load. Results may be incomplete.",
+    "stats": {
+      "totalPBX": {
+        "title": "Total PBX",
+        "description": "Configured systems"
+      },
+      "online": {
+        "title": "Online",
+        "reachable": "{{percent}}% reachable",
+        "noPBX": "No PBX"
+      },
+      "offlineError": {
+        "title": "Offline / Error",
+        "description": "Needs attention"
+      },
+      "totalExtensions": {
+        "title": "Total Extensions",
+        "description": "Across all PBX"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search PBX systems by name, IP, or type…",
+      "allStatuses": "All statuses",
+      "offlineError": "Offline / Error",
+      "clearFilters": "Clear filters"
+    },
+    "columns": {
+      "name": "PBX System",
+      "type": "Type",
+      "status": "Status",
+      "connection": "Connection",
+      "extensions": "Extensions",
+      "lastSynced": "Last Synced"
+    },
+    "rowActions": {
+      "viewDashboard": "View Dashboard",
+      "syncNow": "Sync Now",
+      "viewExtensions": "View Extensions",
+      "openWebUI": "Open Web UI",
+      "delete": "Delete"
+    },
+    "itemName": "PBX system",
+    "itemNamePlural": "PBX systems",
+    "empty": {
+      "title": "No PBX systems connected",
+      "addFirst": "Add First PBX"
+    },
+    "bulk": {
+      "syncAll": "Sync All",
+      "delete": "Delete",
+      "deleteToast": {
+        "title": "Bulk Delete",
+        "description": "Please delete PBX systems individually for safety."
+      }
+    },
+    "toasts": {
+      "added": {
+        "title": "PBX added",
+        "description": "{{name}} has been connected successfully."
+      },
+      "error": {
+        "title": "Error",
+        "createFailed": "Failed to create PBX",
+        "deleteFailed": "Failed to delete PBX",
+        "syncFailed": "Failed to sync PBX"
+      }
+    },
+    "test": {
+      "connected": "Connected",
+      "connectionFailed": "Connection failed",
+      "responseTime": "Response time: {{ms}}ms"
+    },
+    "pbxTypes": {
+      "freepbx": {
+        "label": "FreePBX",
+        "description": "FreePBX / Asterisk AMI"
+      },
+      "asterisk": {
+        "label": "Asterisk",
+        "description": "Asterisk AMI direct"
+      },
+      "freeswitch": {
+        "label": "FreeSWITCH",
+        "description": "FreeSWITCH ESL"
+      },
+      "3cx": {
+        "label": "3CX",
+        "description": "3CX Management API"
+      },
+      "other": {
+        "label": "Other",
+        "description": "Custom PBX system"
+      }
+    },
+    "dialog": {
+      "title": "Add PBX System",
+      "description": "Connect an existing PBX server. Supports FreePBX.",
+      "testConnection": "Test Connection",
+      "fields": {
+        "pbxType": "PBX Type",
+        "displayName": "Display Name",
+        "ipAddress": "IP Address / Hostname",
+        "apiPort": "API Port",
+        "sipPort": "SIP Port",
+        "username": "Username",
+        "password": "Password",
+        "apiKey": "API Key (optional)",
+        "clientId": "Client ID",
+        "clientSecret": "Client Secret",
+        "description": "Description (optional)"
+      },
+      "placeholders": {
+        "displayName": "Office PBX",
+        "username": "admin",
+        "apiKey": "If required by your PBX",
+        "clientId": "From the M2M app",
+        "description": "Brief description"
+      },
+      "oauth": {
+        "heading": "OAuth2 Machine-to-Machine App",
+        "optional": "(FreePBX 16+, optional)",
+        "createAt": "Create one at",
+        "whenSet": "When set, the adapter uses the sanctioned REST + GraphQL API surface (78 queries, 105 mutations) instead of legacy web-session auth."
+      },
+      "tls": {
+        "label": "Allow self-signed / expired TLS certificate",
+        "help": "Check this only if your PBX uses a self-signed or expired cert. Default is strict verification. The override is per-PBX and audit-logged."
+      }
+    }
+  },
+  "ExtensionsPage": {
+    "status": {
+      "idle": "Idle",
+      "inUse": "In Use",
+      "ringing": "Ringing",
+      "unavailable": "Unavailable",
+      "dnd": "DND",
+      "unknown": "Unknown"
+    },
+    "ringStrategy": {
+      "ringAll": "Ring All"
+    },
+    "columns": {
+      "extension": "Extension",
+      "status": "Status",
+      "callerId": "Caller ID",
+      "type": "Type",
+      "pbx": "PBX",
+      "voicemail": "Voicemail",
+      "ringGroup": "Ring Group",
+      "strategy": "Strategy",
+      "members": "Members",
+      "ringTime": "Ring Time"
+    },
+    "voicemail": {
+      "enabled": "Enabled"
+    },
+    "ringTimeSeconds": "{{seconds}}s",
+    "header": {
+      "title": "Extensions & Ring Groups",
+      "description": "{{extensions}} extensions, {{ringGroups}} ring groups"
+    },
+    "actions": {
+      "export": "Export"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "stats": {
+      "extensions": {
+        "title": "Extensions",
+        "description": "All registered"
+      },
+      "idle": {
+        "title": "Idle",
+        "description": "Available now"
+      },
+      "inUse": {
+        "title": "In Use",
+        "description": "Active calls"
+      },
+      "ringGroups": {
+        "title": "Ring Groups",
+        "description": "Configured"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search extensions, names, or ring groups…",
+      "allPbxSystems": "All PBX systems",
+      "clearFilters": "Clear filters"
+    },
+    "tabs": {
+      "extensions": "Extensions",
+      "ringGroups": "Ring Groups"
+    },
+    "empty": {
+      "extensions": {
+        "title": "No extensions found",
+        "description": "Connect a PBX and sync to import extensions"
+      },
+      "ringGroups": {
+        "title": "No ring groups found"
+      }
+    },
+    "bulk": {
+      "enableVm": "Enable VM",
+      "disableVm": "Disable VM",
+      "delete": "Delete"
+    },
+    "toasts": {
+      "bulkAction": "Bulk Action",
+      "bulkDelete": "Bulk Delete",
+      "enableVoicemail": "Enabled voicemail for {{count}} extensions.",
+      "disableVoicemail": "Disabled voicemail for {{count}} extensions.",
+      "deleteExtensionsSafety": "Delete extensions individually for safety.",
+      "deleteRingGroupsSafety": "Delete ring groups individually for safety."
+    }
+  },
+  "components": {
+    "phoneStatus": {
+      "online": "Online",
+      "offline": "Offline",
+      "inCall": "In Call",
+      "ringing": "Ringing",
+      "dnd": "DND",
+      "warning": "Warning",
+      "unknown": "Unknown"
+    },
+    "lifecycle": {
+      "discovered": "Discovered",
+      "onboarding": "Onboarding",
+      "managed": "Managed",
+      "maintenance": "Maintenance",
+      "firmwareUpdating": "Updating FW",
+      "decommissioned": "Decommissioned"
+    },
+    "provision": {
+      "pending": "Pending",
+      "generated": "Generated",
+      "pushed": "Pushed",
+      "applied": "Applied",
+      "failed": "Failed",
+      "stale": "Stale"
+    },
+    "scan": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "callDirection": {
+      "inbound": "Inbound",
+      "outbound": "Outbound",
+      "internal": "Internal"
+    },
+    "callStatus": {
+      "answered": "Answered",
+      "missed": "Missed",
+      "voicemail": "Voicemail",
+      "failed": "Failed",
+      "completed": "Answered",
+      "noAnswer": "No Answer",
+      "busy": "Busy"
+    },
+    "pbxType": {
+      "other": "Other"
+    }
+  },
+  "PBXOverviewTab": {
+    "stats": {
+      "activeCalls": "Active Calls",
+      "rightNow": "Right now",
+      "extensions": "Extensions",
+      "registered": "Registered",
+      "sipTrunks": "SIP Trunks",
+      "online": "{{count}} online",
+      "voicemails": "Voicemails",
+      "unreadMessages": "Unread messages",
+      "callsToday": "Calls Today",
+      "ringGroups": "Ring Groups",
+      "queues": "Queues",
+      "ivrMenus": "IVR Menus",
+      "dids": "DIDs"
+    },
+    "trunks": {
+      "heading": "SIP Trunks",
+      "channels": "channels",
+      "empty": "No trunk data available · click Sync to load"
+    },
+    "queues": {
+      "waitingBadge": "{{count}} waiting",
+      "agents": "Agents",
+      "completed": "Completed",
+      "waiting": "Waiting"
+    },
+    "connection": {
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "heading": "Connection Status",
+      "ipAddress": "IP Address",
+      "apiPort": "API Port",
+      "sipPort": "SIP Port",
+      "asterisk": "Asterisk",
+      "lastSync": "Last Sync",
+      "never": "Never"
+    },
+    "extensions": {
+      "heading": "Extensions",
+      "viewAll": "View All",
+      "emptyTitle": "No extensions synced yet",
+      "syncNow": "Sync Now",
+      "colExt": "Ext",
+      "colName": "Name",
+      "colStatus": "Status",
+      "colVm": "VM",
+      "active": "Active",
+      "inactive": "Inactive",
+      "moreCount": "+{{count}} more extensions"
+    }
+  },
+  "AnnouncementsConfigSection": {
+    "common": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "announcements": {
+      "title": "Announcements",
+      "id": "ID",
+      "description": "Description",
+      "recording": "Recording",
+      "skip": "Skip",
+      "postDest": "Post Dest"
+    },
+    "pagingGroups": {
+      "title": "Paging / Intercom Groups",
+      "group": "Group",
+      "description": "Description",
+      "default": "Default"
+    },
+    "systemRecordings": {
+      "title": "System Recordings",
+      "name": "Name",
+      "filename": "Filename",
+      "description": "Description",
+      "languages": "Languages"
+    },
+    "musicOnHold": {
+      "title": "Music on Hold",
+      "category": "Category",
+      "type": "Type",
+      "random": "Random",
+      "format": "Format"
+    }
+  },
+  "RoutingConfigSection": {
+    "outboundRoutes": {
+      "title": "Outbound Routes ({{count}})",
+      "columns": {
+        "name": "Name",
+        "cid": "CID",
+        "emergency": "Emergency",
+        "sequence": "Sequence"
+      },
+      "fallbackName": "Route {{index}}",
+      "emergencyBadge": "Emergency"
+    },
+    "followMe": {
+      "title": "Follow Me ({{count}})",
+      "extension": "Ext {{ext}}"
+    },
+    "dayNight": {
+      "title": "Day/Night Controls ({{count}})",
+      "columns": {
+        "extension": "Extension",
+        "destination": "Destination",
+        "description": "Description"
+      }
+    },
+    "timeConditions": {
+      "title": "Time Conditions ({{count}})",
+      "columns": {
+        "name": "Name",
+        "timezone": "Timezone",
+        "trueDest": "True Dest",
+        "falseDest": "False Dest",
+        "mode": "Mode"
+      }
+    }
+  },
+  "PBXSettingsTab": {
+    "connection": {
+      "title": "PBX Connection Settings",
+      "description": "Update connection credentials and configuration"
+    },
+    "fields": {
+      "displayName": "Display Name",
+      "description": "Description",
+      "ipAddress": "IP Address / Hostname",
+      "apiPort": "API Port",
+      "sipPort": "SIP Port",
+      "username": "Username",
+      "password": "Password"
+    },
+    "auth": {
+      "heading": "Authentication"
+    },
+    "actions": {
+      "saveSettings": "Save Settings",
+      "testConnection": "Test Connection",
+      "deletePBX": "Delete PBX"
+    },
+    "dangerZone": {
+      "title": "Danger Zone",
+      "description": "Permanent actions that cannot be undone",
+      "deleteConfirm": "Delete PBX \"{{name}}\"? This cannot be undone."
+    }
+  },
+  "VoicemailPage": {
+    "title": "Voicemail",
+    "subtitle": "{{total}} messages · {{unread}} unread",
+    "dataLoadError": "Some data failed to load. Results may be incomplete.",
+    "unknown": "Unknown",
+    "urgent": "Urgent",
+    "empty": "No voicemail messages",
+    "itemName": "voicemails",
+    "columns": {
+      "from": "From",
+      "mailbox": "Mailbox",
+      "duration": "Duration",
+      "date": "Date"
+    },
+    "actions": {
+      "markRead": "Mark as read",
+      "download": "Download",
+      "downloadUnavailable": "Audio playback is not available, the recording is stored only on the PBX.",
+      "delete": "Delete"
+    },
+    "stats": {
+      "totalMessages": "Total Messages",
+      "unread": "Unread",
+      "urgent": "Urgent"
+    }
+  },
+  "PBXExtensionsTab": {
+    "heading": "Extensions",
+    "countSummary": "{{count}} extensions on this PBX",
+    "itemName": "extensions",
+    "actions": {
+      "refresh": "Refresh",
+      "create": "Create Extension"
+    },
+    "empty": {
+      "title": "No extensions found",
+      "syncAction": "Sync from PBX"
+    }
+  },
+  "PBXDidsTab": {
+    "heading": "DIDs / Inbound Routes",
+    "routesConfigured": "{{count}} inbound routes configured",
+    "itemName": "DIDs",
+    "emptyText": "No DIDs / inbound routes found",
+    "syncFromPbx": "Sync from PBX",
+    "create": "New Inbound Route"
+  },
+  "PBXQueuesTab": {
+    "heading": "Call Queues",
+    "subtitle": "Live queue data from the PBX",
+    "itemName": "queues",
+    "empty": "No call queues found or adapter not connected"
+  },
+  "PBXVoicemailTab": {
+    "heading": "Voicemail Boxes",
+    "description": "Voicemail configuration from the PBX",
+    "itemName": "voicemail boxes",
+    "empty": "No voicemail boxes found or adapter not connected"
+  },
+  "VoIPPage": {
+    "common": {
+      "unknown": "Unknown",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "active": "Active",
+      "inactive": "Inactive",
+      "filter": "Filter",
+      "notAvailable": "N/A",
+      "error": "Error"
+    },
+    "header": {
+      "title": "VoIP",
+      "subtitle": "Voice over IP · phones, PBX, extensions, and call management",
+      "addPhone": "Add Phone"
+    },
+    "errorBanner": "Some data failed to load. Results may be incomplete.",
+    "tabs": {
+      "dashboard": "Dashboard",
+      "phones": "Phones",
+      "pbxSystems": "PBX Systems",
+      "extensions": "Extensions",
+      "ringGroups": "Ring Groups",
+      "queues": "Queues",
+      "callHistory": "Call History",
+      "voicemail": "Voicemail"
+    },
+    "phoneStatus": {
+      "online": "Online",
+      "offline": "Offline",
+      "inCall": "In Call",
+      "ringing": "Ringing",
+      "dnd": "DND",
+      "unknown": "Unknown"
+    },
+    "callDirection": {
+      "inbound": "Inbound",
+      "outbound": "Outbound",
+      "internal": "Internal"
+    },
+    "pbxType": {
+      "other": "Other"
+    },
+    "ringStrategy": {
+      "ringall": "Ring All",
+      "hunt": "Hunt",
+      "memoryhunt": "Memory Hunt",
+      "random": "Random"
+    },
+    "phoneCard": {
+      "unknownDevice": "Unknown Device",
+      "extLabel": "Ext:",
+      "ipLabel": "IP:",
+      "macLabel": "MAC:",
+      "fwLabel": "FW:",
+      "lastSeen": "Last seen: {{time}}"
+    },
+    "addPbxDialog": {
+      "title": "Add PBX System",
+      "description": "Connect an existing PBX server to manage it through FreeSDN. Supports FreePBX.",
+      "pbxTypeLabel": "PBX Type",
+      "pbxTypePlaceholder": "Select PBX type",
+      "displayNameLabel": "Display Name",
+      "displayNamePlaceholder": "e.g. Office PBX, Main FreePBX",
+      "ipAddressLabel": "IP Address / Hostname",
+      "apiPortLabel": "API Port",
+      "sipPortLabel": "SIP Port",
+      "credentialsLabel": "Credentials",
+      "usernameLabel": "Username",
+      "passwordLabel": "Password",
+      "apiKeyLabel": "API Key (optional)",
+      "apiKeyPlaceholder": "Only if required by your PBX",
+      "descriptionLabel": "Description (optional)",
+      "descriptionPlaceholder": "Brief description of this PBX system",
+      "responseTime": "Response time: {{ms}}ms",
+      "testConnection": "Test Connection",
+      "addPbx": "Add PBX"
+    },
+    "pbxTypeOptions": {
+      "freepbx": "FreePBX / Asterisk AMI",
+      "asterisk": "Asterisk AMI direct",
+      "freeswitch": "FreeSWITCH ESL",
+      "3cx": "3CX Management API",
+      "other": "Custom PBX system"
+    },
+    "addPhoneDialog": {
+      "title": "Add Phone",
+      "description": "Register a new IP phone. It can be auto-provisioned or manually configured.",
+      "phoneNameLabel": "Phone Name",
+      "phoneNamePlaceholder": "e.g. Reception Phone, John's Desk",
+      "vendorLabel": "Vendor",
+      "vendorPlaceholder": "Select vendor",
+      "vendorOther": "Other",
+      "modelLabel": "Model",
+      "modelPlaceholder": "e.g. GXP2170, T54W",
+      "macLabel": "MAC Address",
+      "ipLabel": "IP Address",
+      "assignPbxLabel": "Assign to PBX (optional)",
+      "assignPbxPlaceholder": "Select PBX · none",
+      "serialLabel": "Serial Number",
+      "serialPlaceholder": "Optional",
+      "locationLabel": "Location",
+      "locationPlaceholder": "e.g. Building A, Floor 2",
+      "descriptionLabel": "Description (optional)",
+      "descriptionPlaceholder": "Brief description",
+      "cancel": "Cancel",
+      "addPhone": "Add Phone"
+    },
+    "toasts": {
+      "createPbxFailed": "Failed to create PBX",
+      "deletePbxFailed": "Failed to delete PBX",
+      "syncFailed": "Sync failed",
+      "connectionTestFailed": "Connection test failed",
+      "createPhoneFailed": "Failed to create phone",
+      "deletePhoneFailed": "Failed to delete phone",
+      "markReadFailed": "Failed to mark as read",
+      "deleteVoicemailFailed": "Failed to delete voicemail"
+    },
+    "confirm": {
+      "deletePhone": "Delete phone \"{{name}}\"?",
+      "deletePbx": "Delete PBX \"{{name}}\"? This cannot be undone.",
+      "deleteVoicemail": "Delete this voicemail?"
+    },
+    "phoneColumns": {
+      "phone": "Phone",
+      "extension": "Extension",
+      "ipAddress": "IP Address",
+      "macAddress": "MAC Address",
+      "firmware": "Firmware",
+      "status": "Status",
+      "lastSeen": "Last Seen"
+    },
+    "phoneActions": {
+      "viewDetails": "View Details",
+      "callLogs": "Call Logs",
+      "rebootPhone": "Reboot Phone",
+      "provisionConfig": "Provision Config",
+      "deletePhone": "Delete Phone"
+    },
+    "pbxColumns": {
+      "pbxSystem": "PBX System",
+      "type": "Type",
+      "address": "Address",
+      "status": "Status",
+      "lastSeen": "Last Seen"
+    },
+    "pbxStatus": {
+      "connected": "Connected",
+      "disconnected": "Disconnected"
+    },
+    "pbxActions": {
+      "configure": "Configure",
+      "openAdminUi": "Open Admin UI",
+      "syncExtensions": "Sync Extensions",
+      "delete": "Delete"
+    },
+    "extensionColumns": {
+      "extension": "Extension",
+      "displayName": "Display Name",
+      "callerId": "Caller ID",
+      "voicemail": "Voicemail",
+      "status": "Status"
+    },
+    "extensionActions": {
+      "viewDetails": "View Details",
+      "settings": "Settings"
+    },
+    "ringGroupColumns": {
+      "ringGroup": "Ring Group",
+      "strategy": "Strategy",
+      "ringTime": "Ring Time",
+      "members": "Members",
+      "membersCount": "{{count}} members",
+      "status": "Status"
+    },
+    "callLogColumns": {
+      "direction": "Direction",
+      "from": "From",
+      "to": "To",
+      "status": "Status",
+      "duration": "Duration",
+      "time": "Time",
+      "playRecording": "Play recording"
+    },
+    "callStatus": {
+      "answered": "Answered",
+      "missed": "Missed",
+      "voicemail": "Voicemail",
+      "failed": "Failed"
+    },
+    "stats": {
+      "totalPhones": "Total Phones",
+      "online": "Online",
+      "inCall": "In Call",
+      "offline": "Offline",
+      "percentOfFleet": "{{percent}}% of fleet",
+      "activeRightNow": "Active right now"
+    },
+    "summary": {
+      "extensions": "Extensions",
+      "activeCount": "{{count}} active",
+      "ringGroups": "Ring Groups",
+      "voicemails": "Voicemails",
+      "unreadMessages": "Unread messages"
+    },
+    "dashboard": {
+      "pbxSystems": "PBX Systems",
+      "noPbxConfigured": "No PBX systems configured",
+      "sipTrunks": "SIP Trunks",
+      "channels": "{{active}}/{{max}} ch",
+      "recentCalls": "Recent Calls",
+      "viewAll": "View All"
+    },
+    "queues": {
+      "queueNumber": "Queue {{number}}",
+      "queueNumberStrategy": "Queue {{number}} · {{strategy}}",
+      "callsWaiting": "{{count}} waiting",
+      "inQueue": "In Queue",
+      "agents": "Agents",
+      "waiting": "Waiting",
+      "emptyTitle": "Call Queues",
+      "emptyDescription": "Queue management coming soon."
+    },
+    "phones": {
+      "searchPlaceholder": "Search phones by name, extension, IP, MAC...",
+      "zeroTouchTitle": "Zero-Touch Provisioning",
+      "zeroTouchDescription": "Auto-discover and provision Grandstream phones via GDMS or local DHCP Option 66",
+      "provisioningSettings": "Provisioning Settings",
+      "emptyTitle": "No VoIP phones found",
+      "emptyDescription": "Add a phone or enable auto-provisioning to get started."
+    },
+    "pbxTab": {
+      "bannerTitle": "PBX Integration · FreePBX",
+      "bannerDescription": "Connect your existing PBX server to sync extensions, ring groups, and call logs automatically",
+      "addPbx": "Add PBX",
+      "cardTitle": "PBX Systems",
+      "cardDescription": "Manage connected PBX/IP telephony servers",
+      "emptyTitle": "No PBX systems connected",
+      "emptyDescription": "Connect a FreePBX server to manage extensions and call routing from this dashboard.",
+      "addPbxSystem": "Add PBX System"
+    },
+    "extensionsTab": {
+      "searchPlaceholder": "Search extensions...",
+      "cardTitle": "Extensions",
+      "cardDescription": "Phone extensions across all PBX systems"
+    },
+    "ringGroupsTab": {
+      "cardTitle": "Ring Groups",
+      "cardDescription": "Configure how incoming calls are distributed to groups of extensions",
+      "addRingGroup": "Add Ring Group",
+      "emptyTitle": "No ring groups configured",
+      "emptyDescription": "Create ring groups to route incoming calls to multiple extensions."
+    },
+    "callHistory": {
+      "searchPlaceholder": "Search calls...",
+      "exportCdr": "Export CDR"
+    },
+    "voicemail": {
+      "searchPlaceholder": "Search voicemails...",
+      "refresh": "Refresh",
+      "unreadBadge": "{{count}} unread",
+      "emptyTitle": "No voicemails",
+      "emptyDescription": "Voicemail messages will appear here.",
+      "urgent": "Urgent",
+      "new": "New",
+      "extDate": "Ext {{ext}} · {{date}}",
+      "play": "Play",
+      "playMarkRead": "Play & Mark Read",
+      "download": "Download",
+      "downloadToastTitle": "Download",
+      "downloadToastDescription": "File: {{file}}, Format: {{format}}, Size: {{size}} bytes",
+      "noAudioError": "No audio file available for this voicemail.",
+      "downloadError": "Failed to download voicemail.",
+      "downloadUnavailable": "Audio playback is not available, the recording is stored only on the PBX.",
+      "delete": "Delete"
+    },
+    "itemNames": {
+      "calls": "calls",
+      "phones": "phones",
+      "pbxSystems": "PBX systems",
+      "extensions": "extensions",
+      "ringGroups": "ring groups",
+      "callRecords": "call records"
+    }
+  },
+  "PhonesListPage": {
+    "common": {
+      "cancel": "Cancel",
+      "done": "Done"
+    },
+    "unnamed": "Unnamed",
+    "header": {
+      "title": "Phone Fleet",
+      "description": "{{count}} devices · fleet management, provisioning, lifecycle control"
+    },
+    "actions": {
+      "addPhone": "Add Phone",
+      "linking": "Linking…",
+      "autoLink": "Auto-link to PBX",
+      "discover": "Discover",
+      "export": "Export"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "stats": {
+      "totalPhones": {
+        "title": "Total Phones",
+        "description": "In fleet"
+      },
+      "online": {
+        "title": "Online",
+        "reachable": "{{percent}}% reachable",
+        "noPhones": "No phones"
+      },
+      "managed": {
+        "title": "Managed",
+        "description": "Lifecycle: managed"
+      },
+      "sipRegistered": {
+        "title": "SIP Registered",
+        "description": "Authenticated to PBX"
+      }
+    },
+    "filters": {
+      "searchPlaceholder": "Search by name, IP, MAC, or model…",
+      "clear": "Clear filters",
+      "lifecycle": {
+        "placeholder": "Lifecycle",
+        "all": "All States",
+        "discovered": "Discovered",
+        "onboarding": "Onboarding",
+        "managed": "Managed",
+        "maintenance": "Maintenance",
+        "decommissioned": "Decommissioned"
+      },
+      "vendor": {
+        "placeholder": "Vendor",
+        "all": "All Vendors"
+      },
+      "status": {
+        "placeholder": "Status",
+        "all": "All Statuses",
+        "online": "Online",
+        "offline": "Offline",
+        "inCall": "In Call"
+      }
+    },
+    "viewMode": {
+      "table": "Table view",
+      "grid": "Grid view"
+    },
+    "columns": {
+      "device": "Device",
+      "status": "Status",
+      "lifecycle": "Lifecycle",
+      "network": "Network",
+      "vendor": "Vendor",
+      "extension": "Extension",
+      "firmware": "Firmware",
+      "provisioning": "Provisioning",
+      "location": "Location",
+      "lastSeen": "Last Seen"
+    },
+    "extension": {
+      "onPbx": "on {{name}}",
+      "unlinked": "unlinked"
+    },
+    "rowActions": {
+      "viewDetails": "View Details",
+      "onboard": "Onboard",
+      "reprovision": "Re-provision",
+      "maintenanceMode": "Maintenance Mode",
+      "exitMaintenance": "Exit Maintenance",
+      "decommission": "Decommission",
+      "delete": "Delete"
+    },
+    "itemName": {
+      "phones": "phones",
+      "phone": "phone"
+    },
+    "empty": {
+      "title": "No phones found",
+      "discoverDevices": "Discover Devices"
+    },
+    "bulkActions": {
+      "connect": "Connect",
+      "reboot": "Reboot",
+      "provision": "Provision",
+      "delete": "Delete"
+    },
+    "addDialog": {
+      "title": "Add Phone",
+      "description": "Manually add a phone to the fleet",
+      "vendorOther": "Other",
+      "fields": {
+        "name": "Name",
+        "macAddress": "MAC Address",
+        "ipAddress": "IP Address",
+        "vendor": "Vendor",
+        "model": "Model",
+        "location": "Location"
+      },
+      "placeholders": {
+        "name": "Front Desk Phone",
+        "location": "Building A, Floor 2"
+      }
+    },
+    "onboardDialog": {
+      "title": "Onboard Device",
+      "description": "Onboard {{name}} into active management",
+      "selectTemplate": "Select template...",
+      "fields": {
+        "deviceName": "Device Name",
+        "configTemplate": "Config Template",
+        "location": "Location"
+      }
+    },
+    "bulkConnect": {
+      "title": "Fleet Connect",
+      "descriptionForm": "Authenticate and sync {{count}} phone(s) · credentials will be saved, and all device data (SIP, network, firmware, VLAN) will be fetched and persisted.",
+      "descriptionDone": "Connection operation completed for {{count}} phone(s).",
+      "username": "Username",
+      "password": "Password",
+      "passwordPlaceholder": "Enter phone web password",
+      "cards": {
+        "devices": "Devices",
+        "autoValue": "Auto",
+        "saveCredentials": "Save Credentials",
+        "fullValue": "Full",
+        "configSync": "Config Sync"
+      },
+      "infoText": "Credentials are saved per-device on successful authentication. Each phone will be probed, logged in, and all configuration (SIP accounts, network, VLAN, firmware) synchronized.",
+      "connecting": "Connecting {{count}} devices…",
+      "connectButton": "Connect {{count}} Phone(s)",
+      "results": {
+        "connected": "Connected",
+        "failed": "Failed",
+        "skipped": "Skipped",
+        "successRate": "Success Rate",
+        "deviceResults": "Device Results",
+        "authenticated": "Authenticated",
+        "summary": "{{succeeded}} of {{total}} devices synchronized"
+      }
+    },
+    "toasts": {
+      "deleteFailed": "Failed to delete phone",
+      "onboardFailed": "Onboard failed",
+      "decommissionFailed": "Decommission failed",
+      "maintenanceFailed": "Maintenance toggle failed",
+      "provisionFailed": "Provision failed",
+      "bulkRebootFailed": "Bulk reboot failed",
+      "bulkProvisionFailed": "Bulk provision failed",
+      "createFailed": "Failed to create phone",
+      "bulkConnectComplete": {
+        "title": "Bulk Connect Complete",
+        "description": "{{succeeded}} connected, {{failed}} failed, {{skipped}} skipped"
+      },
+      "bulkConnectFailed": "Bulk Connect Failed",
+      "bulkDelete": {
+        "title": "Bulk Delete",
+        "description": "Please delete phones individually for safety."
+      },
+      "autoLink": {
+        "linked": {
+          "title": "Linked {{count}} phone(s) to PBX extensions",
+          "description": "{{alreadyLinked}} already linked, {{skipped}} skipped (no SIP info or matching extension)"
+        },
+        "allLinked": {
+          "title": "All phones already linked",
+          "description": "{{alreadyLinked}} phones are already bound to PBX extensions"
+        },
+        "none": {
+          "title": "No phones to link",
+          "skipped": "{{skipped}} phones skipped, see server logs for reasons",
+          "noSip": "No discoverable phones with SIP info"
+        },
+        "failed": "Auto-link failed"
+      }
+    }
+  },
+  "VoipDiscoveryPage": {
+    "common": {
+      "yes": "Yes",
+      "no": "No",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "cancel": "Cancel",
+      "delete": "Delete"
+    },
+    "phases": {
+      "init": "Initialize",
+      "arp": "ARP Sweep",
+      "http": "HTTP Probe",
+      "sip": "SIP Scan",
+      "complete": "Complete"
+    },
+    "subnetPresets": {
+      "classC254": "Class C · 254 hosts",
+      "classAPrivate254": "Class A private · 254 hosts",
+      "classBPrivate254": "Class B private · 254 hosts",
+      "commonVoipVlan": "Common VoIP VLAN",
+      "largeSweep65k": "Large sweep · 65k hosts"
+    },
+    "validation": {
+      "required": "Subnet is required",
+      "invalidCidr": "Must be valid CIDR notation (e.g. 192.168.1.0/24)",
+      "prefixRange": "Prefix must be between /16 and /32",
+      "invalidOctets": "Invalid IP address octets"
+    },
+    "toast": {
+      "scanStarted": {
+        "title": "Scan started",
+        "message": "Discovery scan queued for {{subnet}}",
+        "autoDetect": "auto-detect"
+      },
+      "scanFailed": {
+        "title": "Scan failed",
+        "fallback": "Failed to start scan"
+      },
+      "scanCancelled": {
+        "title": "Scan cancelled",
+        "message": "The discovery scan has been stopped."
+      },
+      "cancelFailed": {
+        "title": "Cancel failed",
+        "fallback": "Could not cancel scan"
+      },
+      "scanDeleted": {
+        "title": "Scan deleted",
+        "message": "Scan record removed from history."
+      },
+      "deleteFailed": {
+        "title": "Delete failed",
+        "fallback": "Could not delete scan"
+      }
+    },
+    "columns": {
+      "status": "Status",
+      "subnet": "Subnet",
+      "type": "Type",
+      "devices": "Devices",
+      "started": "Started",
+      "duration": "Duration"
+    },
+    "deviceColumns": {
+      "ipAddress": "IP Address",
+      "macAddress": "MAC Address",
+      "vendor": "Vendor",
+      "model": "Model",
+      "method": "Method",
+      "sipRegistration": "SIP Registration",
+      "auth": "Auth",
+      "status": "Status"
+    },
+    "deviceStatus": {
+      "new": "New",
+      "known": "Known"
+    },
+    "sip": {
+      "registered": "Registered",
+      "configured": "Configured"
+    },
+    "newDevicesBadge": "+{{count}} new",
+    "actions": {
+      "results": "Results",
+      "onboard": "Onboard",
+      "view": "View",
+      "refresh": "Refresh",
+      "newScan": "New Scan",
+      "startFirstScan": "Start First Scan"
+    },
+    "header": {
+      "title": "Network Discovery",
+      "subtitle": "Scan the network for VoIP phones and endpoints"
+    },
+    "errors": {
+      "loadFailed": "Some data failed to load. Results may be incomplete."
+    },
+    "stats": {
+      "totalScans": "Total Scans",
+      "runningNow": "Running Now",
+      "devicesFound": "Devices Found",
+      "scanTime": "Scan Time"
+    },
+    "liveScan": {
+      "inProgress": "Discovery Scan In Progress",
+      "complete": "Scan Complete",
+      "cancelled": "Scan Cancelled",
+      "failed": "Scan Failed",
+      "initializing": "Initializing...",
+      "devicesCount": "{{count}} devices",
+      "stopping": "Stopping...",
+      "stopScan": "Stop Scan",
+      "overallProgress": "Overall Progress",
+      "discoveredDevices": "Discovered Devices",
+      "waitingForDevices": "Waiting for devices...",
+      "macUnknown": "MAC unknown",
+      "activityLog": "Activity Log",
+      "waitingForEvents": "Waiting for events..."
+    },
+    "scanForm": {
+      "title": "New Discovery Scan",
+      "description": "Configure and launch a network scan to find VoIP devices",
+      "subnetLabel": "Subnet (CIDR)",
+      "commonSubnets": "Common subnets",
+      "scanTypeLabel": "Scan Type",
+      "autoOnboardLabel": "Auto-Onboard",
+      "defaultTemplateLabel": "Default Template",
+      "selectTemplatePlaceholder": "Select template...",
+      "starting": "Starting...",
+      "startDiscovery": "Start Discovery"
+    },
+    "scanTypes": {
+      "arp": "ARP Sweep",
+      "sip": "SIP OPTIONS",
+      "http": "HTTP Probe",
+      "full": "Full (ARP + SIP + HTTP)"
+    },
+    "credentials": {
+      "label": "Phone Login Credentials",
+      "custom": "Custom credentials for phone web UI login",
+      "default": "Uses default admin/admin",
+      "username": "Username",
+      "password": "Password"
+    },
+    "history": {
+      "title": "Scan History",
+      "description": "Previous discovery scan results",
+      "empty": "No scans yet"
+    },
+    "itemName": {
+      "scans": "scans",
+      "devices": "devices"
+    },
+    "resultsDialog": {
+      "title": "Scan Results",
+      "devicesFound": "{{count}} devices found",
+      "empty": "No devices in this scan"
+    },
+    "deleteDialog": {
+      "title": "Delete Scan Record",
+      "descriptionBefore": "This will permanently delete the scan of",
+      "descriptionAfter": "and its results. This action cannot be undone.",
+      "deleting": "Deleting..."
+    }
+  },
+  "VoipTemplatesPage": {
+    "header": {
+      "title": "Config Templates",
+      "subtitle": "{{count}} provisioning templates"
+    },
+    "actions": {
+      "newTemplate": "New Template",
+      "edit": "Edit",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "update": "Update",
+      "create": "Create"
+    },
+    "columns": {
+      "template": "Template",
+      "vendor": "Vendor",
+      "modelPattern": "Model Pattern",
+      "phones": "Phones",
+      "updated": "Updated"
+    },
+    "badges": {
+      "default": "Default"
+    },
+    "duplicateName": "{{name}} (Copy)",
+    "errorBanner": "Some data failed to load. Results may be incomplete.",
+    "itemName": "templates",
+    "empty": {
+      "title": "No config templates",
+      "createFirst": "Create First Template"
+    },
+    "dialog": {
+      "editTitle": "Edit Template",
+      "createTitle": "Create Template",
+      "editDescription": "Update provisioning template settings",
+      "createDescription": "Create a new provisioning config template"
+    },
+    "vendors": {
+      "generic": "Generic"
+    },
+    "form": {
+      "nameLabel": "Template Name *",
+      "namePlaceholder": "Default Grandstream Config",
+      "vendorLabel": "Vendor",
+      "modelPatternLabel": "Model Pattern",
+      "modelPatternHelp": "Glob pattern for matching phone models",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "sipSettingsLabel": "SIP Settings (JSON)",
+      "networkSettingsLabel": "Network Settings (JSON)",
+      "customSettingsLabel": "Custom Settings (JSON)",
+      "invalidJson": "Invalid JSON"
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "createFailed": "Failed to create template",
+      "updateFailed": "Failed to update template",
+      "deleteFailed": "Failed to delete template"
+    }
+  },
+  "FleetDashboardPage": {
+    "header": {
+      "title": "Fleet Dashboard",
+      "subtitle": "GDMS-style VoIP fleet overview · phones, provisioning, firmware compliance"
+    },
+    "actions": {
+      "discoverDevices": "Discover Devices",
+      "addPhone": "Add Phone",
+      "viewAllPhones": "View All Phones"
+    },
+    "error": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "stats": {
+      "totalPhones": "Total Phones",
+      "online": "Online",
+      "offline": "Offline",
+      "sipRegistered": "SIP Registered",
+      "recentlyDiscovered": "Recently Discovered",
+      "last24h": "Last 24h",
+      "pendingProvision": "Pending Provision"
+    },
+    "lifecycle": {
+      "title": "Device Lifecycle",
+      "description": "Current state of all devices across the fleet",
+      "discovered": "Discovered",
+      "onboarding": "Onboarding",
+      "managed": "Managed",
+      "maintenance": "Maintenance",
+      "decommissioned": "Decommissioned"
+    },
+    "quickActions": {
+      "title": "Quick Actions",
+      "runDiscoveryScan": "Run Discovery Scan",
+      "reviewDiscovered": "Review Discovered ({{count}})",
+      "configTemplates": "Config Templates",
+      "firmwareCompliance": "Firmware Compliance",
+      "pbxSystems": "PBX Systems"
+    },
+    "distribution": {
+      "vendor": "Vendor Distribution",
+      "model": "Model Distribution",
+      "firmware": "Firmware Versions",
+      "noData": "No data",
+      "unknown": "Unknown"
+    },
+    "sip": {
+      "title": "SIP Registration",
+      "registered": "Registered",
+      "unregistered": "Unregistered"
+    }
+  },
+  "CallLogsPage": {
+    "title": "Call History",
+    "subtitle": "{{count}} call records",
+    "itemName": "calls",
+    "error": {
+      "loadFailed": "Some data failed to load. Results may be incomplete."
+    },
+    "stats": {
+      "totalCalls": "Total Calls",
+      "inbound": "Inbound",
+      "outbound": "Outbound",
+      "missed": "Missed",
+      "avgDuration": "Avg Duration"
+    },
+    "columns": {
+      "direction": "Direction",
+      "caller": "Caller",
+      "destination": "Destination",
+      "status": "Status",
+      "duration": "Duration",
+      "dateTime": "Date / Time",
+      "pbx": "PBX"
+    },
+    "filters": {
+      "searchPlaceholder": "Search caller, destination...",
+      "directionPlaceholder": "Direction",
+      "statusPlaceholder": "Status",
+      "allDirections": "All Directions",
+      "inbound": "Inbound",
+      "outbound": "Outbound",
+      "internal": "Internal",
+      "allStatus": "All Status",
+      "answered": "Answered",
+      "missed": "Missed",
+      "noAnswer": "No Answer",
+      "busy": "Busy",
+      "failed": "Failed"
+    },
+    "empty": {
+      "noRecords": "No call records found"
+    }
+  },
+  "PBXConfigTab": {
+    "heading": "PBX Configuration Snapshot",
+    "description": "All synced data from the PBX",
+    "lastSynced": "Last synced {{time}}",
+    "actions": {
+      "reSync": "Re-Sync"
+    },
+    "summary": {
+      "extensions": "Extensions",
+      "trunks": "Trunks",
+      "ringGroups": "Ring Groups",
+      "dids": "DIDs",
+      "timeConditions": "Time Conditions",
+      "contacts": "Contacts",
+      "recordings": "Recordings",
+      "featureCodes": "Feature Codes",
+      "modules": "Modules",
+      "outboundRoutes": "Outbound Routes",
+      "announcements": "Announcements",
+      "certificates": "Certificates",
+      "backupJobs": "Backup Jobs",
+      "amiManagers": "AMI Managers"
+    }
+  },
+  "SecurityConfigSection": {
+    "blacklist": {
+      "title": "Blacklist ({{count}})"
+    },
+    "certificates": {
+      "title": "Certificates ({{count}})",
+      "columns": {
+        "name": "Name",
+        "type": "Type",
+        "description": "Description",
+        "default": "Default"
+      },
+      "types": {
+        "selfSigned": "Self-Signed",
+        "letsEncrypt": "Let's Encrypt"
+      }
+    },
+    "adminUsers": {
+      "title": "Admin Users ({{count}})",
+      "columns": {
+        "username": "Username",
+        "extRange": "Ext Range",
+        "department": "Department"
+      }
+    },
+    "amiManagers": {
+      "title": "AMI Managers ({{count}})",
+      "columns": {
+        "name": "Name",
+        "permit": "Permit",
+        "read": "Read",
+        "write": "Write"
+      }
+    }
+  },
+  "SystemConfigSection": {
+    "cards": {
+      "contacts": {
+        "title": "Contacts"
+      },
+      "backupJobs": {
+        "title": "Backup Jobs"
+      },
+      "sipSettings": {
+        "title": "SIP/PJSIP Settings ({{count}} parameters)"
+      },
+      "parking": {
+        "title": "Parking Lot Configuration"
+      },
+      "featureCodes": {
+        "title": "Feature Codes"
+      },
+      "installedModules": {
+        "title": "Installed Modules"
+      }
+    },
+    "contacts": {
+      "columns": {
+        "name": "Name",
+        "extension": "Extension",
+        "email": "Email",
+        "company": "Company",
+        "department": "Department"
+      }
+    },
+    "backupJobs": {
+      "columns": {
+        "name": "Name",
+        "description": "Description"
+      }
+    }
+  },
+  "PBXActiveCallsTab": {
+    "title": "Active Calls",
+    "subtitle": "Real-time call monitoring • Auto-refreshes every 5s",
+    "actions": {
+      "refresh": "Refresh",
+      "originate": "Originate Call"
+    },
+    "itemName": "active calls",
+    "empty": {
+      "title": "No active calls",
+      "monitoring": "Monitoring..."
+    }
+  },
+  "PBXTrunksTab": {
+    "heading": "SIP Trunks",
+    "subtitle": "Live trunk data from the PBX adapter",
+    "itemName": "trunks",
+    "emptyState": "No trunks found or adapter not connected",
+    "actions": {
+      "refresh": "Refresh",
+      "createTrunk": "Create Trunk"
+    }
+  },
+  "PBXIvrTab": {
+    "heading": "IVR Menus",
+    "description": "Interactive Voice Response configurations",
+    "itemName": "IVR menus",
+    "empty": "No IVR menus found or adapter not connected"
+  },
+  "PBXRingGroupsTab": {
+    "heading": "Ring Groups",
+    "configuredCount": "{{n}} ring groups configured",
+    "itemName": "ring groups",
+    "empty": "No ring groups found",
+    "create": "New Ring Group"
+  }
+}

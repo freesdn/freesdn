@@ -1,0 +1,2589 @@
+{
+  "welcome": "Welcome to FreeSDN",
+  "welcomeUser": "Welcome, {{name}}!",
+  "appName": "FreeSDN",
+  "appDescription": "Unified Network Management Platform",
+  "loading": "Loading...",
+  "saving": "Saving...",
+  "success": "Success",
+  "error": "Error",
+  "warning": "Warning",
+  "info": "Information",
+  "confirm": "Confirm",
+  "cancel": "Cancel",
+  "save": "Save",
+  "delete": "Delete",
+  "edit": "Edit",
+  "create": "Create",
+  "update": "Update",
+  "search": "Search",
+  "searchPlaceholder": "Search...",
+  "filter": "Filter",
+  "reset": "Reset",
+  "apply": "Apply",
+  "close": "Close",
+  "back": "Back",
+  "next": "Next",
+  "previous": "Previous",
+  "yes": "Yes",
+  "no": "No",
+  "ok": "OK",
+  "actions": "Actions",
+  "details": "Details",
+  "settings": "Settings",
+  "help": "Help",
+  "logout": "Logout",
+  "login": "Login",
+  "register": "Register",
+  "profile": "Profile",
+  "language": "Language",
+  "theme": "Theme",
+  "darkMode": "Dark Mode",
+  "lightMode": "Light Mode",
+  "system": "System",
+  "noData": "No data available",
+  "tryAgain": "Try Again",
+  "learnMore": "Learn More",
+  "viewAll": "View All",
+  "showMore": "Show More",
+  "showLess": "Show Less",
+  "selectAll": "Select All",
+  "deselectAll": "Deselect All",
+  "noResults": "No results found",
+  "pagination": {
+    "showing": "Showing {{from}} to {{to}} of {{total}}",
+    "itemsPerPage": "Items per page",
+    "page": "Page {{current}} of {{total}}",
+    "first": "First",
+    "last": "Last"
+  },
+  "time": {
+    "now": "Just now",
+    "minutesAgo": "{{count}} minute ago",
+    "minutesAgo_other": "{{count}} minutes ago",
+    "hoursAgo": "{{count}} hour ago",
+    "hoursAgo_other": "{{count}} hours ago",
+    "daysAgo": "{{count}} day ago",
+    "daysAgo_other": "{{count}} days ago",
+    "seconds": "{{count}} second",
+    "seconds_other": "{{count}} seconds",
+    "minutes": "{{count}} minute",
+    "minutes_other": "{{count}} minutes",
+    "hours": "{{count}} hour",
+    "hours_other": "{{count}} hours",
+    "days": "{{count}} day",
+    "days_other": "{{count}} days"
+  },
+  "organizations": {
+    "title": "Organizations",
+    "subtitle": "Manage multi-tenant organizations and their resources.",
+    "allOrganizations": "All Organizations",
+    "searchPlaceholder": "Search organizations...",
+    "loading": "Loading organizations…",
+    "owner": "Owner",
+    "plans": {
+      "free": "Free",
+      "pro": "Pro",
+      "enterprise": "Enterprise"
+    },
+    "statuses": {
+      "active": "Active",
+      "suspended": "Suspended",
+      "trial": "Trial"
+    },
+    "metrics": {
+      "users": "Users",
+      "sites": "Sites",
+      "deviceLimit": "Device Limit",
+      "totalOrganizations": "Total Organizations",
+      "active": "Active",
+      "totalUsers": "Total Users",
+      "enterprise": "Enterprise"
+    },
+    "actions": {
+      "addOrganization": "Add Organization",
+      "createOrganization": "Create Organization",
+      "editOrganization": "Edit Organization",
+      "deleteOrganization": "Delete Organization",
+      "apiKeys": "API Keys"
+    },
+    "dialogs": {
+      "createTitle": "Create Organization",
+      "createDescription": "Create a new organization for multi-tenant management."
+    },
+    "fields": {
+      "name": "Organization Name",
+      "slug": "URL Slug",
+      "ownerEmail": "Owner Email",
+      "plan": "Plan",
+      "description": "Description"
+    },
+    "planOptions": {
+      "free": "Free - 10 devices",
+      "pro": "Pro - 100 devices",
+      "enterprise": "Enterprise - Unlimited"
+    },
+    "placeholders": {
+      "name": "Acme Corporation",
+      "slug": "acme-corp",
+      "ownerEmail": "admin@acme.com",
+      "description": "Brief description...",
+      "yourOrg": "your-org"
+    },
+    "hints": {
+      "urlSlug": "Used in URLs: freesdn.org/{{slug}}"
+    },
+    "errors": {
+      "load": "Failed to load organizations ({{status}})",
+      "loadGeneric": "Failed to load organizations",
+      "create": "Failed to create organization ({{status}})",
+      "createGeneric": "Failed to create organization"
+    }
+  },
+  "AddDeviceDialog": {
+    "title": "Add Camera / NVR",
+    "description": "Discover devices on your network or add a camera manually.",
+    "tabs": {
+      "discover": "Discover Device",
+      "manual": "Manual Add"
+    },
+    "common": {
+      "site": "Site",
+      "port": "Port",
+      "username": "Username",
+      "password": "Password",
+      "cancel": "Cancel",
+      "back": "Back",
+      "close": "Close",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "selectSiteHint": "Select a site to enable import"
+    },
+    "site": {
+      "namePlaceholder": "Site name (e.g. Main Office)",
+      "create": "Create",
+      "createError": "Failed to create site",
+      "loading": "Loading...",
+      "noSitesCreate": "No sites · create one →",
+      "selectPlaceholder": "Select site",
+      "noSitesYet": "No sites exist yet",
+      "usePlusButton": "Use the + button to create one",
+      "quickCreateTitle": "Quick-create a new site"
+    },
+    "manual": {
+      "createError": "Failed to create camera",
+      "cameraName": "Camera Name",
+      "cameraNamePlaceholder": "e.g. Front Door",
+      "ipAddress": "IP Address",
+      "cameraType": "Camera Type",
+      "vendor": "Vendor",
+      "vendorPlaceholder": "Select vendor",
+      "location": "Location",
+      "locationPlaceholder": "e.g. Building A",
+      "addCamera": "Add Camera",
+      "validation": {
+        "nameRequired": "Camera name is required",
+        "ipRequired": "IP address is required",
+        "siteRequired": "Site is required",
+        "ipInvalid": "Enter a valid IP address or hostname"
+      },
+      "cameraTypes": {
+        "ipCamera": "IP Camera",
+        "ptzCamera": "PTZ Camera",
+        "doorbell": "Doorbell",
+        "intercom": "Intercom"
+      },
+      "vendors": {
+        "other": "Other"
+      }
+    },
+    "discover": {
+      "scan": {
+        "hint": "Don't know the IP? Scan the local network for ONVIF cameras & NVRs.",
+        "button": "Scan local network",
+        "scanning": "Scanning…",
+        "unknownDevice": "ONVIF device",
+        "none": "No devices answered. Enter the IP manually below.",
+        "failed": "Network scan failed."
+      },
+      "steps": {
+        "connect": "Connect",
+        "confirmCamera": "Confirm Camera",
+        "selectChannels": "Select Channels",
+        "done": "Done",
+        "chooseType": "Choose Type"
+      },
+      "connect": {
+        "ipAddress": "NVR / Camera IP Address",
+        "success": "Connection Successful",
+        "failed": "Connection Failed:",
+        "test": "Test",
+        "discoverChannels": "Discover Channels",
+        "testError": "Connection test failed. Check the IP address and try again.",
+        "discoverError": "Discovery failed. Check credentials and try again.",
+        "detail": {
+          "device": "Device",
+          "type": "Type",
+          "model": "Model",
+          "firmware": "Firmware",
+          "serial": "Serial"
+        },
+        "invalidHost": "Enter a valid IP address or hostname"
+      },
+      "channels": {
+        "channelCount": "{{count}} channels",
+        "nvrName": "NVR Name",
+        "nvrNamePlaceholder": "Office NVR",
+        "cameraChannels": "Camera Channels",
+        "selectedCount": "{{selected}} / {{total}} selected",
+        "onlineCount": "{{count}} Online",
+        "offlineCount": "{{count}} Offline",
+        "searchPlaceholder": "Search cameras...",
+        "selectAll": "Select All",
+        "deselectAll": "Deselect All",
+        "onlineOnly": "Online Only",
+        "noMatch": "No channels match your search or filter.",
+        "noneDiscovered": "No camera channels discovered on this device.",
+        "importError": "Import failed. If this NVR was previously added, use the Sync Channels option from the NVR list instead.",
+        "importCount_one": "Import {{count}} Camera",
+        "importCount_other": "Import {{count}} Cameras",
+        "filterOnline": "Filter to online channels",
+        "filterOffline": "Filter to offline channels"
+      },
+      "cameraConfirm": {
+        "standaloneCamera": "Standalone Camera",
+        "info": "This device is a standalone IP camera, not an NVR. It will be imported directly as a camera without channel selection.",
+        "cameraName": "Camera Name",
+        "cameraNamePlaceholder": "My Camera",
+        "importError": "Camera import failed. The device may already be registered.",
+        "importCamera": "Import Camera"
+      },
+      "done": {
+        "errorTitle": "Something went wrong",
+        "errorDescription": "The import may have completed, but the result could not be displayed.",
+        "tryAgain": "Try Again",
+        "completeTitle": "Import Complete",
+        "camerasImported_one": "{{count}} camera imported",
+        "camerasImported_other": "{{count}} cameras imported",
+        "camerasSkipped": ", {{count}} skipped",
+        "cameraImportedSuccess": "{{name}} imported successfully",
+        "channelBadge": "Ch {{id}}",
+        "standalone": "Standalone",
+        "addAnother": "Add Another",
+        "done": "Done",
+        "camerasSynced_one": "{{count}} camera synced (already imported)",
+        "camerasSynced_other": "{{count}} cameras synced (already imported)"
+      },
+      "unknownChoice": {
+        "unknownType": "Unknown type",
+        "noModel": "Unknown model",
+        "info": "We couldn't determine whether this device is a single camera or an NVR. Choose how you'd like to add it.",
+        "asCamera": "Add as camera",
+        "asCameraHint": "Import as a single standalone camera",
+        "asNvr": "Treat as NVR",
+        "asNvrHint": "Continue to channel selection"
+      }
+    },
+    "channelRow": {
+      "noSourceIp": "No source IP",
+      "audio": "Audio"
+    }
+  },
+  "DetectionConfigPanel": {
+    "title": "Detection & Analytics",
+    "save": "Save",
+    "loading": "Loading…",
+    "loadingCapabilities": "Loading smart capabilities…",
+    "sensitivity": "Sensitivity",
+    "low": "Low",
+    "high": "High",
+    "notSupported": "Not Supported",
+    "notAvailableShort": "N/A",
+    "unsupportedFeature": "This camera does not support {{feature}}.",
+    "capabilitiesError": {
+      "title": "Failed to load smart capabilities",
+      "description": "Smart capabilities for this camera could not be retrieved."
+    },
+    "tabLabels": {
+      "motion": "Motion",
+      "lineCrossing": "Line Crossing",
+      "intrusion": "Intrusion",
+      "privacy": "Privacy Masks",
+      "face": "Face Detection"
+    },
+    "motion": {
+      "gridHint": "Click or drag cells to toggle motion detection regions",
+      "enableLabel": "Enable Motion Detection",
+      "enableDescription": "Triggers events when motion is detected in the field of view."
+    },
+    "lineCrossing": {
+      "enableLabel": "Enable Line Crossing Detection",
+      "enableDescription": "Alerts when objects cross a virtual line boundary.",
+      "noRules": "No rules configured on this camera.",
+      "rule": "Rule {{id}}",
+      "addRule": "Add line",
+      "editTitle": "Draw line-crossing tripwire"
+    },
+    "intrusion": {
+      "enableLabel": "Enable Intrusion Detection",
+      "enableDescription": "Triggers events when objects enter a restricted zone for longer than the threshold.",
+      "noZones": "No intrusion zones configured on this camera.",
+      "zone": "Zone {{id}}",
+      "timeThreshold": "Time Threshold (s)",
+      "addRule": "Add zone",
+      "editTitle": "Draw intrusion zone"
+    },
+    "privacy": {
+      "enableLabel": "Enable Privacy Masks",
+      "enableDescription": "Black-out regions of the camera image to protect sensitive areas.",
+      "noRegions": "No privacy mask regions configured.",
+      "region": "Region {{id}}",
+      "points": "{{count}} pts",
+      "addRegion": "Add mask",
+      "editTitle": "Draw privacy mask"
+    },
+    "face": {
+      "enableLabel": "Enable Face Detection",
+      "enableDescription": "Detect and capture faces in the camera field of view.",
+      "snapInterval": "Snap Interval (ms)",
+      "generationSpeed": "Generation Speed",
+      "generationSpeedHint": "1 = fewest captures, 5 = most"
+    },
+    "editArea": "Edit area ({{count}} pts)"
+  },
+  "RunScanDialog": {
+    "trigger": {
+      "runScanNow": "Run scan now"
+    },
+    "title": "Run scan on {{agentName}}",
+    "toast": {
+      "cancelRequested": "Scan cancellation requested",
+      "cancelFailed": "Cancel failed",
+      "dispatched": "Scan dispatched",
+      "dispatchedDescription": "{{scanType}} scan running on {{agentName}}",
+      "failedToStart": "Scan failed to start"
+    },
+    "form": {
+      "intro": "Dispatches a scan immediately over the agent's WebSocket. The card updates live as scanners complete.",
+      "scanTypeLabel": "Scan type",
+      "scanTypeFilterNote": "Filtered by this agent's advertised capabilities.",
+      "targetsLabel": "Targets (optional, one per line or comma-separated)",
+      "targetsHint": "Leave empty to scan the agent's auto-detected interfaces.",
+      "timeoutLabel": "Timeout (seconds)"
+    },
+    "result": {
+      "discoveredHostsPrefix": "Discovered hosts are pushed into",
+      "discoveriesTab": "Discoveries",
+      "discoveredHostsSuffix": "on this page. Switch to that tab to adopt them."
+    },
+    "actions": {
+      "cancel": "Cancel",
+      "dispatching": "Dispatching…",
+      "startScan": "Start scan",
+      "cancelling": "Cancelling…",
+      "cancelScan": "Cancel scan",
+      "hideScanContinues": "Hide (scan continues)",
+      "close": "Close",
+      "runAnother": "Run another"
+    },
+    "progress": {
+      "waitingForAgent": "Waiting for agent to acknowledge…",
+      "complete": "Scan complete",
+      "failed": "Scan failed",
+      "scanning": "Scanning… {{percent}}%",
+      "devicesFound": "Devices found",
+      "currentScanner": "Current scanner",
+      "started": "Started",
+      "completed": "Completed"
+    }
+  },
+  "DeviceDetailsDialog": {
+    "title": "Device Details · {{ip}}",
+    "status": {
+      "adopted": "Adopted"
+    },
+    "actions": {
+      "openHttp": "Open HTTP",
+      "openHttps": "Open HTTPS",
+      "adoptDevice": "Adopt Device"
+    },
+    "cards": {
+      "networkInfo": "Network Info",
+      "classification": "Classification",
+      "openPorts": "Open Ports",
+      "driverMatch": "Driver Match",
+      "allDriverMatches": "All Driver Matches",
+      "suggestions": "Suggestions"
+    },
+    "fields": {
+      "ipAddress": "IP Address",
+      "macAddress": "MAC Address",
+      "hostname": "Hostname",
+      "manufacturer": "Manufacturer",
+      "deviceType": "Device Type",
+      "unknown": "Unknown",
+      "confidence": "Confidence",
+      "manageable": "Manageable",
+      "fingerprintAvailable": "Fingerprint data available",
+      "portTooltip": "Port {{port}}"
+    },
+    "empty": {
+      "noOpenPorts": "No open ports detected",
+      "noDriverMatch": "No driver match found"
+    }
+  },
+  "CameraHealthPanel": {
+    "chart": {
+      "notEnoughData": "Not enough data to render chart."
+    },
+    "timeline": {
+      "notEnoughData": "Not enough data to render status timeline.",
+      "now": "Now"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "noData": "No data"
+    },
+    "stats": {
+      "status": "Status",
+      "bitrate": "Bitrate",
+      "frameRate": "Frame Rate",
+      "codec": "Codec",
+      "resolution": "Resolution",
+      "lastChecked": "Last Checked"
+    },
+    "cards": {
+      "bitrateHistory": "Bitrate History (24 h)",
+      "noHistoryData": "No history data available.",
+      "statusTimeline": "Status Timeline (24 h)",
+      "noStatusData": "No status data available."
+    },
+    "errors": {
+      "loadHealth": "Unable to load health data for this camera.",
+      "loadHistory": "Failed to load history data."
+    }
+  },
+  "FleetActivityPanel": {
+    "title": "Recent Activity",
+    "lastCount": "Last {{n}}",
+    "error": "Could not load fleet activity.",
+    "loading": "Loading…",
+    "empty": "No scheduled runs yet. Once a daemon agent is connected and a schedule's cron matches, executions will appear here.",
+    "columns": {
+      "status": "Status",
+      "siteSchedule": "Site / Schedule",
+      "agent": "Agent",
+      "when": "When",
+      "duration": "Duration",
+      "devices": "Devices",
+      "error": "Error"
+    },
+    "relative": {
+      "seconds": "{{n}}s ago",
+      "minutes": "{{n}}m ago",
+      "hours": "{{n}}h ago",
+      "days": "{{n}}d ago"
+    }
+  },
+  "VPNDashboardWidget": {
+    "title": "VPN Health",
+    "error": {
+      "failedToLoad": "Failed to load VPN data"
+    },
+    "empty": {
+      "noData": "No VPN data available"
+    },
+    "stats": {
+      "connections": "Connections",
+      "healthy": "Healthy",
+      "avgLatency": "Avg Latency",
+      "tunnels": "Tunnels"
+    },
+    "bandwidth": {
+      "rx": "RX",
+      "tx": "TX"
+    },
+    "alerts": "Alerts",
+    "sites": {
+      "prefix": "Sites",
+      "suffix": "healthy"
+    }
+  },
+  "DataTable": {
+    "searchPlaceholder": "Search...",
+    "selectAllRows": "Select all rows",
+    "selectRow": "Select row",
+    "tableAriaLabel": "{{itemName}} data table",
+    "empty": {
+      "title": "No {{itemName}} found",
+      "description": "No {{itemName}} available. Items will appear here once added.",
+      "searchDescription": "No {{itemName}} match \"{{searchQuery}}\". Try adjusting your search."
+    },
+    "pagination": {
+      "showing": "Showing {{startItem}} to {{endItem}} of {{totalItems}} {{itemName}}",
+      "rowsPerPage": "Rows per page",
+      "pageOf": "Page {{current}} of {{total}}",
+      "firstPage": "First page",
+      "previousPage": "Previous page",
+      "nextPage": "Next page",
+      "lastPage": "Last page"
+    }
+  },
+  "ModuleGuard": {
+    "title": "Module Not Enabled",
+    "disabledMessage": {
+      "before": "The",
+      "after": "module is not enabled for your organization."
+    },
+    "actions": {
+      "goToSettings": "Go to Settings > Modules",
+      "goBack": "Go Back"
+    },
+    "helpText": "Contact your administrator if you believe this module should be enabled."
+  },
+  "ProtectedRoute": {
+    "loading": "Loading...",
+    "unauthorized": {
+      "title": "Access Denied",
+      "description": "You don't have permission to access this page. Please contact your administrator if you believe this is an error.",
+      "goToDashboard": "Go to Dashboard",
+      "goBack": "Go Back"
+    }
+  },
+  "BulkActionsBar": {
+    "selectedCount": "{{count}} {{item}} selected",
+    "selectAll": "Select all {{count}} {{item}}s",
+    "all": "(all)",
+    "clearSelection": "Clear selection"
+  },
+  "Dialog": {
+    "close": {
+      "ariaLabel": "Close dialog",
+      "srLabel": "Close"
+    }
+  },
+  "ContextActionsMenu": {
+    "loading": "Loading..."
+  },
+  "AddControllerModal": {
+    "title": {
+      "omada": "Add Omada Controller",
+      "default": "Add Controller"
+    },
+    "description": {
+      "omada": "Connect an Omada controller and map its sites to FreeSDN sites.",
+      "default": "Connect an SDN controller to manage network devices. For firewalls, cameras, PBX, or hypervisors use their dedicated pages."
+    },
+    "submitLabel": "Add Controller",
+    "steps": {
+      "connectionDetails": "Connection details",
+      "siteMapping": "Site mapping"
+    },
+    "sections": {
+      "controllerDetails": "Controller Details"
+    },
+    "fields": {
+      "name": {
+        "label": "Controller Name *",
+        "placeholder": "e.g., HQ Omada Controller"
+      },
+      "site": {
+        "label": "Site *",
+        "placeholder": "Select a site"
+      },
+      "controllerType": {
+        "label": "Controller Type *",
+        "placeholder": "Select controller type"
+      },
+      "host": {
+        "label": "Host Address *",
+        "placeholder": "e.g., 192.168.1.100 or controller.local"
+      },
+      "port": {
+        "label": "Port *"
+      },
+      "username": {
+        "label": "Username *",
+        "placeholder": "admin"
+      },
+      "password": {
+        "label": "Password *"
+      },
+      "cloudRegion": {
+        "label": "Cloud Region *",
+        "placeholder": "Select cloud region"
+      },
+      "clientId": {
+        "label": "Client ID *",
+        "placeholder": "From Omada → Settings → Platform Integration → OpenAPI"
+      },
+      "clientSecret": {
+        "label": "Client Secret *"
+      },
+      "omadaId": {
+        "label": "Omada Controller ID (omadacId) *",
+        "placeholder": "e.g., 7f1346dcd01b17a65ad23024e55effe5",
+        "descriptionPrefix": "Find this in your Omada Cloud URL as the",
+        "descriptionSuffix": "parameter, or in Settings → Platform Integration → OpenAPI application details."
+      }
+    },
+    "connectionMode": {
+      "label": "Connection Mode",
+      "local": "Local Controller",
+      "cloud": "Cloud Controller",
+      "descriptionCloud": "Connect via TP-Link Cloud OpenAPI (OAuth2). Go to your Omada Cloud Controller → Settings → Platform Integration → Open API → Add New App to get your Client ID and Secret.",
+      "descriptionLocal": "Connect directly to a locally hosted Omada Controller via IP/hostname."
+    },
+    "cloudRegions": {
+      "use1": "US East ({{code}})",
+      "euw1": "EU West ({{code}})",
+      "aps1": "Asia Pacific ({{code}})"
+    },
+    "ssl": {
+      "useLabel": "Use SSL/TLS",
+      "useHelper": "Connect using HTTPS",
+      "verifyLabel": "Verify SSL Certificate",
+      "verifyHelper": "Disable for self-signed certs"
+    },
+    "test": {
+      "title": "Connection Test",
+      "helper": "Verify connectivity before adding",
+      "button": "Test Connection",
+      "testing": "Testing...",
+      "successTitle": "Connection Successful",
+      "failedTitle": "Connection Failed",
+      "details": {
+        "latency": "Latency",
+        "latencyValue": "{{ms}}ms",
+        "version": "Version",
+        "mode": "Mode"
+      }
+    },
+    "testErrors": {
+      "selectType": "Please select a controller type",
+      "cloudRequired": "Cloud mode requires Client ID, Secret, Omada ID, and Region",
+      "localRequired": "Host, username and password are required",
+      "failed": "Connection test failed"
+    },
+    "probe": {
+      "networkError": "Network error: could not reach the FreeSDN backend. Make sure the backend server is running and accessible.",
+      "failed": "Failed to probe remote sites: {{message}}. Check the browser console and backend logs for more details.",
+      "unknownError": "Unknown error"
+    },
+    "siteBinding": {
+      "title": "Site Mapping",
+      "summaryOne": "Your Omada controller has 1 site. Map it to an existing FreeSDN site, or leave unmapped to skip.",
+      "summaryMany": "Your Omada controller has {{count}} sites. Map each to an existing FreeSDN site, or leave unmapped to skip.",
+      "selectPlaceholder": "Select a FreeSDN site",
+      "skipOption": "- Skip (don't import devices) -",
+      "empty": "No sites found on the controller. You can still create the controller and configure sites later."
+    }
+  },
+  "TopBar": {
+    "aria": {
+      "openMenu": "Open menu",
+      "openCommandPalette": "Open command palette"
+    },
+    "search": {
+      "placeholder": "Search…"
+    },
+    "connection": {
+      "online": "online",
+      "offline": "offline",
+      "connecting": "connecting",
+      "statusAria": "Connection status: {{status}}",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "connectingLabel": "Connecting...",
+      "tooltipOnline": "Real-time updates active",
+      "tooltipConnecting": "Establishing connection...",
+      "tooltipOffline": "Click to reconnect"
+    },
+    "notifications": {
+      "title": "Notifications",
+      "ariaWithCount": "Notifications ({{n}} unread)",
+      "markAllRead": "Mark all read",
+      "clearAll": "Clear all",
+      "tabActive": "Active",
+      "tabArchive": "Archive",
+      "empty": "No notifications",
+      "emptyArchive": "No archived notifications",
+      "dismissAria": "Dismiss notification",
+      "loadMore": "Load more"
+    },
+    "userMenu": {
+      "ariaLabel": "User menu",
+      "profile": "Profile",
+      "changePassword": "Change Password",
+      "settings": "Settings",
+      "security": "Security",
+      "logout": "Log out"
+    },
+    "roles": {
+      "superAdmin": "Super Admin",
+      "orgAdmin": "Organization Admin",
+      "user": "User"
+    },
+    "profileDialog": {
+      "title": "Profile Settings",
+      "description": "Manage your account settings and preferences.",
+      "fullName": "Full Name",
+      "email": "Email",
+      "change": "Change",
+      "role": "Role",
+      "mfaStatus": "MFA Status",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "manage": "Manage",
+      "enable": "Enable",
+      "deleteAccount": "Delete Account"
+    },
+    "emailDialog": {
+      "title": "Change Email Address",
+      "description": "Enter your new email address. You'll need to verify it before it becomes active.",
+      "currentEmail": "Current Email",
+      "newEmail": "New Email",
+      "newEmailPlaceholder": "Enter new email address",
+      "submit": "Update Email"
+    },
+    "passwordDialog": {
+      "title": "Change Password",
+      "description": "Enter your current password and choose a new one.",
+      "currentPassword": "Current Password",
+      "newPassword": "New Password",
+      "confirmPassword": "Confirm New Password",
+      "submit": "Change Password"
+    },
+    "deleteDialog": {
+      "title": "Delete Account",
+      "description": "This action cannot be undone. This will permanently delete your account and remove all associated data.",
+      "warningHeading": "Warning",
+      "warningData": "• All your personal data will be deleted",
+      "warningKeys": "• API keys and sessions will be revoked",
+      "warningIrreversible": "• This action is irreversible",
+      "confirmPrefix": "Type",
+      "confirmSuffix": "to confirm",
+      "submit": "Delete My Account"
+    },
+    "actions": {
+      "cancel": "Cancel",
+      "close": "Close"
+    },
+    "errors": {
+      "enterNewEmail": "Please enter a new email address",
+      "updateEmailFailed": "Failed to update email",
+      "fillAllFields": "Please fill in all fields",
+      "passwordsDoNotMatch": "New passwords do not match",
+      "passwordTooShort": "Password must be at least 8 characters",
+      "changePasswordFailed": "Failed to change password",
+      "typeDeleteToConfirm": "Please type DELETE to confirm",
+      "deleteAccountFailed": "Failed to delete account"
+    },
+    "success": {
+      "emailUpdated": "Email updated successfully. Please verify your new email.",
+      "passwordChanged": "Password changed successfully"
+    },
+    "time": {
+      "justNow": "Just now",
+      "minutesAgo": "{{n}}m ago",
+      "hoursAgo": "{{n}}h ago",
+      "daysAgo": "{{n}}d ago"
+    }
+  },
+  "UserProfile": {
+    "header": {
+      "title": "Account Settings",
+      "subtitle": "Manage your account and security settings"
+    },
+    "actions": {
+      "signOut": "Sign Out",
+      "saveChanges": "Save Changes",
+      "cancel": "Cancel"
+    },
+    "profile": {
+      "title": "Profile Information",
+      "email": "Email",
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "organization": "Organization",
+      "none": "None",
+      "roles": "Roles"
+    },
+    "password": {
+      "title": "Change Password",
+      "current": "Current Password",
+      "new": "New Password",
+      "confirm": "Confirm New Password",
+      "showPasswords": "Show passwords"
+    },
+    "mfa": {
+      "title": "Two-Factor Authentication",
+      "scanInstructions": "Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.)",
+      "qrCodeAlt": "MFA QR Code",
+      "manualEntryKey": "Manual entry key:",
+      "backupCodes": "Backup codes (save these!):",
+      "enterCode": "Enter code from app to verify:",
+      "verifyEnable": "Verify & Enable",
+      "statusEnabled": "MFA is enabled",
+      "statusDisabled": "MFA is not enabled",
+      "statusEnabledDescription": "Your account is protected with two-factor authentication",
+      "statusDisabledDescription": "Add an extra layer of security to your account",
+      "disable": "Disable MFA",
+      "enable": "Enable MFA"
+    },
+    "messages": {
+      "profileUpdated": "Profile updated successfully",
+      "profileUpdateFailed": "Failed to update profile",
+      "passwordsDoNotMatch": "Passwords do not match",
+      "passwordChanged": "Password changed successfully",
+      "passwordChangeFailed": "Failed to change password",
+      "mfaSetupFailed": "Failed to setup MFA",
+      "mfaEnabled": "MFA enabled successfully",
+      "mfaInvalidCode": "Invalid MFA code",
+      "mfaDisabled": "MFA disabled successfully",
+      "mfaDisableFailed": "Failed to disable MFA"
+    }
+  },
+  "TypeBadge": {
+    "unknown": "Unknown"
+  },
+  "DiscoveredDeviceCard": {
+    "actions": {
+      "viewDetails": "View Details",
+      "copyIp": "Copy IP",
+      "openInBrowser": "Open in Browser",
+      "ignoreDevice": "Ignore Device",
+      "adoptDevice": "Adopt Device",
+      "details": "Details"
+    },
+    "confidence": {
+      "high": "High Match",
+      "good": "Good Match",
+      "low": "Low Match"
+    },
+    "status": {
+      "adopted": "Adopted",
+      "matched": "Driver Matched",
+      "ignored": "Ignored",
+      "discovered": "Discovered"
+    },
+    "morePorts": "+{{count}} more",
+    "driverLabel": "Driver:",
+    "manageable": "Manageable",
+    "deviceAdopted": "Device adopted"
+  },
+  "RecordingTimeline": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "ranges": {
+      "1h": "1 Hour",
+      "4h": "4 Hours",
+      "12h": "12 Hours",
+      "24h": "24 Hours",
+      "3d": "3 Days",
+      "7d": "7 Days"
+    },
+    "legend": {
+      "continuous": "Continuous",
+      "motion": "Motion",
+      "alarm": "Alarm"
+    },
+    "errors": {
+      "loadFailed": "Failed to load recordings"
+    },
+    "empty": {
+      "noRecordings": "No recordings in this time range",
+      "notSupported": "Timeline not available for this camera model"
+    }
+  },
+  "vendorSupport": {
+    "tiers": {
+      "native": "Native, full support",
+      "onvif": "ONVIF (generic), live view only"
+    },
+    "addHint": "Only Hikvision is natively supported in this release (live, recordings, playback, zones). Other vendors connect via generic ONVIF, live view only; recordings, playback and zones aren't available yet.",
+    "notes": {
+      "recordings": "This camera isn't on a natively-supported NVR. Recording search currently requires Hikvision; other vendors connect via generic ONVIF (live view only) for now.",
+      "playback": "Recorded playback currently requires a natively-supported NVR (Hikvision in this release). This vendor connects via generic ONVIF, which provides live view only.",
+      "zones": "Detection zones & privacy masks currently require a natively-supported camera (Hikvision in this release). This vendor connects via generic ONVIF, which doesn't expose zone configuration yet."
+    }
+  },
+  "WallCameraSidebar": {
+    "header": {
+      "title": "Cameras"
+    },
+    "search": {
+      "placeholder": "Search cameras..."
+    },
+    "status": {
+      "placeholder": "Status",
+      "all": "All Status",
+      "online": "Online",
+      "offline": "Offline",
+      "recording": "Recording"
+    },
+    "empty": {
+      "noMatch": "No cameras match"
+    },
+    "camera": {
+      "noDetails": "No details",
+      "onWall": "on wall"
+    },
+    "footer": {
+      "dragHint": "Drag cameras to wall cells"
+    }
+  },
+  "QuickActions": {
+    "actions": {
+      "addDevice": {
+        "label": "Add Device",
+        "description": "Register a new device"
+      },
+      "discovery": {
+        "label": "Discovery",
+        "description": "Scan network for devices"
+      },
+      "sync": {
+        "label": "Sync All",
+        "description": "Synchronize all controllers"
+      },
+      "backup": {
+        "label": "Backup",
+        "description": "Create configuration backup"
+      }
+    }
+  },
+  "AlertsWidget": {
+    "empty": {
+      "title": "All clear!",
+      "description": "No active alerts"
+    },
+    "summary": {
+      "criticalOne": "{{count}} critical alert requires attention",
+      "criticalMany": "{{count}} critical alerts require attention"
+    },
+    "viewAll": "View all {{count}} alerts",
+    "acknowledge": "Acknowledge",
+    "acknowledgeAlert": "Acknowledge alert: {{title}}"
+  },
+  "DeviceStatusWidget": {
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "warning": "Warning",
+      "unknown": "Unknown"
+    },
+    "tooltip": {
+      "devices": "{{n}} devices"
+    }
+  },
+  "DestructiveConfirmDialog": {
+    "typePrompt": {
+      "prefix": "Type",
+      "suffix": "to confirm"
+    },
+    "cancel": "Cancel",
+    "readOnly": {
+      "message": "Read-only mode is on — this change will be refused.",
+      "link": "Turn it off in Settings"
+    }
+  },
+  "Sheet": {
+    "close": {
+      "ariaLabel": "Close panel",
+      "label": "Close"
+    }
+  },
+  "MainLayout": {
+    "skipToMainContent": "Skip to main content"
+  },
+  "PendingChangesDrawer": {
+    "title": "Pending Changes",
+    "refreshAria": "Refresh pending changes",
+    "loading": "Loading…",
+    "description": {
+      "before": "Staged writes for",
+      "after": ". Nothing has touched the live device, apply individually or in bulk."
+    },
+    "actions": {
+      "apply": "Apply",
+      "applyAll": "Apply all",
+      "discard": "Discard",
+      "cancel": "Cancel",
+      "close": "Close"
+    },
+    "operations": {
+      "create": "create",
+      "update": "update",
+      "delete": "delete"
+    },
+    "change": {
+      "targetLabel": "Target:",
+      "noTargetId": "No target id",
+      "applyAria": "Apply {{feature}}",
+      "discardAria": "Discard {{feature}}",
+      "payload": "Payload",
+      "applyResponse": "Apply response"
+    },
+    "readOnly": {
+      "title": "Apply refused: API is read-only",
+      "setPrefix": "Set",
+      "legacyPrefix": "(or the legacy",
+      "middle": ") on the API server, OR your operator role lacks"
+    },
+    "loadError": {
+      "title": "Could not load pending changes",
+      "unknown": "Unknown error"
+    },
+    "empty": {
+      "title": "No pending changes",
+      "description": "Stage a change from any tab and it will appear here."
+    },
+    "sections": {
+      "pending": {
+        "aria": "Pending changes",
+        "heading": "Pending",
+        "bulkDisabledTooltip": "Bulk apply disabled: the queue contains a reboot, firmware install, or restore operation. Apply those individually.",
+        "nothingStaged": "Nothing staged."
+      },
+      "applying": {
+        "aria": "Currently applying",
+        "heading": "Applying"
+      },
+      "failed": {
+        "aria": "Failed changes",
+        "heading": "Failed"
+      },
+      "recentlyApplied": {
+        "aria": "Recently applied",
+        "heading": "Recently applied"
+      }
+    },
+    "confirmApply": {
+      "title": "Apply change?",
+      "bodyBefore": "This will push the staged change to",
+      "bodyAfter": ".",
+      "typedBefore": "This is a destructive change. Type",
+      "typedAfter": " to confirm."
+    },
+    "confirmDiscard": {
+      "title": "Discard change?",
+      "body": "The staged change will be removed without touching the live device."
+    },
+    "bulkApply": {
+      "title": "Apply all pending changes?",
+      "bodyBefore": "{{count}} change(s) will be pushed to",
+      "bodyAfter": " sequentially. Bulk apply STOPS on the first error.",
+      "summaryAria": "Pending change summary",
+      "stopped": "Stopped at {{current}} / {{total}}: {{error}}",
+      "progress": "Applying {{current}} / {{total}}…",
+      "typedBefore": "Type",
+      "typedAfter": " to confirm",
+      "applyCount": "Apply {{count}}"
+    },
+    "toasts": {
+      "applied": {
+        "title": "Change applied",
+        "description": "Pushed to {{gatewayName}}."
+      },
+      "applyFailed": {
+        "title": "Apply failed"
+      },
+      "discarded": {
+        "title": "Change discarded"
+      },
+      "discardFailed": {
+        "title": "Discard failed"
+      },
+      "allApplied": {
+        "title": "All changes applied",
+        "description": "{{count}} change(s) pushed to {{gatewayName}}."
+      }
+    }
+  },
+  "CameraAccessPanel": {
+    "title": "Camera Access Control",
+    "description": "Manage who can access {{camera}} and what they can do.",
+    "thisCamera": "this camera",
+    "loading": "Loading access grants...",
+    "loadError": "Failed to load access grants.",
+    "unknownUser": "Unknown user",
+    "expired": "Expired",
+    "expiresOn": "Expires {{date}}",
+    "confirmRevoke": "Revoke access for {{user}}?",
+    "actions": {
+      "cancel": "Cancel",
+      "grantAccess": "Grant Access",
+      "retry": "Retry",
+      "revokeAccess": "Revoke access"
+    },
+    "levels": {
+      "viewer": {
+        "label": "Viewer",
+        "desc": "Live view only"
+      },
+      "operator": {
+        "label": "Operator",
+        "desc": "+ PTZ, playback"
+      },
+      "full": {
+        "label": "Full",
+        "desc": "+ export, config"
+      }
+    },
+    "capabilities": {
+      "live": "Live view",
+      "playback": "Playback",
+      "ptz": "PTZ control",
+      "export": "Export",
+      "configure": "Configure"
+    },
+    "empty": {
+      "title": "No custom access grants",
+      "descBefore": "All users with the",
+      "descAfter": "role permission can view this camera. Add grants to restrict or extend access for specific users."
+    },
+    "info": {
+      "heading": "How camera access works:",
+      "orgAdmins": "Org admins always have full access to all cameras",
+      "siteAdmins": "Site admins have operator-level access by default",
+      "explicitGrants": "Explicit grants override role-based defaults",
+      "groupGrants": "Group grants apply to all cameras in the group",
+      "timeLimited": "Time-limited grants expire automatically"
+    },
+    "form": {
+      "userLabel": "User",
+      "userPlaceholder": "Select user...",
+      "accessLevelLabel": "Access Level",
+      "expiresLabel": "Expires in (days)",
+      "expiresPlaceholder": "Never",
+      "options": {
+        "viewer": "Viewer (live only)",
+        "operator": "Operator (+ PTZ, playback)",
+        "full": "Full (+ export, config)"
+      }
+    },
+    "toasts": {
+      "revoked": "Access revoked",
+      "revokeFailed": "Failed to revoke access",
+      "updateFailed": "Failed to update grant",
+      "granted": "Access granted",
+      "grantFailed": "Failed to grant access (may already exist)"
+    }
+  },
+  "AgentDiscoveriesTab": {
+    "title": "Agent Discoveries",
+    "showAdopted": "Show adopted",
+    "selectSitePrompt": "Select a site to view agent discoveries.",
+    "filterPlaceholder": "Filter by IP, MAC, hostname, vendor…",
+    "adoptSelected": "Adopt Selected",
+    "adoptCount": "Adopt ({{count}})",
+    "loadError": "Could not load discovered hosts.",
+    "loading": "Loading…",
+    "empty": "No discovered hosts yet. Run a scan from an agent or via Agent Scan tab.",
+    "selectAllAria": "Select all adoptable",
+    "probeTooltip": "Deep probe this host (FINGERPRINT_DEVICE)",
+    "columns": {
+      "ip": "IP",
+      "mac": "MAC",
+      "vendor": "Vendor",
+      "hostname": "Hostname",
+      "sources": "Sources",
+      "status": "Status",
+      "probe": "Probe"
+    },
+    "status": {
+      "adopted": "Adopted",
+      "new": "New",
+      "known": "Known · {{detail}}",
+      "knownTooltip": "Known to FreeSDN: {{name}} ({{detail}})"
+    },
+    "errors": {
+      "noAgentForProbe": "Host has no associated agent for deep probe"
+    },
+    "toast": {
+      "probeDispatched": {
+        "title": "Deep probe dispatched",
+        "description": "Fingerprinting {{ip}}, task {{taskId}}…"
+      },
+      "probeFailed": {
+        "title": "Deep probe failed"
+      },
+      "adoptComplete": {
+        "title": "Adoption complete",
+        "description": "{{succeeded}}/{{total}} adopted, {{failed}} failed"
+      },
+      "adoptFailed": {
+        "title": "Adoption failed"
+      }
+    }
+  },
+  "Sidebar": {
+    "search": {
+      "placeholder": "Search...",
+      "ariaLabel": "Search navigation"
+    },
+    "dashboard": "Dashboard",
+    "recent": "Recent",
+    "settings": "Settings",
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar",
+    "badge": {
+      "settings": "Badge Settings",
+      "sources": "Sources",
+      "alertRules": "Alert Rules",
+      "incidents": "Incidents",
+      "securityEvents": "Security Events",
+      "minimumSeverity": "Minimum Severity",
+      "clear": "Clear badge",
+      "reset": "Reset to defaults"
+    },
+    "severity": {
+      "all": "All levels",
+      "info": "Info & above",
+      "warning": "Warning & above",
+      "critical": "Critical only"
+    }
+  },
+  "DeviceTypeIcon": {
+    "types": {
+      "switch": "Switch",
+      "access_point": "Access Point",
+      "router": "Router",
+      "gateway": "Gateway",
+      "firewall": "Firewall",
+      "camera": "Camera",
+      "nvr": "NVR",
+      "dvr": "DVR",
+      "access_control": "Access Control",
+      "intercom": "Intercom",
+      "voip_phone": "VoIP Phone",
+      "pbx": "PBX",
+      "server": "Server",
+      "hypervisor": "Hypervisor",
+      "iot": "IoT",
+      "sensor": "Sensor",
+      "controller": "Controller",
+      "other": "Other"
+    }
+  },
+  "WallCell": {
+    "eventLabels": {
+      "motion": "Motion",
+      "lineCross": "Line Cross",
+      "intrusion": "Intrusion",
+      "tamper": "Tamper",
+      "videoLoss": "Video Lost",
+      "face": "Face",
+      "audio": "Audio"
+    },
+    "replay": {
+      "unavailable": "Replay unavailable",
+      "label": "Replay"
+    },
+    "status": {
+      "reconnecting": "Reconnecting...",
+      "retry": "RETRY",
+      "err": "ERR",
+      "live": "LIVE",
+      "rec": "REC",
+      "snapshotUnavailable": "Snapshot unavailable"
+    },
+    "actions": {
+      "enlarge": "Enlarge",
+      "remove": "Remove"
+    },
+    "menu": {
+      "replayLast30s": "Replay Last 30s",
+      "replayLast1min": "Replay Last 1 min",
+      "replayLast5min": "Replay Last 5 min",
+      "openLiveView": "Open Live View",
+      "openDetailPage": "Open Detail Page",
+      "removeFromWall": "Remove from Wall"
+    }
+  },
+  "DeleteControllerDialog": {
+    "title": "Delete controller",
+    "submitLabel": "Delete controller",
+    "validation": {
+      "nameMismatch": "Controller name does not match"
+    },
+    "confirmPrompt": {
+      "before": "Are you sure you want to delete ",
+      "after": "? This action cannot be undone."
+    },
+    "warning": {
+      "label": "Warning:",
+      "message": "This controller has {{count}} associated device(s). Deleting the controller will also remove all device records."
+    },
+    "confirmLabel": {
+      "before": "Type ",
+      "after": " to confirm"
+    }
+  },
+  "ScanHistoryPanel": {
+    "title": "Scan History",
+    "empty": {
+      "title": "No scans yet",
+      "description": "Start a scan to discover devices on your network"
+    },
+    "scanType": {
+      "controller": "Controller Scan",
+      "network": "Network Scan"
+    },
+    "status": {
+      "completed": "Completed",
+      "running": "Running",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "pending": "Pending"
+    },
+    "devicesCount": "{{count}} devices",
+    "time": {
+      "justNow": "Just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago"
+    }
+  },
+  "DiscoveryStats": {
+    "stats": {
+      "totalScans": "Total Scans",
+      "devicesFound": "Devices Found",
+      "devicesAdopted": "Adopted",
+      "activeScans": "Active Scans",
+      "pendingDevices": "Pending",
+      "failedScans": "Failed"
+    }
+  },
+  "EmptyState": {
+    "noResults": {
+      "title": "No results found",
+      "descriptionWithQuery": "No results for \"{{query}}\". Try adjusting your search or filters.",
+      "description": "Try adjusting your search or filters.",
+      "clear": "Clear search"
+    },
+    "noData": {
+      "title": "No {{type}} yet",
+      "description": "Get started by adding your first {{type}}.",
+      "add": "Add {{type}}"
+    },
+    "error": {
+      "title": "Error",
+      "description": "Something went wrong",
+      "retry": "Try again"
+    },
+    "inlineError": {
+      "retry": "Retry"
+    }
+  },
+  "WizardDialog": {
+    "actions": {
+      "create": "Create",
+      "cancel": "Cancel",
+      "done": "Done",
+      "back": "Back",
+      "next": "Next"
+    },
+    "ariaLabel": {
+      "steps": "Wizard steps"
+    },
+    "errors": {
+      "unexpected": "An unexpected error occurred"
+    }
+  },
+  "Tabs": {
+    "aria": {
+      "scrollLeft": "Scroll tabs left",
+      "scrollRight": "Scroll tabs right"
+    }
+  },
+  "DetailSheet": {
+    "srTitle": "Details"
+  },
+  "AgentSchedulesPanel": {
+    "title": "Scheduled Scans",
+    "selectSite": "Select a site to manage scan schedules.",
+    "loading": "Loading…",
+    "loadError": "Could not load schedules.",
+    "empty": "No scheduled scans yet. Create one above to have the agent run scans automatically.",
+    "disabled": "Disabled",
+    "neverFired": "Never fired",
+    "confirmDelete": "Delete schedule \"{{name}}\"?",
+    "scanTypes": {
+      "quick": "Quick (ARP + ICMP)",
+      "camera": "Camera (ONVIF + SADP)",
+      "voip": "VoIP (SIP + mDNS)",
+      "iot": "IoT (mDNS + SSDP)",
+      "port": "Port scan",
+      "windows": "Windows (NetBIOS + SMB)",
+      "full": "Full (all protocols)"
+    },
+    "cronPresets": {
+      "hourly": "Every hour",
+      "every4h": "Every 4 hours",
+      "every6h": "Every 6 hours",
+      "daily0200": "Daily at 02:00",
+      "weeklySun0200": "Weekly (Sun 02:00)"
+    },
+    "relative": {
+      "never": "never",
+      "secondsAgo": "{{n}}s ago",
+      "minutesAgo": "{{n}}m ago",
+      "hoursAgo": "{{n}}h ago",
+      "daysAgo": "{{n}}d ago"
+    },
+    "runStatus": {
+      "completed": "completed",
+      "failed": "failed"
+    },
+    "errors": {
+      "siteRequired": "Site required"
+    },
+    "toasts": {
+      "created": "Schedule created",
+      "createFailed": "Create failed",
+      "deleted": "Schedule deleted"
+    },
+    "actions": {
+      "newSchedule": "New schedule",
+      "cancel": "Cancel",
+      "create": "Create",
+      "viewHistory": "View run history",
+      "disable": "Disable",
+      "enable": "Enable"
+    },
+    "dialog": {
+      "title": "New scan schedule"
+    },
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "e.g. nightly-quick",
+      "scanType": "Scan type",
+      "cron": "Cron (preset or custom)",
+      "cronPlaceholder": "Or custom 5-field cron…",
+      "targets": "Targets (CIDRs/IPs, one per line)"
+    },
+    "notifications": {
+      "heading": "Notifications (optional)",
+      "emailRecipients": "Email recipients (comma-separated)",
+      "slackChannel": "Slack channel",
+      "notifyOnFailure": "Notify on failure",
+      "alertNewHosts": "Alert on N+ new hosts (0 = off)"
+    },
+    "columns": {
+      "name": "Name",
+      "cron": "Cron",
+      "type": "Type",
+      "targets": "Targets",
+      "lastFired": "Last fired"
+    },
+    "history": {
+      "title": "Run history, {{name}}",
+      "empty": "No runs recorded yet. The agent reports each fired execution via WS once the daemon is connected and the schedule's cron matches.",
+      "columns": {
+        "status": "Status",
+        "started": "Started",
+        "duration": "Duration",
+        "devices": "Devices",
+        "error": "Error"
+      }
+    }
+  },
+  "CameraLiveViewModal": {
+    "rec": "REC",
+    "ptz": {
+      "control": "PTZ Control",
+      "directionControls": "PTZ direction controls",
+      "panUp": "Pan up",
+      "panDown": "Pan down",
+      "panLeft": "Pan left",
+      "panRight": "Pan right",
+      "home": "Return to home position",
+      "zoom": "Zoom",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out"
+    },
+    "presets": {
+      "title": "Presets",
+      "entrance": "Entrance",
+      "parking": "Parking",
+      "wideView": "Wide View",
+      "zoom": "Zoom"
+    },
+    "stream": {
+      "connecting": "Connecting to stream...",
+      "unavailable": "Stream unavailable",
+      "retry": "Retry",
+      "label": "Stream",
+      "sub": "Sub",
+      "main": "Main",
+      "paused": "Paused",
+      "localTime": "local"
+    },
+    "offline": {
+      "title": "Camera Offline",
+      "description": "Unable to connect to stream"
+    },
+    "controls": {
+      "play": "Play",
+      "pause": "Pause",
+      "refreshStream": "Refresh Stream",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "volume": "Volume",
+      "takeSnapshot": "Take Snapshot",
+      "recordingManaged": "Recording managed by NVR schedule",
+      "fullscreen": "Fullscreen",
+      "exitFullscreen": "Exit Fullscreen"
+    },
+    "fit": {
+      "contain": "Fit (aspect ratio)",
+      "cover": "Fill (crop edges)",
+      "coverAria": "Fill (crop)",
+      "fill": "Stretch (fill all)",
+      "fillAria": "Stretch"
+    },
+    "badges": {
+      "ptz": "PTZ",
+      "audio": "Audio"
+    }
+  },
+  "LoginPageComponent": {
+    "tagline": "Vendor-Agnostic Network Management",
+    "errors": {
+      "generic": "An error occurred"
+    },
+    "mfa": {
+      "subtitle": "Two-Factor Authentication",
+      "heading": "Verify Your Identity",
+      "instructions": "Enter the 6-digit code from your authenticator app",
+      "codeLabel": "Authentication Code",
+      "verifying": "Verifying...",
+      "verifyButton": "Verify Code",
+      "backToLogin": "Back to login"
+    },
+    "login": {
+      "heading": "Welcome back",
+      "subtitle": "Sign in to your account to continue",
+      "identifierLabel": "Email or Username",
+      "identifierPlaceholder": "you@example.com or admin",
+      "passwordLabel": "Password",
+      "forgotPassword": "Forgot password?",
+      "rememberMe": "Remember me for 30 days",
+      "hidePassword": "Hide password",
+      "showPassword": "Show password",
+      "signingIn": "Signing in...",
+      "signIn": "Sign In",
+      "noAccount": "Don't have an account?",
+      "requestAccess": "Request access"
+    },
+    "footer": {
+      "agreePrefix": "By signing in, you agree to our",
+      "termsOfService": "Terms of Service",
+      "and": "and",
+      "privacyPolicy": "Privacy Policy"
+    }
+  },
+  "AgentSettingsPanel": {
+    "general": {
+      "title": "General",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional notes about this agent",
+      "enabledLabel": "Enabled",
+      "enabledHelp": "When off, the agent's API key is rejected and no new tasks can be dispatched. The current WebSocket stays connected until the daemon reconnects.",
+      "pollIntervalLabel": "REST poll interval (seconds)",
+      "pollIntervalHelp": "Legacy fallback for REST-polling agents. WebSocket-based daemons (the default) ignore this; safe to leave at 30."
+    },
+    "offlineAlerts": {
+      "title": "Offline alerts",
+      "thresholdLabel": "Offline threshold (seconds, min 60)",
+      "thresholdHelp": "An alert fires when no heartbeat has arrived for this many seconds. Default 180s = 6 missed 30s heartbeats. One alert per transition (no spam).",
+      "emailLabel": "Email recipients",
+      "emailPlaceholder": "ops@example.com, oncall@example.com",
+      "emailHelp": "Comma- or whitespace-separated. Requires email provider configured at org level.",
+      "slackLabel": "Slack channel",
+      "webhookLabel": "Webhook URL"
+    },
+    "lastAlert": {
+      "title": "Last alert dispatched",
+      "detail": "{{timestamp}}. Will reset when the agent reconnects."
+    },
+    "actions": {
+      "saving": "Saving…",
+      "save": "Save settings"
+    },
+    "toasts": {
+      "saved": {
+        "title": "Settings saved"
+      },
+      "saveFailed": {
+        "title": "Save failed"
+      }
+    }
+  },
+  "ForgotPasswordPage": {
+    "tagline": "Vendor-Agnostic Network Management",
+    "title": "Forgot Password?",
+    "subtitle": "Enter your email and we'll send you a reset link",
+    "emailLabel": "Email",
+    "actions": {
+      "sending": "Sending...",
+      "sendResetLink": "Send Reset Link",
+      "backToLogin": "Back to Login"
+    },
+    "success": {
+      "title": "Check Your Email",
+      "description": "If an account exists for <strong>{{email}}</strong>, you will receive a password reset link shortly.",
+      "spamHint": "Didn't receive the email? Check your spam folder or try again in a few minutes."
+    }
+  },
+  "NetworkHealthWidget": {
+    "metrics": {
+      "latency": "Latency",
+      "packetLoss": "Packet Loss"
+    },
+    "throughput": {
+      "title": "Throughput",
+      "download": "Download",
+      "upload": "Upload"
+    },
+    "uptime": {
+      "title": "Uptime"
+    }
+  },
+  "RecordingSchedulePanel": {
+    "title": "Recording Schedule",
+    "managedByNvr": "Recording on this NVR is managed by the device, a per-channel schedule isn't exposed through the API. Configure recording schedules directly on the NVR.",
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "enableLabel": "Enable recording schedule",
+    "actions": {
+      "save": "Save"
+    },
+    "feedback": {
+      "saveSuccess": "Schedule saved successfully."
+    },
+    "errors": {
+      "loadFailed": "Failed to load recording schedule",
+      "saveFailed": "Failed to save schedule"
+    },
+    "recordTypes": {
+      "continuous": "Continuous",
+      "motion": "Motion",
+      "alarm": "Alarm"
+    }
+  },
+  "CameraEventAlerts": {
+    "eventTypes": {
+      "motionDetected": "Motion Detected",
+      "lineCrossing": "Line Crossing",
+      "intrusion": "Intrusion",
+      "tampering": "Tampering",
+      "videoLoss": "Video Loss",
+      "diskError": "Disk Error",
+      "diskFull": "Disk Full",
+      "illegalAccess": "Illegal Access",
+      "alarmInput": "Alarm Input"
+    },
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{{n}}m ago",
+      "hoursAgo": "{{n}}h ago",
+      "daysAgo": "{{n}}d ago"
+    },
+    "badge": {
+      "cameraEvents": "Camera events",
+      "unacknowledgedTooltip": "{{n}} unacknowledged event(s)",
+      "unacknowledgedAria": "Camera events ({{n}} unacknowledged)"
+    },
+    "feed": {
+      "title": "Camera Events",
+      "ackAll": "Ack All",
+      "hideAcknowledged": "Hide acknowledged",
+      "hideAcknowledgedAria": "Hide acknowledged events",
+      "showAllEvents": "Show all events",
+      "loadError": "Failed to load events",
+      "noEvents": "No events found",
+      "noUnacknowledged": "No unacknowledged events",
+      "channel": "Ch {{channel}}",
+      "acknowledge": "Acknowledge",
+      "acknowledgeAria": "Acknowledge event"
+    },
+    "toast": {
+      "dismissAria": "Dismiss alert"
+    }
+  },
+  "SiteSelector": {
+    "ariaLabel": {
+      "selector": "Site selector",
+      "search": "Search sites"
+    },
+    "allSites": "All Sites",
+    "searchPlaceholder": "Search sites...",
+    "allSitesSummary": "{{count}} sites · {{devices}} devices",
+    "allSitesSummary_one": "{{count}} site · {{devices}} devices",
+    "empty": {
+      "noMatch": "No sites match your search",
+      "none": "No sites created yet"
+    },
+    "deviceCount": "{{count}} devices",
+    "deviceCount_one": "{{count}} device",
+    "offline": "{{count}} offline",
+    "manageSites": "Manage Sites"
+  },
+  "GreetingCard": {
+    "greetings": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening",
+      "late": "Working late"
+    },
+    "fullGreeting": "{{greeting}}, {{name}}"
+  },
+  "CameraPreviewWidget": {
+    "empty": {
+      "title": "No cameras configured"
+    },
+    "actions": {
+      "addCamera": "Add Camera",
+      "viewAll": "View all cameras",
+      "viewAllCount": "View all {{count}} cameras"
+    },
+    "recording": "REC"
+  },
+  "Toast": {
+    "dismiss": "Dismiss notification",
+    "region": "Notifications",
+    "errorTitle": "Something went wrong"
+  },
+  "FormFieldArray": {
+    "actions": {
+      "add": "Add"
+    },
+    "itemCount": {
+      "ariaLabel": "Item count",
+      "ofMax": "{{n}} of {{max}}",
+      "items": "{{n}} items"
+    }
+  },
+  "ScanWizard": {
+    "title": "Scan Wizard",
+    "steps": {
+      "scanType": {
+        "title": "Scan Type",
+        "description": "Choose discovery method"
+      },
+      "target": {
+        "title": "Target",
+        "description": "Configure scan target"
+      },
+      "options": {
+        "title": "Options",
+        "description": "Fine-tune settings"
+      },
+      "review": {
+        "title": "Review",
+        "description": "Confirm and start"
+      }
+    },
+    "scanTypes": {
+      "subnet": {
+        "title": "Subnet Scan",
+        "description": "Scan IP ranges to discover devices on your network.",
+        "badges": {
+          "portScan": "Port Scan",
+          "fingerprint": "Fingerprint"
+        }
+      },
+      "controller": {
+        "title": "Controller Discovery",
+        "description": "Query controllers to discover managed devices.",
+        "badges": {
+          "autoSync": "Auto-sync"
+        }
+      }
+    },
+    "fields": {
+      "site": "Site",
+      "sitePlaceholder": "Select a site...",
+      "subnet": "Subnet / IP Range",
+      "subnetHelper": "Enter CIDRs, IP ranges, or individual IPs (one per line)",
+      "controller": "Controller",
+      "controllerPlaceholder": "Select a controller...",
+      "controllerSelectSiteFirst": "Select a site to list its controllers.",
+      "controllerNone": "No controllers registered for this site. Add one under Controllers first."
+    },
+    "options": {
+      "fingerprint": {
+        "title": "Fingerprint Devices",
+        "description": "Probe HTTP/RTSP/SNMP to identify vendors"
+      },
+      "portScan": {
+        "title": "Port Scan",
+        "description": "Scan common ports (22, 80, 443, 554, 8080, etc.)"
+      },
+      "autoAdopt": {
+        "title": "Auto-Adopt",
+        "description": "Automatically adopt devices with high-confidence driver matches"
+      },
+      "timeout": "Timeout (seconds)",
+      "threads": "Concurrent Threads"
+    },
+    "review": {
+      "scanType": "Scan Type",
+      "site": "Site",
+      "targets": "Targets",
+      "targetCount": "{{count}} target(s)",
+      "controller": "Controller",
+      "timeoutBadge": "{{seconds}}s timeout",
+      "threadsBadge": "{{count}} threads",
+      "info": "The scan will probe the specified targets and identify devices on your network. This may take several minutes depending on the target range."
+    },
+    "actions": {
+      "back": "Back",
+      "cancel": "Cancel",
+      "next": "Next",
+      "startScan": "Start Scan"
+    }
+  },
+  "AdoptDeviceDialog": {
+    "title": "Adopt Device · {{ip}}",
+    "submitLabel": "Adopt Device",
+    "defaultCredentialName": "{{ip}} credential",
+    "steps": {
+      "driver": "Driver",
+      "credentials": "Credentials",
+      "confirm": "Confirm"
+    },
+    "validation": {
+      "selectDriver": "Please select a driver",
+      "selectCredential": "Please select a credential",
+      "usernameRequired": "Username is required",
+      "passwordRequired": "Password is required"
+    },
+    "errors": {
+      "driverNotSelected": "Driver not selected"
+    },
+    "actions": {
+      "back": "Back",
+      "next": "Next"
+    },
+    "fields": {
+      "deviceName": "Device Name",
+      "selectDriver": "Select Driver",
+      "nameOptional": "Name (optional)",
+      "namePlaceholder": "e.g., Main switch admin",
+      "username": "Username",
+      "password": "Password"
+    },
+    "credentials": {
+      "useExisting": "Use Existing",
+      "createNew": "Create New",
+      "selectPlaceholder": "Select a credential...",
+      "noneFound": "No credentials found. Create a new one."
+    },
+    "review": {
+      "device": "Device",
+      "name": "Name",
+      "driver": "Driver",
+      "credentials": "Credentials",
+      "vendor": "Vendor",
+      "newCredential": "New: {{name}}",
+      "autoNamed": "Auto-named",
+      "info": "The device will be adopted into your site and the selected driver will be used for monitoring and management."
+    }
+  },
+  "WallToolbar": {
+    "tooltips": {
+      "sidebar": "Camera Sidebar"
+    },
+    "actions": {
+      "fill": "Fill ({{count}})"
+    },
+    "streamMode": {
+      "snapshots": "Snapshots",
+      "live": "Live"
+    },
+    "nvrLoad": {
+      "streamCount_one": "{{count}} stream",
+      "streamCount_other": "{{count}} streams",
+      "overloaded_one": "· {{count}} NVR full",
+      "overloaded_other": "· {{count}} NVRs full",
+      "title": "NVR Connection Load",
+      "empty": "No active NVR connections"
+    },
+    "pagination": {
+      "previous": "Previous page",
+      "next": "Next page"
+    },
+    "status": {
+      "live": "LIVE",
+      "summary": "{{active}} active · {{online}}/{{total}} online"
+    },
+    "autoCycle": {
+      "button": "Cycle",
+      "title": "Auto-Cycle",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "interval": "Interval",
+      "seconds": "{{count}} seconds"
+    },
+    "display": {
+      "button": "Display",
+      "labels": "Camera Labels",
+      "statusIndicators": "Status Indicators",
+      "streamQuality": "Stream Quality",
+      "subStream": "Sub Stream (fast)",
+      "mainStream": "Main Stream (HD)"
+    },
+    "alertSound": {
+      "mute": "Mute alert sounds",
+      "enable": "Enable alert sounds"
+    },
+    "refresh": {
+      "title": "Refresh snapshots now",
+      "ariaLabel": "Refresh snapshots"
+    },
+    "popOut": {
+      "title": "Pop out wall",
+      "tooltip": "Pop out to new window"
+    },
+    "fullscreen": {
+      "title": "Fullscreen",
+      "exit": "Exit fullscreen",
+      "enter": "Enter fullscreen"
+    }
+  },
+  "HolidaySchedulePanel": {
+    "days": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    },
+    "months": {
+      "jan": "Jan",
+      "feb": "Feb",
+      "mar": "Mar",
+      "apr": "Apr",
+      "may": "May",
+      "jun": "Jun",
+      "jul": "Jul",
+      "aug": "Aug",
+      "sep": "Sep",
+      "oct": "Oct",
+      "nov": "Nov",
+      "dec": "Dec"
+    },
+    "actions": {
+      "continuous": "Continuous",
+      "motion": "Motion",
+      "alarm": "Alarm"
+    },
+    "definitions": {
+      "title": "Holiday Definitions",
+      "nvrLevel": "NVR-Level",
+      "loading": "Loading holidays…",
+      "help": "Define up to 32 holidays. These date ranges apply to all cameras on this NVR for holiday recording schedules.",
+      "addHoliday": "Add Holiday",
+      "empty": "No holidays configured",
+      "namePlaceholder": "Holiday name",
+      "saved": "Saved",
+      "failed": "Failed",
+      "saveHolidays": "Save Holidays"
+    },
+    "schedule": {
+      "title": "Holiday Recording Schedule",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "loading": "Loading holiday schedule…",
+      "enableLabel": "Enable holiday recording schedule",
+      "save": "Save",
+      "saveSuccess": "Holiday schedule saved.",
+      "saveError": "Failed to save holiday schedule.",
+      "unavailable": "Holiday recording schedule not available for this camera."
+    }
+  },
+  "PTZToursPanel": {
+    "title": "PTZ Tours",
+    "loading": "Loading tours…",
+    "empty": "No PTZ tours configured on this camera.",
+    "tourCount_one": "{{count}} tour",
+    "tourCount_other": "{{count}} tours",
+    "tourFallbackName": "Tour {{id}}",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "stepCount_one": "{{count}} step",
+    "stepCount_other": "{{count}} steps",
+    "confirmDelete": "Delete this tour?",
+    "addStop": "Add Stop",
+    "emptyStops": {
+      "title": "No stops defined",
+      "description": "Add preset stops to build the tour."
+    },
+    "fields": {
+      "preset": "Preset",
+      "dwell": "Dwell (s)",
+      "speed": "Speed"
+    },
+    "status": {
+      "saved": "Saved",
+      "failed": "Failed"
+    },
+    "actions": {
+      "start": "Start",
+      "stop": "Stop",
+      "saveTour": "Save Tour"
+    }
+  },
+  "ErrorBoundary": {
+    "root": {
+      "badge": "Error",
+      "title": "Something went wrong",
+      "description": "An unexpected error occurred. Please try refreshing the page."
+    },
+    "route": {
+      "title": "This page crashed",
+      "description": "Something went wrong while rendering this page. The rest of the app should still work · try navigating somewhere else, or retry below."
+    },
+    "section": {
+      "title": "This section failed to load"
+    },
+    "actions": {
+      "refreshPage": "Refresh Page",
+      "goToDashboard": "Go to Dashboard",
+      "retry": "Retry"
+    }
+  },
+  "ScanProgress": {
+    "title": "Discovery Scan",
+    "scanning": "Scanning...",
+    "status": {
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "phases": {
+      "protocolDiscovery": "Protocol Discovery",
+      "portScanning": "Port Scanning",
+      "serviceProbing": "Service Probing",
+      "hostnameResolution": "Hostname Resolution"
+    },
+    "stats": {
+      "scannedOf": "of {{total}} Scanned",
+      "scanned": "Scanned",
+      "found": "Found",
+      "identified": "Identified",
+      "elapsed": "Elapsed"
+    },
+    "errors": {
+      "heading": "Errors ({{count}})",
+      "more": "+{{count}} more"
+    },
+    "actions": {
+      "cancelScan": "Cancel Scan",
+      "viewResults": "View Results ({{count}} devices)"
+    }
+  },
+  "SystemStatusWidget": {
+    "status": {
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "down": "Down"
+    },
+    "overall": {
+      "allOperational": "All systems operational",
+      "needsAttention": "Some services need attention",
+      "servicesHealthy": "{{healthy}}/{{total}} services healthy"
+    },
+    "resources": {
+      "heading": "Resources",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "disk": "Disk"
+    },
+    "service": {
+      "latencyMs": "{{latency}}ms"
+    }
+  },
+  "BatchProgressDialog": {
+    "stats": {
+      "success": "Success: {{count}}",
+      "running": "Running: {{count}}",
+      "failed": "Failed: {{count}}",
+      "pending": "Pending: {{count}}"
+    },
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "success": "Success",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "actions": {
+      "cancel": "Cancel",
+      "retryFailed": "Retry Failed ({{count}})",
+      "close": "Close",
+      "done": "Done"
+    }
+  },
+  "PendingChangesBadge": {
+    "label": "Pending",
+    "ariaLabel": {
+      "open": "Open pending changes panel",
+      "openStaged": "Open pending changes panel, {{count}} staged"
+    },
+    "title": {
+      "none": "No pending changes",
+      "one": "{{count}} pending change for this gateway",
+      "many": "{{count}} pending changes for this gateway"
+    }
+  },
+  "PageHeader": {
+    "actions": {
+      "refresh": "Refresh"
+    }
+  },
+  "CameraCanvasOverlay": {
+    "snapshotAlt": "Camera view",
+    "label": {
+      "region": "R{{id}}",
+      "line": "L{{id}}",
+      "zone": "Z{{id}}"
+    }
+  },
+  "SearchBar": {
+    "placeholder": "Search...",
+    "clear": "Clear search"
+  },
+  "ControllerDetailsSheet": {
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "error": "Error",
+      "syncing": "Syncing",
+      "unknown": "Unknown"
+    },
+    "common": {
+      "notAvailable": "N/A",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "actions": {
+      "syncNow": "Sync Now",
+      "test": "Test",
+      "edit": "Edit"
+    },
+    "test": {
+      "failedMessage": "Connection test failed",
+      "successful": "Connection Successful",
+      "failed": "Connection Failed",
+      "latency": "Latency",
+      "version": "Version"
+    },
+    "health": {
+      "title": "Controller Health",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "disk": "Disk",
+      "uptime": "Uptime"
+    },
+    "devices": {
+      "title": "Devices",
+      "total": "Total",
+      "online": "Online",
+      "offline": "Offline",
+      "switchesCount": "{{count}} Switches",
+      "apsCount": "{{count}} APs",
+      "gatewaysCount": "{{count}} Gateways",
+      "clientsCount": "{{count}} Clients",
+      "managedDevices": "Managed Devices ({{count}})"
+    },
+    "poe": {
+      "title": "PoE Power Budget",
+      "consumedBudget": "Consumed / Budget",
+      "remaining": "{{watts}} remaining across {{count}} PoE switches"
+    },
+    "firmware": {
+      "title": "Firmware",
+      "compliance": "Compliance",
+      "upToDate": "{{current}}/{{total}} up to date"
+    },
+    "connection": {
+      "title": "Connection",
+      "host": "Host",
+      "port": "Port",
+      "ssl": "SSL/TLS",
+      "verifyCertificate": "Verify Certificate"
+    },
+    "sync": {
+      "title": "Sync Status",
+      "autoSync": "Auto-Sync",
+      "interval": "Sync Interval",
+      "lastSync": "Last Sync",
+      "duration": "Sync Duration",
+      "errorHistory": "Error History ({{count}})"
+    },
+    "details": {
+      "title": "Details",
+      "controllerId": "Controller ID",
+      "active": "Active",
+      "created": "Created",
+      "updated": "Updated"
+    }
+  },
+  "RegisterPage": {
+    "tagline": "Vendor-Agnostic Network Management",
+    "heading": "Create Account",
+    "subheading": "Enter your details to get started",
+    "submit": "Create Account",
+    "submitting": "Creating account...",
+    "passwordMismatch": "Passwords do not match",
+    "haveAccount": "Already have an account?",
+    "signIn": "Sign in",
+    "success": {
+      "title": "Registration Successful!",
+      "description": "Your account has been created. You can now sign in with your credentials.",
+      "goToLogin": "Go to Login"
+    },
+    "fields": {
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "email": "Email",
+      "organizationName": "Organization Name",
+      "optional": "(optional)",
+      "password": "Password",
+      "confirmPassword": "Confirm Password"
+    },
+    "placeholders": {
+      "firstName": "John",
+      "lastName": "Doe",
+      "organizationName": "Acme Inc."
+    },
+    "passwordRules": {
+      "minLength": "At least 12 characters",
+      "lowercase": "At least one lowercase letter",
+      "uppercase": "At least one uppercase letter",
+      "number": "At least one number",
+      "special": "At least one special character"
+    },
+    "legal": {
+      "prefix": "By creating an account, you agree to our",
+      "terms": "Terms of Service",
+      "and": "and",
+      "privacy": "Privacy Policy"
+    }
+  },
+  "CommandPalette": {
+    "searchPlaceholder": "Type a command or search…",
+    "noResults": "No results found.",
+    "groups": {
+      "recent": "Recent",
+      "actions": "Actions",
+      "theme": "Theme",
+      "help": "Help"
+    },
+    "sync": {
+      "none": {
+        "title": "No controllers found",
+        "description": "There are no controllers available to sync."
+      },
+      "started": {
+        "title": "Controller sync started",
+        "description": "Sync initiated for {{count}} controller(s)."
+      },
+      "failed": {
+        "title": "Controller sync failed",
+        "description": "Could not start sync for any controllers."
+      },
+      "partial": {
+        "title": "Partial sync started",
+        "description": "Started {{succeeded}} controller(s); {{failed}} failed."
+      },
+      "error": "Failed to start controller sync."
+    },
+    "actions": {
+      "discovery": "Run Network Discovery",
+      "syncAll": "Sync All Controllers"
+    },
+    "theme": {
+      "light": "Switch to Light Theme",
+      "dark": "Switch to Dark Theme",
+      "system": "Use System Theme"
+    },
+    "help": {
+      "docs": "View Documentation",
+      "shortcuts": "Keyboard Shortcuts",
+      "support": "Get Support",
+      "logout": "Sign Out"
+    }
+  },
+  "EditControllerModal": {
+    "title": "Edit Controller",
+    "description": "Update controller settings for {{name}}",
+    "submitLabel": "Save Changes",
+    "sectionHeading": "Controller Settings",
+    "unknownSite": "Unknown Site",
+    "fields": {
+      "name": "Controller Name *",
+      "description": "Description",
+      "site": "Site",
+      "host": "Host Address *",
+      "port": "Port *",
+      "useSsl": "Use SSL/TLS",
+      "verifySsl": "Verify SSL Certificate",
+      "syncEnabled": "Auto-Sync Enabled",
+      "syncInterval": "Sync Interval (seconds)",
+      "isActive": "Controller Active"
+    },
+    "placeholders": {
+      "description": "Optional description..."
+    },
+    "descriptions": {
+      "siteImmutable": "Site cannot be changed after creation",
+      "useSsl": "Connect using HTTPS",
+      "verifySsl": "Disable for self-signed certs",
+      "syncEnabled": "Automatically sync devices",
+      "isActive": "Disable to pause all operations"
+    },
+    "validation": {
+      "nameRequired": "Controller name is required",
+      "hostRequired": "Host address is required",
+      "portRange": "Port must be 1-65535",
+      "minSeconds": "Minimum 60 seconds"
+    }
+  },
+  "AdHocScansPanel": {
+    "loading": "Loading scans…",
+    "empty": "No ad-hoc scans yet. Use \"Run scan now\" on the Overview tab to trigger one.",
+    "autoDetect": "auto-detect",
+    "toasts": {
+      "cancellationRequested": "Cancellation requested",
+      "cancelFailed": "Cancel failed"
+    },
+    "columns": {
+      "status": "Status",
+      "type": "Type",
+      "targets": "Targets",
+      "started": "Started",
+      "progress": "Progress",
+      "devices": "Devices",
+      "actions": "Actions"
+    },
+    "status": {
+      "completed": "completed",
+      "failed": "failed",
+      "cancelled": "cancelled"
+    },
+    "actions": {
+      "cancel": "Cancel"
+    }
+  },
+  "TimeRangeSelector": {
+    "ariaLabel": "Time range",
+    "custom": "Custom",
+    "labels": {
+      "5m": "Last 5 minutes",
+      "15m": "Last 15 minutes",
+      "1h": "Last hour",
+      "6h": "Last 6 hours",
+      "24h": "Last 24 hours",
+      "7d": "Last 7 days",
+      "30d": "Last 30 days",
+      "90d": "Last 90 days",
+      "custom": "Custom range"
+    },
+    "shortLabels": {
+      "5m": "5M",
+      "15m": "15M",
+      "1h": "1H",
+      "6h": "6H",
+      "24h": "24H",
+      "7d": "7D",
+      "30d": "30D",
+      "90d": "90D",
+      "custom": "Custom"
+    }
+  },
+  "TopologyDiscoveryTab": {
+    "title": "Agent Topology",
+    "selectSitePrompt": "Select a site to view its topology.",
+    "countBadge": "{{hosts}} hosts / {{subnets}} subnets",
+    "error": "Could not load topology.",
+    "loading": "Loading…",
+    "empty": "No discoveries yet. Run a scan from an agent, hosts and subnet groups will appear here.",
+    "host": {
+      "managedLink": "→ managed"
+    },
+    "subnet": {
+      "hostCount": "{{count}} hosts",
+      "vlanBadge": "VLAN {{id}}"
+    },
+    "legend": {
+      "adopted": "Adopted",
+      "discovered": "Discovered",
+      "lldp": "LLDP"
+    }
+  },
+  "ThemeToggle": {
+    "themes": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "groupAriaLabel": "Theme selection",
+    "icon": {
+      "title": "Current: {{theme}}. Click to change.",
+      "ariaLabel": "Toggle theme (current: {{theme}})"
+    },
+    "dropdown": {
+      "ariaLabel": "Theme: {{theme}}"
+    }
+  },
+  "ShortcutsCheatsheet": {
+    "or": "or",
+    "title": "Keyboard shortcuts",
+    "description": {
+      "before": "Speed up navigation with these global shortcuts. Press",
+      "after": "any time to open this dialog."
+    },
+    "tip": {
+      "before": "Tip: For",
+      "middle": "-prefixed shortcuts, press",
+      "after": "then the second key within 1.5 seconds."
+    }
+  },
+  "DriverSelector": {
+    "searchPlaceholder": "Search drivers...",
+    "empty": "No drivers found",
+    "recommended": "Recommended"
+  },
+  "Breadcrumb": {
+    "ariaLabel": "Breadcrumb",
+    "paths": {
+      "dashboard": "Dashboard",
+      "devices": "Devices",
+      "controllers": "Controllers",
+      "sites": "Sites",
+      "cameras": "Cameras",
+      "voip": "VoIP",
+      "access": "Access Control",
+      "firewall": "Firewall",
+      "users": "Users",
+      "settings": "Settings",
+      "discovery": "Discovery",
+      "organizations": "Organizations",
+      "network": "Network"
+    }
+  },
+  "ActivityFeed": {
+    "empty": "No recent activity"
+  },
+  "nav": {
+    "sections": {
+      "Overview": "Overview",
+      "Network": "Network",
+      "Cameras": "Cameras",
+      "VoIP": "VoIP",
+      "Infrastructure": "Infrastructure",
+      "Operations": "Operations",
+      "Automation": "Automation",
+      "Administration": "Administration"
+    },
+    "items": {
+      "Dashboard": "Dashboard",
+      "Sites": "Sites",
+      "Health": "Health",
+      "Topology": "Topology",
+      "Network Overview": "Network Overview",
+      "Devices": "Devices",
+      "Switches": "Switches",
+      "Access Points": "Access Points",
+      "VLANs": "VLANs",
+      "WiFi Networks": "WiFi Networks",
+      "Clients": "Clients",
+      "PoE": "PoE",
+      "VPN": "VPN",
+      "Firewall": "Firewall",
+      "Discovery": "Discovery",
+      "Cameras": "Cameras",
+      "Camera Wall": "Camera Wall",
+      "NVRs": "NVRs",
+      "Multi-Playback": "Multi-Playback",
+      "Fleet Overview": "Fleet Overview",
+      "PBX Systems": "PBX Systems",
+      "Phones": "Phones",
+      "Extensions": "Extensions",
+      "Call History": "Call History",
+      "Voicemail": "Voicemail",
+      "Phone Templates": "Phone Templates",
+      "Phone Discovery": "Phone Discovery",
+      "Hypervisor": "Hypervisor",
+      "Backups": "Backups",
+      "Access Control": "Access Control",
+      "Alerts": "Alerts",
+      "Incidents": "Incidents",
+      "Observability": "Observability",
+      "Log Explorer": "Log Explorer",
+      "System Logs": "System Logs",
+      "Analytics": "Analytics",
+      "SLA": "SLA",
+      "Bulk Operations": "Bulk Operations",
+      "Device Lifecycle": "Device Lifecycle",
+      "Reconciliation": "Reconciliation",
+      "Firmware": "Firmware",
+      "Gateway VPN": "Gateway VPN",
+      "Gateway Firmware": "Gateway Firmware",
+      "Gateway Bulk Ops": "Gateway Bulk Ops",
+      "Gateway System": "Gateway System",
+      "Gateway Routing": "Gateway Routing",
+      "Gateway Firewall": "Gateway Firewall",
+      "Gateway Hotspot": "Gateway Hotspot",
+      "Gateway Profiles": "Gateway Profiles",
+      "Gateway Switch Advanced": "Gateway Switch Advanced",
+      "Gateway Diagnostics": "Gateway Diagnostics",
+      "Gateway Insights": "Gateway Insights",
+      "Pending Changes": "Pending Changes",
+      "Automation Rules": "Automation Rules",
+      "Alert Rules": "Alert Rules",
+      "Notification Providers": "Notification Providers",
+      "Webhooks": "Webhooks",
+      "Integrations": "Integrations",
+      "Config Templates": "Config Templates",
+      "Site Groups": "Site Groups",
+      "AI Assistant": "AI Assistant",
+      "Controllers": "Controllers",
+      "Credentials": "Credentials",
+      "Agents": "Agents",
+      "Agent Downloads": "Agent Downloads",
+      "Agent Releases": "Agent Releases",
+      "Users": "Users",
+      "Roles": "Roles",
+      "Organizations": "Organizations",
+      "Security Audit": "Security Audit",
+      "Plugins": "Plugins",
+      "Marketplace": "Marketplace",
+      "Drivers": "Drivers"
+    }
+  },
+  "changeLanguage": "Change language",
+  "filters": "Filters",
+  "updated": "Updated",
+  "relative": {
+    "never": "Never",
+    "justNow": "Just now",
+    "minutesAgo": "{{n}}m ago",
+    "hoursAgo": "{{n}}h ago",
+    "daysAgo": "{{n}}d ago"
+  }
+}

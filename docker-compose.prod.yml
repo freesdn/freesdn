@@ -1,0 +1,16 @@
+# =============================================================================
+# FreeSDN - production compose (COMPATIBILITY SHIM)
+# =============================================================================
+# The canonical stack now lives in docker-compose.yml (the single env-driven
+# base, production-oriented by default). This shim keeps existing
+# `-f docker-compose.prod.yml` commands, docs, install.sh, and the HA overlay
+# working without duplicating ~1000 lines of service definitions.
+#
+# Prefer the tier model for new deployments:
+#   docker compose --env-file .env.lite up -d   # homelab
+#   docker compose --env-file .env.pro  up -d   # SMB
+#   docker compose --env-file .env.max  up -d   # enterprise  (+ -f docker-compose.ha.yml)
+#
+# See https://docs.freesdn.org/deploy/deployment-tiers/.
+include:
+  - path: docker-compose.yml

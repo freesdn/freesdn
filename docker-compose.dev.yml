@@ -1,0 +1,147 @@
+# =============================================================================
+# FreeSDN - DEV overlay (developer workflow)
+# =============================================================================
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d
+#
+# Turns the production base into a hot-reload dev environment:
+#   - backend services run the `development` image with the source bind-mounted
+#     and uvicorn --reload (no rebuild on code change)
+#   - the Caddy edge (profile: caddy - NOT enabled here) is replaced by the
+#     Vite dev server (HMR), which proxies /api to the api service
+#   - DB / Redis / API host ports are exposed for local debugging
+#   - pg-backup writes unencrypted dumps on a short cycle
+#
+# Enable cameras (go2rtc) in dev with COMPOSE_PROFILES=cameras (set in .env.dev).
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    image: ${BACKEND_DEV_IMAGE:-freesdn-backend:dev}
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      DEBUG: "false"
+      # The Vite dev server serves the UI cross-origin from the API (5173 -> 8000),
+      # so the browser's Origin must be allowed or every API call (and its CORS
+      # preflight) is rejected. The base compose default is ["https://localhost"]
+      # (production); override it here for the dev frontend origins.
+      CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173"]'
+      # DEV-ONLY write enablement: flip BOTH to "false" to let staged adapter
+      # changes APPLY to the live device from the UI (the per-apply force=true +
+      # Apply-confirm dialog remain the second gate). Left "true" (read-only) by
+      # default since this dev stack is wired to a PRODUCTION PBX; production
+      # base keeps these unset (=read-only) too.
+      ADAPTER_READ_ONLY: "true"
+      OMADA_READ_ONLY: "true"
+    volumes:
+      - ./backend:/app
+    entrypoint: []
+    command: >-
+      sh -c "python scripts/migrate.py && python scripts/migrate_logdb.py || true;
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app"
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
+    read_only: false
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    image: ${BACKEND_DEV_IMAGE:-freesdn-backend:dev}
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      C_FORCE_ROOT: "1"
+      PYTHONWARNINGS: "ignore:::celery.platforms"
+    volumes:
+      - ./backend:/app
+    # Dev runs ONE worker across all queues (no separate worker-io).
+    command: >-
+      celery -A app.core.celery_app worker
+      --loglevel=info --pool=${CELERY_POOL:-prefork}
+      --concurrency=${CELERY_CONCURRENCY:-4}
+      --max-tasks-per-child=1000 --pidfile=/tmp/celery_worker.pid
+      -Q default,priority,discovery,sync,metrics
+    read_only: false
+
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    image: ${BACKEND_DEV_IMAGE:-freesdn-backend:dev}
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      C_FORCE_ROOT: "1"
+      PYTHONWARNINGS: "ignore:::celery.platforms"
+    volumes:
+      - ./backend:/app
+      - celerybeat_data:/app/celerybeat
+    command: celery -A app.core.celery_app beat --loglevel=info --scheduler celery.beat:PersistentScheduler --schedule=/app/celerybeat/celerybeat-schedule
+    read_only: false
+
+  # Keep the Caddy edge OFF in dev (gate it behind a profile that is never
+  # enabled). Dev serves the SPA via the Vite HMR server below instead.
+  edge:
+    profiles: ["disabled-in-dev"]
+
+  # Dev frontend = Vite dev server with HMR. Vite proxies /api to the api service.
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    image: ${FRONTEND_DEV_IMAGE:-freesdn-frontend:dev}
+    restart: unless-stopped
+    environment:
+      # Same-origin dev: leave VITE_API_URL UNSET so the client uses
+      # window.location.origin and calls /api on the Vite dev server, which
+      # proxies to the api service (VITE_PROXY_TARGET). Same-origin means the
+      # auth session cookie is set + sent reliably (cross-origin to :8000 drops
+      # SameSite cookies over http and forces CORS preflights). WS goes through
+      # the same same-origin proxy path (vite proxy has ws:true for /api).
+      - VITE_WS_URL=${VITE_WS_URL:-ws://localhost:5173/api/v1/ws}
+      - VITE_PROXY_TARGET=http://api:8000
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-5173}:5173"
+    stdin_open: true
+    tty: true
+    depends_on:
+      api: {condition: service_healthy}
+    networks: [default]
+
+  # Expose data-tier ports for local debugging (prod keeps these internal).
+  postgres:
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-15432}:5432"
+  logdb:
+    ports:
+      - "127.0.0.1:${LOGDB_HOST_PORT:-15433}:5432"
+  redis:
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-16379}:6379"
+
+  # Dev backups: unencrypted, short cycle, smaller retention.
+  pg-backup:
+    environment:
+      HOME: /tmp
+      PGUSER: ${POSTGRES_USER:-freesdn}
+      PG_PASSWORD: ${POSTGRES_PASSWORD}
+      LOGDB_USER: ${LOGDB_USER:-freesdn}
+      LOGDB_PASS: ${LOGDB_PASSWORD}
+      LOGDB_DB: ${LOGDB_DB:-freesdn_logs}
+      POSTGRES_DB: ${POSTGRES_DB:-freesdn}
+      BACKUP_GPG_RECIPIENT: ${BACKUP_GPG_RECIPIENT:-}
+      BACKUP_ALLOW_PLAINTEXT: "1"
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-43200}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-3}
+
+volumes:
+  frontend_node_modules:

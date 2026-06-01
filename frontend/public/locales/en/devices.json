@@ -1,0 +1,385 @@
+{
+  "title": "Devices",
+  "device": "Device",
+  "devices": "Devices",
+  "deviceCount": "{{count}} device",
+  "deviceCount_other": "{{count}} devices",
+  "noDevices": "No devices found",
+  "addDevice": "Add Device",
+  "adoptDevice": "Adopt Device",
+  "discoverDevices": "Discover Devices",
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "warning": "Warning",
+    "error": "Error",
+    "unknown": "Unknown",
+    "provisioning": "Provisioning",
+    "upgrading": "Upgrading",
+    "rebooting": "Rebooting"
+  },
+  "types": {
+    "switch": "Switch",
+    "router": "Router",
+    "accessPoint": "Access Point",
+    "camera": "Camera",
+    "gateway": "Gateway",
+    "controller": "Controller",
+    "firewall": "Firewall",
+    "server": "Server",
+    "phone": "VoIP Phone",
+    "unknown": "Unknown"
+  },
+  "actions": {
+    "reboot": "Reboot",
+    "rebootConfirm": "Are you sure you want to reboot this device?",
+    "provision": "Provision",
+    "locate": "Locate",
+    "locateDescription": "Flash the device LEDs to help locate it",
+    "upgrade": "Upgrade Firmware",
+    "upgradeConfirm": "Upgrade to version {{version}}?",
+    "backup": "Backup Configuration",
+    "restore": "Restore Configuration",
+    "adopt": "Adopt",
+    "forget": "Forget",
+    "forgetConfirm": "Are you sure you want to forget this device?"
+  },
+  "properties": {
+    "name": "Name",
+    "ipAddress": "IP Address",
+    "macAddress": "MAC Address",
+    "model": "Model",
+    "manufacturer": "Manufacturer",
+    "firmware": "Firmware",
+    "uptime": "Uptime",
+    "lastSeen": "Last Seen",
+    "site": "Site",
+    "location": "Location",
+    "serialNumber": "Serial Number",
+    "temperature": "Temperature",
+    "cpuUsage": "CPU Usage",
+    "memoryUsage": "Memory Usage"
+  },
+  "tabs": {
+    "overview": "Overview",
+    "ports": "Ports",
+    "clients": "Clients",
+    "configuration": "Configuration",
+    "logs": "Logs",
+    "statistics": "Statistics"
+  },
+  "filters": {
+    "allDevices": "All Devices",
+    "onlineOnly": "Online Only",
+    "offlineOnly": "Offline Only",
+    "byType": "By Type",
+    "bySite": "By Site"
+  },
+  "DevicesPage": {
+    "title": "Device Inventory",
+    "description": "Real-time infrastructure overview · {{n}} devices across your network",
+    "descriptionShort": "Real-time infrastructure overview",
+    "noData": "No data",
+    "unknownVendor": "Unknown",
+    "itemName": "device",
+    "itemNamePlural": "devices",
+    "error": {
+      "message": "Could not connect to the device inventory. Check that the API server is running."
+    },
+    "tabs": {
+      "dashboard": "Dashboard",
+      "devices": "Devices"
+    },
+    "actions": {
+      "exportCsv": "Export CSV",
+      "actionsFor": "Actions for {{name}}",
+      "viewDetails": "View Details",
+      "reboot": "Reboot",
+      "exportConfig": "Export Config"
+    },
+    "badges": {
+      "unmanaged": "Unmanaged"
+    },
+    "columns": {
+      "device": "Device",
+      "type": "Type",
+      "vendor": "Vendor",
+      "modelFirmware": "Model / Firmware",
+      "uptime": "Uptime",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "ports": "Ports",
+      "lastSeen": "Last Seen"
+    },
+    "lastSeen": {
+      "never": "Never",
+      "justNow": "Just now",
+      "minutesAgo": "{{n}}m ago",
+      "hoursAgo": "{{n}}h ago",
+      "daysAgo": "{{n}}d ago"
+    },
+    "statusOptions": {
+      "online": "Online",
+      "offline": "Offline",
+      "degraded": "Degraded",
+      "adopting": "Adopting",
+      "provisioning": "Provisioning",
+      "adoptionFailed": "Adoption Failed",
+      "unknown": "Unknown"
+    },
+    "stats": {
+      "total": {
+        "title": "Total Devices"
+      },
+      "online": {
+        "title": "Online",
+        "availability": "{{percent}}% availability",
+        "noDevices": "No devices"
+      },
+      "offline": {
+        "title": "Offline",
+        "degraded": "{{n}} degraded",
+        "needsAttention": "Needs attention"
+      },
+      "pending": {
+        "title": "Pending",
+        "awaitingAdoption": "Awaiting adoption"
+      },
+      "managedUnmanaged": "{{managed}} managed · {{unmanaged}} unmanaged"
+    },
+    "cards": {
+      "healthOverview": "Health Overview",
+      "byType": "By Type",
+      "byVendor": "By Vendor"
+    },
+    "metrics": {
+      "online": "Online",
+      "offline": "Offline",
+      "degraded": "Degraded",
+      "pending": "Pending",
+      "avgCpu": "Avg CPU",
+      "avgMemory": "Avg Memory"
+    },
+    "filters": {
+      "searchPlaceholder": "Search by name, IP, MAC, model, or vendor…",
+      "byTypeAria": "Filter by device type",
+      "byStatusAria": "Filter by status",
+      "byVendorAria": "Filter by vendor",
+      "byManagementAria": "Filter by management status",
+      "allTypes": "All Types",
+      "allStatuses": "All Statuses",
+      "allVendors": "All Vendors",
+      "all": "All",
+      "managed": "Managed",
+      "unmanaged": "Unmanaged",
+      "clear": "Clear",
+      "countAll": "{{n}} devices",
+      "countFiltered": "Showing {{shown}} of {{total}}"
+    },
+    "toasts": {
+      "noRebootEligible": {
+        "title": "No reboot-eligible devices",
+        "description": "Reboot only applies to online devices."
+      },
+      "rebootInitiated": {
+        "title": "Reboot initiated",
+        "description": "Rebooting {{n}} device(s)."
+      },
+      "exportQueued": {
+        "title": "Export queued",
+        "description": "Exporting {{n}} device record(s)."
+      },
+      "bulkDelete": {
+        "title": "Bulk delete",
+        "description": "Please delete devices individually for safety."
+      }
+    },
+    "bulkActions": {
+      "reboot": "Reboot",
+      "export": "Export",
+      "delete": "Delete"
+    }
+  },
+  "DeviceDetailPage": {
+    "deviceTypes": {
+      "switch": "Switch",
+      "access_point": "Access Point",
+      "router": "Router",
+      "gateway": "Gateway",
+      "firewall": "Firewall",
+      "camera": "Camera",
+      "nvr": "NVR",
+      "dvr": "DVR",
+      "access_control": "Access Control",
+      "intercom": "Intercom",
+      "voip_phone": "VoIP Phone",
+      "pbx": "PBX",
+      "server": "Server",
+      "iot": "IoT",
+      "sensor": "Sensor",
+      "other": "Other"
+    },
+    "statuses": {
+      "online": "Online",
+      "offline": "Offline",
+      "degraded": "Degraded",
+      "adopting": "Adopting",
+      "provisioning": "Provisioning",
+      "adoption_failed": "Adoption Failed",
+      "unknown": "Unknown"
+    },
+    "detailRow": {
+      "clickToCopy": "Click to copy"
+    },
+    "uptime": {
+      "dhm": "{{d}}d {{h}}h {{m}}m",
+      "hm": "{{h}}h {{m}}m",
+      "m": "{{m}}m"
+    },
+    "relative": {
+      "never": "Never",
+      "justNow": "Just now",
+      "minutesAgo": "{{n}}m ago",
+      "hoursAgo": "{{n}}h ago",
+      "daysAgo": "{{n}}d ago"
+    },
+    "manage": {
+      "nvr": "Manage NVR",
+      "camera": "Manage Camera",
+      "switch": "Manage Switch",
+      "accessPoint": "Manage AP",
+      "phone": "Manage Phone",
+      "pbx": "Manage PBX",
+      "firewall": "Manage Firewall",
+      "gateway": "Manage Gateway",
+      "default": "Manage"
+    },
+    "common": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "error": {
+      "title": "Failed to load device",
+      "notFound": "Device not found or network error",
+      "backToInventory": "Back to Inventory",
+      "retry": "Retry"
+    },
+    "toast": {
+      "credentialUpdated": "Credential updated",
+      "updateFailed": "Update failed"
+    },
+    "badge": {
+      "unmanaged": "Unmanaged"
+    },
+    "actions": {
+      "sync": "Sync",
+      "reboot": "Reboot"
+    },
+    "menu": {
+      "editDevice": "Edit Device",
+      "changeCredential": "Change Credential",
+      "assignCredential": "Assign Credential",
+      "reprobe": "Re-probe (sync now)",
+      "backupConfig": "Backup Config",
+      "upgradeFirmware": "Upgrade Firmware",
+      "removeDevice": "Remove Device"
+    },
+    "banner": {
+      "adoptionInProgress": {
+        "title": "Adoption in progress",
+        "withController": "Waiting for the controller to validate this device. It will go online once the next controller sync confirms it.",
+        "noController": "This device has no controller and no liveness source yet. Assign a credential (so an adapter can reach it) or let the agent re-observe it on the next scan."
+      },
+      "agentDiscovery": {
+        "title": "Tracked via agent discovery",
+        "description": "No controller manages this device, its online status is driven by the site agent re-observing it on the network. It will show offline if the agent stops seeing it for 30 minutes. Assign a credential to enable adapter-level management (config backup, reboot, etc.)."
+      }
+    },
+    "stats": {
+      "uptime": "Uptime",
+      "sinceLastReboot": "Since last reboot",
+      "activePorts": "Active Ports",
+      "connectedClients": "Connected Clients",
+      "activeConnections": "Active connections"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "network": "Network",
+      "ports": "Ports ({{count}})",
+      "system": "System"
+    },
+    "identity": {
+      "title": "Device Identity",
+      "name": "Name",
+      "type": "Type",
+      "manufacturer": "Manufacturer",
+      "model": "Model",
+      "serialNumber": "Serial Number",
+      "macAddress": "MAC Address",
+      "firmware": "Firmware"
+    },
+    "location": {
+      "title": "Location & Management",
+      "status": "Status",
+      "managed": "Managed",
+      "active": "Active",
+      "location": "Location",
+      "floor": "Floor",
+      "room": "Room",
+      "lastSeen": "Last Seen",
+      "notes": "Notes"
+    },
+    "networkConfig": {
+      "title": "Network Configuration",
+      "ipAddress": "IP Address",
+      "macAddress": "MAC Address",
+      "connectionType": "Connection Type",
+      "vlanId": "VLAN ID",
+      "controllerId": "Controller ID",
+      "siteId": "Site ID",
+      "externalId": "External ID"
+    },
+    "portSummary": {
+      "title": "Port Summary",
+      "utilization": "Port utilization",
+      "total": "Total",
+      "active": "Active",
+      "unused": "Unused",
+      "noData": "No port data available"
+    },
+    "portManagement": {
+      "title": "Port Management",
+      "description": "{{active}} of {{total}} ports active ({{pct}}% utilization)",
+      "portTooltip": "Port {{n}} · {{state}}",
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "systemHealth": {
+      "title": "System Health",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "uptime": "Uptime",
+      "connectedClients": "Connected Clients"
+    },
+    "metadata": {
+      "title": "Metadata & Timestamps",
+      "deviceId": "Device ID",
+      "created": "Created",
+      "lastUpdated": "Last Updated",
+      "lastSeen": "Last Seen",
+      "connectionType": "Connection Type",
+      "vlan": "VLAN",
+      "capabilities": "Capabilities",
+      "metadataHeading": "Metadata"
+    },
+    "credDialog": {
+      "titleChange": "Change credential",
+      "titleAssign": "Assign credential",
+      "description": "Attach a stored credential so adapters can authenticate to {{name}}. Required for config backup, reboot, and other managed operations on standalone devices.",
+      "selectPlaceholder": "Select a credential…",
+      "noCredentials": "No credentials found. Create one on the Credentials page first.",
+      "cancel": "Cancel",
+      "save": "Save"
+    }
+  }
+}

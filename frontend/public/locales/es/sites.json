@@ -1,0 +1,487 @@
+{
+  "SiteDetailPage": {
+    "common": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "error": "Error",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "done": "Listo",
+      "copied": "Copiado",
+      "clickToCopy": "Clic para copiar"
+    },
+    "actions": {
+      "sync": "Sincronizar",
+      "edit": "Editar",
+      "retry": "Reintentar",
+      "backToSites": "Volver a sitios",
+      "viewAllDevices": "Ver todos los dispositivos",
+      "deleteSite": "Eliminar sitio",
+      "configureVpn": "Configurar VPN",
+      "setupVpn": "Configurar VPN",
+      "manageAgents": "Administrar agentes",
+      "deployAgent": "Implementar agente",
+      "fullInventory": "Inventario completo",
+      "copy": "Copiar"
+    },
+    "header": {
+      "subnetCount": "{{count}} subred",
+      "subnetCount_other": "{{count}} subredes"
+    },
+    "stats": {
+      "controllers": "Controladores",
+      "devices": "Dispositivos",
+      "online": "En línea",
+      "offline": "Sin conexión",
+      "health": "Estado",
+      "devicesOffline": "{{count}} dispositivo sin conexión",
+      "devicesOffline_other": "{{count}} dispositivos sin conexión"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "network": "Red",
+      "vpn": "VPN",
+      "agent": "Agente",
+      "devices": "Dispositivos",
+      "settings": "Configuración"
+    },
+    "fields": {
+      "name": "Nombre",
+      "slug": "Slug",
+      "id": "ID",
+      "gatewayIp": "IP de puerta de enlace",
+      "status": "Estado",
+      "subnets": "Subredes",
+      "description": "Descripción",
+      "address": "Dirección",
+      "city": "Ciudad",
+      "country": "País",
+      "timezone": "Zona horaria",
+      "timeFormat": "Formato de hora",
+      "dateFormat": "Formato de fecha",
+      "created": "Creado",
+      "updated": "Actualizado"
+    },
+    "errors": {
+      "loadFailedTitle": "Error al cargar el sitio",
+      "loadFailedDesc": "Sitio no encontrado o error de red"
+    },
+    "toasts": {
+      "siteUpdated": "Sitio actualizado",
+      "updateFailed": "Error al actualizar el sitio",
+      "deleteFailed": "Error al eliminar el sitio"
+    },
+    "deviceTable": {
+      "device": "Dispositivo",
+      "status": "Estado",
+      "ipAddress": "Dirección IP",
+      "model": "Modelo",
+      "lastSeen": "Visto por última vez"
+    },
+    "deviceTypes": {
+      "switch": "Switch",
+      "access_point": "Punto de acceso",
+      "router": "Router",
+      "gateway": "Puerta de enlace",
+      "firewall": "Firewall",
+      "camera": "Cámara",
+      "nvr": "NVR",
+      "voip_phone": "Teléfono VoIP",
+      "pbx": "PBX",
+      "server": "Servidor",
+      "hypervisor": "Hipervisor",
+      "other": "Otro"
+    },
+    "statuses": {
+      "online": "En línea",
+      "offline": "Sin conexión",
+      "degraded": "Degradado",
+      "adopting": "Adoptando",
+      "provisioning": "Aprovisionando",
+      "unknown": "Desconocido"
+    },
+    "relative": {
+      "never": "Nunca",
+      "justNow": "Justo ahora",
+      "minutesAgo": "hace {{n}} min",
+      "hoursAgo": "hace {{n}} h",
+      "daysAgo": "hace {{n}} d"
+    },
+    "overview": {
+      "siteInformation": "Información del sitio",
+      "locationAndTime": "Ubicación y hora",
+      "vpnStatus": "Estado de VPN",
+      "noVpnConfigured": "Sin VPN configurada",
+      "agentStatus": "Estado del agente",
+      "noAgentsDeployed": "Sin agentes implementados",
+      "deviceHealthSummary": "Resumen del estado de los dispositivos",
+      "devicesOnlineRatio": "{{online}} de {{total}} dispositivos en línea"
+    },
+    "devices": {
+      "titleAt": "Dispositivos en {{name}}",
+      "itemName": "dispositivos"
+    },
+    "deleteDialog": {
+      "title": "¿Eliminar \"{{name}}\"?",
+      "description": "Esto eliminará de forma lógica el sitio y todos los controladores y dispositivos asociados.",
+      "deleting": "Eliminando…"
+    },
+    "network": {
+      "siteGateway": "Puerta de enlace del sitio",
+      "gatewayIpPlaceholder": "ej. 192.168.1.1",
+      "notConfigured": "No configurada",
+      "routeToSubnets": "Ruta a subredes",
+      "noSubnets": "Sin subredes",
+      "subnets": "Subredes",
+      "scanAllSubnets": "Escanear todas las subredes",
+      "addSubnet": "Agregar subred",
+      "addSubnetDesc": "Define una subred de red en este sitio para descubrimiento y monitoreo.",
+      "emptyTitle": "Sin subredes configuradas",
+      "emptyDesc": "Agrega subredes para habilitar el escaneo de red y el descubrimiento de dispositivos",
+      "addFirstSubnet": "Agregar primera subred",
+      "confirmRemoveSubnet": "¿Eliminar esta subred?",
+      "invalidIpTitle": "IP no válida",
+      "invalidIpDesc": "Ingresa una dirección IP válida como 192.168.1.1",
+      "scanStartedTitle": "Escaneo iniciado",
+      "scanStartedDesc": "Tarea de escaneo de red enviada al agente",
+      "scanFailedTitle": "Error en el escaneo",
+      "scanFailedDesc": "Error al iniciar el escaneo",
+      "validation": {
+        "cidrRequired": "El CIDR es obligatorio",
+        "cidrInvalid": "Ingresa un CIDR válido como 192.168.1.0/24",
+        "vlanRange": "El ID de VLAN debe estar entre 1 y 4094"
+      },
+      "errors": {
+        "noOnlineAgent": "No hay ningún agente en línea en este sitio",
+        "noSubnetsToScan": "No hay subredes configuradas para escanear"
+      },
+      "form": {
+        "cidr": "CIDR *",
+        "namePlaceholder": "Administración",
+        "vlanId": "ID de VLAN",
+        "descriptionPlaceholder": "Descripción opcional"
+      }
+    },
+    "vpn": {
+      "provider": "Proveedor",
+      "lastCheck": "Última comprobación",
+      "configurations": "Configuraciones de VPN",
+      "addVpnConfig": "Agregar configuración de VPN",
+      "primary": "Principal",
+      "disabled": "Deshabilitado",
+      "noEndpointConfigured": "Sin endpoint configurado",
+      "viaBrain": "vía Brain",
+      "setPrimary": "Establecer como principal",
+      "confirmRemoveConfig": "¿Eliminar esta configuración de VPN?",
+      "addConfigTitle": "Agregar configuración de VPN",
+      "addConfigDesc": "Agrega una conexión VPN adicional a este sitio",
+      "enabled": "Habilitado",
+      "autoConnect": "Conexión automática",
+      "createConfig": "Crear configuración",
+      "connection": "Conexión VPN",
+      "connectionDesc": "Configura la conectividad VPN para llegar a la red local de este sitio",
+      "test": "Probar",
+      "importOvpn": "Importar .ovpn",
+      "addVpn": "Agregar VPN",
+      "setup": "Configurar",
+      "tailscaleHostname": "Nombre de host de Tailscale",
+      "endpoint": "Endpoint",
+      "healthCheckIp": "IP de comprobación de estado",
+      "lastHealthCheck": "Última comprobación de estado",
+      "advertisedSubnets": "Subredes anunciadas",
+      "noVpnTitle": "Sin VPN configurada",
+      "noVpnDesc": "Configura una conexión VPN para llegar a los dispositivos de la red local de este sitio. FreeSDN admite Tailscale, WireGuard, OpenVPN, Netbird, ZeroTier e IPsec.",
+      "connectViaBrain": "Conectar vía Brain",
+      "manualSetup": "Configuración manual",
+      "vpnEnabled": "VPN habilitada",
+      "saveVpnConfig": "Guardar configuración de VPN",
+      "loadFailedTitle": "Error al cargar la configuración de VPN",
+      "loadFailedDesc": "Verifica que la API de VPN sea accesible y luego intenta actualizar.",
+      "preflight": {
+        "checking": "Comprobando conectividad VPN...",
+        "directAccess": "Acceso directo (sin VPN)",
+        "skipped": "omitido",
+        "connected": "VPN conectada",
+        "connectedWithLatency": "VPN conectada ({{ms}}ms)",
+        "active": "activa",
+        "unreachable": "VPN inaccesible · revisa la configuración de VPN",
+        "unreachableBadge": "inaccesible"
+      },
+      "brain": {
+        "title": "Conectar vía Brain (puerta de enlace)",
+        "description": "Tu firewall/puerta de enlace ya tiene servidores VPN. Conéctate a través de él para llegar a todas las subredes del sitio.",
+        "syncSubnets": "Sincronizar subredes",
+        "discoverVpn": "Descubrir VPN",
+        "serversOn": "Servidores VPN en {{name}}",
+        "noServersFound": "No se encontraron servidores VPN. Configura primero OpenVPN o WireGuard en el firewall.",
+        "openvpnLabel": "OpenVPN: {{description}}",
+        "protocolPort": "{{protocol}} puerto {{port}}",
+        "wireguardLabel": "WireGuard: {{name}}",
+        "port": "Puerto {{port}}",
+        "ipsecLabel": "IPsec: {{description}}",
+        "import": "Importar"
+      },
+      "form": {
+        "tailscaleNode": "Nombre de nodo de Tailscale",
+        "tailscaleHostname": "Nombre de host / IP de Tailscale",
+        "interface": "Interfaz",
+        "configPath": "Ruta de configuración (en el servidor FreeSDN)",
+        "openvpnHint": "O usa el botón \"Importar .ovpn\" de arriba para pegar el contenido de la configuración directamente.",
+        "peerId": "ID de par",
+        "group": "Grupo",
+        "zerotierNetworkId": "ID de red de ZeroTier",
+        "zerotierHint": "ID de red de 16 caracteres del panel de ZeroTier Central",
+        "healthCheckIpPlaceholder": "IP para hacer ping de comprobación de estado (ej. puerta de enlace del sitio)",
+        "remoteSubnets": "Subredes remotas (separadas por comas)",
+        "localSubnets": "Subredes locales (separadas por comas)"
+      },
+      "ovpnDialog": {
+        "title": "Importar configuración de OpenVPN",
+        "description": "Pega el contenido de tu archivo .ovpn. Funciona con cualquier servidor OpenVPN (OPNsense, pfSense, MikroTik o independiente).",
+        "submit": "Importar configuración",
+        "hint": "Se admiten certificados incrustados (<ca>, <cert>, <key>). Las directivas de script (up/down/plugin) se rechazan por seguridad."
+      },
+      "methods": {
+        "title": "Métodos de conexión",
+        "description": "Elige el enfoque que se ajuste a tu infraestructura",
+        "brainTitle": "Brain (VPN de puerta de enlace)",
+        "recommended": "Recomendado",
+        "brainDesc": "Tu OPNsense / pfSense / MikroTik ya tiene OpenVPN o WireGuard. FreeSDN se conecta como cliente · sin software adicional en el sitio.",
+        "tailscaleDesc": "VPN de malla sin configuración. Instálalo en cualquier dispositivo y habilita el enrutamiento de subredes. La configuración más sencilla.",
+        "wireguardDesc": "Túnel ligero y rápido. Usa la pestaña Agente para generar automáticamente configuraciones de WireGuard, o configura manualmente.",
+        "openvpnDesc": "Estándar empresarial. Exporta .ovpn desde tu firewall e impórtalo arriba. Funciona a través de firewalls corporativos en TCP/443."
+      },
+      "validation": {
+        "pasteConfig": "Pega tu configuración de OpenVPN",
+        "configTooLarge": "Configuración demasiado grande"
+      },
+      "toasts": {
+        "saved": "Configuración de VPN guardada",
+        "saveFailed": "Error al guardar la configuración de VPN",
+        "testPassed": "Prueba de VPN exitosa",
+        "latency": "Latencia: {{ms}}ms",
+        "testFailed": "Prueba de VPN fallida",
+        "siteNotReachable": "Sitio inaccesible",
+        "testError": "Error de prueba",
+        "connectivityFailed": "Prueba de conectividad fallida",
+        "discoveryFailed": "Error en el descubrimiento",
+        "couldNotReachBrain": "No se pudo conectar con Brain",
+        "imported": "¡Importado!",
+        "importFailed": "Error al importar",
+        "importConfigFailed": "Error al importar la configuración",
+        "subnetsSynced": "Subredes sincronizadas",
+        "syncFailed": "Error de sincronización",
+        "syncSubnetsFailed": "Error al sincronizar las subredes",
+        "ovpnImported": "Configuración de OpenVPN importada",
+        "ovpnEndpoint": "Endpoint: {{endpoint}}:{{port}}",
+        "configAdded": "Configuración de VPN agregada",
+        "createConfigFailed": "Error al crear la configuración de VPN",
+        "configRemoved": "Configuración de VPN eliminada",
+        "removeConfigFailed": "Error al eliminar la configuración de VPN",
+        "primaryUpdated": "VPN principal actualizada",
+        "setPrimaryFailed": "Error al establecer la configuración principal"
+      }
+    },
+    "reachability": {
+      "title": "Accesibilidad de dispositivos",
+      "reachableCount": "{{reachable}}/{{total}} accesibles",
+      "description": "Comprueba qué dispositivos de este sitio son accesibles a través del túnel VPN.",
+      "check": "Comprobar accesibilidad",
+      "deviceName": "Nombre del dispositivo",
+      "type": "Tipo",
+      "ip": "IP",
+      "latency": "Latencia",
+      "noDevices": "No se encontraron dispositivos en este sitio para comprobar la accesibilidad.",
+      "instruction": "Haz clic en \"Comprobar accesibilidad\" para probar la conectividad con cada dispositivo de este sitio."
+    },
+    "agent": {
+      "siteAgents": "Agentes del sitio",
+      "siteAgentsDesc": "Agentes implementados en este sitio para el descubrimiento y la gestión de la red local",
+      "registerAgent": "Registrar agente",
+      "emptyTitle": "Sin agentes implementados",
+      "emptyDesc": "Implementa un agente FreeSDN en este sitio para habilitar el escaneo de red local, el descubrimiento de dispositivos y la gestión remota.",
+      "deployFirstAgent": "Implementar primer agente",
+      "pendingApproval": "Aprobación pendiente",
+      "lastSeen": "Visto por última vez: {{time}}",
+      "approve": "Aprobar",
+      "agentName": "Nombre del agente",
+      "register": "Registrar",
+      "registerDialog": {
+        "title": "Registrar nuevo agente",
+        "description": "Registra un agente FreeSDN para el sitio \"{{name}}\". El agente necesitará las credenciales de abajo para conectarse.",
+        "generateWireguard": "Generar configuración de VPN WireGuard (sin intervención)",
+        "wireguardHint": "Genera un par de claves y una configuración de WireGuard para que el agente se reconecte automáticamente a FreeSDN.",
+        "serverPublicKey": "Clave pública del servidor",
+        "serverPublicKeyPlaceholder": "Clave pública de WireGuard del servidor FreeSDN",
+        "serverEndpoint": "Endpoint del servidor",
+        "agentVpnAddress": "Dirección VPN del agente"
+      },
+      "result": {
+        "saveCredentials": "Guarda estas credenciales ahora · la clave de API NO se mostrará de nuevo.",
+        "agentId": "ID del agente",
+        "apiKey": "Clave de API (de un solo uso)",
+        "websocketUrl": "URL de WebSocket",
+        "wgPrivateKeyWarning": "Esta configuración contiene la clave privada de WireGuard del agente. Cópiala ahora y guárdala de forma segura · no se mostrará de nuevo.",
+        "wgAgentConfig": "Configuración del agente WireGuard",
+        "configCopied": "Configuración copiada",
+        "addToServerConf": "Agregar al wg0.conf del servidor",
+        "peerBlockCopied": "Bloque de par copiado"
+      },
+      "guide": {
+        "title": "Guía de implementación del agente",
+        "step1": "Haz clic en \"Registrar agente\" arriba para obtener las credenciales",
+        "step2Before": "Descarga el agente FreeSDN desde la",
+        "step2Link": "página de descargas",
+        "step3": "Instala el agente en cualquier equipo del sitio (Linux, Windows, macOS)",
+        "step4": "Configura con las credenciales:",
+        "step5": "Aprueba el agente y luego inicia escaneos de subredes desde la pestaña Red"
+      },
+      "toasts": {
+        "registered": "Agente registrado",
+        "registerFailed": "Error al registrar el agente",
+        "approved": "Agente aprobado",
+        "approveFailed": "Error al aprobar el agente"
+      }
+    },
+    "settings": {
+      "title": "Configuración del sitio",
+      "siteIsActive": "El sitio está activo",
+      "saveChanges": "Guardar cambios",
+      "autoAdopt": {
+        "heading": "Adopción automática de descubrimientos",
+        "toggleLabel": "Adoptar automáticamente descubrimientos de alta confianza",
+        "toggleDesc": "Omite el paso de Adopción para los hosts descubiertos que coincidan con un controlador de proveedor conocido (UniFi, MikroTik, Grandstream, Sangoma, etc.). Los hosts desconocidos aún requieren revisión manual. Desactivado de forma predeterminada.",
+        "minConfidence": "Confianza mínima del proveedor (0.0-1.0)",
+        "minConfidenceHint": "Predeterminado 0.7. Más alto = menos adopciones falsas pero más dispositivos legítimos atascados en Descubiertos."
+      }
+    }
+  },
+  "SitesPage": {
+    "header": {
+      "title": "Sitios",
+      "description": "Administra ubicaciones físicas y lógicas en toda tu organización."
+    },
+    "actions": {
+      "addSite": "Agregar sitio",
+      "export": "Exportar",
+      "delete": "Eliminar",
+      "cancel": "Cancelar",
+      "viewDetails": "Ver detalles",
+      "editSite": "Editar sitio",
+      "deleteSite": "Eliminar sitio",
+      "actionsFor": "Acciones para {{name}}"
+    },
+    "stats": {
+      "total": {
+        "title": "Total de sitios",
+        "description": "Ubicaciones configuradas"
+      },
+      "active": {
+        "title": "Activos",
+        "percent": "{{percent}}% activos",
+        "none": "Sin sitios"
+      },
+      "devices": {
+        "title": "Dispositivos",
+        "description": "En todos los sitios"
+      },
+      "online": {
+        "title": "En línea",
+        "description": "Accesibles actualmente"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar sitios por nombre, ciudad o país…",
+      "allOrganizations": "Todas las organizaciones",
+      "allStatuses": "Todos los estados",
+      "clearFilters": "Limpiar filtros"
+    },
+    "columns": {
+      "site": "Sitio",
+      "status": "Estado",
+      "controllers": "Controladores",
+      "devices": "Dispositivos",
+      "timezone": "Zona horaria",
+      "updated": "Actualizado"
+    },
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo"
+    },
+    "time": {
+      "justNow": "Justo ahora",
+      "minutesAgo": "hace {{count}} min",
+      "hoursAgo": "hace {{count}} h",
+      "daysAgo": "hace {{count}} d"
+    },
+    "fields": {
+      "name": "Nombre",
+      "slug": "Slug",
+      "description": "Descripción",
+      "city": "Ciudad",
+      "country": "País",
+      "timezone": "Zona horaria",
+      "address": "Dirección"
+    },
+    "placeholders": {
+      "name": "Oficina central",
+      "slug": "oficina-central",
+      "description": "Oficina corporativa principal…",
+      "city": "Nueva York",
+      "country": "EE. UU.",
+      "address": "Calle Principal 123"
+    },
+    "hints": {
+      "slug": "Identificador apto para URL. Solo letras minúsculas, números y guiones."
+    },
+    "validation": {
+      "nameRequired": "El nombre es obligatorio",
+      "slugRequired": "El slug es obligatorio",
+      "slugFormat": "Solo letras minúsculas, números y guiones"
+    },
+    "dialogs": {
+      "create": {
+        "title": "Crear sitio",
+        "description": "Agrega una nueva ubicación física o lógica para organizar tu infraestructura.",
+        "submit": "Crear sitio"
+      },
+      "edit": {
+        "title": "Editar sitio",
+        "description": "Actualiza los detalles del sitio.",
+        "submit": "Guardar cambios"
+      },
+      "delete": {
+        "title": "¿Eliminar \"{{name}}\"?",
+        "description": "Esto eliminará de forma lógica el sitio y todos sus controladores y dispositivos asociados. Un administrador puede revertir esta acción.",
+        "deleting": "Eliminando…",
+        "confirm": "Eliminar sitio"
+      }
+    },
+    "toasts": {
+      "createFailed": {
+        "title": "Error al crear",
+        "description": "No se pudo crear el sitio. Inténtalo de nuevo."
+      },
+      "updateFailed": {
+        "title": "Error al actualizar",
+        "description": "No se pudo actualizar el sitio. Inténtalo de nuevo."
+      },
+      "deleteFailed": {
+        "title": "Error al eliminar",
+        "description": "No se pudo eliminar el sitio. Inténtalo de nuevo."
+      },
+      "export": {
+        "title": "Exportar",
+        "description": "Exportación masiva: aún no implementada."
+      },
+      "bulkDelete": {
+        "title": "Eliminación masiva",
+        "description": "Por seguridad, elimina los sitios de uno en uno."
+      }
+    },
+    "errors": {
+      "loadFailed": "No se pudieron cargar los sitios"
+    }
+  }
+}

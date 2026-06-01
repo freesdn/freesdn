@@ -1,0 +1,20 @@
+{
+  "AboutPage": {
+    "title": "About FreeSDN",
+    "subtitle": "Unified Network Management Platform",
+    "platform": {
+      "title": "Platform",
+      "version": "Version",
+      "license": "License",
+      "documentation": "Documentation",
+      "sourceCode": "Source code"
+    },
+    "trademarks": {
+      "title": "Trademarks & Acknowledgements",
+      "intro": "All third-party product names, logos, and brands are the property of their respective owners. Product and company names used in FreeSDN are for identification purposes only, and their use does not imply endorsement or affiliation.",
+      "independence": "FreeSDN is an independent, community-developed open-source project. It is not affiliated with, endorsed by, sponsored by, or otherwise associated with any of the third-party vendors whose products it interoperates with or manages. Compatibility, support, and integration statements describe interoperability only and do not assert any partnership, certification, or approval by the respective vendors.",
+      "attributionTitle": "Attribution",
+      "closing": "Any other product names, logos, and brands referenced are likewise the property of their respective owners. The absence of a name from this list does not constitute a waiver of that mark, nor does its inclusion imply any relationship between FreeSDN and the mark holder."
+    }
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "OrganizationDetailPage": {
+    "info": {
+      "title": "组织信息",
+      "slug": "Slug",
+      "plan": "套餐",
+      "status": "状态",
+      "email": "电子邮件",
+      "phone": "电话",
+      "created": "创建时间"
+    },
+    "status": {
+      "active": "启用",
+      "inactive": "停用"
+    },
+    "stats": {
+      "sites": "站点",
+      "users": "用户",
+      "controllers": "控制器",
+      "devices": "设备",
+      "online": "在线",
+      "percentOnline": "{{pct}}% 在线"
+    },
+    "recentSites": {
+      "title": "最近的站点",
+      "description": "该组织中最近更新的站点",
+      "viewAll": "查看全部",
+      "empty": "暂无站点。创建您的第一个站点以开始使用。"
+    },
+    "sitesTab": {
+      "emptyTitle": "暂无站点",
+      "emptyDescription": "该组织尚无站点。"
+    },
+    "usersTab": {
+      "title": "用户管理",
+      "description": "查看和管理该组织的用户、分配站点级访问权限并配置角色。",
+      "action": "前往用户"
+    },
+    "settingsTab": {
+      "title": "组织设置",
+      "description": "为该组织配置计费、套餐限额、SSO 提供商和模块启用。",
+      "action": "前往设置"
+    },
+    "backToOrganizations": "返回组织列表",
+    "error": {
+      "loadFailed": "加载组织失败"
+    },
+    "header": {
+      "siteCount_one": "{{count}} 个站点",
+      "siteCount_other": "{{count}} 个站点",
+      "userCount_one": "{{count}} 个用户",
+      "userCount_other": "{{count}} 个用户"
+    },
+    "tabs": {
+      "overview": "概览",
+      "sites": "站点",
+      "users": "用户",
+      "settings": "设置"
+    }
+  },
+  "OrganizationsPage": {
+    "columns": {
+      "organization": "组织",
+      "status": "状态",
+      "plan": "套餐"
+    },
+    "placeholders": {
+      "selectPlan": "选择套餐"
+    },
+    "filters": {
+      "allPlans": "所有套餐",
+      "allStatuses": "所有状态",
+      "clearFilters": "清除筛选"
+    },
+    "planOptions": {
+      "free": "免费版",
+      "pro": "专业版",
+      "enterprise": "企业版"
+    },
+    "statusOptions": {
+      "active": "活跃",
+      "trial": "试用",
+      "suspended": "已暂停"
+    },
+    "actions": {
+      "actionsFor": "对 {{name}} 的操作",
+      "viewDetails": "查看详情",
+      "export": "导出",
+      "delete": "删除"
+    },
+    "itemNamePlural": "个组织",
+    "itemNameSingular": "组织",
+    "toasts": {
+      "bulkExportNotImplemented": "批量导出：尚未实现。",
+      "bulkDeleteTitle": "批量删除",
+      "bulkDeleteDescription": "为安全起见，请逐个删除组织。"
+    }
+  }
+}

@@ -1,0 +1,2589 @@
+{
+  "welcome": "欢迎使用 FreeSDN",
+  "welcomeUser": "欢迎，{{name}}！",
+  "appName": "FreeSDN",
+  "appDescription": "统一网络管理平台",
+  "loading": "加载中...",
+  "saving": "保存中...",
+  "success": "成功",
+  "error": "错误",
+  "warning": "警告",
+  "info": "信息",
+  "confirm": "确认",
+  "cancel": "取消",
+  "save": "保存",
+  "delete": "删除",
+  "edit": "编辑",
+  "create": "创建",
+  "update": "更新",
+  "search": "搜索",
+  "searchPlaceholder": "搜索...",
+  "filter": "筛选",
+  "reset": "重置",
+  "apply": "应用",
+  "close": "关闭",
+  "back": "返回",
+  "next": "下一步",
+  "previous": "上一步",
+  "yes": "是",
+  "no": "否",
+  "ok": "确定",
+  "actions": "操作",
+  "details": "详情",
+  "settings": "设置",
+  "help": "帮助",
+  "logout": "退出登录",
+  "login": "登录",
+  "register": "注册",
+  "profile": "个人资料",
+  "language": "语言",
+  "theme": "主题",
+  "darkMode": "深色模式",
+  "lightMode": "浅色模式",
+  "system": "系统",
+  "noData": "暂无数据",
+  "tryAgain": "重试",
+  "learnMore": "了解更多",
+  "viewAll": "查看全部",
+  "showMore": "显示更多",
+  "showLess": "收起",
+  "selectAll": "全选",
+  "deselectAll": "取消全选",
+  "noResults": "未找到结果",
+  "pagination": {
+    "showing": "显示 {{from}} 到 {{to}}，共 {{total}} 条",
+    "itemsPerPage": "每页条数",
+    "page": "第 {{current}} 页，共 {{total}} 页",
+    "first": "首页",
+    "last": "末页"
+  },
+  "time": {
+    "now": "刚刚",
+    "minutesAgo": "{{count}} 分钟前",
+    "minutesAgo_other": "{{count}} 分钟前",
+    "hoursAgo": "{{count}} 小时前",
+    "hoursAgo_other": "{{count}} 小时前",
+    "daysAgo": "{{count}} 天前",
+    "daysAgo_other": "{{count}} 天前",
+    "seconds": "{{count}} 秒",
+    "seconds_other": "{{count}} 秒",
+    "minutes": "{{count}} 分钟",
+    "minutes_other": "{{count}} 分钟",
+    "hours": "{{count}} 小时",
+    "hours_other": "{{count}} 小时",
+    "days": "{{count}} 天",
+    "days_other": "{{count}} 天"
+  },
+  "AddDeviceDialog": {
+    "title": "添加摄像头 / NVR",
+    "description": "发现网络中的设备或手动添加摄像头。",
+    "tabs": {
+      "discover": "发现设备",
+      "manual": "手动添加"
+    },
+    "common": {
+      "site": "站点",
+      "port": "端口",
+      "username": "用户名",
+      "password": "密码",
+      "cancel": "取消",
+      "back": "返回",
+      "close": "关闭",
+      "showPassword": "显示密码",
+      "hidePassword": "隐藏密码",
+      "selectSiteHint": "选择站点以启用导入"
+    },
+    "site": {
+      "namePlaceholder": "站点名称（例如：总部）",
+      "create": "创建",
+      "createError": "创建站点失败",
+      "loading": "加载中...",
+      "noSitesCreate": "暂无站点 · 创建一个 →",
+      "selectPlaceholder": "选择站点",
+      "noSitesYet": "尚无站点",
+      "usePlusButton": "使用 + 按钮创建一个",
+      "quickCreateTitle": "快速创建新站点"
+    },
+    "manual": {
+      "createError": "创建摄像头失败",
+      "cameraName": "摄像头名称",
+      "cameraNamePlaceholder": "例如：前门",
+      "ipAddress": "IP 地址",
+      "cameraType": "摄像头类型",
+      "vendor": "厂商",
+      "vendorPlaceholder": "选择厂商",
+      "location": "位置",
+      "locationPlaceholder": "例如：A 栋",
+      "addCamera": "添加摄像头",
+      "validation": {
+        "nameRequired": "摄像头名称为必填项",
+        "ipRequired": "IP 地址为必填项",
+        "siteRequired": "站点为必填项",
+        "ipInvalid": "请输入有效的 IP 地址或主机名"
+      },
+      "cameraTypes": {
+        "ipCamera": "IP 摄像头",
+        "ptzCamera": "PTZ 摄像头",
+        "doorbell": "门铃",
+        "intercom": "对讲机"
+      },
+      "vendors": {
+        "other": "其他"
+      }
+    },
+    "discover": {
+      "scan": {
+        "hint": "不知道 IP？扫描本地网络以查找 ONVIF 摄像机和 NVR。",
+        "button": "扫描本地网络",
+        "scanning": "正在扫描…",
+        "unknownDevice": "ONVIF 设备",
+        "none": "没有设备响应。请在下方手动输入 IP。",
+        "failed": "网络扫描失败。"
+      },
+      "steps": {
+        "connect": "连接",
+        "confirmCamera": "确认摄像头",
+        "selectChannels": "选择通道",
+        "done": "完成",
+        "chooseType": "选择类型"
+      },
+      "connect": {
+        "ipAddress": "NVR / 摄像头 IP 地址",
+        "success": "连接成功",
+        "failed": "连接失败：",
+        "test": "测试",
+        "discoverChannels": "发现通道",
+        "testError": "连接测试失败。请检查 IP 地址后重试。",
+        "discoverError": "发现失败。请检查凭据后重试。",
+        "detail": {
+          "device": "设备",
+          "type": "类型",
+          "model": "型号",
+          "firmware": "固件",
+          "serial": "序列号"
+        },
+        "invalidHost": "请输入有效的 IP 地址或主机名"
+      },
+      "channels": {
+        "channelCount": "{{count}} 个通道",
+        "nvrName": "NVR 名称",
+        "nvrNamePlaceholder": "办公室 NVR",
+        "cameraChannels": "摄像头通道",
+        "selectedCount": "已选择 {{selected}} / {{total}}",
+        "onlineCount": "{{count}} 在线",
+        "offlineCount": "{{count}} 离线",
+        "searchPlaceholder": "搜索摄像头...",
+        "selectAll": "全选",
+        "deselectAll": "取消全选",
+        "onlineOnly": "仅在线",
+        "noMatch": "没有通道符合您的搜索或筛选条件。",
+        "noneDiscovered": "在此设备上未发现摄像头通道。",
+        "importError": "导入失败。如果此 NVR 之前已添加，请改用 NVR 列表中的同步通道选项。",
+        "importCount_one": "导入 {{count}} 个摄像头",
+        "importCount_other": "导入 {{count}} 个摄像头",
+        "filterOnline": "筛选在线通道",
+        "filterOffline": "筛选离线通道"
+      },
+      "cameraConfirm": {
+        "standaloneCamera": "独立摄像头",
+        "info": "此设备是独立 IP 摄像头，而非 NVR。它将直接作为摄像头导入，无需选择通道。",
+        "cameraName": "摄像头名称",
+        "cameraNamePlaceholder": "我的摄像头",
+        "importError": "摄像头导入失败。该设备可能已注册。",
+        "importCamera": "导入摄像头"
+      },
+      "done": {
+        "errorTitle": "出现问题",
+        "errorDescription": "导入可能已完成，但无法显示结果。",
+        "tryAgain": "重试",
+        "completeTitle": "导入完成",
+        "camerasImported_one": "已导入 {{count}} 个摄像头",
+        "camerasImported_other": "已导入 {{count}} 个摄像头",
+        "camerasSkipped": "，跳过 {{count}} 个",
+        "cameraImportedSuccess": "{{name}} 导入成功",
+        "channelBadge": "通道 {{id}}",
+        "standalone": "独立",
+        "addAnother": "继续添加",
+        "done": "完成",
+        "camerasSynced_one": "已同步 {{count}} 个摄像机（已导入）",
+        "camerasSynced_other": "已同步 {{count}} 个摄像机（已导入）"
+      },
+      "unknownChoice": {
+        "unknownType": "未知类型",
+        "noModel": "未知型号",
+        "info": "无法确定此设备是单个摄像机还是 NVR。请选择添加方式。",
+        "asCamera": "添加为摄像机",
+        "asCameraHint": "作为单个独立摄像机导入",
+        "asNvr": "视为 NVR",
+        "asNvrHint": "继续选择通道"
+      }
+    },
+    "channelRow": {
+      "noSourceIp": "无源 IP",
+      "audio": "音频"
+    }
+  },
+  "DetectionConfigPanel": {
+    "title": "检测与分析",
+    "save": "保存",
+    "loading": "加载中…",
+    "loadingCapabilities": "正在加载智能功能…",
+    "sensitivity": "灵敏度",
+    "low": "低",
+    "high": "高",
+    "notSupported": "不支持",
+    "notAvailableShort": "不适用",
+    "unsupportedFeature": "此摄像头不支持{{feature}}。",
+    "capabilitiesError": {
+      "title": "加载智能功能失败",
+      "description": "无法获取此摄像头的智能功能。"
+    },
+    "tabLabels": {
+      "motion": "移动侦测",
+      "lineCrossing": "越线侦测",
+      "intrusion": "区域入侵",
+      "privacy": "隐私遮挡",
+      "face": "人脸检测"
+    },
+    "motion": {
+      "gridHint": "点击或拖动单元格以切换移动侦测区域",
+      "enableLabel": "启用移动侦测",
+      "enableDescription": "当在视野范围内检测到移动时触发事件。"
+    },
+    "lineCrossing": {
+      "enableLabel": "启用越线侦测",
+      "enableDescription": "当物体越过虚拟边界线时发出警报。",
+      "noRules": "此摄像头未配置任何规则。",
+      "rule": "规则 {{id}}",
+      "addRule": "添加绊线",
+      "editTitle": "绘制越界绊线"
+    },
+    "intrusion": {
+      "enableLabel": "启用区域入侵侦测",
+      "enableDescription": "当物体进入受限区域并超过设定阈值时触发事件。",
+      "noZones": "此摄像头未配置任何入侵区域。",
+      "zone": "区域 {{id}}",
+      "timeThreshold": "时间阈值（秒）",
+      "addRule": "添加区域",
+      "editTitle": "绘制入侵区域"
+    },
+    "privacy": {
+      "enableLabel": "启用隐私遮挡",
+      "enableDescription": "遮挡摄像头画面中的区域以保护敏感区域。",
+      "noRegions": "未配置任何隐私遮挡区域。",
+      "region": "区域 {{id}}",
+      "points": "{{count}} 个点",
+      "addRegion": "添加遮罩",
+      "editTitle": "绘制隐私遮罩"
+    },
+    "face": {
+      "enableLabel": "启用人脸检测",
+      "enableDescription": "在摄像头视野范围内检测并捕捉人脸。",
+      "snapInterval": "抓拍间隔（毫秒）",
+      "generationSpeed": "生成速度",
+      "generationSpeedHint": "1 = 抓拍最少，5 = 抓拍最多"
+    },
+    "editArea": "编辑区域（{{count}} 点）"
+  },
+  "RunScanDialog": {
+    "trigger": {
+      "runScanNow": "立即运行扫描"
+    },
+    "title": "在 {{agentName}} 上运行扫描",
+    "toast": {
+      "cancelRequested": "已请求取消扫描",
+      "cancelFailed": "取消失败",
+      "dispatched": "扫描已下发",
+      "dispatchedDescription": "{{scanType}} 扫描正在 {{agentName}} 上运行",
+      "failedToStart": "扫描启动失败"
+    },
+    "form": {
+      "intro": "通过代理的 WebSocket 立即下发扫描。扫描器完成时卡片会实时更新。",
+      "scanTypeLabel": "扫描类型",
+      "scanTypeFilterNote": "已按该代理公布的能力进行筛选。",
+      "targetsLabel": "目标（可选，每行一个或以逗号分隔）",
+      "targetsHint": "留空则扫描代理自动检测到的接口。",
+      "timeoutLabel": "超时（秒）"
+    },
+    "result": {
+      "discoveredHostsPrefix": "发现的主机会推送到",
+      "discoveriesTab": "发现项",
+      "discoveredHostsSuffix": "（本页面）。切换到该选项卡以纳管它们。"
+    },
+    "actions": {
+      "cancel": "取消",
+      "dispatching": "下发中…",
+      "startScan": "开始扫描",
+      "cancelling": "取消中…",
+      "cancelScan": "取消扫描",
+      "hideScanContinues": "隐藏（扫描继续）",
+      "close": "关闭",
+      "runAnother": "再运行一次"
+    },
+    "progress": {
+      "waitingForAgent": "等待代理确认…",
+      "complete": "扫描完成",
+      "failed": "扫描失败",
+      "scanning": "扫描中… {{percent}}%",
+      "devicesFound": "发现的设备",
+      "currentScanner": "当前扫描器",
+      "started": "开始时间",
+      "completed": "完成时间"
+    }
+  },
+  "DeviceDetailsDialog": {
+    "title": "设备详情 · {{ip}}",
+    "status": {
+      "adopted": "已纳管"
+    },
+    "actions": {
+      "openHttp": "打开 HTTP",
+      "openHttps": "打开 HTTPS",
+      "adoptDevice": "纳管设备"
+    },
+    "cards": {
+      "networkInfo": "网络信息",
+      "classification": "分类",
+      "openPorts": "开放端口",
+      "driverMatch": "驱动匹配",
+      "allDriverMatches": "所有驱动匹配",
+      "suggestions": "建议"
+    },
+    "fields": {
+      "ipAddress": "IP 地址",
+      "macAddress": "MAC 地址",
+      "hostname": "主机名",
+      "manufacturer": "制造商",
+      "deviceType": "设备类型",
+      "unknown": "未知",
+      "confidence": "置信度",
+      "manageable": "可管理",
+      "fingerprintAvailable": "指纹数据可用",
+      "portTooltip": "端口 {{port}}"
+    },
+    "empty": {
+      "noOpenPorts": "未检测到开放端口",
+      "noDriverMatch": "未找到驱动匹配"
+    }
+  },
+  "CameraHealthPanel": {
+    "chart": {
+      "notEnoughData": "数据不足，无法呈现图表。"
+    },
+    "timeline": {
+      "notEnoughData": "数据不足，无法呈现状态时间线。",
+      "now": "现在"
+    },
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "noData": "无数据"
+    },
+    "stats": {
+      "status": "状态",
+      "bitrate": "比特率",
+      "frameRate": "帧率",
+      "codec": "编解码器",
+      "resolution": "分辨率",
+      "lastChecked": "最后检查"
+    },
+    "cards": {
+      "bitrateHistory": "比特率历史（24 小时）",
+      "noHistoryData": "暂无历史数据。",
+      "statusTimeline": "状态时间线（24 小时）",
+      "noStatusData": "暂无状态数据。"
+    },
+    "errors": {
+      "loadHealth": "无法加载该摄像头的状态数据。",
+      "loadHistory": "加载历史数据失败。"
+    }
+  },
+  "FleetActivityPanel": {
+    "title": "最近活动",
+    "lastCount": "最近 {{n}} 条",
+    "error": "无法加载机群活动。",
+    "loading": "加载中…",
+    "empty": "暂无计划运行记录。当 daemon 代理已连接且某个计划的 cron 匹配后，执行记录将显示在此处。",
+    "columns": {
+      "status": "状态",
+      "siteSchedule": "站点 / 计划",
+      "agent": "代理",
+      "when": "时间",
+      "duration": "时长",
+      "devices": "设备",
+      "error": "错误"
+    },
+    "relative": {
+      "seconds": "{{n}} 秒前",
+      "minutes": "{{n}} 分钟前",
+      "hours": "{{n}} 小时前",
+      "days": "{{n}} 天前"
+    }
+  },
+  "VPNDashboardWidget": {
+    "title": "VPN 健康状况",
+    "error": {
+      "failedToLoad": "无法加载 VPN 数据"
+    },
+    "empty": {
+      "noData": "暂无 VPN 数据"
+    },
+    "stats": {
+      "connections": "连接数",
+      "healthy": "健康",
+      "avgLatency": "平均延迟",
+      "tunnels": "隧道"
+    },
+    "bandwidth": {
+      "rx": "RX",
+      "tx": "TX"
+    },
+    "alerts": "告警",
+    "sites": {
+      "prefix": "站点",
+      "suffix": "健康"
+    }
+  },
+  "DataTable": {
+    "searchPlaceholder": "搜索...",
+    "selectAllRows": "选择所有行",
+    "selectRow": "选择行",
+    "tableAriaLabel": "{{itemName}}数据表",
+    "empty": {
+      "title": "未找到{{itemName}}",
+      "description": "暂无{{itemName}}。添加后将显示在此处。",
+      "searchDescription": "没有{{itemName}}与“{{searchQuery}}”匹配。请尝试调整搜索条件。"
+    },
+    "pagination": {
+      "showing": "显示第 {{startItem}} 到 {{endItem}} 项，共 {{totalItems}} 个{{itemName}}",
+      "rowsPerPage": "每页行数",
+      "pageOf": "第 {{current}} 页，共 {{total}} 页",
+      "firstPage": "首页",
+      "previousPage": "上一页",
+      "nextPage": "下一页",
+      "lastPage": "末页"
+    }
+  },
+  "ModuleGuard": {
+    "title": "模块未启用",
+    "disabledMessage": {
+      "before": "模块",
+      "after": "未为您的组织启用。"
+    },
+    "actions": {
+      "goToSettings": "前往 设置 > 模块",
+      "goBack": "返回"
+    },
+    "helpText": "如果您认为应启用此模块，请联系您的管理员。"
+  },
+  "ProtectedRoute": {
+    "loading": "加载中...",
+    "unauthorized": {
+      "title": "访问被拒绝",
+      "description": "您没有权限访问此页面。如果您认为这是一个错误，请联系您的管理员。",
+      "goToDashboard": "前往仪表板",
+      "goBack": "返回"
+    }
+  },
+  "BulkActionsBar": {
+    "selectedCount": "已选择 {{count}} 个{{item}}",
+    "selectAll": "全选 {{count}} 个{{item}}",
+    "all": "(全部)",
+    "clearSelection": "清除选择"
+  },
+  "Dialog": {
+    "close": {
+      "ariaLabel": "关闭对话框",
+      "srLabel": "关闭"
+    }
+  },
+  "ContextActionsMenu": {
+    "loading": "加载中..."
+  },
+  "AddControllerModal": {
+    "title": {
+      "omada": "添加 Omada 控制器",
+      "default": "添加控制器"
+    },
+    "description": {
+      "omada": "连接 Omada 控制器并将其站点映射到 FreeSDN 站点。",
+      "default": "连接 SDN 控制器以管理网络设备。对于防火墙、摄像头、PBX 或虚拟化平台，请使用各自的专用页面。"
+    },
+    "submitLabel": "添加控制器",
+    "steps": {
+      "connectionDetails": "连接详情",
+      "siteMapping": "站点映射"
+    },
+    "sections": {
+      "controllerDetails": "控制器详情"
+    },
+    "fields": {
+      "name": {
+        "label": "控制器名称 *",
+        "placeholder": "例如：总部 Omada 控制器"
+      },
+      "site": {
+        "label": "站点 *",
+        "placeholder": "选择站点"
+      },
+      "controllerType": {
+        "label": "控制器类型 *",
+        "placeholder": "选择控制器类型"
+      },
+      "host": {
+        "label": "主机地址 *",
+        "placeholder": "例如：192.168.1.100 或 controller.local"
+      },
+      "port": {
+        "label": "端口 *"
+      },
+      "username": {
+        "label": "用户名 *",
+        "placeholder": "admin"
+      },
+      "password": {
+        "label": "密码 *"
+      },
+      "cloudRegion": {
+        "label": "云区域 *",
+        "placeholder": "选择云区域"
+      },
+      "clientId": {
+        "label": "Client ID *",
+        "placeholder": "来自 Omada → 设置 → 平台集成 → OpenAPI"
+      },
+      "clientSecret": {
+        "label": "Client Secret *"
+      },
+      "omadaId": {
+        "label": "Omada 控制器 ID (omadacId) *",
+        "placeholder": "例如：7f1346dcd01b17a65ad23024e55effe5",
+        "descriptionPrefix": "在 Omada Cloud URL 中以",
+        "descriptionSuffix": "参数的形式查找，或在 设置 → 平台集成 → OpenAPI 应用详情中查找。"
+      }
+    },
+    "connectionMode": {
+      "label": "连接模式",
+      "local": "本地控制器",
+      "cloud": "云控制器",
+      "descriptionCloud": "通过 TP-Link Cloud OpenAPI (OAuth2) 连接。前往你的 Omada Cloud 控制器 → 设置 → 平台集成 → Open API → 添加新应用，以获取你的 Client ID 和 Secret。",
+      "descriptionLocal": "通过 IP/主机名直接连接到本地部署的 Omada 控制器。"
+    },
+    "cloudRegions": {
+      "use1": "美国东部 ({{code}})",
+      "euw1": "欧洲西部 ({{code}})",
+      "aps1": "亚太地区 ({{code}})"
+    },
+    "ssl": {
+      "useLabel": "使用 SSL/TLS",
+      "useHelper": "通过 HTTPS 连接",
+      "verifyLabel": "验证 SSL 证书",
+      "verifyHelper": "对于自签名证书请禁用"
+    },
+    "test": {
+      "title": "连接测试",
+      "helper": "添加前验证连接",
+      "button": "测试连接",
+      "testing": "正在测试…",
+      "successTitle": "连接成功",
+      "failedTitle": "连接失败",
+      "details": {
+        "latency": "延迟",
+        "latencyValue": "{{ms}} ms",
+        "version": "版本",
+        "mode": "模式"
+      }
+    },
+    "testErrors": {
+      "selectType": "请选择控制器类型",
+      "cloudRequired": "云模式需要 Client ID、Secret、Omada ID 和区域",
+      "localRequired": "需要主机、用户名和密码",
+      "failed": "连接测试失败"
+    },
+    "probe": {
+      "networkError": "网络错误：无法连接到 FreeSDN 后端。请确保后端服务器正在运行且可访问。",
+      "failed": "探测远程站点失败：{{message}}。请查看浏览器控制台和后端日志以获取更多详情。",
+      "unknownError": "未知错误"
+    },
+    "siteBinding": {
+      "title": "站点映射",
+      "summaryOne": "你的 Omada 控制器有 1 个站点。请将其映射到现有的 FreeSDN 站点，或保持未映射以跳过。",
+      "summaryMany": "你的 Omada 控制器有 {{count}} 个站点。请将每个站点映射到现有的 FreeSDN 站点，或保持未映射以跳过。",
+      "selectPlaceholder": "选择 FreeSDN 站点",
+      "skipOption": "- 跳过（不导入设备）-",
+      "empty": "在控制器上未找到任何站点。你仍然可以创建该控制器并稍后配置站点。"
+    }
+  },
+  "TopBar": {
+    "aria": {
+      "openMenu": "打开菜单",
+      "openCommandPalette": "打开命令面板"
+    },
+    "search": {
+      "placeholder": "搜索…"
+    },
+    "connection": {
+      "online": "在线",
+      "offline": "离线",
+      "connecting": "连接中",
+      "statusAria": "连接状态：{{status}}",
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "connectingLabel": "连接中...",
+      "tooltipOnline": "实时更新已启用",
+      "tooltipConnecting": "正在建立连接...",
+      "tooltipOffline": "点击重新连接"
+    },
+    "notifications": {
+      "title": "通知",
+      "ariaWithCount": "通知（{{n}} 条未读）",
+      "markAllRead": "全部标为已读",
+      "clearAll": "清除全部",
+      "tabActive": "活动",
+      "tabArchive": "归档",
+      "empty": "暂无通知",
+      "emptyArchive": "暂无已归档通知",
+      "dismissAria": "关闭通知",
+      "loadMore": "加载更多"
+    },
+    "userMenu": {
+      "ariaLabel": "用户菜单",
+      "profile": "个人资料",
+      "changePassword": "修改密码",
+      "settings": "设置",
+      "security": "安全",
+      "logout": "退出登录"
+    },
+    "roles": {
+      "superAdmin": "超级管理员",
+      "orgAdmin": "组织管理员",
+      "user": "用户"
+    },
+    "profileDialog": {
+      "title": "个人资料设置",
+      "description": "管理你的账户设置和偏好。",
+      "fullName": "全名",
+      "email": "邮箱",
+      "change": "更改",
+      "role": "角色",
+      "mfaStatus": "MFA 状态",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "manage": "管理",
+      "enable": "启用",
+      "deleteAccount": "删除账户"
+    },
+    "emailDialog": {
+      "title": "更改邮箱地址",
+      "description": "输入你的新邮箱地址。在生效前你需要先验证它。",
+      "currentEmail": "当前邮箱",
+      "newEmail": "新邮箱",
+      "newEmailPlaceholder": "输入新邮箱地址",
+      "submit": "更新邮箱"
+    },
+    "passwordDialog": {
+      "title": "修改密码",
+      "description": "输入你的当前密码并选择一个新密码。",
+      "currentPassword": "当前密码",
+      "newPassword": "新密码",
+      "confirmPassword": "确认新密码",
+      "submit": "修改密码"
+    },
+    "deleteDialog": {
+      "title": "删除账户",
+      "description": "此操作无法撤销。这将永久删除你的账户并移除所有相关数据。",
+      "warningHeading": "警告",
+      "warningData": "• 你的所有个人数据将被删除",
+      "warningKeys": "• API 密钥和会话将被吊销",
+      "warningIrreversible": "• 此操作不可逆",
+      "confirmPrefix": "输入",
+      "confirmSuffix": "以确认",
+      "submit": "删除我的账户"
+    },
+    "actions": {
+      "cancel": "取消",
+      "close": "关闭"
+    },
+    "errors": {
+      "enterNewEmail": "请输入新的邮箱地址",
+      "updateEmailFailed": "更新邮箱失败",
+      "fillAllFields": "请填写所有字段",
+      "passwordsDoNotMatch": "两次输入的新密码不一致",
+      "passwordTooShort": "密码至少需要 8 个字符",
+      "changePasswordFailed": "修改密码失败",
+      "typeDeleteToConfirm": "请输入 DELETE 以确认",
+      "deleteAccountFailed": "删除账户失败"
+    },
+    "success": {
+      "emailUpdated": "邮箱更新成功。请验证你的新邮箱。",
+      "passwordChanged": "密码修改成功"
+    },
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{n}} 分钟前",
+      "hoursAgo": "{{n}} 小时前",
+      "daysAgo": "{{n}} 天前"
+    }
+  },
+  "UserProfile": {
+    "header": {
+      "title": "账户设置",
+      "subtitle": "管理您的账户和安全设置"
+    },
+    "actions": {
+      "signOut": "退出登录",
+      "saveChanges": "保存更改",
+      "cancel": "取消"
+    },
+    "profile": {
+      "title": "个人资料",
+      "email": "电子邮件",
+      "firstName": "名字",
+      "lastName": "姓氏",
+      "organization": "组织",
+      "none": "无",
+      "roles": "角色"
+    },
+    "password": {
+      "title": "修改密码",
+      "current": "当前密码",
+      "new": "新密码",
+      "confirm": "确认新密码",
+      "showPasswords": "显示密码"
+    },
+    "mfa": {
+      "title": "双因素认证",
+      "scanInstructions": "使用您的验证器应用（Google Authenticator、Authy 等）扫描 QR 码",
+      "qrCodeAlt": "MFA QR 码",
+      "manualEntryKey": "手动输入密钥：",
+      "backupCodes": "备份代码（请妥善保存！）：",
+      "enterCode": "输入应用中的代码以验证：",
+      "verifyEnable": "验证并启用",
+      "statusEnabled": "MFA 已启用",
+      "statusDisabled": "MFA 未启用",
+      "statusEnabledDescription": "您的账户已受双因素认证保护",
+      "statusDisabledDescription": "为您的账户增加一层额外的安全保护",
+      "disable": "禁用 MFA",
+      "enable": "启用 MFA"
+    },
+    "messages": {
+      "profileUpdated": "个人资料更新成功",
+      "profileUpdateFailed": "更新个人资料失败",
+      "passwordsDoNotMatch": "两次输入的密码不一致",
+      "passwordChanged": "密码修改成功",
+      "passwordChangeFailed": "修改密码失败",
+      "mfaSetupFailed": "MFA 设置失败",
+      "mfaEnabled": "MFA 启用成功",
+      "mfaInvalidCode": "MFA 代码无效",
+      "mfaDisabled": "MFA 禁用成功",
+      "mfaDisableFailed": "禁用 MFA 失败"
+    }
+  },
+  "TypeBadge": {
+    "unknown": "未知"
+  },
+  "DiscoveredDeviceCard": {
+    "actions": {
+      "viewDetails": "查看详情",
+      "copyIp": "复制 IP",
+      "openInBrowser": "在浏览器中打开",
+      "ignoreDevice": "忽略设备",
+      "adoptDevice": "纳管设备",
+      "details": "详情"
+    },
+    "confidence": {
+      "high": "高度匹配",
+      "good": "良好匹配",
+      "low": "低度匹配"
+    },
+    "status": {
+      "adopted": "已纳管",
+      "matched": "驱动已匹配",
+      "ignored": "已忽略",
+      "discovered": "已发现"
+    },
+    "morePorts": "+{{count}} 个更多",
+    "driverLabel": "驱动：",
+    "manageable": "可管理",
+    "deviceAdopted": "设备已纳管"
+  },
+  "RecordingTimeline": {
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "ranges": {
+      "1h": "1 小时",
+      "4h": "4 小时",
+      "12h": "12 小时",
+      "24h": "24 小时",
+      "3d": "3 天",
+      "7d": "7 天"
+    },
+    "legend": {
+      "continuous": "连续录制",
+      "motion": "移动侦测",
+      "alarm": "报警"
+    },
+    "errors": {
+      "loadFailed": "加载录像失败"
+    },
+    "empty": {
+      "noRecordings": "此时间范围内没有录像",
+      "notSupported": "此摄像机型号不支持时间线"
+    }
+  },
+  "vendorSupport": {
+    "tiers": {
+      "native": "原生--完整支持",
+      "onvif": "ONVIF（通用）--仅实时画面"
+    },
+    "addHint": "本版本仅原生支持海康威视（实时、录像、回放、区域）。其他厂商通过通用 ONVIF 连接--仅支持实时画面；录像、回放和区域功能暂不可用。",
+    "notes": {
+      "recordings": "此摄像机未连接到原生支持的 NVR。录像检索目前需要海康威视；其他厂商暂时通过通用 ONVIF 连接（仅实时画面）。",
+      "playback": "录像回放目前需要原生支持的 NVR（本版本为海康威视）。此厂商通过通用 ONVIF 连接，仅提供实时画面。",
+      "zones": "检测区域和隐私遮罩目前需要原生支持的摄像机（本版本为海康威视）。此厂商通过通用 ONVIF 连接，暂不支持区域配置。"
+    }
+  },
+  "WallCameraSidebar": {
+    "header": {
+      "title": "摄像头"
+    },
+    "search": {
+      "placeholder": "搜索摄像头..."
+    },
+    "status": {
+      "placeholder": "状态",
+      "all": "所有状态",
+      "online": "在线",
+      "offline": "离线",
+      "recording": "录制中"
+    },
+    "empty": {
+      "noMatch": "没有匹配的摄像头"
+    },
+    "camera": {
+      "noDetails": "无详情",
+      "onWall": "已在墙上"
+    },
+    "footer": {
+      "dragHint": "将摄像头拖到电视墙单元格"
+    }
+  },
+  "QuickActions": {
+    "actions": {
+      "addDevice": {
+        "label": "添加设备",
+        "description": "注册新设备"
+      },
+      "discovery": {
+        "label": "发现",
+        "description": "扫描网络中的设备"
+      },
+      "sync": {
+        "label": "全部同步",
+        "description": "同步所有控制器"
+      },
+      "backup": {
+        "label": "备份",
+        "description": "创建配置备份"
+      }
+    }
+  },
+  "AlertsWidget": {
+    "empty": {
+      "title": "一切正常！",
+      "description": "没有活动告警"
+    },
+    "summary": {
+      "criticalOne": "{{count}} 条严重告警需要处理",
+      "criticalMany": "{{count}} 条严重告警需要处理"
+    },
+    "viewAll": "查看全部 {{count}} 条告警",
+    "acknowledge": "确认",
+    "acknowledgeAlert": "确认告警：{{title}}"
+  },
+  "DeviceStatusWidget": {
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "warning": "警告",
+      "unknown": "未知"
+    },
+    "tooltip": {
+      "devices": "{{n}} 台设备"
+    }
+  },
+  "DestructiveConfirmDialog": {
+    "typePrompt": {
+      "prefix": "输入",
+      "suffix": "以确认"
+    },
+    "cancel": "取消",
+    "readOnly": {
+      "message": "只读模式已开启 — 此更改将被拒绝。",
+      "link": "在设置中关闭"
+    }
+  },
+  "Sheet": {
+    "close": {
+      "ariaLabel": "关闭面板",
+      "label": "关闭"
+    }
+  },
+  "MainLayout": {
+    "skipToMainContent": "跳转到主要内容"
+  },
+  "PendingChangesDrawer": {
+    "title": "待处理更改",
+    "refreshAria": "刷新待处理更改",
+    "loading": "加载中…",
+    "description": {
+      "before": "已暂存的写入操作针对",
+      "after": "。尚未对在线设备进行任何操作--可单独或批量应用。"
+    },
+    "actions": {
+      "apply": "应用",
+      "applyAll": "全部应用",
+      "discard": "丢弃",
+      "cancel": "取消",
+      "close": "关闭"
+    },
+    "operations": {
+      "create": "创建",
+      "update": "更新",
+      "delete": "删除"
+    },
+    "change": {
+      "targetLabel": "目标：",
+      "noTargetId": "无目标 ID",
+      "applyAria": "应用 {{feature}}",
+      "discardAria": "丢弃 {{feature}}",
+      "payload": "负载",
+      "applyResponse": "应用响应"
+    },
+    "readOnly": {
+      "title": "应用被拒绝：API 为只读",
+      "setPrefix": "请设置",
+      "legacyPrefix": "（或旧版",
+      "middle": "），在 API 服务器上设置，或您的操作员角色缺少"
+    },
+    "loadError": {
+      "title": "无法加载待处理更改",
+      "unknown": "未知错误"
+    },
+    "empty": {
+      "title": "无待处理更改",
+      "description": "从任意选项卡暂存一项更改，它将显示在此处。"
+    },
+    "sections": {
+      "pending": {
+        "aria": "待处理更改",
+        "heading": "待处理",
+        "bulkDisabledTooltip": "批量应用已禁用：队列中包含重启、固件安装或恢复操作。请单独应用这些操作。",
+        "nothingStaged": "无暂存内容。"
+      },
+      "applying": {
+        "aria": "正在应用",
+        "heading": "应用中"
+      },
+      "failed": {
+        "aria": "失败的更改",
+        "heading": "失败"
+      },
+      "recentlyApplied": {
+        "aria": "最近应用",
+        "heading": "最近应用"
+      }
+    },
+    "confirmApply": {
+      "title": "应用此更改？",
+      "bodyBefore": "此操作会将已暂存的更改推送至",
+      "bodyAfter": "。",
+      "typedBefore": "这是一项破坏性更改。请输入",
+      "typedAfter": " 以确认。"
+    },
+    "confirmDiscard": {
+      "title": "丢弃此更改？",
+      "body": "已暂存的更改将被移除，且不会影响在线设备。"
+    },
+    "bulkApply": {
+      "title": "应用所有待处理更改？",
+      "bodyBefore": "将按顺序把 {{count}} 项更改推送至",
+      "bodyAfter": "。批量应用在首次出错时会停止。",
+      "summaryAria": "待处理更改摘要",
+      "stopped": "已在 {{current}} / {{total}} 处停止：{{error}}",
+      "progress": "正在应用 {{current}} / {{total}}…",
+      "typedBefore": "请输入",
+      "typedAfter": " 以确认",
+      "applyCount": "应用 {{count}}"
+    },
+    "toasts": {
+      "applied": {
+        "title": "更改已应用",
+        "description": "已推送至 {{gatewayName}}。"
+      },
+      "applyFailed": {
+        "title": "应用失败"
+      },
+      "discarded": {
+        "title": "更改已丢弃"
+      },
+      "discardFailed": {
+        "title": "丢弃失败"
+      },
+      "allApplied": {
+        "title": "所有更改已应用",
+        "description": "已将 {{count}} 项更改推送至 {{gatewayName}}。"
+      }
+    }
+  },
+  "CameraAccessPanel": {
+    "title": "摄像头访问控制",
+    "description": "管理谁可以访问 {{camera}} 以及他们可以执行的操作。",
+    "thisCamera": "此摄像头",
+    "loading": "正在加载访问授权...",
+    "loadError": "加载访问授权失败。",
+    "unknownUser": "未知用户",
+    "expired": "已过期",
+    "expiresOn": "{{date}} 过期",
+    "confirmRevoke": "撤销 {{user}} 的访问权限？",
+    "actions": {
+      "cancel": "取消",
+      "grantAccess": "授予访问权限",
+      "retry": "重试",
+      "revokeAccess": "撤销访问权限"
+    },
+    "levels": {
+      "viewer": {
+        "label": "查看者",
+        "desc": "仅实时查看"
+      },
+      "operator": {
+        "label": "操作员",
+        "desc": "+ PTZ、回放"
+      },
+      "full": {
+        "label": "完全",
+        "desc": "+ 导出、配置"
+      }
+    },
+    "capabilities": {
+      "live": "实时查看",
+      "playback": "回放",
+      "ptz": "PTZ 控制",
+      "export": "导出",
+      "configure": "配置"
+    },
+    "empty": {
+      "title": "没有自定义访问授权",
+      "descBefore": "所有拥有",
+      "descAfter": "角色权限的用户都可以查看此摄像头。添加授权以限制或扩展特定用户的访问权限。"
+    },
+    "info": {
+      "heading": "摄像头访问的工作原理：",
+      "orgAdmins": "组织管理员始终对所有摄像头拥有完全访问权限",
+      "siteAdmins": "站点管理员默认拥有操作员级别的访问权限",
+      "explicitGrants": "显式授权会覆盖基于角色的默认设置",
+      "groupGrants": "组授权适用于该组中的所有摄像头",
+      "timeLimited": "限时授权会自动过期"
+    },
+    "form": {
+      "userLabel": "用户",
+      "userPlaceholder": "选择用户...",
+      "accessLevelLabel": "访问级别",
+      "expiresLabel": "过期时间（天）",
+      "expiresPlaceholder": "永不",
+      "options": {
+        "viewer": "查看者（仅实时）",
+        "operator": "操作员（+ PTZ、回放）",
+        "full": "完全（+ 导出、配置）"
+      }
+    },
+    "toasts": {
+      "revoked": "已撤销访问权限",
+      "revokeFailed": "撤销访问权限失败",
+      "updateFailed": "更新授权失败",
+      "granted": "已授予访问权限",
+      "grantFailed": "授予访问权限失败（可能已存在）"
+    }
+  },
+  "AgentDiscoveriesTab": {
+    "title": "代理发现",
+    "showAdopted": "显示已采纳",
+    "selectSitePrompt": "请选择一个站点以查看代理发现。",
+    "filterPlaceholder": "按 IP、MAC、主机名、厂商筛选…",
+    "adoptSelected": "采纳所选",
+    "adoptCount": "采纳（{{count}}）",
+    "loadError": "无法加载已发现的主机。",
+    "loading": "加载中…",
+    "empty": "尚无已发现的主机。请从代理或通过“代理扫描”选项卡运行扫描。",
+    "selectAllAria": "选择全部可采纳项",
+    "probeTooltip": "深度探测此主机（FINGERPRINT_DEVICE）",
+    "columns": {
+      "ip": "IP",
+      "mac": "MAC",
+      "vendor": "厂商",
+      "hostname": "主机名",
+      "sources": "来源",
+      "status": "状态",
+      "probe": "探测"
+    },
+    "status": {
+      "adopted": "已采纳",
+      "new": "新",
+      "known": "已知 · {{detail}}",
+      "knownTooltip": "FreeSDN 已知：{{name}}（{{detail}}）"
+    },
+    "errors": {
+      "noAgentForProbe": "该主机没有关联的代理可用于深度探测"
+    },
+    "toast": {
+      "probeDispatched": {
+        "title": "已派发深度探测",
+        "description": "正在识别 {{ip}}, 任务 {{taskId}}…"
+      },
+      "probeFailed": {
+        "title": "深度探测失败"
+      },
+      "adoptComplete": {
+        "title": "采纳完成",
+        "description": "已采纳 {{succeeded}}/{{total}}，失败 {{failed}}"
+      },
+      "adoptFailed": {
+        "title": "采纳失败"
+      }
+    }
+  },
+  "Sidebar": {
+    "search": {
+      "placeholder": "搜索...",
+      "ariaLabel": "搜索导航"
+    },
+    "dashboard": "仪表板",
+    "recent": "最近",
+    "settings": "设置",
+    "expand": "展开侧边栏",
+    "collapse": "收起侧边栏",
+    "badge": {
+      "settings": "角标设置",
+      "sources": "来源",
+      "alertRules": "告警规则",
+      "incidents": "事件",
+      "securityEvents": "安全事件",
+      "minimumSeverity": "最低严重级别",
+      "clear": "清除角标",
+      "reset": "恢复默认设置"
+    },
+    "severity": {
+      "all": "所有级别",
+      "info": "信息及以上",
+      "warning": "警告及以上",
+      "critical": "仅严重"
+    }
+  },
+  "DeviceTypeIcon": {
+    "types": {
+      "switch": "交换机",
+      "access_point": "接入点",
+      "router": "路由器",
+      "gateway": "网关",
+      "firewall": "防火墙",
+      "camera": "摄像头",
+      "nvr": "NVR",
+      "dvr": "DVR",
+      "access_control": "门禁",
+      "intercom": "对讲机",
+      "voip_phone": "VoIP 电话",
+      "pbx": "PBX",
+      "server": "服务器",
+      "hypervisor": "虚拟机管理程序",
+      "iot": "IoT",
+      "sensor": "传感器",
+      "controller": "控制器",
+      "other": "其他"
+    }
+  },
+  "WallCell": {
+    "eventLabels": {
+      "motion": "移动侦测",
+      "lineCross": "越线",
+      "intrusion": "入侵",
+      "tamper": "篡改",
+      "videoLoss": "视频丢失",
+      "face": "人脸",
+      "audio": "声音"
+    },
+    "replay": {
+      "unavailable": "无法回放",
+      "label": "回放"
+    },
+    "status": {
+      "reconnecting": "重新连接中...",
+      "retry": "重试",
+      "err": "错误",
+      "live": "实时",
+      "rec": "录制",
+      "snapshotUnavailable": "快照不可用"
+    },
+    "actions": {
+      "enlarge": "放大",
+      "remove": "移除"
+    },
+    "menu": {
+      "replayLast30s": "回放最近 30 秒",
+      "replayLast1min": "回放最近 1 分钟",
+      "replayLast5min": "回放最近 5 分钟",
+      "openLiveView": "打开实时视图",
+      "openDetailPage": "打开详情页",
+      "removeFromWall": "从墙面移除"
+    }
+  },
+  "DeleteControllerDialog": {
+    "title": "删除控制器",
+    "submitLabel": "删除控制器",
+    "validation": {
+      "nameMismatch": "控制器名称不匹配"
+    },
+    "confirmPrompt": {
+      "before": "确定要删除 ",
+      "after": " 吗？此操作无法撤销。"
+    },
+    "warning": {
+      "label": "警告：",
+      "message": "此控制器有 {{count}} 个关联设备。删除控制器还将移除所有设备记录。"
+    },
+    "confirmLabel": {
+      "before": "输入 ",
+      "after": " 以确认"
+    }
+  },
+  "ScanHistoryPanel": {
+    "title": "扫描历史",
+    "empty": {
+      "title": "暂无扫描记录",
+      "description": "启动扫描以发现网络中的设备"
+    },
+    "scanType": {
+      "controller": "控制器扫描",
+      "network": "网络扫描"
+    },
+    "status": {
+      "completed": "已完成",
+      "running": "运行中",
+      "failed": "失败",
+      "cancelled": "已取消",
+      "pending": "等待中"
+    },
+    "devicesCount": "{{count}} 台设备",
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{count}} 分钟前",
+      "hoursAgo": "{{count}} 小时前",
+      "daysAgo": "{{count}} 天前"
+    }
+  },
+  "DiscoveryStats": {
+    "stats": {
+      "totalScans": "扫描总数",
+      "devicesFound": "发现的设备",
+      "devicesAdopted": "已采纳",
+      "activeScans": "进行中的扫描",
+      "pendingDevices": "待处理",
+      "failedScans": "失败"
+    }
+  },
+  "EmptyState": {
+    "noResults": {
+      "title": "未找到结果",
+      "descriptionWithQuery": "没有与“{{query}}”匹配的结果。请尝试调整搜索或筛选条件。",
+      "description": "请尝试调整搜索或筛选条件。",
+      "clear": "清除搜索"
+    },
+    "noData": {
+      "title": "暂无{{type}}",
+      "description": "添加第一个{{type}}即可开始。",
+      "add": "添加{{type}}"
+    },
+    "error": {
+      "title": "错误",
+      "description": "出现错误",
+      "retry": "重试"
+    },
+    "inlineError": {
+      "retry": "重试"
+    }
+  },
+  "WizardDialog": {
+    "actions": {
+      "create": "创建",
+      "cancel": "取消",
+      "done": "完成",
+      "back": "上一步",
+      "next": "下一步"
+    },
+    "ariaLabel": {
+      "steps": "向导步骤"
+    },
+    "errors": {
+      "unexpected": "发生意外错误"
+    }
+  },
+  "Tabs": {
+    "aria": {
+      "scrollLeft": "向左滚动标签页",
+      "scrollRight": "向右滚动标签页"
+    }
+  },
+  "DetailSheet": {
+    "srTitle": "详情"
+  },
+  "AgentSchedulesPanel": {
+    "title": "计划扫描",
+    "selectSite": "选择一个站点以管理扫描计划。",
+    "loading": "加载中…",
+    "loadError": "无法加载计划。",
+    "empty": "尚无计划扫描。在上方创建一个，让代理自动运行扫描。",
+    "disabled": "已禁用",
+    "neverFired": "从未触发",
+    "confirmDelete": "删除计划“{{name}}”？",
+    "scanTypes": {
+      "quick": "快速 (ARP + ICMP)",
+      "camera": "摄像头 (ONVIF + SADP)",
+      "voip": "VoIP (SIP + mDNS)",
+      "iot": "IoT (mDNS + SSDP)",
+      "port": "端口扫描",
+      "windows": "Windows (NetBIOS + SMB)",
+      "full": "完整 (所有协议)"
+    },
+    "cronPresets": {
+      "hourly": "每小时",
+      "every4h": "每 4 小时",
+      "every6h": "每 6 小时",
+      "daily0200": "每天 02:00",
+      "weeklySun0200": "每周 (周日 02:00)"
+    },
+    "relative": {
+      "never": "从未",
+      "secondsAgo": "{{n}} 秒前",
+      "minutesAgo": "{{n}} 分钟前",
+      "hoursAgo": "{{n}} 小时前",
+      "daysAgo": "{{n}} 天前"
+    },
+    "runStatus": {
+      "completed": "已完成",
+      "failed": "失败"
+    },
+    "errors": {
+      "siteRequired": "需要站点"
+    },
+    "toasts": {
+      "created": "计划已创建",
+      "createFailed": "创建失败",
+      "deleted": "计划已删除"
+    },
+    "actions": {
+      "newSchedule": "新建计划",
+      "cancel": "取消",
+      "create": "创建",
+      "viewHistory": "查看运行历史",
+      "disable": "禁用",
+      "enable": "启用"
+    },
+    "dialog": {
+      "title": "新建扫描计划"
+    },
+    "fields": {
+      "name": "名称",
+      "namePlaceholder": "例如 nightly-quick",
+      "scanType": "扫描类型",
+      "cron": "Cron (预设或自定义)",
+      "cronPlaceholder": "或自定义 5 字段 cron…",
+      "targets": "目标 (CIDR/IP，每行一个)"
+    },
+    "notifications": {
+      "heading": "通知 (可选)",
+      "emailRecipients": "邮件收件人 (用逗号分隔)",
+      "slackChannel": "Slack 频道",
+      "notifyOnFailure": "失败时通知",
+      "alertNewHosts": "新主机达到 N 个及以上时告警 (0 = 关闭)"
+    },
+    "columns": {
+      "name": "名称",
+      "cron": "Cron",
+      "type": "类型",
+      "targets": "目标",
+      "lastFired": "上次触发"
+    },
+    "history": {
+      "title": "运行历史, {{name}}",
+      "empty": "尚未记录任何运行。当守护进程已连接且计划的 cron 匹配时，代理会通过 WS 报告每次触发的执行。",
+      "columns": {
+        "status": "状态",
+        "started": "开始时间",
+        "duration": "时长",
+        "devices": "设备",
+        "error": "错误"
+      }
+    }
+  },
+  "CameraLiveViewModal": {
+    "rec": "REC",
+    "ptz": {
+      "control": "PTZ 控制",
+      "directionControls": "PTZ 方向控制",
+      "panUp": "向上",
+      "panDown": "向下",
+      "panLeft": "向左",
+      "panRight": "向右",
+      "home": "返回初始位置",
+      "zoom": "缩放",
+      "zoomIn": "放大",
+      "zoomOut": "缩小"
+    },
+    "presets": {
+      "title": "预设",
+      "entrance": "入口",
+      "parking": "停车场",
+      "wideView": "广角视图",
+      "zoom": "变焦"
+    },
+    "stream": {
+      "connecting": "正在连接视频流...",
+      "unavailable": "视频流不可用",
+      "retry": "重试",
+      "label": "视频流",
+      "sub": "子码流",
+      "main": "主码流",
+      "paused": "已暂停",
+      "localTime": "本地"
+    },
+    "offline": {
+      "title": "摄像头离线",
+      "description": "无法连接到视频流"
+    },
+    "controls": {
+      "play": "播放",
+      "pause": "暂停",
+      "refreshStream": "刷新视频流",
+      "mute": "静音",
+      "unmute": "取消静音",
+      "volume": "音量",
+      "takeSnapshot": "截图",
+      "recordingManaged": "录制由 NVR 计划管理",
+      "fullscreen": "全屏",
+      "exitFullscreen": "退出全屏"
+    },
+    "fit": {
+      "contain": "适应（保持宽高比）",
+      "cover": "填充（裁剪边缘）",
+      "coverAria": "填充（裁剪）",
+      "fill": "拉伸（铺满）",
+      "fillAria": "拉伸"
+    },
+    "badges": {
+      "ptz": "PTZ",
+      "audio": "音频"
+    }
+  },
+  "LoginPageComponent": {
+    "tagline": "厂商无关的网络管理",
+    "errors": {
+      "generic": "发生错误"
+    },
+    "mfa": {
+      "subtitle": "双因素认证",
+      "heading": "验证你的身份",
+      "instructions": "请输入身份验证器应用中的 6 位验证码",
+      "codeLabel": "验证码",
+      "verifying": "验证中...",
+      "verifyButton": "验证验证码",
+      "backToLogin": "返回登录"
+    },
+    "login": {
+      "heading": "欢迎回来",
+      "subtitle": "登录你的账户以继续",
+      "identifierLabel": "邮箱或用户名",
+      "identifierPlaceholder": "you@example.com 或 admin",
+      "passwordLabel": "密码",
+      "forgotPassword": "忘记密码？",
+      "rememberMe": "记住我30天",
+      "hidePassword": "隐藏密码",
+      "showPassword": "显示密码",
+      "signingIn": "登录中...",
+      "signIn": "登录",
+      "noAccount": "还没有账户？",
+      "requestAccess": "申请访问"
+    },
+    "footer": {
+      "agreePrefix": "登录即表示你同意我们的",
+      "termsOfService": "服务条款",
+      "and": "和",
+      "privacyPolicy": "隐私政策"
+    }
+  },
+  "AgentSettingsPanel": {
+    "general": {
+      "title": "常规",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "关于此代理的可选备注",
+      "enabledLabel": "已启用",
+      "enabledHelp": "关闭后，将拒绝代理的 API 密钥，且无法分派新任务。当前 WebSocket 会保持连接，直到守护进程重新连接。",
+      "pollIntervalLabel": "REST 轮询间隔（秒）",
+      "pollIntervalHelp": "用于 REST 轮询代理的旧版回退方案。基于 WebSocket 的守护进程（默认）会忽略此项；保持为 30 即可。"
+    },
+    "offlineAlerts": {
+      "title": "离线告警",
+      "thresholdLabel": "离线阈值（秒，最小 60）",
+      "thresholdHelp": "当超过此秒数未收到心跳时触发告警。默认 180 秒 = 漏掉 6 次 30 秒心跳。每次状态转换仅告警一次（不会刷屏）。",
+      "emailLabel": "邮件收件人",
+      "emailPlaceholder": "ops@example.com, oncall@example.com",
+      "emailHelp": "以逗号或空格分隔。需要在组织级别配置邮件提供商。",
+      "slackLabel": "Slack 频道",
+      "webhookLabel": "Webhook URL"
+    },
+    "lastAlert": {
+      "title": "上次已发送告警",
+      "detail": "{{timestamp}}。代理重新连接后将重置。"
+    },
+    "actions": {
+      "saving": "正在保存…",
+      "save": "保存设置"
+    },
+    "toasts": {
+      "saved": {
+        "title": "设置已保存"
+      },
+      "saveFailed": {
+        "title": "保存失败"
+      }
+    }
+  },
+  "ForgotPasswordPage": {
+    "tagline": "厂商无关的网络管理",
+    "title": "忘记密码？",
+    "subtitle": "输入您的电子邮件，我们将向您发送重置链接",
+    "emailLabel": "电子邮件",
+    "actions": {
+      "sending": "发送中...",
+      "sendResetLink": "发送重置链接",
+      "backToLogin": "返回登录"
+    },
+    "success": {
+      "title": "请查收您的电子邮件",
+      "description": "如果 <strong>{{email}}</strong> 存在对应的账户，您将很快收到密码重置链接。",
+      "spamHint": "没有收到邮件？请检查您的垃圾邮件文件夹，或在几分钟后重试。"
+    }
+  },
+  "NetworkHealthWidget": {
+    "metrics": {
+      "latency": "延迟",
+      "packetLoss": "丢包率"
+    },
+    "throughput": {
+      "title": "吞吐量",
+      "download": "下载",
+      "upload": "上传"
+    },
+    "uptime": {
+      "title": "运行时间"
+    }
+  },
+  "RecordingSchedulePanel": {
+    "title": "录像计划",
+    "managedByNvr": "此 NVR 的录像由设备自行管理--无法通过 API 获取按通道的录像计划。请直接在 NVR 上配置录像计划。",
+    "status": {
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    },
+    "enableLabel": "启用录像计划",
+    "actions": {
+      "save": "保存"
+    },
+    "feedback": {
+      "saveSuccess": "计划保存成功。"
+    },
+    "errors": {
+      "loadFailed": "加载录像计划失败",
+      "saveFailed": "保存计划失败"
+    },
+    "recordTypes": {
+      "continuous": "连续",
+      "motion": "移动侦测",
+      "alarm": "报警"
+    }
+  },
+  "CameraEventAlerts": {
+    "eventTypes": {
+      "motionDetected": "检测到移动",
+      "lineCrossing": "越线",
+      "intrusion": "区域入侵",
+      "tampering": "设备遮挡",
+      "videoLoss": "视频丢失",
+      "diskError": "磁盘错误",
+      "diskFull": "磁盘已满",
+      "illegalAccess": "非法访问",
+      "alarmInput": "报警输入"
+    },
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{n}} 分钟前",
+      "hoursAgo": "{{n}} 小时前",
+      "daysAgo": "{{n}} 天前"
+    },
+    "badge": {
+      "cameraEvents": "摄像头事件",
+      "unacknowledgedTooltip": "{{n}} 个未确认事件",
+      "unacknowledgedAria": "摄像头事件（{{n}} 个未确认）"
+    },
+    "feed": {
+      "title": "摄像头事件",
+      "ackAll": "全部确认",
+      "hideAcknowledged": "隐藏已确认",
+      "hideAcknowledgedAria": "隐藏已确认事件",
+      "showAllEvents": "显示所有事件",
+      "loadError": "加载事件失败",
+      "noEvents": "未找到事件",
+      "noUnacknowledged": "没有未确认的事件",
+      "channel": "通道 {{channel}}",
+      "acknowledge": "确认",
+      "acknowledgeAria": "确认事件"
+    },
+    "toast": {
+      "dismissAria": "关闭提醒"
+    }
+  },
+  "SiteSelector": {
+    "ariaLabel": {
+      "selector": "站点选择器",
+      "search": "搜索站点"
+    },
+    "allSites": "所有站点",
+    "searchPlaceholder": "搜索站点...",
+    "allSitesSummary": "{{count}} 个站点 · {{devices}} 台设备",
+    "allSitesSummary_one": "{{count}} 个站点 · {{devices}} 台设备",
+    "empty": {
+      "noMatch": "没有匹配的站点",
+      "none": "尚未创建任何站点"
+    },
+    "deviceCount": "{{count}} 台设备",
+    "deviceCount_one": "{{count}} 台设备",
+    "offline": "{{count}} 台离线",
+    "manageSites": "管理站点"
+  },
+  "GreetingCard": {
+    "greetings": {
+      "morning": "早上好",
+      "afternoon": "下午好",
+      "evening": "晚上好",
+      "late": "深夜工作中"
+    },
+    "fullGreeting": "{{greeting}}，{{name}}"
+  },
+  "CameraPreviewWidget": {
+    "empty": {
+      "title": "未配置摄像头"
+    },
+    "actions": {
+      "addCamera": "添加摄像头",
+      "viewAll": "查看所有摄像头",
+      "viewAllCount": "查看全部 {{count}} 个摄像头"
+    },
+    "recording": "REC"
+  },
+  "Toast": {
+    "dismiss": "关闭通知",
+    "region": "通知",
+    "errorTitle": "出错了"
+  },
+  "FormFieldArray": {
+    "actions": {
+      "add": "添加"
+    },
+    "itemCount": {
+      "ariaLabel": "项目数量",
+      "ofMax": "{{n}} / {{max}}",
+      "items": "{{n}} 项"
+    }
+  },
+  "ScanWizard": {
+    "title": "扫描向导",
+    "steps": {
+      "scanType": {
+        "title": "扫描类型",
+        "description": "选择发现方式"
+      },
+      "target": {
+        "title": "目标",
+        "description": "配置扫描目标"
+      },
+      "options": {
+        "title": "选项",
+        "description": "微调设置"
+      },
+      "review": {
+        "title": "查看",
+        "description": "确认并开始"
+      }
+    },
+    "scanTypes": {
+      "subnet": {
+        "title": "子网扫描",
+        "description": "扫描 IP 范围以发现网络上的设备。",
+        "badges": {
+          "portScan": "端口扫描",
+          "fingerprint": "指纹识别"
+        }
+      },
+      "controller": {
+        "title": "控制器发现",
+        "description": "查询控制器以发现受管设备。",
+        "badges": {
+          "autoSync": "自动同步"
+        }
+      }
+    },
+    "fields": {
+      "site": "站点",
+      "sitePlaceholder": "选择一个站点...",
+      "subnet": "子网 / IP 范围",
+      "subnetHelper": "输入 CIDR、IP 范围或单个 IP（每行一个）",
+      "controller": "控制器",
+      "controllerPlaceholder": "选择一个控制器...",
+      "controllerSelectSiteFirst": "请先选择一个站点以列出其控制器。",
+      "controllerNone": "该站点未注册任何控制器。请先在“控制器”中添加。"
+    },
+    "options": {
+      "fingerprint": {
+        "title": "设备指纹识别",
+        "description": "探测 HTTP/RTSP/SNMP 以识别厂商"
+      },
+      "portScan": {
+        "title": "端口扫描",
+        "description": "扫描常用端口（22、80、443、554、8080 等）"
+      },
+      "autoAdopt": {
+        "title": "自动接管",
+        "description": "自动接管驱动匹配置信度高的设备"
+      },
+      "timeout": "超时（秒）",
+      "threads": "并发线程数"
+    },
+    "review": {
+      "scanType": "扫描类型",
+      "site": "站点",
+      "targets": "目标",
+      "targetCount": "{{count}} 个目标",
+      "controller": "控制器",
+      "timeoutBadge": "{{seconds}} 秒超时",
+      "threadsBadge": "{{count}} 个线程",
+      "info": "扫描将探测指定的目标并识别网络上的设备。根据目标范围，这可能需要几分钟。"
+    },
+    "actions": {
+      "back": "上一步",
+      "cancel": "取消",
+      "next": "下一步",
+      "startScan": "开始扫描"
+    }
+  },
+  "AdoptDeviceDialog": {
+    "title": "纳管设备 · {{ip}}",
+    "submitLabel": "纳管设备",
+    "defaultCredentialName": "{{ip}} 凭据",
+    "steps": {
+      "driver": "驱动",
+      "credentials": "凭据",
+      "confirm": "确认"
+    },
+    "validation": {
+      "selectDriver": "请选择驱动",
+      "selectCredential": "请选择凭据",
+      "usernameRequired": "用户名为必填项",
+      "passwordRequired": "密码为必填项"
+    },
+    "errors": {
+      "driverNotSelected": "未选择驱动"
+    },
+    "actions": {
+      "back": "上一步",
+      "next": "下一步"
+    },
+    "fields": {
+      "deviceName": "设备名称",
+      "selectDriver": "选择驱动",
+      "nameOptional": "名称（可选）",
+      "namePlaceholder": "例如：主交换机管理员",
+      "username": "用户名",
+      "password": "密码"
+    },
+    "credentials": {
+      "useExisting": "使用现有",
+      "createNew": "新建",
+      "selectPlaceholder": "选择凭据...",
+      "noneFound": "未找到凭据。请新建一个。"
+    },
+    "review": {
+      "device": "设备",
+      "name": "名称",
+      "driver": "驱动",
+      "credentials": "凭据",
+      "vendor": "厂商",
+      "newCredential": "新建：{{name}}",
+      "autoNamed": "自动命名",
+      "info": "设备将被纳管到您的站点，所选驱动将用于监控和管理。"
+    }
+  },
+  "WallToolbar": {
+    "tooltips": {
+      "sidebar": "摄像头侧边栏"
+    },
+    "actions": {
+      "fill": "填充 ({{count}})"
+    },
+    "streamMode": {
+      "snapshots": "快照",
+      "live": "实时"
+    },
+    "nvrLoad": {
+      "streamCount_one": "{{count}} 路视频流",
+      "streamCount_other": "{{count}} 路视频流",
+      "overloaded_one": "· {{count}} 台 NVR 已满",
+      "overloaded_other": "· {{count}} 台 NVR 已满",
+      "title": "NVR 连接负载",
+      "empty": "无活动的 NVR 连接"
+    },
+    "pagination": {
+      "previous": "上一页",
+      "next": "下一页"
+    },
+    "status": {
+      "live": "实时",
+      "summary": "{{active}} 个活动 · {{online}}/{{total}} 在线"
+    },
+    "autoCycle": {
+      "button": "轮播",
+      "title": "自动轮播",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "interval": "间隔",
+      "seconds": "{{count}} 秒"
+    },
+    "display": {
+      "button": "显示",
+      "labels": "摄像头标签",
+      "statusIndicators": "状态指示器",
+      "streamQuality": "视频流质量",
+      "subStream": "子码流（快速）",
+      "mainStream": "主码流（HD）"
+    },
+    "alertSound": {
+      "mute": "静音警报声",
+      "enable": "启用警报声"
+    },
+    "refresh": {
+      "title": "立即刷新快照",
+      "ariaLabel": "刷新快照"
+    },
+    "popOut": {
+      "title": "弹出视频墙",
+      "tooltip": "在新窗口中弹出"
+    },
+    "fullscreen": {
+      "title": "全屏",
+      "exit": "退出全屏",
+      "enter": "进入全屏"
+    }
+  },
+  "HolidaySchedulePanel": {
+    "days": {
+      "mon": "周一",
+      "tue": "周二",
+      "wed": "周三",
+      "thu": "周四",
+      "fri": "周五",
+      "sat": "周六",
+      "sun": "周日"
+    },
+    "months": {
+      "jan": "1月",
+      "feb": "2月",
+      "mar": "3月",
+      "apr": "4月",
+      "may": "5月",
+      "jun": "6月",
+      "jul": "7月",
+      "aug": "8月",
+      "sep": "9月",
+      "oct": "10月",
+      "nov": "11月",
+      "dec": "12月"
+    },
+    "actions": {
+      "continuous": "连续",
+      "motion": "移动侦测",
+      "alarm": "报警"
+    },
+    "definitions": {
+      "title": "节假日定义",
+      "nvrLevel": "NVR 级别",
+      "loading": "正在加载节假日…",
+      "help": "最多可定义 32 个节假日。这些日期范围适用于此 NVR 上所有摄像头的节假日录像计划。",
+      "addHoliday": "添加节假日",
+      "empty": "未配置节假日",
+      "namePlaceholder": "节假日名称",
+      "saved": "已保存",
+      "failed": "失败",
+      "saveHolidays": "保存节假日"
+    },
+    "schedule": {
+      "title": "节假日录像计划",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "loading": "正在加载节假日计划…",
+      "enableLabel": "启用节假日录像计划",
+      "save": "保存",
+      "saveSuccess": "节假日计划已保存。",
+      "saveError": "保存节假日计划失败。",
+      "unavailable": "此摄像头不支持节假日录像计划。"
+    }
+  },
+  "PTZToursPanel": {
+    "title": "PTZ 巡航",
+    "loading": "正在加载巡航…",
+    "empty": "此摄像头未配置 PTZ 巡航。",
+    "tourCount_one": "{{count}} 个巡航",
+    "tourCount_other": "{{count}} 个巡航",
+    "tourFallbackName": "巡航 {{id}}",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "stepCount_one": "{{count}} 步",
+    "stepCount_other": "{{count}} 步",
+    "confirmDelete": "删除此巡航？",
+    "addStop": "添加停留点",
+    "emptyStops": {
+      "title": "未定义停留点",
+      "description": "添加预置位停留点以构建巡航。"
+    },
+    "fields": {
+      "preset": "预置位",
+      "dwell": "停留时间 (s)",
+      "speed": "速度"
+    },
+    "status": {
+      "saved": "已保存",
+      "failed": "失败"
+    },
+    "actions": {
+      "start": "启动",
+      "stop": "停止",
+      "saveTour": "保存巡航"
+    }
+  },
+  "ErrorBoundary": {
+    "root": {
+      "badge": "错误",
+      "title": "出错了",
+      "description": "发生了意外错误。请尝试刷新页面。"
+    },
+    "route": {
+      "title": "此页面已崩溃",
+      "description": "渲染此页面时出错。应用的其余部分应仍可使用 · 请尝试切换到其他页面，或在下方重试。"
+    },
+    "section": {
+      "title": "此区块加载失败"
+    },
+    "actions": {
+      "refreshPage": "刷新页面",
+      "goToDashboard": "前往仪表板",
+      "retry": "重试"
+    }
+  },
+  "ScanProgress": {
+    "title": "发现扫描",
+    "scanning": "正在扫描...",
+    "status": {
+      "running": "运行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消"
+    },
+    "phases": {
+      "protocolDiscovery": "协议发现",
+      "portScanning": "端口扫描",
+      "serviceProbing": "服务探测",
+      "hostnameResolution": "主机名解析"
+    },
+    "stats": {
+      "scannedOf": "已扫描 {{total}} 个中的",
+      "scanned": "已扫描",
+      "found": "已发现",
+      "identified": "已识别",
+      "elapsed": "已用时"
+    },
+    "errors": {
+      "heading": "错误 ({{count}})",
+      "more": "另有 {{count}} 个"
+    },
+    "actions": {
+      "cancelScan": "取消扫描",
+      "viewResults": "查看结果（{{count}} 台设备）"
+    }
+  },
+  "SystemStatusWidget": {
+    "status": {
+      "healthy": "正常",
+      "degraded": "降级",
+      "down": "宕机"
+    },
+    "overall": {
+      "allOperational": "所有系统运行正常",
+      "needsAttention": "部分服务需要关注",
+      "servicesHealthy": "{{healthy}}/{{total}} 个服务正常"
+    },
+    "resources": {
+      "heading": "资源",
+      "cpu": "CPU",
+      "memory": "内存",
+      "disk": "磁盘"
+    },
+    "service": {
+      "latencyMs": "{{latency}} 毫秒"
+    }
+  },
+  "BatchProgressDialog": {
+    "stats": {
+      "success": "成功：{{count}}",
+      "running": "进行中：{{count}}",
+      "failed": "失败：{{count}}",
+      "pending": "待处理：{{count}}"
+    },
+    "status": {
+      "pending": "待处理",
+      "running": "进行中",
+      "success": "成功",
+      "failed": "失败",
+      "skipped": "已跳过"
+    },
+    "actions": {
+      "cancel": "取消",
+      "retryFailed": "重试失败项（{{count}}）",
+      "close": "关闭",
+      "done": "完成"
+    }
+  },
+  "PendingChangesBadge": {
+    "label": "待处理",
+    "ariaLabel": {
+      "open": "打开待处理更改面板",
+      "openStaged": "打开待处理更改面板, 已暂存 {{count}} 项"
+    },
+    "title": {
+      "none": "没有待处理的更改",
+      "one": "此网关有 {{count}} 项待处理更改",
+      "many": "此网关有 {{count}} 项待处理更改"
+    }
+  },
+  "PageHeader": {
+    "actions": {
+      "refresh": "刷新"
+    }
+  },
+  "CameraCanvasOverlay": {
+    "snapshotAlt": "摄像头画面",
+    "label": {
+      "region": "R{{id}}",
+      "line": "L{{id}}",
+      "zone": "Z{{id}}"
+    }
+  },
+  "SearchBar": {
+    "placeholder": "搜索...",
+    "clear": "清除搜索"
+  },
+  "ControllerDetailsSheet": {
+    "status": {
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "error": "错误",
+      "syncing": "同步中",
+      "unknown": "未知"
+    },
+    "common": {
+      "notAvailable": "不可用",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "yes": "是",
+      "no": "否"
+    },
+    "actions": {
+      "syncNow": "立即同步",
+      "test": "测试",
+      "edit": "编辑"
+    },
+    "test": {
+      "failedMessage": "连接测试失败",
+      "successful": "连接成功",
+      "failed": "连接失败",
+      "latency": "延迟",
+      "version": "版本"
+    },
+    "health": {
+      "title": "控制器健康状况",
+      "cpu": "CPU",
+      "memory": "内存",
+      "disk": "磁盘",
+      "uptime": "运行时间"
+    },
+    "devices": {
+      "title": "设备",
+      "total": "总计",
+      "online": "在线",
+      "offline": "离线",
+      "switchesCount": "{{count}} 台交换机",
+      "apsCount": "{{count}} 个 AP",
+      "gatewaysCount": "{{count}} 个网关",
+      "clientsCount": "{{count}} 个客户端",
+      "managedDevices": "受管设备 ({{count}})"
+    },
+    "poe": {
+      "title": "PoE 功率预算",
+      "consumedBudget": "已用 / 预算",
+      "remaining": "{{watts}} 剩余，分布在 {{count}} 台 PoE 交换机上"
+    },
+    "firmware": {
+      "title": "固件",
+      "compliance": "合规性",
+      "upToDate": "{{current}}/{{total}} 已是最新"
+    },
+    "connection": {
+      "title": "连接",
+      "host": "主机",
+      "port": "端口",
+      "ssl": "SSL/TLS",
+      "verifyCertificate": "验证证书"
+    },
+    "sync": {
+      "title": "同步状态",
+      "autoSync": "自动同步",
+      "interval": "同步间隔",
+      "lastSync": "上次同步",
+      "duration": "同步时长",
+      "errorHistory": "错误历史 ({{count}})"
+    },
+    "details": {
+      "title": "详情",
+      "controllerId": "控制器 ID",
+      "active": "活动",
+      "created": "创建时间",
+      "updated": "更新时间"
+    }
+  },
+  "RegisterPage": {
+    "tagline": "厂商无关的网络管理",
+    "heading": "创建账户",
+    "subheading": "输入您的信息以开始使用",
+    "submit": "创建账户",
+    "submitting": "正在创建账户...",
+    "passwordMismatch": "两次输入的密码不一致",
+    "haveAccount": "已有账户?",
+    "signIn": "登录",
+    "success": {
+      "title": "注册成功!",
+      "description": "您的账户已创建。现在可以使用您的凭据登录。",
+      "goToLogin": "前往登录"
+    },
+    "fields": {
+      "firstName": "名字",
+      "lastName": "姓氏",
+      "email": "邮箱",
+      "organizationName": "组织名称",
+      "optional": "(可选)",
+      "password": "密码",
+      "confirmPassword": "确认密码"
+    },
+    "placeholders": {
+      "firstName": "John",
+      "lastName": "Doe",
+      "organizationName": "Acme Inc."
+    },
+    "passwordRules": {
+      "minLength": "至少 12 个字符",
+      "lowercase": "至少一个小写字母",
+      "uppercase": "至少一个大写字母",
+      "number": "至少一个数字",
+      "special": "至少一个特殊字符"
+    },
+    "legal": {
+      "prefix": "创建账户即表示您同意我们的",
+      "terms": "服务条款",
+      "and": "和",
+      "privacy": "隐私政策"
+    }
+  },
+  "CommandPalette": {
+    "searchPlaceholder": "输入命令或搜索…",
+    "noResults": "未找到结果。",
+    "groups": {
+      "recent": "最近",
+      "actions": "操作",
+      "theme": "主题",
+      "help": "帮助"
+    },
+    "sync": {
+      "none": {
+        "title": "未找到控制器",
+        "description": "没有可同步的控制器。"
+      },
+      "started": {
+        "title": "控制器同步已开始",
+        "description": "已为 {{count}} 个控制器启动同步。"
+      },
+      "failed": {
+        "title": "控制器同步失败",
+        "description": "无法为任何控制器启动同步。"
+      },
+      "partial": {
+        "title": "部分同步已开始",
+        "description": "已启动 {{succeeded}} 个控制器；{{failed}} 个失败。"
+      },
+      "error": "无法启动控制器同步。"
+    },
+    "actions": {
+      "discovery": "运行网络发现",
+      "syncAll": "同步所有控制器"
+    },
+    "theme": {
+      "light": "切换到浅色主题",
+      "dark": "切换到深色主题",
+      "system": "使用系统主题"
+    },
+    "help": {
+      "docs": "查看文档",
+      "shortcuts": "键盘快捷键",
+      "support": "获取支持",
+      "logout": "退出登录"
+    }
+  },
+  "EditControllerModal": {
+    "title": "编辑控制器",
+    "description": "更新 {{name}} 的控制器设置",
+    "submitLabel": "保存更改",
+    "sectionHeading": "控制器设置",
+    "unknownSite": "未知站点",
+    "fields": {
+      "name": "控制器名称 *",
+      "description": "描述",
+      "site": "站点",
+      "host": "主机地址 *",
+      "port": "端口 *",
+      "useSsl": "使用 SSL/TLS",
+      "verifySsl": "验证 SSL 证书",
+      "syncEnabled": "启用自动同步",
+      "syncInterval": "同步间隔（秒）",
+      "isActive": "控制器已启用"
+    },
+    "placeholders": {
+      "description": "可选描述..."
+    },
+    "descriptions": {
+      "siteImmutable": "创建后无法更改站点",
+      "useSsl": "使用 HTTPS 连接",
+      "verifySsl": "对自签名证书禁用此项",
+      "syncEnabled": "自动同步设备",
+      "isActive": "禁用以暂停所有操作"
+    },
+    "validation": {
+      "nameRequired": "控制器名称为必填项",
+      "hostRequired": "主机地址为必填项",
+      "portRange": "端口必须为 1-65535",
+      "minSeconds": "最少 60 秒"
+    }
+  },
+  "AdHocScansPanel": {
+    "loading": "正在加载扫描…",
+    "empty": "暂无临时扫描。在“概览”选项卡中使用“立即运行扫描”来触发一次。",
+    "autoDetect": "自动检测",
+    "toasts": {
+      "cancellationRequested": "已请求取消",
+      "cancelFailed": "取消失败"
+    },
+    "columns": {
+      "status": "状态",
+      "type": "类型",
+      "targets": "目标",
+      "started": "开始时间",
+      "progress": "进度",
+      "devices": "设备",
+      "actions": "操作"
+    },
+    "status": {
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消"
+    },
+    "actions": {
+      "cancel": "取消"
+    }
+  },
+  "TimeRangeSelector": {
+    "ariaLabel": "时间范围",
+    "custom": "自定义",
+    "labels": {
+      "5m": "最近 5 分钟",
+      "15m": "最近 15 分钟",
+      "1h": "最近 1 小时",
+      "6h": "最近 6 小时",
+      "24h": "最近 24 小时",
+      "7d": "最近 7 天",
+      "30d": "最近 30 天",
+      "90d": "最近 90 天",
+      "custom": "自定义范围"
+    },
+    "shortLabels": {
+      "5m": "5M",
+      "15m": "15M",
+      "1h": "1H",
+      "6h": "6H",
+      "24h": "24H",
+      "7d": "7D",
+      "30d": "30D",
+      "90d": "90D",
+      "custom": "自定义"
+    }
+  },
+  "TopologyDiscoveryTab": {
+    "title": "代理拓扑",
+    "selectSitePrompt": "选择一个站点以查看其拓扑。",
+    "countBadge": "{{hosts}} 台主机 / {{subnets}} 个子网",
+    "error": "无法加载拓扑。",
+    "loading": "加载中…",
+    "empty": "尚无发现结果。从代理运行扫描后，主机和子网组将显示在此处。",
+    "host": {
+      "managedLink": "→ 已纳管"
+    },
+    "subnet": {
+      "hostCount": "{{count}} 台主机",
+      "vlanBadge": "VLAN {{id}}"
+    },
+    "legend": {
+      "adopted": "已采纳",
+      "discovered": "已发现",
+      "lldp": "LLDP"
+    }
+  },
+  "ThemeToggle": {
+    "themes": {
+      "light": "浅色",
+      "dark": "深色",
+      "system": "跟随系统"
+    },
+    "groupAriaLabel": "主题选择",
+    "icon": {
+      "title": "当前：{{theme}}。点击切换。",
+      "ariaLabel": "切换主题（当前：{{theme}}）"
+    },
+    "dropdown": {
+      "ariaLabel": "主题：{{theme}}"
+    }
+  },
+  "ShortcutsCheatsheet": {
+    "or": "或",
+    "title": "键盘快捷键",
+    "description": {
+      "before": "使用这些全局快捷键加快导航。随时按",
+      "after": "即可打开此对话框。"
+    },
+    "tip": {
+      "before": "提示：对于以",
+      "middle": "为前缀的快捷键，请先按",
+      "after": "然后在 1.5 秒内按第二个键。"
+    }
+  },
+  "DriverSelector": {
+    "searchPlaceholder": "搜索驱动...",
+    "empty": "未找到驱动",
+    "recommended": "推荐"
+  },
+  "Breadcrumb": {
+    "ariaLabel": "面包屑导航",
+    "paths": {
+      "dashboard": "仪表板",
+      "devices": "设备",
+      "controllers": "控制器",
+      "sites": "站点",
+      "cameras": "摄像头",
+      "voip": "VoIP",
+      "access": "访问控制",
+      "firewall": "防火墙",
+      "users": "用户",
+      "settings": "设置",
+      "discovery": "发现",
+      "organizations": "组织",
+      "network": "网络"
+    }
+  },
+  "ActivityFeed": {
+    "empty": "暂无最近活动"
+  },
+  "nav": {
+    "sections": {
+      "Overview": "概览",
+      "Network": "网络",
+      "Cameras": "摄像头",
+      "VoIP": "VoIP",
+      "Infrastructure": "基础设施",
+      "Operations": "运维",
+      "Automation": "自动化",
+      "Administration": "管理"
+    },
+    "items": {
+      "Dashboard": "仪表板",
+      "Sites": "站点",
+      "Health": "健康状态",
+      "Topology": "拓扑",
+      "Network Overview": "网络概览",
+      "Devices": "设备",
+      "Switches": "交换机",
+      "Access Points": "接入点",
+      "VLANs": "VLAN",
+      "WiFi Networks": "WiFi 网络",
+      "Clients": "客户端",
+      "PoE": "PoE",
+      "VPN": "VPN",
+      "Firewall": "防火墙",
+      "Discovery": "发现",
+      "Cameras": "摄像头",
+      "Camera Wall": "摄像头墙",
+      "NVRs": "NVR",
+      "Multi-Playback": "多路回放",
+      "Fleet Overview": "设备群概览",
+      "PBX Systems": "PBX 系统",
+      "Phones": "电话",
+      "Extensions": "分机",
+      "Call History": "通话记录",
+      "Voicemail": "语音信箱",
+      "Phone Templates": "电话模板",
+      "Phone Discovery": "电话发现",
+      "Hypervisor": "虚拟机管理程序",
+      "Backups": "备份",
+      "Access Control": "门禁控制",
+      "Alerts": "告警",
+      "Incidents": "事件",
+      "Observability": "可观测性",
+      "Log Explorer": "日志浏览器",
+      "System Logs": "系统日志",
+      "Analytics": "分析",
+      "SLA": "SLA",
+      "Bulk Operations": "批量操作",
+      "Device Lifecycle": "设备生命周期",
+      "Reconciliation": "对账",
+      "Firmware": "固件",
+      "Gateway VPN": "网关 VPN",
+      "Gateway Firmware": "网关固件",
+      "Gateway Bulk Ops": "网关批量操作",
+      "Gateway System": "网关系统",
+      "Gateway Routing": "网关路由",
+      "Gateway Firewall": "网关防火墙",
+      "Gateway Hotspot": "网关热点",
+      "Gateway Profiles": "网关配置文件",
+      "Gateway Switch Advanced": "网关交换机高级设置",
+      "Gateway Diagnostics": "网关诊断",
+      "Gateway Insights": "网关洞察",
+      "Pending Changes": "待应用更改",
+      "Automation Rules": "自动化规则",
+      "Alert Rules": "告警规则",
+      "Notification Providers": "通知提供商",
+      "Webhooks": "Webhook",
+      "Integrations": "集成",
+      "Config Templates": "配置模板",
+      "Site Groups": "站点组",
+      "AI Assistant": "AI 助手",
+      "Controllers": "控制器",
+      "Credentials": "凭据",
+      "Agents": "代理",
+      "Agent Downloads": "代理下载",
+      "Agent Releases": "代理发布版本",
+      "Users": "用户",
+      "Roles": "角色",
+      "Organizations": "组织",
+      "Security Audit": "安全审计",
+      "Plugins": "插件",
+      "Marketplace": "市场",
+      "Drivers": "驱动"
+    }
+  },
+  "organizations": {
+    "title": "组织",
+    "subtitle": "管理多租户组织及其资源。",
+    "allOrganizations": "所有组织",
+    "searchPlaceholder": "搜索组织...",
+    "loading": "正在加载组织…",
+    "owner": "所有者",
+    "plans": {
+      "free": "免费版",
+      "pro": "专业版",
+      "enterprise": "企业版"
+    },
+    "statuses": {
+      "active": "活跃",
+      "suspended": "已暂停",
+      "trial": "试用"
+    },
+    "metrics": {
+      "users": "用户",
+      "sites": "站点",
+      "deviceLimit": "设备上限",
+      "totalOrganizations": "组织总数",
+      "active": "活跃",
+      "totalUsers": "用户总数",
+      "enterprise": "企业版"
+    },
+    "actions": {
+      "addOrganization": "添加组织",
+      "createOrganization": "创建组织",
+      "editOrganization": "编辑组织",
+      "deleteOrganization": "删除组织",
+      "apiKeys": "API 密钥"
+    },
+    "dialogs": {
+      "createTitle": "创建组织",
+      "createDescription": "创建一个用于多租户管理的新组织。"
+    },
+    "fields": {
+      "name": "组织名称",
+      "slug": "URL 标识",
+      "ownerEmail": "所有者邮箱",
+      "plan": "套餐",
+      "description": "描述"
+    },
+    "planOptions": {
+      "free": "免费版 - 10 台设备",
+      "pro": "专业版 - 100 台设备",
+      "enterprise": "企业版 - 无限制"
+    },
+    "placeholders": {
+      "name": "Acme Corporation",
+      "slug": "acme-corp",
+      "ownerEmail": "admin@acme.com",
+      "description": "简要描述...",
+      "yourOrg": "your-org"
+    },
+    "hints": {
+      "urlSlug": "用于 URL：freesdn.org/{{slug}}"
+    },
+    "errors": {
+      "load": "加载组织失败（{{status}}）",
+      "loadGeneric": "加载组织失败",
+      "create": "创建组织失败（{{status}}）",
+      "createGeneric": "创建组织失败"
+    }
+  },
+  "changeLanguage": "切换语言",
+  "filters": "筛选",
+  "updated": "已更新",
+  "relative": {
+    "never": "从不",
+    "justNow": "刚刚",
+    "minutesAgo": "{{n}} 分钟前",
+    "hoursAgo": "{{n}} 小时前",
+    "daysAgo": "{{n}} 天前"
+  }
+}

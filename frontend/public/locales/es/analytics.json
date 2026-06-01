@@ -1,0 +1,345 @@
+{
+  "AnalyticsPage": {
+    "title": "Analítica",
+    "actions": {
+      "export": "Exportar"
+    },
+    "errors": {
+      "loadFailed": "No se pudieron cargar los datos de analítica"
+    },
+    "subtitle": {
+      "updated": "Actualizado {{timestamp}} · ventana de {{window}}",
+      "default": "Información en tiempo real de flota, seguridad, clientes y tráfico"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "insights": "Análisis",
+      "wifi": "Wi-Fi",
+      "clients": "Clientes",
+      "traffic": "Tráfico"
+    },
+    "common": {
+      "noData": "Sin datos",
+      "noDataAvailable": "No hay datos disponibles",
+      "wired": "Cableado",
+      "wireless": "Inalámbrico",
+      "clients": "Clientes",
+      "total": "Total"
+    },
+    "overview": {
+      "organizationHealth": "Estado de la organización",
+      "acrossSitesDevices": "En {{siteCount}} {{sites}} · {{deviceCount}} {{devices}}",
+      "unit": {
+        "site": "sitio",
+        "sites": "sitios",
+        "device": "dispositivo",
+        "devices": "dispositivos"
+      },
+      "peak": "Pico {{value}}%",
+      "peakTemp": "Pico {{value}}°C",
+      "noTelemetry": "Sin telemetría",
+      "online": "En línea",
+      "offline": "Fuera de línea",
+      "devicesLabel": "dispositivos",
+      "cpuLabel": "CPU",
+      "cpuBarName": "CPU %",
+      "memoryLabel": "Memoria",
+      "memoryBarName": "Memoria %",
+      "stats": {
+        "healthScore": "Puntuación de estado",
+        "devices": "Dispositivos",
+        "devicesDesc": "{{online}} en línea · {{offline}} fuera de línea",
+        "networkClients": "Clientes de red",
+        "networkClientsDesc": "{{online}} en línea",
+        "activeAlerts": "Alertas activas",
+        "activeAlertsDesc": "{{total}} incidentes en total",
+        "avgCpu": "CPU promedio",
+        "avgMemory": "Memoria promedio",
+        "avgTemperature": "Temperatura promedio",
+        "portHealth": "Estado de puertos",
+        "portHealthDesc": "{{down}} caídos · {{errors}} errores"
+      },
+      "healthStatus": {
+        "healthy": "Saludable",
+        "degraded": "Degradado",
+        "critical": "Crítico"
+      },
+      "siteHealth": {
+        "title": "Estado del sitio",
+        "description": "Puntuación de estado por sitio en la organización",
+        "empty": "No hay sitios configurados",
+        "tooltip": "Estado",
+        "barName": "Estado %"
+      },
+      "devicesByType": {
+        "title": "Dispositivos por tipo",
+        "description": "División en línea/fuera de línea por clase de dispositivo",
+        "empty": "No hay datos de dispositivos"
+      },
+      "devicesByManufacturer": {
+        "title": "Dispositivos por fabricante",
+        "description": "Distribución de proveedores en la flota",
+        "empty": "No hay datos de fabricantes"
+      },
+      "controllers": {
+        "title": "Controladores",
+        "description": "{{count}} registrados",
+        "empty": "No hay controladores configurados"
+      },
+      "topCpu": {
+        "title": "Mayor consumo de CPU",
+        "description": "Mayor uso de CPU en la ventana",
+        "empty": "Sin telemetría de CPU"
+      },
+      "topMemory": {
+        "title": "Mayor consumo de memoria",
+        "description": "Mayor uso de memoria en la ventana",
+        "empty": "Sin telemetría de memoria"
+      }
+    },
+    "insights": {
+      "securityPosture": "Postura de seguridad",
+      "eventsLabel": "Eventos",
+      "totalLabel": "Total",
+      "stats": {
+        "healthScore": "Puntuación de estado",
+        "totalTraffic": "Tráfico total",
+        "totalTrafficDesc": "{{tx}} TX · {{rx}} RX",
+        "devicesOnline": "Dispositivos en línea",
+        "devicesOnlineDesc": "{{degraded}} degradados · {{offline}} fuera de línea",
+        "avgClientSignal": "Señal promedio de clientes"
+      },
+      "security": {
+        "failedLogins": "Inicios de sesión fallidos",
+        "activeIpBlocks": "Bloqueos de IP activos",
+        "unresolvedAnomalies": "Anomalías sin resolver",
+        "securityEvents": "Eventos de seguridad",
+        "lastHours": "Últimas {{hours}} h"
+      },
+      "incidentStatus": {
+        "open": "Abierto",
+        "investigating": "En investigación",
+        "resolved": "Resuelto",
+        "other": "Otro"
+      },
+      "auditByLevel": {
+        "title": "Eventos de auditoría por nivel",
+        "description": "{{count}} eventos en total",
+        "empty": "No hay datos de auditoría"
+      },
+      "auditBySource": {
+        "title": "Auditoría por origen",
+        "description": "Actividad por tipo de recurso",
+        "empty": "No hay datos de origen"
+      },
+      "incidents": {
+        "title": "Incidentes",
+        "description": "{{total}} en total · {{open}} abiertos",
+        "empty": "Sin incidentes · todo en orden"
+      }
+    },
+    "wifi": {
+      "radar": {
+        "signalStrength": "Intensidad de señal",
+        "signalQuality": "Calidad de señal",
+        "bandDiversity": "Diversidad de bandas",
+        "connectivity": "Conectividad"
+      },
+      "stats": {
+        "wirelessClients": "Clientes inalámbricos",
+        "ofTotal": "de {{total}} en total",
+        "avgSignal": "Señal promedio",
+        "clientUpload": "Subida de clientes",
+        "clientDownload": "Descarga de clientes"
+      },
+      "bandDistribution": {
+        "title": "Distribución de bandas de clientes",
+        "description": "Clientes inalámbricos por banda de radio, más cableados"
+      },
+      "signalQuality": {
+        "title": "Distribución de calidad de señal",
+        "description": "Por rango de dBm · más alto es mejor",
+        "empty": "No hay muestras de señal"
+      },
+      "topSsids": {
+        "title": "Principales SSID por número de clientes",
+        "description": "Redes inalámbricas más populares",
+        "empty": "No hay datos de SSID"
+      },
+      "healthProfile": {
+        "title": "Perfil de estado de Wi-Fi",
+        "description": "Puntuación compuesta de señal, calidad, diversidad y tiempo activo",
+        "radarName": "Estado"
+      }
+    },
+    "clients": {
+      "signalRating": {
+        "excellent": "Excelente",
+        "good": "Buena",
+        "fair": "Regular",
+        "weak": "Débil",
+        "poor": "Mala"
+      },
+      "stats": {
+        "totalClients": "Total de clientes",
+        "online": "En línea",
+        "reachable": "{{pct}}% accesibles"
+      },
+      "connectionType": {
+        "title": "Tipo de conexión",
+        "description": "Mezcla de cableado e inalámbrico"
+      },
+      "bandDistribution": {
+        "title": "Distribución de bandas",
+        "description": "Desglose de clientes inalámbricos por banda de radio",
+        "empty": "No hay clientes inalámbricos"
+      },
+      "ssidDistribution": {
+        "title": "Distribución de SSID",
+        "description": "Principales redes inalámbricas",
+        "empty": "No hay datos de SSID"
+      },
+      "signalQuality": {
+        "title": "Calidad de señal de clientes",
+        "description": "Distribución por rangos de dBm",
+        "empty": "No hay datos de señal disponibles"
+      },
+      "clientTraffic": {
+        "title": "Tráfico de clientes",
+        "totalDesc": "Total {{total}}",
+        "uploadTx": "Subida (TX)",
+        "downloadRx": "Descarga (RX)"
+      },
+      "avgSignalStrength": {
+        "title": "Intensidad de señal promedio",
+        "description": "En todos los clientes inalámbricos",
+        "empty": "No hay datos de señal",
+        "dbmAverage": "promedio en dBm"
+      }
+    },
+    "traffic": {
+      "portsLabel": "Puertos",
+      "bytesLabel": "Bytes",
+      "trafficLabel": "Tráfico",
+      "portStatusLabel": {
+        "up": "Activo",
+        "down": "Caído",
+        "other": "Otro"
+      },
+      "trafficCompare": {
+        "portTx": "TX de puerto",
+        "portRx": "RX de puerto",
+        "clientTx": "TX de cliente",
+        "clientRx": "RX de cliente"
+      },
+      "stats": {
+        "totalPorts": "Total de puertos",
+        "totalPortsDesc": "{{up}} activos · {{down}} caídos",
+        "portUpload": "Subida de puerto",
+        "portDownload": "Descarga de puerto",
+        "poePower": "Potencia PoE",
+        "poePortsCount": "{{count}} puertos PoE"
+      },
+      "siteColumns": {
+        "site": "Sitio",
+        "devices": "Dispositivos",
+        "online": "En línea",
+        "offline": "Fuera de línea",
+        "health": "Estado"
+      },
+      "portStatus": {
+        "title": "Estado de puertos",
+        "description": "{{count}} puertos en total",
+        "empty": "Sin telemetría de puertos"
+      },
+      "trafficBreakdown": {
+        "title": "Desglose de tráfico",
+        "description": "Bytes por dirección de interfaz",
+        "empty": "No se registró tráfico"
+      },
+      "poeBudget": {
+        "title": "Presupuesto de potencia PoE",
+        "description": "{{count}} puertos habilitados para PoE",
+        "wattsConsumed": "Vatios consumidos"
+      },
+      "portErrors": {
+        "title": "Errores de puerto",
+        "recentDetected": "Errores recientes detectados",
+        "healthy": "Saludable · sin errores",
+        "totalErrors": "Total de errores de puerto",
+        "noErrorsDetected": "No se detectaron errores de puerto"
+      },
+      "siteOverview": {
+        "title": "Resumen de sitios",
+        "description": "Recuento de dispositivos y estado por sitio",
+        "itemName": "sitios"
+      }
+    }
+  },
+  "CrossSiteComparisonPage": {
+    "header": {
+      "title": "Comparación entre sitios",
+      "description": "Métricas comparadas de todos los sitios de su organización"
+    },
+    "error": {
+      "loadFailed": "No se pudo cargar la comparación. Intente actualizar."
+    },
+    "summary": {
+      "sites": "Sitios",
+      "devicesOnline": "Dispositivos en línea",
+      "phones": "Teléfonos",
+      "openAlerts": "Alertas abiertas ({{critical}} críticas)"
+    },
+    "outliers": {
+      "title": "Valores atípicos a revisar",
+      "mostOpenAlerts": "Más alertas abiertas:",
+      "criticalCount": "({{critical}} críticas)",
+      "lowestOnlinePct": "Menor % en línea:",
+      "reachable": "({{online}} de {{total}} accesibles)",
+      "firmwareCompliance": "Cumplimiento de firmware:"
+    },
+    "table": {
+      "title": "Métricas por sitio",
+      "metric": "Métrica"
+    },
+    "sections": {
+      "devices": "Dispositivos",
+      "phones": "Teléfonos (VoIP)",
+      "alerts": "Alertas",
+      "controllers": "Controladores",
+      "firmwareCompliance": "Cumplimiento de firmware"
+    },
+    "rows": {
+      "total": "Total",
+      "onlinePct": "% en línea",
+      "switches": "Switches",
+      "accessPoints": "Puntos de acceso",
+      "cameras": "Cámaras",
+      "totalPhones": "Total de teléfonos",
+      "managed": "Gestionados",
+      "open": "Abiertas",
+      "last24h": "Últimas 24 h",
+      "last7d": "Últimos 7 d",
+      "compliant": "Conformes"
+    },
+    "subtext": {
+      "online": "{{count}} en línea",
+      "registered": "{{count}} registrados",
+      "critical": "{{count}} críticas",
+      "connected": "{{count}} conectados"
+    },
+    "footer": {
+      "generated": "Generado {{timestamp}} · se actualiza cada 30 s"
+    },
+    "empty": {
+      "prefix": "No hay sitios en su organización.",
+      "createOne": "Cree uno",
+      "suffix": "para empezar a comparar.",
+      "before": "No hay sitios en tu organización.",
+      "after": "para empezar a comparar."
+    },
+    "errors": {
+      "loadFailed": "No se pudo cargar la comparación. Intenta actualizar."
+    }
+  }
+}

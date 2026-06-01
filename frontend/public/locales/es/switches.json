@@ -1,0 +1,671 @@
+{
+  "SwitchesPage": {
+    "actions": {
+      "back": "Atrás",
+      "refresh": "Actualizar",
+      "refreshing": "Actualizando...",
+      "retry": "Reintentar",
+      "cancel": "Cancelar",
+      "saveChanges": "Guardar cambios",
+      "update": "Actualizar",
+      "create": "Crear",
+      "delete": "Eliminar",
+      "manage": "Administrar",
+      "export": "Exportar",
+      "addSwitch": "Agregar switch"
+    },
+    "menu": {
+      "configureStp": "Configurar STP",
+      "viewMacTable": "Ver tabla MAC",
+      "portMirroring": "Replicación de puertos"
+    },
+    "capabilities": {
+      "limitedTitle": "Capacidades limitadas",
+      "portControlLabel": "Control de puertos:",
+      "poeControlLabel": "Control PoE:",
+      "portNotSupported": "La administración de puertos no es compatible con este dispositivo",
+      "poeNotSupported": "La administración PoE no es compatible con este dispositivo"
+    },
+    "summary": {
+      "ports": "Puertos",
+      "portsDownDisabled": "{{down}} caídos, {{disabled}} deshabilitados",
+      "poePower": "Potencia PoE",
+      "ofBudget": "de {{budget}}W de presupuesto",
+      "cpu": "CPU",
+      "memory": "Memoria",
+      "uptime": "Tiempo activo"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "ports": "Puertos",
+      "vlans": "VLAN",
+      "lags": "LAG",
+      "profiles": "Perfiles",
+      "network": "Red",
+      "config": "Configuración",
+      "configHistory": "Historial de configuración",
+      "logs": "Registros",
+      "clients": "Clientes",
+      "diagnostics": "Diagnóstico",
+      "advanced": "Avanzado"
+    },
+    "clients": {
+      "loadFailedTitle": "Error al cargar los clientes",
+      "loadFailedDesc": "No se pudieron obtener los clientes conectados del controlador. Es posible que el controlador no esté accesible."
+    },
+    "portDialog": {
+      "title": "Configurar {{name}}",
+      "description": "Ajuste la configuración del puerto, incluyendo VLAN, PoE, seguridad y más",
+      "tabs": {
+        "general": "General",
+        "vlan": "VLAN",
+        "poe": "PoE",
+        "security": "Seguridad"
+      },
+      "portName": "Nombre del puerto",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": "Descripción opcional",
+      "portEnabled": "Puerto habilitado",
+      "flowControl": "Control de flujo",
+      "flowControlHint": "Tramas de pausa 802.3x",
+      "mtuHint": "Tamaño de trama (1500 = estándar, 9216 = jumbo)",
+      "vlanMode": "Modo VLAN",
+      "vlanModeAccess": "Acceso",
+      "vlanModeTrunk": "Troncal",
+      "vlanModeHybrid": "Híbrido",
+      "nativeVlan": "VLAN nativa (PVID)",
+      "taggedVlans": "VLAN etiquetadas",
+      "taggedVlansPlaceholder": "p. ej., 10, 20, 30",
+      "voiceVlan": "VLAN de voz",
+      "optional": "Opcional",
+      "poeEnabled": "PoE habilitado",
+      "poeMode": "Modo PoE",
+      "poeModeAuto": "Detección automática",
+      "poeModeManual": "Manual",
+      "poeModeFixed": "Fijo",
+      "powerLimit": "Límite de potencia (W)",
+      "priority": "Prioridad",
+      "priorityLow": "Baja",
+      "priorityMedium": "Media",
+      "priorityHigh": "Alta",
+      "priorityCritical": "Crítica",
+      "priorityHint": "Los puertos de mayor prioridad reciben energía primero cuando el presupuesto es limitado",
+      "portSecurity": "Seguridad del puerto",
+      "portSecurityHint": "Limitar las direcciones MAC en este puerto",
+      "macAddressLimit": "Límite de direcciones MAC",
+      "rateLimiting": "Limitación de velocidad",
+      "rateLimitingHint": "Control de ancho de banda por puerto",
+      "ingress": "Entrada (kbps)",
+      "egress": "Salida (kbps)",
+      "stormControl": "Control de tormentas",
+      "stormControlHint": "Prevenir tormentas de difusión/multidifusión",
+      "broadcastThreshold": "Umbral de difusión (pps)",
+      "multicastThreshold": "Umbral de multidifusión (pps)",
+      "unknownUnicastThreshold": "Umbral de unidifusión desconocida (pps)",
+      "portIsolation": "Aislamiento de puerto",
+      "portIsolationHint": "Impedir la comunicación con otros puertos aislados"
+    },
+    "lagDialog": {
+      "editTitle": "Editar LAG",
+      "createTitle": "Crear LAG",
+      "editDescription": "Actualizar la configuración del grupo de agregación de enlaces.",
+      "createDescription": "Agrupe puertos para aumentar el ancho de banda y la redundancia.",
+      "name": "Nombre",
+      "namePlaceholder": "p. ej. Enlace de servidor",
+      "mode": "Modo",
+      "modeStatic": "Estático",
+      "lacpMode": "Modo LACP",
+      "lacpActive": "Activo",
+      "lacpPassive": "Pasivo",
+      "memberPorts": "Puertos miembros",
+      "selected": "Seleccionados: {{ports}}",
+      "none": "Ninguno"
+    },
+    "lagDelete": {
+      "title": "Eliminar LAG",
+      "description": "¿Está seguro de que desea eliminar \"{{name}}\"? Los puertos miembros volverán al funcionamiento individual."
+    },
+    "header": {
+      "title": "Switches y puertos",
+      "description": "Administre configuraciones de switches, ajustes de puertos, VLAN y más"
+    },
+    "errorState": {
+      "message": "No se pudieron obtener los datos del switch. Verifique su conexión e inténtelo de nuevo."
+    },
+    "stats": {
+      "totalSwitches": "Total de switches",
+      "onlineCount": "{{count}} en línea",
+      "activePorts": "Puertos activos",
+      "portsUpTotal": "Puertos activos / total",
+      "poePower": "Potencia PoE",
+      "ofBudget": "de {{budget}}W de presupuesto",
+      "portProfiles": "Perfiles de puerto",
+      "portsUsing": "{{count}} puertos en uso"
+    },
+    "empty": {
+      "title": "No se encontraron switches",
+      "description": "Aún no se han descubierto ni configurado switches. Ejecute un escaneo de descubrimiento o agregue un controlador para llenar esta lista."
+    },
+    "list": {
+      "portsUp": "{{up}}/{{total}} puertos activos",
+      "uptime": "Tiempo activo",
+      "cpu": "CPU",
+      "memory": "Memoria",
+      "poe": "PoE",
+      "firmware": "Firmware",
+      "update": "Actualización",
+      "vlans": "VLAN",
+      "portStatus": "Estado de los puertos",
+      "portUp": "Puerto activo",
+      "portDown": "Puerto caído",
+      "portDisabled": "Puerto deshabilitado"
+    },
+    "toast": {
+      "switchRefreshed": "Datos del switch actualizados",
+      "switchRefreshedDesc": "{{clients}} clientes, {{entries}} entradas MAC sincronizadas",
+      "switchRefreshFailed": "Error al actualizar los datos del switch",
+      "ledUpdated": "Configuración del LED actualizada",
+      "ledUpdateFailed": "Error al actualizar la configuración del LED",
+      "poeCycleInitiated": "Ciclo de energía PoE iniciado",
+      "poeCycleFailed": "Error al reiniciar el puerto PoE",
+      "portBounced": "Puerto reiniciado correctamente",
+      "portBounceFailed": "Error al reiniciar el puerto · el puerto puede haber quedado deshabilitado. Verifique el estado del puerto.",
+      "portEnabled": "Puerto habilitado correctamente",
+      "portDisabled": "Puerto deshabilitado correctamente",
+      "portEnableFailed": "Error al habilitar el puerto",
+      "portDisableFailed": "Error al deshabilitar el puerto",
+      "poeEnabled": "PoE habilitado correctamente",
+      "poeDisabled": "PoE deshabilitado correctamente",
+      "poeEnableFailed": "Error al habilitar PoE",
+      "poeDisableFailed": "Error al deshabilitar PoE",
+      "lagCreated": "LAG creado correctamente",
+      "lagCreateFailed": "Error al crear el LAG",
+      "lagUpdated": "LAG actualizado correctamente",
+      "lagUpdateFailed": "Error al actualizar el LAG",
+      "lagDeleted": "LAG eliminado",
+      "lagDeleteFailed": "Error al eliminar el LAG",
+      "vlanAssignmentsUpdated": "Asignaciones de VLAN actualizadas",
+      "vlanAssignmentsFailed": "Error al actualizar las asignaciones de VLAN",
+      "portConfigSaved": "Configuración del puerto guardada",
+      "portConfigSaveFailed": "Error al guardar la configuración del puerto",
+      "profileApplied": "Perfil aplicado a {{count}} puerto(s)"
+    },
+    "applyProfile": {
+      "title": "Aplicar perfil de puerto",
+      "description": "Aplicar un perfil guardado a {{count}} puerto(s) seleccionado(s).",
+      "profileLabel": "Perfil",
+      "profilePlaceholder": "Seleccione un perfil",
+      "noProfiles": "No hay perfiles disponibles. Cree uno primero en la pestaña Perfiles.",
+      "apply": "Aplicar perfil"
+    }
+  },
+  "AdvancedTab": {
+    "common": {
+      "apply": "Aplicar",
+      "applying": "Aplicando..."
+    },
+    "oui": {
+      "title": "Asignación de VLAN basada en OUI",
+      "description": "Asigna VLAN a los puertos automáticamente según el prefijo OUI de la MAC del dispositivo conectado",
+      "prefixLabel": "Prefijo OUI",
+      "vlanLabel": "VLAN",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": "p. ej. Teléfonos IP",
+      "addMapping": "Agregar asignación",
+      "preview": "Vista previa",
+      "previewToast": "Vista previa: {{count}} puertos cambiarían",
+      "previewFailed": "Error en la vista previa de VLAN por OUI",
+      "appliedToast": "Cambios de VLAN aplicados a {{count}} puertos",
+      "applyFailed": "Error al asignar VLAN por OUI"
+    },
+    "cli": {
+      "title": "Perfil de configuración CLI",
+      "description": "Aplica configuración de puertos por lotes a varios puertos a la vez",
+      "profileNameLabel": "Nombre del perfil",
+      "profileNamePlaceholder": "p. ej. Refuerzo de seguridad",
+      "portRangeLabel": "Rango de puertos (separados por comas)",
+      "configLabel": "Configuración (JSON)",
+      "keysHint": "Claves: {{keys}}",
+      "applyProfile": "Aplicar perfil",
+      "appliedToast": "Perfil aplicado: {{succeeded}}/{{total}} puertos",
+      "invalidJson": "Configuración JSON no válida",
+      "applyFailed": "Error al aplicar el perfil"
+    }
+  },
+  "ConfigHistoryTab": {
+    "empty": {
+      "title": "Sin historial de configuración",
+      "description": "Aún no se han registrado versiones de configuración para este switch. Las instantáneas de configuración se crean cuando se detectan cambios o se activan copias de seguridad."
+    },
+    "card": {
+      "title": "Historial de configuración",
+      "versionsRecorded": "{{count}} versiones registradas"
+    },
+    "table": {
+      "version": "Versión",
+      "changeType": "Tipo de cambio",
+      "by": "Por",
+      "firmware": "Firmware",
+      "date": "Fecha",
+      "actions": "Acciones"
+    },
+    "actions": {
+      "diffWithPrev": "Comparar con anterior",
+      "close": "Cerrar"
+    },
+    "diff": {
+      "title": "Diferencias de configuración: v{{a}} → v{{b}}",
+      "summary": "+{{added}} agregadas, -{{removed}} eliminadas",
+      "sections": " • Secciones: {{sections}}",
+      "noChanges": "No hay cambios entre estas versiones."
+    }
+  },
+  "ConfigTab": {
+    "common": {
+      "status": "Estado",
+      "direction": "Dirección",
+      "on": "Activado",
+      "off": "Desactivado",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "yes": "Sí",
+      "no": "No"
+    },
+    "stp": {
+      "title": "Configuración STP / RSTP",
+      "description": "Ajustes del Protocolo de Árbol de Expansión",
+      "mode": "Modo",
+      "priority": "Prioridad",
+      "helloTime": "Intervalo Hello",
+      "forwardDelay": "Retardo de reenvío",
+      "maxAge": "Edad máxima",
+      "rootBridge": "Puente raíz",
+      "loading": "Cargando configuración STP..."
+    },
+    "igmp": {
+      "title": "Snooping IGMP",
+      "description": "Gestión de grupos de multidifusión",
+      "enabled": "Habilitado",
+      "version": "Versión",
+      "fastLeave": "Salida rápida",
+      "querier": "Consultante",
+      "queryInterval": "Intervalo de consulta",
+      "loading": "Cargando configuración IGMP..."
+    },
+    "mirror": {
+      "title": "Duplicación de puertos",
+      "description": "Sesiones de duplicación de tráfico",
+      "destinationPort": "Puerto de destino",
+      "portValue": "Puerto {{port}}",
+      "sourcePorts": "Puertos de origen",
+      "loading": "Cargando configuración de duplicación..."
+    },
+    "qos": {
+      "title": "Configuración de QoS",
+      "description": "Ajustes de calidad de servicio",
+      "mode": "Modo",
+      "trustMode": "Modo de confianza",
+      "loading": "Cargando configuración de QoS..."
+    },
+    "dhcp": {
+      "title": "Snooping DHCP",
+      "description": "Filtrado de seguridad DHCP",
+      "verifyMac": "Verificar MAC",
+      "trustedPorts": "Puertos de confianza",
+      "loading": "Cargando configuración de snooping DHCP..."
+    },
+    "acl": {
+      "title": "Reglas ACL",
+      "rulesConfigured": "{{count}} reglas configuradas",
+      "any": "cualquiera",
+      "empty": "No hay reglas ACL configuradas",
+      "columns": {
+        "name": "Nombre",
+        "action": "Acción",
+        "protocol": "Protocolo",
+        "source": "Origen",
+        "destination": "Destino",
+        "direction": "Dirección",
+        "status": "Estado"
+      }
+    }
+  },
+  "DiagnosticsTab": {
+    "targetLabel": "IP / Nombre de host de destino",
+    "cableTest": {
+      "title": "Prueba de cable",
+      "description": "Probar la calidad del cable en un puerto",
+      "portNumber": "Número de puerto",
+      "run": "Ejecutar prueba de cable",
+      "running": "Probando...",
+      "toastComplete": "Prueba de cable completada",
+      "toastFailed": "Error en la prueba de cable"
+    },
+    "ping": {
+      "title": "Ping",
+      "description": "Hacer ping desde este dispositivo",
+      "placeholder": "p. ej. 8.8.8.8",
+      "run": "Ejecutar ping",
+      "running": "Haciendo ping...",
+      "toastComplete": "Prueba de ping completada",
+      "toastFailed": "Error en la prueba de ping"
+    },
+    "traceroute": {
+      "title": "Traceroute",
+      "description": "Rastrear la ruta desde este dispositivo",
+      "placeholder": "p. ej. 1.1.1.1",
+      "run": "Ejecutar traceroute",
+      "running": "Rastreando...",
+      "toastComplete": "Traceroute completado",
+      "toastFailed": "Error en traceroute"
+    },
+    "results": {
+      "title": "Resultados del diagnóstico"
+    }
+  },
+  "LagsTab": {
+    "actions": {
+      "createLag": "Crear LAG",
+      "edit": "Editar",
+      "delete": "Eliminar"
+    },
+    "empty": {
+      "title": "Sin grupos de agregación de enlaces",
+      "description": "Cree LAG para agrupar puertos y aumentar el ancho de banda y la redundancia."
+    },
+    "card": {
+      "subtitle": "LAG {{lagId}} • {{mode}}"
+    },
+    "fields": {
+      "memberPorts": "Puertos miembros:",
+      "active": "Activos:",
+      "speed": "Velocidad:",
+      "speedValue": "{{value}} Mbps",
+      "mode": "Modo:"
+    }
+  },
+  "LogsTab": {
+    "alerts": {
+      "title": "Alertas activas",
+      "count": "{{count}} alertas",
+      "noDescription": "Sin descripción",
+      "empty": "No hay alertas activas"
+    },
+    "events": {
+      "title": "Registro de eventos",
+      "count": "{{count}} eventos recientes",
+      "empty": "No hay eventos registrados",
+      "columns": {
+        "time": "Hora",
+        "level": "Nivel",
+        "category": "Categoría",
+        "message": "Mensaje",
+        "device": "Dispositivo"
+      }
+    }
+  },
+  "NetworkTab": {
+    "lldp": {
+      "title": "Vecinos LLDP",
+      "discovered": "{{count}} vecinos descubiertos",
+      "portFallback": "Puerto {{index}}",
+      "empty": "No se detectaron vecinos LLDP",
+      "columns": {
+        "port": "Puerto",
+        "neighborDevice": "Dispositivo vecino",
+        "neighborPort": "Puerto vecino",
+        "ip": "IP"
+      }
+    },
+    "routes": {
+      "title": "Rutas estáticas",
+      "configured": "{{count}} rutas configuradas",
+      "empty": "No hay rutas estáticas configuradas",
+      "status": {
+        "active": "Activa",
+        "disabled": "Deshabilitada"
+      },
+      "columns": {
+        "destination": "Destino",
+        "mask": "Máscara",
+        "gateway": "Puerta de enlace",
+        "metric": "Métrica",
+        "status": "Estado"
+      }
+    },
+    "dhcp": {
+      "title": "Configuración DHCP",
+      "empty": "No hay configuración DHCP disponible"
+    },
+    "mac": {
+      "title": "Tabla de direcciones MAC",
+      "entries": "{{count}} entradas",
+      "empty": "No hay entradas en la tabla MAC",
+      "columns": {
+        "macAddress": "Dirección MAC",
+        "vlan": "VLAN",
+        "port": "Puerto",
+        "type": "Tipo"
+      }
+    }
+  },
+  "OverviewTab": {
+    "portStatus": {
+      "title": "Estado de puertos",
+      "description": "Distribución de enlaces activos",
+      "up": "Activo",
+      "down": "Inactivo",
+      "disabled": "Deshabilitado",
+      "linkSpeeds": "Velocidades de enlace"
+    },
+    "poe": {
+      "title": "Análisis de energía PoE",
+      "description": "Uso y distribución del presupuesto",
+      "ofBudget": "de {{budget}}W de presupuesto ({{pct}}%)",
+      "delivering": "Suministrando",
+      "idle": "Inactivo",
+      "off": "PoE apagado",
+      "topConsumers": "Mayores consumidores"
+    },
+    "traffic": {
+      "title": "Resumen de tráfico",
+      "description": "Rendimiento agregado de puertos",
+      "totalTx": "TX total",
+      "totalRx": "RX total",
+      "topPorts": "Puertos con más tráfico",
+      "noData": "No hay datos de puertos disponibles"
+    },
+    "device": {
+      "title": "Información del dispositivo",
+      "description": "Detalles de hardware y red",
+      "model": "Modelo",
+      "vendor": "Fabricante",
+      "serialNumber": "Número de serie",
+      "macAddress": "Dirección MAC",
+      "ipAddress": "Dirección IP",
+      "ipv6Address": "Dirección IPv6",
+      "controllerIp": "IP del controlador",
+      "firmware": "Firmware",
+      "hardwareVersion": "Versión de hardware",
+      "totalPorts": "Total de puertos",
+      "site": "Sitio",
+      "vlans": "VLAN",
+      "clients": "Clientes",
+      "fanStatus": "Estado del ventilador",
+      "status": "Estado",
+      "temperature": "Temperatura",
+      "updateAvailable": "Actualización de firmware disponible",
+      "locatorLed": "LED localizador",
+      "ledActivating": "Activando...",
+      "flashLed": "Parpadear LED"
+    },
+    "lldp": {
+      "title": "Dispositivos conectados (LLDP)",
+      "discovered_one": "{{count}} vecino descubierto",
+      "discovered_other": "{{count}} vecinos descubiertos",
+      "localPort": "Puerto local",
+      "neighbor": "Vecino",
+      "remotePort": "Puerto remoto",
+      "speed": "Velocidad",
+      "poe": "PoE"
+    }
+  },
+  "PortsTab": {
+    "toolbar": {
+      "searchPlaceholder": "Buscar puertos...",
+      "applyProfile": "Aplicar perfil ({{count}})",
+      "clearSelection": "Borrar selección"
+    },
+    "portStatus": {
+      "title": "Estado de puertos",
+      "description": "Haz clic en un puerto para configurarlo • Mayús+clic para selección múltiple"
+    },
+    "legend": {
+      "speed": {
+        "fastEthernet": "10/100 Mbps",
+        "gigabit": "1000 Mbps",
+        "multiGig": "2.5 Gbps",
+        "tenGig": "10 Gbps",
+        "disabled": "Deshabilitado",
+        "disconnected": "Desconectado"
+      },
+      "icons": {
+        "poeDelivering": "PoE suministrando",
+        "lagMember": "Miembro de LAG",
+        "sfp": "SFP",
+        "uplink": "Enlace ascendente"
+      }
+    },
+    "tooltip": {
+      "status": "Estado",
+      "enabledIdle": "Habilitado (inactivo)",
+      "off": "Apagado",
+      "module": "Módulo",
+      "vendor": "Fabricante",
+      "wavelength": "Longitud de onda",
+      "temp": "Temp",
+      "power": "Potencia"
+    },
+    "table": {
+      "port": "Puerto",
+      "status": "Estado",
+      "connection": "Conexión",
+      "speed": "Velocidad",
+      "type": "Tipo",
+      "txSum": "Suma TX",
+      "rxSum": "Suma RX",
+      "actions": "Acciones",
+      "trunk": "Troncal",
+      "access": "Acceso"
+    },
+    "poe": {
+      "enabled": "Habilitado",
+      "off": "Apagado"
+    },
+    "traffic": {
+      "txBytes": "Bytes TX",
+      "txPackets": "Paquetes TX",
+      "txErrors": "Errores TX",
+      "rxBytes": "Bytes RX",
+      "rxPackets": "Paquetes RX",
+      "rxErrors": "Errores RX",
+      "utilization": "Utilización"
+    },
+    "actions": {
+      "configure": "Configurar",
+      "bouncePort": "Reiniciar puerto",
+      "poePowerCycle": "Ciclo de energía PoE",
+      "disable": "Deshabilitar",
+      "enable": "Habilitar",
+      "disablePoe": "Deshabilitar PoE",
+      "enablePoe": "Habilitar PoE",
+      "controlNotSupported": "Control de puerto no compatible"
+    }
+  },
+  "ProfilesTab": {
+    "actions": {
+      "createProfile": "Crear perfil",
+      "edit": "Editar",
+      "duplicate": "Duplicar",
+      "delete": "Eliminar"
+    },
+    "empty": {
+      "title": "Sin perfiles de puerto",
+      "description": "Cree perfiles de puerto para configurar rápidamente varios puertos."
+    },
+    "fields": {
+      "profileType": "Tipo de perfil:",
+      "portsUsing": "Puertos en uso:"
+    }
+  },
+  "SwitchClientsTab": {
+    "stats": {
+      "totalClients": "Clientes totales",
+      "wired": "Cableado",
+      "wireless": "Inalámbrico",
+      "totalTraffic": "Tráfico total",
+      "downloadUpload": "Descarga / Subida"
+    },
+    "columns": {
+      "client": "Cliente",
+      "ipAddress": "Dirección IP",
+      "macAddress": "Dirección MAC",
+      "connection": "Conexión",
+      "vlan": "VLAN",
+      "signal": "Señal",
+      "activity": "Actividad",
+      "traffic": "Tráfico",
+      "uptime": "Tiempo activo",
+      "lastSeen": "Última conexión"
+    },
+    "connectionType": {
+      "wired": "Cableado",
+      "wireless": "Inalámbrico"
+    },
+    "filters": {
+      "all": "Todos",
+      "wired": "Cableado",
+      "wireless": "Inalámbrico"
+    },
+    "unknownDevice": "Dispositivo desconocido",
+    "port": "Puerto {{port}}",
+    "dbm": "{{value}} dBm",
+    "searchPlaceholder": "Buscar clientes por nombre, IP, MAC, SSID...",
+    "itemName": "clientes",
+    "empty": {
+      "title": "No hay clientes conectados",
+      "description": "No hay clientes conectados actualmente a este switch. Los clientes aparecerán aquí cuando los dispositivos se conecten."
+    }
+  },
+  "VlansTab": {
+    "view": {
+      "matrix": "Vista de matriz",
+      "list": "Vista de lista"
+    },
+    "matrix": {
+      "changes": "{{count}} cambios",
+      "title": "Matriz de asignación VLAN a puerto",
+      "toggleHint": "Haga clic en las celdas para alternar:",
+      "untagged": "Sin etiquetar (nativa)",
+      "tagged": "Etiquetada",
+      "emptyExcluded": "Vacío = excluida",
+      "portColumn": "Puerto",
+      "portRow": "Puerto {{index}}"
+    },
+    "actions": {
+      "discard": "Descartar",
+      "applyChanges": "Aplicar cambios",
+      "viewPorts": "Ver puertos"
+    },
+    "list": {
+      "title": "Configuración de VLAN",
+      "description": "VLAN asignadas a los puertos de este switch",
+      "portCounts": "{{untagged}} sin etiquetar, {{tagged}} etiquetadas",
+      "dhcp": "DHCP",
+      "default": "Predeterminada",
+      "vlanName": "VLAN {{vid}}"
+    }
+  }
+}

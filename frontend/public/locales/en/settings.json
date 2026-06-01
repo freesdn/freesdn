@@ -1,0 +1,1007 @@
+{
+  "title": "Settings",
+  "general": "General",
+  "appearance": "Appearance",
+  "modules": "Modules",
+  "security": "Security",
+  "sso": "Single Sign-On",
+  "notifications": "Notifications",
+  "api": "API",
+  "backup": "Backup",
+  "about": "About",
+  "theme": "Theme",
+  "language": "Language",
+  "timezone": "Timezone",
+  "darkMode": "Dark Mode",
+  "lightMode": "Light Mode",
+  "systemTheme": "System Theme",
+  "accentColor": "Accent Color",
+  "enableModule": "Enable Module",
+  "disableModule": "Disable Module",
+  "moduleEnabled": "Module Enabled",
+  "moduleDisabled": "Module Disabled",
+  "ssoProvider": "SSO Provider",
+  "saml": "SAML",
+  "oidc": "OpenID Connect",
+  "ldap": "LDAP",
+  "clientId": "Client ID",
+  "clientSecret": "Client Secret",
+  "issuerUrl": "Issuer URL",
+  "callbackUrl": "Callback URL",
+  "saveChanges": "Save Changes",
+  "resetDefaults": "Reset to Defaults",
+  "version": "Version",
+  "license": "License",
+  "subtitle": "Manage your FreeSDN configuration and preferences.",
+  "tabs": {
+    "general": "General",
+    "notifications": "Notifications",
+    "security": "Security",
+    "modules": "Modules",
+    "appearance": "Appearance",
+    "system": "System"
+  },
+  "messages": {
+    "loadFailed": "Failed to load settings",
+    "saveFailed": "Failed to save settings",
+    "saveFailedWithStatus": "Failed to save settings ({{status}})",
+    "noOrganization": "No organization is associated with current user"
+  },
+  "generalPage": {
+    "description": "Configure basic site settings and regional preferences.",
+    "siteInformation": {
+      "title": "Site Information",
+      "description": "Basic information about your FreeSDN instance",
+      "nameLabel": "Site Name",
+      "namePlaceholder": "My Network Dashboard",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "A brief description of this installation"
+    },
+    "regional": {
+      "title": "Regional Settings",
+      "description": "Configure timezone and date formats",
+      "timezone": "Timezone",
+      "dateFormat": "Date Format",
+      "language": "Language"
+    }
+  },
+  "SettingsPage": {
+    "nav": {
+      "categories": {
+        "organization": "Organization",
+        "securityAccess": "Security & Access",
+        "integrations": "Integrations",
+        "system": "System"
+      },
+      "items": {
+        "general": "General",
+        "appearance": "Appearance",
+        "security": "Security",
+        "access": "Read-only / Write access",
+        "sso": "SSO Providers",
+        "apiKeys": "API Keys",
+        "oauth2Apps": "OAuth2 Apps",
+        "ai": "AI Providers",
+        "notifications": "Notifications",
+        "modules": "Modules",
+        "system": "System Info",
+        "about": "About"
+      }
+    },
+    "timezones": {
+      "utc": "UTC",
+      "easternUs": "Eastern Time (US)",
+      "centralUs": "Central Time (US)",
+      "mountainUs": "Mountain Time (US)",
+      "pacificUs": "Pacific Time (US)",
+      "london": "London (GMT)",
+      "paris": "Paris (CET)",
+      "tokyo": "Tokyo (JST)",
+      "shanghai": "Shanghai (CST)"
+    },
+    "regional": {
+      "selectTimezonePlaceholder": "Select timezone",
+      "selectFormatPlaceholder": "Select format",
+      "selectLanguagePlaceholder": "Select language"
+    },
+    "security": {
+      "saveChanges": "Save Changes",
+      "session": {
+        "title": "Session Security",
+        "description": "Configure session and timeout settings",
+        "timeoutLabel": "Session Timeout (minutes)",
+        "maxAttemptsLabel": "Max Login Attempts"
+      },
+      "auth": {
+        "title": "Authentication",
+        "description": "Multi-factor and password policies",
+        "requireMfaLabel": "Require Multi-Factor Authentication",
+        "requireMfaDescription": "Enforce MFA for all users",
+        "minPasswordLabel": "Minimum Password Length",
+        "requireSpecialLabel": "Require Special Characters",
+        "requireSpecialDescription": "Passwords must contain special characters"
+      },
+      "access": {
+        "title": "Access Control",
+        "description": "IP restrictions and API security",
+        "ipWhitelistLabel": "IP Whitelist",
+        "ipWhitelistPlaceholder": "One IP or CIDR per line (leave empty to allow all)",
+        "ipWhitelistHelp": "Restrict access to specific IP addresses. Leave empty for no restrictions."
+      }
+    },
+    "access": {
+      "title": "Read-only / Write access",
+      "description": "Control whether FreeSDN can write to your devices. Read-only mode is the safe, monitor-only posture, all device writes are refused platform-wide.",
+      "row": {
+        "labelReadOnly": "Read-only mode (monitor only)",
+        "labelWrite": "Read-write mode (manage)",
+        "descReadOnly": "Device writes are disabled. Turn this off to manage and configure devices.",
+        "descWrite": "Device writes are enabled. Turn this on to lock the platform to monitor-only.",
+        "toggleAria": "Toggle read-only mode"
+      },
+      "status": {
+        "readOnly": "Read-only mode is ON. FreeSDN will not write to any device.",
+        "write": "Write access is ON. FreeSDN can apply changes to managed devices."
+      },
+      "toast": {
+        "readOnlyTitle": "Read-only mode enabled",
+        "readOnlyDesc": "Device writes are now disabled platform-wide.",
+        "writeTitle": "Write access enabled",
+        "writeDesc": "Devices can now be managed and configured.",
+        "errorTitle": "Failed to update mode"
+      }
+    },
+    "appearance": {
+      "theme": {
+        "title": "Theme",
+        "description": "Choose your preferred color scheme",
+        "light": {
+          "label": "Light",
+          "desc": "Clean, bright interface"
+        },
+        "dark": {
+          "label": "Dark",
+          "desc": "Reduced eye strain"
+        },
+        "system": {
+          "label": "System",
+          "desc": "Match OS preference"
+        }
+      },
+      "accent": {
+        "title": "Accent Color",
+        "description": "Customize the primary color used across buttons, links, selections, and the sidebar throughout the app"
+      },
+      "preview": {
+        "title": "Live Preview",
+        "primaryButton": "Primary Button",
+        "outline": "Outline",
+        "secondary": "Secondary",
+        "activeBadge": "Active Badge",
+        "outlineBadge": "Outline Badge",
+        "primaryText": "Primary text"
+      },
+      "display": {
+        "title": "Display Options",
+        "description": "Customize interface motion and effects",
+        "animationsLabel": "Enable Animations",
+        "animationsDescription": "Smooth transitions and motion effects throughout the interface"
+      },
+      "autoSaveNote": "Changes are applied and saved automatically"
+    },
+    "system": {
+      "fetchError": "Could not fetch infrastructure health. Some values are static defaults.",
+      "status": {
+        "connected": "Connected",
+        "unknown": "Unknown"
+      },
+      "platform": {
+        "title": "Platform",
+        "version": "Version",
+        "license": "License",
+        "about": "About & Trademarks",
+        "aboutLink": "View"
+      },
+      "database": {
+        "title": "Database",
+        "postgresVersion": "PostgreSQL Version",
+        "connectionPool": "Connection Pool",
+        "connectionPoolValue": "20 + 30 overflow",
+        "schemas": "Schemas",
+        "enabled": "Enabled"
+      },
+      "cacheQueue": {
+        "title": "Cache & Queue",
+        "celeryWorkers": "Celery Workers",
+        "workersActive": "{{workers}} active",
+        "noWorkers": "No workers",
+        "celeryBeat": "Celery Beat",
+        "running": "Running"
+      },
+      "runtime": {
+        "title": "Runtime",
+        "uptime": "Uptime",
+        "apiRoutes": "API Routes",
+        "modulesLoaded": "Modules Loaded",
+        "adapters": "Adapters"
+      },
+      "maintenance": {
+        "title": "Maintenance",
+        "backupDatabase": "Backup Database",
+        "clearCache": "Clear Cache"
+      }
+    },
+    "content": {
+      "general": {
+        "title": "General Settings"
+      },
+      "appearance": {
+        "title": "Appearance Settings",
+        "description": "Customize the look and feel of FreeSDN."
+      },
+      "access": {
+        "title": "Read-only / Write access",
+        "description": "Switch the platform between safe monitor-only (read-only) and full management (read-write)."
+      },
+      "security": {
+        "title": "Security Settings",
+        "description": "Configure authentication and access control."
+      },
+      "ai": {
+        "title": "AI Providers",
+        "description": "Configure LLM providers (OpenAI, Anthropic, Ollama) for the AI assistant."
+      },
+      "notifications": {
+        "title": "Notification Settings",
+        "description": "Manage notification preferences, severity thresholds, quiet hours, category subscriptions, digest batching, and delivery providers."
+      },
+      "modules": {
+        "title": "Module Management",
+        "description": "Enable, disable, and configure FreeSDN modules. Modules add new functionality like cameras, VoIP, firewall management, and more."
+      }
+    }
+  },
+  "AISettingsPage": {
+    "header": {
+      "title": "AI Settings",
+      "subtitle": "Configure LLM providers for the AI assistant"
+    },
+    "providers": {
+      "openai": {
+        "description": "GPT-4o and GPT-4 series models via OpenAI API"
+      },
+      "anthropic": {
+        "description": "Claude 3 series models via Anthropic API"
+      },
+      "ollama": {
+        "description": "Locally-hosted open-source models via Ollama"
+      }
+    },
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "keySet": "Key set"
+    },
+    "fields": {
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "Enter API key...",
+      "apiKeyHint": "Leave blank to keep existing key",
+      "baseUrl": "Base URL",
+      "defaultModel": "Default Model",
+      "defaultModelPlaceholder": "Select default model..."
+    },
+    "test": {
+      "success": "Connection successful",
+      "failed": "Connection failed",
+      "requestFailed": "Request failed"
+    },
+    "actions": {
+      "save": "Save",
+      "testConnection": "Test Connection",
+      "configureApiKeyFirst": "Configure API key first",
+      "update": "Update"
+    },
+    "errors": {
+      "saveFailed": "Failed to save configuration",
+      "governanceUpdateFailed": "Failed to update governance settings",
+      "governanceLoadFailed": "Failed to load governance data",
+      "loadProvidersPrefix": "Failed to load AI provider settings. You may need the",
+      "loadProvidersSuffix": "permission."
+    },
+    "policy": {
+      "disabled": {
+        "label": "Disabled",
+        "description": "No LLM access"
+      },
+      "localOnly": {
+        "label": "Local Only",
+        "description": "Ollama only · data stays on-premise"
+      },
+      "cloudApproved": {
+        "label": "Cloud Approved",
+        "description": "OpenAI + Anthropic + Ollama"
+      }
+    },
+    "governance": {
+      "title": "LLM Governance",
+      "description": "Control which LLM providers are allowed and set token budgets",
+      "noProviderHint": "Configure at least one AI provider above before setting governance policy.",
+      "orgPolicy": "Organization Policy",
+      "monthlyBudget": "Monthly Token Budget",
+      "tokenUsage": "Token Usage",
+      "usageSummary": "{{percent}}% used · {{remaining}} tokens remaining"
+    },
+    "callLog": {
+      "title": "Recent LLM Calls",
+      "description": "Privacy-preserving audit log · field names only, no content",
+      "columns": {
+        "time": "Time",
+        "operation": "Operation",
+        "provider": "Provider",
+        "tokens": "Tokens",
+        "latency": "Latency",
+        "status": "Status"
+      }
+    },
+    "pagination": {
+      "showing": "Showing {{from}}-{{to}} of {{total}}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "info": {
+      "title": "About AI providers",
+      "encryption": "API keys are encrypted at rest using Fernet symmetric encryption",
+      "ollamaLocal": "Ollama connects to a locally-running model server · no data leaves your network",
+      "readAccess": "The AI assistant only has read access to your network data unless you explicitly grant write tools"
+    }
+  },
+  "APIKeysTab": {
+    "header": {
+      "title": "API Keys",
+      "description": "Manage API keys for programmatic access to FreeSDN from scripts and integrations.",
+      "newKey": "New API Key"
+    },
+    "loadError": "Some data failed to load. Results may be incomplete.",
+    "loading": "Loading API keys…",
+    "empty": {
+      "title": "No API keys yet",
+      "description": "Create your first API key to enable programmatic access. The full key is shown only once at creation time, so be sure to copy it.",
+      "action": "Create API Key"
+    },
+    "badge": {
+      "revoked": "Revoked",
+      "expired": "Expired"
+    },
+    "scopeCount": {
+      "one": "{{count}} scope",
+      "other": "{{count}} scopes"
+    },
+    "lastUsed": "Last used {{date}}",
+    "neverUsed": "Never used",
+    "expiresOn": "Expires {{date}}",
+    "expiredOn": "Expired {{date}}",
+    "created": {
+      "title": "API Key Created",
+      "description": "Copy your API key now.",
+      "notShownAgain": "It will not be shown again.",
+      "storeSecurely": "Store this key securely. Anyone with this key can access the API with your permissions.",
+      "keyLabel": "Your new API key",
+      "copiedConfirm": "I have copied the key"
+    },
+    "create": {
+      "title": "Create API Key",
+      "description": "Create a new API key for programmatic access to FreeSDN.",
+      "submit": "Create Key",
+      "nameLabel": "Name *",
+      "namePlaceholder": "e.g. CI/CD Pipeline, Monitoring Bot",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "What is this key used for?",
+      "scopesLabel": "Scopes",
+      "scopesDescription": "Leave empty to inherit your full permissions. Select specific scopes to limit access.",
+      "expiresLabel": "Expires in (days)",
+      "expiresPlaceholder": "Leave empty for no expiration"
+    },
+    "scopes": {
+      "deviceRead": "Device · Read",
+      "deviceWrite": "Device · Write",
+      "networkRead": "Network · Read",
+      "networkWrite": "Network · Write",
+      "camerasRead": "Cameras · Read",
+      "camerasWrite": "Cameras · Write",
+      "backupRead": "Backup · Read",
+      "backupWrite": "Backup · Write",
+      "automationRead": "Automation · Read",
+      "automationWrite": "Automation · Write"
+    },
+    "validation": {
+      "nameRequired": "Name is required",
+      "expiresRange": "Must be 1-365 days, or empty for no expiration"
+    },
+    "revoke": {
+      "title": "Revoke API Key",
+      "description": "This key will stop working immediately. Any integrations using it will break.",
+      "cancel": "Cancel",
+      "confirm": "Revoke Key",
+      "revoking": "Revoking…"
+    }
+  },
+  "ModuleDetailPage": {
+    "section": {
+      "noneConfigured": "None configured"
+    },
+    "backToModules": "Back to Modules",
+    "notFound": {
+      "title": "Module Not Found",
+      "description": "The module \"{{moduleId}}\" could not be found."
+    },
+    "breadcrumb": {
+      "modules": "Modules",
+      "settings": "Settings"
+    },
+    "badges": {
+      "core": "Core",
+      "beta": "Beta",
+      "premium": "Premium",
+      "comingSoon": "Coming soon"
+    },
+    "byAuthor": "by {{author}}",
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "actions": {
+      "reload": "Reload",
+      "reloadTooltip": "Refresh module data from the server",
+      "disable": "Disable",
+      "enable": "Enable",
+      "dismiss": "Dismiss",
+      "viewDocs": "View Docs",
+      "cancel": "Cancel",
+      "disableModule": "Disable Module",
+      "enableModule": "Enable Module",
+      "comingSoonTooltip": "This module is a preview and cannot be enabled yet."
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete.",
+      "toggleFailed": "Failed to update module: {{error}}"
+    },
+    "banners": {
+      "missingDeps": {
+        "title": "Missing Dependencies",
+        "body": "This module requires:"
+      },
+      "requiredBy": {
+        "one": "Required by {{count}} module",
+        "other": "Required by {{count}} modules"
+      },
+      "comingSoon": {
+        "title": "Coming soon",
+        "body": "This module is a preview and is not yet available to enable. It is included so you can review its capabilities ahead of general availability."
+      }
+    },
+    "minVersion": "(≥ {{version}})",
+    "tabs": {
+      "overview": "Overview",
+      "capabilities": "Capabilities",
+      "permissions": "Permissions",
+      "deviceTypes": "Device Types",
+      "navigation": "Navigation",
+      "dependencies": "Dependencies"
+    },
+    "sections": {
+      "moduleInfo": "Module Information",
+      "statusActivation": "Status & Activation",
+      "dashboardWidgets": "Dashboard Widgets",
+      "capabilities": "Capabilities",
+      "permissions": "Permissions",
+      "supportedDeviceTypes": "Supported Device Types",
+      "navigationItems": "Navigation Items",
+      "requiredDependencies": "Required Dependencies",
+      "usedBy": "Used By"
+    },
+    "fields": {
+      "moduleId": "Module ID",
+      "version": "Version",
+      "category": "Category",
+      "author": "Author",
+      "license": "License",
+      "minCoreVersion": "Min Core Version",
+      "documentation": "Documentation",
+      "state": "State",
+      "coreModule": "Core Module",
+      "beta": "Beta",
+      "premium": "Premium",
+      "enabledAt": "Enabled At",
+      "disabledAt": "Disabled At"
+    },
+    "yes": "Yes",
+    "no": "No",
+    "widgets": {
+      "autoRefresh": "Auto-refresh"
+    },
+    "empty": {
+      "capabilities": "This module does not declare any capabilities.",
+      "permissions": "This module does not require any permissions.",
+      "deviceTypes": "This module does not target specific device types.",
+      "navigationItems": "This module does not register navigation items.",
+      "dependencies": "This module has no dependencies.",
+      "usedBy": "No other enabled modules depend on this module."
+    },
+    "nav": {
+      "order": "order: {{order}}",
+      "parent": "parent: {{parent}}"
+    },
+    "dep": {
+      "minVersionMono": "≥ {{version}}",
+      "optional": "Optional",
+      "installed": "Installed",
+      "missing": "Missing"
+    },
+    "dialog": {
+      "disableTitle": "Disable {{name}}?",
+      "enableTitle": "Enable {{name}}?",
+      "disableDescription": "This will deactivate the module for your organization. Module data and configuration will be preserved.",
+      "enableDescription": "This will activate the module and register its routes, navigation items, and permissions.",
+      "dependentsWarningPrefix": "The following enabled modules depend on",
+      "dependentsWarningSuffix": ":",
+      "missingDepsWarning": "Missing required dependencies: {{deps}}"
+    }
+  },
+  "ModulesSettingsTab": {
+    "categories": {
+      "core": "Core",
+      "network": "Network",
+      "surveillance": "Surveillance",
+      "security": "Security",
+      "communication": "Communication",
+      "monitoring": "Monitoring",
+      "system": "System"
+    },
+    "row": {
+      "coreModule": "Core module",
+      "beta": "Beta",
+      "missingDeps": "Missing deps: {{deps}}",
+      "comingSoon": "Coming soon",
+      "comingSoonAria": "Coming soon — not yet available",
+      "comingSoonTooltip": "This module is a preview and cannot be enabled yet.",
+      "capsCount_one": "{{count}} cap",
+      "capsCount_other": "{{count}} caps"
+    },
+    "warnings": {
+      "dependents": "The following enabled modules depend on {{module}}: {{dependents}}",
+      "missingRequired": "Missing required dependencies: {{deps}}"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete.",
+      "toggleFailed": "Failed to update module: {{error}}"
+    },
+    "stats": {
+      "total": "Total Modules",
+      "enabled": "Enabled",
+      "ofTotal": "of {{total}}",
+      "core": "Core",
+      "disabled": "Disabled"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Filter modules...",
+      "categoryPlaceholder": "Category",
+      "allCategories": "All Categories",
+      "refresh": "Refresh"
+    },
+    "actions": {
+      "dismiss": "Dismiss",
+      "cancel": "Cancel",
+      "disableModule": "Disable Module",
+      "enableModule": "Enable Module"
+    },
+    "columns": {
+      "module": "Module",
+      "category": "Category",
+      "version": "Version",
+      "caps": "Caps",
+      "usedBy": "Used By",
+      "active": "Active"
+    },
+    "empty": {
+      "title": "No modules match the current filter",
+      "description": "Try adjusting your search or category filter"
+    },
+    "footer": {
+      "count": "{{shown}} of {{total}} modules",
+      "filtered": "(filtered)"
+    },
+    "dialog": {
+      "titleDisable": "Disable {{module}}",
+      "titleEnable": "Enable {{module}}",
+      "descriptionDisable": "This will disable the module and hide its pages from navigation. Module data will be preserved.",
+      "descriptionEnable": "This will enable the module and register its routes and navigation items."
+    }
+  },
+  "NotificationsSettingsTab": {
+    "categories": {
+      "system": {
+        "label": "System",
+        "desc": "Platform updates, maintenance"
+      },
+      "security": {
+        "label": "Security",
+        "desc": "Login alerts, access changes"
+      },
+      "device": {
+        "label": "Devices",
+        "desc": "Online / offline status changes"
+      },
+      "network": {
+        "label": "Network",
+        "desc": "Connectivity, performance"
+      },
+      "alert": {
+        "label": "Alerts",
+        "desc": "Alert rule triggers"
+      },
+      "user": {
+        "label": "Users",
+        "desc": "Account changes, invitations"
+      }
+    },
+    "channels": {
+      "email": "Email",
+      "slack": "Slack",
+      "in_app": "In-App"
+    },
+    "general": {
+      "title": "General Preferences",
+      "description": "Master notification controls and per-channel settings",
+      "enable": {
+        "label": "Enable Notifications",
+        "description": "Master switch · when off, no notifications are sent through any channel"
+      },
+      "channelToggles": "Channel Toggles",
+      "email": {
+        "label": "Email Notifications",
+        "description": "Receive notifications via email"
+      },
+      "slack": {
+        "label": "Slack Notifications",
+        "description": "Send notifications to Slack channels"
+      },
+      "inApp": {
+        "label": "In-App Notifications",
+        "description": "Show notifications in the FreeSDN notification center"
+      },
+      "emailOverride": {
+        "label": "Notification Email Override",
+        "description": "Send email notifications to a different address than your account email",
+        "placeholder": "Leave empty to use account email"
+      }
+    },
+    "severity": {
+      "title": "Severity Thresholds",
+      "description": "Only receive notifications at or above these severity levels",
+      "minForChannel": "Minimum severity for {{channel}} notifications",
+      "example": {
+        "before": "For example, setting Email to \"error\" means only ",
+        "error": "error",
+        "middle": " and ",
+        "critical": "critical",
+        "after": " notifications will be emailed."
+      }
+    },
+    "quietHours": {
+      "title": "Quiet Hours",
+      "description": "Pause notifications during specific hours · critical alerts still come through",
+      "active": "Active",
+      "enable": {
+        "label": "Enable Quiet Hours",
+        "description": "Silence non-critical notifications during a time window"
+      },
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "timezone": "Timezone",
+      "bypass": {
+        "label": "Bypass Categories",
+        "description": "These categories will always send notifications, even during quiet hours"
+      }
+    },
+    "subscriptions": {
+      "title": "Category Subscriptions",
+      "description": "Choose which channels receive notifications for each category",
+      "categoryHeader": "Category"
+    },
+    "digest": {
+      "title": "Digest & Batching",
+      "description": "Batch non-critical notifications into periodic digest emails",
+      "enable": {
+        "label": "Enable Digest",
+        "description": "Group non-critical notifications into periodic summary emails"
+      },
+      "frequency": "Frequency",
+      "frequencies": {
+        "realtime": "Real-time (no digest)",
+        "hourly": "Hourly",
+        "daily": "Daily",
+        "weekly": "Weekly"
+      },
+      "deliveryTime": "Delivery Time",
+      "deliveryTimeHint": "Based on your quiet hours timezone"
+    },
+    "providers": {
+      "title": "Delivery Providers",
+      "description": "Gmail, SMTP, Mailgun, SendGrid, Brevo, SES, Postmark, Resend, Slack, Teams, SMS, Webhooks",
+      "configuredCount": "{{count}} configured",
+      "verifiedCount": "{{count}} verified",
+      "empty": {
+        "title": "No Providers Configured",
+        "description": "Head to the dedicated Providers page to set up your email, Slack, Teams, SMS, or webhook integrations."
+      },
+      "errors": {
+        "one": "{{count}} provider has errors · check the Providers page for details.",
+        "other": "{{count}} providers have errors · check the Providers page for details."
+      },
+      "manage": {
+        "title": "Manage Providers",
+        "description": "Full provider configuration, testing console, health diagnostics, and debug tools."
+      }
+    },
+    "loadError": "Some data failed to load. Results may be incomplete.",
+    "save": {
+      "success": "Preferences saved",
+      "error": "Failed to save preferences",
+      "idle": "Unsaved changes are local until you save",
+      "button": "Save Preferences"
+    }
+  },
+  "OAuth2AppsTab": {
+    "header": {
+      "title": "OAuth2 Applications",
+      "description": "Register third-party applications for OAuth2 Authorization Code integration with PKCE."
+    },
+    "actions": {
+      "registerApp": "Register App",
+      "rotate": "Rotate",
+      "rotateTitle": "Rotate client secret",
+      "cancel": "Cancel",
+      "deleting": "Deleting…",
+      "deleteApp": "Delete App"
+    },
+    "status": {
+      "inactive": "Inactive"
+    },
+    "loading": "Loading apps…",
+    "errors": {
+      "loadFailed": "Some data failed to load. Results may be incomplete."
+    },
+    "empty": {
+      "title": "No OAuth2 apps registered",
+      "description": "Register your first app to enable OAuth2 integrations and grant programmatic access via the Authorization Code flow."
+    },
+    "fields": {
+      "clientId": "Client ID",
+      "clientSecret": "Client Secret",
+      "clientIdLabel": "Client ID:",
+      "secretLabel": "Secret:",
+      "applicationNameRequired": "Application Name *",
+      "description": "Description",
+      "homepageUrl": "Homepage URL"
+    },
+    "placeholders": {
+      "applicationName": "e.g. My Dashboard App",
+      "description": "What does this application do?",
+      "redirectUri": "https://myapp.example.com/callback",
+      "homepageUrl": "https://myapp.example.com"
+    },
+    "redirectUris": {
+      "add": "Add redirect URI",
+      "label": "Redirect URIs *",
+      "description": "Add one URI per row.",
+      "empty": "No redirect URIs",
+      "itemLabel": "Redirect URI {{index}}",
+      "removeAria": "Remove redirect URI {{index}}"
+    },
+    "meta": {
+      "redirectUriCount": "{{count}} redirect URI",
+      "redirectUriCountPlural": "{{count}} redirect URIs",
+      "registered": "Registered {{date}}",
+      "website": "Website"
+    },
+    "secretDialog": {
+      "title": "Client Secret",
+      "copyNow": "Copy the client secret now.",
+      "notShownAgain": "It will not be shown again.",
+      "storeSecurely": "Store this secret securely. It cannot be recovered.",
+      "stored": "I have stored the secret"
+    },
+    "registerDialog": {
+      "title": "Register OAuth2 App",
+      "description": "Register a new application to receive a client ID and secret for OAuth2 integration."
+    },
+    "deleteDialog": {
+      "title": "Delete OAuth2 App",
+      "description": "This app will be deactivated and all issued tokens revoked immediately."
+    },
+    "validation": {
+      "nameRequired": "Application name is required",
+      "uriRequired": "URI required",
+      "atLeastOneUri": "At least one redirect URI is required"
+    }
+  },
+  "PluginsPage": {
+    "header": {
+      "title": "Plugins",
+      "description": "Install and manage third-party plugins to extend FreeSDN"
+    },
+    "actions": {
+      "installPlugin": "Install Plugin",
+      "install": "Install",
+      "cancel": "Cancel",
+      "clearFilters": "Clear filters",
+      "enable": "Enable",
+      "disable": "Disable",
+      "update": "Update",
+      "uninstall": "Uninstall"
+    },
+    "install": {
+      "title": "Install Plugin",
+      "description": "Upload a plugin ZIP file or provide a download URL.",
+      "trustWarningTitle": "Plugin Trust Warning",
+      "trustWarningBody": "Plugins run with full backend permissions and have access to your database, credentials, and network. Only install plugins from sources you trust. Review the code before installation.",
+      "trustAcknowledge": "I understand this plugin will run with full backend permissions and I trust its source.",
+      "uploadZip": "Upload ZIP",
+      "fromUrl": "From URL",
+      "selectedFileAria": "Selected file: {{name}}",
+      "selectFileAria": "Click to select a plugin ZIP file",
+      "selectFilePrompt": "Click to select a plugin ZIP file",
+      "urlPlaceholder": "https://example.com/plugin.zip"
+    },
+    "capabilities": {
+      "permissions_one": "{{count}} permission",
+      "permissions_other": "{{count}} permissions",
+      "uiPages": "UI pages",
+      "restApi": "REST API",
+      "configurable": "Configurable",
+      "dependencies_one": "{{count}} dep",
+      "dependencies_other": "{{count}} deps"
+    },
+    "row": {
+      "selectAria": "Select {{name}}",
+      "by": "By",
+      "homepage": "Homepage"
+    },
+    "status": {
+      "installed": "installed",
+      "disabled": "disabled",
+      "error": "error"
+    },
+    "stats": {
+      "total": {
+        "title": "Total Plugins",
+        "description": "Installed"
+      },
+      "enabled": {
+        "title": "Enabled",
+        "description": "Currently active"
+      },
+      "disabled": {
+        "title": "Disabled",
+        "description": "Inactive"
+      },
+      "errors": {
+        "title": "Errors",
+        "description": "Need attention"
+      }
+    },
+    "searchPlaceholder": "Search plugins by name or description…",
+    "empty": {
+      "title": "No plugins installed",
+      "description": "Install a plugin ZIP file to extend FreeSDN functionality."
+    },
+    "itemName": "plugin",
+    "confirmBulkUninstall": "Uninstall {{count}} plugin(s)?",
+    "uninstallDialog": {
+      "title": "Uninstall plugin?",
+      "description": "This will call the plugin's uninstall hook and remove all plugin files. Plugin settings may remain in the database."
+    },
+    "errors": {
+      "installFailed": "Install failed",
+      "toggleFailed": "Toggle failed",
+      "uninstallFailed": "Uninstall failed",
+      "loadFailed": "Failed to load plugins"
+    }
+  },
+  "SSOSettingsPage": {
+    "header": {
+      "title": "SSO / Identity Providers",
+      "subtitle": "Manage OIDC, SAML, and LDAP identity providers for single sign-on."
+    },
+    "backToSecurity": "Back to Security Settings",
+    "backToProviders": "Back to providers",
+    "confirmDelete": "Are you sure you want to delete this SSO provider?",
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled"
+    },
+    "columns": {
+      "provider": "Provider",
+      "protocol": "Protocol",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "actions": {
+      "addProvider": "Add Provider",
+      "refresh": "Refresh",
+      "testConnection": "Test connection",
+      "edit": "Edit",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "createProvider": "Create Provider",
+      "updateProvider": "Update Provider"
+    },
+    "empty": {
+      "title": "No SSO providers configured yet",
+      "description": "Add an OIDC, SAML, or LDAP identity provider to enable single sign-on for your users.",
+      "action": "Add your first provider"
+    },
+    "form": {
+      "addTitle": "Add SSO Provider",
+      "editTitle": "Edit Provider"
+    },
+    "fields": {
+      "providerName": "Provider Name *",
+      "providerNamePlaceholder": "e.g. Company Azure AD",
+      "slug": "Slug *",
+      "protocol": "Protocol *",
+      "enabled": "Enabled"
+    },
+    "placeholders": {
+      "unchanged": "(unchanged)",
+      "autoDiscoveredFromIssuer": "(auto-discovered from issuer)",
+      "autoDiscovered": "(auto-discovered)"
+    },
+    "oidc": {
+      "legend": "OIDC Configuration",
+      "clientId": "Client ID *",
+      "clientSecret": "Client Secret",
+      "issuerUrl": "Issuer URL *",
+      "scopes": "Scopes",
+      "authorizationEndpoint": "Authorization Endpoint",
+      "tokenEndpoint": "Token Endpoint",
+      "userinfoEndpoint": "Userinfo Endpoint"
+    },
+    "saml": {
+      "legend": "SAML Configuration",
+      "entityId": "IdP Entity ID *",
+      "ssoUrl": "SSO URL *",
+      "sloUrl": "SLO URL",
+      "certificate": "IdP Certificate (PEM) *"
+    },
+    "ldap": {
+      "legend": "LDAP Configuration",
+      "url": "LDAP URL *",
+      "baseDn": "Base DN *",
+      "bindDn": "Bind DN *",
+      "bindPassword": "Bind Password",
+      "userFilter": "User Filter",
+      "useSsl": "Use SSL/TLS (ldaps)"
+    },
+    "provisioning": {
+      "legend": "User Provisioning",
+      "autoCreate": "Auto-create users on first SSO login (JIT provisioning)",
+      "defaultRole": "Default Role"
+    },
+    "roles": {
+      "viewer": "Viewer",
+      "operator": "Operator",
+      "admin": "Admin"
+    },
+    "test": {
+      "ok": "OK",
+      "failed": "Failed",
+      "connectionFailed": "Connection test failed"
+    },
+    "errors": {
+      "loadFailed": "Failed to load SSO providers",
+      "saveFailed": "Failed to save provider",
+      "deleteFailed": "Failed to delete provider"
+    }
+  }
+}

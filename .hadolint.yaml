@@ -1,0 +1,18 @@
+# FreeSDN - Hadolint Configuration
+# Dockerfile linting rules.
+# https://github.com/hadolint/hadolint
+
+ignored:
+  # DL3008: Pin versions in apt-get install.
+  # We intentionally use apt-get upgrade and unpinned installs for
+  # automatic security patches across Debian Trixie containers.
+  - DL3008
+
+  # DL3013: Pin versions in pip install.
+  # We use Poetry with a lockfile for deterministic Python builds.
+  - DL3013
+
+trustedRegistries:
+  - docker.io
+  - ghcr.io
+  - index.docker.io

@@ -1,0 +1,45 @@
+[
+    {
+        "id": "ssid-001",
+        "wlanId": "wlan-001",
+        "name": "Corporate-WiFi",
+        "enable": true,
+        "ssid": "Corporate-WiFi",
+        "band": "5g",
+        "security": "wpa2_personal",
+        "securityMode": "wpa2_personal",
+        "vlanId": 10,
+        "guestNetwork": false,
+        "clientIsolation": false,
+        "bandSteering": true,
+        "broadcast": true
+    },
+    {
+        "id": "ssid-002",
+        "wlanId": "wlan-002",
+        "name": "Guest-WiFi",
+        "enable": true,
+        "ssid": "Guest-WiFi",
+        "band": "2g",
+        "security": "wpa2_personal",
+        "vlanId": 100,
+        "guestNetwork": true,
+        "clientIsolation": true,
+        "bandSteering": false,
+        "broadcast": true
+    },
+    {
+        "id": "ssid-003",
+        "wlanId": "wlan-003",
+        "name": "IoT-Network",
+        "enable": false,
+        "ssid": "IoT-Network",
+        "band": "2g",
+        "security": "wpa2_personal",
+        "vlanId": 30,
+        "guestNetwork": false,
+        "clientIsolation": true,
+        "bandSteering": false,
+        "broadcast": false
+    }
+]

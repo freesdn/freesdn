@@ -1,0 +1,587 @@
+{
+  "TailscaleSetupWizard": {
+    "adminConsole": "Consola de administración de Tailscale",
+    "states": {
+      "not_installed": {
+        "label": "No instalado",
+        "description": "Tailscale no está instalado en este contenedor."
+      },
+      "daemon_stopped": {
+        "label": "Demonio detenido",
+        "description": "El demonio de Tailscale no se está ejecutando. Inícielo para continuar."
+      },
+      "needs_login": {
+        "label": "Requiere autenticación",
+        "description": "El demonio de Tailscale se está ejecutando pero no está autenticado. Inicie sesión para unirse a su tailnet."
+      },
+      "awaiting_auth": {
+        "label": "Esperando autorización",
+        "description": "Abra la URL de autorización en su navegador para completar el inicio de sesión."
+      },
+      "connected": {
+        "label": "Conectado",
+        "description": "Tailscale está conectado y listo para la red de malla."
+      },
+      "error": {
+        "label": "Error",
+        "description": "Se produjo un error con la configuración de Tailscale."
+      }
+    },
+    "nodeInfo": {
+      "title": "Información del nodo de Tailscale",
+      "hostname": "Nombre de host",
+      "tailscaleIp": "IP de Tailscale",
+      "tailnet": "Tailnet",
+      "magicDns": "MagicDNS",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "peers": "Pares",
+      "peerCount": "{{count}} dispositivos",
+      "ipv6": "IPv6",
+      "notAvailable": "N/D"
+    },
+    "fields": {
+      "hostname": "Nombre de host",
+      "hostnameHelp": "El nombre con el que aparecerá este nodo en su tailnet."
+    },
+    "authKeyForm": {
+      "authKeyLabel": "Clave de autenticación",
+      "authKeyHelpPrefix": "Genere una clave de autenticación desde",
+      "authKeyHelpSuffix": ". Use una clave reutilizable o de un solo uso.",
+      "authenticating": "Autenticando...",
+      "connect": "Conectar con clave de autenticación"
+    },
+    "advanced": {
+      "show": "Mostrar",
+      "hide": "Ocultar",
+      "label": "Opciones avanzadas"
+    },
+    "options": {
+      "acceptRoutes": {
+        "label": "Aceptar rutas",
+        "description": "Aceptar rutas de subred anunciadas por los pares",
+        "descriptionLogin": "Aceptar rutas de subred de otros nodos (--accept-routes)"
+      },
+      "advertiseRoutes": {
+        "label": "Anunciar rutas",
+        "description": "Subredes CIDR separadas por comas para exponer a su tailnet."
+      },
+      "exitNode": {
+        "label": "Anunciar como nodo de salida",
+        "description": "Enrutar todo el tráfico de los pares a través de este nodo"
+      },
+      "shieldsUp": {
+        "label": "Escudos activados",
+        "description": "Bloquear conexiones entrantes de pares del tailnet",
+        "descriptionLogin": "Bloquear conexiones entrantes de otros nodos del tailnet"
+      },
+      "acceptDns": {
+        "label": "Aceptar DNS",
+        "description": "Usar los servidores de nombres de MagicDNS de su tailnet"
+      }
+    },
+    "interactive": {
+      "generating": "Generando URL de inicio de sesión...",
+      "loginViaBrowser": "Iniciar sesión por navegador",
+      "openUrlInstruction": "Abra la URL de abajo en su navegador para autorizar este nodo en su tailnet.",
+      "openInBrowser": "Abrir en el navegador",
+      "autoUpdateNote": "Después de autorizar, el estado se actualizará automáticamente."
+    },
+    "configure": {
+      "title": "Configuración",
+      "description": "Modifique la configuración del agente de Tailscale sin volver a autenticarse.",
+      "applying": "Aplicando...",
+      "apply": "Aplicar configuración"
+    },
+    "authenticate": {
+      "title": "Autenticar Tailscale",
+      "description": "Elija cómo autenticar este nodo de FreeSDN con su cuenta de Tailscale.",
+      "authKeyTab": "Clave de autenticación",
+      "browserTab": "Inicio de sesión por navegador"
+    },
+    "authKeyTip": {
+      "label": "Clave de autenticación (recomendado):",
+      "prefix": "Genere una clave de preautenticación desde la",
+      "suffix": ". Esto permite la inscripción sin intervención y sin interacción del navegador · ideal para implementaciones de producción."
+    },
+    "loading": {
+      "title": "Comprobando el estado de Tailscale...",
+      "description": "Consultando el estado de configuración del agente de Tailscale."
+    },
+    "statusError": {
+      "title": "No se puede comprobar el estado de configuración",
+      "description": "No se pudo acceder al endpoint de configuración de Tailscale. Asegúrese de que el backend esté en ejecución."
+    },
+    "notInstalled": {
+      "title": "Tailscale no instalado",
+      "description": "El contenedor de la API no tiene Tailscale instalado. Reconstruya el contenedor con el Dockerfile actualizado para instalar Tailscale."
+    },
+    "daemonStopped": {
+      "title": "Iniciar el demonio de Tailscale",
+      "descriptionPrefix": "Tailscale está instalado pero el demonio",
+      "descriptionSuffix": "no se está ejecutando. Inícielo para comenzar el proceso de autenticación.",
+      "starting": "Iniciando demonio...",
+      "start": "Iniciar el demonio de Tailscale"
+    },
+    "unexpectedState": {
+      "title": "Estado inesperado",
+      "descriptionPrefix": "Tailscale está en el estado"
+    },
+    "quickActions": {
+      "title": "Acciones rápidas",
+      "refreshStatus": "Actualizar estado",
+      "disconnect": "Desconectar",
+      "logout": "Cerrar sesión"
+    },
+    "confirm": {
+      "disconnect": "¿Desconectar de la red de Tailscale?",
+      "logout": "Cerrar sesión desautorizará este nodo de su tailnet. ¿Continuar?"
+    },
+    "actions": {
+      "copy": "Copiar",
+      "retry": "Reintentar",
+      "refresh": "Actualizar",
+      "reconnect": "Reconectar"
+    },
+    "toast": {
+      "copied": {
+        "title": "Copiado",
+        "description": "{{label}} copiado al portapapeles"
+      },
+      "copyFailed": {
+        "title": "Error al copiar",
+        "description": "Acceso al portapapeles denegado"
+      },
+      "loginUrlCopied": "URL de inicio de sesión copiada al portapapeles",
+      "warning": "Advertencia",
+      "daemonStarted": "Demonio iniciado",
+      "startDaemonFailed": "No se pudo iniciar el demonio",
+      "connected": "¡Conectado!",
+      "joinedTailnet": "Se unió al tailnet como {{hostname}}",
+      "loginFailed": "Error de inicio de sesión",
+      "authFailed": "Error de autenticación",
+      "loginUrlReady": "URL de inicio de sesión lista",
+      "loginUrlReadyDescription": "Abra la URL en su navegador para autorizar este nodo.",
+      "interactiveLoginFailed": "Error en el inicio de sesión interactivo",
+      "configured": "Configurado",
+      "configureFailed": "Error de configuración",
+      "disconnected": "Desconectado",
+      "disconnectFailed": "Error al desconectar",
+      "reconnected": "Reconectado",
+      "reconnectFailed": "Error al reconectar",
+      "loggedOut": "Sesión cerrada",
+      "logoutFailed": "Error al cerrar sesión"
+    }
+  },
+  "VPNPage": {
+    "common": {
+      "error": "Error",
+      "cancel": "Cancelar",
+      "delete": "Eliminar",
+      "saving": "Guardando...",
+      "ping": "Ping",
+      "connected": "Conectado",
+      "offline": "Desconectado",
+      "online": "En línea",
+      "na": "N/D",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado"
+    },
+    "reconnect": {
+      "resetToast": "Reconexión restablecida",
+      "resetFailed": "No se pudo restablecer la reconexión",
+      "retrying": "Reconectando... intento {{attempt}}/{{max}} (próximo reintento en {{seconds}}s)",
+      "exhausted": "Reconexión automática agotada",
+      "reset": "Restablecer"
+    },
+    "health": {
+      "title": "Historial de estado",
+      "uptime": "Tiempo activo:",
+      "avg": "Prom.: {{value}}ms",
+      "max": "Máx.: {{value}}ms",
+      "loadError": "No se pudo cargar el historial de estado",
+      "noData": "No hay datos de comprobación de estado para este rango de tiempo",
+      "healthy": "Saludable",
+      "unhealthy": "No saludable",
+      "latency": "Latencia:"
+    },
+    "connectionCard": {
+      "endpoint": "Extremo:",
+      "localIp": "IP local:",
+      "latency": "Latencia:",
+      "traffic": "Tráfico:",
+      "uptime": "Tiempo activo:",
+      "disconnectConfirm": "¿Desconectar la conexión VPN \"{{name}}\"?",
+      "disconnect": "Desconectar",
+      "connect": "Conectar",
+      "editAria": "Editar conexión",
+      "deleteAria": "Eliminar conexión",
+      "hideHealth": "Ocultar historial de estado",
+      "showHealth": "Mostrar historial de estado"
+    },
+    "connectionForm": {
+      "updatedToast": "Conexión actualizada",
+      "createdToast": "Conexión creada",
+      "updatedDesc": "{{name}} se actualizó correctamente.",
+      "createdDesc": "{{name}} se creó correctamente.",
+      "saveFailed": "No se pudo guardar la conexión",
+      "editTitle": "Editar conexión VPN",
+      "newTitle": "Nueva conexión VPN",
+      "editDescription": "Actualice la configuración de la conexión a continuación.",
+      "newDescription": "Configure una nueva conexión VPN a una red remota.",
+      "connectionName": "Nombre de la conexión",
+      "connectionNamePlaceholder": "p. ej., WireGuard de oficina",
+      "vpnProvider": "Proveedor de VPN",
+      "endpoint": "Extremo",
+      "port": "Puerto",
+      "localIp": "IP local",
+      "remoteIp": "IP remota",
+      "allowedIps": "IP permitidas",
+      "allowedIpsHelp": "Lista separada por comas de CIDR enrutados a través de este túnel.",
+      "dnsServers": "Servidores DNS",
+      "openvpnSettings": "Configuración de OpenVPN",
+      "configFilePath": "Ruta del archivo de configuración",
+      "ovpnConfigContent": "Configuración de OpenVPN (.ovpn)",
+      "ovpnConfigContentHelp": "Pegue la configuración .ovpn completa del cliente (ca/cert/key en línea). Requerido para conectar. Las directivas de script/management se rechazan.",
+      "wireguardSettings": "Configuración de WireGuard",
+      "wgConfigContent": "Configuración de WireGuard",
+      "wgConfigContentHelp": "Pegue la configuración wg-quick completa (Interface + Peer). Requerido para conectar. PostUp/PreUp/PostDown/PreDown se rechazan.",
+      "protocol": "Protocolo",
+      "netbirdSettings": "Configuración de Netbird",
+      "setupKey": "Clave de configuración",
+      "setupKeyPlaceholder": "Clave de configuración del panel de Netbird",
+      "managementUrl": "URL de administración",
+      "updateConnection": "Actualizar conexión",
+      "createConnection": "Crear conexión"
+    },
+    "deleteDialog": {
+      "deletedToast": "Conexión eliminada",
+      "deletedDesc": "{{name}} se ha eliminado.",
+      "deleteFailed": "No se pudo eliminar la conexión",
+      "title": "Eliminar conexión VPN",
+      "confirmPrefix": "¿Seguro que desea eliminar",
+      "confirmSuffix": "? Esta acción no se puede deshacer.",
+      "deleting": "Eliminando..."
+    },
+    "tailscaleNode": {
+      "tailscaleIp": "IP de Tailscale",
+      "publicIp": "IP pública",
+      "os": "SO",
+      "relay": "Relé",
+      "advertisedRoutes": "Rutas anunciadas:",
+      "tags": "Etiquetas:"
+    },
+    "netbirdPeer": {
+      "ipAddress": "Dirección IP",
+      "connection": "Conexión",
+      "directP2P": "Directa (P2P)",
+      "relay": "Relé",
+      "relayWith": "Relé ({{relay}})",
+      "lastHandshake": "Último handshake",
+      "routes": "Rutas:"
+    },
+    "siteConfig": {
+      "updatedToast": "VPN del sitio actualizada",
+      "updatedDesc": "Se guardó la configuración de VPN para {{name}}.",
+      "saveFailed": "No se pudo guardar la configuración de VPN del sitio",
+      "title": "Configurar VPN para {{name}}",
+      "description": "Configure el acceso VPN para alcanzar los dispositivos de la red de este sitio.",
+      "vpnType": "Tipo de VPN",
+      "directNoVpn": "Directa (sin VPN)",
+      "tailscaleHostname": "Nombre de host de Tailscale",
+      "tailscaleHostnamePlaceholder": "p. ej., router-sucursal",
+      "tailscaleHostnameHelp": "El nombre de máquina de Tailscale que proporciona acceso a la red de este sitio.",
+      "wireguardInterface": "Interfaz de WireGuard",
+      "peerId": "ID de par",
+      "peerIdPlaceholder": "ID de par de Netbird para este sitio",
+      "networkGroup": "Grupo de red",
+      "remoteSubnets": "Subredes remotas",
+      "remoteSubnetsHelp": "Lista separada por comas de subredes accesibles a través de esta conexión VPN.",
+      "healthCheckIp": "IP de comprobación de estado",
+      "healthCheckIpHelp": "Dirección IP a la que hacer ping para la supervisión del estado de la VPN.",
+      "saveConfiguration": "Guardar configuración"
+    },
+    "templateDialog": {
+      "createdToast": "Plantilla creada",
+      "createdDesc": "{{name}} se ha creado.",
+      "createFailed": "No se pudo crear la plantilla",
+      "title": "Nueva plantilla de túnel",
+      "description": "Cree una plantilla reutilizable para túneles VPN de sitio a sitio.",
+      "templateName": "Nombre de la plantilla",
+      "templateNamePlaceholder": "p. ej., WireGuard S2S de sucursal",
+      "vpnType": "Tipo de VPN",
+      "topology": "Topología",
+      "topologyPointToPoint": "Punto a punto",
+      "topologyHubSpoke": "Concentrador y radios",
+      "topologyFullMesh": "Malla completa",
+      "defaultSubnets": "Subredes predeterminadas",
+      "defaultSubnetsHelp": "CIDR separados por comas a incluir de forma predeterminada.",
+      "creating": "Creando...",
+      "createTemplate": "Crear plantilla"
+    },
+    "toasts": {
+      "pingResult": "Resultado del ping",
+      "reachable": "Accesible ({{latency}}ms)",
+      "unreachable": "Inaccesible",
+      "operationFailed": "La operación falló",
+      "success": "Éxito",
+      "notice": "Aviso",
+      "actionFailed": "La acción falló",
+      "tunnelAction": "Acción de túnel",
+      "tunnelRemoved": "Túnel eliminado",
+      "tunnelRemovedDesc": "El túnel se ha desmantelado.",
+      "teardownFailed": "Falló el desmantelamiento",
+      "certScanComplete": "Análisis de certificados completado",
+      "certScanCompleteDesc": "Se analizaron {{scanned}} certificados, se actualizaron {{updated}}, errores {{errors}}.",
+      "certScanFailed": "Falló el análisis de certificados"
+    },
+    "wsEvents": {
+      "connectionDown": "Conexión VPN caída",
+      "connectionDownNamed": "{{name}} se ha desconectado.",
+      "connectionDownGeneric": "Una conexión VPN se cayó.",
+      "connectionRestored": "Conexión VPN restaurada",
+      "connectionRestoredNamed": "{{name}} está nuevamente en línea.",
+      "connectionRestoredGeneric": "Se restauró una conexión VPN.",
+      "healthDegraded": "Estado de VPN degradado",
+      "healthDegradedGeneric": "El estado de la VPN se ha degradado.",
+      "tunnelStatusChanged": "Estado del túnel cambiado",
+      "tunnelStatusChangedNamed": "{{name}} ahora está {{status}}.",
+      "tunnelStatusChangedGeneric": "El estado de un túnel VPN ha cambiado.",
+      "updated": "actualizado",
+      "reconnectStarted": "Reconexión iniciada",
+      "reconnectStartedNamed": "Intentando reconectar {{name}}...",
+      "reconnectStartedGeneric": "Se inició un intento de reconexión de VPN.",
+      "reconnectFailed": "Falló la reconexión",
+      "reconnectFailedNamed": "Se agotaron todos los intentos de reconexión para {{name}}.",
+      "reconnectFailedGeneric": "Se agotaron los intentos de reconexión de VPN."
+    },
+    "eventColumns": {
+      "time": "Hora",
+      "type": "Tipo",
+      "severity": "Gravedad",
+      "title": "Título",
+      "site": "Sitio"
+    },
+    "header": {
+      "title": "Gestión de VPN",
+      "description": "Gestione túneles VPN en Tailscale, WireGuard, OpenVPN y Netbird para el acceso remoto a sitios"
+    },
+    "errors": {
+      "someDataFailed": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "coexistence": {
+      "title": "Tailscale y NetBird están ambos configurados",
+      "body": "Ambas redes superpuestas usan el rango 100.64.0.0/10 y pueden entrar en conflicto en un mismo host. FreeSDN ejecuta Tailscale automáticamente con --netfilter-mode=off para que coexistan. Contrapartida: con netfilter desactivado, el nodo de salida (exit-node) y el enrutamiento de subredes de Tailscale dejan de funcionar; si los necesitas, establece FREESDN_TAILSCALE_NETFILTER_MODE=on y asume el riesgo de conflicto con NetBird. Si un dispositivo de una red no es accesible, vuelve a conectar Tailscale y evita IPs de pares superpuestas entre las dos redes."
+    },
+    "stats": {
+      "activeConnections": "Conexiones activas",
+      "activeConnectionsDesc": "de {{total}} configuradas",
+      "peersOnline": "{{count}} pares en línea",
+      "peersConnected": "{{count}} pares conectados",
+      "onlinePeers": "Pares en línea",
+      "onlinePeersDesc": "En todos los proveedores",
+      "sitesWithVpn": "Sitios con VPN",
+      "sitesWithVpnDesc": "Sitios configurados"
+    },
+    "providers": {
+      "tailscale": "Tailscale",
+      "netbird": "Netbird",
+      "wireguard": "WireGuard",
+      "openvpn": "OpenVPN",
+      "meshVpn": "VPN de malla",
+      "p2pMesh": "Malla P2P",
+      "tunnelVpn": "VPN de túnel",
+      "classicVpn": "VPN clásica",
+      "activeCount": "{{count}} activas",
+      "tunnelsConfigured": "{{count}} túneles configurados",
+      "connectionsConfigured": "{{count}} conexiones configuradas"
+    },
+    "overview": {
+      "tailscaleNetwork": "Red de Tailscale",
+      "hostname": "Nombre de host:",
+      "tailscaleIp": "IP de Tailscale:",
+      "tailnet": "Tailnet:",
+      "magicDns": "Magic DNS:",
+      "netbirdNetwork": "Red de Netbird",
+      "ip": "IP:",
+      "fqdn": "FQDN:",
+      "interface": "Interfaz:",
+      "peers": "Pares:",
+      "allConnections": "Todas las conexiones VPN",
+      "emptyTitle": "Sin conexiones VPN",
+      "emptyDescription": "Aún no hay conexiones VPN configuradas. Cree su primera conexión para empezar a gestionar el acceso a la red remota.",
+      "emptyAction": "Crear primera conexión"
+    },
+    "actions": {
+      "newConnection": "Nueva conexión",
+      "createTemplate": "Crear plantilla"
+    },
+    "connections": {
+      "heading": "Conexiones VPN",
+      "subtitle": "Cree, edite y gestione todas las conexiones VPN entre proveedores.",
+      "emptyTitle": "Sin conexiones VPN",
+      "emptyDescription": "Agregue conexiones VPN para gestionar túneles de Tailscale, WireGuard, OpenVPN o Netbird para el acceso a la red remota.",
+      "emptyAction": "Crear conexión"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "connections": "Conexiones",
+      "discovery": "Descubrimiento",
+      "sites": "Configuración del sitio",
+      "events": "Eventos",
+      "metrics": "Métricas",
+      "tunnels": "Túneles",
+      "topology": "Topología",
+      "conflicts": "Conflictos de rutas",
+      "certificates": "Certificados"
+    },
+    "overlayDiscovery": {
+      "heading": "Descubiertos en tu malla",
+      "subtitle": "Dispositivos encontrados en tu superposición conectada (Tailscale / NetBird). Adopta uno para gestionarlo o ignóralo.",
+      "refresh": "Actualizar",
+      "loadError": "Error al cargar el descubrimiento de la superposición.",
+      "emptyTitle": "No se descubrieron dispositivos",
+      "emptyOffBody": "No hay ninguna superposición conectada. Habilita un proveedor de VPN (Tailscale o NetBird) para que FreeSDN vea los dispositivos de tu malla.",
+      "emptyOnBody": "Aún no se encontraron otros dispositivos en tu malla. Los nuevos pares aparecerán aquí automáticamente.",
+      "noSiteTitle": "Selecciona un sitio primero",
+      "noSiteBody": "Elige un sitio en la barra superior antes de adoptar un dispositivo descubierto.",
+      "ignoredTitle": "Dispositivo ignorado"
+    },
+    "tailscaleTab": {
+      "tailnetPeers": "Pares de Tailnet",
+      "emptyTitle": "Sin pares de Tailscale",
+      "emptyDescription": "No hay otros dispositivos conectados a su red de Tailscale. Instale Tailscale en los dispositivos de sitios remotos para habilitar la red de malla segura."
+    },
+    "netbirdTab": {
+      "connectedNoPeersTitle": "Netbird conectado · Sin pares",
+      "connectedNoPeersDescription": "Su cliente de Netbird está conectado pero no hay pares disponibles. Agregue máquinas a su red de Netbird para verlas aquí.",
+      "notConnectedTitle": "Netbird no conectado",
+      "notConnectedDescription": "Instale y conecte Netbird para habilitar la red de malla punto a punto. Netbird ofrece conectividad basada en WireGuard con red sin configuración.",
+      "getNetbird": "Obtener Netbird"
+    },
+    "sitesTab": {
+      "heading": "Configuración de VPN del sitio",
+      "subtitle": "Configure el acceso VPN para cada sitio a fin de habilitar el descubrimiento y la gestión de dispositivos remotos.",
+      "noAddress": "Sin dirección configurada",
+      "configureVpn": "Configurar VPN",
+      "emptyTitle": "Sin sitios configurados",
+      "emptyDescription": "Cree primero los sitios y luego configure el acceso VPN para la red de cada sitio."
+    },
+    "eventsTab": {
+      "heading": "Eventos de VPN",
+      "subtitle": "Registro de eventos en tiempo real para todas las conexiones y túneles VPN.",
+      "severityLabel": "Gravedad:",
+      "loadError": "No se pudieron cargar los eventos de VPN.",
+      "searchPlaceholder": "Buscar eventos...",
+      "emptyTitle": "Sin eventos de VPN",
+      "emptyDescription": "No se registraron eventos. Los eventos aparecerán a medida que las conexiones VPN cambien de estado.",
+      "emptyDescriptionFiltered": "No se registraron eventos con gravedad \"{{severity}}\". Los eventos aparecerán a medida que las conexiones VPN cambien de estado."
+    },
+    "severity": {
+      "all": "todas",
+      "info": "info",
+      "warning": "advertencia",
+      "error": "error",
+      "critical": "crítica"
+    },
+    "metricsTab": {
+      "heading": "Métricas de VPN",
+      "subtitle": "Métricas agregadas de tráfico y latencia en todas las conexiones VPN.",
+      "loadError": "No se pudieron cargar las métricas de VPN.",
+      "totalRx": "RX total",
+      "totalRxDesc": "Datos totales recibidos",
+      "totalTx": "TX total",
+      "totalTxDesc": "Datos totales transmitidos",
+      "avgLatency": "Latencia prom.",
+      "avgLatencyDesc": "En todas las conexiones",
+      "connections": "Conexiones",
+      "connectionsDesc": "Conexiones activas rastreadas",
+      "connectionsByProvider": "Conexiones por proveedor",
+      "connectionCount": "{{count}} conexiones",
+      "rx": "RX: {{value}}",
+      "tx": "TX: {{value}}",
+      "latency": "Latencia: {{value}}",
+      "emptyTitle": "Sin métricas disponibles",
+      "emptyDescription": "Las métricas de VPN aparecerán una vez que las conexiones estén activas y transmitiendo datos."
+    },
+    "tunnelsTab": {
+      "heading": "Túneles de sitio a sitio",
+      "subtitle": "Orqueste y gestione túneles VPN de sitio a sitio a partir de plantillas.",
+      "loadError": "No se pudieron cargar los datos del túnel.",
+      "templates": "Plantillas",
+      "created": "Creada el {{date}}",
+      "subnetCount": "{{count}} subredes",
+      "noTemplates": "Aún no hay plantillas de túnel. Cree una plantilla para comenzar.",
+      "activeTunnels": "Túneles activos",
+      "enable": "Habilitar",
+      "disable": "Deshabilitar",
+      "disableConfirm": "¿Deshabilitar este túnel? El tráfico dejará de fluir.",
+      "teardownConfirm": "¿Desmantelar el túnel entre {{siteA}} y {{siteB}}?",
+      "siteA": "Sitio A",
+      "siteB": "Sitio B",
+      "teardownAria": "Desmantelar túnel",
+      "provisioned": "Aprovisionado el {{date}}",
+      "lastCheck": "Última comprobación {{date}}",
+      "emptyTitle": "Sin túneles de sitio a sitio",
+      "emptyDescription": "Cree primero una plantilla de túnel y luego aprovisione túneles entre sus sitios."
+    },
+    "conflictsTab": {
+      "loadError": "No se pudieron cargar los datos de conflictos de rutas.",
+      "heading": "Análisis de conflictos de rutas",
+      "sourcesScanned": "{{count}} fuentes analizadas",
+      "noConflictsTitle": "No se detectaron conflictos de rutas",
+      "noConflictsDescription": "Todas las rutas VPN están limpias, sin subredes superpuestas.",
+      "colSubnet": "Subred",
+      "colSourceA": "Fuente A",
+      "colSourceB": "Fuente B",
+      "colSeverity": "Gravedad",
+      "colOverlapType": "Tipo de superposición"
+    },
+    "certsTab": {
+      "loadError": "No se pudieron cargar los datos del certificado.",
+      "heading": "Seguimiento de vencimiento de certificados",
+      "scanning": "Analizando...",
+      "scanCertificates": "Analizar certificados",
+      "emptyTitle": "No se encontraron certificados",
+      "emptyDescription": "Ejecute un análisis de certificados para descubrir y rastrear las fechas de vencimiento de los certificados VPN.",
+      "colSite": "Sitio",
+      "colVpnType": "Tipo de VPN",
+      "colSubject": "Asunto",
+      "colExpiresAt": "Vence el",
+      "colDaysRemaining": "Días restantes",
+      "colSeverity": "Gravedad"
+    }
+  },
+  "VPNTopologyTab": {
+    "tunnelCount": {
+      "one": "{{count}} túnel",
+      "other": "{{count}} túneles"
+    },
+    "error": {
+      "title": "No se pudieron cargar los datos de topología",
+      "description": "Verifica que las API de VPN y de Sitios estén accesibles y vuelve a actualizar."
+    },
+    "empty": {
+      "title": "No hay túneles S2S configurados",
+      "description": "Crea una plantilla de túnel y aprovisiona túneles de sitio a sitio para ver aquí la topología de red."
+    },
+    "summary": {
+      "siteCount": {
+        "one": "{{count}} sitio",
+        "other": "{{count}} sitios"
+      },
+      "tunnelCount": {
+        "one": "{{count}} túnel",
+        "other": "{{count}} túneles"
+      },
+      "site": {
+        "one": "{{count}} sitio",
+        "other": "{{count}} sitios"
+      },
+      "tunnel": {
+        "one": "{{count}} túnel",
+        "other": "{{count}} túneles"
+      }
+    }
+  }
+}

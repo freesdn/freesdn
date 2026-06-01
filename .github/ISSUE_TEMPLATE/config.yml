@@ -1,0 +1,28 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question, discussion, or design chat
+    url: https://github.com/freesdn/freesdn/discussions
+    about: |
+      Use Discussions for usage questions, deployment help, architecture
+      questions, or open-ended "would this fit?" conversations. Concrete
+      feature requests have their own issue template. Code PRs are not
+      accepted (see CONTRIBUTING.md).
+
+  - name: Security vulnerability (private disclosure)
+    url: https://github.com/freesdn/freesdn/security/advisories/new
+    about: |
+      Report security vulnerabilities privately via GitHub Security
+      Advisories. Do NOT open a public issue. See SECURITY.md for the
+      full disclosure policy and response-time commitments.
+
+  - name: Hardware donation offer
+    url: https://github.com/freesdn/freesdn/blob/main/DONATE.md
+    about: |
+      The fastest path to getting your vendor supported is donating
+      hardware. See the wishlist and how it works in DONATE.md.
+
+  - name: Documentation
+    url: https://docs.freesdn.org
+    about: |
+      The full manual - install, deployment tiers, adapters, modules,
+      operations, and security - lives at docs.freesdn.org.

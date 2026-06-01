@@ -1,0 +1,99 @@
+{
+  "OrganizationDetailPage": {
+    "info": {
+      "title": "Información de la organización",
+      "slug": "Slug",
+      "plan": "Plan",
+      "status": "Estado",
+      "email": "Correo electrónico",
+      "phone": "Teléfono",
+      "created": "Creada"
+    },
+    "status": {
+      "active": "Activa",
+      "inactive": "Inactiva"
+    },
+    "stats": {
+      "sites": "Sitios",
+      "users": "Usuarios",
+      "controllers": "Controladores",
+      "devices": "Dispositivos",
+      "online": "En línea",
+      "percentOnline": "{{pct}}% en línea"
+    },
+    "recentSites": {
+      "title": "Sitios recientes",
+      "description": "Últimos sitios actualizados en esta organización",
+      "viewAll": "Ver todos",
+      "empty": "Aún no hay sitios. Crea tu primer sitio para comenzar."
+    },
+    "sitesTab": {
+      "emptyTitle": "Sin sitios",
+      "emptyDescription": "Esta organización aún no tiene sitios."
+    },
+    "usersTab": {
+      "title": "Gestión de usuarios",
+      "description": "Visualiza y gestiona los usuarios de esta organización, asigna acceso a nivel de sitio y configura roles.",
+      "action": "Ir a Usuarios"
+    },
+    "settingsTab": {
+      "title": "Configuración de la organización",
+      "description": "Configura la facturación, los límites del plan, los proveedores de SSO y la habilitación de módulos para esta organización.",
+      "action": "Ir a Configuración"
+    },
+    "backToOrganizations": "Volver a Organizaciones",
+    "error": {
+      "loadFailed": "No se pudo cargar la organización"
+    },
+    "header": {
+      "siteCount_one": "{{count}} sitio",
+      "siteCount_other": "{{count}} sitios",
+      "userCount_one": "{{count}} usuario",
+      "userCount_other": "{{count}} usuarios"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "sites": "Sitios",
+      "users": "Usuarios",
+      "settings": "Configuración"
+    }
+  },
+  "OrganizationsPage": {
+    "columns": {
+      "organization": "Organización",
+      "status": "Estado",
+      "plan": "Plan"
+    },
+    "placeholders": {
+      "selectPlan": "Seleccionar plan"
+    },
+    "filters": {
+      "allPlans": "Todos los planes",
+      "allStatuses": "Todos los estados",
+      "clearFilters": "Limpiar filtros"
+    },
+    "planOptions": {
+      "free": "Gratis",
+      "pro": "Pro",
+      "enterprise": "Enterprise"
+    },
+    "statusOptions": {
+      "active": "Activo",
+      "trial": "Prueba",
+      "suspended": "Suspendido"
+    },
+    "actions": {
+      "actionsFor": "Acciones para {{name}}",
+      "viewDetails": "Ver detalles",
+      "export": "Exportar",
+      "delete": "Eliminar"
+    },
+    "itemNamePlural": "organizaciones",
+    "itemNameSingular": "organización",
+    "toasts": {
+      "bulkExportNotImplemented": "Exportación masiva: aún no implementada.",
+      "bulkDeleteTitle": "Eliminación masiva",
+      "bulkDeleteDescription": "Por seguridad, elimina las organizaciones de forma individual."
+    }
+  }
+}

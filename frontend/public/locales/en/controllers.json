@@ -1,0 +1,268 @@
+{
+  "ControllerDetailPage": {
+    "common": {
+      "notAvailable": "N/A",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "error": "Error",
+      "syncing": "Syncing",
+      "unknown": "Unknown"
+    },
+    "error": {
+      "notFound": "Controller not found",
+      "backToControllers": "Back to Controllers"
+    },
+    "actions": {
+      "syncNow": "Sync Now",
+      "testConnection": "Test Connection"
+    },
+    "test": {
+      "successful": "Connection Successful",
+      "failed": "Connection Failed",
+      "failedMessage": "Connection test failed",
+      "version": "Version: {{version}}"
+    },
+    "toast": {
+      "syncFailed": {
+        "title": "Sync failed",
+        "description": "Could not sync controller. Please try again."
+      },
+      "deleteFailed": {
+        "title": "Delete failed",
+        "description": "Could not delete controller. Please try again."
+      }
+    },
+    "stats": {
+      "devices": "Devices",
+      "clients": "Clients",
+      "poePower": "PoE Power",
+      "ofBudget": "of {{budget}}",
+      "firmware": "Firmware",
+      "upToDate": "up to date"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "devices": "Devices",
+      "firmware": "Firmware",
+      "settings": "Settings"
+    },
+    "health": {
+      "title": "Controller Health",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "disk": "Disk",
+      "uptime": "Uptime",
+      "unavailable": "Health metrics unavailable for this controller version."
+    },
+    "breakdown": {
+      "title": "Device Breakdown",
+      "total": "Total",
+      "online": "Online",
+      "offline": "Offline",
+      "switches": "{{count}} Switches",
+      "accessPoints": "{{count}} APs",
+      "gateways": "{{count}} Gateways",
+      "clients": "{{count}} Clients"
+    },
+    "poe": {
+      "title": "PoE Power Budget",
+      "consumedBudget": "Consumed / Budget",
+      "remainingOne": "{{watts}} remaining across 1 PoE switch",
+      "remainingOther": "{{watts}} remaining across {{count}} PoE switches"
+    },
+    "sync": {
+      "title": "Sync Status",
+      "autoSync": "Auto-Sync",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "interval": "Interval",
+      "lastSync": "Last Sync",
+      "duration": "Duration",
+      "errorHistory": "Error History ({{count}})"
+    },
+    "devices": {
+      "title": "Managed Devices ({{count}})",
+      "description": "All devices discovered from this controller",
+      "loadError": "Failed to load device data.",
+      "online": "Online",
+      "offline": "Offline",
+      "columns": {
+        "device": "Device",
+        "type": "Type",
+        "model": "Model",
+        "ipAddress": "IP Address",
+        "cpu": "CPU",
+        "memory": "Memory",
+        "uptime": "Uptime",
+        "status": "Status"
+      },
+      "empty": {
+        "title": "No devices discovered yet",
+        "description": "Run a sync to discover devices managed by this controller.",
+        "action": "Run Discovery"
+      }
+    },
+    "firmware": {
+      "title": "Firmware Status",
+      "description": "Firmware version and upgrade status for all managed devices",
+      "upToDateCount": "{{count}} up to date",
+      "needsUpgradeOne": "{{count}} needs upgrade",
+      "needsUpgradeOther": "{{count}} need upgrade",
+      "empty": "No firmware data available. Run a sync to collect firmware information.",
+      "columns": {
+        "device": "Device",
+        "currentVersion": "Current Version",
+        "latestVersion": "Latest Version",
+        "status": "Status"
+      },
+      "badge": {
+        "upgrade": "Upgrade",
+        "current": "Current"
+      }
+    },
+    "connection": {
+      "title": "Connection Details",
+      "host": "Host",
+      "port": "Port",
+      "ssl": "SSL/TLS",
+      "verifyCertificate": "Verify Certificate",
+      "connectionMode": "Connection Mode"
+    },
+    "metadata": {
+      "title": "Metadata",
+      "controllerId": "Controller ID",
+      "type": "Type",
+      "active": "Active",
+      "created": "Created",
+      "updated": "Updated"
+    },
+    "siteMappings": {
+      "title": "Site Mappings",
+      "description": "Maps controller sites to FreeSDN sites"
+    },
+    "dangerZone": {
+      "title": "Danger Zone",
+      "description": "Deleting this controller will also remove all associated devices from FreeSDN.",
+      "confirm": "Delete controller \"{{name}}\"? This will also remove all {{count}} managed devices.",
+      "delete": "Delete Controller"
+    }
+  },
+  "ControllersPage": {
+    "header": {
+      "title": "Controllers",
+      "description": "Manage SDN controllers and gateways (Omada, UniFi, OPNsense, pfSense, MikroTik, OpenWrt). For cameras, PBX, or hypervisors, use their dedicated pages."
+    },
+    "error": {
+      "loadFailed": "Failed to load controllers"
+    },
+    "itemNameSingular": "controller",
+    "itemNamePlural": "controllers",
+    "columns": {
+      "controller": "Controller",
+      "type": "Type",
+      "status": "Status",
+      "devices": "Devices",
+      "version": "Version",
+      "lastSync": "Last Sync"
+    },
+    "status": {
+      "disabled": "Disabled"
+    },
+    "statusLabels": {
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "error": "Error",
+      "syncing": "Syncing",
+      "unreachable": "Unreachable"
+    },
+    "lastSync": {
+      "took": "took {{duration}}"
+    },
+    "actions": {
+      "label": "Actions",
+      "syncNow": "Sync Now",
+      "syncAria": "Sync {{name}}",
+      "menuAria": "Actions for {{name}}",
+      "viewDetails": "View Details",
+      "editSettings": "Edit Settings",
+      "testConnection": "Test Connection",
+      "delete": "Delete",
+      "export": "Export",
+      "addController": "Add Controller"
+    },
+    "stats": {
+      "totalControllers": {
+        "title": "Total Controllers",
+        "description": "Configured controllers"
+      },
+      "connected": {
+        "title": "Connected",
+        "percentOnline": "{{percent}}% online",
+        "noControllers": "No controllers"
+      },
+      "disconnected": {
+        "title": "Disconnected",
+        "description": "Needs attention"
+      },
+      "totalDevices": {
+        "title": "Total Devices",
+        "description": "Managed devices"
+      }
+    },
+    "filters": {
+      "searchPlaceholder": "Search controllers by name, host, or type…",
+      "allTypes": "All types",
+      "allStatuses": "All statuses",
+      "clearFilters": "Clear filters"
+    },
+    "bulkActions": {
+      "syncAll": "Sync All",
+      "delete": "Delete"
+    },
+    "toast": {
+      "syncStarted": {
+        "title": "Sync Started",
+        "description": "Controller sync has been initiated."
+      },
+      "syncFailed": {
+        "title": "Sync Failed",
+        "description": "Failed to sync controller."
+      },
+      "connectionSuccessful": {
+        "title": "Connection Successful",
+        "connected": "Connected",
+        "latency": "Latency: {{latency}}"
+      },
+      "connectionFailed": {
+        "title": "Connection Failed",
+        "description": "Could not connect to the controller."
+      },
+      "connectionTestFailed": {
+        "title": "Connection Test Failed",
+        "description": "Failed to connect to controller."
+      },
+      "bulkSyncStarted": {
+        "title": "Bulk Sync Started",
+        "description": "Sync initiated for {{count}} controller(s)."
+      },
+      "bulkSyncFailed": {
+        "title": "Bulk Sync Failed",
+        "description": "Some controllers failed to sync."
+      },
+      "bulkDelete": {
+        "title": "Bulk Delete",
+        "description": "Please delete controllers individually for safety."
+      },
+      "controllerDeleted": {
+        "title": "Controller Deleted",
+        "description": "The controller has been successfully removed."
+      }
+    }
+  }
+}

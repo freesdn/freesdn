@@ -1,0 +1,975 @@
+{
+  "GatewayPage": {
+    "header": {
+      "title": "编排",
+      "subtitle": "VLAN 分发、漂移检测和跨网关资源管理"
+    },
+    "error": {
+      "partialLoad": "部分数据加载失败。结果可能不完整。"
+    },
+    "common": {
+      "on": "开",
+      "off": "关",
+      "up": "在线",
+      "down": "离线"
+    },
+    "time": {
+      "never": "从不",
+      "justNow": "刚刚",
+      "minutesAgo": "{{n}} 分钟前",
+      "hoursAgo": "{{n}} 小时前",
+      "daysAgo": "{{n}} 天前"
+    },
+    "status": {
+      "pending": "待处理",
+      "executing": "执行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "rolledBack": "已回滚"
+    },
+    "toast": {
+      "error": "错误",
+      "importComplete": {
+        "title": "导入完成",
+        "description": "已从主脑设备导入 VLAN"
+      },
+      "importFailed": {
+        "title": "导入失败",
+        "description": "无法从主脑读取"
+      },
+      "distributionComplete": {
+        "title": "分发完成",
+        "description": "已将 VLAN 推送到肢节设备"
+      },
+      "distributionFailed": {
+        "title": "分发失败",
+        "description": "无法推送到肢节"
+      },
+      "createVlanFailed": "创建 VLAN 失败",
+      "deleteVlanFailed": "删除 VLAN 失败",
+      "triggerDistributionFailed": "触发分发失败",
+      "resolveDriftFailed": "解决漂移事件失败",
+      "createTemplateFailed": "创建模板失败",
+      "deleteTemplateFailed": "删除模板失败",
+      "retractDistributionFailed": "撤回分发失败",
+      "triggerDriftCheckFailed": "触发漂移检查失败",
+      "retryDistributionFailed": "重试分发失败",
+      "rollbackDistributionFailed": "回滚分发失败"
+    },
+    "tabs": {
+      "dashboard": "仪表板",
+      "vlans": "VLAN",
+      "distribution": "分发",
+      "drift": "漂移",
+      "templates": "模板",
+      "fwRules": "防火墙规则",
+      "nat": "NAT",
+      "vpn": "VPN",
+      "interfaces": "接口",
+      "dhcpLeases": "DHCP 租约",
+      "reconciliation": "对账"
+    },
+    "dashboard": {
+      "stats": {
+        "canonicalVlans": "规范 VLAN",
+        "siteRoleMaps": "站点角色映射",
+        "distributions": "分发",
+        "openDriftEvents": "未处理漂移事件"
+      },
+      "driftSummary": {
+        "title": "漂移摘要",
+        "description": "所有受管设备的配置漂移"
+      },
+      "quickActions": {
+        "title": "快捷操作",
+        "manageVlans": "管理 VLAN",
+        "importWizard": "导入向导",
+        "vlanTemplates": "VLAN 模板",
+        "driftEvents": "漂移事件"
+      }
+    },
+    "driftSummary": {
+      "total": "总计",
+      "critical": "严重",
+      "warning": "警告",
+      "info": "信息",
+      "pending": "待处理",
+      "resolved": "已解决"
+    },
+    "vlanColumns": {
+      "vlan": "VLAN",
+      "name": "名称",
+      "subnet": "子网",
+      "gateway": "网关",
+      "purpose": "用途",
+      "dhcp": "DHCP",
+      "state": "状态"
+    },
+    "vlanActions": {
+      "distribute": "分发",
+      "retract": "撤回",
+      "delete": "删除",
+      "deleteConfirm": "删除此规范 VLAN？此操作无法撤销。"
+    },
+    "vlans": {
+      "searchPlaceholder": "搜索 VLAN...",
+      "createVlan": "创建 VLAN"
+    },
+    "distColumns": {
+      "resource": "资源",
+      "action": "操作",
+      "status": "状态",
+      "started": "已开始",
+      "completed": "已完成",
+      "error": "错误"
+    },
+    "distActions": {
+      "retry": "重试",
+      "rollback": "回滚"
+    },
+    "distribution": {
+      "stepDetails": "步骤详情 · {{action}} {{resource}}"
+    },
+    "driftColumns": {
+      "severity": "严重程度",
+      "type": "类型",
+      "resource": "资源",
+      "message": "消息",
+      "resolution": "处理方式",
+      "detected": "检测时间"
+    },
+    "driftActions": {
+      "reapply": "重新应用规范",
+      "accept": "接受设备状态",
+      "ignore": "忽略"
+    },
+    "drift": {
+      "severityPlaceholder": "严重程度",
+      "resolutionPlaceholder": "处理方式",
+      "allSeverity": "所有严重程度",
+      "allStatus": "所有状态",
+      "runDriftCheck": "运行漂移检查",
+      "selectSiteHint": "从顶部筛选器中选择一个站点以运行漂移检查。"
+    },
+    "templateColumns": {
+      "name": "名称",
+      "vlanId": "VLAN ID",
+      "subnetTemplate": "子网模板",
+      "purpose": "用途",
+      "dhcp": "DHCP"
+    },
+    "templateActions": {
+      "delete": "删除",
+      "deleteConfirm": "删除此 VLAN 模板？此操作无法撤销。"
+    },
+    "templates": {
+      "createTemplate": "创建模板"
+    },
+    "fwRuleColumns": {
+      "index": "#",
+      "name": "名称",
+      "dir": "方向",
+      "action": "操作",
+      "proto": "协议",
+      "enabled": "已启用",
+      "hits": "命中数",
+      "synced": "同步时间"
+    },
+    "natColumns": {
+      "name": "名称",
+      "type": "类型",
+      "enabled": "已启用",
+      "synced": "同步时间"
+    },
+    "vpnColumns": {
+      "name": "名称",
+      "type": "类型",
+      "status": "状态",
+      "synced": "同步时间"
+    },
+    "ifaceColumns": {
+      "name": "名称",
+      "type": "类型",
+      "ipv4": "IPv4",
+      "vlan": "VLAN",
+      "status": "状态",
+      "mac": "MAC"
+    },
+    "dhcpColumns": {
+      "ipAddress": "IP 地址",
+      "macAddress": "MAC 地址",
+      "hostname": "主机名",
+      "interface": "接口",
+      "status": "状态"
+    },
+    "reconciliation": {
+      "selectSiteTitle": "选择一个站点以查看对账状态",
+      "selectSiteDescription": "使用顶部的站点筛选器选择一个站点。",
+      "importFromBrain": "从主脑导入",
+      "distributeToLimbs": "分发到肢节",
+      "refresh": "刷新",
+      "alignmentScore": "对齐评分",
+      "totalVlans": "VLAN 总数",
+      "aligned": "已对齐",
+      "missing": "缺失",
+      "extra": "多余"
+    },
+    "alignmentTable": {
+      "vlan": "VLAN",
+      "name": "名称",
+      "device": "设备",
+      "role": "角色",
+      "status": "状态"
+    },
+    "createVlanDialog": {
+      "title": "创建规范 VLAN",
+      "description": "定义一个新的 VLAN 以在您的主脑/肢节拓扑中分发。",
+      "submitLabel": "创建 VLAN",
+      "site": "站点",
+      "selectSite": "选择站点",
+      "vlanId": "VLAN ID",
+      "vlanIdPlaceholder": "例如 30",
+      "name": "名称",
+      "namePlaceholder": "例如 访客 WiFi",
+      "subnet": "子网",
+      "subnetPlaceholder": "例如 10.30.0.0/24",
+      "gatewayIp": "网关 IP",
+      "gatewayIpPlaceholder": "例如 10.30.0.1",
+      "purpose": "用途",
+      "enableDhcp": "启用 DHCP",
+      "dhcpRangeStart": "DHCP 范围起始",
+      "dhcpRangeStartPlaceholder": "例如 10.30.0.100",
+      "dhcpRangeEnd": "DHCP 范围结束",
+      "dhcpRangeEndPlaceholder": "例如 10.30.0.254"
+    },
+    "createTemplateDialog": {
+      "title": "创建 VLAN 模板",
+      "description": "模板可应用于任何站点，以快速创建规范 VLAN。",
+      "submitLabel": "创建模板",
+      "name": "名称",
+      "namePlaceholder": "例如 标准访客 VLAN",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "可选描述",
+      "vlanId": "VLAN ID",
+      "subnetTemplate": "子网模板",
+      "subnetTemplatePlaceholder": "例如 10.{site}.30.0/24",
+      "purpose": "用途",
+      "enableDhcp": "启用 DHCP"
+    }
+  },
+  "ImportWizardPage": {
+    "header": {
+      "title": "导入向导",
+      "subtitleSession": "会话 {{id}}… · 步骤 {{step}}/6",
+      "subtitleDefault": "导入现有网关配置"
+    },
+    "steps": {
+      "discover": {
+        "label": "发现",
+        "description": "发现站点的网关设备"
+      },
+      "assignRoles": {
+        "label": "分配角色",
+        "description": "指定大脑设备和肢体设备"
+      },
+      "scan": {
+        "label": "扫描",
+        "description": "拉取 VLAN、接口和 DHCP 池"
+      },
+      "reconcile": {
+        "label": "协调",
+        "description": "解决冲突并选择资源"
+      },
+      "apply": {
+        "label": "应用",
+        "description": "创建规范 VLAN 并分发"
+      },
+      "verify": {
+        "label": "验证",
+        "description": "确认配置与预期一致"
+      }
+    },
+    "actions": {
+      "cancel": "取消",
+      "cancelImport": "取消导入",
+      "backToGateway": "返回网关"
+    },
+    "siteSelection": {
+      "title": "开始导入现有配置",
+      "description": "导入现有网关配置。向导将发现设备，让你分配大脑/肢体角色，扫描 VLAN 并创建规范资源。",
+      "selectSite": "选择站点",
+      "sitePlaceholder": "选择一个站点...",
+      "discovering": "正在发现...",
+      "startImport": "开始导入",
+      "startError": "无法开始导入。请检查此站点的网关连接。"
+    },
+    "assignRoles": {
+      "noDevicesTitle": "未发现设备",
+      "noDevicesDescription": "在此站点未找到网关连接。请先添加网关连接。",
+      "title": "分配设备角色",
+      "descriptionBefore": "将一台设备指定为",
+      "brain": "大脑",
+      "descriptionMiddle": "（权威 L3 网关），其余设备指定为",
+      "limbs": "肢体",
+      "descriptionAfter": "（L2 交换机或辅助设备）。大脑的配置为规范配置，并将分发给各肢体设备。",
+      "online": "在线",
+      "offline": "离线",
+      "roleBrain": "大脑",
+      "roleLimb": "肢体",
+      "brainRequired": "你必须至少将一台设备指定为大脑。",
+      "scanning": "正在扫描...",
+      "scanDevices": "扫描设备"
+    },
+    "scanning": {
+      "title": "正在扫描设备",
+      "description": "正在从大脑设备拉取 VLAN、接口、DHCP 池和 DNS 记录..."
+    },
+    "reconcile": {
+      "conflictsTitle": "检测到冲突（{{count}}）",
+      "conflictsDescription": "这些资源在大脑设备和肢体设备之间存在冲突的配置。",
+      "conflictItem": "{{type}} · VLAN {{tag}}",
+      "discoveredVlansTitle": "已发现的 VLAN",
+      "discoveredVlansDescription": "为每个已发现的资源选择一项操作。“导入”将创建规范 VLAN 并分发给所有肢体设备。",
+      "noVlans": "在大脑设备上未发现 VLAN。",
+      "vlanLabel": "VLAN {{tag}}",
+      "conflictBadge": "冲突",
+      "decisionImport": "导入",
+      "decisionAdoptBrain": "采用大脑",
+      "decisionAdoptLimb": "采用肢体",
+      "decisionKeepBoth": "两者都保留",
+      "decisionIgnore": "忽略",
+      "applying": "正在应用...",
+      "applyVerify": "应用并验证"
+    },
+    "applying": {
+      "title": "正在应用配置",
+      "description": "正在创建规范 VLAN 并分发给肢体设备..."
+    },
+    "complete": {
+      "verifiedTitle": "导入已验证",
+      "verifiedDescription": "所有规范 VLAN 均已成功分发并验证。",
+      "mismatchTitle": "导入完成但存在不匹配项",
+      "mismatchDescription": "部分配置无法验证。请查看下方的不匹配项。",
+      "mismatchesTitle": "不匹配项（{{count}}）",
+      "distributionRecordsTitle": "分发记录",
+      "distributionQueued": "已排队 {{count}} 个分发。",
+      "distributionViewDetails": "查看详情，请前往",
+      "distributionTab": "分发选项卡",
+      "viewCanonicalVlans": "查看规范 VLAN"
+    },
+    "failed": {
+      "cancelledTitle": "导入已取消",
+      "failedTitle": "导入失败",
+      "cancelledDescription": "此导入会话已取消。未做任何更改。",
+      "failedDescription": "导入过程中发生错误。请重试。",
+      "retry": "重试"
+    },
+    "cancelDialog": {
+      "title": "取消导入？",
+      "description": "这将取消当前的导入会话。尚未应用的更改将不会保存。此操作无法撤消。",
+      "continue": "继续导入",
+      "cancelling": "正在取消..."
+    }
+  },
+  "GatewayBulkPage": {
+    "header": {
+      "title": "批量操作与模板",
+      "description": "暂存批量设备、SSID、客户端和站点模板操作。在操作员使用 force=true 显式应用之前，不会向控制器推送任何内容。"
+    },
+    "target": {
+      "title": "目标",
+      "description": "选择用于批量操作的 Omada 控制器和站点。"
+    },
+    "notReady": {
+      "title": "请选择控制器和站点",
+      "description": "批量操作按站点划分范围。请同时选择两者以加载实时状态。"
+    },
+    "tabs": {
+      "templates": "模板",
+      "pending": "待处理"
+    },
+    "templates": {
+      "title": "此控制器上可用的站点模板",
+      "description": "模板将设置（VLAN、ACL、SSID 等）克隆到另一个站点。应用 / 导出 / 删除操作均为暂存。",
+      "loadError": "无法加载模板"
+    },
+    "pending": {
+      "title": "待处理的批量和模板更改",
+      "description": "已暂存在我们的数据库中。请通过“待处理更改”界面显式应用。",
+      "empty": "没有待处理的批量更改",
+      "loadError": "无法加载待处理的批量更改"
+    },
+    "templatesTable": {
+      "empty": "没有模板",
+      "name": "名称",
+      "id": "ID",
+      "description": "描述"
+    },
+    "pendingTable": {
+      "feature": "功能",
+      "operation": "操作",
+      "target": "目标",
+      "created": "创建时间",
+      "status": "状态"
+    }
+  },
+  "GatewayDiagnosticsPage": {
+    "title": "网关诊断",
+    "description": "网关的实时遥测：WAN 速度测试、会话统计、活动会话列表。速度测试触发的是一次测量，而非配置更改，不会进入暂存。",
+    "target": {
+      "title": "目标",
+      "description": "诊断按 MAC 针对特定网关。",
+      "gatewayMac": "网关 MAC",
+      "load": "加载",
+      "loadedFor": "已加载："
+    },
+    "empty": {
+      "pickTarget": {
+        "title": "请选择控制器和站点",
+        "description": "诊断按站点进行。请同时选择两者，然后输入网关 MAC。"
+      },
+      "enterMac": {
+        "title": "请输入网关 MAC",
+        "description": "请提供要诊断的网关的 MAC。"
+      }
+    },
+    "tabs": {
+      "speed": "速度测试",
+      "stats": "会话统计",
+      "active": "活动会话"
+    },
+    "speedTest": {
+      "title": "WAN 速度测试",
+      "description": "触发一次测量并查看最新结果。仅为测量，不会进入暂存。",
+      "running": "运行中…",
+      "run": "运行速度测试",
+      "triggerError": "速度测试触发失败",
+      "loadError": "无法加载速度测试结果",
+      "empty": {
+        "title": "暂无速度测试结果",
+        "description": "点击“运行”开始测量。"
+      },
+      "download": "下载",
+      "upload": "上传",
+      "latency": "延迟"
+    },
+    "sessionStats": {
+      "title": "会话统计",
+      "loadError": "无法加载会话统计"
+    },
+    "activeSessions": {
+      "title": "活动会话",
+      "loadError": "无法加载活动会话",
+      "empty": "无活动会话",
+      "columns": {
+        "client": "客户端",
+        "source": "源",
+        "destination": "目标",
+        "proto": "协议",
+        "bytes": "字节"
+      }
+    }
+  },
+  "GatewayFirewallPage": {
+    "header": {
+      "title": "防火墙深度",
+      "description": "查看控制器端防火墙配置数据块（DMZ、UPnP、攻击防御、ALG、IDS/IPS）。所有编辑均已暂存--请通过待应用更改显式应用。"
+    },
+    "target": {
+      "title": "目标",
+      "description": "防火墙配置按站点划分范围。"
+    },
+    "emptyPicker": {
+      "title": "选择控制器和站点",
+      "description": "防火墙配置按站点划分。请同时选择两者以加载实时状态。"
+    },
+    "tabs": {
+      "configs": "配置",
+      "pending": "待处理"
+    },
+    "configCards": {
+      "dmz": "DMZ",
+      "upnp": "UPnP",
+      "attackDefense": "攻击防御",
+      "alg": "ALG",
+      "idsIps": "IDS / IPS",
+      "loadError": "无法加载 {{label}} 配置"
+    },
+    "pending": {
+      "title": "待处理的防火墙更改",
+      "description": "已暂存于我们的数据库中。请通过待应用更改屏幕显式应用。",
+      "empty": "没有待处理的防火墙更改",
+      "loadError": "无法加载待处理的防火墙更改"
+    },
+    "table": {
+      "feature": "功能",
+      "operation": "操作",
+      "target": "目标",
+      "created": "创建时间",
+      "status": "状态"
+    }
+  },
+  "GatewayControllerSitePicker": {
+    "controller": {
+      "label": "控制器",
+      "placeholder": "选择控制器",
+      "empty": "此站点未配置控制器。"
+    },
+    "site": {
+      "label": "站点",
+      "placeholder": "选择站点",
+      "empty": "没有可用的站点。"
+    },
+    "unreachable": "无法连接控制器 — 请确认其在线且可达（主机、端口、凭据），然后重试。"
+  },
+  "GatewayFirmwarePage": {
+    "header": {
+      "title": "网关固件",
+      "description": "实时读取 Omada 网关的固件状态。升级操作会暂存以供审核--在你明确应用之前，绝不会推送到实时控制器。"
+    },
+    "target": {
+      "title": "目标",
+      "description": "选择要检查的 Omada 控制器和站点。"
+    },
+    "notReady": {
+      "title": "选择控制器和站点",
+      "description": "固件数据按站点划分。请同时选择两者以加载实时状态。"
+    },
+    "tabs": {
+      "available": "可用",
+      "schedules": "计划",
+      "history": "历史",
+      "pending": "待处理"
+    },
+    "available": {
+      "title": "已纳管设备的可用固件镜像",
+      "loadError": "无法加载固件列表"
+    },
+    "schedules": {
+      "title": "自动升级计划",
+      "description": "计划更改已暂存。请在“待处理”选项卡中应用。",
+      "loadError": "无法加载计划"
+    },
+    "history": {
+      "title": "最近的升级尝试",
+      "loadError": "无法加载升级历史"
+    },
+    "pending": {
+      "title": "待处理的固件更改",
+      "description": "已暂存在我们的数据库中。除非你使用 force=true 应用且环境中的 OMADA_READ_ONLY 已关闭，否则它们绝不会影响控制器。",
+      "emptyTitle": "没有待处理的更改",
+      "emptyDescription": "没有等待应用的内容。"
+    },
+    "common": {
+      "yes": "是",
+      "no": "否"
+    },
+    "firmwareTable": {
+      "emptyTitle": "没有可用固件",
+      "model": "型号",
+      "version": "版本",
+      "released": "发布日期",
+      "notes": "说明"
+    },
+    "schedulesTable": {
+      "emptyTitle": "没有计划",
+      "emptyDescription": "自动升级计划让你可以在重复的时间窗口为设备群批量打补丁。",
+      "name": "名称",
+      "models": "型号",
+      "when": "时间",
+      "stableOnly": "仅稳定版"
+    },
+    "historyTable": {
+      "emptyTitle": "没有升级历史",
+      "device": "设备",
+      "fromTo": "从 → 到",
+      "status": "状态",
+      "when": "时间"
+    },
+    "pendingTable": {
+      "feature": "功能",
+      "operation": "操作",
+      "target": "目标",
+      "created": "创建时间",
+      "status": "状态"
+    }
+  },
+  "GatewayHotspotPage": {
+    "header": {
+      "title": "热点",
+      "description": "查看热点运营商、SMS 网关和免认证策略。所有更改均为暂存状态，需通过待处理更改显式应用。"
+    },
+    "target": {
+      "title": "目标",
+      "description": "热点配置按站点设置。"
+    },
+    "picker": {
+      "title": "选择控制器和站点",
+      "description": "热点数据按站点划分。请同时选择两者以加载实时状态。"
+    },
+    "tabs": {
+      "operators": "运营商",
+      "sms": "SMS 网关",
+      "freeAuth": "免认证",
+      "pending": "待处理"
+    },
+    "operators": {
+      "title": "热点运营商",
+      "description": "强制门户管理账户（实时）。",
+      "error": "无法加载运营商",
+      "empty": "暂无热点运营商",
+      "columns": {
+        "username": "用户名",
+        "role": "角色",
+        "portal": "门户",
+        "notes": "备注"
+      }
+    },
+    "sms": {
+      "title": "SMS 网关",
+      "description": "SMS 认证门户使用的提供商配置。",
+      "error": "无法加载 SMS 网关"
+    },
+    "freeAuth": {
+      "title": "免认证策略",
+      "description": "绕过强制门户的允许列表规则。",
+      "error": "无法加载免认证策略",
+      "empty": "暂无免认证策略",
+      "columns": {
+        "name": "名称",
+        "status": "状态",
+        "match": "匹配",
+        "id": "ID"
+      }
+    },
+    "pending": {
+      "title": "待处理的热点更改",
+      "description": "已暂存于数据库中。请通过待处理更改界面显式应用。",
+      "empty": "暂无待处理的热点更改",
+      "columns": {
+        "feature": "功能",
+        "operation": "操作",
+        "target": "目标",
+        "created": "创建时间",
+        "status": "状态"
+      }
+    }
+  },
+  "GatewayInsightsPage": {
+    "header": {
+      "title": "网关洞察",
+      "description": "只读遥测：高流量客户端、异常、AI 建议和网状拓扑。"
+    },
+    "target": {
+      "title": "目标",
+      "description": "洞察按站点范围划分。"
+    },
+    "empty": {
+      "pickTarget": {
+        "title": "选择控制器和站点",
+        "description": "洞察按站点划分。请同时选择两者以加载实时遥测。"
+      }
+    },
+    "tabs": {
+      "topTalkers": "高流量客户端",
+      "anomalies": "异常",
+      "aiSuggestions": "AI 建议",
+      "meshTopology": "网状拓扑"
+    },
+    "topTalkers": {
+      "title": "高流量客户端",
+      "description": "过去一天流量最高的客户端。",
+      "error": "无法加载高流量客户端",
+      "empty": "无流量数据",
+      "columns": {
+        "identity": "标识",
+        "kind": "类型",
+        "rx": "RX",
+        "tx": "TX",
+        "total": "合计"
+      }
+    },
+    "anomalies": {
+      "title": "异常",
+      "description": "过去一天检测到的异常。",
+      "error": "无法加载异常",
+      "empty": "无异常",
+      "columns": {
+        "when": "时间",
+        "severity": "严重性",
+        "type": "类型",
+        "description": "描述"
+      }
+    },
+    "aiSuggestions": {
+      "title": "AI 建议",
+      "description": "控制器生成的建议。",
+      "error": "无法加载 AI 建议",
+      "empty": "无 AI 建议"
+    },
+    "meshTopology": {
+      "title": "网状拓扑",
+      "description": "无线回传树。",
+      "error": "无法加载网状拓扑"
+    }
+  },
+  "GatewayProfilesPage": {
+    "header": {
+      "title": "配置文件与对象目录",
+      "description": "可重用对象，被 URL 过滤、应用控制、带宽、强制门户、RADIUS、PPSK 和 802.1X 引用。读取为实时操作；写入为暂存操作。"
+    },
+    "target": {
+      "title": "目标",
+      "description": "配置文件按站点划分范围。"
+    },
+    "notReady": {
+      "title": "选择控制器和站点",
+      "description": "配置文件按站点划分。请同时选择两者以加载实时状态。"
+    },
+    "tabs": {
+      "macGroups": "MAC 组",
+      "domainGroups": "域名组",
+      "ouiProfiles": "OUI 配置文件",
+      "timeRanges": "时间范围",
+      "rateLimits": "速率限制",
+      "ppsk": "PPSK",
+      "radius": "RADIUS",
+      "ldap": "LDAP",
+      "pending": "待处理"
+    },
+    "list": {
+      "itemCountOne": "本站点 {{count}} 个项目",
+      "itemCountOther": "本站点 {{count}} 个项目",
+      "loadError": "无法加载 {{label}}",
+      "empty": "无 {{label}}",
+      "columns": {
+        "name": "名称",
+        "id": "ID",
+        "type": "类型",
+        "description": "描述"
+      }
+    },
+    "pending": {
+      "title": "待处理的配置文件更改",
+      "description": "已暂存在我们的数据库中。请通过“待处理更改”界面显式应用。",
+      "empty": "没有待处理的配置文件更改",
+      "loadError": "无法加载待处理的配置文件更改",
+      "columns": {
+        "feature": "功能",
+        "operation": "操作",
+        "target": "目标",
+        "created": "创建时间",
+        "status": "状态"
+      }
+    }
+  },
+  "GatewayRoutingPage": {
+    "header": {
+      "title": "高级路由",
+      "description": "查看 VRRP、IPv6 静态路由、BGP、邻居以及实时路由表。编辑将进入暂存状态。"
+    },
+    "target": {
+      "title": "目标",
+      "description": "路由数据按站点划分。"
+    },
+    "empty": {
+      "title": "请选择控制器和站点",
+      "description": "路由数据按站点划分。请同时选择两者以加载实时状态。"
+    },
+    "readTabs": {
+      "vrrp": "VRRP",
+      "bgp": "BGP",
+      "bgpNeighbors": "BGP 邻居",
+      "ipv6Static": "IPv6 静态路由",
+      "routingTable": "路由表"
+    },
+    "tabs": {
+      "pending": "待处理"
+    },
+    "pending": {
+      "title": "待处理的路由更改",
+      "description": "已暂存于我们的数据库中。请通过“待处理更改”界面显式应用。",
+      "empty": "没有待处理的路由更改",
+      "loadError": "无法加载待处理的路由更改"
+    },
+    "loadError": "无法加载 {{label}}",
+    "table": {
+      "feature": "功能",
+      "operation": "操作",
+      "target": "目标",
+      "created": "创建时间",
+      "status": "状态"
+    }
+  },
+  "GatewaySwitchAdvancedPage": {
+    "header": {
+      "title": "交换机高级设置",
+      "description": "查看各交换机的 sFlow、镜像会话和 MSTP。所有更改均为暂存状态，请通过待应用更改显式应用。"
+    },
+    "target": {
+      "title": "目标",
+      "description": "交换机高级功能按 MAC 限定到特定交换机。",
+      "switchMacLabel": "交换机 MAC",
+      "load": "加载",
+      "loadedFor": "已加载："
+    },
+    "empty": {
+      "pickController": {
+        "title": "选择控制器和站点",
+        "description": "交换机高级数据按站点划分。请同时选择两者，然后输入交换机 MAC。"
+      },
+      "enterMac": {
+        "title": "输入交换机 MAC",
+        "description": "请提供要检查的交换机的 MAC。"
+      }
+    },
+    "tabs": {
+      "sflow": "sFlow",
+      "mirror": "镜像会话",
+      "mstp": "MSTP",
+      "pending": "待处理"
+    },
+    "config": {
+      "title": "{{label}} 配置",
+      "loadError": "无法加载 {{label}} 配置"
+    },
+    "mirror": {
+      "title": "镜像会话",
+      "loadError": "无法加载镜像会话",
+      "empty": "暂无镜像会话",
+      "columns": {
+        "session": "会话",
+        "source": "源",
+        "destination": "目标",
+        "direction": "方向",
+        "status": "状态"
+      }
+    },
+    "pending": {
+      "title": "待处理的交换机高级更改",
+      "description": "已暂存在数据库中。请通过待应用更改界面显式应用。",
+      "empty": "暂无待处理的交换机高级更改",
+      "loadError": "无法加载待处理的交换机高级更改",
+      "columns": {
+        "feature": "功能",
+        "operation": "操作",
+        "target": "目标",
+        "created": "创建时间",
+        "status": "状态"
+      }
+    }
+  },
+  "GatewaySystemPage": {
+    "pageTitle": "控制器系统设置",
+    "pageDescription": "查看控制器级别的系统和监控配置。编辑会暂存--在显式应用之前绝不会推送到在线控制器。",
+    "controllerCard": {
+      "title": "控制器",
+      "description": "控制器设置是全局的--请选择一个进行查看。"
+    },
+    "emptyPickController": {
+      "title": "请选择控制器",
+      "description": "在上方选择一个控制器以加载其系统状态。"
+    },
+    "picker": {
+      "label": "控制器",
+      "placeholder": "选择控制器"
+    },
+    "configLabels": {
+      "smtp": "SMTP",
+      "notifications": "通知",
+      "sslCert": "SSL 证书",
+      "global": "全局",
+      "maintenance": "维护",
+      "cloudAccess": "云访问"
+    },
+    "tabs": {
+      "backups": "备份",
+      "admins": "管理员",
+      "pending": "待处理"
+    },
+    "configCard": {
+      "title": "{{name}} 配置",
+      "loadError": "无法加载配置"
+    },
+    "backupsCard": {
+      "title": "控制器备份",
+      "description": "列出 + 下载。恢复 / 删除会暂存。",
+      "loadError": "无法加载备份"
+    },
+    "backupsTable": {
+      "empty": "暂无备份",
+      "id": "ID",
+      "created": "创建时间",
+      "size": "大小",
+      "action": "操作",
+      "download": "下载"
+    },
+    "adminsCard": {
+      "title": "控制器管理员"
+    },
+    "adminsTable": {
+      "empty": "暂无管理员",
+      "username": "用户名",
+      "role": "角色",
+      "email": "电子邮件"
+    },
+    "pendingCard": {
+      "title": "待处理的系统更改",
+      "description": "已暂存在我们的数据库中。请通过待处理更改界面显式应用。",
+      "empty": "暂无待处理的系统更改"
+    },
+    "pendingTable": {
+      "feature": "功能",
+      "operation": "操作",
+      "target": "目标",
+      "created": "创建时间",
+      "status": "状态"
+    }
+  },
+  "GatewayVPNPage": {
+    "pageTitle": "网关 VPN",
+    "pageDescription": "受管网关上的实时 VPN 配置。读取为实时执行；每项更改都会暂存以便显式应用。",
+    "target": "目标",
+    "pickControllerAndSite": "选择控制器和站点",
+    "tabs": {
+      "pending": "待处理"
+    },
+    "protocolConfiguration": "{{protocol}} 配置",
+    "protocolConfigDescription": "从控制器实时读取。编辑将通过暂存队列处理。",
+    "nothingConfigured": "未配置任何内容",
+    "nothingConfiguredDescription": "此站点上尚无 {{protocol}} {{entryType}}。",
+    "entryType": {
+      "users": "用户",
+      "entries": "条目"
+    },
+    "enabledState": {
+      "on": "开启",
+      "off": "关闭"
+    },
+    "activeConnections": "活动连接",
+    "noActiveSessions": "无活动会话",
+    "pendingChanges": "待处理的 VPN 更改",
+    "pendingChangesDescription": "已暂存在我们的数据库中。应用受 OMADA_READ_ONLY + force=true 限制。",
+    "noPendingChanges": "无待处理的更改",
+    "configLoadError": "无法加载 {{protocol}} 配置",
+    "statusLoadError": "无法加载 {{protocol}} 活动连接",
+    "pendingLoadError": "无法加载待处理的更改",
+    "columns": {
+      "nameId": "名称 / ID",
+      "detail": "详情",
+      "enabled": "已启用",
+      "peer": "对端",
+      "state": "状态",
+      "rxTx": "RX / TX",
+      "lastHandshake": "上次握手",
+      "feature": "功能",
+      "op": "操作",
+      "target": "目标",
+      "created": "创建时间",
+      "status": "状态"
+    },
+    "summary": {
+      "ipsec": "{{local}} ↔ {{remote}} 经由 {{gateway}}"
+    }
+  }
+}

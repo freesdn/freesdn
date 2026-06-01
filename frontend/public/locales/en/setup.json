@@ -1,0 +1,455 @@
+{
+  "SetupPage": {
+    "errors": {
+      "checkStatus": "Failed to check setup status",
+      "title": "Setup Error"
+    },
+    "actions": {
+      "retry": "Retry"
+    },
+    "header": {
+      "mobileTitle": "FreeSDN Setup",
+      "mobileStep": "Step {{current}}/{{total}} · {{step}}",
+      "wizard": "Setup Wizard",
+      "stepOf": "Step {{current}} of {{total}}"
+    },
+    "environment": {
+      "production": "Production",
+      "development": "Development"
+    },
+    "steps": {
+      "welcome": {
+        "name": "Welcome",
+        "description": "System requirements"
+      },
+      "database": {
+        "name": "Database",
+        "description": "Database connection"
+      },
+      "organization": {
+        "name": "Organization",
+        "description": "First organization"
+      },
+      "admin": {
+        "name": "Admin",
+        "description": "Create admin user"
+      },
+      "modules": {
+        "name": "Modules",
+        "description": "Enable features"
+      },
+      "accessMode": {
+        "name": "Access Mode",
+        "description": "Manage or monitor only"
+      },
+      "controllers": {
+        "name": "Controllers",
+        "description": "Add devices (optional)"
+      },
+      "complete": {
+        "name": "Complete",
+        "description": "Finish setup"
+      }
+    }
+  },
+  "AdminStep": {
+    "title": "Create Admin Account",
+    "subtitle": "Set up the administrator account for managing FreeSDN",
+    "card": {
+      "title": "Administrator Details",
+      "description": "This account will have full access to all features"
+    },
+    "banner": {
+      "emailLabel": "Your email address",
+      "text": "is used to sign in to FreeSDN. The username is a display name shown in the interface."
+    },
+    "fields": {
+      "email": {
+        "label": "Email Address *",
+        "placeholder": "admin@example.com",
+        "helper": "You will use this email to sign in"
+      },
+      "firstName": {
+        "label": "First Name"
+      },
+      "lastName": {
+        "label": "Last Name"
+      },
+      "username": {
+        "label": "Username *",
+        "helper": "Display name shown in the UI (not used for login)"
+      },
+      "password": {
+        "label": "Password *",
+        "strengthLabel": "Password strength"
+      },
+      "confirmPassword": {
+        "label": "Confirm Password *",
+        "match": "Passwords match",
+        "mismatch": "Passwords do not match"
+      }
+    },
+    "rules": {
+      "length": "At least 12 characters",
+      "lower": "At least one lowercase letter",
+      "upper": "At least one uppercase letter",
+      "digit": "At least one number",
+      "special": "At least one special character"
+    },
+    "strength": {
+      "veryWeak": "Very weak",
+      "weak": "Weak",
+      "fair": "Fair",
+      "strong": "Strong",
+      "veryStrong": "Very strong"
+    },
+    "actions": {
+      "previous": "Previous",
+      "continue": "Continue"
+    },
+    "errors": {
+      "emailRequired": "Email is required",
+      "emailInvalid": "Please enter a valid email address",
+      "usernameTooShort": "Username must be at least 3 characters",
+      "passwordRequirements": "Password does not meet all requirements",
+      "passwordMismatch": "Passwords do not match",
+      "createFailed": "Failed to create admin user"
+    }
+  },
+  "AccessModeStep": {
+    "title": "Access Mode",
+    "subtitle": "Choose how FreeSDN works with your devices. You can change this later in Settings.",
+    "defaultBadge": "Default",
+    "hint": "Monitor only is the safe choice for a brand-new install — FreeSDN reads device state but never writes changes. Switch to Manage anytime once you're ready.",
+    "modes": {
+      "manage": {
+        "title": "Manage (read-write)",
+        "description": "FreeSDN can read device state and push configuration changes to your controllers and devices."
+      },
+      "monitor": {
+        "title": "Monitor only (read-only)",
+        "description": "FreeSDN reads device state for monitoring and dashboards, but all writes to devices are refused. Nothing on your network is changed."
+      }
+    },
+    "actions": {
+      "previous": "Previous",
+      "continue": "Continue"
+    }
+  },
+  "CompleteStep": {
+    "progress": {
+      "finalizing": "Finalizing configuration...",
+      "installingSampleData": "Installing sample data (this may take a moment)...",
+      "installingAndDiscovery": "Installing sample data & starting discovery...",
+      "startingDiscovery": "Starting device discovery...",
+      "enablingMonitorOnly": "Enabling monitor-only (read-only) mode..."
+    },
+    "errors": {
+      "failed": "Failed to complete setup",
+      "monitorOnlyFailed": "Could not enable monitor-only mode"
+    },
+    "done": {
+      "heading": "Setup Complete!",
+      "subtitle": "FreeSDN is ready to use",
+      "monitorOnlyWarning": "Setup finished, but monitor-only (read-only) mode could not be enabled: {{error}}. You can enable it in Settings."
+    },
+    "summary": {
+      "title": "Setup Summary",
+      "description": "Here's what you've configured",
+      "adminAccount": "Admin Account",
+      "organization": "Organization",
+      "modulesEnabled": "Modules Enabled",
+      "controllersAdded": "Controllers Added",
+      "devicesCount": "({{count}} devices)"
+    },
+    "review": {
+      "heading": "Almost Done!",
+      "subtitle": "Review your setup and complete the wizard",
+      "administrator": "Administrator",
+      "enabledModules": "Enabled Modules",
+      "controllers": "Controllers",
+      "controllersFound": "{{controllers}} controller(s), {{devices}} device(s) found",
+      "noControllers": "None added (you can add later)",
+      "accessMode": "Access Mode",
+      "accessModeManage": "Manage (read-write)",
+      "accessModeMonitor": "Monitor only (read-only)"
+    },
+    "options": {
+      "title": "Final Options",
+      "installSampleData": "Install sample data",
+      "installSampleDataHelp": "Populate the system with demo devices, networks, alerts, events, audit logs, backups, and firmware data",
+      "startDiscovery": "Start device discovery after setup",
+      "sendWelcomeEmail": "Send welcome email with login instructions"
+    },
+    "actions": {
+      "goToLogin": "Go to Login",
+      "completing": "Completing Setup...",
+      "complete": "Complete Setup"
+    }
+  },
+  "ControllersStep": {
+    "title": "Add Controllers",
+    "subtitle": "Connect to device controllers to start managing your network (optional)",
+    "addedControllers": "Added Controllers",
+    "devicesCount": "{{count}} devices",
+    "testSuccess": "Connection successful! Found {{count}} devices",
+    "cloud": "cloud",
+    "regionCloud": "{{region}} cloud",
+    "errors": {
+      "loadTypes": "Failed to load controller types",
+      "requiredCloudFields": "Please fill in all required cloud fields",
+      "requiredFields": "Please fill in all required fields",
+      "connectionTestFailed": "Connection test failed",
+      "testFirst": "Please test the connection first",
+      "probeFailed": "Failed to probe remote sites. Check the browser console and backend logs for more details.",
+      "addFailed": "Failed to add controller"
+    },
+    "form": {
+      "newController": "New Controller",
+      "bindSites": "Bind Sites",
+      "connectionDescription": "Connect to a network controller or management platform",
+      "bindSitesDescription": "Map each Omada site to a FreeSDN site. You can use existing sites or skip."
+    },
+    "fields": {
+      "controllerType": "Controller Type *",
+      "controllerTypePlaceholder": "Select controller type",
+      "connectionMode": "Connection Mode",
+      "modeLocal": "Local",
+      "modeCloud": "Cloud",
+      "modeCloudHint": "Connect via TP-Link Cloud OpenAPI (OAuth2). Get credentials from Omada → Settings → Platform Integration → OpenAPI.",
+      "modeLocalHint": "Connect directly to a local Omada Controller.",
+      "displayName": "Display Name *",
+      "displayNamePlaceholder": "Main Office Controller",
+      "host": "Host/URL *",
+      "username": "Username *",
+      "usernamePlaceholder": "admin",
+      "password": "Password *",
+      "cloudRegion": "Cloud Region *",
+      "cloudRegionPlaceholder": "Select cloud region",
+      "regionUsEast": "US East (use1)",
+      "regionEuWest": "EU West (euw1)",
+      "regionAsiaPacific": "Asia Pacific (aps1)",
+      "clientId": "Client ID *",
+      "clientIdPlaceholder": "From Omada → Platform Integration → OpenAPI",
+      "clientSecret": "Client Secret *",
+      "omadaId": "Omada Controller ID (omadacId) *",
+      "omadaIdPlaceholder": "e.g., 7f1346dcd01b17a65ad23024e55effe5",
+      "omadaIdHintBefore": "Find this in your Omada Cloud URL as the ",
+      "omadaIdHintAfter": " parameter",
+      "siteId": "Site ID (optional)",
+      "siteIdPlaceholder": "Leave empty for default",
+      "verifySsl": "Verify SSL certificate"
+    },
+    "actions": {
+      "testConnection": "Test Connection",
+      "probingSites": "Probing Sites...",
+      "nextBindSites": "Next: Bind Sites",
+      "addController": "Add Controller",
+      "cancel": "Cancel",
+      "back": "Back",
+      "previous": "Previous",
+      "continue": "Continue",
+      "skipForNow": "Skip for now"
+    },
+    "binding": {
+      "intro": {
+        "before": "Your Omada controller has ",
+        "after": " site(s). Map each to an existing FreeSDN site, or leave unmapped."
+      },
+      "selectSitePlaceholder": "Select a FreeSDN site",
+      "skipOption": "- Skip (don't import devices) -",
+      "noSites": "No sites found on the controller. You can still add the controller."
+    },
+    "empty": {
+      "addAnother": "Add another controller?",
+      "none": "No controllers added yet"
+    },
+    "note": {
+      "label": "Note:",
+      "text": "You can skip this step and add controllers later from the dashboard."
+    }
+  },
+  "DatabaseStep": {
+    "title": "Database Setup",
+    "subtitle": "Verify database connection and run migrations",
+    "errors": {
+      "checkFailed": "Failed to check database",
+      "migrationsFailed": "Failed to run migrations. Check backend logs for details."
+    },
+    "status": {
+      "heading": "Database Status",
+      "description": "Connection and migration status"
+    },
+    "connection": {
+      "label": "Connection",
+      "connected": "Connected to database",
+      "failed": "Connection failed"
+    },
+    "databaseType": {
+      "label": "Database Type"
+    },
+    "timescale": {
+      "enabledDetail": "v{{version}} on {{location}}",
+      "locationLog": "log database",
+      "locationMain": "main database",
+      "required": "Required · time-series extension for metrics, health checks, and events"
+    },
+    "logDatabase": {
+      "label": "Log Database",
+      "connectedDetail": "Separate TimescaleDB instance for time-series data",
+      "required": "Required · separate TimescaleDB for metrics, health checks, heartbeats, and events"
+    },
+    "migrations": {
+      "label": "Migrations",
+      "upToDate": "Schema up to date",
+      "countDetail": "{{applied}} applied, {{pending}} pending",
+      "running": "Running...",
+      "runningBanner": {
+        "title": "Running database migrations...",
+        "description": "This creates all schemas and tables. It may take up to a minute."
+      }
+    },
+    "badges": {
+      "ok": "OK",
+      "error": "Error",
+      "enabled": "Enabled",
+      "required": "Required",
+      "connected": "Connected",
+      "upToDate": "Up to date"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "runMigrations": "Run Migrations",
+      "previous": "Previous",
+      "continue": "Continue"
+    }
+  },
+  "ModulesStep": {
+    "title": "Enable Modules",
+    "subtitle": "Select the features you want to enable",
+    "badges": {
+      "recommended": "Recommended",
+      "required": "Required"
+    },
+    "requires": "Requires: {{modules}}",
+    "selected": {
+      "label": "Selected:",
+      "count": "{{count}} modules",
+      "hint": "You can enable or disable modules later in Settings"
+    },
+    "actions": {
+      "previous": "Previous",
+      "continue": "Continue"
+    },
+    "errors": {
+      "loadFailed": "Failed to load modules",
+      "enableFailed": "Failed to enable modules",
+      "cannotDisable": "Cannot disable: {{dependents}} depends on this module"
+    }
+  },
+  "OrganizationStep": {
+    "title": "Create Organization",
+    "subtitle": "Set up your first organization to manage sites and devices",
+    "card": {
+      "title": "Organization Details",
+      "description": "Organizations help you organize sites, devices, and users"
+    },
+    "fields": {
+      "name": {
+        "label": "Organization Name *",
+        "placeholder": "My Company"
+      },
+      "slug": {
+        "label": "URL Slug *",
+        "placeholder": "my-company",
+        "helper": "Used in URLs and API requests"
+      },
+      "timezone": {
+        "label": "Timezone",
+        "placeholder": "Select timezone"
+      },
+      "locale": {
+        "label": "Language",
+        "placeholder": "Select language"
+      },
+      "timeFormat": {
+        "label": "Time Format",
+        "placeholder": "Select time format"
+      },
+      "dateFormat": {
+        "label": "Date Format",
+        "placeholder": "Select date format"
+      }
+    },
+    "locales": {
+      "enUS": "English (US)",
+      "enGB": "English (UK)",
+      "esES": "Spanish",
+      "frFR": "French",
+      "deDE": "German",
+      "jaJP": "Japanese",
+      "zhCN": "Chinese (Simplified)"
+    },
+    "timeFormats": {
+      "h24": "24-hour (14:30)",
+      "h12": "12-hour (2:30 PM)"
+    },
+    "dateFormats": {
+      "iso": "YYYY-MM-DD (ISO)",
+      "us": "MM/DD/YYYY (US)",
+      "eu": "DD/MM/YYYY (EU)",
+      "de": "DD.MM.YYYY (DE)"
+    },
+    "validation": {
+      "nameMin": "Organization name must be at least 2 characters",
+      "slugMin": "Slug must be at least 2 characters",
+      "slugPattern": "Slug can only contain lowercase letters, numbers, and hyphens"
+    },
+    "errors": {
+      "capture": "Failed to capture organization details"
+    },
+    "actions": {
+      "previous": "Previous",
+      "continue": "Continue"
+    }
+  },
+  "WelcomeStep": {
+    "errors": {
+      "checkFailed": "Failed to check system requirements",
+      "title": "Error",
+      "unknown": "Unknown error occurred"
+    },
+    "actions": {
+      "retry": "Retry",
+      "continue": "Continue"
+    },
+    "restore": {
+      "toggle": "Restore from a backup instead",
+      "help": "Already have a Full backup (.fsdnvault) from another instance? Restore it here to rebuild this one — your sites, devices, accounts and credentials come back, and you log in with your existing password. (A config snapshot .fsdn can't be used here — it has no accounts.)",
+      "fileLabel": "Backup file (.fsdnvault)",
+      "passLabel": "Backup passphrase",
+      "passPlaceholder": "The passphrase the backup was created with",
+      "submit": "Restore this instance",
+      "failed": "Restore failed — check the file and passphrase."
+    },
+    "hero": {
+      "title": "Welcome to {{appName}}",
+      "subtitle": "Let's get your network management platform set up",
+      "version": "Version {{version}}"
+    },
+    "requirements": {
+      "title": "System Requirements",
+      "description": "Checking that your system meets the requirements",
+      "required": "Required: {{value}}",
+      "allMet": "All system requirements met. You're ready to continue!",
+      "notMet": "Some requirements are not met. Please resolve them before continuing."
+    },
+    "stack": {
+      "title": "Stack Information",
+      "backend": "Backend",
+      "frontend": "Frontend",
+      "dockerServices": "Docker Services",
+      "unreachable": "unreachable"
+    }
+  }
+}

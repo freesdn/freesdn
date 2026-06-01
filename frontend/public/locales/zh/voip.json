@@ -1,0 +1,2009 @@
+{
+  "PBXDetailPage": {
+    "pbxFallbackName": "PBX",
+    "common": {
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "active": "活动",
+      "inactive": "未激活",
+      "yes": "是",
+      "no": "否",
+      "unknown": "未知",
+      "any": "任意",
+      "default": "默认",
+      "cancel": "取消",
+      "create": "创建",
+      "delete": "删除",
+      "edit": "编辑",
+      "view": "查看",
+      "saveChanges": "保存更改",
+      "unlimited": "无限制",
+      "auto": "自动",
+      "live": "实时",
+      "cached": "缓存",
+      "unnamed": "未命名"
+    },
+    "tabs": {
+      "overview": "概览",
+      "extensions": "分机",
+      "trunks": "中继",
+      "ringGroups": "振铃组",
+      "queues": "队列",
+      "ivr": "IVR",
+      "dids": "DID",
+      "activeCalls": "活动呼叫",
+      "voicemail": "语音信箱",
+      "config": "PBX 配置",
+      "settings": "设置"
+    },
+    "breadcrumb": {
+      "pbxSystems": "PBX 系统"
+    },
+    "header": {
+      "withAsterisk": "{{host}} · Asterisk {{version}}"
+    },
+    "actions": {
+      "testConnection": "测试连接",
+      "applyConfig": "应用配置",
+      "pendingChanges": "待处理更改",
+      "webUi": "Web 界面",
+      "backToPbx": "返回 PBX"
+    },
+    "editExt": {
+      "button": "编辑",
+      "title": "编辑分机 {{number}}",
+      "description": "暂存更改以供审核。在你从“待处理更改”中应用之前，不会写入 PBX。",
+      "outboundCid": "外呼来电显示",
+      "outboundCidPlaceholder": "\"姓名\" <100>",
+      "stageButton": "暂存更改",
+      "staged": "更改已暂存 - 请在“待处理更改”中审核并应用",
+      "stageFailed": "暂存更改失败"
+    },
+    "editRg": {
+      "title": "编辑振铃组 {{number}}",
+      "descLabel": "描述"
+    },
+    "createRg": {
+      "title": "新建振铃组",
+      "groupNumber": "组号",
+      "members": "成员（分机，用连字符分隔）"
+    },
+    "createDid": {
+      "title": "新建呼入路由",
+      "did": "DID 号码",
+      "cid": "CID 匹配",
+      "destination": "目标",
+      "destinationHint": "匹配的呼叫去向，例如 from-did-direct,200,1 表示振铃分机 200。"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败。结果可能不完整。"
+    },
+    "sync": {
+      "started": "同步已开始",
+      "failed": "同步失败",
+      "complete": "同步完成",
+      "completeDescription": "分机、中继、振铃组和 IVR 均已更新。",
+      "queuedConnecting": "同步已排队, 正在连接到 PBX...",
+      "watchingProgress": "正在跟踪实时进度...",
+      "connecting": "正在连接到 PBX...",
+      "unknownError": "未知错误",
+      "queuedWaiting": "已排队, 正在等待工作进程...",
+      "syncingStep": "正在同步, 第 {{current}}/{{total}} 步"
+    },
+    "syncStages": {
+      "connect": "连接",
+      "extensions": "分机",
+      "ringGroups": "振铃组",
+      "liveData": "实时数据",
+      "save": "保存",
+      "done": "完成"
+    },
+    "toast": {
+      "pbxConnected": "PBX 连接成功",
+      "connectionFailed": "连接失败",
+      "connectionTestFailed": "连接测试失败",
+      "configReloaded": "PBX 配置已重新加载",
+      "reloadFailed": "重新加载失败",
+      "callTerminated": "呼叫已终止",
+      "hangupFailed": "挂断呼叫失败",
+      "pbxDeleted": "PBX 已删除",
+      "settingsSaved": "PBX 设置已保存",
+      "settingsSaveFailed": "保存设置失败",
+      "extensionCreated": "分机已创建",
+      "extensionCreateFailed": "创建分机失败",
+      "extensionDeleted": "分机已删除",
+      "extensionDeleteFailed": "删除分机失败",
+      "trunkSettingsSaved": "中继设置已保存",
+      "trunkUpdateFailed": "更新中继失败 · 写入 API 可能不可用",
+      "trunkDeleted": "中继已删除",
+      "trunkDeleteFailed": "删除中继失败 · 写入 API 可能不可用",
+      "trunkCreated": "中继已创建",
+      "trunkCreateFailed": "创建中继失败 · 写入 API 可能不可用",
+      "callOriginated": "呼叫已发起",
+      "callOriginateFailed": "发起呼叫失败"
+    },
+    "confirm": {
+      "deleteExtension": "删除分机 {{number}}？",
+      "deleteRingGroup": "删除振铃组 {{number}}？这将暂存一个删除以供审核。",
+      "deleteInboundRoute": "删除呼入路由 {{route}}？这将暂存一个删除以供审核。",
+      "deleteTrunk": "删除中继 \"{{name}}\"？此操作无法撤销。"
+    },
+    "columns": {
+      "extension": "分机",
+      "name": "名称",
+      "callerId": "主叫 ID",
+      "voicemail": "语音信箱",
+      "phone": "电话",
+      "tech": "技术",
+      "recording": "录音",
+      "status": "状态",
+      "trunk": "中继",
+      "sipServer": "SIP 服务器",
+      "outboundCid": "外呼 CID",
+      "channels": "通道",
+      "queue": "队列",
+      "members": "成员",
+      "waiting": "等待中",
+      "completed": "已完成",
+      "abandoned": "已放弃",
+      "serviceLevel": "SL%",
+      "ivrMenu": "IVR 菜单",
+      "timeout": "超时",
+      "directDial": "直拨",
+      "options": "选项",
+      "channel": "通道",
+      "caller": "主叫",
+      "connectedTo": "已连接至",
+      "state": "状态",
+      "duration": "时长",
+      "mailbox": "信箱",
+      "email": "邮箱",
+      "new": "新",
+      "old": "旧",
+      "didRoute": "DID / 路由",
+      "cidMatch": "CID 匹配",
+      "destination": "目标",
+      "cidPrefix": "CID 前缀",
+      "alertInfo": "提醒信息",
+      "moh": "MOH",
+      "privacy": "隐私",
+      "ringGroup": "振铃组",
+      "strategy": "策略",
+      "ringTime": "振铃时间"
+    },
+    "trunkStatus": {
+      "registered": "已注册",
+      "disabled": "已禁用",
+      "configured": "已配置"
+    },
+    "callState": {
+      "up": "通话中",
+      "ringing": "振铃中"
+    },
+    "extDialog": {
+      "title": "创建分机",
+      "description": "在 PBX 上创建新分机。将通过 FreePBX 适配器创建并保存到本地。",
+      "extensionNumber": "分机号码",
+      "displayName": "显示名称",
+      "namePlaceholder": "张三",
+      "callerIdName": "主叫 ID 名称",
+      "callerIdNumber": "主叫 ID 号码",
+      "sipPassword": "SIP 密码",
+      "voicemailPin": "语音信箱 PIN"
+    },
+    "trunkDialog": {
+      "title": "创建 SIP 中继",
+      "description": "向 PBX 添加新的 SIP 中继。配置连接和认证设置。",
+      "trunkName": "中继名称",
+      "trunkNamePlaceholder": "我的 SIP 中继",
+      "technology": "技术",
+      "sipLegacy": "SIP（旧版）",
+      "hostSipServer": "主机 / SIP 服务器",
+      "port": "端口",
+      "username": "用户名",
+      "secretPassword": "密钥 / 密码",
+      "outboundCid": "外呼 CID",
+      "maxChannels": "最大通道数",
+      "codecs": "编解码器",
+      "transport": "传输",
+      "provider": "提供商",
+      "providerPlaceholder": "提供商名称（可选）",
+      "createTrunk": "创建中继"
+    },
+    "callDialog": {
+      "title": "发起呼叫",
+      "description": "从一个分机向另一个分机或外部号码发起呼叫。",
+      "fromExtension": "来源分机",
+      "destination": "目标",
+      "destinationPlaceholder": "200 或外部号码",
+      "callButton": "呼叫"
+    },
+    "extSheet": {
+      "unnamed": "未命名分机",
+      "description": "完整的企业分机配置",
+      "extPrefix": "分机"
+    },
+    "trunkSheet": {
+      "techTrunk": "{{tech}} 中继",
+      "editDescription": "编辑中继设置 · 更改将推送到 PBX",
+      "viewDescription": "中继注册和配置详情",
+      "activeChannels": "活动通道",
+      "editSettings": "编辑设置",
+      "readOnlyNote": "此处中继为只读 — FreePBX 未提供中继写入 API。请在 FreePBX 管理界面中管理中继。"
+    },
+    "reloadBanner": {
+      "message": "配置更改已暂存到 PBX，但尚未生效。点击“应用配置”以激活（这将重新加载 Asterisk）。"
+    },
+    "queueSheet": {
+      "strategyLabel": "{{strategy}} 策略",
+      "description": "队列性能指标和坐席配置",
+      "agents": "坐席",
+      "queueMembers": "队列成员 ({{count}})",
+      "noMembers": "此队列没有成员"
+    },
+    "ringGroupSheet": {
+      "description": "振铃组配置和成员",
+      "membersCount": "成员 ({{count}})",
+      "noMembers": "此振铃组没有成员"
+    },
+    "ivrSheet": {
+      "description": "IVR 菜单结构和路由选项",
+      "menuOptions": "菜单选项 ({{count}})",
+      "noDestination": "无目标",
+      "returnLabel": "返回：{{value}}",
+      "noMenuOptions": "未配置菜单选项"
+    },
+    "voicemailSheet": {
+      "description": "语音信箱详情和消息数量",
+      "newMessages": "新消息",
+      "oldMessages": "旧消息"
+    },
+    "trunkEdit": {
+      "callerIdNumberOnly": "仅主叫 ID 号码",
+      "yesDisabled": "是（已禁用）",
+      "dialOutPrefixPlaceholder": "例如 9",
+      "providerNamePlaceholder": "提供商名称",
+      "failoverPlaceholder": "中继名称或 ID"
+    },
+    "sections": {
+      "identity": "身份",
+      "credentials": "凭据",
+      "callerId": "主叫 ID",
+      "callRouting": "呼叫路由",
+      "recording": "录音",
+      "features": "功能",
+      "liveFreepbxData": "FreePBX 实时数据",
+      "connection": "连接",
+      "authentication": "认证",
+      "mediaCodecs": "媒体和编解码器",
+      "advanced": "高级",
+      "channels": "通道",
+      "rawSettings": "原始设置",
+      "general": "常规",
+      "connectionSip": "连接 / SIP",
+      "pjsipRegistration": "PJSIP / 注册",
+      "performance": "性能",
+      "settings": "设置",
+      "configuration": "配置",
+      "description": "描述",
+      "details": "详情"
+    },
+    "fields": {
+      "extension": "分机",
+      "displayName": "显示名称",
+      "sipName": "SIP 名称",
+      "description": "描述",
+      "user": "用户",
+      "technology": "技术",
+      "dialString": "拨号串",
+      "sipPassword": "SIP 密码",
+      "voicemail": "语音信箱",
+      "outboundCid": "外呼 CID",
+      "emergencyCid": "紧急 CID",
+      "noAnswerCid": "无应答 CID",
+      "busyCid": "忙线 CID",
+      "unavailableCid": "不可用 CID",
+      "ringTimer": "振铃计时器",
+      "noAnswerDest": "无应答目标",
+      "busyDest": "忙线目标",
+      "unavailDest": "不可用目标",
+      "noAnswerAction": "无应答操作",
+      "mohClass": "MOH 类别",
+      "policy": "策略",
+      "onDemand": "按需",
+      "priority": "优先级",
+      "inboundExternal": "外部入站",
+      "outboundExternal": "外部出站",
+      "inboundInternal": "内部入站",
+      "outboundInternal": "内部出站",
+      "answerMode": "应答模式",
+      "intercom": "对讲",
+      "cwTone": "呼叫等待提示音",
+      "hintOverride": "提示覆盖",
+      "trunkName": "中继名称",
+      "trunkId": "中继 ID",
+      "provider": "提供商",
+      "keepCid": "保留 CID",
+      "disabled": "已禁用",
+      "failoverTrunk": "故障转移中继",
+      "dialOutPrefix": "外呼前缀",
+      "sipServer": "SIP 服务器",
+      "port": "端口",
+      "username": "用户名",
+      "secret": "密钥",
+      "transport": "传输",
+      "context": "上下文",
+      "fromDomain": "来源域",
+      "fromUser": "来源用户",
+      "registration": "注册",
+      "pjsipLine": "PJSIP 线路",
+      "authRejectionPermanent": "永久认证拒绝",
+      "expiration": "过期时间",
+      "identifyBy": "识别方式",
+      "codecs": "编解码器",
+      "dtmfMode": "DTMF 模式",
+      "mediaEncryption": "媒体加密",
+      "rtpSymmetric": "RTP 对称",
+      "forceRport": "强制 RPort",
+      "t38Udptl": "T.38 UDPTL",
+      "qualifyFrequency": "探测频率",
+      "sendConnectedLine": "发送已连接线路",
+      "trustRpid": "信任 RPID",
+      "sendRpid": "发送 RPID",
+      "faxDetect": "传真检测",
+      "allowUnauthOptions": "允许未认证 OPTIONS",
+      "maxRetries": "最大重试次数",
+      "retryInterval": "重试间隔",
+      "registrationString": "注册字符串",
+      "aorContact": "AOR 联系人",
+      "matchIpCidr": "匹配 (IP/CIDR)",
+      "contactUser": "联系用户",
+      "avgHoldTime": "平均等待时间",
+      "avgTalkTime": "平均通话时间",
+      "callsTaken": "已接听呼叫",
+      "groupNumber": "组号",
+      "announcement": "公告",
+      "authentication": "身份验证"
+    }
+  },
+  "PhoneDetailPage": {
+    "common": {
+      "cancel": "取消",
+      "previewPlan": "预览方案"
+    },
+    "values": {
+      "assigned": "已分配",
+      "none": "无",
+      "unknown": "未知"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "onboard": "纳管",
+      "provision": "下发配置",
+      "copy": "复制",
+      "firmwareManagement": "固件管理"
+    },
+    "errorBanner": "部分数据加载失败，结果可能不完整。",
+    "notFound": {
+      "title": "未找到话机",
+      "back": "返回话机列表"
+    },
+    "liveState": {
+      "label": "实时状态：",
+      "lines": "线路：",
+      "linesValue": "{{active}} 条活动 / 共 {{total}} 条",
+      "lockout": "锁定：{{lockout}}",
+      "refresh": "每 5 秒刷新一次"
+    },
+    "tabs": {
+      "overview": "概览",
+      "config": "配置",
+      "provisioning": "配置下发",
+      "network": "网络",
+      "actions": "操作"
+    },
+    "overview": {
+      "deviceInfo": "设备信息",
+      "statusHealth": "状态与健康",
+      "pbxAssociation": "PBX 关联",
+      "tagsMetadata": "标签与元数据",
+      "noTags": "无标签"
+    },
+    "fields": {
+      "name": "名称",
+      "vendor": "厂商",
+      "model": "型号",
+      "macAddress": "MAC 地址",
+      "serialNumber": "序列号",
+      "firmware": "固件",
+      "location": "位置",
+      "status": "状态",
+      "lifecycle": "生命周期",
+      "sipRegistration": "SIP 注册",
+      "uptime": "运行时间",
+      "cpu": "CPU",
+      "memory": "内存",
+      "lastSeen": "最后在线",
+      "lastPolled": "最后轮询",
+      "pbxSystem": "PBX 系统",
+      "extension": "分机",
+      "sipUser": "SIP 用户",
+      "discoveryMethod": "发现方式",
+      "created": "创建时间",
+      "updated": "更新时间",
+      "configTemplate": "配置模板",
+      "currentStatus": "当前状态",
+      "autoProvisionUrl": "自动配置 URL",
+      "template": "模板",
+      "currentVersion": "当前版本",
+      "ipAddress": "IP 地址",
+      "subnet": "子网",
+      "vlan": "VLAN",
+      "sipRegistrar": "SIP 注册服务器",
+      "pbx": "PBX"
+    },
+    "config": {
+      "templateAssignment": "模板分配",
+      "noTemplateAssigned": "未分配模板",
+      "manageTemplates": "管理模板",
+      "provisioningInfo": "配置下发信息",
+      "configPreview": "配置预览",
+      "configPreviewDesc": "生成的配置下发内容",
+      "assignTemplateHint": "分配模板以生成配置"
+    },
+    "provisioning": {
+      "statusTitle": "配置下发状态",
+      "statusDesc": "当前配置下发状态与历史",
+      "provisioning": "下发中...",
+      "provisionNow": "立即下发",
+      "firmware": "固件",
+      "firmwareDesc": "当前固件版本与合规情况"
+    },
+    "network": {
+      "detailsTitle": "网络详情"
+    },
+    "connTest": {
+      "title": "话机登录测试",
+      "description": "测试与话机 Web 界面的连接和登录 · 获取设备信息、SIP 注册状态并验证凭据",
+      "username": "用户名",
+      "password": "密码",
+      "saveCreds": "登录成功后保存凭据",
+      "testing": "测试中...",
+      "testConnection": "测试连接",
+      "testFailed": "连接测试失败",
+      "result": {
+        "authenticated": "已连接并认证",
+        "configReadable": "设备已连接（配置可读）",
+        "identified": "已识别设备",
+        "reachable": "可达（身份未知）",
+        "lockedOut": "话机已被锁定",
+        "unreachable": "话机不可达",
+        "error": "错误：{{error}}",
+        "statusIp": "状态：{{status}} · IP：{{ip}}",
+        "apiAccessibleSuffix": " · API 可访问",
+        "vendor": "厂商：",
+        "model": "型号：",
+        "mac": "MAC：",
+        "firmware": "固件：",
+        "configItems": "配置项：",
+        "lockout": "锁定：",
+        "notLocked": "未锁定",
+        "sip": "SIP：",
+        "registered": "已注册",
+        "notRegistered": "未注册",
+        "account": "账户 {{account}}：",
+        "active": "活动",
+        "notConfigured": "未配置",
+        "rawPValues": "原始 P 值（{{count}} 项）"
+      }
+    },
+    "lifecycle": {
+      "title": "生命周期管理",
+      "description": "更改此设备的生命周期状态",
+      "onboardDevice": "纳管设备",
+      "enterMaintenance": "进入维护模式",
+      "exitMaintenance": "退出维护模式",
+      "decommissionDevice": "停用设备"
+    },
+    "quickActions": {
+      "title": "快捷操作",
+      "description": "设备操作",
+      "testConnection": "测试话机连接",
+      "pushSipTooltipLinked": "将分机 {{extension}} 的凭据下发到话机",
+      "pushSipTooltipUnlinked": "未关联到 PBX 分机, 请先运行自动关联",
+      "pushSipConfig": "从 PBX 下发 SIP 配置",
+      "reprovisionConfig": "重新下发配置",
+      "rebootPhone": "重启话机",
+      "moveToSite": "迁移到站点",
+      "factoryReset": "恢复出厂设置",
+      "discoveryScans": "发现扫描",
+      "configTemplates": "配置模板"
+    },
+    "pushSip": {
+      "title": "从 FreePBX 下发 SIP 配置",
+      "descPrefix": "将分机",
+      "descFrom": "从",
+      "linkedPbx": "已关联的 PBX",
+      "descSuffix": "作为账户 1 下发到此话机。FreeSDN 不缓存 SIP 密钥, 从 FreePBX 输入一次密码，即可直接发送到话机。",
+      "passwordLabel": "SIP 密码（来自 FreePBX 分机）",
+      "passwordPlaceholder": "输入 SIP 密钥",
+      "secretHint": "在 FreePBX 中：应用程序 → 分机 → {{extension}} → 编辑 → \"Secret\"。",
+      "plan": "方案（账户 1）：",
+      "pushToPhone": "下发到话机"
+    },
+    "migrate": {
+      "title": "将话机迁移到其他站点",
+      "description": "将 {{ip}}（{{model}}）从当前站点迁移到所选站点。影子设备记录和固件历史会自动随迁。迁移后请在目标站点重新运行 PBX 自动关联。",
+      "destinationSite": "目标站点",
+      "pickSite": "选择一个站点…",
+      "noOtherSites": "您的组织中没有其他站点。请先在设置 → 站点中创建一个。",
+      "followLinks": "随迁 PBX/分机关联",
+      "followLinksHint": "尝试将话机重新绑定到新站点中等效的 PBX（按主机 + 分机号匹配）。默认关闭, 关联会被清除，以便自动关联选择正确的目标。",
+      "planTitle": "迁移方案：",
+      "fromTo": "从 → 到：",
+      "shadowDeviceRow": "影子设备记录：",
+      "willFollow": "✓ 将随迁",
+      "notPresent": ", 不存在",
+      "firmwareHistoryRows": "固件历史记录条数：",
+      "pbxLink": "PBX 关联：",
+      "rebound": "✓ 已重新绑定",
+      "willBeCleared": "⚠ 将被清除",
+      "noneDash": ", 无",
+      "extensionLink": "分机关联：",
+      "configTemplate": "配置模板：",
+      "movePhone": "迁移话机"
+    },
+    "reboot": {
+      "title": "重启此话机？",
+      "description": "{{ip}}（{{model}}）在重启期间将有约 30 秒不可达。此设备上的活动通话将中断。",
+      "confirm": "重启"
+    },
+    "factoryReset": {
+      "title": "恢复此话机的出厂设置？",
+      "destructive": "此操作具有破坏性。",
+      "description": "{{ip}} 处的话机将丢失全部配置, SIP 账户、线路按键、语音信箱 PIN、管理员密码。它将以默认设置重启，并需要重新纳管。"
+    },
+    "onboard": {
+      "title": "纳管设备",
+      "description": "将 {{name}} 纳管为活动受管状态",
+      "deviceName": "设备名称",
+      "selectTemplate": "选择模板..."
+    },
+    "toasts": {
+      "previewFailed": "预览失败",
+      "sipConfigPushed": "SIP 配置已下发",
+      "pushFailed": "下发失败",
+      "migrationPreviewFailed": "迁移预览失败",
+      "phoneMigrated": "话机已迁移",
+      "migrationFailed": "迁移失败",
+      "rebootSent": "重启指令已发送",
+      "rebootFailed": "重启失败",
+      "factoryResetSent": "恢复出厂指令已发送",
+      "factoryResetFailed": "恢复出厂失败"
+    }
+  },
+  "PBXPage": {
+    "status": {
+      "online": "在线",
+      "error": "错误",
+      "unknown": "未知"
+    },
+    "header": {
+      "title": "PBX 系统",
+      "description": "{{count}} 个 PBX 系统 · {{online}} 个在线"
+    },
+    "actions": {
+      "export": "导出",
+      "addPBX": "添加 PBX"
+    },
+    "errorBanner": "部分数据加载失败，结果可能不完整。",
+    "stats": {
+      "totalPBX": {
+        "title": "PBX 总数",
+        "description": "已配置的系统"
+      },
+      "online": {
+        "title": "在线",
+        "reachable": "{{percent}}% 可达",
+        "noPBX": "无 PBX"
+      },
+      "offlineError": {
+        "title": "离线 / 错误",
+        "description": "需要处理"
+      },
+      "totalExtensions": {
+        "title": "分机总数",
+        "description": "所有 PBX 合计"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "按名称、IP 或类型搜索 PBX 系统…",
+      "allStatuses": "所有状态",
+      "offlineError": "离线 / 错误",
+      "clearFilters": "清除筛选"
+    },
+    "columns": {
+      "name": "PBX 系统",
+      "type": "类型",
+      "status": "状态",
+      "connection": "连接",
+      "extensions": "分机",
+      "lastSynced": "上次同步"
+    },
+    "rowActions": {
+      "viewDashboard": "查看仪表板",
+      "syncNow": "立即同步",
+      "viewExtensions": "查看分机",
+      "openWebUI": "打开 Web 界面",
+      "delete": "删除"
+    },
+    "itemName": "PBX 系统",
+    "itemNamePlural": "PBX 系统",
+    "empty": {
+      "title": "尚未连接 PBX 系统",
+      "addFirst": "添加首个 PBX"
+    },
+    "bulk": {
+      "syncAll": "全部同步",
+      "delete": "删除",
+      "deleteToast": {
+        "title": "批量删除",
+        "description": "为安全起见，请逐个删除 PBX 系统。"
+      }
+    },
+    "toasts": {
+      "added": {
+        "title": "已添加 PBX",
+        "description": "{{name}} 已成功连接。"
+      },
+      "error": {
+        "title": "错误",
+        "createFailed": "创建 PBX 失败",
+        "deleteFailed": "删除 PBX 失败",
+        "syncFailed": "同步 PBX 失败"
+      }
+    },
+    "test": {
+      "connected": "已连接",
+      "connectionFailed": "连接失败",
+      "responseTime": "响应时间：{{ms}} 毫秒"
+    },
+    "pbxTypes": {
+      "freepbx": {
+        "label": "FreePBX",
+        "description": "FreePBX / Asterisk AMI"
+      },
+      "asterisk": {
+        "label": "Asterisk",
+        "description": "Asterisk AMI 直连"
+      },
+      "freeswitch": {
+        "label": "FreeSWITCH",
+        "description": "FreeSWITCH ESL"
+      },
+      "3cx": {
+        "label": "3CX",
+        "description": "3CX 管理 API"
+      },
+      "other": {
+        "label": "其他",
+        "description": "自定义 PBX 系统"
+      }
+    },
+    "dialog": {
+      "title": "添加 PBX 系统",
+      "description": "连接现有的 PBX 服务器。支持 FreePBX。",
+      "testConnection": "测试连接",
+      "fields": {
+        "pbxType": "PBX 类型",
+        "displayName": "显示名称",
+        "ipAddress": "IP 地址 / 主机名",
+        "apiPort": "API 端口",
+        "sipPort": "SIP 端口",
+        "username": "用户名",
+        "password": "密码",
+        "apiKey": "API 密钥（可选）",
+        "clientId": "客户端 ID",
+        "clientSecret": "客户端密钥",
+        "description": "描述（可选）"
+      },
+      "placeholders": {
+        "displayName": "办公室 PBX",
+        "username": "admin",
+        "apiKey": "如果您的 PBX 需要",
+        "clientId": "来自 M2M 应用",
+        "description": "简要描述"
+      },
+      "oauth": {
+        "heading": "OAuth2 机器对机器应用",
+        "optional": "（FreePBX 16+，可选）",
+        "createAt": "在此处创建：",
+        "whenSet": "设置后，适配器将使用经授权的 REST + GraphQL API 接口（78 个查询、105 个变更），而不是旧版 Web 会话认证。"
+      },
+      "tls": {
+        "label": "允许自签名 / 已过期的 TLS 证书",
+        "help": "仅当您的 PBX 使用自签名或已过期的证书时才勾选此项。默认采用严格验证。该覆盖按 PBX 生效并记录到审计日志。"
+      }
+    }
+  },
+  "ExtensionsPage": {
+    "status": {
+      "idle": "空闲",
+      "inUse": "使用中",
+      "ringing": "振铃中",
+      "unavailable": "不可用",
+      "dnd": "免打扰",
+      "unknown": "未知"
+    },
+    "ringStrategy": {
+      "ringAll": "全部振铃"
+    },
+    "columns": {
+      "extension": "分机",
+      "status": "状态",
+      "callerId": "主叫 ID",
+      "type": "类型",
+      "pbx": "PBX",
+      "voicemail": "语音信箱",
+      "ringGroup": "振铃组",
+      "strategy": "策略",
+      "members": "成员",
+      "ringTime": "振铃时间"
+    },
+    "voicemail": {
+      "enabled": "已启用"
+    },
+    "ringTimeSeconds": "{{seconds}} 秒",
+    "header": {
+      "title": "分机与振铃组",
+      "description": "{{extensions}} 个分机，{{ringGroups}} 个振铃组"
+    },
+    "actions": {
+      "export": "导出"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败，结果可能不完整。"
+    },
+    "stats": {
+      "extensions": {
+        "title": "分机",
+        "description": "全部已注册"
+      },
+      "idle": {
+        "title": "空闲",
+        "description": "当前可用"
+      },
+      "inUse": {
+        "title": "使用中",
+        "description": "活动通话"
+      },
+      "ringGroups": {
+        "title": "振铃组",
+        "description": "已配置"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "搜索分机、名称或振铃组…",
+      "allPbxSystems": "所有 PBX 系统",
+      "clearFilters": "清除筛选"
+    },
+    "tabs": {
+      "extensions": "分机",
+      "ringGroups": "振铃组"
+    },
+    "empty": {
+      "extensions": {
+        "title": "未找到分机",
+        "description": "连接 PBX 并同步以导入分机"
+      },
+      "ringGroups": {
+        "title": "未找到振铃组"
+      }
+    },
+    "bulk": {
+      "enableVm": "启用语音信箱",
+      "disableVm": "禁用语音信箱",
+      "delete": "删除"
+    },
+    "toasts": {
+      "bulkAction": "批量操作",
+      "bulkDelete": "批量删除",
+      "enableVoicemail": "已为 {{count}} 个分机启用语音信箱。",
+      "disableVoicemail": "已为 {{count}} 个分机禁用语音信箱。",
+      "deleteExtensionsSafety": "为安全起见，请逐个删除分机。",
+      "deleteRingGroupsSafety": "为安全起见，请逐个删除振铃组。"
+    }
+  },
+  "components": {
+    "phoneStatus": {
+      "online": "在线",
+      "offline": "离线",
+      "inCall": "通话中",
+      "ringing": "振铃中",
+      "dnd": "免打扰",
+      "warning": "警告",
+      "unknown": "未知"
+    },
+    "lifecycle": {
+      "discovered": "已发现",
+      "onboarding": "接入中",
+      "managed": "已纳管",
+      "maintenance": "维护中",
+      "firmwareUpdating": "固件更新中",
+      "decommissioned": "已停用"
+    },
+    "provision": {
+      "pending": "待处理",
+      "generated": "已生成",
+      "pushed": "已下发",
+      "applied": "已应用",
+      "failed": "失败",
+      "stale": "已过期"
+    },
+    "scan": {
+      "pending": "待处理",
+      "running": "运行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消"
+    },
+    "callDirection": {
+      "inbound": "呼入",
+      "outbound": "呼出",
+      "internal": "内部"
+    },
+    "callStatus": {
+      "answered": "已接听",
+      "missed": "未接",
+      "voicemail": "语音信箱",
+      "failed": "失败",
+      "completed": "已接听",
+      "noAnswer": "无应答",
+      "busy": "忙线"
+    },
+    "pbxType": {
+      "other": "其他"
+    }
+  },
+  "PBXOverviewTab": {
+    "stats": {
+      "activeCalls": "活动通话",
+      "rightNow": "当前",
+      "extensions": "分机",
+      "registered": "已注册",
+      "sipTrunks": "SIP 中继",
+      "online": "{{count}} 个在线",
+      "voicemails": "语音邮件",
+      "unreadMessages": "未读消息",
+      "callsToday": "今日通话",
+      "ringGroups": "振铃组",
+      "queues": "队列",
+      "ivrMenus": "IVR 菜单",
+      "dids": "DIDs"
+    },
+    "trunks": {
+      "heading": "SIP 中继",
+      "channels": "通道",
+      "empty": "暂无中继数据 · 点击同步以加载"
+    },
+    "queues": {
+      "waitingBadge": "{{count}} 个等待中",
+      "agents": "座席",
+      "completed": "已完成",
+      "waiting": "等待中"
+    },
+    "connection": {
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "heading": "连接状态",
+      "ipAddress": "IP 地址",
+      "apiPort": "API 端口",
+      "sipPort": "SIP 端口",
+      "asterisk": "Asterisk",
+      "lastSync": "上次同步",
+      "never": "从不"
+    },
+    "extensions": {
+      "heading": "分机",
+      "viewAll": "查看全部",
+      "emptyTitle": "尚未同步任何分机",
+      "syncNow": "立即同步",
+      "colExt": "分机",
+      "colName": "名称",
+      "colStatus": "状态",
+      "colVm": "VM",
+      "active": "活动",
+      "inactive": "非活动",
+      "moreCount": "另有 {{count}} 个分机"
+    }
+  },
+  "AnnouncementsConfigSection": {
+    "common": {
+      "yes": "是",
+      "no": "否"
+    },
+    "announcements": {
+      "title": "公告",
+      "id": "ID",
+      "description": "描述",
+      "recording": "录音",
+      "skip": "跳过",
+      "postDest": "后续目标"
+    },
+    "pagingGroups": {
+      "title": "广播 / 对讲组",
+      "group": "组",
+      "description": "描述",
+      "default": "默认"
+    },
+    "systemRecordings": {
+      "title": "系统录音",
+      "name": "名称",
+      "filename": "文件名",
+      "description": "描述",
+      "languages": "语言"
+    },
+    "musicOnHold": {
+      "title": "保持音乐",
+      "category": "类别",
+      "type": "类型",
+      "random": "随机",
+      "format": "格式"
+    }
+  },
+  "RoutingConfigSection": {
+    "outboundRoutes": {
+      "title": "出站路由 ({{count}})",
+      "columns": {
+        "name": "名称",
+        "cid": "CID",
+        "emergency": "紧急",
+        "sequence": "序列"
+      },
+      "fallbackName": "路由 {{index}}",
+      "emergencyBadge": "紧急"
+    },
+    "followMe": {
+      "title": "跟随转移 ({{count}})",
+      "extension": "分机 {{ext}}"
+    },
+    "dayNight": {
+      "title": "日间/夜间控制 ({{count}})",
+      "columns": {
+        "extension": "分机",
+        "destination": "目标",
+        "description": "描述"
+      }
+    },
+    "timeConditions": {
+      "title": "时间条件 ({{count}})",
+      "columns": {
+        "name": "名称",
+        "timezone": "时区",
+        "trueDest": "真目标",
+        "falseDest": "假目标",
+        "mode": "模式"
+      }
+    }
+  },
+  "PBXSettingsTab": {
+    "connection": {
+      "title": "PBX 连接设置",
+      "description": "更新连接凭据和配置"
+    },
+    "fields": {
+      "displayName": "显示名称",
+      "description": "描述",
+      "ipAddress": "IP 地址 / 主机名",
+      "apiPort": "API 端口",
+      "sipPort": "SIP 端口",
+      "username": "用户名",
+      "password": "密码"
+    },
+    "auth": {
+      "heading": "身份验证"
+    },
+    "actions": {
+      "saveSettings": "保存设置",
+      "testConnection": "测试连接",
+      "deletePBX": "删除 PBX"
+    },
+    "dangerZone": {
+      "title": "危险区域",
+      "description": "无法撤销的永久性操作",
+      "deleteConfirm": "删除 PBX \"{{name}}\"？此操作无法撤销。"
+    }
+  },
+  "VoicemailPage": {
+    "title": "语音信箱",
+    "subtitle": "{{total}} 条消息 · {{unread}} 条未读",
+    "dataLoadError": "部分数据加载失败，结果可能不完整。",
+    "unknown": "未知",
+    "urgent": "紧急",
+    "empty": "暂无语音留言",
+    "itemName": "语音留言",
+    "columns": {
+      "from": "来自",
+      "mailbox": "信箱",
+      "duration": "时长",
+      "date": "日期"
+    },
+    "actions": {
+      "markRead": "标记为已读",
+      "download": "下载",
+      "downloadUnavailable": "音频播放不可用--录音仅存储在 PBX 上。",
+      "delete": "删除"
+    },
+    "stats": {
+      "totalMessages": "消息总数",
+      "unread": "未读",
+      "urgent": "紧急"
+    }
+  },
+  "PBXExtensionsTab": {
+    "heading": "分机",
+    "countSummary": "此 PBX 上有 {{count}} 个分机",
+    "itemName": "分机",
+    "actions": {
+      "refresh": "刷新",
+      "create": "创建分机"
+    },
+    "empty": {
+      "title": "未找到分机",
+      "syncAction": "从 PBX 同步"
+    }
+  },
+  "PBXDidsTab": {
+    "heading": "DID / 呼入路由",
+    "routesConfigured": "已配置 {{count}} 条呼入路由",
+    "itemName": "DID",
+    "emptyText": "未找到 DID / 呼入路由",
+    "syncFromPbx": "从 PBX 同步",
+    "create": "新建呼入路由"
+  },
+  "PBXQueuesTab": {
+    "heading": "呼叫队列",
+    "subtitle": "来自 PBX 的实时队列数据",
+    "itemName": "队列",
+    "empty": "未找到呼叫队列或适配器未连接"
+  },
+  "PBXVoicemailTab": {
+    "heading": "语音信箱",
+    "description": "来自 PBX 的语音信箱配置",
+    "itemName": "语音信箱",
+    "empty": "未找到语音信箱或适配器未连接"
+  },
+  "VoIPPage": {
+    "common": {
+      "unknown": "未知",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "active": "活动",
+      "inactive": "未激活",
+      "filter": "筛选",
+      "notAvailable": "不可用",
+      "error": "错误"
+    },
+    "header": {
+      "title": "VoIP",
+      "subtitle": "IP 语音 · 话机、PBX、分机和呼叫管理",
+      "addPhone": "添加话机"
+    },
+    "errorBanner": "部分数据加载失败，结果可能不完整。",
+    "tabs": {
+      "dashboard": "仪表盘",
+      "phones": "话机",
+      "pbxSystems": "PBX 系统",
+      "extensions": "分机",
+      "ringGroups": "振铃组",
+      "queues": "队列",
+      "callHistory": "呼叫历史",
+      "voicemail": "语音信箱"
+    },
+    "phoneStatus": {
+      "online": "在线",
+      "offline": "离线",
+      "inCall": "通话中",
+      "ringing": "振铃中",
+      "dnd": "免打扰",
+      "unknown": "未知"
+    },
+    "callDirection": {
+      "inbound": "呼入",
+      "outbound": "呼出",
+      "internal": "内部"
+    },
+    "pbxType": {
+      "other": "其他"
+    },
+    "ringStrategy": {
+      "ringall": "全部振铃",
+      "hunt": "顺序寻找",
+      "memoryhunt": "记忆寻找",
+      "random": "随机"
+    },
+    "phoneCard": {
+      "unknownDevice": "未知设备",
+      "extLabel": "分机：",
+      "ipLabel": "IP：",
+      "macLabel": "MAC：",
+      "fwLabel": "固件：",
+      "lastSeen": "最后在线：{{time}}"
+    },
+    "addPbxDialog": {
+      "title": "添加 PBX 系统",
+      "description": "连接现有的 PBX 服务器，通过 FreeSDN 进行管理。支持 FreePBX。",
+      "pbxTypeLabel": "PBX 类型",
+      "pbxTypePlaceholder": "选择 PBX 类型",
+      "displayNameLabel": "显示名称",
+      "displayNamePlaceholder": "例如：办公室 PBX、主 FreePBX",
+      "ipAddressLabel": "IP 地址 / 主机名",
+      "apiPortLabel": "API 端口",
+      "sipPortLabel": "SIP 端口",
+      "credentialsLabel": "凭据",
+      "usernameLabel": "用户名",
+      "passwordLabel": "密码",
+      "apiKeyLabel": "API Key（可选）",
+      "apiKeyPlaceholder": "仅在 PBX 需要时填写",
+      "descriptionLabel": "描述（可选）",
+      "descriptionPlaceholder": "此 PBX 系统的简要描述",
+      "responseTime": "响应时间：{{ms}} 毫秒",
+      "testConnection": "测试连接",
+      "addPbx": "添加 PBX"
+    },
+    "pbxTypeOptions": {
+      "freepbx": "FreePBX / Asterisk AMI",
+      "asterisk": "Asterisk AMI 直连",
+      "freeswitch": "FreeSWITCH ESL",
+      "3cx": "3CX 管理 API",
+      "other": "自定义 PBX 系统"
+    },
+    "addPhoneDialog": {
+      "title": "添加话机",
+      "description": "注册新的 IP 话机。可自动配置或手动配置。",
+      "phoneNameLabel": "话机名称",
+      "phoneNamePlaceholder": "例如：前台话机、张三的桌面话机",
+      "vendorLabel": "厂商",
+      "vendorPlaceholder": "选择厂商",
+      "vendorOther": "其他",
+      "modelLabel": "型号",
+      "modelPlaceholder": "例如：GXP2170、T54W",
+      "macLabel": "MAC 地址",
+      "ipLabel": "IP 地址",
+      "assignPbxLabel": "分配到 PBX（可选）",
+      "assignPbxPlaceholder": "选择 PBX · 无",
+      "serialLabel": "序列号",
+      "serialPlaceholder": "可选",
+      "locationLabel": "位置",
+      "locationPlaceholder": "例如：A 栋，2 层",
+      "descriptionLabel": "描述（可选）",
+      "descriptionPlaceholder": "简要描述",
+      "cancel": "取消",
+      "addPhone": "添加话机"
+    },
+    "toasts": {
+      "createPbxFailed": "创建 PBX 失败",
+      "deletePbxFailed": "删除 PBX 失败",
+      "syncFailed": "同步失败",
+      "connectionTestFailed": "连接测试失败",
+      "createPhoneFailed": "创建话机失败",
+      "deletePhoneFailed": "删除话机失败",
+      "markReadFailed": "标记为已读失败",
+      "deleteVoicemailFailed": "删除语音留言失败"
+    },
+    "confirm": {
+      "deletePhone": "删除话机“{{name}}”？",
+      "deletePbx": "删除 PBX“{{name}}”？此操作无法撤消。",
+      "deleteVoicemail": "删除此语音留言？"
+    },
+    "phoneColumns": {
+      "phone": "话机",
+      "extension": "分机",
+      "ipAddress": "IP 地址",
+      "macAddress": "MAC 地址",
+      "firmware": "固件",
+      "status": "状态",
+      "lastSeen": "最后在线"
+    },
+    "phoneActions": {
+      "viewDetails": "查看详情",
+      "callLogs": "呼叫记录",
+      "rebootPhone": "重启话机",
+      "provisionConfig": "配置自动部署",
+      "deletePhone": "删除话机"
+    },
+    "pbxColumns": {
+      "pbxSystem": "PBX 系统",
+      "type": "类型",
+      "address": "地址",
+      "status": "状态",
+      "lastSeen": "最后在线"
+    },
+    "pbxStatus": {
+      "connected": "已连接",
+      "disconnected": "已断开"
+    },
+    "pbxActions": {
+      "configure": "配置",
+      "openAdminUi": "打开管理界面",
+      "syncExtensions": "同步分机",
+      "delete": "删除"
+    },
+    "extensionColumns": {
+      "extension": "分机",
+      "displayName": "显示名称",
+      "callerId": "主叫 ID",
+      "voicemail": "语音信箱",
+      "status": "状态"
+    },
+    "extensionActions": {
+      "viewDetails": "查看详情",
+      "settings": "设置"
+    },
+    "ringGroupColumns": {
+      "ringGroup": "振铃组",
+      "strategy": "策略",
+      "ringTime": "振铃时长",
+      "members": "成员",
+      "membersCount": "{{count}} 名成员",
+      "status": "状态"
+    },
+    "callLogColumns": {
+      "direction": "方向",
+      "from": "主叫",
+      "to": "被叫",
+      "status": "状态",
+      "duration": "时长",
+      "time": "时间",
+      "playRecording": "播放录音"
+    },
+    "callStatus": {
+      "answered": "已接听",
+      "missed": "未接",
+      "voicemail": "语音信箱",
+      "failed": "失败"
+    },
+    "stats": {
+      "totalPhones": "话机总数",
+      "online": "在线",
+      "inCall": "通话中",
+      "offline": "离线",
+      "percentOfFleet": "占设备总数 {{percent}}%",
+      "activeRightNow": "当前活动"
+    },
+    "summary": {
+      "extensions": "分机",
+      "activeCount": "{{count}} 个活动",
+      "ringGroups": "振铃组",
+      "voicemails": "语音留言",
+      "unreadMessages": "未读消息"
+    },
+    "dashboard": {
+      "pbxSystems": "PBX 系统",
+      "noPbxConfigured": "未配置 PBX 系统",
+      "sipTrunks": "SIP 中继",
+      "channels": "{{active}}/{{max}} 路",
+      "recentCalls": "最近呼叫",
+      "viewAll": "查看全部"
+    },
+    "queues": {
+      "queueNumber": "队列 {{number}}",
+      "queueNumberStrategy": "队列 {{number}} · {{strategy}}",
+      "callsWaiting": "{{count}} 个等待",
+      "inQueue": "队列中",
+      "agents": "坐席",
+      "waiting": "等待中",
+      "emptyTitle": "呼叫队列",
+      "emptyDescription": "队列管理即将推出。"
+    },
+    "phones": {
+      "searchPlaceholder": "按名称、分机、IP、MAC 搜索话机...",
+      "zeroTouchTitle": "零接触部署",
+      "zeroTouchDescription": "通过 GDMS 或本地 DHCP Option 66 自动发现并部署 Grandstream 话机",
+      "provisioningSettings": "部署设置",
+      "emptyTitle": "未找到 VoIP 话机",
+      "emptyDescription": "添加话机或启用自动部署以开始使用。"
+    },
+    "pbxTab": {
+      "bannerTitle": "PBX 集成 · FreePBX",
+      "bannerDescription": "连接现有的 PBX 服务器，自动同步分机、振铃组和呼叫记录",
+      "addPbx": "添加 PBX",
+      "cardTitle": "PBX 系统",
+      "cardDescription": "管理已连接的 PBX/IP 电话服务器",
+      "emptyTitle": "未连接 PBX 系统",
+      "emptyDescription": "连接 FreePBX 服务器，即可在此仪表盘中管理分机和呼叫路由。",
+      "addPbxSystem": "添加 PBX 系统"
+    },
+    "extensionsTab": {
+      "searchPlaceholder": "搜索分机...",
+      "cardTitle": "分机",
+      "cardDescription": "所有 PBX 系统中的话机分机"
+    },
+    "ringGroupsTab": {
+      "cardTitle": "振铃组",
+      "cardDescription": "配置如何将呼入呼叫分配到分机组",
+      "addRingGroup": "添加振铃组",
+      "emptyTitle": "未配置振铃组",
+      "emptyDescription": "创建振铃组，将呼入呼叫路由到多个分机。"
+    },
+    "callHistory": {
+      "searchPlaceholder": "搜索呼叫...",
+      "exportCdr": "导出 CDR"
+    },
+    "voicemail": {
+      "searchPlaceholder": "搜索语音留言...",
+      "refresh": "刷新",
+      "unreadBadge": "{{count}} 条未读",
+      "emptyTitle": "无语音留言",
+      "emptyDescription": "语音留言将显示在此处。",
+      "urgent": "紧急",
+      "new": "新",
+      "extDate": "分机 {{ext}} · {{date}}",
+      "play": "播放",
+      "playMarkRead": "播放并标记为已读",
+      "download": "下载",
+      "downloadToastTitle": "下载",
+      "downloadToastDescription": "文件：{{file}}，格式：{{format}}，大小：{{size}} 字节",
+      "noAudioError": "此语音留言没有可用的音频文件。",
+      "downloadError": "下载语音留言失败。",
+      "downloadUnavailable": "音频播放不可用--录音仅存储在 PBX 上。",
+      "delete": "删除"
+    },
+    "itemNames": {
+      "calls": "呼叫",
+      "phones": "话机",
+      "pbxSystems": "PBX 系统",
+      "extensions": "分机",
+      "ringGroups": "振铃组",
+      "callRecords": "呼叫记录"
+    }
+  },
+  "PhonesListPage": {
+    "common": {
+      "cancel": "取消",
+      "done": "完成"
+    },
+    "unnamed": "未命名",
+    "header": {
+      "title": "电话设备群",
+      "description": "{{count}} 台设备 · 设备群管理、配置下发、生命周期控制"
+    },
+    "actions": {
+      "addPhone": "添加电话",
+      "linking": "关联中…",
+      "autoLink": "自动关联到 PBX",
+      "discover": "发现",
+      "export": "导出"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败。结果可能不完整。"
+    },
+    "stats": {
+      "totalPhones": {
+        "title": "电话总数",
+        "description": "设备群中"
+      },
+      "online": {
+        "title": "在线",
+        "reachable": "{{percent}}% 可达",
+        "noPhones": "无电话"
+      },
+      "managed": {
+        "title": "已纳管",
+        "description": "生命周期：已纳管"
+      },
+      "sipRegistered": {
+        "title": "SIP 已注册",
+        "description": "已通过 PBX 认证"
+      }
+    },
+    "filters": {
+      "searchPlaceholder": "按名称、IP、MAC 或型号搜索…",
+      "clear": "清除筛选",
+      "lifecycle": {
+        "placeholder": "生命周期",
+        "all": "所有状态",
+        "discovered": "已发现",
+        "onboarding": "纳管中",
+        "managed": "已纳管",
+        "maintenance": "维护中",
+        "decommissioned": "已停用"
+      },
+      "vendor": {
+        "placeholder": "厂商",
+        "all": "所有厂商"
+      },
+      "status": {
+        "placeholder": "状态",
+        "all": "所有状态",
+        "online": "在线",
+        "offline": "离线",
+        "inCall": "通话中"
+      }
+    },
+    "viewMode": {
+      "table": "表格视图",
+      "grid": "网格视图"
+    },
+    "columns": {
+      "device": "设备",
+      "status": "状态",
+      "lifecycle": "生命周期",
+      "network": "网络",
+      "vendor": "厂商",
+      "extension": "分机",
+      "firmware": "固件",
+      "provisioning": "配置下发",
+      "location": "位置",
+      "lastSeen": "最后在线"
+    },
+    "extension": {
+      "onPbx": "位于 {{name}}",
+      "unlinked": "未关联"
+    },
+    "rowActions": {
+      "viewDetails": "查看详情",
+      "onboard": "纳管",
+      "reprovision": "重新配置下发",
+      "maintenanceMode": "维护模式",
+      "exitMaintenance": "退出维护",
+      "decommission": "停用",
+      "delete": "删除"
+    },
+    "itemName": {
+      "phones": "台电话",
+      "phone": "台电话"
+    },
+    "empty": {
+      "title": "未找到电话",
+      "discoverDevices": "发现设备"
+    },
+    "bulkActions": {
+      "connect": "连接",
+      "reboot": "重启",
+      "provision": "配置下发",
+      "delete": "删除"
+    },
+    "addDialog": {
+      "title": "添加电话",
+      "description": "手动将电话添加到设备群",
+      "vendorOther": "其他",
+      "fields": {
+        "name": "名称",
+        "macAddress": "MAC 地址",
+        "ipAddress": "IP 地址",
+        "vendor": "厂商",
+        "model": "型号",
+        "location": "位置"
+      },
+      "placeholders": {
+        "name": "前台电话",
+        "location": "A 栋，2 层"
+      }
+    },
+    "onboardDialog": {
+      "title": "纳管设备",
+      "description": "将 {{name}} 纳入主动管理",
+      "selectTemplate": "选择模板...",
+      "fields": {
+        "deviceName": "设备名称",
+        "configTemplate": "配置模板",
+        "location": "位置"
+      }
+    },
+    "bulkConnect": {
+      "title": "设备群连接",
+      "descriptionForm": "认证并同步 {{count}} 台电话 · 凭据将被保存，所有设备数据（SIP、网络、固件、VLAN）将被获取并持久化。",
+      "descriptionDone": "已完成 {{count}} 台电话的连接操作。",
+      "username": "用户名",
+      "password": "密码",
+      "passwordPlaceholder": "输入电话 Web 密码",
+      "cards": {
+        "devices": "设备",
+        "autoValue": "自动",
+        "saveCredentials": "保存凭据",
+        "fullValue": "完整",
+        "configSync": "配置同步"
+      },
+      "infoText": "认证成功后将按设备保存凭据。系统会对每台电话进行探测、登录，并同步所有配置（SIP 账户、网络、VLAN、固件）。",
+      "connecting": "正在连接 {{count}} 台设备…",
+      "connectButton": "连接 {{count}} 台电话",
+      "results": {
+        "connected": "已连接",
+        "failed": "失败",
+        "skipped": "已跳过",
+        "successRate": "成功率",
+        "deviceResults": "设备结果",
+        "authenticated": "已认证",
+        "summary": "{{total}} 台设备中已同步 {{succeeded}} 台"
+      }
+    },
+    "toasts": {
+      "deleteFailed": "删除电话失败",
+      "onboardFailed": "纳管失败",
+      "decommissionFailed": "停用失败",
+      "maintenanceFailed": "维护状态切换失败",
+      "provisionFailed": "配置下发失败",
+      "bulkRebootFailed": "批量重启失败",
+      "bulkProvisionFailed": "批量配置下发失败",
+      "createFailed": "创建电话失败",
+      "bulkConnectComplete": {
+        "title": "批量连接完成",
+        "description": "{{succeeded}} 台已连接，{{failed}} 台失败，{{skipped}} 台已跳过"
+      },
+      "bulkConnectFailed": "批量连接失败",
+      "bulkDelete": {
+        "title": "批量删除",
+        "description": "为安全起见，请逐个删除电话。"
+      },
+      "autoLink": {
+        "linked": {
+          "title": "已将 {{count}} 台电话关联到 PBX 分机",
+          "description": "{{alreadyLinked}} 台已关联，{{skipped}} 台已跳过（无 SIP 信息或无匹配分机）"
+        },
+        "allLinked": {
+          "title": "所有电话均已关联",
+          "description": "{{alreadyLinked}} 台电话已绑定到 PBX 分机"
+        },
+        "none": {
+          "title": "没有可关联的电话",
+          "skipped": "{{skipped}} 台电话已跳过, 原因请查看服务器日志",
+          "noSip": "没有带 SIP 信息的可发现电话"
+        },
+        "failed": "自动关联失败"
+      }
+    }
+  },
+  "VoipDiscoveryPage": {
+    "common": {
+      "yes": "是",
+      "no": "否",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "cancel": "取消",
+      "delete": "删除"
+    },
+    "phases": {
+      "init": "初始化",
+      "arp": "ARP 扫描",
+      "http": "HTTP 探测",
+      "sip": "SIP 扫描",
+      "complete": "完成"
+    },
+    "subnetPresets": {
+      "classC254": "C 类 · 254 台主机",
+      "classAPrivate254": "A 类私有 · 254 台主机",
+      "classBPrivate254": "B 类私有 · 254 台主机",
+      "commonVoipVlan": "常见 VoIP VLAN",
+      "largeSweep65k": "大范围扫描 · 65k 台主机"
+    },
+    "validation": {
+      "required": "子网为必填项",
+      "invalidCidr": "必须是有效的 CIDR 表示法（例如 192.168.1.0/24）",
+      "prefixRange": "前缀必须在 /16 到 /32 之间",
+      "invalidOctets": "IP 地址段无效"
+    },
+    "toast": {
+      "scanStarted": {
+        "title": "扫描已开始",
+        "message": "已为 {{subnet}} 排队发现扫描",
+        "autoDetect": "自动检测"
+      },
+      "scanFailed": {
+        "title": "扫描失败",
+        "fallback": "无法启动扫描"
+      },
+      "scanCancelled": {
+        "title": "扫描已取消",
+        "message": "发现扫描已停止。"
+      },
+      "cancelFailed": {
+        "title": "取消失败",
+        "fallback": "无法取消扫描"
+      },
+      "scanDeleted": {
+        "title": "扫描已删除",
+        "message": "扫描记录已从历史中移除。"
+      },
+      "deleteFailed": {
+        "title": "删除失败",
+        "fallback": "无法删除扫描"
+      }
+    },
+    "columns": {
+      "status": "状态",
+      "subnet": "子网",
+      "type": "类型",
+      "devices": "设备",
+      "started": "开始时间",
+      "duration": "时长"
+    },
+    "deviceColumns": {
+      "ipAddress": "IP 地址",
+      "macAddress": "MAC 地址",
+      "vendor": "厂商",
+      "model": "型号",
+      "method": "方法",
+      "sipRegistration": "SIP 注册",
+      "auth": "认证",
+      "status": "状态"
+    },
+    "deviceStatus": {
+      "new": "新增",
+      "known": "已知"
+    },
+    "sip": {
+      "registered": "已注册",
+      "configured": "已配置"
+    },
+    "newDevicesBadge": "+{{count}} 新增",
+    "actions": {
+      "results": "结果",
+      "onboard": "接入",
+      "view": "查看",
+      "refresh": "刷新",
+      "newScan": "新建扫描",
+      "startFirstScan": "开始首次扫描"
+    },
+    "header": {
+      "title": "网络发现",
+      "subtitle": "扫描网络以查找 VoIP 电话和终端"
+    },
+    "errors": {
+      "loadFailed": "部分数据加载失败。结果可能不完整。"
+    },
+    "stats": {
+      "totalScans": "扫描总数",
+      "runningNow": "正在运行",
+      "devicesFound": "已发现设备",
+      "scanTime": "扫描时间"
+    },
+    "liveScan": {
+      "inProgress": "发现扫描进行中",
+      "complete": "扫描完成",
+      "cancelled": "扫描已取消",
+      "failed": "扫描失败",
+      "initializing": "正在初始化...",
+      "devicesCount": "{{count}} 台设备",
+      "stopping": "正在停止...",
+      "stopScan": "停止扫描",
+      "overallProgress": "总体进度",
+      "discoveredDevices": "已发现设备",
+      "waitingForDevices": "正在等待设备...",
+      "macUnknown": "MAC 未知",
+      "activityLog": "活动日志",
+      "waitingForEvents": "正在等待事件..."
+    },
+    "scanForm": {
+      "title": "新建发现扫描",
+      "description": "配置并启动网络扫描以查找 VoIP 设备",
+      "subnetLabel": "子网 (CIDR)",
+      "commonSubnets": "常用子网",
+      "scanTypeLabel": "扫描类型",
+      "autoOnboardLabel": "自动接入",
+      "defaultTemplateLabel": "默认模板",
+      "selectTemplatePlaceholder": "选择模板...",
+      "starting": "正在启动...",
+      "startDiscovery": "开始发现"
+    },
+    "scanTypes": {
+      "arp": "ARP 扫描",
+      "sip": "SIP OPTIONS",
+      "http": "HTTP 探测",
+      "full": "完整 (ARP + SIP + HTTP)"
+    },
+    "credentials": {
+      "label": "电话登录凭据",
+      "custom": "用于电话 Web 界面登录的自定义凭据",
+      "default": "使用默认 admin/admin",
+      "username": "用户名",
+      "password": "密码"
+    },
+    "history": {
+      "title": "扫描历史",
+      "description": "以往的发现扫描结果",
+      "empty": "暂无扫描"
+    },
+    "itemName": {
+      "scans": "扫描",
+      "devices": "设备"
+    },
+    "resultsDialog": {
+      "title": "扫描结果",
+      "devicesFound": "发现 {{count}} 台设备",
+      "empty": "此扫描中没有设备"
+    },
+    "deleteDialog": {
+      "title": "删除扫描记录",
+      "descriptionBefore": "这将永久删除以下扫描：",
+      "descriptionAfter": "及其结果。此操作无法撤消。",
+      "deleting": "正在删除..."
+    }
+  },
+  "VoipTemplatesPage": {
+    "header": {
+      "title": "配置模板",
+      "subtitle": "{{count}} 个置备模板"
+    },
+    "actions": {
+      "newTemplate": "新建模板",
+      "edit": "编辑",
+      "duplicate": "复制",
+      "delete": "删除",
+      "cancel": "取消",
+      "update": "更新",
+      "create": "创建"
+    },
+    "columns": {
+      "template": "模板",
+      "vendor": "厂商",
+      "modelPattern": "型号匹配",
+      "phones": "话机",
+      "updated": "更新时间"
+    },
+    "badges": {
+      "default": "默认"
+    },
+    "duplicateName": "{{name}}（副本）",
+    "errorBanner": "部分数据加载失败，结果可能不完整。",
+    "itemName": "模板",
+    "empty": {
+      "title": "暂无配置模板",
+      "createFirst": "创建第一个模板"
+    },
+    "dialog": {
+      "editTitle": "编辑模板",
+      "createTitle": "创建模板",
+      "editDescription": "更新置备模板设置",
+      "createDescription": "创建新的置备配置模板"
+    },
+    "vendors": {
+      "generic": "通用"
+    },
+    "form": {
+      "nameLabel": "模板名称 *",
+      "namePlaceholder": "默认 Grandstream 配置",
+      "vendorLabel": "厂商",
+      "modelPatternLabel": "型号匹配",
+      "modelPatternHelp": "用于匹配话机型号的通配符模式",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "可选描述",
+      "sipSettingsLabel": "SIP 设置 (JSON)",
+      "networkSettingsLabel": "网络设置 (JSON)",
+      "customSettingsLabel": "自定义设置 (JSON)",
+      "invalidJson": "JSON 无效"
+    },
+    "toast": {
+      "errorTitle": "错误",
+      "createFailed": "创建模板失败",
+      "updateFailed": "更新模板失败",
+      "deleteFailed": "删除模板失败"
+    }
+  },
+  "FleetDashboardPage": {
+    "header": {
+      "title": "设备群仪表板",
+      "subtitle": "GDMS 风格的 VoIP 设备群概览 · 电话、预配、固件合规"
+    },
+    "actions": {
+      "discoverDevices": "发现设备",
+      "addPhone": "添加电话",
+      "viewAllPhones": "查看所有电话"
+    },
+    "error": {
+      "partialLoad": "部分数据加载失败，结果可能不完整。"
+    },
+    "stats": {
+      "totalPhones": "电话总数",
+      "online": "在线",
+      "offline": "离线",
+      "sipRegistered": "SIP 已注册",
+      "recentlyDiscovered": "最近发现",
+      "last24h": "最近 24 小时",
+      "pendingProvision": "待预配"
+    },
+    "lifecycle": {
+      "title": "设备生命周期",
+      "description": "设备群中所有设备的当前状态",
+      "discovered": "已发现",
+      "onboarding": "接入中",
+      "managed": "已纳管",
+      "maintenance": "维护中",
+      "decommissioned": "已停用"
+    },
+    "quickActions": {
+      "title": "快捷操作",
+      "runDiscoveryScan": "运行发现扫描",
+      "reviewDiscovered": "查看已发现 ({{count}})",
+      "configTemplates": "配置模板",
+      "firmwareCompliance": "固件合规",
+      "pbxSystems": "PBX 系统"
+    },
+    "distribution": {
+      "vendor": "厂商分布",
+      "model": "型号分布",
+      "firmware": "固件版本",
+      "noData": "无数据",
+      "unknown": "未知"
+    },
+    "sip": {
+      "title": "SIP 注册",
+      "registered": "已注册",
+      "unregistered": "未注册"
+    }
+  },
+  "CallLogsPage": {
+    "title": "通话记录",
+    "subtitle": "{{count}} 条通话记录",
+    "itemName": "通话",
+    "error": {
+      "loadFailed": "部分数据加载失败，结果可能不完整。"
+    },
+    "stats": {
+      "totalCalls": "通话总数",
+      "inbound": "呼入",
+      "outbound": "呼出",
+      "missed": "未接",
+      "avgDuration": "平均时长"
+    },
+    "columns": {
+      "direction": "方向",
+      "caller": "主叫",
+      "destination": "目标",
+      "status": "状态",
+      "duration": "时长",
+      "dateTime": "日期 / 时间",
+      "pbx": "PBX"
+    },
+    "filters": {
+      "searchPlaceholder": "搜索主叫、目标...",
+      "directionPlaceholder": "方向",
+      "statusPlaceholder": "状态",
+      "allDirections": "所有方向",
+      "inbound": "呼入",
+      "outbound": "呼出",
+      "internal": "内部",
+      "allStatus": "所有状态",
+      "answered": "已接听",
+      "missed": "未接",
+      "noAnswer": "无应答",
+      "busy": "忙线",
+      "failed": "失败"
+    },
+    "empty": {
+      "noRecords": "未找到通话记录"
+    }
+  },
+  "PBXConfigTab": {
+    "heading": "PBX 配置快照",
+    "description": "来自 PBX 的所有已同步数据",
+    "lastSynced": "上次同步 {{time}}",
+    "actions": {
+      "reSync": "重新同步"
+    },
+    "summary": {
+      "extensions": "分机",
+      "trunks": "中继",
+      "ringGroups": "振铃组",
+      "dids": "DID",
+      "timeConditions": "时间条件",
+      "contacts": "联系人",
+      "recordings": "录音",
+      "featureCodes": "功能代码",
+      "modules": "模块",
+      "outboundRoutes": "出局路由",
+      "announcements": "公告",
+      "certificates": "证书",
+      "backupJobs": "备份任务",
+      "amiManagers": "AMI 管理器"
+    }
+  },
+  "SecurityConfigSection": {
+    "blacklist": {
+      "title": "黑名单 ({{count}})"
+    },
+    "certificates": {
+      "title": "证书 ({{count}})",
+      "columns": {
+        "name": "名称",
+        "type": "类型",
+        "description": "描述",
+        "default": "默认"
+      },
+      "types": {
+        "selfSigned": "自签名",
+        "letsEncrypt": "Let's Encrypt"
+      }
+    },
+    "adminUsers": {
+      "title": "管理员用户 ({{count}})",
+      "columns": {
+        "username": "用户名",
+        "extRange": "分机范围",
+        "department": "部门"
+      }
+    },
+    "amiManagers": {
+      "title": "AMI 管理员 ({{count}})",
+      "columns": {
+        "name": "名称",
+        "permit": "许可",
+        "read": "读取",
+        "write": "写入"
+      }
+    }
+  },
+  "SystemConfigSection": {
+    "cards": {
+      "contacts": {
+        "title": "联系人"
+      },
+      "backupJobs": {
+        "title": "备份任务"
+      },
+      "sipSettings": {
+        "title": "SIP/PJSIP 设置（{{count}} 个参数）"
+      },
+      "parking": {
+        "title": "呼叫驻留配置"
+      },
+      "featureCodes": {
+        "title": "功能码"
+      },
+      "installedModules": {
+        "title": "已安装模块"
+      }
+    },
+    "contacts": {
+      "columns": {
+        "name": "姓名",
+        "extension": "分机",
+        "email": "电子邮件",
+        "company": "公司",
+        "department": "部门"
+      }
+    },
+    "backupJobs": {
+      "columns": {
+        "name": "名称",
+        "description": "描述"
+      }
+    }
+  },
+  "PBXActiveCallsTab": {
+    "title": "活动通话",
+    "subtitle": "实时通话监控 • 每 5 秒自动刷新",
+    "actions": {
+      "refresh": "刷新",
+      "originate": "发起通话"
+    },
+    "itemName": "活动通话",
+    "empty": {
+      "title": "无活动通话",
+      "monitoring": "监控中..."
+    }
+  },
+  "PBXTrunksTab": {
+    "heading": "SIP 中继",
+    "subtitle": "来自 PBX 适配器的实时中继数据",
+    "itemName": "中继",
+    "emptyState": "未找到中继或适配器未连接",
+    "actions": {
+      "refresh": "刷新",
+      "createTrunk": "创建中继"
+    }
+  },
+  "PBXIvrTab": {
+    "heading": "IVR 菜单",
+    "description": "交互式语音应答配置",
+    "itemName": "IVR 菜单",
+    "empty": "未找到 IVR 菜单或适配器未连接"
+  },
+  "PBXRingGroupsTab": {
+    "heading": "振铃组",
+    "configuredCount": "已配置 {{n}} 个振铃组",
+    "itemName": "振铃组",
+    "empty": "未找到振铃组",
+    "create": "新建振铃组"
+  }
+}

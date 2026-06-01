@@ -1,0 +1,253 @@
+{
+  "AccessPointsPage": {
+    "common": {
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "active": "Active",
+      "default": "Default",
+      "yes": "Yes",
+      "no": "No",
+      "unknown": "Unknown",
+      "unknownLower": "unknown",
+      "auto": "Auto",
+      "ch": "Ch",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "apply": "Apply",
+      "applying": "Applying..."
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "operationFailed": "Operation failed",
+      "radioSettingsUpdated": "Radio settings updated",
+      "radioSettingsUpdatedDesc": "Changes may take a moment to apply to all APs."
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "adopting": "Adopting"
+    },
+    "header": {
+      "title": "Access Points",
+      "description": "Manage and monitor wireless access points across your network",
+      "export": "Export"
+    },
+    "stats": {
+      "totalApsTitle": "Total APs",
+      "totalApsDescription": "Configured radios",
+      "onlineTitle": "Online",
+      "onlineDescription": "{{pct}}% reachable",
+      "noAps": "No APs",
+      "offlineTitle": "Offline",
+      "offlineDescription": "Needs attention",
+      "totalClientsTitle": "Total Clients",
+      "totalClientsDescription": "Connected now"
+    },
+    "list": {
+      "loadError": "Failed to load access points. Check your connection and try again.",
+      "searchPlaceholder": "Search by name, model, MAC, or IP…",
+      "allSitesPlaceholder": "All sites",
+      "allSites": "All Sites",
+      "allStatusesPlaceholder": "All statuses",
+      "allStatuses": "All statuses",
+      "clearFilters": "Clear filters",
+      "loading": "Loading access points...",
+      "emptyTitle": "No access points found",
+      "emptyDescription": "Run a discovery to find access points on your network."
+    },
+    "card": {
+      "clients": "Clients",
+      "radios": "Radios",
+      "uptime": "Uptime"
+    },
+    "detail": {
+      "back": "Back",
+      "refresh": "Refresh"
+    },
+    "actions": {
+      "rename": "Rename",
+      "locateFlashLed": "Locate (Flash LED)",
+      "locate": "Locate",
+      "reboot": "Reboot",
+      "upgrade": "Upgrade",
+      "upgradeFirmware": "Upgrade Firmware",
+      "forget": "Forget",
+      "forgetDevice": "Forget Device",
+      "viewDetails": "View Details",
+      "reAdopt": "Re-Adopt",
+      "ledOn": "LED On",
+      "ledOff": "LED Off"
+    },
+    "summary": {
+      "clients": "Clients",
+      "cpuMemory": "CPU / Memory",
+      "cpu": "CPU",
+      "mem": "Mem",
+      "uptime": "Uptime",
+      "radios": "Radios",
+      "noRadios": "No radios",
+      "controls": "Controls",
+      "led": "LED",
+      "mesh": "Mesh"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "radios": "Radios",
+      "ssids": "SSIDs",
+      "clients": "Clients",
+      "configuration": "Configuration",
+      "rfHealth": "RF Health",
+      "rogueAps": "Rogue APs",
+      "radioSettings": "Radio Settings"
+    },
+    "overview": {
+      "deviceInformation": "Device Information",
+      "model": "Model",
+      "vendor": "Vendor",
+      "macAddress": "MAC Address",
+      "ipAddress": "IP Address",
+      "serialNumber": "Serial Number",
+      "firmware": "Firmware",
+      "site": "Site",
+      "mesh": "Mesh",
+      "radioSummary": "Radio Summary",
+      "noRadioData": "No radio data available"
+    },
+    "radio": {
+      "width": "Width",
+      "txPower": "Tx Power",
+      "clients": "Clients",
+      "channel": "Channel",
+      "configure": "Configure",
+      "bandRadio": "{{band}} Radio",
+      "noDataForAp": "No radio data available for this access point."
+    },
+    "ssids": {
+      "overridesTitle": "SSID Overrides",
+      "overridesCardDescription": "Per-AP SSID configuration overrides",
+      "overridesTabDescription": "Per-AP SSID overrides allow customizing network names and settings for this specific access point",
+      "noneConfigured": "No SSID overrides configured",
+      "noneForAp": "No SSID overrides configured for this AP",
+      "colSsid": "SSID",
+      "colGlobalName": "Global Name",
+      "colSecurity": "Security",
+      "colBands": "Bands",
+      "colVlan": "VLAN",
+      "colStatus": "Status"
+    },
+    "clients": {
+      "title": "Connected Clients",
+      "description": "Devices currently connected to this access point",
+      "loading": "Loading clients...",
+      "emptyTitle": "No clients currently connected",
+      "emptyDescription": "Devices currently connected to this access point will appear here.",
+      "colName": "Name",
+      "colMac": "MAC",
+      "colIp": "IP",
+      "colSsid": "SSID",
+      "colBand": "Band",
+      "colSignal": "Signal",
+      "colRate": "Rate",
+      "colUptime": "Uptime"
+    },
+    "config": {
+      "lanPort": "LAN Port",
+      "lanPortDescription": "Ethernet uplink configuration",
+      "vlanEnabled": "VLAN Enabled",
+      "vlanId": "VLAN ID",
+      "poe": "PoE",
+      "powered": "Powered",
+      "location": "Location",
+      "locationDescription": "Geographic placement",
+      "latitude": "Latitude",
+      "longitude": "Longitude",
+      "noLocationSet": "No location set",
+      "firmware": "Firmware",
+      "currentVersion": "Current Version",
+      "updateAvailableLabel": "Update Available",
+      "updateAvailable": "Update Available",
+      "upToDate": "Up to Date",
+      "quickActions": "Quick Actions"
+    },
+    "rfHealth": {
+      "noController": "No controller available for RF data.",
+      "loadError": "Failed to load RF health data. The controller may be unreachable or this feature may not be supported.",
+      "noChannelDataTitle": "No Channel Data",
+      "noChannelDataDescription": "Channel utilization data is not yet available. This data is collected during AP operation.",
+      "utilization": "Utilization",
+      "interference": "Interference",
+      "aps": "APs",
+      "clients": "Clients",
+      "channelHeatmap": "Channel Heatmap",
+      "channelHeatmapDescription": "Visual overview of channel utilization across access points",
+      "ap": "AP",
+      "noData": "No data",
+      "low": "Low",
+      "high": "High",
+      "utilizationByApTitle": "Channel Utilization by AP",
+      "utilizationByApDescription": "RF environment per access point and band",
+      "colBand": "Band",
+      "colChannel": "Channel",
+      "colWidth": "Width",
+      "noiseFloor": "Noise Floor"
+    },
+    "rogueAps": {
+      "noController": "No controller available for rogue AP detection.",
+      "loadError": "Failed to load rogue AP data. The controller may be unreachable or this feature may not be supported.",
+      "noneTitle": "No Rogue APs Detected",
+      "noneDescription": "No unauthorized or neighboring access points have been detected. Your network looks clean.",
+      "rogueApsLabel": "Rogue APs",
+      "neighborApsLabel": "Neighbor APs",
+      "knownApsLabel": "Known APs",
+      "detectedTitle": "Detected Access Points",
+      "detectedDescription": "Unauthorized and neighboring access points detected by your APs",
+      "colClassification": "Classification",
+      "colBssid": "BSSID",
+      "colSsid": "SSID",
+      "colChannel": "Channel",
+      "colBand": "Band",
+      "colSignal": "Signal",
+      "colSecurity": "Security",
+      "colDetectedBy": "Detected By",
+      "colLastSeen": "Last Seen",
+      "hidden": "Hidden"
+    },
+    "radioSettings": {
+      "noController": "No controller available for radio settings.",
+      "loadError": "Failed to load radio settings. The controller may be unreachable or this feature may not be supported.",
+      "noneTitle": "No Radio Settings",
+      "noneDescription": "Radio settings are not available for this controller.",
+      "fastRoamingTitle": "Fast Roaming (802.11k/r/v)",
+      "fastRoamingDescription": "Enable seamless client handoff between access points. Recommended for VoIP, video, and mobile devices.",
+      "dot11rTitle": "802.11r (Fast BSS Transition)",
+      "dot11rDescription": "Pre-authenticates clients to neighboring APs for near-instant handoff (<50ms)",
+      "dot11kTitle": "802.11k (Radio Resource Management)",
+      "dot11kDescription": "Provides clients with AP neighbor reports to speed up roaming decisions",
+      "dot11vTitle": "802.11v (BSS Transition Management)",
+      "dot11vDescription": "Allows APs to suggest better APs to clients for load balancing and roaming",
+      "applyingChanges": "Applying changes..."
+    },
+    "renameDialog": {
+      "title": "Rename Access Point",
+      "description": "Enter a new name for this access point",
+      "nameLabel": "Name",
+      "namePlaceholder": "Access Point Name"
+    },
+    "radioDialog": {
+      "title": "Configure {{band}} Radio",
+      "description": "Adjust radio settings for this access point",
+      "channelOption": "Channel {{ch}}",
+      "txPowerLabel": "Tx Power (dBm)"
+    },
+    "confirm": {
+      "rebootTitle": "Reboot Access Point",
+      "upgradeTitle": "Upgrade Firmware",
+      "forgetTitle": "Forget Access Point",
+      "rebootDescription": "Are you sure you want to reboot \"{{name}}\"? Connected clients will be temporarily disconnected.",
+      "upgradeDescription": "Are you sure you want to upgrade the firmware on \"{{name}}\"? The device will reboot during the process.",
+      "forgetDescription": "Are you sure you want to forget \"{{name}}\"? This will remove the device from the controller.",
+      "forgetDescriptionDetail": "Are you sure you want to forget \"{{name}}\"? This will remove the device from the controller. You will need to re-adopt it to manage it again."
+    }
+  }
+}

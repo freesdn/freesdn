@@ -1,0 +1,40 @@
+# FreeSDN - Frontend Development Dockerfile
+# Enterprise-grade Debian Trixie base
+# Node.js 24 LTS + Vite 7.x + React 19
+
+FROM node:24.18.0-trixie-slim
+
+RUN npm install -g npm@11.17.0
+
+# Full security patches + git for npm dependencies
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install --no-install-recommends -y \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Prevent tsc OOM inside container (305k LOC codebase)
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
+# Install dependencies first (caching)
+# --legacy-peer-deps because openapi-typescript@7.x's peer is still
+# pinned at typescript@^5.x while the project tracks typescript@^6.
+# Drop the flag once openapi-typescript ships a TS6-compatible peer.
+# (.npmrc carries the same flag - copied so local/CI/Docker stay consistent.)
+COPY package*.json .npmrc* ./
+RUN npm install --legacy-peer-deps
+
+# Copy source
+COPY . .
+
+# Entrypoint syncs node_modules when package.json changes
+# (handles anonymous volume staleness in docker-compose)
+COPY docker-entrypoint.dev.sh /usr/local/bin/
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.dev.sh && \
+    chmod +x /usr/local/bin/docker-entrypoint.dev.sh
+
+EXPOSE 5173
+
+ENTRYPOINT ["docker-entrypoint.dev.sh"]
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

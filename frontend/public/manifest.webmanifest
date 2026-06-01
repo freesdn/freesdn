@@ -1,0 +1,41 @@
+{
+  "name": "FreeSDN, Unified Network & Camera Management",
+  "short_name": "FreeSDN",
+  "description": "Vendor-neutral SDN, NVR/camera, VoIP and firewall management platform.",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1120",
+  "theme_color": "#1E63E8",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Camera wall",
+      "short_name": "Cameras",
+      "url": "/cameras?source=pwa",
+      "description": "Live camera grid"
+    },
+    {
+      "name": "Review events",
+      "short_name": "Review",
+      "url": "/cameras/events?source=pwa",
+      "description": "Acknowledge camera alerts"
+    }
+  ]
+}

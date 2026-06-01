@@ -1,0 +1,1497 @@
+{
+  "AlertRulesPage": {
+    "header": {
+      "title": "Alert Rules Engine",
+      "description": "Configure alert rules, manage firing alerts, and set up notification channels"
+    },
+    "actions": {
+      "alertsConsole": "Alerts Console",
+      "evaluateNow": "Evaluate Now",
+      "newRule": "New Rule",
+      "editRule": "Edit rule",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "updateRule": "Update Rule",
+      "createRule": "Create Rule",
+      "acknowledge": "Acknowledge",
+      "resolve": "Resolve",
+      "close": "Close"
+    },
+    "errorBanner": {
+      "message": "Some data failed to load. Results may be incomplete."
+    },
+    "stats": {
+      "activeRules": "Active Rules",
+      "firingAlerts": "Firing Alerts",
+      "alerts24h": "Alerts (24h)",
+      "criticalFiring": "Critical Firing"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search rules, alerts, providers…",
+      "allStatuses": "All statuses",
+      "active": "Active",
+      "disabled": "Disabled",
+      "clearFilters": "Clear filters"
+    },
+    "tabs": {
+      "rules": "Rules ({{count}})",
+      "alerts": "Alerts ({{count}})",
+      "channels": "Notification Channels ({{count}})"
+    },
+    "ruleColumns": {
+      "rule": "Rule",
+      "type": "Type",
+      "severity": "Severity",
+      "status": "Status",
+      "channels": "Channels",
+      "scope": "Scope",
+      "fired": "Fired",
+      "lastEvaluated": "Last Evaluated"
+    },
+    "alertColumns": {
+      "severity": "Severity",
+      "title": "Title",
+      "status": "Status",
+      "count": "Count",
+      "notified": "Notified",
+      "fired": "Fired"
+    },
+    "common": {
+      "none": "None",
+      "never": "Never"
+    },
+    "confirm": {
+      "deleteRule": "Delete rule \"{{name}}\"?",
+      "deleteRules": "Delete {{count}} rule(s)?"
+    },
+    "emptyRules": {
+      "title": "No Rules Found",
+      "description": "Create your first alert rule to get started.",
+      "searchDescription": "No rules match your search."
+    },
+    "emptyAlerts": {
+      "title": "All Clear",
+      "description": "No rule-based alerts found."
+    },
+    "itemNames": {
+      "rules": "rules",
+      "rule": "rule",
+      "alerts": "alerts"
+    },
+    "bulkActions": {
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete"
+    },
+    "dialog": {
+      "createTitle": "Create Alert Rule",
+      "editTitle": "Edit Alert Rule"
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "createFailed": "Failed to create rule",
+      "updateFailed": "Failed to update rule",
+      "deleteFailed": "Failed to delete rule",
+      "toggleFailed": "Failed to toggle rule",
+      "acknowledgeFailed": "Failed to acknowledge alert",
+      "resolveFailed": "Failed to resolve alert",
+      "evaluationFailed": "Evaluation failed",
+      "verificationFailed": "Verification failed",
+      "providerVerifiedTitle": "Provider verified",
+      "providerVerifiedDesc": "Connectivity check passed."
+    },
+    "channels": {
+      "email": "Email",
+      "slack": "Slack",
+      "sms": "SMS",
+      "webhook": "Webhook",
+      "teams": "Microsoft Teams",
+      "inApp": "In-App",
+      "inAppNotifications": "In-App Notifications"
+    },
+    "channelsTab": {
+      "notConfigured": "Not configured",
+      "activeCount": "{{enabled}}/{{count}} active",
+      "noProvidersTitle": "No Notification Providers",
+      "noProvidersDescription": "Configure notification providers to enable alert notifications via Email, Slack, SMS, Webhook, and more. Providers are managed in the system settings.",
+      "configureProviders": "Configure Providers",
+      "providerCount": "{{count}} provider(s)",
+      "default": "Default",
+      "test": "Test",
+      "availableTypesTitle": "Available Provider Types",
+      "availableTypesDescription": "These notification provider types can be configured in system settings."
+    },
+    "ruleTypes": {
+      "threshold": "Threshold",
+      "pattern": "Pattern",
+      "anomaly": "Anomaly"
+    },
+    "severities": {
+      "info": "Info",
+      "low": "Low",
+      "warning": "Warning",
+      "high": "High",
+      "critical": "Critical",
+      "criticalOnly": "Critical only"
+    },
+    "scopes": {
+      "organization": "Organization",
+      "site": "Site",
+      "deviceGroup": "Device Group",
+      "device": "Device"
+    },
+    "operators": {
+      "greaterThan": "Greater than",
+      "greaterOrEqual": "Greater or equal",
+      "lessThan": "Less than",
+      "lessOrEqual": "Less or equal",
+      "equal": "Equal",
+      "notEqual": "Not equal"
+    },
+    "form": {
+      "dialogDescription": "Configure rule conditions, severity, and notification channels.",
+      "basicInformation": "Basic Information",
+      "ruleName": "Rule Name *",
+      "ruleNamePlaceholder": "e.g. High CPU Alert",
+      "description": "Description",
+      "descriptionPlaceholder": "Optional description of what this rule monitors...",
+      "type": "Type",
+      "severity": "Severity",
+      "scope": "Scope",
+      "conditions": "Conditions",
+      "metric": "Metric",
+      "metricThresholdPlaceholder": "e.g. cpu_utilization, memory_percent, packet_loss",
+      "metricAnomalyPlaceholder": "e.g. traffic_volume, error_rate",
+      "operator": "Operator",
+      "thresholdValue": "Threshold Value",
+      "eventType": "Event Type",
+      "eventTypePlaceholder": "e.g. device.offline, link.down",
+      "minimumCount": "Minimum Count",
+      "timeWindow": "Time Window (seconds)",
+      "anomalyDescription": "Anomaly detection uses machine learning to identify unusual behavior patterns. Configure the metric to monitor and the system will automatically detect outliers.",
+      "timingBehavior": "Timing & Behavior",
+      "checkInterval": "Check Interval (seconds)",
+      "checkIntervalHint": "How often to evaluate",
+      "forDuration": "For Duration (seconds)",
+      "forDurationHint": "Must be true for this long to fire",
+      "cooldown": "Cooldown (seconds)",
+      "cooldownHint": "Wait between re-fires",
+      "dedupeWindow": "Dedupe Window (seconds)",
+      "dedupeWindowHint": "Group same alerts within this window",
+      "autoResolve": "Auto-resolve when condition clears",
+      "notifyOnResolve": "Notify on resolve",
+      "notificationChannels": "Notification Channels",
+      "notificationChannelsHint": "Select which channels should be notified when this rule fires. Configure channel-specific settings below.",
+      "recipients": "Recipients (comma-separated)",
+      "minSeverityEmail": "Minimum Severity for Email",
+      "slackChannel": "Slack Channel",
+      "mention": "Mention",
+      "mentionPlaceholder": "@oncall, @channel · leave empty for no mention",
+      "phoneNumbers": "Phone Numbers (comma-separated)",
+      "minSeveritySms": "Minimum Severity for SMS",
+      "webhookUrl": "Webhook URL",
+      "httpMethod": "HTTP Method",
+      "secretHeader": "Secret Header",
+      "secretHeaderPlaceholder": "Optional auth secret",
+      "customHeaders": "Custom Headers (JSON)",
+      "teamsWebhookUrl": "Teams Webhook URL",
+      "inAppHint": "In-app notifications will appear in the sidebar badge and notification center. No additional configuration required.",
+      "noProviderConfigured": "No provider configured",
+      "tags": "Tags (comma-separated)"
+    },
+    "detail": {
+      "status": "Status",
+      "occurrences": "Occurrences",
+      "notificationsSent": "Notifications Sent",
+      "lastNotified": "Last Notified",
+      "acknowledged": "Acknowledged",
+      "resolved": "Resolved",
+      "message": "Message",
+      "tags": "Tags",
+      "details": "Details"
+    }
+  },
+  "BulkOperationsPage": {
+    "title": "Bulk Operations",
+    "description": "Push config, reboot, or update firmware across many devices with staged rollout",
+    "searchPlaceholder": "Search bulk operations…",
+    "itemName": "operation",
+    "itemNamePlural": "operations",
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "paused": "Paused",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "rollingBack": "Rolling Back",
+      "rolledBack": "Rolled Back"
+    },
+    "errorState": {
+      "message": "Failed to load bulk operations"
+    },
+    "actions": {
+      "newOperation": "New Operation",
+      "details": "Details",
+      "cancel": "Cancel",
+      "creating": "Creating...",
+      "createAndRun": "Create & Run"
+    },
+    "stats": {
+      "totalJobs": {
+        "title": "Total Jobs",
+        "description": "All operations"
+      },
+      "running": {
+        "title": "Running",
+        "description": "In progress"
+      },
+      "completed": {
+        "title": "Completed",
+        "description": "Successful"
+      },
+      "failed": {
+        "title": "Failed",
+        "description": "Failed or rolled back"
+      }
+    },
+    "filters": {
+      "allStatuses": "All Statuses",
+      "clear": "Clear filters"
+    },
+    "columns": {
+      "jobId": "Job ID",
+      "operation": "Operation",
+      "status": "Status",
+      "progress": "Progress",
+      "stage": "Stage",
+      "created": "Created"
+    },
+    "table": {
+      "failedCount": "{{count}} failed",
+      "stage": "Stage {{stage}}"
+    },
+    "bulkActions": {
+      "cancelRunning": "Cancel Running"
+    },
+    "createDialog": {
+      "title": "New Bulk Operation",
+      "description": "Push configuration, reboot devices, or trigger firmware updates across a set of devices.",
+      "operationType": "Operation Type",
+      "targetScope": "Target Scope",
+      "scopeId": "Scope ID",
+      "scopeIdPlaceholder": "UUID of site/group",
+      "deviceType": "Device Type (optional)",
+      "tag": "Tag",
+      "tagPlaceholder": "floor-3",
+      "deviceIds": "Device IDs",
+      "deviceIdsPlaceholder": "Paste device UUIDs, one per line or comma-separated",
+      "deviceIdsHint": "Enter device UUIDs separated by new lines or commas (up to 500).",
+      "configPayload": "Config Payload (JSON)"
+    },
+    "operations": {
+      "pushConfig": "Push Config",
+      "reboot": "Reboot",
+      "firmwareUpdate": "Firmware Update"
+    },
+    "scopes": {
+      "site": "Site",
+      "deviceGroup": "Device Group",
+      "tag": "Tag",
+      "deviceList": "Device List"
+    },
+    "deviceTypes": {
+      "all": "All Types",
+      "accessPoint": "Access Point",
+      "switch": "Switch",
+      "router": "Router"
+    },
+    "strategies": {
+      "immediate": "Immediate",
+      "staged": "Staged"
+    },
+    "rollout": {
+      "title": "Rollout Strategy",
+      "failureThreshold": "Failure Threshold (%)",
+      "autoRollback": "Auto-rollback",
+      "stages": "Stages (JSON)",
+      "stagesHint": "Each stage:"
+    },
+    "detailsDialog": {
+      "title": "Operation Details",
+      "jobId": "Job ID",
+      "status": "Status",
+      "operation": "Operation",
+      "stage": "Stage",
+      "progress": "Progress",
+      "failed": "{{count}} failed",
+      "skipped": "{{count}} skipped (no access)",
+      "created": "Created",
+      "started": "Started",
+      "finished": "Finished",
+      "error": "Error"
+    },
+    "toasts": {
+      "unknownError": "Unknown error",
+      "error": "Error",
+      "invalidJson": "Invalid JSON",
+      "createFailed": "Create bulk operation failed",
+      "cancelFailed": "Cancel bulk operation failed",
+      "cancelRequested": "Cancel requested",
+      "queued": {
+        "title": "Bulk operation queued",
+        "description": "{{operation}} dispatched ({{count}} devices)"
+      },
+      "nothingToCancel": {
+        "title": "Nothing to cancel",
+        "description": "Selected operations are already finished."
+      },
+      "bulkCancel": {
+        "title": "Bulk cancel complete",
+        "description": "{{ok}} cancelled",
+        "descriptionWithFailures": "{{ok}} cancelled, {{failed}} failed"
+      }
+    }
+  },
+  "ActiveAlertsPanel": {
+    "title": "Active Alerts",
+    "error": "Failed to load active alerts.",
+    "empty": "No firing alerts.",
+    "fallbackTitle": "Alert",
+    "viewAll": "View all alerts",
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{{minutes}}m ago",
+      "hoursAgo": "{{hours}}h ago",
+      "daysAgo": "{{days}}d ago"
+    }
+  },
+  "DeviceHealthDrawer": {
+    "title": "Device Health Detail",
+    "loading": "Loading...",
+    "error": "Failed to load device health data.",
+    "site": "Site",
+    "notAvailable": "N/A",
+    "componentScores": "Component Scores",
+    "scores": {
+      "reachability": "Reachability",
+      "latency": "Latency",
+      "configDrift": "Config Drift",
+      "errorRate": "Error Rate",
+      "utilization": "Utilization",
+      "firmware": "Firmware"
+    },
+    "scoreHistory": "Score History",
+    "scoreLabel": "Score",
+    "lastUpdated": "Last updated"
+  },
+  "DeviceHealthTable": {
+    "title": "Device Health",
+    "common": {
+      "notAvailable": "N/A"
+    },
+    "allTypes": "All Types",
+    "statusOptions": {
+      "all": "All Statuses",
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "degraded": "Degraded",
+      "critical": "Critical"
+    },
+    "errorLoading": "Failed to load device health data.",
+    "empty": "No devices match the current filters.",
+    "headers": {
+      "device": "Device",
+      "site": "Site",
+      "type": "Type",
+      "status": "Status",
+      "updated": "Updated"
+    },
+    "columns": {
+      "health": "Health",
+      "reachability": "Reachability",
+      "latency": "Latency",
+      "drift": "Drift",
+      "errorRate": "Error Rate",
+      "utilization": "Utilization",
+      "firmware": "Firmware"
+    },
+    "pagination": {
+      "totalOne": "{{count}} device total",
+      "totalOther": "{{count}} devices total",
+      "previous": "Previous",
+      "pageOf": "Page {{page}} of {{total}}",
+      "next": "Next"
+    }
+  },
+  "HealthStatusBadge": {
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "degraded": "Degraded",
+      "critical": "Critical",
+      "unknown": "Unknown"
+    }
+  },
+  "HealthTrendChart": {
+    "title": "Health Trend",
+    "empty": "No trend data available",
+    "healthScore": "Health Score"
+  },
+  "InfrastructureHealthPanel": {
+    "title": "Infrastructure Health",
+    "loadError": "Failed to load infrastructure health.",
+    "systemStatus": "System {{status}}",
+    "uptime": "Uptime: {{hours}}h {{minutes}}m",
+    "latencyLabel": "Latency:",
+    "latencyValue": "{{ms}}ms"
+  },
+  "ModuleHealthGrid": {
+    "title": "Module Health",
+    "error": "Failed to load module health.",
+    "empty": "No module data available.",
+    "deviceCount_one": "{{count}} device",
+    "deviceCount_other": "{{count}} devices",
+    "counts": {
+      "healthy": "{{count}}h",
+      "warning": "{{count}}w",
+      "degraded": "{{count}}d",
+      "critical": "{{count}}c"
+    }
+  },
+  "ScoreBar": {
+    "notAvailable": "N/A"
+  },
+  "SiteRankingTable": {
+    "title": "Site Ranking",
+    "error": "Failed to load site ranking data.",
+    "empty": "No site ranking data available.",
+    "columns": {
+      "site": "Site",
+      "healthScore": "Health Score",
+      "uptimePercent": "Uptime %",
+      "devices": "Devices",
+      "trend": "Trend"
+    }
+  },
+  "SLAComplianceCard": {
+    "title": "SLA Compliance",
+    "error": "Failed to load SLA data.",
+    "notAvailable": "N/A",
+    "overallCompliance": "Overall Compliance",
+    "noPolicies": "No SLA policies defined",
+    "activePolicies": "Active Policies",
+    "activeBreaches": "Active Breaches",
+    "viewDashboard": "View SLA Dashboard"
+  },
+  "TopIssuesPanel": {
+    "title": "Top Issues",
+    "error": "Failed to load top issues.",
+    "empty": "No health issues detected."
+  },
+  "WANHealthPanel": {
+    "title": "WAN Health",
+    "error": "Failed to load WAN health data.",
+    "empty": "No WAN devices found.",
+    "columns": {
+      "device": "Device",
+      "site": "Site",
+      "ip": "IP",
+      "health": "Health",
+      "latency": "Latency",
+      "reachability": "Reachability"
+    }
+  },
+  "HealthDashboardPage": {
+    "title": "Network Health",
+    "description": {
+      "site": "Site health monitoring · {{devices}} devices",
+      "org": "Organization-wide health monitoring · {{sites}} sites, {{devices}} devices"
+    },
+    "error": {
+      "loadFailed": "Failed to load health data. Please try again."
+    },
+    "stats": {
+      "overallScore": "Overall Score",
+      "healthyDevices": "Healthy Devices",
+      "warnings": "Warnings",
+      "critical": "Critical"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "degraded": "Degraded",
+      "critical": "Critical"
+    },
+    "siteCard": {
+      "deviceCount": "{{count}} devices",
+      "uptime": "{{percent}}% uptime"
+    },
+    "orgHealth": {
+      "heading": "Organization Health",
+      "summary": "Aggregated health across {{sites}} sites and {{devices}} devices. Scores are computed from reachability, latency, config drift, error rates, utilization, and firmware currency."
+    },
+    "actions": {
+      "reconcileAll": "Reconcile All"
+    },
+    "toast": {
+      "reconcileDispatched": {
+        "title": "Reconcile dispatched",
+        "description": "{{count}} devices queued for drift check."
+      },
+      "reconcileFailed": {
+        "title": "Reconcile failed"
+      },
+      "unknownError": "Unknown error"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "devices": "Devices",
+      "alerts": "Alerts & SLA",
+      "infrastructure": "Infrastructure",
+      "scores": "Score Info"
+    },
+    "empty": {
+      "noData": "No health data available yet."
+    },
+    "scoreInfo": {
+      "title": "Health Score Components",
+      "description": "Understanding how health scores are calculated",
+      "weightsHeading": "Score Weights",
+      "weights": {
+        "reachability": "Reachability",
+        "configDrift": "Config Drift",
+        "latency": "Latency (preview)",
+        "errorRate": "Error Rate (preview)",
+        "utilization": "Utilization (preview)",
+        "firmware": "Firmware (preview)"
+      },
+      "previewNote": "Components marked preview are wired in the score formula but their per-device values are not yet sourced from live telemetry; they fall back to neutral defaults.",
+      "thresholdsHeading": "Thresholds",
+      "thresholds": {
+        "healthy": "90-100 · Healthy",
+        "warning": "70-89 · Warning",
+        "degraded": "50-69 · Degraded",
+        "critical": "0-49 · Critical"
+      }
+    }
+  },
+  "IncidentsPage": {
+    "header": {
+      "title": "Event Correlation & Incidents",
+      "description": "Correlated events grouped into actionable incidents"
+    },
+    "stats": {
+      "activeRules": {
+        "title": "Active Rules",
+        "description": "Currently enabled"
+      },
+      "openIncidents": {
+        "title": "Open Incidents",
+        "description": "Need attention"
+      },
+      "last24h": {
+        "title": "Last 24h",
+        "description": "Recent incidents"
+      },
+      "totalRules": {
+        "title": "Total Rules",
+        "description": "Configured rules"
+      }
+    },
+    "tabs": {
+      "incidents": "Incidents ({{count}})",
+      "rules": "Correlation Rules ({{count}})"
+    },
+    "columns": {
+      "severity": "Severity",
+      "title": "Title",
+      "status": "Status",
+      "events": "Events",
+      "devices": "Devices",
+      "opened": "Opened",
+      "name": "Name",
+      "scope": "Scope",
+      "window": "Window",
+      "fires": "Fires",
+      "patterns": "Patterns"
+    },
+    "rules": {
+      "patternsCount": "{{count}} patterns"
+    },
+    "search": {
+      "placeholder": "Search incidents by title, severity, or status…"
+    },
+    "filters": {
+      "allStatuses": "All statuses",
+      "allSeverities": "All severities",
+      "clear": "Clear filters"
+    },
+    "status": {
+      "open": "Open",
+      "investigating": "Investigating",
+      "mitigating": "Mitigating",
+      "resolved": "Resolved",
+      "closed": "Closed"
+    },
+    "severity": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "scope": {
+      "site": "Site",
+      "deviceGroup": "Device Group",
+      "organization": "Organization"
+    },
+    "itemNames": {
+      "incidents": "incidents",
+      "incident": "incident",
+      "rules": "rules"
+    },
+    "actions": {
+      "runCorrelation": "Run Correlation",
+      "newRule": "New Rule",
+      "investigate": "Investigate",
+      "acknowledge": "Acknowledge",
+      "assign": "Assign",
+      "close": "Close",
+      "startInvestigation": "Start Investigation",
+      "resolve": "Resolve"
+    },
+    "detail": {
+      "statusLabel": "Status:",
+      "openedLabel": "Opened:",
+      "eventsLabel": "Events:",
+      "devicesLabel": "Devices:",
+      "rootCause": "Root Cause",
+      "linkedEvents": "Linked Events",
+      "loading": "Loading…",
+      "unknownEventType": "unknown",
+      "patternPrefix": "pattern: {{pattern}}"
+    },
+    "form": {
+      "name": "Name",
+      "scope": "Scope",
+      "severity": "Severity",
+      "timeWindow": "Time Window (seconds)",
+      "eventPatterns": "Event Patterns (JSON)"
+    },
+    "dialogs": {
+      "newRule": {
+        "title": "New Correlation Rule",
+        "submit": "Create Rule"
+      },
+      "trigger": {
+        "title": "Run Event Correlation",
+        "description": "Manually scan recent events and create incidents based on active correlation rules.",
+        "dryRun": "Dry Run",
+        "runNow": "Run Now"
+      }
+    },
+    "validation": {
+      "nameRequired": "Name is required",
+      "patternsRequired": "Event patterns are required",
+      "invalidJson": "Invalid JSON"
+    },
+    "errors": {
+      "unknown": "Unknown error",
+      "updateIncident": "Update incident failed",
+      "createRule": "Create correlation rule failed",
+      "triggerCorrelation": "Trigger correlation failed",
+      "loadFailed": "Failed to load incidents data"
+    }
+  },
+  "LifecyclePage": {
+    "title": "Device Lifecycle",
+    "description": "Manage device states from discovery through decommission",
+    "loadError": "Failed to load device lifecycle data",
+    "stateMachine": "State Machine",
+    "searchPlaceholder": "Search devices by name or IP…",
+    "allStates": "All States",
+    "clearFilters": "Clear filters",
+    "unnamed": "Unnamed",
+    "states": {
+      "discovered": "Discovered",
+      "adopting": "Adopting",
+      "provisioning": "Provisioning",
+      "managed": "Managed",
+      "updating": "Updating",
+      "offline": "Offline",
+      "error": "Error",
+      "decommissioned": "Decommissioned",
+      "ignored": "Ignored"
+    },
+    "stats": {
+      "managed": {
+        "title": "Managed",
+        "description": "Healthy devices"
+      },
+      "discovered": {
+        "title": "Discovered",
+        "description": "Awaiting adoption"
+      },
+      "offline": {
+        "title": "Offline",
+        "description": "Unreachable"
+      },
+      "error": {
+        "title": "Error",
+        "description": "Need attention"
+      }
+    },
+    "columns": {
+      "device": "Device",
+      "type": "Type",
+      "lifecycleState": "Lifecycle State",
+      "lastChanged": "Last Changed",
+      "error": "Error"
+    },
+    "historyColumns": {
+      "time": "Time",
+      "transition": "Transition",
+      "trigger": "Trigger",
+      "details": "Details"
+    },
+    "actions": {
+      "history": "History",
+      "transition": "Transition",
+      "transitioning": "Transitioning...",
+      "cancel": "Cancel"
+    },
+    "bulkActions": {
+      "approve": "Approve",
+      "reject": "Reject",
+      "markStale": "Mark Stale"
+    },
+    "itemName": {
+      "devices": "devices",
+      "device": "device",
+      "entries": "entries"
+    },
+    "historyDialog": {
+      "title": "Lifecycle History · {{name}}",
+      "description": "Full transition audit trail for this device"
+    },
+    "transitionDialog": {
+      "title": "Transition Device State",
+      "currentState": "Current State",
+      "transitionTo": "Transition To",
+      "selectTarget": "Select target state"
+    },
+    "toast": {
+      "transitionFailedTitle": "Transition failed"
+    },
+    "errors": {
+      "unknown": "Unknown error"
+    }
+  },
+  "NotificationProvidersPage": {
+    "common": {
+      "default": "Default",
+      "never": "never",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "tabs": {
+      "providers": {
+        "label": "Providers",
+        "desc": "Manage delivery providers"
+      },
+      "testing": {
+        "label": "Testing Console",
+        "desc": "Test & debug providers"
+      },
+      "health": {
+        "label": "Health & Diagnostics",
+        "desc": "Provider health overview"
+      }
+    },
+    "header": {
+      "title": "Notification Providers",
+      "subtitle": "Configure, test, and monitor notification delivery channels · Gmail, SMTP, Mailgun, SendGrid, Brevo, SES, Postmark, Resend, Slack, Teams, SMS, and Webhooks.",
+      "loadError": "Failed to load notification providers. Please try again."
+    },
+    "stats": {
+      "total": "Total Providers",
+      "enabled": "Enabled",
+      "verified": "Verified",
+      "errors": "Errors",
+      "needsAttention": "needs attention"
+    },
+    "dashboard": {
+      "errCount": "{{count}} err",
+      "activeVerified": "{{enabled}}/{{total}} active · {{verified}} verified",
+      "defaultSet": "Default set",
+      "noDefault": "No default"
+    },
+    "status": {
+      "verified": "Verified",
+      "unverified": "Unverified"
+    },
+    "row": {
+      "editConfig": "Edit Configuration",
+      "verifyConnection": "Verify Connection",
+      "sendTest": "Send Test",
+      "setDefault": "Set as Default",
+      "deleteProvider": "Delete Provider"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search providers…",
+      "channel": "Channel",
+      "allChannels": "All channels",
+      "status": "Status",
+      "allStatus": "All status",
+      "statusEnabled": "Enabled",
+      "statusDisabled": "Disabled",
+      "statusError": "Has Errors",
+      "clearFilters": "Clear filters",
+      "countOf": "{{shown}} of {{total}}",
+      "refresh": "Refresh",
+      "addProvider": "Add Provider"
+    },
+    "empty": {
+      "title": "No Providers Found",
+      "filtered": "No providers match your current filters. Try adjusting the search or filter criteria.",
+      "none": "Add your first notification provider to start sending alerts via Email, Slack, Teams, SMS, or webhooks.",
+      "addFirst": "Add First Provider"
+    },
+    "table": {
+      "provider": "Provider",
+      "channel": "Channel",
+      "status": "Status",
+      "lastVerified": "Last Verified",
+      "rateLimits": "Rate Limits",
+      "created": "Created",
+      "enabled": "Enabled"
+    },
+    "bulk": {
+      "verify": "Verify",
+      "disable": "Disable",
+      "delete": "Delete",
+      "confirmDelete": "Delete {{count}} provider(s)?"
+    },
+    "deleteDialog": {
+      "title": "Delete Provider",
+      "confirm": "Permanently delete {{name}}?",
+      "warning": "Active notifications using this provider will fail."
+    },
+    "toast": {
+      "unknownError": "Unknown error",
+      "createFailed": "Create provider failed",
+      "updateFailed": "Update provider failed",
+      "deleteFailed": "Delete provider failed",
+      "toggleFailed": "Toggle provider failed",
+      "verifyFailed": "Provider verification failed",
+      "setDefaultFailed": "Set default failed"
+    },
+    "form": {
+      "title": {
+        "edit": "Edit Provider",
+        "selectType": "Select Provider Type",
+        "configure": "Configure Provider"
+      },
+      "submit": {
+        "save": "Save Changes",
+        "create": "Create Provider"
+      },
+      "description": {
+        "edit": "Update {{name}} configuration.",
+        "selectType": "Choose a delivery provider type to configure.",
+        "configure": "Set up your {{type}} provider."
+      },
+      "validation": {
+        "nameRequired": "Display name is required",
+        "typeRequired": "Provider type is required",
+        "zeroOrGreater": "Must be 0 or greater",
+        "fieldRequired": "{{field}} is required"
+      },
+      "changeType": "Change type",
+      "displayName": "Display Name",
+      "displayNamePlaceholder": "e.g. Production Mailgun",
+      "providerType": "Provider Type",
+      "configuration": "Configuration",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "behavior": "Behavior",
+      "default": "Default",
+      "ratePerHour": "Rate / hour",
+      "ratePerDay": "Rate / day",
+      "invalidJson": "Invalid JSON, fix the syntax before saving (last valid value is kept).",
+      "saving": "Saving…"
+    },
+    "testing": {
+      "selectProviderFirst": "Select a provider first",
+      "testFailed": "Test failed",
+      "singleTitle": "Single Provider Test",
+      "singleDesc": "Send a test notification through a specific provider.",
+      "providerLabel": "Provider",
+      "selectProvider": "Select provider…",
+      "recipientLabel": "Recipient",
+      "sendTest": "Send Test",
+      "bulkTitle": "Bulk Channel Test",
+      "bulkDesc": "Test all enabled providers in a channel at once.",
+      "channelLabel": "Channel",
+      "selectChannel": "Select channel…",
+      "channelOption": "{{channel}} ({{count}} providers)",
+      "recipientAllPlaceholder": "Recipient for all tests",
+      "testAll": "Test All Providers",
+      "testAllChannel": "Test All {{channel}} Providers",
+      "resultsTitle": "Test Results",
+      "resultsDesc": "Real-time test results for this session.",
+      "clearLog": "Clear Log",
+      "emptyResults": "Run a test to see results here.",
+      "toLabel": "To:",
+      "showDebug": "Show Debug Details",
+      "hideDebug": "Hide Debug Details"
+    },
+    "health": {
+      "verifyFailed": "Verify failed",
+      "connectivityCheck": "Connectivity Check",
+      "connectivityDesc": "Verify all enabled providers can reach their endpoints.",
+      "providersToCheck": "{{count}} provider(s) to check.",
+      "verifyAll": "Verify All ({{count}})",
+      "channelReadiness": "Channel Readiness",
+      "channelReadinessDesc": "Overview of channel delivery capability.",
+      "statusReady": "Ready",
+      "statusPartial": "Partial",
+      "statusFailing": "Failing",
+      "statusNotConfigured": "Not configured",
+      "enabledVerified": "{{enabled}} enabled · {{verified}} verified",
+      "healthDetails": "Provider Health Details",
+      "providersCount": "{{count}} providers",
+      "noProviders": "No providers configured.",
+      "on": "On",
+      "off": "Off",
+      "verifiedLabel": "Verified",
+      "lastVerifiedLabel": "Last Verified",
+      "rateLimitsLabel": "Rate Limits",
+      "createdLabel": "Created",
+      "updatedLabel": "Updated",
+      "neverCapitalized": "Never",
+      "hideConfig": "Hide Config",
+      "viewConfig": "View Config (masked)"
+    }
+  },
+  "ReconciliationPage": {
+    "header": {
+      "title": "Config Reconciliation",
+      "description": "Inspect desired vs running configs, detect drift, and trigger reconciliation"
+    },
+    "searchPlaceholder": "Search devices by name or IP…",
+    "unnamed": "Unnamed",
+    "itemName": "device",
+    "itemNamePlural": "devices",
+    "columns": {
+      "device": "Device",
+      "type": "Type"
+    },
+    "actions": {
+      "inspect": "Inspect",
+      "reconcile": "Reconcile",
+      "reconcileAll": "Reconcile All",
+      "clearFilters": "Clear filters",
+      "rerun": "Re-run",
+      "dismissDiff": "Dismiss Diff"
+    },
+    "status": {
+      "driftDetected": "Drift Detected",
+      "compliant": "Compliant"
+    },
+    "driftDetails": "Drift Details",
+    "tabs": {
+      "threeState": "Three-State View",
+      "resolved": "Resolved Config",
+      "overrides": "Device Overrides"
+    },
+    "threeState": {
+      "desired": "Desired Config",
+      "pushed": "Pushed Config",
+      "running": "Running Config",
+      "lastPushed": "Last pushed: {{date}}",
+      "lastSynced": "| Last synced: {{date}}"
+    },
+    "resolved": {
+      "templateChain": "Template Chain:",
+      "empty": "No resolved config available"
+    },
+    "inspector": {
+      "title": "Config Inspector",
+      "description": "Three-state config model for device {{id}}...",
+      "loading": "Loading config...",
+      "push": "Push: {{value}}",
+      "neverPushed": "Never pushed",
+      "version": "Version: {{value}}",
+      "autoRemediate": "Auto-remediate"
+    },
+    "noConfig": {
+      "title": "No config entry found for this device.",
+      "description": "Config entries are created when a device is first provisioned through the template system."
+    },
+    "toast": {
+      "dismissedTitle": "Drift dismissed",
+      "dismissed": "{{count}} dismissed"
+    },
+    "errors": {
+      "unknown": "Unknown error",
+      "reconcileFailed": "Reconcile failed",
+      "updateSettingsFailed": "Update device-config settings failed",
+      "loadDevices": "Failed to load devices"
+    }
+  },
+  "SiteGroupsPage": {
+    "header": {
+      "title": "Groups",
+      "description": "Organize your infrastructure with site groups and device groups for template hierarchy"
+    },
+    "tabs": {
+      "siteGroups": "Site Groups",
+      "deviceGroups": "Device Groups"
+    },
+    "stats": {
+      "siteGroups": {
+        "title": "Site Groups",
+        "description": "Configured site groups"
+      },
+      "deviceGroups": {
+        "title": "Device Groups",
+        "description": "Configured device groups"
+      },
+      "rootGroups": {
+        "title": "Root Groups",
+        "description": "Top-level"
+      },
+      "activeDeviceGroups": {
+        "title": "Active DG",
+        "description": "Active device groups"
+      }
+    },
+    "columns": {
+      "name": "Name",
+      "description": "Description",
+      "parent": "Parent",
+      "site": "Site",
+      "status": "Status"
+    },
+    "values": {
+      "root": "Root",
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "actions": {
+      "newSiteGroup": "New Site Group",
+      "newDeviceGroup": "New Device Group",
+      "clearFilters": "Clear filters",
+      "delete": "Delete",
+      "save": "Save",
+      "create": "Create"
+    },
+    "search": {
+      "siteGroups": "Search site groups…",
+      "deviceGroups": "Search device groups…"
+    },
+    "itemName": {
+      "siteGroup": "site group",
+      "siteGroups": "site groups",
+      "deviceGroup": "device group",
+      "deviceGroups": "device groups"
+    },
+    "confirm": {
+      "deleteSiteGroup": "Delete site group \"{{name}}\"? Member sites stay; only the group is removed.",
+      "deleteDeviceGroup": "Delete device group \"{{name}}\"? Member devices stay; only the group is removed.",
+      "bulkDeleteSiteGroups": "Delete {{count}} site group(s)?",
+      "bulkDeleteDeviceGroups": "Delete {{count}} device group(s)?"
+    },
+    "dialogs": {
+      "siteGroup": {
+        "createTitle": "Create Site Group",
+        "editTitle": "Edit Site Group",
+        "description": "Site groups organize sites for template inheritance."
+      },
+      "deviceGroup": {
+        "createTitle": "Create Device Group",
+        "editTitle": "Edit Device Group",
+        "description": "Device groups organize devices within a site for template targeting."
+      }
+    },
+    "fields": {
+      "name": {
+        "label": "Name"
+      },
+      "description": {
+        "label": "Description"
+      },
+      "siteGroupName": {
+        "placeholder": "Branch Offices"
+      },
+      "siteGroupDescription": {
+        "placeholder": "All branch office locations"
+      },
+      "deviceGroupName": {
+        "placeholder": "Floor 3 APs"
+      },
+      "deviceGroupDescription": {
+        "placeholder": "Access points on floor 3"
+      },
+      "parentGroup": {
+        "label": "Parent Group",
+        "none": "None (root)"
+      },
+      "siteId": {
+        "label": "Site ID",
+        "placeholder": "UUID of the site"
+      },
+      "matchRules": {
+        "label": "Match Rules (JSON)"
+      }
+    },
+    "validation": {
+      "nameRequired": "Name is required",
+      "siteIdRequired": "Site ID is required",
+      "invalidJson": "Invalid JSON"
+    },
+    "errors": {
+      "unknown": "Unknown error",
+      "createSiteGroup": "Create site group failed",
+      "updateSiteGroup": "Update site group failed",
+      "deleteSiteGroup": "Delete site group failed",
+      "createDeviceGroup": "Create device group failed",
+      "updateDeviceGroup": "Update device group failed",
+      "deleteDeviceGroup": "Delete device group failed"
+    },
+    "error": {
+      "loadFailed": "Failed to load group data"
+    }
+  },
+  "SLAPage": {
+    "header": {
+      "title": "SLA Monitoring",
+      "description": "Service Level Agreement compliance tracking and breach management"
+    },
+    "errorState": {
+      "message": "Failed to load SLA data"
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "operationFailed": "Operation failed"
+    },
+    "stats": {
+      "notAvailable": "N/A",
+      "activePolicies": {
+        "title": "Active Policies",
+        "description": "Currently enforced"
+      },
+      "activeBreaches": {
+        "title": "Active Breaches",
+        "description": "Open violations"
+      },
+      "avgCompliance": {
+        "title": "Avg Compliance",
+        "description": "Across all policies"
+      },
+      "breaches24h": {
+        "title": "Breaches (24h)",
+        "description": "Last 24 hours"
+      }
+    },
+    "tabs": {
+      "overview": "Overview",
+      "policies": "Policies ({{count}})",
+      "breaches": "Breaches ({{count}})"
+    },
+    "overview": {
+      "worstPerforming": "Worst Performing SLA"
+    },
+    "actions": {
+      "evaluateNow": "Evaluate Now",
+      "newPolicy": "New Policy",
+      "acknowledge": "Acknowledge",
+      "clearFilters": "Clear filters",
+      "editThresholds": "Edit Thresholds",
+      "delete": "Delete"
+    },
+    "columns": {
+      "name": "Name",
+      "status": "Status",
+      "scope": "Scope",
+      "target": "Target",
+      "compliance": "Compliance",
+      "lastEvaluated": "Last Evaluated",
+      "never": "Never",
+      "severity": "Severity",
+      "metric": "Metric",
+      "threshold": "Threshold",
+      "actual": "Actual",
+      "deviation": "Deviation",
+      "started": "Started"
+    },
+    "itemNames": {
+      "policies": "policies",
+      "policy": "policy",
+      "breaches": "breaches",
+      "breach": "breach"
+    },
+    "policies": {
+      "searchPlaceholder": "Search policies by name or target…"
+    },
+    "breaches": {
+      "searchPlaceholder": "Search breaches by metric…",
+      "allStatuses": "All statuses",
+      "statusActive": "Active",
+      "statusAcknowledged": "Acknowledged",
+      "statusResolved": "Resolved"
+    },
+    "detail": {
+      "scope": "Scope:",
+      "target": "Target:",
+      "evalWindow": "Eval Window:",
+      "consecutive": "Consecutive:",
+      "minutes": "{{count}}min",
+      "thresholds": "Thresholds",
+      "lastEvaluated": "Last evaluated: {{date}}"
+    },
+    "dialog": {
+      "newPolicyTitle": "New SLA Policy",
+      "createPolicy": "Create Policy"
+    },
+    "form": {
+      "nameRequired": "Name is required",
+      "name": "Name",
+      "namePlaceholder": "e.g., Main Office Uptime SLA",
+      "scope": "Scope",
+      "scopeOptions": {
+        "organization": "Organization",
+        "site": "Site",
+        "siteGroup": "Site Group",
+        "deviceGroup": "Device Group",
+        "ssid": "SSID"
+      },
+      "evalWindow": "Eval Window (min)",
+      "scopeId": "Scope ID",
+      "scopeIdPlaceholder": "UUID",
+      "scopeName": "Scope Name",
+      "scopeNamePlaceholder": "Display name",
+      "healthScoreMin": "Health Score Min",
+      "uptimePercentMin": "Uptime % Min",
+      "latencyMsMax": "Latency ms Max",
+      "optional": "optional"
+    }
+  },
+  "ConfigTemplatesPage": {
+    "header": {
+      "title": "Config Templates",
+      "description": "Manage configuration templates with hierarchical inheritance (Org → Site Group → Site → Device Group)",
+      "descriptionShort": "Manage configuration templates with hierarchical inheritance"
+    },
+    "actions": {
+      "newTemplate": "New Template",
+      "clearFilters": "Clear filters"
+    },
+    "stats": {
+      "total": {
+        "title": "Total Templates",
+        "description": "All templates"
+      },
+      "organization": {
+        "title": "Organization",
+        "description": "Org-wide"
+      },
+      "siteGroup": {
+        "title": "Site Group",
+        "description": "Site groups"
+      },
+      "siteDevice": {
+        "title": "Site / Device",
+        "description": "Targeted"
+      }
+    },
+    "search": {
+      "placeholder": "Search templates by name or description…"
+    },
+    "filter": {
+      "scopePlaceholder": "Filter scope",
+      "allScopes": "All Scopes"
+    },
+    "scopes": {
+      "organization": "Organization",
+      "site_group": "Site Group",
+      "site": "Site",
+      "device_group": "Device Group"
+    },
+    "columns": {
+      "name": "Template Name",
+      "scope": "Scope",
+      "deviceType": "Device Type",
+      "priority": "Priority",
+      "status": "Status"
+    },
+    "deviceType": {
+      "all": "All"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "bulk": {
+      "apply": "Apply",
+      "applyNotWired": "Apply templates to scope (not yet wired).",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "copyName": "{{name}} (copy)"
+    },
+    "confirm": {
+      "deleteOne": "Delete template \"{{name}}\"? This cannot be undone.",
+      "deleteMany": "Delete {{count}} template(s)?"
+    },
+    "dialog": {
+      "createTitle": "Create Template",
+      "editTitle": "Edit Template",
+      "description": "Templates define configuration that cascades down through the hierarchy.",
+      "createSubmit": "Create Template",
+      "saveChanges": "Save Changes"
+    },
+    "form": {
+      "name": "Name",
+      "namePlaceholder": "Branch Office APs",
+      "priority": "Priority (lower = higher)",
+      "description": "Description",
+      "descriptionPlaceholder": "Standard config for branch office access points",
+      "scope": "Scope",
+      "scopeId": "Scope ID",
+      "scopeIdPlaceholder": "UUID (optional for org)",
+      "deviceType": "Device Type",
+      "config": "Config (JSON)"
+    },
+    "deviceTypes": {
+      "all": "All Types",
+      "accessPoint": "Access Point",
+      "switch": "Switch",
+      "router": "Router",
+      "gateway": "Gateway"
+    },
+    "view": {
+      "priority": "Priority: {{priority}}"
+    },
+    "validation": {
+      "nameRequired": "Name is required",
+      "invalidJson": "Invalid JSON"
+    },
+    "errors": {
+      "unknown": "Unknown error",
+      "createFailed": "Create template failed",
+      "updateFailed": "Update template failed",
+      "deleteFailed": "Delete template failed",
+      "duplicateFailed": "Duplicate template failed",
+      "loadFailed": "Failed to load config templates"
+    }
+  },
+  "TopologyPage": {
+    "header": {
+      "title": "Network Topology",
+      "description": "Interactive network graph with device relationships and health overlay"
+    },
+    "error": {
+      "loadFailed": "Failed to load topology data. Please try again."
+    },
+    "stats": {
+      "devices": "Devices",
+      "links": "Links",
+      "orphans": "Orphans",
+      "types": "Types"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search devices...",
+      "health": "Health",
+      "exportPng": "Export as PNG",
+      "fullscreen": "Fullscreen",
+      "exitFullscreen": "Exit Fullscreen",
+      "saveLayoutDisabledHint": "Select a site to save layout"
+    },
+    "layoutAlgorithm": {
+      "auto": "Auto Layout",
+      "hierarchical": "Hierarchical",
+      "forceDirected": "Force Directed"
+    },
+    "actions": {
+      "saveLayout": "Save Layout",
+      "saving": "Saving...",
+      "viewDevice": "View Device",
+      "reboot": "Reboot",
+      "rebooting": "Rebooting..."
+    },
+    "loading": "Loading topology...",
+    "empty": {
+      "title": "No topology data",
+      "description": "Devices will appear here once controllers are synced and link discovery is enabled."
+    },
+    "legend": {
+      "otherSpeed": "Other"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "degraded": "Degraded",
+      "unknown": "Unknown"
+    },
+    "node": {
+      "health": "Health: {{value}}%",
+      "layer": "Layer: {{layer}}"
+    },
+    "detail": {
+      "sheetTitle": "Device Details",
+      "sheetDescription": "Detailed information about the selected device",
+      "ipAddress": "IP Address",
+      "macAddress": "MAC Address",
+      "model": "Model",
+      "networkLayer": "Network Layer",
+      "site": "Site",
+      "healthScore": "Health Score",
+      "connectedDevices": "Connected Devices ({{n}})",
+      "quickActions": "Quick Actions"
+    },
+    "confirm": {
+      "reboot": "Reboot {{label}}? The device will be unreachable for ~30-90s."
+    },
+    "toast": {
+      "unknownError": "Unknown error",
+      "rebootDispatched": {
+        "title": "Reboot dispatched",
+        "description": "{{label}} will restart shortly."
+      },
+      "rebootFailed": {
+        "title": "Reboot failed"
+      },
+      "saveLayoutFailed": {
+        "title": "Save layout failed"
+      },
+      "autoLayoutFailed": {
+        "title": "Auto-layout failed"
+      },
+      "noSiteSelected": {
+        "title": "No site selected",
+        "description": "Pick a site from the site selector before saving a layout."
+      }
+    },
+    "deviceTypes": {
+      "switch": "Switch",
+      "access_point": "Access Point",
+      "router": "Router",
+      "gateway": "Gateway",
+      "firewall": "Firewall",
+      "camera": "Camera",
+      "nvr": "NVR",
+      "dvr": "DVR",
+      "access_control": "Access Control",
+      "intercom": "Intercom",
+      "voip_phone": "VoIP Phone",
+      "pbx": "PBX",
+      "server": "Server",
+      "iot": "IoT",
+      "sensor": "Sensor",
+      "other": "Other"
+    }
+  }
+}

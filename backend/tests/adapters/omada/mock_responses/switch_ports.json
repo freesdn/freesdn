@@ -1,0 +1,67 @@
+[
+    {
+        "port": 1,
+        "portId": "port-1",
+        "name": "Uplink",
+        "enable": true,
+        "linkStatus": true,
+        "linkSpeed": 1000,
+        "duplex": "full",
+        "type": "copper",
+        "profileId": "prof-trunk",
+        "profileName": "Trunk-All",
+        "pvid": 1,
+        "taggedVlans": [10, 20, 30],
+        "poe": {
+            "enable": true,
+            "power": 15.3,
+            "maxPower": 30.0,
+            "standard": "at"
+        },
+        "rx": 0,
+        "tx": 0,
+        "rxBytes": 1073741824,
+        "txBytes": 536870912
+    },
+    {
+        "port": 2,
+        "portId": "port-2",
+        "name": "Server",
+        "enable": true,
+        "linkStatus": true,
+        "linkSpeed": 1000,
+        "duplex": "full",
+        "type": "copper",
+        "profileId": "prof-access",
+        "profileName": "Access-VLAN10",
+        "pvid": 10,
+        "taggedVlans": [],
+        "poe": {
+            "enable": false,
+            "power": 0.0,
+            "maxPower": 30.0,
+            "standard": "at"
+        },
+        "rxBytes": 52428800,
+        "txBytes": 20971520
+    },
+    {
+        "port": 3,
+        "portId": "port-3",
+        "name": "",
+        "enable": false,
+        "linkStatus": false,
+        "linkSpeed": 0,
+        "duplex": "none",
+        "type": "copper",
+        "pvid": 1,
+        "taggedVlans": [],
+        "poe": {
+            "enable": false,
+            "power": 0.0,
+            "maxPower": 30.0
+        },
+        "rxBytes": 0,
+        "txBytes": 0
+    }
+]

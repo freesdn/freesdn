@@ -1,0 +1,278 @@
+name: CI
+
+# Public CI for github.com/freesdn/freesdn.
+# Build-from-source is the supported install path, so this workflow is the
+# correctness gate - lint, type-check, unit tests, and a clean production
+# build - not an image-publishing pipeline. (Container images, signing, and
+# release automation are intentionally out of scope here.)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Weekly run so a newly-disclosed CVE in a pinned dependency or base image is
+  # surfaced even with no code change (the gap that let a base-image CVE sit).
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==========================================================================
+  # Backend - ruff, PEP 765 compile check, schema bootstrap, full test suite
+  # ==========================================================================
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_USER: freesdn
+          POSTGRES_PASSWORD: freesdn_test
+          POSTGRES_DB: freesdn_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U freesdn -d freesdn_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      valkey:
+        image: valkey/valkey:8.1.8-trixie
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://freesdn:freesdn_test@localhost:5432/freesdn_test
+      LOGDB_URL: postgresql+asyncpg://freesdn:freesdn_test@localhost:5432/freesdn_test
+      REDIS_URL: redis://localhost:6379/0
+      REDIS_PASSWORD: ""
+      SECRET_KEY: ci-test-secret-key-not-for-production
+      ENCRYPTION_SALT: ci-test-encryption-salt-not-for-production
+      # development/staging/production only - the ENVIRONMENT validator
+      # fail-closes on "testing", which would error every test at collection.
+      ENVIRONMENT: development
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.14'
+
+      - name: Install Poetry
+        run: pipx install poetry==2.4.1
+
+      - name: Install dependencies
+        working-directory: backend
+        run: poetry install --no-root
+
+      - name: Ruff lint
+        working-directory: backend
+        run: poetry run ruff check app
+
+      - name: Ruff format check
+        working-directory: backend
+        run: poetry run ruff format --check app
+
+      # PEP 765 (3.14): a return/break/continue in a finally silently swallows
+      # in-flight exceptions. Promote the SyntaxWarning to an error and compile
+      # the whole tree fresh so no cached .pyc hides it.
+      - name: PEP 765 check (no return/break/continue in finally)
+        working-directory: backend
+        run: poetry run python -W error::SyntaxWarning -m compileall -q app
+
+      - name: Create test schema (create_all + alembic stamp)
+        working-directory: backend
+        run: poetry run python scripts/migrate.py
+
+      - name: Run tests
+        working-directory: backend
+        run: poetry run pytest tests/ --tb=short -q
+
+  # ==========================================================================
+  # Frontend - eslint, type-check, unit tests, production build
+  # ==========================================================================
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # build-info.ts is generated (gitignored); standalone eslint/tsc run
+      # before any vite invocation, so generate it first or imports of
+      # @/lib/build-info fail TS2307 on a clean checkout.
+      - name: Generate build-info
+        working-directory: frontend
+        run: node scripts/gen-build-info.mjs
+
+      - name: ESLint (src)
+        working-directory: frontend
+        run: npx eslint src/ --max-warnings 69
+
+      - name: Type check
+        working-directory: frontend
+        run: npm run type-check
+
+      - name: Run tests
+        working-directory: frontend
+        run: npm run test:run
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  # ==========================================================================
+  # Dependency CVE audit (GATING) - actionable dependency vulns fail the build
+  # (Python via pip-audit, JS via npm audit). Base-image CVEs are handled
+  # separately (advisory) since many are unfixable noise.
+  # ==========================================================================
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.14'
+
+      - name: Install Poetry
+        run: pipx install poetry==2.4.1
+
+      - name: pip-audit (Python dependencies)
+        working-directory: backend
+        run: |
+          poetry install --only main --no-root
+          poetry run pip install pip-audit
+          # starlette 1.x advisories are upstream-gated: the fixes require
+          # fastapi >=0.137, whose internal _IncludedRouter route type (no .path)
+          # crashes prometheus-fastapi-instrumentator on every request. FreeSDN is
+          # held on starlette 0.52.1 until the instrumentator ships support.
+          # Mirrors ../.trivyignore; see backend/pyproject.toml for the pins.
+          poetry run pip-audit \
+            --ignore-vuln PYSEC-2026-161 \
+            --ignore-vuln CVE-2026-48818 \
+            --ignore-vuln CVE-2026-48817 \
+            --ignore-vuln CVE-2026-54283 \
+            --ignore-vuln CVE-2026-54282
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm audit (JS dependencies)
+        working-directory: frontend
+        # Gate on high+. Transitive moderates that are build-only or upstream-
+        # gated are cleared via package.json "overrides" (e.g. js-yaml >=4.2.0);
+        # add/bump an override (and document why) to clear a new finding.
+        run: |
+          npm ci
+          npm audit --audit-level=high
+
+  # ==========================================================================
+  # Secret scan (GATING) - fail the build if a credential/key/token is committed.
+  # Standing backstop so nothing sensitive ever lands in the public history.
+  # ==========================================================================
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Trivy secret scan (gating)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          scanners: 'secret'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '1'
+
+  # ==========================================================================
+  # Filesystem CVE visibility (ADVISORY) - whole-tree dependency/secret surface.
+  # ==========================================================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    # Advisory: Trivy exits non-zero on any HIGH/CRITICAL (including unfixable
+    # base-image CVEs). Runs for visibility; does not gate the build.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+  # ==========================================================================
+  # Pinned base/runtime image CVE scan (ADVISORY, FIXABLE-ONLY) - catches a CVE
+  # disclosed in a pinned third-party image where a fixed image already exists
+  # (the class that left a base-image CVE sitting in a pin). ignore-unfixed keeps
+  # every hit ACTIONABLE = "a newer image clears this; bump the pin". Skipped on
+  # PRs (base images don't change per-PR); runs on push-to-main + the weekly cron.
+  # KEEP THIS MATRIX IN SYNC with docker-compose*.yml + */Dockerfile pins.
+  # ==========================================================================
+  image-cve-scan:
+    name: Image CVE Scan
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - postgres:18.4
+          - valkey/valkey:8.1.8-trixie
+          - python:3.14.6-slim-trixie
+          - node:26.4.0-trixie-slim
+          - caddy:2.11.4-alpine
+          - nginx:1.31.2-alpine
+          - debian:trixie-slim
+
+    steps:
+      - name: Trivy image scan (${{ matrix.image }})
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: 'image'
+          image-ref: ${{ matrix.image }}
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'

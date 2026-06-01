@@ -1,0 +1,295 @@
+{
+  "RolesPage": {
+    "header": {
+      "title": "Roles y permisos",
+      "description": "Gestiona los roles y las concesiones de permisos detalladas de tu organización."
+    },
+    "errors": {
+      "loadFailed": "No se pudieron cargar los roles"
+    },
+    "tabs": {
+      "roles": "Roles",
+      "matrix": "Matriz de permisos"
+    },
+    "columns": {
+      "role": "Rol",
+      "type": "Tipo",
+      "level": "Nivel",
+      "permissions": "Permisos",
+      "users": "Usuarios"
+    },
+    "type": {
+      "system": "Sistema",
+      "custom": "Personalizado",
+      "default": "Predeterminado"
+    },
+    "stats": {
+      "totalRoles": {
+        "title": "Total de roles",
+        "description": "Todos los roles definidos"
+      },
+      "systemRoles": {
+        "title": "Roles del sistema",
+        "description": "Jerarquía integrada"
+      },
+      "customRoles": {
+        "title": "Roles personalizados",
+        "description": "Creados por el usuario"
+      },
+      "usersAssigned": {
+        "title": "Usuarios asignados",
+        "description": "En todos los roles"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar roles por nombre, slug o descripción…",
+      "allTypes": "Todos los tipos",
+      "clearFilters": "Borrar filtros"
+    },
+    "itemName": "rol",
+    "itemNamePlural": "roles",
+    "actions": {
+      "export": "Exportar",
+      "createRole": "Crear rol",
+      "updateRole": "Actualizar rol",
+      "actions": "Acciones",
+      "actionsForRole": "Acciones para {{name}}",
+      "viewPermissions": "Ver permisos",
+      "edit": "Editar",
+      "editRole": "Editar rol",
+      "delete": "Eliminar",
+      "deleting": "Eliminando...",
+      "cancel": "Cancelar",
+      "close": "Cerrar",
+      "saving": "Guardando..."
+    },
+    "toasts": {
+      "export": {
+        "title": "Exportar",
+        "description": "Exportación masiva: aún no implementada."
+      },
+      "bulkDelete": {
+        "title": "Eliminación masiva",
+        "summary": "{{ok}} eliminados, {{failed}} fallidos, {{skipped}} roles del sistema omitidos",
+        "nothingTitle": "Nada que eliminar",
+        "nothingDescription": "Los roles del sistema no se pueden eliminar."
+      }
+    },
+    "deleteDialog": {
+      "title": "Eliminar rol",
+      "confirm": "¿Seguro que quieres eliminar <strong>{{name}}</strong>? Esta acción no se puede deshacer.",
+      "warningOne": "Advertencia: {{count}} usuario está asignado actualmente a este rol.",
+      "warningMany": "Advertencia: {{count}} usuarios están asignados actualmente a este rol."
+    },
+    "matrix": {
+      "permissionHeader": "Permiso"
+    },
+    "levels": {
+      "superAdmin": "Superadministrador",
+      "admin": "Administrador",
+      "orgAdmin": "Administrador de organización",
+      "siteAdmin": "Administrador de sitio",
+      "operator": "Operador",
+      "viewer": "Visualizador",
+      "guest": "Invitado"
+    },
+    "categories": {
+      "usersAccess": "Usuarios y acceso",
+      "devices": "Dispositivos",
+      "controllers": "Controladores",
+      "sites": "Sitios",
+      "monitoringAlerts": "Supervisión y alertas",
+      "securityAudit": "Seguridad y auditoría",
+      "settings": "Configuración"
+    },
+    "roleDialog": {
+      "editTitle": "Editar rol",
+      "createTitle": "Crear rol",
+      "editDescription": "Actualiza la información y los permisos del rol",
+      "createDescription": "Define un nuevo rol con permisos personalizados",
+      "nameLabel": "Nombre *",
+      "namePlaceholder": "p. ej., Administrador de red",
+      "slugLabel": "Slug",
+      "slugPlaceholder": "generado automáticamente",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": "Describe para qué sirve este rol...",
+      "levelLabel": "Nivel (1-100)",
+      "levelHelp": "Mayor nivel = más autoridad",
+      "optionsLabel": "Opciones",
+      "defaultRoleLabel": "Rol predeterminado para usuarios nuevos",
+      "permissionsLabel": "Permisos",
+      "permissionsCount": "{{selected}} de {{total}}"
+    },
+    "viewDialog": {
+      "noDescription": "Sin descripción",
+      "usersLabel": "Usuarios",
+      "permissionsLabel": "Permisos",
+      "levelLabel": "Nivel",
+      "permissionBreakdown": "Desglose de permisos",
+      "slug": "Slug",
+      "roleId": "ID del rol"
+    },
+    "permissions": {
+      "user": {
+        "read": {
+          "label": "Ver usuarios",
+          "description": "Ver la lista y los detalles de usuarios"
+        },
+        "create": {
+          "label": "Crear usuarios",
+          "description": "Crear nuevas cuentas de usuario"
+        },
+        "update": {
+          "label": "Actualizar usuarios",
+          "description": "Modificar la información de usuarios"
+        },
+        "delete": {
+          "label": "Eliminar usuarios",
+          "description": "Eliminar cuentas de usuario"
+        }
+      },
+      "role": {
+        "read": {
+          "label": "Ver roles",
+          "description": "Ver la lista y los detalles de roles"
+        },
+        "create": {
+          "label": "Crear roles",
+          "description": "Crear nuevos roles"
+        },
+        "update": {
+          "label": "Actualizar roles",
+          "description": "Modificar los permisos de roles"
+        },
+        "delete": {
+          "label": "Eliminar roles",
+          "description": "Eliminar roles"
+        }
+      },
+      "device": {
+        "read": {
+          "label": "Ver dispositivos",
+          "description": "Ver la lista y los detalles de dispositivos"
+        },
+        "create": {
+          "label": "Crear dispositivos",
+          "description": "Agregar nuevos dispositivos"
+        },
+        "update": {
+          "label": "Actualizar dispositivos",
+          "description": "Modificar la configuración de dispositivos"
+        },
+        "delete": {
+          "label": "Eliminar dispositivos",
+          "description": "Eliminar dispositivos"
+        },
+        "actions": {
+          "label": "Acciones de dispositivo",
+          "description": "Realizar acciones como reinicio o ciclo PoE"
+        }
+      },
+      "controller": {
+        "read": {
+          "label": "Ver controladores",
+          "description": "Ver la lista de controladores"
+        },
+        "create": {
+          "label": "Crear controladores",
+          "description": "Agregar nuevos controladores"
+        },
+        "update": {
+          "label": "Actualizar controladores",
+          "description": "Modificar la configuración de controladores"
+        },
+        "delete": {
+          "label": "Eliminar controladores",
+          "description": "Eliminar controladores"
+        },
+        "sync": {
+          "label": "Sincronizar controladores",
+          "description": "Activar la sincronización del controlador"
+        }
+      },
+      "site": {
+        "read": {
+          "label": "Ver sitios",
+          "description": "Ver la lista y los detalles de sitios"
+        },
+        "create": {
+          "label": "Crear sitios",
+          "description": "Crear nuevos sitios"
+        },
+        "update": {
+          "label": "Actualizar sitios",
+          "description": "Modificar la configuración de sitios"
+        },
+        "delete": {
+          "label": "Eliminar sitios",
+          "description": "Eliminar sitios"
+        }
+      },
+      "alert": {
+        "read": {
+          "label": "Ver alertas",
+          "description": "Ver la lista de alertas"
+        },
+        "create": {
+          "label": "Crear alertas",
+          "description": "Crear reglas de alertas"
+        },
+        "update": {
+          "label": "Actualizar alertas",
+          "description": "Modificar reglas de alertas"
+        },
+        "delete": {
+          "label": "Eliminar alertas",
+          "description": "Eliminar reglas de alertas"
+        },
+        "acknowledge": {
+          "label": "Confirmar alertas",
+          "description": "Confirmar o descartar alertas"
+        }
+      },
+      "audit": {
+        "read": {
+          "label": "Ver registros de auditoría",
+          "description": "Acceder al registro de auditoría"
+        },
+        "export": {
+          "label": "Exportar registros de auditoría",
+          "description": "Exportar datos de auditoría"
+        },
+        "security": {
+          "label": "Ver eventos de seguridad",
+          "description": "Acceder a los eventos de seguridad"
+        }
+      },
+      "security": {
+        "manage": {
+          "label": "Gestionar seguridad",
+          "description": "Gestionar la configuración de seguridad"
+        }
+      },
+      "setting": {
+        "read": {
+          "label": "Ver configuración",
+          "description": "Ver la configuración del sistema"
+        },
+        "update": {
+          "label": "Actualizar configuración",
+          "description": "Modificar la configuración del sistema"
+        }
+      },
+      "integration": {
+        "read": {
+          "label": "Ver integraciones",
+          "description": "Ver las configuraciones de integración"
+        },
+        "manage": {
+          "label": "Gestionar integraciones",
+          "description": "Configurar integraciones"
+        }
+      }
+    }
+  }
+}

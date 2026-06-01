@@ -1,0 +1,455 @@
+{
+  "SetupPage": {
+    "errors": {
+      "checkStatus": "Error al verificar el estado de la configuración",
+      "title": "Error de configuración"
+    },
+    "actions": {
+      "retry": "Reintentar"
+    },
+    "header": {
+      "mobileTitle": "Configuración de FreeSDN",
+      "mobileStep": "Paso {{current}}/{{total}} · {{step}}",
+      "wizard": "Asistente de configuración",
+      "stepOf": "Paso {{current}} de {{total}}"
+    },
+    "environment": {
+      "production": "Producción",
+      "development": "Desarrollo"
+    },
+    "steps": {
+      "welcome": {
+        "name": "Bienvenida",
+        "description": "Requisitos del sistema"
+      },
+      "database": {
+        "name": "Base de datos",
+        "description": "Conexión a la base de datos"
+      },
+      "organization": {
+        "name": "Organización",
+        "description": "Primera organización"
+      },
+      "admin": {
+        "name": "Administrador",
+        "description": "Crear usuario administrador"
+      },
+      "modules": {
+        "name": "Módulos",
+        "description": "Habilitar funciones"
+      },
+      "accessMode": {
+        "name": "Modo de acceso",
+        "description": "Gestionar o solo monitorear"
+      },
+      "controllers": {
+        "name": "Controladores",
+        "description": "Agregar dispositivos (opcional)"
+      },
+      "complete": {
+        "name": "Completado",
+        "description": "Finalizar configuración"
+      }
+    }
+  },
+  "AdminStep": {
+    "title": "Crear cuenta de administrador",
+    "subtitle": "Configura la cuenta de administrador para gestionar FreeSDN",
+    "card": {
+      "title": "Datos del administrador",
+      "description": "Esta cuenta tendrá acceso completo a todas las funciones"
+    },
+    "banner": {
+      "emailLabel": "Tu dirección de correo electrónico",
+      "text": "se usa para iniciar sesión en FreeSDN. El nombre de usuario es un nombre visible que se muestra en la interfaz."
+    },
+    "fields": {
+      "email": {
+        "label": "Dirección de correo electrónico *",
+        "placeholder": "admin@example.com",
+        "helper": "Usarás este correo electrónico para iniciar sesión"
+      },
+      "firstName": {
+        "label": "Nombre"
+      },
+      "lastName": {
+        "label": "Apellido"
+      },
+      "username": {
+        "label": "Nombre de usuario *",
+        "helper": "Nombre visible que se muestra en la interfaz (no se usa para iniciar sesión)"
+      },
+      "password": {
+        "label": "Contraseña *",
+        "strengthLabel": "Seguridad de la contraseña"
+      },
+      "confirmPassword": {
+        "label": "Confirmar contraseña *",
+        "match": "Las contraseñas coinciden",
+        "mismatch": "Las contraseñas no coinciden"
+      }
+    },
+    "rules": {
+      "length": "Al menos 12 caracteres",
+      "lower": "Al menos una letra minúscula",
+      "upper": "Al menos una letra mayúscula",
+      "digit": "Al menos un número",
+      "special": "Al menos un carácter especial"
+    },
+    "strength": {
+      "veryWeak": "Muy débil",
+      "weak": "Débil",
+      "fair": "Aceptable",
+      "strong": "Fuerte",
+      "veryStrong": "Muy fuerte"
+    },
+    "actions": {
+      "previous": "Anterior",
+      "continue": "Continuar"
+    },
+    "errors": {
+      "emailRequired": "El correo electrónico es obligatorio",
+      "emailInvalid": "Introduce una dirección de correo electrónico válida",
+      "usernameTooShort": "El nombre de usuario debe tener al menos 3 caracteres",
+      "passwordRequirements": "La contraseña no cumple todos los requisitos",
+      "passwordMismatch": "Las contraseñas no coinciden",
+      "createFailed": "No se pudo crear el usuario administrador"
+    }
+  },
+  "AccessModeStep": {
+    "title": "Modo de acceso",
+    "subtitle": "Elige cómo FreeSDN interactúa con tus dispositivos. Puedes cambiarlo más tarde en Configuración.",
+    "defaultBadge": "Predeterminado",
+    "hint": "Solo monitoreo es la opción segura para una instalación nueva: FreeSDN lee el estado de los dispositivos pero nunca escribe cambios. Cambia a Gestionar cuando estés listo.",
+    "modes": {
+      "manage": {
+        "title": "Gestionar (lectura y escritura)",
+        "description": "FreeSDN puede leer el estado de los dispositivos y enviar cambios de configuración a tus controladores y dispositivos."
+      },
+      "monitor": {
+        "title": "Solo monitoreo (solo lectura)",
+        "description": "FreeSDN lee el estado de los dispositivos para el monitoreo y los paneles, pero se rechazan todas las escrituras a los dispositivos. No se cambia nada en tu red."
+      }
+    },
+    "actions": {
+      "previous": "Anterior",
+      "continue": "Continuar"
+    }
+  },
+  "CompleteStep": {
+    "progress": {
+      "finalizing": "Finalizando la configuración...",
+      "installingSampleData": "Instalando datos de muestra (esto puede tardar un momento)...",
+      "installingAndDiscovery": "Instalando datos de muestra e iniciando el descubrimiento...",
+      "startingDiscovery": "Iniciando el descubrimiento de dispositivos...",
+      "enablingMonitorOnly": "Habilitando el modo solo monitoreo (solo lectura)..."
+    },
+    "errors": {
+      "failed": "No se pudo completar la configuración",
+      "monitorOnlyFailed": "No se pudo habilitar el modo solo monitoreo"
+    },
+    "done": {
+      "heading": "¡Configuración completada!",
+      "subtitle": "FreeSDN está listo para usar",
+      "monitorOnlyWarning": "La configuración finalizó, pero no se pudo habilitar el modo solo monitoreo (solo lectura): {{error}}. Puedes habilitarlo en Configuración."
+    },
+    "summary": {
+      "title": "Resumen de la configuración",
+      "description": "Esto es lo que has configurado",
+      "adminAccount": "Cuenta de administrador",
+      "organization": "Organización",
+      "modulesEnabled": "Módulos habilitados",
+      "controllersAdded": "Controladores agregados",
+      "devicesCount": "({{count}} dispositivos)"
+    },
+    "review": {
+      "heading": "¡Ya casi terminas!",
+      "subtitle": "Revisa tu configuración y completa el asistente",
+      "administrator": "Administrador",
+      "enabledModules": "Módulos habilitados",
+      "controllers": "Controladores",
+      "controllersFound": "{{controllers}} controlador(es), {{devices}} dispositivo(s) encontrados",
+      "noControllers": "Ninguno agregado (puedes agregarlos más tarde)",
+      "accessMode": "Modo de acceso",
+      "accessModeManage": "Gestionar (lectura y escritura)",
+      "accessModeMonitor": "Solo monitoreo (solo lectura)"
+    },
+    "options": {
+      "title": "Opciones finales",
+      "installSampleData": "Instalar datos de muestra",
+      "installSampleDataHelp": "Llena el sistema con dispositivos de demostración, redes, alertas, eventos, registros de auditoría, copias de seguridad y datos de firmware",
+      "startDiscovery": "Iniciar el descubrimiento de dispositivos después de la configuración",
+      "sendWelcomeEmail": "Enviar correo de bienvenida con instrucciones de inicio de sesión"
+    },
+    "actions": {
+      "goToLogin": "Ir a inicio de sesión",
+      "completing": "Completando la configuración...",
+      "complete": "Completar configuración"
+    }
+  },
+  "ControllersStep": {
+    "title": "Agregar controladores",
+    "subtitle": "Conéctese a los controladores de dispositivos para empezar a gestionar su red (opcional)",
+    "addedControllers": "Controladores agregados",
+    "devicesCount": "{{count}} dispositivos",
+    "testSuccess": "¡Conexión exitosa! Se encontraron {{count}} dispositivos",
+    "cloud": "nube",
+    "regionCloud": "nube {{region}}",
+    "errors": {
+      "loadTypes": "No se pudieron cargar los tipos de controlador",
+      "requiredCloudFields": "Complete todos los campos de nube requeridos",
+      "requiredFields": "Complete todos los campos requeridos",
+      "connectionTestFailed": "La prueba de conexión falló",
+      "testFirst": "Pruebe la conexión primero",
+      "probeFailed": "No se pudieron detectar los sitios remotos. Revise la consola del navegador y los registros del backend para obtener más detalles.",
+      "addFailed": "No se pudo agregar el controlador"
+    },
+    "form": {
+      "newController": "Nuevo controlador",
+      "bindSites": "Vincular sitios",
+      "connectionDescription": "Conéctese a un controlador de red o plataforma de gestión",
+      "bindSitesDescription": "Asigne cada sitio de Omada a un sitio de FreeSDN. Puede usar sitios existentes u omitir."
+    },
+    "fields": {
+      "controllerType": "Tipo de controlador *",
+      "controllerTypePlaceholder": "Seleccione el tipo de controlador",
+      "connectionMode": "Modo de conexión",
+      "modeLocal": "Local",
+      "modeCloud": "Nube",
+      "modeCloudHint": "Conéctese mediante TP-Link Cloud OpenAPI (OAuth2). Obtenga las credenciales en Omada → Configuración → Integración de plataforma → OpenAPI.",
+      "modeLocalHint": "Conéctese directamente a un controlador Omada local.",
+      "displayName": "Nombre para mostrar *",
+      "displayNamePlaceholder": "Controlador de la oficina principal",
+      "host": "Host/URL *",
+      "username": "Usuario *",
+      "usernamePlaceholder": "admin",
+      "password": "Contraseña *",
+      "cloudRegion": "Región de nube *",
+      "cloudRegionPlaceholder": "Seleccione la región de nube",
+      "regionUsEast": "Este de EE. UU. (use1)",
+      "regionEuWest": "Oeste de Europa (euw1)",
+      "regionAsiaPacific": "Asia-Pacífico (aps1)",
+      "clientId": "Client ID *",
+      "clientIdPlaceholder": "Desde Omada → Integración de plataforma → OpenAPI",
+      "clientSecret": "Client Secret *",
+      "omadaId": "ID del controlador Omada (omadacId) *",
+      "omadaIdPlaceholder": "p. ej., 7f1346dcd01b17a65ad23024e55effe5",
+      "omadaIdHintBefore": "Encuéntrelo en la URL de Omada Cloud como el parámetro ",
+      "omadaIdHintAfter": "",
+      "siteId": "ID del sitio (opcional)",
+      "siteIdPlaceholder": "Dejar vacío para usar el predeterminado",
+      "verifySsl": "Verificar certificado SSL"
+    },
+    "actions": {
+      "testConnection": "Probar conexión",
+      "probingSites": "Detectando sitios...",
+      "nextBindSites": "Siguiente: vincular sitios",
+      "addController": "Agregar controlador",
+      "cancel": "Cancelar",
+      "back": "Atrás",
+      "previous": "Anterior",
+      "continue": "Continuar",
+      "skipForNow": "Omitir por ahora"
+    },
+    "binding": {
+      "intro": {
+        "before": "Su controlador Omada tiene ",
+        "after": " sitio(s). Asigne cada uno a un sitio existente de FreeSDN o déjelo sin asignar."
+      },
+      "selectSitePlaceholder": "Seleccione un sitio de FreeSDN",
+      "skipOption": "- Omitir (no importar dispositivos) -",
+      "noSites": "No se encontraron sitios en el controlador. Aún puede agregar el controlador."
+    },
+    "empty": {
+      "addAnother": "¿Agregar otro controlador?",
+      "none": "Aún no se han agregado controladores"
+    },
+    "note": {
+      "label": "Nota:",
+      "text": "Puede omitir este paso y agregar controladores más tarde desde el panel."
+    }
+  },
+  "DatabaseStep": {
+    "title": "Configuración de la base de datos",
+    "subtitle": "Verifique la conexión a la base de datos y ejecute las migraciones",
+    "errors": {
+      "checkFailed": "No se pudo verificar la base de datos",
+      "migrationsFailed": "No se pudieron ejecutar las migraciones. Revise los registros del backend para más detalles."
+    },
+    "status": {
+      "heading": "Estado de la base de datos",
+      "description": "Estado de la conexión y de las migraciones"
+    },
+    "connection": {
+      "label": "Conexión",
+      "connected": "Conectado a la base de datos",
+      "failed": "Error de conexión"
+    },
+    "databaseType": {
+      "label": "Tipo de base de datos"
+    },
+    "timescale": {
+      "enabledDetail": "v{{version}} en {{location}}",
+      "locationLog": "base de datos de registros",
+      "locationMain": "base de datos principal",
+      "required": "Requerido · extensión de series temporales para métricas, comprobaciones de estado y eventos"
+    },
+    "logDatabase": {
+      "label": "Base de datos de registros",
+      "connectedDetail": "Instancia de TimescaleDB independiente para datos de series temporales",
+      "required": "Requerido · TimescaleDB independiente para métricas, comprobaciones de estado, latidos y eventos"
+    },
+    "migrations": {
+      "label": "Migraciones",
+      "upToDate": "Esquema actualizado",
+      "countDetail": "{{applied}} aplicadas, {{pending}} pendientes",
+      "running": "Ejecutando...",
+      "runningBanner": {
+        "title": "Ejecutando migraciones de la base de datos...",
+        "description": "Esto crea todos los esquemas y tablas. Puede tardar hasta un minuto."
+      }
+    },
+    "badges": {
+      "ok": "OK",
+      "error": "Error",
+      "enabled": "Habilitado",
+      "required": "Requerido",
+      "connected": "Conectado",
+      "upToDate": "Actualizado"
+    },
+    "actions": {
+      "refresh": "Actualizar",
+      "runMigrations": "Ejecutar migraciones",
+      "previous": "Anterior",
+      "continue": "Continuar"
+    }
+  },
+  "ModulesStep": {
+    "title": "Habilitar módulos",
+    "subtitle": "Seleccione las funciones que desea habilitar",
+    "badges": {
+      "recommended": "Recomendado",
+      "required": "Requerido"
+    },
+    "requires": "Requiere: {{modules}}",
+    "selected": {
+      "label": "Seleccionados:",
+      "count": "{{count}} módulos",
+      "hint": "Puede habilitar o deshabilitar módulos más adelante en Configuración"
+    },
+    "actions": {
+      "previous": "Anterior",
+      "continue": "Continuar"
+    },
+    "errors": {
+      "loadFailed": "No se pudieron cargar los módulos",
+      "enableFailed": "No se pudieron habilitar los módulos",
+      "cannotDisable": "No se puede deshabilitar: {{dependents}} depende de este módulo"
+    }
+  },
+  "OrganizationStep": {
+    "title": "Crear organización",
+    "subtitle": "Configura tu primera organización para administrar sitios y dispositivos",
+    "card": {
+      "title": "Detalles de la organización",
+      "description": "Las organizaciones te ayudan a organizar sitios, dispositivos y usuarios"
+    },
+    "fields": {
+      "name": {
+        "label": "Nombre de la organización *",
+        "placeholder": "Mi empresa"
+      },
+      "slug": {
+        "label": "Slug de URL *",
+        "placeholder": "mi-empresa",
+        "helper": "Se usa en las URL y en las solicitudes de la API"
+      },
+      "timezone": {
+        "label": "Zona horaria",
+        "placeholder": "Selecciona la zona horaria"
+      },
+      "locale": {
+        "label": "Idioma",
+        "placeholder": "Selecciona el idioma"
+      },
+      "timeFormat": {
+        "label": "Formato de hora",
+        "placeholder": "Selecciona el formato de hora"
+      },
+      "dateFormat": {
+        "label": "Formato de fecha",
+        "placeholder": "Selecciona el formato de fecha"
+      }
+    },
+    "locales": {
+      "enUS": "Inglés (EE. UU.)",
+      "enGB": "Inglés (Reino Unido)",
+      "esES": "Español",
+      "frFR": "Francés",
+      "deDE": "Alemán",
+      "jaJP": "Japonés",
+      "zhCN": "Chino (simplificado)"
+    },
+    "timeFormats": {
+      "h24": "24 horas (14:30)",
+      "h12": "12 horas (2:30 PM)"
+    },
+    "dateFormats": {
+      "iso": "AAAA-MM-DD (ISO)",
+      "us": "MM/DD/AAAA (EE. UU.)",
+      "eu": "DD/MM/AAAA (UE)",
+      "de": "DD.MM.AAAA (DE)"
+    },
+    "validation": {
+      "nameMin": "El nombre de la organización debe tener al menos 2 caracteres",
+      "slugMin": "El slug debe tener al menos 2 caracteres",
+      "slugPattern": "El slug solo puede contener letras minúsculas, números y guiones"
+    },
+    "errors": {
+      "capture": "No se pudieron capturar los detalles de la organización"
+    },
+    "actions": {
+      "previous": "Anterior",
+      "continue": "Continuar"
+    }
+  },
+  "WelcomeStep": {
+    "errors": {
+      "checkFailed": "No se pudieron verificar los requisitos del sistema",
+      "title": "Error",
+      "unknown": "Ocurrió un error desconocido"
+    },
+    "actions": {
+      "retry": "Reintentar",
+      "continue": "Continuar"
+    },
+    "restore": {
+      "toggle": "Restaurar desde una copia de seguridad",
+      "help": "¿Ya tienes una copia completa (.fsdnvault) de otra instancia? Restáurala aquí para reconstruir esta: vuelven tus sitios, dispositivos, cuentas y credenciales, e inicias sesión con tu contraseña actual. (Una instantánea de configuración .fsdn no sirve aquí: no tiene cuentas.)",
+      "fileLabel": "Archivo de copia (.fsdnvault)",
+      "passLabel": "Frase de contraseña de la copia",
+      "passPlaceholder": "La frase de contraseña con la que se creó la copia",
+      "submit": "Restaurar esta instancia",
+      "failed": "La restauración falló — revisa el archivo y la frase de contraseña."
+    },
+    "hero": {
+      "title": "Bienvenido a {{appName}}",
+      "subtitle": "Vamos a configurar tu plataforma de gestión de red",
+      "version": "Versión {{version}}"
+    },
+    "requirements": {
+      "title": "Requisitos del sistema",
+      "description": "Verificando que tu sistema cumple con los requisitos",
+      "required": "Requerido: {{value}}",
+      "allMet": "Se cumplen todos los requisitos del sistema. ¡Ya puedes continuar!",
+      "notMet": "Algunos requisitos no se cumplen. Resuélvelos antes de continuar."
+    },
+    "stack": {
+      "title": "Información del stack",
+      "backend": "Backend",
+      "frontend": "Frontend",
+      "dockerServices": "Servicios de Docker",
+      "unreachable": "no accesible"
+    }
+  }
+}

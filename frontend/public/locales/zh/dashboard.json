@@ -1,0 +1,179 @@
+{
+  "title": "仪表板",
+  "welcome": "欢迎回来，{{name}}",
+  "lastUpdated": "最后更新：{{time}}",
+  "refresh": "刷新",
+  "widgets": {
+    "deviceStatus": "设备状态",
+    "networkOverview": "网络概览",
+    "alerts": "告警",
+    "clients": "已连接客户端",
+    "throughput": "吞吐量",
+    "uptime": "系统运行时间",
+    "events": "近期事件",
+    "topology": "网络拓扑"
+  },
+  "stats": {
+    "totalDevices": "设备总数",
+    "onlineDevices": "在线设备",
+    "offlineDevices": "离线设备",
+    "activeAlerts": "活动告警",
+    "criticalAlerts": "严重告警",
+    "totalClients": "客户端总数",
+    "wiredClients": "有线",
+    "wirelessClients": "无线",
+    "warningAlerts": "警告"
+  },
+  "quickActions": {
+    "title": "快捷操作",
+    "scanNetwork": "扫描网络",
+    "addDevice": "添加设备",
+    "viewAlerts": "查看告警",
+    "manageUsers": "管理用户"
+  },
+  "health": {
+    "healthy": "健康",
+    "degraded": "降级",
+    "critical": "严重",
+    "title": "系统健康"
+  },
+  "DashboardPage": {
+    "title": "仪表板",
+    "subtitle": {
+      "global": "所有站点的全局概览",
+      "site": "{{site}} · {{count}} 台设备在线",
+      "defaultSite": "站点"
+    },
+    "actions": {
+      "addWidget": "添加小部件",
+      "reset": "重置",
+      "resetTooltip": "恢复默认小部件集",
+      "done": "完成",
+      "customize": "自定义",
+      "customizeTooltip": "添加或移除仪表板小部件"
+    },
+    "customize": {
+      "allWidgetsAdded": "所有小部件均已在您的仪表板上。"
+    },
+    "error": {
+      "partialLoad": "部分数据加载失败，结果可能不完整。"
+    },
+    "stats": {
+      "sites": {
+        "title": "站点",
+        "subtitle": "活动位置"
+      },
+      "controllers": {
+        "title": "控制器",
+        "subtitle": "已连接"
+      },
+      "devices": {
+        "title": "设备",
+        "subtitle": "在线"
+      },
+      "cameras": {
+        "title": "摄像头",
+        "subtitle": "{{count}} 个正在录制"
+      }
+    },
+    "siteHealth": {
+      "title": "站点健康状况",
+      "devicesOnline": "{{online}}/{{total}} 台设备在线",
+      "controllerCount": "{{count}} 个控制器",
+      "controllerCount_plural": "{{count}} 个控制器"
+    },
+    "empty": {
+      "title": "您的仪表板为空",
+      "description": "点击上方的“自定义”以添加小部件，或恢复默认布局。",
+      "restoreButton": "恢复默认布局"
+    },
+    "traffic": {
+      "downloadMbps": "下载 (Mbps)",
+      "uploadMbps": "上传 (Mbps)",
+      "noData": "无可用流量数据",
+      "last24h": "最近 24 小时"
+    },
+    "networkHealth": {
+      "notAvailable": "不可用",
+      "windowLabel": "{{hours}} 小时窗口"
+    },
+    "services": {
+      "apiServer": "API 服务器",
+      "database": "数据库",
+      "redisCache": "Redis 缓存"
+    },
+    "activity": {
+      "severityStatus": "严重程度：{{severity}} - 状态：{{status}}"
+    },
+    "camera": {
+      "unknown": "未知"
+    }
+  },
+  "DashboardWidgetCard": {
+    "dragHandle": {
+      "ariaLabel": "拖动以重新排序 {{title}} 小部件",
+      "title": "拖动以重新排序"
+    },
+    "remove": {
+      "ariaLabel": "移除 {{title}} 小部件",
+      "title": "移除 {{title}}"
+    }
+  },
+  "extraWidgets": {
+    "cpu": {
+      "empty": "暂无 CPU 遥测数据"
+    },
+    "memory": {
+      "empty": "暂无内存遥测数据"
+    },
+    "manufacturer": {
+      "empty": "暂无厂商数据"
+    },
+    "wifiBands": {
+      "empty": "暂无无线客户端"
+    },
+    "ssids": {
+      "empty": "暂无 SSID 数据",
+      "clientCount": "{{count}} 个客户端",
+      "clientCountPlural": "{{count}} 个客户端"
+    },
+    "poe": {
+      "acrossPorts": "涵盖 {{count}} 个 PoE 端口",
+      "acrossPortsPlural": "涵盖 {{count}} 个 PoE 端口",
+      "avgPerPort": "平均/端口",
+      "active": "活动"
+    },
+    "security": {
+      "failedLogins": "登录失败",
+      "ipBlocks": "IP 封锁",
+      "anomalies": "异常",
+      "secEvents": "安全事件",
+      "lastHours": "最近 {{hours}} 小时"
+    },
+    "audit": {
+      "empty": "暂无审计事件",
+      "totalEvents": "事件总数"
+    },
+    "incidents": {
+      "allClear": "一切正常",
+      "noneInWindow": "此时间段内无事件",
+      "open": "未处理",
+      "investigating": "调查中",
+      "resolved": "已解决",
+      "viewAll": "查看所有事件"
+    },
+    "ports": {
+      "empty": "暂无端口数据",
+      "portsUp": "{{pct}}% 端口正常",
+      "up": "正常",
+      "down": "断开",
+      "errors": "错误",
+      "aggregateTraffic": "{{value}} 总流量"
+    },
+    "siteHealth": {
+      "empty": "未配置站点",
+      "deviceCount": "{{count}} 设备"
+    }
+  },
+  "customize": "自定义仪表盘"
+}

@@ -1,0 +1,539 @@
+{
+  "BackupsPage": {
+    "header": {
+      "title": "Copia de seguridad de configuración",
+      "description": "Instantáneas portátiles de configuración: sitios, controladores, dispositivos, usuarios, reglas de automatización"
+    },
+    "actions": {
+      "newBackup": "Nueva copia de seguridad",
+      "createBackup": "Crear copia de seguridad",
+      "storageLocations": "Ubicaciones de almacenamiento",
+      "download": "Descargar",
+      "restore": "Restaurar",
+      "viewDetails": "Ver detalles",
+      "delete": "Eliminar",
+      "deleteBackup": "Eliminar copia de seguridad",
+      "createSchedule": "Crear programación",
+      "pauseSchedule": "Pausar programación",
+      "resumeSchedule": "Reanudar programación",
+      "editSchedule": "Editar programación",
+      "runNow": "Ejecutar ahora",
+      "deleteSchedule": "Eliminar programación",
+      "updateSchedule": "Actualizar programación",
+      "cancel": "Cancelar",
+      "close": "Cerrar",
+      "previewChanges": "Previsualizar cambios",
+      "restoreNow": "Restaurar ahora",
+      "selectItem": "Seleccionar {{name}}"
+    },
+    "common": {
+      "encrypted": "Cifrada"
+    },
+    "scopeBanner": {
+      "title": "Esta es una instantánea de configuración, no una copia de seguridad completa del sistema",
+      "part1Before": "Los archivos",
+      "part1After": "que aquí se exportan incluyen sitios, controladores, dispositivos, usuarios y reglas de automatización, diseñados para migrar la configuración entre instancias o mantener una plantilla portátil de ajustes. Para recuperación ante desastres (registro de auditoría + cadena de hash, credenciales cifradas, registro de agentes, estado de instalación de complementos, datos por módulo de VoIP/Cámara/Hipervisor) use la salida del contenedor",
+      "part2": "y siga"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "quickActions": {
+      "title": "Acciones rápidas",
+      "subtitle": "Exporte o importe su configuración al instante",
+      "exporting": "Exportando...",
+      "exportConfig": "Exportar configuración",
+      "reading": "Leyendo...",
+      "importConfig": "Importar configuración"
+    },
+    "stats": {
+      "totalBackups": "Copias de seguridad totales",
+      "completed": "Completadas",
+      "failed": "Fallidas",
+      "storageUsed": "Almacenamiento usado",
+      "activeSchedules": "{{count}} programaciones activas"
+    },
+    "storageCta": {
+      "noneTitle": "No hay ubicaciones de almacenamiento configuradas",
+      "noneDescription": "Configure dónde se almacenan sus copias de seguridad · disco local, NFS, S3 u otros destinos.",
+      "configure": "Configurar almacenamiento",
+      "countOne": "{{count}} ubicación de almacenamiento",
+      "countMany": "{{count}} ubicaciones de almacenamiento",
+      "configuredForBackups": "configuradas para copias de seguridad",
+      "manage": "Administrar ubicaciones"
+    },
+    "timeline": {
+      "title": "Línea de tiempo de copias de seguridad",
+      "lastN": "Últimas {{count}} copias de seguridad",
+      "oldest": "Más antigua",
+      "mostRecent": "Más reciente"
+    },
+    "tabs": {
+      "backups": "Copias de seguridad",
+      "schedules": "Programaciones",
+      "history": "Historial"
+    },
+    "filters": {
+      "searchPlaceholder": "Buscar copias de seguridad...",
+      "statusPlaceholder": "Filtrar por estado",
+      "allStatus": "Todos los estados"
+    },
+    "status": {
+      "pending": "Pendiente",
+      "inProgress": "En curso",
+      "completed": "Completada",
+      "failed": "Fallida",
+      "cancelled": "Cancelada"
+    },
+    "empty": {
+      "noBackups": {
+        "title": "Aún no hay copias de seguridad",
+        "description": "Cree su primera copia de seguridad para proteger las configuraciones de sus dispositivos. Las copias de seguridad pueden activarse manualmente o ejecutarse de forma programada."
+      },
+      "noSchedules": {
+        "title": "Aún no hay programaciones",
+        "description": "Configure copias de seguridad automáticas para que sus configuraciones se capturen con una cadencia recurrente · diaria, semanal o cron personalizado."
+      },
+      "noHistory": {
+        "title": "Sin historial de copias de seguridad",
+        "description": "Las copias de seguridad completadas aparecerán aquí como una línea de tiempo cronológica una vez que finalice cualquier trabajo de copia de seguridad."
+      }
+    },
+    "rollbackBadge": {
+      "label": "Instantánea previa a la restauración",
+      "tooltip": "Capturada automáticamente antes de una restauración. Restaure esta instantánea para deshacer esa restauración."
+    },
+    "schedules": {
+      "heading": "Programaciones de copia de seguridad automáticas",
+      "subheading": "Configure copias de seguridad automatizadas con políticas de retención",
+      "active": "Activa",
+      "paused": "Pausada",
+      "keepBackups": "Conservar {{count}} copias de seguridad",
+      "retainDays": "Retener {{count}} días",
+      "lastRun": "Última ejecución",
+      "nextRun": "Próxima ejecución",
+      "manualRunName": "{{name}} - Ejecución manual",
+      "manualRunDescription": "Ejecución manual de la programación: {{name}}"
+    },
+    "history": {
+      "heading": "Historial de copias de seguridad",
+      "subheading": "Línea de tiempo completa de todas las operaciones de copia de seguridad",
+      "scheduled": "Programada"
+    },
+    "include": {
+      "title": "Incluir en la copia de seguridad",
+      "devices": "Dispositivos",
+      "vlans": "VLAN",
+      "ssids": "SSID",
+      "users": "Usuarios",
+      "automation": "Automatización"
+    },
+    "createDialog": {
+      "title": "Crear nueva copia de seguridad",
+      "description": "Cree una copia de seguridad de su configuración",
+      "nameLabel": "Nombre de la copia de seguridad",
+      "namePlaceholder": "p. ej., Copia previa a la actualización",
+      "backupTypeLabel": "Tipo de copia de seguridad",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": "Descripción opcional",
+      "siteLabel": "Sitio (opcional)",
+      "allSites": "Todos los sitios",
+      "storageLabel": "Ubicación de almacenamiento",
+      "manageStorageLink": "Administrar ubicaciones de almacenamiento",
+      "retentionLabel": "Retención (días)",
+      "encryptionLabel": "Cifrado",
+      "encryptionHelp": "Cifrar los datos de la copia de seguridad",
+      "fullBackupLabel": "Copia completa (incluye todos los secretos)",
+      "fullBackupHelp": "Incluye todas las credenciales, claves VPN e inicios de sesión. Se sella con una frase de contraseña que tú defines y es portable a otra instancia. Desactivado = una instantánea de configuración sin secretos (.fsdn).",
+      "fullBackupWarnLabel": "Este archivo contiene todas tus contraseñas.",
+      "fullBackupWarnText": "Cualquiera con este archivo .fsdnvault y la frase de contraseña puede tomar el control de toda tu implementación: guárdalo como una bóveda de contraseñas. La copia de configuración normal (.fsdn) es la que se puede compartir con seguridad.",
+      "passphraseLabel": "Frase de contraseña de la copia",
+      "passphrasePlaceholder": "Al menos 12 caracteres — la necesitarás para restaurar"
+    },
+    "backupTypeOptions": {
+      "full": "Copia de seguridad completa",
+      "deviceConfig": "Solo configuración de dispositivos",
+      "siteConfig": "Solo configuración del sitio"
+    },
+    "backupTypeLabels": {
+      "full": "Copia de seguridad completa",
+      "deviceConfig": "Configuración de dispositivos",
+      "siteConfig": "Configuración del sitio",
+      "rollbackSlot": "Instantánea previa a la restauración"
+    },
+    "storageOptions": {
+      "local": "Almacenamiento local",
+      "s3": "Amazon S3 / compatible con S3",
+      "s3Short": "Amazon S3",
+      "sftp": "Servidor SFTP",
+      "ftp": "Servidor FTP/FTPS",
+      "googleDrive": "Google Drive",
+      "dropbox": "Dropbox",
+      "webdav": "WebDAV (Nextcloud/ownCloud)",
+      "configuredLocations": "Ubicaciones configuradas",
+      "default": "Predeterminada"
+    },
+    "storageTypeLabels": {
+      "local": "Disco local",
+      "s3": "Amazon S3",
+      "sftp": "SFTP",
+      "ftp": "FTP/FTPS",
+      "nfs": "NFS",
+      "googleDrive": "Google Drive",
+      "dropbox": "Dropbox",
+      "webdav": "WebDAV"
+    },
+    "deleteDialog": {
+      "title": "Eliminar copia de seguridad",
+      "description": "¿Seguro que desea eliminar esta copia de seguridad? Esta acción no se puede deshacer."
+    },
+    "restoreDialog": {
+      "title": "Restaurar desde copia de seguridad",
+      "description": "Restaurar la configuración desde \"{{name}}\"",
+      "created": "Creada",
+      "size": "Tamaño",
+      "type": "Tipo",
+      "security": "Seguridad",
+      "modulesTitle": "Módulos a restaurar",
+      "allModules": "Todos los módulos",
+      "selectedCount": "{{selected}} de {{total}} seleccionados",
+      "readingManifest": "Leyendo el manifiesto de la copia de seguridad…",
+      "manifestError": "No se pudo leer el manifiesto de la copia de seguridad. Los interruptores heredados de \"Qué restaurar\" a continuación siguen aplicándose.",
+      "restoreModuleAria": "Restaurar el módulo {{module}}",
+      "schemaBadge": "esquema {{version}}",
+      "itemCount": "{{count}} elementos",
+      "noRestorableModules": "No hay módulos restaurables en esta copia de seguridad en esta instancia, verifique la compatibilidad del esquema / los módulos instalados.",
+      "whatToRestore": "Qué restaurar",
+      "options": "Opciones",
+      "overwriteTitle": "Sobrescribir existentes",
+      "overwriteHelp": "Reemplazar las configuraciones existentes con los datos de la copia de seguridad",
+      "warningLabel": "Advertencia:",
+      "warningText": "La restauración modificará su configuración actual. Considere ejecutar una simulación primero para previsualizar los cambios.",
+      "credentialNoteLabel": "Los secretos no se incluyen.",
+      "credentialNoteText": "Una instantánea de configuración excluye las contraseñas de controladores, dispositivos, cámaras y PBX, las claves VPN y otros secretos: vuelva a introducirlos tras la restauración para los controladores o dispositivos restaurados. Para una recuperación ante desastres completa con secretos, use la salida del contenedor pg-backup.",
+      "passphraseLabel": "Frase de contraseña (necesaria para una copia completa)",
+      "passphrasePlaceholder": "La frase de contraseña con la que se creó este .fsdnvault",
+      "confirmTypePrefix": "Escriba",
+      "confirmTypeOr": "o",
+      "confirmTypeSuffix": "para confirmar",
+      "confirmPlaceholder": "Escriba para confirmar la restauración destructiva"
+    },
+    "dryRun": {
+      "header": "Vista previa de simulación · aún no se ha aplicado nada",
+      "createCount": "+{{count}} crear",
+      "updateCount": "~{{count}} actualizar",
+      "skipCount": "{{count}} omitir",
+      "errorCount": "{{count}} error",
+      "skippedSuffix": "{{count}} omitidos",
+      "noChanges": "sin cambios"
+    },
+    "scheduleDialog": {
+      "editTitle": "Editar programación de copia de seguridad",
+      "createTitle": "Crear programación de copia de seguridad",
+      "description": "Configure copias de seguridad automáticas con políticas de retención",
+      "nameLabel": "Nombre de la programación",
+      "namePlaceholder": "p. ej., Copia de configuración diaria",
+      "descriptionLabel": "Descripción (opcional)",
+      "descriptionPlaceholder": "Descripción opcional para esta programación",
+      "scheduleLabel": "Programación",
+      "hideHelp": "Ocultar ayuda",
+      "showHelp": "Mostrar ayuda",
+      "cronFormatLabel": "Formato cron:",
+      "cronFormatValue": "minuto hora día-del-mes mes día-de-la-semana",
+      "cronExampleLabel": "Ejemplo:",
+      "cronExampleValue": "= Todos los días a las 2:00 a. m.",
+      "quickPresets": "Ajustes rápidos",
+      "selectPreset": "Seleccione un ajuste...",
+      "cronExpressionLabel": "Expresión cron",
+      "timezone": "Zona horaria",
+      "retentionPolicy": "Política de retención",
+      "maxBackupsLabel": "Copias de seguridad máximas",
+      "maxBackupsHelp": "Conservar las últimas {{count}} copias de seguridad (las más antiguas se eliminarán)",
+      "retentionDaysLabel": "Días de retención",
+      "retentionDaysHelp": "Eliminar copias de seguridad con más de {{count}} días",
+      "encryptFilesHelp": "Cifrar los archivos de copia de seguridad"
+    },
+    "cronPresets": {
+      "everyHour": {
+        "label": "Cada hora",
+        "description": "Se ejecuta al inicio de cada hora"
+      },
+      "daily2am": {
+        "label": "Diariamente a las 2 a. m.",
+        "description": "Se ejecuta diariamente a las 2:00 a. m."
+      },
+      "dailyMidnight": {
+        "label": "Diariamente a medianoche",
+        "description": "Se ejecuta diariamente a medianoche"
+      },
+      "weeklySunday": {
+        "label": "Semanalmente (domingo)",
+        "description": "Se ejecuta cada domingo a las 2:00 a. m."
+      },
+      "weeklyMonday": {
+        "label": "Semanalmente (lunes)",
+        "description": "Se ejecuta cada lunes a las 2:00 a. m."
+      },
+      "monthly1st": {
+        "label": "Mensualmente (día 1)",
+        "description": "Se ejecuta el día 1 de cada mes"
+      },
+      "every6h": {
+        "label": "Cada 6 horas",
+        "description": "Se ejecuta cada 6 horas"
+      },
+      "every12h": {
+        "label": "Cada 12 horas",
+        "description": "Se ejecuta dos veces al día"
+      }
+    },
+    "timezones": {
+      "easternUs": "Hora del Este (EE. UU.)",
+      "centralUs": "Hora Central (EE. UU.)",
+      "mountainUs": "Hora de la Montaña (EE. UU.)",
+      "pacificUs": "Hora del Pacífico (EE. UU.)",
+      "londonUk": "Londres (Reino Unido)",
+      "parisEu": "París (UE)",
+      "tokyoJapan": "Tokio (Japón)",
+      "sydneyAustralia": "Sídney (Australia)"
+    },
+    "deleteScheduleDialog": {
+      "title": "Eliminar programación",
+      "description": "¿Seguro que desea eliminar esta programación de copia de seguridad? Las copias de seguridad existentes creadas por esta programación no se verán afectadas."
+    },
+    "detailDialog": {
+      "title": "Detalles de la copia de seguridad",
+      "status": "Estado",
+      "storage": "Almacenamiento",
+      "yes": "Sí",
+      "expires": "Caduca",
+      "includedInBackup": "Incluido en la copia de seguridad"
+    },
+    "importDialog": {
+      "title": "Importar configuración",
+      "description": "Revise el archivo de configuración antes de importarlo",
+      "contains": "Esta importación contiene:",
+      "sites": "Sitios",
+      "controllers": "Controladores",
+      "metadataCreated": "Creado:",
+      "metadataBy": "Por:",
+      "metadataVersion": "Versión:",
+      "unknown": "Desconocido",
+      "warning": "La importación agregará o actualizará configuraciones. Los elementos existentes con ID coincidentes pueden sobrescribirse.",
+      "importing": "Importando...",
+      "importNow": "Importar ahora"
+    },
+    "bulk": {
+      "itemName": "copia de seguridad",
+      "deleteConfirm": "¿Eliminar {{count}} copia(s) de seguridad?"
+    },
+    "validation": {
+      "nameRequired": "El nombre de la copia de seguridad es obligatorio"
+    },
+    "time": {
+      "never": "Nunca",
+      "justNow": "Justo ahora",
+      "minutesAgo": "hace {{n}} min",
+      "hoursAgo": "hace {{n}} h",
+      "daysAgo": "hace {{n}} d"
+    },
+    "cron": {
+      "invalid": "Cron no válido",
+      "runWord": "ejecución",
+      "nextDayAt": "Próximo {{day}} a las {{time}}",
+      "dayOfMonthAt": "{{ordinal}} a las {{time}}",
+      "everyNHours": "Cada {{n}} horas",
+      "dailyAt": "Diariamente a las {{time}}",
+      "days": {
+        "sunday": "domingo",
+        "monday": "lunes",
+        "tuesday": "martes",
+        "wednesday": "miércoles",
+        "thursday": "jueves",
+        "friday": "viernes",
+        "saturday": "sábado"
+      }
+    },
+    "toasts": {
+      "error": "Error",
+      "backupStarted": {
+        "title": "Copia de seguridad iniciada",
+        "message": "El trabajo de copia de seguridad se ha puesto en cola"
+      },
+      "createBackupFailed": "No se pudo crear la copia de seguridad",
+      "backupDeleted": {
+        "title": "Copia de seguridad eliminada",
+        "message": "La copia de seguridad se ha eliminado correctamente"
+      },
+      "deleteBackupFailed": "No se pudo eliminar la copia de seguridad",
+      "scheduleUpdated": {
+        "title": "Programación actualizada",
+        "message": "La programación de copia de seguridad se ha actualizado"
+      },
+      "scheduleToggled": {
+        "message": "La programación de copia de seguridad se ha alternado"
+      },
+      "toggleScheduleFailed": "No se pudo alternar la programación",
+      "dryRunComplete": {
+        "title": "Simulación completada",
+        "message": "Revise los cambios previsualizados a continuación y luego confirme para restaurar."
+      },
+      "restoreStarted": {
+        "title": "Restauración iniciada",
+        "message": "El trabajo de restauración se ha iniciado"
+      },
+      "restoreFailed": "No se pudo iniciar la restauración",
+      "scheduleCreated": {
+        "title": "Programación creada",
+        "message": "La programación de copia de seguridad se ha creado correctamente"
+      },
+      "createScheduleFailed": "No se pudo crear la programación",
+      "updateScheduleFailed": "No se pudo actualizar la programación",
+      "scheduleDeleted": {
+        "title": "Programación eliminada",
+        "message": "La programación de copia de seguridad se ha eliminado"
+      },
+      "deleteScheduleFailed": "No se pudo eliminar la programación",
+      "downloadFailed": {
+        "title": "Error de descarga"
+      },
+      "downloadBackupFailed": "No se pudo descargar la copia de seguridad",
+      "exportComplete": {
+        "title": "Exportación completada",
+        "message": "La copia de seguridad de configuración se descargó correctamente"
+      },
+      "exportFailed": {
+        "title": "Error de exportación"
+      },
+      "exportConfigFailed": "No se pudo exportar la configuración",
+      "importFailed": {
+        "title": "Error de importación"
+      },
+      "readImportFailed": "No se pudo leer el archivo de importación",
+      "importComplete": {
+        "title": "Importación completada",
+        "message": "La configuración se importó correctamente"
+      },
+      "importConfigFailed": "No se pudo importar la configuración"
+    }
+  },
+  "StorageLocationsPage": {
+    "header": {
+      "title": "Ubicaciones de almacenamiento",
+      "subtitle": "Configure dónde se guardan las copias de seguridad · disco local, nube o servidores remotos.",
+      "backToBackups": "Volver a Copias de seguridad"
+    },
+    "actions": {
+      "add": "Agregar ubicación de almacenamiento",
+      "testConnection": "Probar conexión",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "cancel": "Cancelar",
+      "close": "Cerrar"
+    },
+    "filters": {
+      "searchPlaceholder": "Buscar ubicaciones de almacenamiento...",
+      "allTypes": "Todos los tipos",
+      "refresh": "Actualizar"
+    },
+    "badges": {
+      "default": "Predeterminada"
+    },
+    "status": {
+      "active": "Activa",
+      "inactive": "Inactiva",
+      "connected": "Conectada",
+      "failed": "Con errores",
+      "testing": "Probando..."
+    },
+    "footer": {
+      "lastTested": "Última prueba {{date}}",
+      "neverTested": "Nunca probada",
+      "created": "Creada {{date}}"
+    },
+    "empty": {
+      "title": "No hay ubicaciones de almacenamiento configuradas",
+      "description": "Agregue una ubicación de almacenamiento para empezar a guardar copias de seguridad en disco local, buckets de S3, servidores SFTP, Google Drive, Dropbox y más.",
+      "action": "Agregar su primera ubicación de almacenamiento"
+    },
+    "supportedBackends": {
+      "heading": "Backends de almacenamiento compatibles"
+    },
+    "deleteDialog": {
+      "title": "Eliminar ubicación de almacenamiento",
+      "confirmPrefix": "¿Está seguro de que desea eliminar",
+      "confirmSuffix": "? Las copias de seguridad existentes guardadas en esta ubicación no se eliminarán, pero no podrá acceder a ellas a través de FreeSDN."
+    },
+    "testResult": {
+      "titlePassed": "Prueba de conexión superada",
+      "titleFailed": "Prueba de conexión fallida",
+      "status": "Estado",
+      "success": "Correcto",
+      "failed": "Con errores",
+      "message": "Mensaje",
+      "latency": "Latencia",
+      "latencyValue": "{{ms}} ms",
+      "details": "Detalles"
+    },
+    "formDialog": {
+      "createTitle": "Agregar ubicación de almacenamiento",
+      "editTitle": "Editar ubicación de almacenamiento",
+      "createDescription": "Configure un nuevo destino para sus copias de seguridad.",
+      "editDescription": "Actualice la configuración. Deje los campos de credenciales vacíos para conservar los valores existentes.",
+      "editDescriptionNamed": "Actualice la configuración de {{name}}. Deje los campos de credenciales vacíos para conservar los valores existentes.",
+      "submitCreate": "Crear",
+      "submitSave": "Guardar cambios"
+    },
+    "form": {
+      "name": "Nombre",
+      "namePlaceholder": "p. ej. Bucket de S3 de producción",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Descripción opcional",
+      "storageType": "Tipo de almacenamiento",
+      "storageTypePlaceholder": "Seleccione el tipo de almacenamiento...",
+      "loadingTypes": "Cargando tipos de almacenamiento...",
+      "loadTypesFailed": "No se pudieron cargar los tipos de almacenamiento",
+      "noTypesAvailable": "No hay tipos de almacenamiento disponibles",
+      "cannotBeChanged": "(no se puede cambiar)",
+      "connectionSettings": "Ajustes de conexión",
+      "updateConnectionSettings": "Actualizar ajustes de conexión",
+      "leaveEmptyHint": "Deje los campos vacíos para conservar los valores existentes",
+      "showSecrets": "Mostrar secretos",
+      "hideSecrets": "Ocultar secretos",
+      "setAsDefault": "Establecer como predeterminada",
+      "setAsDefaultHint": "Usar esta ubicación de forma predeterminada para nuevas copias de seguridad"
+    },
+    "dynamicField": {
+      "leaveEmptyPlaceholder": "Deje vacío para conservar el valor existente",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado"
+    },
+    "validation": {
+      "nameRequired": "El nombre es obligatorio",
+      "storageTypeRequired": "El tipo de almacenamiento es obligatorio",
+      "fieldRequired": "{{field}} es obligatorio"
+    },
+    "notifications": {
+      "error": "Error",
+      "created": {
+        "title": "Ubicación de almacenamiento creada",
+        "message": "La ubicación de almacenamiento se creó correctamente."
+      },
+      "createFailed": "No se pudo crear la ubicación de almacenamiento.",
+      "updated": {
+        "title": "Ubicación de almacenamiento actualizada",
+        "message": "Cambios guardados."
+      },
+      "updateFailed": "No se pudo actualizar la ubicación de almacenamiento.",
+      "deleted": {
+        "title": "Ubicación de almacenamiento eliminada",
+        "message": "La ubicación de almacenamiento se eliminó."
+      },
+      "deleteFailed": "No se pudo eliminar la ubicación de almacenamiento.",
+      "testFailed": {
+        "title": "Prueba fallida",
+        "message": "La prueba de conexión falló."
+      }
+    }
+  }
+}

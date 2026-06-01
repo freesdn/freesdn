@@ -1,0 +1,253 @@
+{
+  "AccessPointsPage": {
+    "common": {
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "active": "Activo",
+      "default": "Predeterminado",
+      "yes": "Sí",
+      "no": "No",
+      "unknown": "Desconocido",
+      "unknownLower": "desconocido",
+      "auto": "Automático",
+      "ch": "Can.",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "apply": "Aplicar",
+      "applying": "Aplicando..."
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "operationFailed": "Operación fallida",
+      "radioSettingsUpdated": "Configuración de radio actualizada",
+      "radioSettingsUpdatedDesc": "Los cambios pueden tardar un momento en aplicarse a todos los AP."
+    },
+    "status": {
+      "online": "En línea",
+      "offline": "Sin conexión",
+      "adopting": "Adoptando"
+    },
+    "header": {
+      "title": "Puntos de acceso",
+      "description": "Administra y supervisa los puntos de acceso inalámbricos de tu red",
+      "export": "Exportar"
+    },
+    "stats": {
+      "totalApsTitle": "Total de AP",
+      "totalApsDescription": "Radios configuradas",
+      "onlineTitle": "En línea",
+      "onlineDescription": "{{pct}}% accesibles",
+      "noAps": "Sin AP",
+      "offlineTitle": "Sin conexión",
+      "offlineDescription": "Requiere atención",
+      "totalClientsTitle": "Total de clientes",
+      "totalClientsDescription": "Conectados ahora"
+    },
+    "list": {
+      "loadError": "No se pudieron cargar los puntos de acceso. Verifica tu conexión e inténtalo de nuevo.",
+      "searchPlaceholder": "Buscar por nombre, modelo, MAC o IP…",
+      "allSitesPlaceholder": "Todos los sitios",
+      "allSites": "Todos los sitios",
+      "allStatusesPlaceholder": "Todos los estados",
+      "allStatuses": "Todos los estados",
+      "clearFilters": "Limpiar filtros",
+      "loading": "Cargando puntos de acceso...",
+      "emptyTitle": "No se encontraron puntos de acceso",
+      "emptyDescription": "Ejecuta un descubrimiento para encontrar puntos de acceso en tu red."
+    },
+    "card": {
+      "clients": "Clientes",
+      "radios": "Radios",
+      "uptime": "Tiempo activo"
+    },
+    "detail": {
+      "back": "Volver",
+      "refresh": "Actualizar"
+    },
+    "actions": {
+      "rename": "Renombrar",
+      "locateFlashLed": "Localizar (parpadear LED)",
+      "locate": "Localizar",
+      "reboot": "Reiniciar",
+      "upgrade": "Actualizar",
+      "upgradeFirmware": "Actualizar firmware",
+      "forget": "Olvidar",
+      "forgetDevice": "Olvidar dispositivo",
+      "viewDetails": "Ver detalles",
+      "reAdopt": "Readoptar",
+      "ledOn": "LED encendido",
+      "ledOff": "LED apagado"
+    },
+    "summary": {
+      "clients": "Clientes",
+      "cpuMemory": "CPU / Memoria",
+      "cpu": "CPU",
+      "mem": "Mem",
+      "uptime": "Tiempo activo",
+      "radios": "Radios",
+      "noRadios": "Sin radios",
+      "controls": "Controles",
+      "led": "LED",
+      "mesh": "Malla"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "radios": "Radios",
+      "ssids": "SSID",
+      "clients": "Clientes",
+      "configuration": "Configuración",
+      "rfHealth": "Estado de RF",
+      "rogueAps": "AP no autorizados",
+      "radioSettings": "Configuración de radio"
+    },
+    "overview": {
+      "deviceInformation": "Información del dispositivo",
+      "model": "Modelo",
+      "vendor": "Fabricante",
+      "macAddress": "Dirección MAC",
+      "ipAddress": "Dirección IP",
+      "serialNumber": "Número de serie",
+      "firmware": "Firmware",
+      "site": "Sitio",
+      "mesh": "Malla",
+      "radioSummary": "Resumen de radio",
+      "noRadioData": "No hay datos de radio disponibles"
+    },
+    "radio": {
+      "width": "Ancho",
+      "txPower": "Potencia Tx",
+      "clients": "Clientes",
+      "channel": "Canal",
+      "configure": "Configurar",
+      "bandRadio": "Radio {{band}}",
+      "noDataForAp": "No hay datos de radio disponibles para este punto de acceso."
+    },
+    "ssids": {
+      "overridesTitle": "Anulaciones de SSID",
+      "overridesCardDescription": "Anulaciones de configuración de SSID por AP",
+      "overridesTabDescription": "Las anulaciones de SSID por AP permiten personalizar los nombres de red y la configuración para este punto de acceso específico",
+      "noneConfigured": "No hay anulaciones de SSID configuradas",
+      "noneForAp": "No hay anulaciones de SSID configuradas para este AP",
+      "colSsid": "SSID",
+      "colGlobalName": "Nombre global",
+      "colSecurity": "Seguridad",
+      "colBands": "Bandas",
+      "colVlan": "VLAN",
+      "colStatus": "Estado"
+    },
+    "clients": {
+      "title": "Clientes conectados",
+      "description": "Dispositivos conectados actualmente a este punto de acceso",
+      "loading": "Cargando clientes...",
+      "emptyTitle": "No hay clientes conectados actualmente",
+      "emptyDescription": "Los dispositivos conectados actualmente a este punto de acceso aparecerán aquí.",
+      "colName": "Nombre",
+      "colMac": "MAC",
+      "colIp": "IP",
+      "colSsid": "SSID",
+      "colBand": "Banda",
+      "colSignal": "Señal",
+      "colRate": "Tasa",
+      "colUptime": "Tiempo activo"
+    },
+    "config": {
+      "lanPort": "Puerto LAN",
+      "lanPortDescription": "Configuración del enlace ascendente Ethernet",
+      "vlanEnabled": "VLAN habilitada",
+      "vlanId": "ID de VLAN",
+      "poe": "PoE",
+      "powered": "Con alimentación",
+      "location": "Ubicación",
+      "locationDescription": "Ubicación geográfica",
+      "latitude": "Latitud",
+      "longitude": "Longitud",
+      "noLocationSet": "Sin ubicación definida",
+      "firmware": "Firmware",
+      "currentVersion": "Versión actual",
+      "updateAvailableLabel": "Actualización disponible",
+      "updateAvailable": "Actualización disponible",
+      "upToDate": "Actualizado",
+      "quickActions": "Acciones rápidas"
+    },
+    "rfHealth": {
+      "noController": "No hay controlador disponible para los datos de RF.",
+      "loadError": "No se pudieron cargar los datos de salud de RF. El controlador puede no estar accesible o esta función puede no ser compatible.",
+      "noChannelDataTitle": "Sin datos de canal",
+      "noChannelDataDescription": "Los datos de utilización de canal aún no están disponibles. Estos datos se recopilan durante el funcionamiento del AP.",
+      "utilization": "Utilización",
+      "interference": "Interferencia",
+      "aps": "AP",
+      "clients": "Clientes",
+      "channelHeatmap": "Mapa de calor de canales",
+      "channelHeatmapDescription": "Vista general visual de la utilización de canales en los puntos de acceso",
+      "ap": "AP",
+      "noData": "Sin datos",
+      "low": "Bajo",
+      "high": "Alto",
+      "utilizationByApTitle": "Utilización de canal por AP",
+      "utilizationByApDescription": "Entorno de RF por punto de acceso y banda",
+      "colBand": "Banda",
+      "colChannel": "Canal",
+      "colWidth": "Ancho",
+      "noiseFloor": "Nivel de ruido"
+    },
+    "rogueAps": {
+      "noController": "No hay controlador disponible para la detección de AP no autorizados.",
+      "loadError": "No se pudieron cargar los datos de AP no autorizados. El controlador puede no estar accesible o esta función puede no ser compatible.",
+      "noneTitle": "No se detectaron AP no autorizados",
+      "noneDescription": "No se han detectado puntos de acceso no autorizados ni vecinos. Tu red parece estar limpia.",
+      "rogueApsLabel": "AP no autorizados",
+      "neighborApsLabel": "AP vecinos",
+      "knownApsLabel": "AP conocidos",
+      "detectedTitle": "Puntos de acceso detectados",
+      "detectedDescription": "Puntos de acceso no autorizados y vecinos detectados por tus AP",
+      "colClassification": "Clasificación",
+      "colBssid": "BSSID",
+      "colSsid": "SSID",
+      "colChannel": "Canal",
+      "colBand": "Banda",
+      "colSignal": "Señal",
+      "colSecurity": "Seguridad",
+      "colDetectedBy": "Detectado por",
+      "colLastSeen": "Visto por última vez",
+      "hidden": "Oculto"
+    },
+    "radioSettings": {
+      "noController": "No hay controlador disponible para la configuración de radio.",
+      "loadError": "No se pudo cargar la configuración de radio. El controlador puede no estar accesible o esta función puede no ser compatible.",
+      "noneTitle": "Sin configuración de radio",
+      "noneDescription": "La configuración de radio no está disponible para este controlador.",
+      "fastRoamingTitle": "Itinerancia rápida (802.11k/r/v)",
+      "fastRoamingDescription": "Habilita el traspaso fluido de clientes entre puntos de acceso. Recomendado para VoIP, video y dispositivos móviles.",
+      "dot11rTitle": "802.11r (transición rápida de BSS)",
+      "dot11rDescription": "Preautentica a los clientes en los AP vecinos para un traspaso casi instantáneo (<50ms)",
+      "dot11kTitle": "802.11k (administración de recursos de radio)",
+      "dot11kDescription": "Proporciona a los clientes informes de AP vecinos para acelerar las decisiones de itinerancia",
+      "dot11vTitle": "802.11v (administración de transición de BSS)",
+      "dot11vDescription": "Permite que los AP sugieran mejores AP a los clientes para equilibrio de carga e itinerancia",
+      "applyingChanges": "Aplicando cambios..."
+    },
+    "renameDialog": {
+      "title": "Renombrar punto de acceso",
+      "description": "Ingresa un nuevo nombre para este punto de acceso",
+      "nameLabel": "Nombre",
+      "namePlaceholder": "Nombre del punto de acceso"
+    },
+    "radioDialog": {
+      "title": "Configurar radio {{band}}",
+      "description": "Ajusta la configuración de radio para este punto de acceso",
+      "channelOption": "Canal {{ch}}",
+      "txPowerLabel": "Potencia Tx (dBm)"
+    },
+    "confirm": {
+      "rebootTitle": "Reiniciar punto de acceso",
+      "upgradeTitle": "Actualizar firmware",
+      "forgetTitle": "Olvidar punto de acceso",
+      "rebootDescription": "¿Seguro que deseas reiniciar \"{{name}}\"? Los clientes conectados se desconectarán temporalmente.",
+      "upgradeDescription": "¿Seguro que deseas actualizar el firmware de \"{{name}}\"? El dispositivo se reiniciará durante el proceso.",
+      "forgetDescription": "¿Seguro que deseas olvidar \"{{name}}\"? Esto eliminará el dispositivo del controlador.",
+      "forgetDescriptionDetail": "¿Seguro que deseas olvidar \"{{name}}\"? Esto eliminará el dispositivo del controlador. Deberás readoptarlo para volver a administrarlo."
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "MarketplacePage": {
+    "header": {
+      "title": "Mercado de complementos",
+      "subtitle": "Descubre e instala complementos de la comunidad para ampliar FreeSDN"
+    },
+    "actions": {
+      "syncRegistry": "Sincronizar registro"
+    },
+    "filters": {
+      "searchPlaceholder": "Buscar complementos..."
+    },
+    "categories": {
+      "all": "Todas las categorías",
+      "monitoring": "Monitoreo",
+      "security": "Seguridad",
+      "automation": "Automatización",
+      "integration": "Integración",
+      "analytics": "Analítica",
+      "device": "Dispositivo",
+      "reporting": "Informes"
+    },
+    "sort": {
+      "downloads": "Más descargados",
+      "rating": "Mejor valorados",
+      "newest": "Más recientes",
+      "name": "Nombre A-Z"
+    },
+    "errors": {
+      "loadFailed": "No se pudieron cargar los complementos del mercado",
+      "installFailed": "Error en la instalación"
+    },
+    "results": {
+      "countOne": "{{count}} complemento",
+      "countOther": "{{count}} complementos"
+    },
+    "pagination": {
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "pageOf": "Página {{page}} de {{total}}"
+    },
+    "empty": {
+      "title": "No se encontraron complementos",
+      "description": "Intenta ajustar la búsqueda o el filtro de categoría"
+    },
+    "card": {
+      "verifiedTooltip": "Complemento verificado",
+      "byAuthor": "por {{author}}",
+      "installed": "Instalado",
+      "install": "Instalar"
+    }
+  },
+  "PluginDetailPage": {
+    "loading": "Cargando complemento...",
+    "notFound": "Complemento no encontrado",
+    "backToMarketplace": "Volver al mercado",
+    "verified": "Verificado",
+    "by": "por",
+    "ratingSummary": "{{rating}} ({{count}} reseñas)",
+    "installedWithVersion": "Instalado ({{version}})",
+    "install": "Instalar",
+    "installDialog": {
+      "title": "¿Instalar complemento de terceros?",
+      "warning": "Esto instala código de terceros que se ejecuta con privilegios completos del backend. ¿Continuar?",
+      "pluginLabel": "Complemento:",
+      "notVerified": "Este complemento NO está verificado por FreeSDN.",
+      "cancel": "Cancelar",
+      "confirm": "Instalar complemento"
+    },
+    "installFailed": "Error en la instalación",
+    "screenshots": "Capturas de pantalla",
+    "screenshotAlt": "Captura de pantalla {{index}}",
+    "versionHistory": "Historial de versiones",
+    "noChangelog": "No hay registro de cambios disponible",
+    "reviews": "Reseñas",
+    "writeReview": "Escribir una reseña",
+    "reviewPlaceholder": "Comparte tu experiencia con este complemento...",
+    "submitReview": "Enviar reseña",
+    "submitReviewFailed": "Error al enviar la reseña"
+  }
+}

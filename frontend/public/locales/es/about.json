@@ -1,0 +1,20 @@
+{
+  "AboutPage": {
+    "title": "Acerca de FreeSDN",
+    "subtitle": "Plataforma unificada de gestión de redes",
+    "platform": {
+      "title": "Plataforma",
+      "version": "Versión",
+      "license": "Licencia",
+      "documentation": "Documentación",
+      "sourceCode": "Código fuente"
+    },
+    "trademarks": {
+      "title": "Marcas comerciales y reconocimientos",
+      "intro": "Todos los nombres de productos, logotipos y marcas de terceros son propiedad de sus respectivos titulares. Los nombres de productos y empresas utilizados en FreeSDN tienen únicamente fines de identificación, y su uso no implica respaldo ni afiliación.",
+      "independence": "FreeSDN es un proyecto independiente de código abierto, desarrollado por la comunidad. No está afiliado, respaldado, patrocinado ni asociado de ningún modo con ninguno de los proveedores externos cuyos productos integra o gestiona. Las declaraciones de compatibilidad, soporte e integración describen únicamente la interoperabilidad y no implican asociación, certificación ni aprobación por parte de los respectivos proveedores.",
+      "attributionTitle": "Atribución",
+      "closing": "Cualquier otro nombre de producto, logotipo o marca mencionado es igualmente propiedad de sus respectivos titulares. La ausencia de un nombre en esta lista no constituye una renuncia a esa marca, ni su inclusión implica relación alguna entre FreeSDN y el titular de la marca."
+    }
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "AlertsPage": {
+    "header": {
+      "title": "Alertas",
+      "description": "Consola unificada de alertas · alertas basadas en reglas, incidentes correlacionados y eventos de seguridad"
+    },
+    "actions": {
+      "markAllRead": "Marcar todo como leído",
+      "evaluateRules": "Evaluar reglas",
+      "correlate": "Correlacionar",
+      "manageRules": "Administrar reglas"
+    },
+    "stats": {
+      "activeAlerts": "Alertas activas",
+      "critical": "Críticas",
+      "firingRules": "Reglas activadas",
+      "openIncidents": "Incidentes abiertos",
+      "failedSecurity": "Seguridad fallida"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "search": {
+      "placeholder": "Buscar alertas por título, descripción o fuente..."
+    },
+    "filters": {
+      "severityPlaceholder": "Severidad",
+      "allSeverities": "Todas las severidades",
+      "critical": "Crítica",
+      "high": "Alta",
+      "warningMedium": "Advertencia / Media",
+      "low": "Baja",
+      "info": "Información",
+      "statusPlaceholder": "Estado",
+      "allStatus": "Todos los estados",
+      "active": "Activas",
+      "resolved": "Resueltas"
+    },
+    "bulk": {
+      "itemName": "alerta",
+      "acknowledge": "Reconocer",
+      "resolve": "Resolver",
+      "suppress1h": "Silenciar (1 h)"
+    },
+    "tabs": {
+      "all": "Todas ({{count}})",
+      "rules": "Alertas de reglas ({{count}})",
+      "incidents": "Incidentes ({{count}})",
+      "security": "Seguridad ({{count}})"
+    },
+    "columns": {
+      "severity": "Severidad",
+      "source": "Fuente",
+      "title": "Título",
+      "status": "Estado",
+      "time": "Hora"
+    },
+    "sources": {
+      "rule": "Regla de alerta",
+      "incident": "Incidente",
+      "security": "Seguridad"
+    },
+    "empty": {
+      "title": "Todo en orden",
+      "filtered": "Ninguna alerta coincide con los filtros actuales.",
+      "none": "No hay alertas en esta categoría."
+    },
+    "dataTable": {
+      "itemName": "alertas"
+    },
+    "engineCard": {
+      "title": "Motor de reglas de alerta",
+      "description": "Configura reglas, canales de notificación (correo, Slack, SMS, Webhook) y umbrales de severidad",
+      "activeRules": "{{count}} reglas activas"
+    },
+    "detail": {
+      "status": "Estado",
+      "source": "Fuente",
+      "description": "Descripción",
+      "suppress": "Silenciar",
+      "investigate": "Investigar",
+      "acknowledge": "Reconocer",
+      "resolve": "Resolver",
+      "close": "Cerrar"
+    },
+    "suppress": {
+      "title": "Silenciar alerta",
+      "durationLabel": "Duración (minutos)",
+      "reasonLabel": "Motivo (opcional)",
+      "reasonPlaceholder": "Ventana de mantenimiento...",
+      "cancel": "Cancelar",
+      "confirm": "Confirmar silenciamiento"
+    },
+    "ruleDetail": {
+      "occurrences": "Ocurrencias",
+      "notificationsSent": "Notificaciones enviadas",
+      "acknowledged": "Reconocida",
+      "resolved": "Resuelta",
+      "suppressedUntil": "Silenciada hasta",
+      "tags": "Etiquetas",
+      "details": "Detalles"
+    },
+    "incidentDetail": {
+      "eventCount": "Cantidad de eventos",
+      "affectedDevices": "Dispositivos afectados",
+      "assignedTo": "Asignado a",
+      "resolved": "Resuelto",
+      "rootCause": "Causa raíz",
+      "resolutionNotes": "Notas de resolución",
+      "tags": "Etiquetas",
+      "linkedEvents": "Eventos vinculados",
+      "noLinkedEvents": "No hay eventos vinculados.",
+      "unknownEventType": "desconocido",
+      "pattern": "patrón: {{pattern}}"
+    },
+    "securityDetail": {
+      "eventType": "Tipo de evento",
+      "status": "Estado",
+      "success": "Correcto",
+      "failed": "Fallido",
+      "userEmail": "Correo del usuario",
+      "ipAddress": "Dirección IP",
+      "userId": "ID de usuario",
+      "timestamp": "Marca de tiempo",
+      "riskScore": "Puntuación de riesgo",
+      "additionalDetails": "Detalles adicionales"
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "operationFailed": "La operación falló",
+      "securityReviewUnavailable": "La revisión de eventos de seguridad aún no está disponible"
+    }
+  }
+}

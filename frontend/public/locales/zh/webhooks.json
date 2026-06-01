@@ -1,0 +1,129 @@
+{
+  "WebhooksPage": {
+    "validation": {
+      "nameRequired": "名称为必填项",
+      "urlRequired": "URL 为必填项",
+      "urlInvalid": "必须是有效的 URL"
+    },
+    "create": {
+      "title": "创建 Webhook",
+      "submit": "创建 Webhook"
+    },
+    "fields": {
+      "name": {
+        "label": "名称",
+        "placeholder": "我的 Webhook"
+      },
+      "url": {
+        "label": "URL"
+      },
+      "secret": {
+        "label": "密钥（可选）",
+        "placeholder": "HMAC 签名密钥"
+      },
+      "eventTypes": {
+        "label": "事件类型",
+        "add": "添加",
+        "description": "留空以接收所有事件"
+      },
+      "enabled": "已启用",
+      "verifySsl": "验证 TLS"
+    },
+    "deliveries": {
+      "title": "投递历史",
+      "empty": "暂无投递记录",
+      "attempt": "第 {{n}} 次尝试",
+      "response": "响应：{{code}}"
+    },
+    "toast": {
+      "error": "错误",
+      "success": "成功",
+      "unknownError": "未知错误",
+      "createFailed": "创建 Webhook 失败：{{detail}}",
+      "updateFailed": "更新 Webhook 失败：{{detail}}",
+      "deleteFailed": "删除 Webhook 失败：{{detail}}",
+      "testDelivered": "测试 Webhook 已投递！响应：{{status}}，耗时：{{time}}ms",
+      "testFailed": "测试 Webhook {{status}}：{{error}}",
+      "testRequestFailed": "测试 Webhook 失败：{{detail}}"
+    },
+    "columns": {
+      "webhook": "Webhook",
+      "status": "状态",
+      "events": "事件",
+      "successful": "成功",
+      "failures": "失败",
+      "lastTriggered": "上次触发",
+      "active": "启用"
+    },
+    "status": {
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    },
+    "events": {
+      "all": "所有事件",
+      "typeOne": "{{count}} 种类型",
+      "typeOther": "{{count}} 种类型"
+    },
+    "never": "从未",
+    "actions": {
+      "menuLabel": "{{name}} 的操作",
+      "test": "测试 Webhook",
+      "viewDeliveries": "查看投递记录",
+      "deleteConfirm": "确定要删除此 Webhook 吗？",
+      "delete": "删除"
+    },
+    "header": {
+      "title": "Webhooks",
+      "description": "管理 FreeSDN 事件的出站 Webhook 订阅。",
+      "export": "导出",
+      "addWebhook": "添加 Webhook"
+    },
+    "errorState": {
+      "message": "加载 Webhook 失败"
+    },
+    "stats": {
+      "total": {
+        "title": "Webhook 总数",
+        "description": "已配置的端点"
+      },
+      "enabled": {
+        "title": "已启用",
+        "active": "{{percent}}% 活跃",
+        "none": "无 Webhook"
+      },
+      "failing": {
+        "title": "失败",
+        "description": "近期存在失败"
+      },
+      "deliveries": {
+        "title": "投递",
+        "description": "累计成功"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "按名称或 URL 搜索 Webhook…",
+      "allStatuses": "所有状态",
+      "failing": "失败",
+      "clearFilters": "清除筛选"
+    },
+    "itemName": "Webhook",
+    "itemNamePlural": "Webhook",
+    "bulk": {
+      "test": {
+        "label": "测试",
+        "title": "批量测试",
+        "description": "批量测试：尚未实现。"
+      },
+      "disable": {
+        "label": "禁用",
+        "title": "批量禁用",
+        "description": "批量禁用：尚未实现。"
+      },
+      "delete": {
+        "label": "删除",
+        "title": "批量删除",
+        "description": "为安全起见，请逐个删除 Webhook。"
+      }
+    }
+  }
+}

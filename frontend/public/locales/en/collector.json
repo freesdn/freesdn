@@ -1,0 +1,133 @@
+{
+  "LogExplorerPage": {
+    "header": {
+      "title": "Log Explorer",
+      "description": "Search and filter collected syslog and SNMP trap messages"
+    },
+    "errors": {
+      "loadFailed": "Some data failed to load. Results may be incomplete."
+    },
+    "filters": {
+      "title": "Filters",
+      "startTime": "Start time",
+      "endTime": "End time",
+      "searchPlaceholder": "Search messages...",
+      "allTypes": "All types",
+      "typeSyslog": "Syslog",
+      "typeSnmpTrap": "SNMP Trap",
+      "allSeverities": "All severities"
+    },
+    "presets": {
+      "last15min": "Last 15 min",
+      "last1hour": "Last 1 hour",
+      "last6hours": "Last 6 hours",
+      "last24hours": "Last 24 hours",
+      "last7days": "Last 7 days"
+    },
+    "severity": {
+      "emergency": "Emergency",
+      "alert": "Alert",
+      "critical": "Critical",
+      "error": "Error",
+      "warning": "Warning",
+      "notice": "Notice",
+      "info": "Info",
+      "debug": "Debug"
+    },
+    "results": {
+      "title": "Results",
+      "count": "{{total}} results"
+    },
+    "actions": {
+      "exportCsv": "Export CSV"
+    },
+    "table": {
+      "timestamp": "Timestamp",
+      "type": "Type",
+      "severity": "Severity",
+      "sourceIp": "Source IP",
+      "message": "Message",
+      "typeSnmpShort": "SNMP",
+      "typeSyslogShort": "Syslog"
+    },
+    "detail": {
+      "sourceIp": "Source IP:",
+      "deviceId": "Device ID:",
+      "hostname": "Hostname:",
+      "hostnameLabel": "Hostname",
+      "app": "App:",
+      "facility": "Facility:",
+      "enterpriseOid": "Enterprise OID:",
+      "trapType": "Trap Type:",
+      "varbinds": "Varbinds:",
+      "fullMessage": "Full Message:"
+    },
+    "pagination": {
+      "pageOf": "Page {{page}} of {{pages}}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "empty": {
+      "title": "No logs found",
+      "description": "No logs found for the selected filters. Try adjusting the time range or removing filters."
+    }
+  },
+  "CollectorPage": {
+    "status": {
+      "running": "Running",
+      "stopped": "Stopped"
+    },
+    "toast": {
+      "operationFailed": "Operation failed"
+    },
+    "header": {
+      "title": "Network Collector",
+      "subtitle": "SNMP trap, Syslog, and NetFlow receiver"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "configure": "Configure",
+      "saveConfiguration": "Save Configuration",
+      "close": "Close"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "services": {
+      "snmpTrap": "SNMP Trap Receiver",
+      "syslog": "Syslog Receiver",
+      "netflow": "NetFlow Receiver"
+    },
+    "config": {
+      "title": "Collector Configuration",
+      "description": "Port numbers and retention settings",
+      "snmpTrap": "SNMP Trap",
+      "syslog": "Syslog",
+      "netflow": "NetFlow",
+      "port": "Port",
+      "community": "Community",
+      "logRetention": "Log retention (days)",
+      "flowRetention": "Flow retention (days)"
+    },
+    "stats": {
+      "events24h": "Events (24h)",
+      "bySeverity24h": "By Severity (24h)",
+      "topSources24h": "Top Sources (24h)"
+    },
+    "stream": {
+      "title": "Live Event Stream",
+      "autoRefresh": "Auto-refresh 5s"
+    },
+    "table": {
+      "time": "Time",
+      "type": "Type",
+      "severity": "Severity",
+      "sourceIp": "Source IP",
+      "message": "Message"
+    },
+    "empty": {
+      "title": "No events collected yet",
+      "description": "Enable a collector service above and configure your devices to send SNMP traps, syslog messages, or NetFlow data."
+    }
+  }
+}

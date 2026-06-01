@@ -1,0 +1,2009 @@
+{
+  "PBXDetailPage": {
+    "pbxFallbackName": "PBX",
+    "common": {
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "yes": "Sí",
+      "no": "No",
+      "unknown": "Desconocido",
+      "any": "cualquiera",
+      "default": "predeterminado",
+      "cancel": "Cancelar",
+      "create": "Crear",
+      "delete": "Eliminar",
+      "edit": "Editar",
+      "view": "Ver",
+      "saveChanges": "Guardar cambios",
+      "unlimited": "Ilimitado",
+      "auto": "Automático",
+      "live": "En vivo",
+      "cached": "En caché",
+      "unnamed": "Sin nombre"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "extensions": "Extensiones",
+      "trunks": "Troncales",
+      "ringGroups": "Grupos de timbre",
+      "queues": "Colas",
+      "ivr": "IVR",
+      "dids": "DID",
+      "activeCalls": "Llamadas activas",
+      "voicemail": "Buzón de voz",
+      "config": "Configuración del PBX",
+      "settings": "Ajustes"
+    },
+    "breadcrumb": {
+      "pbxSystems": "Sistemas PBX"
+    },
+    "header": {
+      "withAsterisk": "{{host}} · Asterisk {{version}}"
+    },
+    "actions": {
+      "testConnection": "Probar conexión",
+      "applyConfig": "Aplicar configuración",
+      "pendingChanges": "Cambios pendientes",
+      "webUi": "Interfaz web",
+      "backToPbx": "Volver a PBX"
+    },
+    "editExt": {
+      "button": "Editar",
+      "title": "Editar extensión {{number}}",
+      "description": "Prepara un cambio para revisión. No se escribe nada en el PBX hasta que lo apliques desde Cambios pendientes.",
+      "outboundCid": "Identificador de llamada saliente",
+      "outboundCidPlaceholder": "\"Nombre\" <100>",
+      "stageButton": "Preparar cambio",
+      "staged": "Cambio preparado: revísalo y aplícalo en Cambios pendientes",
+      "stageFailed": "No se pudo preparar el cambio"
+    },
+    "editRg": {
+      "title": "Editar grupo de timbre {{number}}",
+      "descLabel": "Descripción"
+    },
+    "createRg": {
+      "title": "Nuevo grupo de timbre",
+      "groupNumber": "Número de grupo",
+      "members": "Miembros (extensiones, separadas por guion)"
+    },
+    "createDid": {
+      "title": "Nueva ruta entrante",
+      "did": "Número DID",
+      "cid": "Coincidencia de CID",
+      "destination": "Destino",
+      "destinationHint": "A dónde van las llamadas coincidentes, p. ej. from-did-direct,200,1 para sonar la extensión 200."
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "sync": {
+      "started": "Sincronización iniciada",
+      "failed": "Error de sincronización",
+      "complete": "Sincronización completada",
+      "completeDescription": "Las extensiones, troncales, grupos de timbre e IVR están actualizados.",
+      "queuedConnecting": "Sincronización en cola, conectando al PBX...",
+      "watchingProgress": "Siguiendo el progreso en vivo...",
+      "connecting": "Conectando al PBX...",
+      "unknownError": "Error desconocido",
+      "queuedWaiting": "En cola, esperando al worker...",
+      "syncingStep": "Sincronizando, paso {{current}} de {{total}}"
+    },
+    "syncStages": {
+      "connect": "Conectar",
+      "extensions": "Extensiones",
+      "ringGroups": "Grupos de timbre",
+      "liveData": "Datos en vivo",
+      "save": "Guardar",
+      "done": "Listo"
+    },
+    "toast": {
+      "pbxConnected": "PBX conectado correctamente",
+      "connectionFailed": "Error de conexión",
+      "connectionTestFailed": "Falló la prueba de conexión",
+      "configReloaded": "Configuración del PBX recargada",
+      "reloadFailed": "Error al recargar",
+      "callTerminated": "Llamada finalizada",
+      "hangupFailed": "No se pudo colgar la llamada",
+      "pbxDeleted": "PBX eliminado",
+      "settingsSaved": "Ajustes del PBX guardados",
+      "settingsSaveFailed": "No se pudieron guardar los ajustes",
+      "extensionCreated": "Extensión creada",
+      "extensionCreateFailed": "No se pudo crear la extensión",
+      "extensionDeleted": "Extensión eliminada",
+      "extensionDeleteFailed": "No se pudo eliminar la extensión",
+      "trunkSettingsSaved": "Ajustes de la troncal guardados",
+      "trunkUpdateFailed": "No se pudo actualizar la troncal · la API de escritura podría no estar disponible",
+      "trunkDeleted": "Troncal eliminada",
+      "trunkDeleteFailed": "No se pudo eliminar la troncal · la API de escritura podría no estar disponible",
+      "trunkCreated": "Troncal creada",
+      "trunkCreateFailed": "No se pudo crear la troncal · la API de escritura podría no estar disponible",
+      "callOriginated": "Llamada originada",
+      "callOriginateFailed": "No se pudo originar la llamada"
+    },
+    "confirm": {
+      "deleteExtension": "¿Eliminar la extensión {{number}}?",
+      "deleteRingGroup": "¿Eliminar el grupo de timbre {{number}}? Esto prepara una eliminación para revisión.",
+      "deleteInboundRoute": "¿Eliminar la ruta entrante {{route}}? Esto prepara una eliminación para revisión.",
+      "deleteTrunk": "¿Eliminar la troncal \"{{name}}\"? Esta acción no se puede deshacer."
+    },
+    "columns": {
+      "extension": "Extensión",
+      "name": "Nombre",
+      "callerId": "ID de llamante",
+      "voicemail": "Buzón de voz",
+      "phone": "Teléfono",
+      "tech": "Tecnología",
+      "recording": "Grabación",
+      "status": "Estado",
+      "trunk": "Troncal",
+      "sipServer": "Servidor SIP",
+      "outboundCid": "CID saliente",
+      "channels": "Canales",
+      "queue": "Cola",
+      "members": "Miembros",
+      "waiting": "En espera",
+      "completed": "Completadas",
+      "abandoned": "Abandonadas",
+      "serviceLevel": "NS%",
+      "ivrMenu": "Menú IVR",
+      "timeout": "Tiempo de espera",
+      "directDial": "Marcación directa",
+      "options": "Opciones",
+      "channel": "Canal",
+      "caller": "Llamante",
+      "connectedTo": "Conectado con",
+      "state": "Estado",
+      "duration": "Duración",
+      "mailbox": "Buzón",
+      "email": "Correo",
+      "new": "Nuevos",
+      "old": "Antiguos",
+      "didRoute": "DID / Ruta",
+      "cidMatch": "Coincidencia de CID",
+      "destination": "Destino",
+      "cidPrefix": "Prefijo de CID",
+      "alertInfo": "Info de alerta",
+      "moh": "MOH",
+      "privacy": "Privacidad",
+      "ringGroup": "Grupo de timbre",
+      "strategy": "Estrategia",
+      "ringTime": "Tiempo de timbre"
+    },
+    "trunkStatus": {
+      "registered": "Registrada",
+      "disabled": "Deshabilitada",
+      "configured": "Configurada"
+    },
+    "callState": {
+      "up": "En curso",
+      "ringing": "Timbrando"
+    },
+    "extDialog": {
+      "title": "Crear extensión",
+      "description": "Crear una nueva extensión en el PBX. Se creará mediante el adaptador FreePBX y se guardará localmente.",
+      "extensionNumber": "Número de extensión",
+      "displayName": "Nombre visible",
+      "namePlaceholder": "Juan Pérez",
+      "callerIdName": "Nombre del ID de llamante",
+      "callerIdNumber": "Número del ID de llamante",
+      "sipPassword": "Contraseña SIP",
+      "voicemailPin": "PIN del buzón de voz"
+    },
+    "trunkDialog": {
+      "title": "Crear troncal SIP",
+      "description": "Agregar una nueva troncal SIP al PBX. Configure los ajustes de conexión y autenticación.",
+      "trunkName": "Nombre de la troncal",
+      "trunkNamePlaceholder": "Mi troncal SIP",
+      "technology": "Tecnología",
+      "sipLegacy": "SIP (heredado)",
+      "hostSipServer": "Host / Servidor SIP",
+      "port": "Puerto",
+      "username": "Usuario",
+      "secretPassword": "Secreto / Contraseña",
+      "outboundCid": "CID saliente",
+      "maxChannels": "Canales máximos",
+      "codecs": "Códecs",
+      "transport": "Transporte",
+      "provider": "Proveedor",
+      "providerPlaceholder": "Nombre del proveedor (opcional)",
+      "createTrunk": "Crear troncal"
+    },
+    "callDialog": {
+      "title": "Originar llamada",
+      "description": "Realizar una llamada desde una extensión a otra o a un número externo.",
+      "fromExtension": "Desde la extensión",
+      "destination": "Destino",
+      "destinationPlaceholder": "200 o número externo",
+      "callButton": "Llamar"
+    },
+    "extSheet": {
+      "unnamed": "Extensión sin nombre",
+      "description": "Configuración completa de la extensión empresarial",
+      "extPrefix": "Ext"
+    },
+    "trunkSheet": {
+      "techTrunk": "Troncal {{tech}}",
+      "editDescription": "Editar ajustes de la troncal · los cambios se envían al PBX",
+      "viewDescription": "Detalles de registro y configuración de la troncal",
+      "activeChannels": "Canales activos",
+      "editSettings": "Editar ajustes",
+      "readOnlyNote": "Las troncales son de solo lectura aquí — FreePBX no expone una API de escritura de troncales. Gestiónelas en la interfaz de administración de FreePBX."
+    },
+    "reloadBanner": {
+      "message": "Hay cambios de configuración preparados en el PBX pero aún no activos. Use Aplicar configuración para activarlos (esto recarga Asterisk)."
+    },
+    "queueSheet": {
+      "strategyLabel": "Estrategia {{strategy}}",
+      "description": "Métricas de rendimiento de la cola y configuración de agentes",
+      "agents": "Agentes",
+      "queueMembers": "Miembros de la cola ({{count}})",
+      "noMembers": "No hay miembros en esta cola"
+    },
+    "ringGroupSheet": {
+      "description": "Configuración y miembros del grupo de timbre",
+      "membersCount": "Miembros ({{count}})",
+      "noMembers": "No hay miembros en este grupo de timbre"
+    },
+    "ivrSheet": {
+      "description": "Estructura del menú IVR y opciones de enrutamiento",
+      "menuOptions": "Opciones del menú ({{count}})",
+      "noDestination": "Sin destino",
+      "returnLabel": "Retorno: {{value}}",
+      "noMenuOptions": "No hay opciones de menú configuradas"
+    },
+    "voicemailSheet": {
+      "description": "Detalles del buzón de voz y conteo de mensajes",
+      "newMessages": "Mensajes nuevos",
+      "oldMessages": "Mensajes antiguos"
+    },
+    "trunkEdit": {
+      "callerIdNumberOnly": "Solo número de ID de llamante",
+      "yesDisabled": "Sí (deshabilitada)",
+      "dialOutPrefixPlaceholder": "p. ej. 9",
+      "providerNamePlaceholder": "Nombre del proveedor",
+      "failoverPlaceholder": "Nombre o ID de la troncal"
+    },
+    "sections": {
+      "identity": "Identidad",
+      "credentials": "Credenciales",
+      "callerId": "ID de llamante",
+      "callRouting": "Enrutamiento de llamadas",
+      "recording": "Grabación",
+      "features": "Funciones",
+      "liveFreepbxData": "Datos en vivo de FreePBX",
+      "connection": "Conexión",
+      "authentication": "Autenticación",
+      "mediaCodecs": "Medios y códecs",
+      "advanced": "Avanzado",
+      "channels": "Canales",
+      "rawSettings": "Ajustes sin procesar",
+      "general": "General",
+      "connectionSip": "Conexión / SIP",
+      "pjsipRegistration": "PJSIP / Registro",
+      "performance": "Rendimiento",
+      "settings": "Ajustes",
+      "configuration": "Configuración",
+      "description": "Descripción",
+      "details": "Detalles"
+    },
+    "fields": {
+      "extension": "Extensión",
+      "displayName": "Nombre visible",
+      "sipName": "Nombre SIP",
+      "description": "Descripción",
+      "user": "Usuario",
+      "technology": "Tecnología",
+      "dialString": "Cadena de marcación",
+      "sipPassword": "Contraseña SIP",
+      "voicemail": "Buzón de voz",
+      "outboundCid": "CID saliente",
+      "emergencyCid": "CID de emergencia",
+      "noAnswerCid": "CID sin respuesta",
+      "busyCid": "CID ocupado",
+      "unavailableCid": "CID no disponible",
+      "ringTimer": "Temporizador de timbre",
+      "noAnswerDest": "Destino sin respuesta",
+      "busyDest": "Destino ocupado",
+      "unavailDest": "Destino no disponible",
+      "noAnswerAction": "Acción sin respuesta",
+      "mohClass": "Clase de MOH",
+      "policy": "Política",
+      "onDemand": "Bajo demanda",
+      "priority": "Prioridad",
+      "inboundExternal": "Externa entrante",
+      "outboundExternal": "Externa saliente",
+      "inboundInternal": "Interna entrante",
+      "outboundInternal": "Interna saliente",
+      "answerMode": "Modo de respuesta",
+      "intercom": "Intercomunicador",
+      "cwTone": "Tono de llamada en espera",
+      "hintOverride": "Anulación de pista",
+      "trunkName": "Nombre de la troncal",
+      "trunkId": "ID de la troncal",
+      "provider": "Proveedor",
+      "keepCid": "Mantener CID",
+      "disabled": "Deshabilitada",
+      "failoverTrunk": "Troncal de respaldo",
+      "dialOutPrefix": "Prefijo de salida",
+      "sipServer": "Servidor SIP",
+      "port": "Puerto",
+      "username": "Usuario",
+      "secret": "Secreto",
+      "transport": "Transporte",
+      "context": "Contexto",
+      "fromDomain": "Dominio de origen",
+      "fromUser": "Usuario de origen",
+      "registration": "Registro",
+      "pjsipLine": "Línea PJSIP",
+      "authRejectionPermanent": "Rechazo de autenticación permanente",
+      "expiration": "Caducidad",
+      "identifyBy": "Identificar por",
+      "codecs": "Códecs",
+      "dtmfMode": "Modo DTMF",
+      "mediaEncryption": "Cifrado de medios",
+      "rtpSymmetric": "RTP simétrico",
+      "forceRport": "Forzar RPort",
+      "t38Udptl": "T.38 UDPTL",
+      "qualifyFrequency": "Frecuencia de calificación",
+      "sendConnectedLine": "Enviar línea conectada",
+      "trustRpid": "Confiar en RPID",
+      "sendRpid": "Enviar RPID",
+      "faxDetect": "Detección de fax",
+      "allowUnauthOptions": "Permitir opciones no autenticadas",
+      "maxRetries": "Reintentos máximos",
+      "retryInterval": "Intervalo de reintento",
+      "registrationString": "Cadena de registro",
+      "aorContact": "Contacto AOR",
+      "matchIpCidr": "Coincidencia (IP/CIDR)",
+      "contactUser": "Usuario de contacto",
+      "avgHoldTime": "Tiempo medio de espera",
+      "avgTalkTime": "Tiempo medio de conversación",
+      "callsTaken": "Llamadas atendidas",
+      "groupNumber": "Número de grupo",
+      "announcement": "Anuncio",
+      "authentication": "Autenticación"
+    }
+  },
+  "PhoneDetailPage": {
+    "common": {
+      "cancel": "Cancelar",
+      "previewPlan": "Previsualizar plan"
+    },
+    "values": {
+      "assigned": "Asignada",
+      "none": "Ninguna",
+      "unknown": "Desconocido"
+    },
+    "actions": {
+      "refresh": "Actualizar",
+      "onboard": "Incorporar",
+      "provision": "Aprovisionar",
+      "copy": "Copiar",
+      "firmwareManagement": "Gestión de firmware"
+    },
+    "errorBanner": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos.",
+    "notFound": {
+      "title": "Teléfono no encontrado",
+      "back": "Volver a Teléfonos"
+    },
+    "liveState": {
+      "label": "Estado en vivo:",
+      "lines": "Líneas:",
+      "linesValue": "{{active}} activas / {{total}} en total",
+      "lockout": "Bloqueo: {{lockout}}",
+      "refresh": "se actualiza cada 5 s"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "config": "Configuración",
+      "provisioning": "Aprovisionamiento",
+      "network": "Red",
+      "actions": "Acciones"
+    },
+    "overview": {
+      "deviceInfo": "Información del dispositivo",
+      "statusHealth": "Estado y salud",
+      "pbxAssociation": "Asociación de PBX",
+      "tagsMetadata": "Etiquetas y metadatos",
+      "noTags": "Sin etiquetas"
+    },
+    "fields": {
+      "name": "Nombre",
+      "vendor": "Fabricante",
+      "model": "Modelo",
+      "macAddress": "Dirección MAC",
+      "serialNumber": "Número de serie",
+      "firmware": "Firmware",
+      "location": "Ubicación",
+      "status": "Estado",
+      "lifecycle": "Ciclo de vida",
+      "sipRegistration": "Registro SIP",
+      "uptime": "Tiempo activo",
+      "cpu": "CPU",
+      "memory": "Memoria",
+      "lastSeen": "Visto por última vez",
+      "lastPolled": "Último sondeo",
+      "pbxSystem": "Sistema PBX",
+      "extension": "Extensión",
+      "sipUser": "Usuario SIP",
+      "discoveryMethod": "Método de descubrimiento",
+      "created": "Creado",
+      "updated": "Actualizado",
+      "configTemplate": "Plantilla de configuración",
+      "currentStatus": "Estado actual",
+      "autoProvisionUrl": "URL de autoaprovisionamiento",
+      "template": "Plantilla",
+      "currentVersion": "Versión actual",
+      "ipAddress": "Dirección IP",
+      "subnet": "Subred",
+      "vlan": "VLAN",
+      "sipRegistrar": "Registrador SIP",
+      "pbx": "PBX"
+    },
+    "config": {
+      "templateAssignment": "Asignación de plantilla",
+      "noTemplateAssigned": "Ninguna plantilla asignada",
+      "manageTemplates": "Gestionar plantillas",
+      "provisioningInfo": "Información de aprovisionamiento",
+      "configPreview": "Vista previa de configuración",
+      "configPreviewDesc": "Configuración de aprovisionamiento generada",
+      "assignTemplateHint": "Asigna una plantilla para generar la configuración"
+    },
+    "provisioning": {
+      "statusTitle": "Estado de aprovisionamiento",
+      "statusDesc": "Estado e historial de aprovisionamiento actual",
+      "provisioning": "Aprovisionando...",
+      "provisionNow": "Aprovisionar ahora",
+      "firmware": "Firmware",
+      "firmwareDesc": "Versión de firmware actual y cumplimiento"
+    },
+    "network": {
+      "detailsTitle": "Detalles de red"
+    },
+    "connTest": {
+      "title": "Prueba de inicio de sesión del teléfono",
+      "description": "Prueba la conectividad y el inicio de sesión en la interfaz web del teléfono · obtiene información del dispositivo, registro SIP y verifica las credenciales",
+      "username": "Usuario",
+      "password": "Contraseña",
+      "saveCreds": "Guardar credenciales tras un inicio de sesión correcto",
+      "testing": "Probando...",
+      "testConnection": "Probar conexión",
+      "testFailed": "La prueba de conexión falló",
+      "result": {
+        "authenticated": "Conectado y autenticado",
+        "configReadable": "Dispositivo conectado (configuración legible)",
+        "identified": "Dispositivo identificado",
+        "reachable": "Accesible (identidad desconocida)",
+        "lockedOut": "El teléfono está bloqueado",
+        "unreachable": "Teléfono inaccesible",
+        "error": "Error: {{error}}",
+        "statusIp": "Estado: {{status}} · IP: {{ip}}",
+        "apiAccessibleSuffix": " · API accesible",
+        "vendor": "Fabricante:",
+        "model": "Modelo:",
+        "mac": "MAC:",
+        "firmware": "Firmware:",
+        "configItems": "Elementos de configuración:",
+        "lockout": "Bloqueo:",
+        "notLocked": "No bloqueado",
+        "sip": "SIP:",
+        "registered": "Registrado",
+        "notRegistered": "No registrado",
+        "account": "Cuenta {{account}}:",
+        "active": "Activa",
+        "notConfigured": "No configurado",
+        "rawPValues": "Valores P sin procesar ({{count}} elementos)"
+      }
+    },
+    "lifecycle": {
+      "title": "Gestión del ciclo de vida",
+      "description": "Cambia el estado del ciclo de vida de este dispositivo",
+      "onboardDevice": "Incorporar dispositivo",
+      "enterMaintenance": "Entrar en modo de mantenimiento",
+      "exitMaintenance": "Salir del modo de mantenimiento",
+      "decommissionDevice": "Dar de baja el dispositivo"
+    },
+    "quickActions": {
+      "title": "Acciones rápidas",
+      "description": "Operaciones del dispositivo",
+      "testConnection": "Probar conexión del teléfono",
+      "pushSipTooltipLinked": "Enviar las credenciales de la extensión {{extension}} al teléfono",
+      "pushSipTooltipUnlinked": "No vinculado a una extensión de PBX, ejecuta primero la vinculación automática",
+      "pushSipConfig": "Enviar configuración SIP desde la PBX",
+      "reprovisionConfig": "Reaprovisionar configuración",
+      "rebootPhone": "Reiniciar teléfono",
+      "moveToSite": "Mover a sitio",
+      "factoryReset": "Restablecimiento de fábrica",
+      "discoveryScans": "Escaneos de descubrimiento",
+      "configTemplates": "Plantillas de configuración"
+    },
+    "pushSip": {
+      "title": "Enviar configuración SIP desde FreePBX",
+      "descPrefix": "Envía la extensión",
+      "descFrom": "desde",
+      "linkedPbx": "la PBX vinculada",
+      "descSuffix": "hacia este teléfono como Cuenta 1. FreeSDN no almacena en caché los secretos SIP, introduce la contraseña de FreePBX una vez y se envía directamente al teléfono.",
+      "passwordLabel": "Contraseña SIP (de la extensión de FreePBX)",
+      "passwordPlaceholder": "Introduce el secreto SIP",
+      "secretHint": "En FreePBX: Aplicaciones → Extensiones → {{extension}} → Editar → \"Secret\".",
+      "plan": "Plan (Cuenta 1):",
+      "pushToPhone": "Enviar al teléfono"
+    },
+    "migrate": {
+      "title": "Mover el teléfono a otro sitio",
+      "description": "Mueve {{ip}} ({{model}}) de su sitio actual al que elijas. La fila del dispositivo en la sombra y el historial de firmware se trasladan automáticamente. Vuelve a ejecutar la vinculación automática con la PBX en el destino después del traslado.",
+      "destinationSite": "Sitio de destino",
+      "pickSite": "Elige un sitio…",
+      "noOtherSites": "No hay otros sitios en tu organización. Crea uno primero en Configuración → Sitios.",
+      "followLinks": "Seguir los vínculos de PBX/extensión",
+      "followLinksHint": "Intenta volver a vincular el teléfono a una PBX equivalente en el nuevo sitio (coincidiendo por host + número de extensión). Desactivado de forma predeterminada, los vínculos se eliminan para que la vinculación automática elija el destino correcto.",
+      "planTitle": "Plan de migración:",
+      "fromTo": "De → A:",
+      "shadowDeviceRow": "Fila del dispositivo en la sombra:",
+      "willFollow": "✓ se trasladará",
+      "notPresent": ", no presente",
+      "firmwareHistoryRows": "Filas del historial de firmware:",
+      "pbxLink": "Vínculo de PBX:",
+      "rebound": "✓ revinculado",
+      "willBeCleared": "⚠ se eliminará",
+      "noneDash": ", ninguno",
+      "extensionLink": "Vínculo de extensión:",
+      "configTemplate": "Plantilla de configuración:",
+      "movePhone": "Mover teléfono"
+    },
+    "reboot": {
+      "title": "¿Reiniciar este teléfono?",
+      "description": "{{ip}} ({{model}}) quedará inaccesible durante ~30 segundos mientras se reinicia. Las llamadas activas en este dispositivo se cortarán.",
+      "confirm": "Reiniciar"
+    },
+    "factoryReset": {
+      "title": "¿Restablecer de fábrica este teléfono?",
+      "destructive": "Esto es destructivo.",
+      "description": "El teléfono en {{ip}} perderá TODA la configuración, cuentas SIP, teclas de línea, PIN de buzón de voz, contraseña de administrador. Se reiniciará con la configuración predeterminada y deberá volver a incorporarse."
+    },
+    "onboard": {
+      "title": "Incorporar dispositivo",
+      "description": "Incorporar {{name}} al estado gestionado activo",
+      "deviceName": "Nombre del dispositivo",
+      "selectTemplate": "Seleccionar plantilla..."
+    },
+    "toasts": {
+      "previewFailed": "La vista previa falló",
+      "sipConfigPushed": "Configuración SIP enviada",
+      "pushFailed": "El envío falló",
+      "migrationPreviewFailed": "La vista previa de la migración falló",
+      "phoneMigrated": "Teléfono migrado",
+      "migrationFailed": "La migración falló",
+      "rebootSent": "Reinicio enviado",
+      "rebootFailed": "El reinicio falló",
+      "factoryResetSent": "Restablecimiento de fábrica enviado",
+      "factoryResetFailed": "El restablecimiento de fábrica falló"
+    }
+  },
+  "PBXPage": {
+    "status": {
+      "online": "En línea",
+      "error": "Error",
+      "unknown": "Desconocido"
+    },
+    "header": {
+      "title": "Sistemas PBX",
+      "description": "{{count}} sistemas PBX · {{online}} en línea"
+    },
+    "actions": {
+      "export": "Exportar",
+      "addPBX": "Agregar PBX"
+    },
+    "errorBanner": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos.",
+    "stats": {
+      "totalPBX": {
+        "title": "Total de PBX",
+        "description": "Sistemas configurados"
+      },
+      "online": {
+        "title": "En línea",
+        "reachable": "{{percent}}% accesibles",
+        "noPBX": "Sin PBX"
+      },
+      "offlineError": {
+        "title": "Sin conexión / Error",
+        "description": "Requiere atención"
+      },
+      "totalExtensions": {
+        "title": "Total de extensiones",
+        "description": "En todos los PBX"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar sistemas PBX por nombre, IP o tipo…",
+      "allStatuses": "Todos los estados",
+      "offlineError": "Sin conexión / Error",
+      "clearFilters": "Borrar filtros"
+    },
+    "columns": {
+      "name": "Sistema PBX",
+      "type": "Tipo",
+      "status": "Estado",
+      "connection": "Conexión",
+      "extensions": "Extensiones",
+      "lastSynced": "Última sincronización"
+    },
+    "rowActions": {
+      "viewDashboard": "Ver panel",
+      "syncNow": "Sincronizar ahora",
+      "viewExtensions": "Ver extensiones",
+      "openWebUI": "Abrir interfaz web",
+      "delete": "Eliminar"
+    },
+    "itemName": "sistema PBX",
+    "itemNamePlural": "sistemas PBX",
+    "empty": {
+      "title": "No hay sistemas PBX conectados",
+      "addFirst": "Agregar primer PBX"
+    },
+    "bulk": {
+      "syncAll": "Sincronizar todo",
+      "delete": "Eliminar",
+      "deleteToast": {
+        "title": "Eliminación masiva",
+        "description": "Por seguridad, elimine los sistemas PBX uno por uno."
+      }
+    },
+    "toasts": {
+      "added": {
+        "title": "PBX agregado",
+        "description": "{{name}} se ha conectado correctamente."
+      },
+      "error": {
+        "title": "Error",
+        "createFailed": "No se pudo crear el PBX",
+        "deleteFailed": "No se pudo eliminar el PBX",
+        "syncFailed": "No se pudo sincronizar el PBX"
+      }
+    },
+    "test": {
+      "connected": "Conectado",
+      "connectionFailed": "Error de conexión",
+      "responseTime": "Tiempo de respuesta: {{ms}} ms"
+    },
+    "pbxTypes": {
+      "freepbx": {
+        "label": "FreePBX",
+        "description": "FreePBX / Asterisk AMI"
+      },
+      "asterisk": {
+        "label": "Asterisk",
+        "description": "Asterisk AMI directo"
+      },
+      "freeswitch": {
+        "label": "FreeSWITCH",
+        "description": "FreeSWITCH ESL"
+      },
+      "3cx": {
+        "label": "3CX",
+        "description": "API de gestión de 3CX"
+      },
+      "other": {
+        "label": "Otro",
+        "description": "Sistema PBX personalizado"
+      }
+    },
+    "dialog": {
+      "title": "Agregar sistema PBX",
+      "description": "Conecte un servidor PBX existente. Compatible con FreePBX.",
+      "testConnection": "Probar conexión",
+      "fields": {
+        "pbxType": "Tipo de PBX",
+        "displayName": "Nombre para mostrar",
+        "ipAddress": "Dirección IP / Nombre de host",
+        "apiPort": "Puerto de API",
+        "sipPort": "Puerto SIP",
+        "username": "Usuario",
+        "password": "Contraseña",
+        "apiKey": "Clave de API (opcional)",
+        "clientId": "ID de cliente",
+        "clientSecret": "Secreto de cliente",
+        "description": "Descripción (opcional)"
+      },
+      "placeholders": {
+        "displayName": "PBX de oficina",
+        "username": "admin",
+        "apiKey": "Si lo requiere su PBX",
+        "clientId": "Desde la aplicación M2M",
+        "description": "Breve descripción"
+      },
+      "oauth": {
+        "heading": "Aplicación OAuth2 máquina a máquina",
+        "optional": "(FreePBX 16+, opcional)",
+        "createAt": "Cree una en",
+        "whenSet": "Cuando se configura, el adaptador utiliza la superficie de API REST + GraphQL autorizada (78 consultas, 105 mutaciones) en lugar de la autenticación heredada por sesión web."
+      },
+      "tls": {
+        "label": "Permitir certificado TLS autofirmado / expirado",
+        "help": "Marque esto solo si su PBX usa un certificado autofirmado o expirado. La opción predeterminada es la verificación estricta. La anulación se aplica por PBX y queda registrada en la auditoría."
+      }
+    }
+  },
+  "ExtensionsPage": {
+    "status": {
+      "idle": "Inactiva",
+      "inUse": "En uso",
+      "ringing": "Sonando",
+      "unavailable": "No disponible",
+      "dnd": "No molestar",
+      "unknown": "Desconocido"
+    },
+    "ringStrategy": {
+      "ringAll": "Sonar todas"
+    },
+    "columns": {
+      "extension": "Extensión",
+      "status": "Estado",
+      "callerId": "ID de llamante",
+      "type": "Tipo",
+      "pbx": "PBX",
+      "voicemail": "Buzón de voz",
+      "ringGroup": "Grupo de timbre",
+      "strategy": "Estrategia",
+      "members": "Miembros",
+      "ringTime": "Tiempo de timbre"
+    },
+    "voicemail": {
+      "enabled": "Habilitado"
+    },
+    "ringTimeSeconds": "{{seconds}} s",
+    "header": {
+      "title": "Extensiones y grupos de timbre",
+      "description": "{{extensions}} extensiones, {{ringGroups}} grupos de timbre"
+    },
+    "actions": {
+      "export": "Exportar"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "stats": {
+      "extensions": {
+        "title": "Extensiones",
+        "description": "Todas las registradas"
+      },
+      "idle": {
+        "title": "Inactivas",
+        "description": "Disponibles ahora"
+      },
+      "inUse": {
+        "title": "En uso",
+        "description": "Llamadas activas"
+      },
+      "ringGroups": {
+        "title": "Grupos de timbre",
+        "description": "Configurados"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar extensiones, nombres o grupos de timbre…",
+      "allPbxSystems": "Todos los sistemas PBX",
+      "clearFilters": "Borrar filtros"
+    },
+    "tabs": {
+      "extensions": "Extensiones",
+      "ringGroups": "Grupos de timbre"
+    },
+    "empty": {
+      "extensions": {
+        "title": "No se encontraron extensiones",
+        "description": "Conecta un PBX y sincroniza para importar extensiones"
+      },
+      "ringGroups": {
+        "title": "No se encontraron grupos de timbre"
+      }
+    },
+    "bulk": {
+      "enableVm": "Habilitar buzón",
+      "disableVm": "Deshabilitar buzón",
+      "delete": "Eliminar"
+    },
+    "toasts": {
+      "bulkAction": "Acción masiva",
+      "bulkDelete": "Eliminación masiva",
+      "enableVoicemail": "Buzón de voz habilitado para {{count}} extensiones.",
+      "disableVoicemail": "Buzón de voz deshabilitado para {{count}} extensiones.",
+      "deleteExtensionsSafety": "Elimina las extensiones de forma individual por seguridad.",
+      "deleteRingGroupsSafety": "Elimina los grupos de timbre de forma individual por seguridad."
+    }
+  },
+  "components": {
+    "phoneStatus": {
+      "online": "En línea",
+      "offline": "Desconectado",
+      "inCall": "En llamada",
+      "ringing": "Sonando",
+      "dnd": "No molestar",
+      "warning": "Advertencia",
+      "unknown": "Desconocido"
+    },
+    "lifecycle": {
+      "discovered": "Descubierto",
+      "onboarding": "Incorporación",
+      "managed": "Gestionado",
+      "maintenance": "Mantenimiento",
+      "firmwareUpdating": "Actualizando FW",
+      "decommissioned": "Retirado"
+    },
+    "provision": {
+      "pending": "Pendiente",
+      "generated": "Generado",
+      "pushed": "Enviado",
+      "applied": "Aplicado",
+      "failed": "Fallido",
+      "stale": "Obsoleto"
+    },
+    "scan": {
+      "pending": "Pendiente",
+      "running": "En ejecución",
+      "completed": "Completado",
+      "failed": "Fallido",
+      "cancelled": "Cancelado"
+    },
+    "callDirection": {
+      "inbound": "Entrante",
+      "outbound": "Saliente",
+      "internal": "Interna"
+    },
+    "callStatus": {
+      "answered": "Contestada",
+      "missed": "Perdida",
+      "voicemail": "Buzón de voz",
+      "failed": "Fallida",
+      "completed": "Contestada",
+      "noAnswer": "Sin respuesta",
+      "busy": "Ocupado"
+    },
+    "pbxType": {
+      "other": "Otro"
+    }
+  },
+  "PBXOverviewTab": {
+    "stats": {
+      "activeCalls": "Llamadas activas",
+      "rightNow": "Ahora mismo",
+      "extensions": "Extensiones",
+      "registered": "Registradas",
+      "sipTrunks": "Troncales SIP",
+      "online": "{{count}} en línea",
+      "voicemails": "Mensajes de voz",
+      "unreadMessages": "Mensajes sin leer",
+      "callsToday": "Llamadas de hoy",
+      "ringGroups": "Grupos de timbre",
+      "queues": "Colas",
+      "ivrMenus": "Menús IVR",
+      "dids": "DIDs"
+    },
+    "trunks": {
+      "heading": "Troncales SIP",
+      "channels": "canales",
+      "empty": "No hay datos de troncales disponibles · haz clic en Sincronizar para cargar"
+    },
+    "queues": {
+      "waitingBadge": "{{count}} en espera",
+      "agents": "Agentes",
+      "completed": "Completadas",
+      "waiting": "En espera"
+    },
+    "connection": {
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "heading": "Estado de conexión",
+      "ipAddress": "Dirección IP",
+      "apiPort": "Puerto API",
+      "sipPort": "Puerto SIP",
+      "asterisk": "Asterisk",
+      "lastSync": "Última sincronización",
+      "never": "Nunca"
+    },
+    "extensions": {
+      "heading": "Extensiones",
+      "viewAll": "Ver todas",
+      "emptyTitle": "Aún no hay extensiones sincronizadas",
+      "syncNow": "Sincronizar ahora",
+      "colExt": "Ext",
+      "colName": "Nombre",
+      "colStatus": "Estado",
+      "colVm": "VM",
+      "active": "Activa",
+      "inactive": "Inactiva",
+      "moreCount": "+{{count}} extensiones más"
+    }
+  },
+  "AnnouncementsConfigSection": {
+    "common": {
+      "yes": "Sí",
+      "no": "No"
+    },
+    "announcements": {
+      "title": "Anuncios",
+      "id": "ID",
+      "description": "Descripción",
+      "recording": "Grabación",
+      "skip": "Omitir",
+      "postDest": "Destino posterior"
+    },
+    "pagingGroups": {
+      "title": "Grupos de megafonía / intercomunicación",
+      "group": "Grupo",
+      "description": "Descripción",
+      "default": "Predeterminado"
+    },
+    "systemRecordings": {
+      "title": "Grabaciones del sistema",
+      "name": "Nombre",
+      "filename": "Nombre de archivo",
+      "description": "Descripción",
+      "languages": "Idiomas"
+    },
+    "musicOnHold": {
+      "title": "Música en espera",
+      "category": "Categoría",
+      "type": "Tipo",
+      "random": "Aleatorio",
+      "format": "Formato"
+    }
+  },
+  "RoutingConfigSection": {
+    "outboundRoutes": {
+      "title": "Rutas salientes ({{count}})",
+      "columns": {
+        "name": "Nombre",
+        "cid": "CID",
+        "emergency": "Emergencia",
+        "sequence": "Secuencia"
+      },
+      "fallbackName": "Ruta {{index}}",
+      "emergencyBadge": "Emergencia"
+    },
+    "followMe": {
+      "title": "Sígueme ({{count}})",
+      "extension": "Ext {{ext}}"
+    },
+    "dayNight": {
+      "title": "Controles diurno/nocturno ({{count}})",
+      "columns": {
+        "extension": "Extensión",
+        "destination": "Destino",
+        "description": "Descripción"
+      }
+    },
+    "timeConditions": {
+      "title": "Condiciones de tiempo ({{count}})",
+      "columns": {
+        "name": "Nombre",
+        "timezone": "Zona horaria",
+        "trueDest": "Destino verdadero",
+        "falseDest": "Destino falso",
+        "mode": "Modo"
+      }
+    }
+  },
+  "PBXSettingsTab": {
+    "connection": {
+      "title": "Configuración de conexión del PBX",
+      "description": "Actualice las credenciales y la configuración de conexión"
+    },
+    "fields": {
+      "displayName": "Nombre visible",
+      "description": "Descripción",
+      "ipAddress": "Dirección IP / Nombre de host",
+      "apiPort": "Puerto API",
+      "sipPort": "Puerto SIP",
+      "username": "Usuario",
+      "password": "Contraseña"
+    },
+    "auth": {
+      "heading": "Autenticación"
+    },
+    "actions": {
+      "saveSettings": "Guardar configuración",
+      "testConnection": "Probar conexión",
+      "deletePBX": "Eliminar PBX"
+    },
+    "dangerZone": {
+      "title": "Zona de peligro",
+      "description": "Acciones permanentes que no se pueden deshacer",
+      "deleteConfirm": "¿Eliminar el PBX \"{{name}}\"? Esta acción no se puede deshacer."
+    }
+  },
+  "VoicemailPage": {
+    "title": "Buzón de voz",
+    "subtitle": "{{total}} mensajes · {{unread}} sin leer",
+    "dataLoadError": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos.",
+    "unknown": "Desconocido",
+    "urgent": "Urgente",
+    "empty": "No hay mensajes de voz",
+    "itemName": "mensajes de voz",
+    "columns": {
+      "from": "De",
+      "mailbox": "Buzón",
+      "duration": "Duración",
+      "date": "Fecha"
+    },
+    "actions": {
+      "markRead": "Marcar como leído",
+      "download": "Descargar",
+      "downloadUnavailable": "La reproducción de audio no está disponible: la grabación se almacena solo en la PBX.",
+      "delete": "Eliminar"
+    },
+    "stats": {
+      "totalMessages": "Total de mensajes",
+      "unread": "Sin leer",
+      "urgent": "Urgentes"
+    }
+  },
+  "PBXExtensionsTab": {
+    "heading": "Extensiones",
+    "countSummary": "{{count}} extensiones en este PBX",
+    "itemName": "extensiones",
+    "actions": {
+      "refresh": "Actualizar",
+      "create": "Crear extensión"
+    },
+    "empty": {
+      "title": "No se encontraron extensiones",
+      "syncAction": "Sincronizar desde PBX"
+    }
+  },
+  "PBXDidsTab": {
+    "heading": "DID / Rutas entrantes",
+    "routesConfigured": "{{count}} rutas entrantes configuradas",
+    "itemName": "DID",
+    "emptyText": "No se encontraron DID / rutas entrantes",
+    "syncFromPbx": "Sincronizar desde PBX",
+    "create": "Nueva ruta entrante"
+  },
+  "PBXQueuesTab": {
+    "heading": "Colas de llamadas",
+    "subtitle": "Datos de cola en vivo desde el PBX",
+    "itemName": "colas",
+    "empty": "No se encontraron colas de llamadas o el adaptador no está conectado"
+  },
+  "PBXVoicemailTab": {
+    "heading": "Buzones de voz",
+    "description": "Configuración de buzón de voz desde la PBX",
+    "itemName": "buzones de voz",
+    "empty": "No se encontraron buzones de voz o el adaptador no está conectado"
+  },
+  "VoIPPage": {
+    "common": {
+      "unknown": "Desconocido",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "filter": "Filtrar",
+      "notAvailable": "N/D",
+      "error": "Error"
+    },
+    "header": {
+      "title": "VoIP",
+      "subtitle": "Voz sobre IP · teléfonos, PBX, extensiones y gestión de llamadas",
+      "addPhone": "Agregar teléfono"
+    },
+    "errorBanner": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos.",
+    "tabs": {
+      "dashboard": "Panel",
+      "phones": "Teléfonos",
+      "pbxSystems": "Sistemas PBX",
+      "extensions": "Extensiones",
+      "ringGroups": "Grupos de timbrado",
+      "queues": "Colas",
+      "callHistory": "Historial de llamadas",
+      "voicemail": "Buzón de voz"
+    },
+    "phoneStatus": {
+      "online": "En línea",
+      "offline": "Desconectado",
+      "inCall": "En llamada",
+      "ringing": "Timbrando",
+      "dnd": "No molestar",
+      "unknown": "Desconocido"
+    },
+    "callDirection": {
+      "inbound": "Entrante",
+      "outbound": "Saliente",
+      "internal": "Interna"
+    },
+    "pbxType": {
+      "other": "Otro"
+    },
+    "ringStrategy": {
+      "ringall": "Timbrar todos",
+      "hunt": "Búsqueda",
+      "memoryhunt": "Búsqueda con memoria",
+      "random": "Aleatorio"
+    },
+    "phoneCard": {
+      "unknownDevice": "Dispositivo desconocido",
+      "extLabel": "Ext:",
+      "ipLabel": "IP:",
+      "macLabel": "MAC:",
+      "fwLabel": "FW:",
+      "lastSeen": "Visto por última vez: {{time}}"
+    },
+    "addPbxDialog": {
+      "title": "Agregar sistema PBX",
+      "description": "Conecta un servidor PBX existente para administrarlo a través de FreeSDN. Compatible con FreePBX.",
+      "pbxTypeLabel": "Tipo de PBX",
+      "pbxTypePlaceholder": "Selecciona el tipo de PBX",
+      "displayNameLabel": "Nombre para mostrar",
+      "displayNamePlaceholder": "p. ej. PBX de oficina, FreePBX principal",
+      "ipAddressLabel": "Dirección IP / Nombre de host",
+      "apiPortLabel": "Puerto API",
+      "sipPortLabel": "Puerto SIP",
+      "credentialsLabel": "Credenciales",
+      "usernameLabel": "Usuario",
+      "passwordLabel": "Contraseña",
+      "apiKeyLabel": "API Key (opcional)",
+      "apiKeyPlaceholder": "Solo si tu PBX lo requiere",
+      "descriptionLabel": "Descripción (opcional)",
+      "descriptionPlaceholder": "Breve descripción de este sistema PBX",
+      "responseTime": "Tiempo de respuesta: {{ms}} ms",
+      "testConnection": "Probar conexión",
+      "addPbx": "Agregar PBX"
+    },
+    "pbxTypeOptions": {
+      "freepbx": "FreePBX / Asterisk AMI",
+      "asterisk": "Asterisk AMI directo",
+      "freeswitch": "FreeSWITCH ESL",
+      "3cx": "API de gestión de 3CX",
+      "other": "Sistema PBX personalizado"
+    },
+    "addPhoneDialog": {
+      "title": "Agregar teléfono",
+      "description": "Registra un nuevo teléfono IP. Se puede aprovisionar automáticamente o configurar manualmente.",
+      "phoneNameLabel": "Nombre del teléfono",
+      "phoneNamePlaceholder": "p. ej. Teléfono de recepción, Escritorio de Juan",
+      "vendorLabel": "Fabricante",
+      "vendorPlaceholder": "Selecciona el fabricante",
+      "vendorOther": "Otro",
+      "modelLabel": "Modelo",
+      "modelPlaceholder": "p. ej. GXP2170, T54W",
+      "macLabel": "Dirección MAC",
+      "ipLabel": "Dirección IP",
+      "assignPbxLabel": "Asignar a PBX (opcional)",
+      "assignPbxPlaceholder": "Selecciona PBX · ninguno",
+      "serialLabel": "Número de serie",
+      "serialPlaceholder": "Opcional",
+      "locationLabel": "Ubicación",
+      "locationPlaceholder": "p. ej. Edificio A, Piso 2",
+      "descriptionLabel": "Descripción (opcional)",
+      "descriptionPlaceholder": "Breve descripción",
+      "cancel": "Cancelar",
+      "addPhone": "Agregar teléfono"
+    },
+    "toasts": {
+      "createPbxFailed": "No se pudo crear el PBX",
+      "deletePbxFailed": "No se pudo eliminar el PBX",
+      "syncFailed": "Error de sincronización",
+      "connectionTestFailed": "Error en la prueba de conexión",
+      "createPhoneFailed": "No se pudo crear el teléfono",
+      "deletePhoneFailed": "No se pudo eliminar el teléfono",
+      "markReadFailed": "No se pudo marcar como leído",
+      "deleteVoicemailFailed": "No se pudo eliminar el mensaje de voz"
+    },
+    "confirm": {
+      "deletePhone": "¿Eliminar el teléfono \"{{name}}\"?",
+      "deletePbx": "¿Eliminar el PBX \"{{name}}\"? Esto no se puede deshacer.",
+      "deleteVoicemail": "¿Eliminar este mensaje de voz?"
+    },
+    "phoneColumns": {
+      "phone": "Teléfono",
+      "extension": "Extensión",
+      "ipAddress": "Dirección IP",
+      "macAddress": "Dirección MAC",
+      "firmware": "Firmware",
+      "status": "Estado",
+      "lastSeen": "Visto por última vez"
+    },
+    "phoneActions": {
+      "viewDetails": "Ver detalles",
+      "callLogs": "Registros de llamadas",
+      "rebootPhone": "Reiniciar teléfono",
+      "provisionConfig": "Aprovisionar configuración",
+      "deletePhone": "Eliminar teléfono"
+    },
+    "pbxColumns": {
+      "pbxSystem": "Sistema PBX",
+      "type": "Tipo",
+      "address": "Dirección",
+      "status": "Estado",
+      "lastSeen": "Visto por última vez"
+    },
+    "pbxStatus": {
+      "connected": "Conectado",
+      "disconnected": "Desconectado"
+    },
+    "pbxActions": {
+      "configure": "Configurar",
+      "openAdminUi": "Abrir interfaz de administración",
+      "syncExtensions": "Sincronizar extensiones",
+      "delete": "Eliminar"
+    },
+    "extensionColumns": {
+      "extension": "Extensión",
+      "displayName": "Nombre para mostrar",
+      "callerId": "ID de llamante",
+      "voicemail": "Buzón de voz",
+      "status": "Estado"
+    },
+    "extensionActions": {
+      "viewDetails": "Ver detalles",
+      "settings": "Configuración"
+    },
+    "ringGroupColumns": {
+      "ringGroup": "Grupo de timbrado",
+      "strategy": "Estrategia",
+      "ringTime": "Tiempo de timbrado",
+      "members": "Miembros",
+      "membersCount": "{{count}} miembros",
+      "status": "Estado"
+    },
+    "callLogColumns": {
+      "direction": "Dirección",
+      "from": "De",
+      "to": "Para",
+      "status": "Estado",
+      "duration": "Duración",
+      "time": "Hora",
+      "playRecording": "Reproducir grabación"
+    },
+    "callStatus": {
+      "answered": "Contestada",
+      "missed": "Perdida",
+      "voicemail": "Buzón de voz",
+      "failed": "Fallida"
+    },
+    "stats": {
+      "totalPhones": "Total de teléfonos",
+      "online": "En línea",
+      "inCall": "En llamada",
+      "offline": "Desconectados",
+      "percentOfFleet": "{{percent}}% de la flota",
+      "activeRightNow": "Activos ahora mismo"
+    },
+    "summary": {
+      "extensions": "Extensiones",
+      "activeCount": "{{count}} activas",
+      "ringGroups": "Grupos de timbrado",
+      "voicemails": "Mensajes de voz",
+      "unreadMessages": "Mensajes sin leer"
+    },
+    "dashboard": {
+      "pbxSystems": "Sistemas PBX",
+      "noPbxConfigured": "No hay sistemas PBX configurados",
+      "sipTrunks": "Troncales SIP",
+      "channels": "{{active}}/{{max}} can.",
+      "recentCalls": "Llamadas recientes",
+      "viewAll": "Ver todas"
+    },
+    "queues": {
+      "queueNumber": "Cola {{number}}",
+      "queueNumberStrategy": "Cola {{number}} · {{strategy}}",
+      "callsWaiting": "{{count}} en espera",
+      "inQueue": "En cola",
+      "agents": "Agentes",
+      "waiting": "En espera",
+      "emptyTitle": "Colas de llamadas",
+      "emptyDescription": "La gestión de colas estará disponible próximamente."
+    },
+    "phones": {
+      "searchPlaceholder": "Buscar teléfonos por nombre, extensión, IP, MAC...",
+      "zeroTouchTitle": "Aprovisionamiento sin intervención",
+      "zeroTouchDescription": "Descubre y aprovisiona automáticamente teléfonos Grandstream mediante GDMS o DHCP Option 66 local",
+      "provisioningSettings": "Configuración de aprovisionamiento",
+      "emptyTitle": "No se encontraron teléfonos VoIP",
+      "emptyDescription": "Agrega un teléfono o habilita el aprovisionamiento automático para comenzar."
+    },
+    "pbxTab": {
+      "bannerTitle": "Integración de PBX · FreePBX",
+      "bannerDescription": "Conecta tu servidor PBX existente para sincronizar extensiones, grupos de timbrado y registros de llamadas automáticamente",
+      "addPbx": "Agregar PBX",
+      "cardTitle": "Sistemas PBX",
+      "cardDescription": "Administra los servidores PBX/de telefonía IP conectados",
+      "emptyTitle": "No hay sistemas PBX conectados",
+      "emptyDescription": "Conecta un servidor FreePBX para administrar extensiones y el enrutamiento de llamadas desde este panel.",
+      "addPbxSystem": "Agregar sistema PBX"
+    },
+    "extensionsTab": {
+      "searchPlaceholder": "Buscar extensiones...",
+      "cardTitle": "Extensiones",
+      "cardDescription": "Extensiones telefónicas en todos los sistemas PBX"
+    },
+    "ringGroupsTab": {
+      "cardTitle": "Grupos de timbrado",
+      "cardDescription": "Configura cómo se distribuyen las llamadas entrantes a los grupos de extensiones",
+      "addRingGroup": "Agregar grupo de timbrado",
+      "emptyTitle": "No hay grupos de timbrado configurados",
+      "emptyDescription": "Crea grupos de timbrado para enrutar las llamadas entrantes a varias extensiones."
+    },
+    "callHistory": {
+      "searchPlaceholder": "Buscar llamadas...",
+      "exportCdr": "Exportar CDR"
+    },
+    "voicemail": {
+      "searchPlaceholder": "Buscar mensajes de voz...",
+      "refresh": "Actualizar",
+      "unreadBadge": "{{count}} sin leer",
+      "emptyTitle": "Sin mensajes de voz",
+      "emptyDescription": "Los mensajes de voz aparecerán aquí.",
+      "urgent": "Urgente",
+      "new": "Nuevo",
+      "extDate": "Ext {{ext}} · {{date}}",
+      "play": "Reproducir",
+      "playMarkRead": "Reproducir y marcar como leído",
+      "download": "Descargar",
+      "downloadToastTitle": "Descarga",
+      "downloadToastDescription": "Archivo: {{file}}, Formato: {{format}}, Tamaño: {{size}} bytes",
+      "noAudioError": "No hay archivo de audio disponible para este mensaje de voz.",
+      "downloadError": "No se pudo descargar el mensaje de voz.",
+      "downloadUnavailable": "La reproducción de audio no está disponible: la grabación se almacena solo en la PBX.",
+      "delete": "Eliminar"
+    },
+    "itemNames": {
+      "calls": "llamadas",
+      "phones": "teléfonos",
+      "pbxSystems": "sistemas PBX",
+      "extensions": "extensiones",
+      "ringGroups": "grupos de timbrado",
+      "callRecords": "registros de llamadas"
+    }
+  },
+  "PhonesListPage": {
+    "common": {
+      "cancel": "Cancelar",
+      "done": "Listo"
+    },
+    "unnamed": "Sin nombre",
+    "header": {
+      "title": "Flota de teléfonos",
+      "description": "{{count}} dispositivos · gestión de flota, aprovisionamiento, control del ciclo de vida"
+    },
+    "actions": {
+      "addPhone": "Agregar teléfono",
+      "linking": "Vinculando…",
+      "autoLink": "Vincular automáticamente a PBX",
+      "discover": "Descubrir",
+      "export": "Exportar"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "stats": {
+      "totalPhones": {
+        "title": "Total de teléfonos",
+        "description": "En la flota"
+      },
+      "online": {
+        "title": "En línea",
+        "reachable": "{{percent}}% accesibles",
+        "noPhones": "Sin teléfonos"
+      },
+      "managed": {
+        "title": "Gestionados",
+        "description": "Ciclo de vida: gestionado"
+      },
+      "sipRegistered": {
+        "title": "Registrados en SIP",
+        "description": "Autenticados en PBX"
+      }
+    },
+    "filters": {
+      "searchPlaceholder": "Buscar por nombre, IP, MAC o modelo…",
+      "clear": "Limpiar filtros",
+      "lifecycle": {
+        "placeholder": "Ciclo de vida",
+        "all": "Todos los estados",
+        "discovered": "Descubierto",
+        "onboarding": "Incorporación",
+        "managed": "Gestionado",
+        "maintenance": "Mantenimiento",
+        "decommissioned": "Dado de baja"
+      },
+      "vendor": {
+        "placeholder": "Fabricante",
+        "all": "Todos los fabricantes"
+      },
+      "status": {
+        "placeholder": "Estado",
+        "all": "Todos los estados",
+        "online": "En línea",
+        "offline": "Desconectado",
+        "inCall": "En llamada"
+      }
+    },
+    "viewMode": {
+      "table": "Vista de tabla",
+      "grid": "Vista de cuadrícula"
+    },
+    "columns": {
+      "device": "Dispositivo",
+      "status": "Estado",
+      "lifecycle": "Ciclo de vida",
+      "network": "Red",
+      "vendor": "Fabricante",
+      "extension": "Extensión",
+      "firmware": "Firmware",
+      "provisioning": "Aprovisionamiento",
+      "location": "Ubicación",
+      "lastSeen": "Última vez visto"
+    },
+    "extension": {
+      "onPbx": "en {{name}}",
+      "unlinked": "sin vincular"
+    },
+    "rowActions": {
+      "viewDetails": "Ver detalles",
+      "onboard": "Incorporar",
+      "reprovision": "Reaprovisionar",
+      "maintenanceMode": "Modo de mantenimiento",
+      "exitMaintenance": "Salir del mantenimiento",
+      "decommission": "Dar de baja",
+      "delete": "Eliminar"
+    },
+    "itemName": {
+      "phones": "teléfonos",
+      "phone": "teléfono"
+    },
+    "empty": {
+      "title": "No se encontraron teléfonos",
+      "discoverDevices": "Descubrir dispositivos"
+    },
+    "bulkActions": {
+      "connect": "Conectar",
+      "reboot": "Reiniciar",
+      "provision": "Aprovisionar",
+      "delete": "Eliminar"
+    },
+    "addDialog": {
+      "title": "Agregar teléfono",
+      "description": "Agregar manualmente un teléfono a la flota",
+      "vendorOther": "Otro",
+      "fields": {
+        "name": "Nombre",
+        "macAddress": "Dirección MAC",
+        "ipAddress": "Dirección IP",
+        "vendor": "Fabricante",
+        "model": "Modelo",
+        "location": "Ubicación"
+      },
+      "placeholders": {
+        "name": "Teléfono de recepción",
+        "location": "Edificio A, Piso 2"
+      }
+    },
+    "onboardDialog": {
+      "title": "Incorporar dispositivo",
+      "description": "Incorporar {{name}} a la gestión activa",
+      "selectTemplate": "Seleccionar plantilla...",
+      "fields": {
+        "deviceName": "Nombre del dispositivo",
+        "configTemplate": "Plantilla de configuración",
+        "location": "Ubicación"
+      }
+    },
+    "bulkConnect": {
+      "title": "Conexión de flota",
+      "descriptionForm": "Autenticar y sincronizar {{count}} teléfono(s) · las credenciales se guardarán y todos los datos del dispositivo (SIP, red, firmware, VLAN) se obtendrán y persistirán.",
+      "descriptionDone": "Operación de conexión completada para {{count}} teléfono(s).",
+      "username": "Usuario",
+      "password": "Contraseña",
+      "passwordPlaceholder": "Ingrese la contraseña web del teléfono",
+      "cards": {
+        "devices": "Dispositivos",
+        "autoValue": "Auto",
+        "saveCredentials": "Guardar credenciales",
+        "fullValue": "Completa",
+        "configSync": "Sincronización de configuración"
+      },
+      "infoText": "Las credenciales se guardan por dispositivo tras una autenticación exitosa. Cada teléfono será sondeado, se iniciará sesión y se sincronizará toda la configuración (cuentas SIP, red, VLAN, firmware).",
+      "connecting": "Conectando {{count}} dispositivos…",
+      "connectButton": "Conectar {{count}} teléfono(s)",
+      "results": {
+        "connected": "Conectados",
+        "failed": "Fallidos",
+        "skipped": "Omitidos",
+        "successRate": "Tasa de éxito",
+        "deviceResults": "Resultados de dispositivos",
+        "authenticated": "Autenticado",
+        "summary": "{{succeeded}} de {{total}} dispositivos sincronizados"
+      }
+    },
+    "toasts": {
+      "deleteFailed": "No se pudo eliminar el teléfono",
+      "onboardFailed": "Falló la incorporación",
+      "decommissionFailed": "Falló la baja",
+      "maintenanceFailed": "Falló el cambio de mantenimiento",
+      "provisionFailed": "Falló el aprovisionamiento",
+      "bulkRebootFailed": "Falló el reinicio masivo",
+      "bulkProvisionFailed": "Falló el aprovisionamiento masivo",
+      "createFailed": "No se pudo crear el teléfono",
+      "bulkConnectComplete": {
+        "title": "Conexión masiva completada",
+        "description": "{{succeeded}} conectados, {{failed}} fallidos, {{skipped}} omitidos"
+      },
+      "bulkConnectFailed": "Falló la conexión masiva",
+      "bulkDelete": {
+        "title": "Eliminación masiva",
+        "description": "Por seguridad, elimine los teléfonos individualmente."
+      },
+      "autoLink": {
+        "linked": {
+          "title": "Se vincularon {{count}} teléfono(s) a extensiones de PBX",
+          "description": "{{alreadyLinked}} ya vinculados, {{skipped}} omitidos (sin información SIP o sin extensión coincidente)"
+        },
+        "allLinked": {
+          "title": "Todos los teléfonos ya están vinculados",
+          "description": "{{alreadyLinked}} teléfonos ya están asociados a extensiones de PBX"
+        },
+        "none": {
+          "title": "No hay teléfonos para vincular",
+          "skipped": "{{skipped}} teléfonos omitidos, consulte los registros del servidor para conocer los motivos",
+          "noSip": "No hay teléfonos detectables con información SIP"
+        },
+        "failed": "Falló la vinculación automática"
+      }
+    }
+  },
+  "VoipDiscoveryPage": {
+    "common": {
+      "yes": "Sí",
+      "no": "No",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "cancel": "Cancelar",
+      "delete": "Eliminar"
+    },
+    "phases": {
+      "init": "Inicializar",
+      "arp": "Barrido ARP",
+      "http": "Sondeo HTTP",
+      "sip": "Escaneo SIP",
+      "complete": "Completado"
+    },
+    "subnetPresets": {
+      "classC254": "Clase C · 254 hosts",
+      "classAPrivate254": "Clase A privada · 254 hosts",
+      "classBPrivate254": "Clase B privada · 254 hosts",
+      "commonVoipVlan": "VLAN VoIP común",
+      "largeSweep65k": "Barrido grande · 65k hosts"
+    },
+    "validation": {
+      "required": "La subred es obligatoria",
+      "invalidCidr": "Debe ser una notación CIDR válida (p. ej. 192.168.1.0/24)",
+      "prefixRange": "El prefijo debe estar entre /16 y /32",
+      "invalidOctets": "Octetos de dirección IP no válidos"
+    },
+    "toast": {
+      "scanStarted": {
+        "title": "Escaneo iniciado",
+        "message": "Escaneo de descubrimiento en cola para {{subnet}}",
+        "autoDetect": "detección automática"
+      },
+      "scanFailed": {
+        "title": "Error en el escaneo",
+        "fallback": "No se pudo iniciar el escaneo"
+      },
+      "scanCancelled": {
+        "title": "Escaneo cancelado",
+        "message": "El escaneo de descubrimiento se ha detenido."
+      },
+      "cancelFailed": {
+        "title": "Error al cancelar",
+        "fallback": "No se pudo cancelar el escaneo"
+      },
+      "scanDeleted": {
+        "title": "Escaneo eliminado",
+        "message": "Registro de escaneo eliminado del historial."
+      },
+      "deleteFailed": {
+        "title": "Error al eliminar",
+        "fallback": "No se pudo eliminar el escaneo"
+      }
+    },
+    "columns": {
+      "status": "Estado",
+      "subnet": "Subred",
+      "type": "Tipo",
+      "devices": "Dispositivos",
+      "started": "Iniciado",
+      "duration": "Duración"
+    },
+    "deviceColumns": {
+      "ipAddress": "Dirección IP",
+      "macAddress": "Dirección MAC",
+      "vendor": "Fabricante",
+      "model": "Modelo",
+      "method": "Método",
+      "sipRegistration": "Registro SIP",
+      "auth": "Autenticación",
+      "status": "Estado"
+    },
+    "deviceStatus": {
+      "new": "Nuevo",
+      "known": "Conocido"
+    },
+    "sip": {
+      "registered": "Registrado",
+      "configured": "Configurado"
+    },
+    "newDevicesBadge": "+{{count}} nuevos",
+    "actions": {
+      "results": "Resultados",
+      "onboard": "Incorporar",
+      "view": "Ver",
+      "refresh": "Actualizar",
+      "newScan": "Nuevo escaneo",
+      "startFirstScan": "Iniciar primer escaneo"
+    },
+    "header": {
+      "title": "Descubrimiento de red",
+      "subtitle": "Escanea la red en busca de teléfonos VoIP y endpoints"
+    },
+    "errors": {
+      "loadFailed": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "stats": {
+      "totalScans": "Escaneos totales",
+      "runningNow": "En ejecución ahora",
+      "devicesFound": "Dispositivos encontrados",
+      "scanTime": "Tiempo de escaneo"
+    },
+    "liveScan": {
+      "inProgress": "Escaneo de descubrimiento en progreso",
+      "complete": "Escaneo completado",
+      "cancelled": "Escaneo cancelado",
+      "failed": "Error en el escaneo",
+      "initializing": "Inicializando...",
+      "devicesCount": "{{count}} dispositivos",
+      "stopping": "Deteniendo...",
+      "stopScan": "Detener escaneo",
+      "overallProgress": "Progreso general",
+      "discoveredDevices": "Dispositivos descubiertos",
+      "waitingForDevices": "Esperando dispositivos...",
+      "macUnknown": "MAC desconocida",
+      "activityLog": "Registro de actividad",
+      "waitingForEvents": "Esperando eventos..."
+    },
+    "scanForm": {
+      "title": "Nuevo escaneo de descubrimiento",
+      "description": "Configura e inicia un escaneo de red para encontrar dispositivos VoIP",
+      "subnetLabel": "Subred (CIDR)",
+      "commonSubnets": "Subredes comunes",
+      "scanTypeLabel": "Tipo de escaneo",
+      "autoOnboardLabel": "Incorporación automática",
+      "defaultTemplateLabel": "Plantilla predeterminada",
+      "selectTemplatePlaceholder": "Seleccionar plantilla...",
+      "starting": "Iniciando...",
+      "startDiscovery": "Iniciar descubrimiento"
+    },
+    "scanTypes": {
+      "arp": "Barrido ARP",
+      "sip": "SIP OPTIONS",
+      "http": "Sondeo HTTP",
+      "full": "Completo (ARP + SIP + HTTP)"
+    },
+    "credentials": {
+      "label": "Credenciales de inicio de sesión del teléfono",
+      "custom": "Credenciales personalizadas para el inicio de sesión web del teléfono",
+      "default": "Usa admin/admin predeterminado",
+      "username": "Usuario",
+      "password": "Contraseña"
+    },
+    "history": {
+      "title": "Historial de escaneos",
+      "description": "Resultados de escaneos de descubrimiento anteriores",
+      "empty": "Aún no hay escaneos"
+    },
+    "itemName": {
+      "scans": "escaneos",
+      "devices": "dispositivos"
+    },
+    "resultsDialog": {
+      "title": "Resultados del escaneo",
+      "devicesFound": "{{count}} dispositivos encontrados",
+      "empty": "No hay dispositivos en este escaneo"
+    },
+    "deleteDialog": {
+      "title": "Eliminar registro de escaneo",
+      "descriptionBefore": "Esto eliminará permanentemente el escaneo de",
+      "descriptionAfter": "y sus resultados. Esta acción no se puede deshacer.",
+      "deleting": "Eliminando..."
+    }
+  },
+  "VoipTemplatesPage": {
+    "header": {
+      "title": "Plantillas de configuración",
+      "subtitle": "{{count}} plantillas de aprovisionamiento"
+    },
+    "actions": {
+      "newTemplate": "Nueva plantilla",
+      "edit": "Editar",
+      "duplicate": "Duplicar",
+      "delete": "Eliminar",
+      "cancel": "Cancelar",
+      "update": "Actualizar",
+      "create": "Crear"
+    },
+    "columns": {
+      "template": "Plantilla",
+      "vendor": "Fabricante",
+      "modelPattern": "Patrón de modelo",
+      "phones": "Teléfonos",
+      "updated": "Actualizado"
+    },
+    "badges": {
+      "default": "Predeterminada"
+    },
+    "duplicateName": "{{name}} (Copia)",
+    "errorBanner": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos.",
+    "itemName": "plantillas",
+    "empty": {
+      "title": "No hay plantillas de configuración",
+      "createFirst": "Crear primera plantilla"
+    },
+    "dialog": {
+      "editTitle": "Editar plantilla",
+      "createTitle": "Crear plantilla",
+      "editDescription": "Actualizar la configuración de la plantilla de aprovisionamiento",
+      "createDescription": "Crear una nueva plantilla de configuración de aprovisionamiento"
+    },
+    "vendors": {
+      "generic": "Genérico"
+    },
+    "form": {
+      "nameLabel": "Nombre de la plantilla *",
+      "namePlaceholder": "Configuración predeterminada de Grandstream",
+      "vendorLabel": "Fabricante",
+      "modelPatternLabel": "Patrón de modelo",
+      "modelPatternHelp": "Patrón glob para coincidir con modelos de teléfono",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": "Descripción opcional",
+      "sipSettingsLabel": "Configuración SIP (JSON)",
+      "networkSettingsLabel": "Configuración de red (JSON)",
+      "customSettingsLabel": "Configuración personalizada (JSON)",
+      "invalidJson": "JSON no válido"
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "createFailed": "No se pudo crear la plantilla",
+      "updateFailed": "No se pudo actualizar la plantilla",
+      "deleteFailed": "No se pudo eliminar la plantilla"
+    }
+  },
+  "FleetDashboardPage": {
+    "header": {
+      "title": "Panel de flota",
+      "subtitle": "Vista general de flota VoIP estilo GDMS · teléfonos, aprovisionamiento, cumplimiento de firmware"
+    },
+    "actions": {
+      "discoverDevices": "Descubrir dispositivos",
+      "addPhone": "Agregar teléfono",
+      "viewAllPhones": "Ver todos los teléfonos"
+    },
+    "error": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "stats": {
+      "totalPhones": "Teléfonos totales",
+      "online": "En línea",
+      "offline": "Sin conexión",
+      "sipRegistered": "SIP registrados",
+      "recentlyDiscovered": "Descubiertos recientemente",
+      "last24h": "Últimas 24 h",
+      "pendingProvision": "Aprovisionamiento pendiente"
+    },
+    "lifecycle": {
+      "title": "Ciclo de vida del dispositivo",
+      "description": "Estado actual de todos los dispositivos de la flota",
+      "discovered": "Descubiertos",
+      "onboarding": "Incorporación",
+      "managed": "Administrados",
+      "maintenance": "Mantenimiento",
+      "decommissioned": "Retirados"
+    },
+    "quickActions": {
+      "title": "Acciones rápidas",
+      "runDiscoveryScan": "Ejecutar escaneo de descubrimiento",
+      "reviewDiscovered": "Revisar descubiertos ({{count}})",
+      "configTemplates": "Plantillas de configuración",
+      "firmwareCompliance": "Cumplimiento de firmware",
+      "pbxSystems": "Sistemas PBX"
+    },
+    "distribution": {
+      "vendor": "Distribución por proveedor",
+      "model": "Distribución por modelo",
+      "firmware": "Versiones de firmware",
+      "noData": "Sin datos",
+      "unknown": "Desconocido"
+    },
+    "sip": {
+      "title": "Registro SIP",
+      "registered": "Registrados",
+      "unregistered": "No registrados"
+    }
+  },
+  "CallLogsPage": {
+    "title": "Historial de llamadas",
+    "subtitle": "{{count}} registros de llamadas",
+    "itemName": "llamadas",
+    "error": {
+      "loadFailed": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "stats": {
+      "totalCalls": "Total de llamadas",
+      "inbound": "Entrantes",
+      "outbound": "Salientes",
+      "missed": "Perdidas",
+      "avgDuration": "Duración promedio"
+    },
+    "columns": {
+      "direction": "Dirección",
+      "caller": "Llamante",
+      "destination": "Destino",
+      "status": "Estado",
+      "duration": "Duración",
+      "dateTime": "Fecha / Hora",
+      "pbx": "PBX"
+    },
+    "filters": {
+      "searchPlaceholder": "Buscar llamante, destino...",
+      "directionPlaceholder": "Dirección",
+      "statusPlaceholder": "Estado",
+      "allDirections": "Todas las direcciones",
+      "inbound": "Entrantes",
+      "outbound": "Salientes",
+      "internal": "Internas",
+      "allStatus": "Todos los estados",
+      "answered": "Contestadas",
+      "missed": "Perdidas",
+      "noAnswer": "Sin respuesta",
+      "busy": "Ocupado",
+      "failed": "Fallidas"
+    },
+    "empty": {
+      "noRecords": "No se encontraron registros de llamadas"
+    }
+  },
+  "PBXConfigTab": {
+    "heading": "Instantánea de configuración del PBX",
+    "description": "Todos los datos sincronizados del PBX",
+    "lastSynced": "Última sincronización {{time}}",
+    "actions": {
+      "reSync": "Resincronizar"
+    },
+    "summary": {
+      "extensions": "Extensiones",
+      "trunks": "Troncales",
+      "ringGroups": "Grupos de timbrado",
+      "dids": "DIDs",
+      "timeConditions": "Condiciones horarias",
+      "contacts": "Contactos",
+      "recordings": "Grabaciones",
+      "featureCodes": "Códigos de función",
+      "modules": "Módulos",
+      "outboundRoutes": "Rutas salientes",
+      "announcements": "Anuncios",
+      "certificates": "Certificados",
+      "backupJobs": "Trabajos de copia de seguridad",
+      "amiManagers": "Gestores AMI"
+    }
+  },
+  "SecurityConfigSection": {
+    "blacklist": {
+      "title": "Lista negra ({{count}})"
+    },
+    "certificates": {
+      "title": "Certificados ({{count}})",
+      "columns": {
+        "name": "Nombre",
+        "type": "Tipo",
+        "description": "Descripción",
+        "default": "Predeterminado"
+      },
+      "types": {
+        "selfSigned": "Autofirmado",
+        "letsEncrypt": "Let's Encrypt"
+      }
+    },
+    "adminUsers": {
+      "title": "Usuarios administradores ({{count}})",
+      "columns": {
+        "username": "Usuario",
+        "extRange": "Rango de extensiones",
+        "department": "Departamento"
+      }
+    },
+    "amiManagers": {
+      "title": "Administradores AMI ({{count}})",
+      "columns": {
+        "name": "Nombre",
+        "permit": "Permitir",
+        "read": "Lectura",
+        "write": "Escritura"
+      }
+    }
+  },
+  "SystemConfigSection": {
+    "cards": {
+      "contacts": {
+        "title": "Contactos"
+      },
+      "backupJobs": {
+        "title": "Trabajos de copia de seguridad"
+      },
+      "sipSettings": {
+        "title": "Ajustes SIP/PJSIP ({{count}} parámetros)"
+      },
+      "parking": {
+        "title": "Configuración del estacionamiento de llamadas"
+      },
+      "featureCodes": {
+        "title": "Códigos de función"
+      },
+      "installedModules": {
+        "title": "Módulos instalados"
+      }
+    },
+    "contacts": {
+      "columns": {
+        "name": "Nombre",
+        "extension": "Extensión",
+        "email": "Correo electrónico",
+        "company": "Empresa",
+        "department": "Departamento"
+      }
+    },
+    "backupJobs": {
+      "columns": {
+        "name": "Nombre",
+        "description": "Descripción"
+      }
+    }
+  },
+  "PBXActiveCallsTab": {
+    "title": "Llamadas activas",
+    "subtitle": "Monitoreo de llamadas en tiempo real • Se actualiza cada 5 s",
+    "actions": {
+      "refresh": "Actualizar",
+      "originate": "Originar llamada"
+    },
+    "itemName": "llamadas activas",
+    "empty": {
+      "title": "No hay llamadas activas",
+      "monitoring": "Monitoreando..."
+    }
+  },
+  "PBXTrunksTab": {
+    "heading": "Troncales SIP",
+    "subtitle": "Datos de troncales en vivo del adaptador PBX",
+    "itemName": "troncales",
+    "emptyState": "No se encontraron troncales o el adaptador no está conectado",
+    "actions": {
+      "refresh": "Actualizar",
+      "createTrunk": "Crear troncal"
+    }
+  },
+  "PBXIvrTab": {
+    "heading": "Menús IVR",
+    "description": "Configuraciones de respuesta de voz interactiva",
+    "itemName": "menús IVR",
+    "empty": "No se encontraron menús IVR o el adaptador no está conectado"
+  },
+  "PBXRingGroupsTab": {
+    "heading": "Grupos de timbrado",
+    "configuredCount": "{{n}} grupos de timbrado configurados",
+    "itemName": "grupos de timbrado",
+    "empty": "No se encontraron grupos de timbrado",
+    "create": "Nuevo grupo de timbre"
+  }
+}

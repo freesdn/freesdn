@@ -1,0 +1,134 @@
+{
+  "AlertsPage": {
+    "header": {
+      "title": "告警",
+      "description": "统一告警控制台 · 基于规则的告警、关联事件和安全事件"
+    },
+    "actions": {
+      "markAllRead": "全部标记为已读",
+      "evaluateRules": "评估规则",
+      "correlate": "关联分析",
+      "manageRules": "管理规则"
+    },
+    "stats": {
+      "activeAlerts": "活动告警",
+      "critical": "严重",
+      "firingRules": "触发的规则",
+      "openIncidents": "未关闭事件",
+      "failedSecurity": "安全失败"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败，结果可能不完整。"
+    },
+    "search": {
+      "placeholder": "按标题、描述或来源搜索告警..."
+    },
+    "filters": {
+      "severityPlaceholder": "严重程度",
+      "allSeverities": "所有严重程度",
+      "critical": "严重",
+      "high": "高",
+      "warningMedium": "警告 / 中",
+      "low": "低",
+      "info": "信息",
+      "statusPlaceholder": "状态",
+      "allStatus": "所有状态",
+      "active": "活动",
+      "resolved": "已解决"
+    },
+    "bulk": {
+      "itemName": "告警",
+      "acknowledge": "确认",
+      "resolve": "解决",
+      "suppress1h": "抑制（1 小时）"
+    },
+    "tabs": {
+      "all": "全部（{{count}}）",
+      "rules": "规则告警（{{count}}）",
+      "incidents": "事件（{{count}}）",
+      "security": "安全（{{count}}）"
+    },
+    "columns": {
+      "severity": "严重程度",
+      "source": "来源",
+      "title": "标题",
+      "status": "状态",
+      "time": "时间"
+    },
+    "sources": {
+      "rule": "告警规则",
+      "incident": "事件",
+      "security": "安全"
+    },
+    "empty": {
+      "title": "一切正常",
+      "filtered": "没有告警符合当前筛选条件。",
+      "none": "此类别中没有告警。"
+    },
+    "dataTable": {
+      "itemName": "告警"
+    },
+    "engineCard": {
+      "title": "告警规则引擎",
+      "description": "配置规则、通知渠道（电子邮件、Slack、SMS、Webhook）和严重程度阈值",
+      "activeRules": "{{count}} 条活动规则"
+    },
+    "detail": {
+      "status": "状态",
+      "source": "来源",
+      "description": "描述",
+      "suppress": "抑制",
+      "investigate": "调查",
+      "acknowledge": "确认",
+      "resolve": "解决",
+      "close": "关闭"
+    },
+    "suppress": {
+      "title": "抑制告警",
+      "durationLabel": "时长（分钟）",
+      "reasonLabel": "原因（可选）",
+      "reasonPlaceholder": "维护窗口...",
+      "cancel": "取消",
+      "confirm": "确认抑制"
+    },
+    "ruleDetail": {
+      "occurrences": "发生次数",
+      "notificationsSent": "已发送通知",
+      "acknowledged": "已确认",
+      "resolved": "已解决",
+      "suppressedUntil": "抑制至",
+      "tags": "标签",
+      "details": "详情"
+    },
+    "incidentDetail": {
+      "eventCount": "事件数量",
+      "affectedDevices": "受影响的设备",
+      "assignedTo": "指派给",
+      "resolved": "已解决",
+      "rootCause": "根本原因",
+      "resolutionNotes": "解决说明",
+      "tags": "标签",
+      "linkedEvents": "关联事件",
+      "noLinkedEvents": "没有关联事件。",
+      "unknownEventType": "未知",
+      "pattern": "模式：{{pattern}}"
+    },
+    "securityDetail": {
+      "eventType": "事件类型",
+      "status": "状态",
+      "success": "成功",
+      "failed": "失败",
+      "userEmail": "用户邮箱",
+      "ipAddress": "IP 地址",
+      "userId": "用户 ID",
+      "timestamp": "时间戳",
+      "riskScore": "风险评分",
+      "additionalDetails": "其他详情"
+    },
+    "toast": {
+      "errorTitle": "错误",
+      "operationFailed": "操作失败",
+      "securityReviewUnavailable": "安全事件审核功能尚未提供"
+    }
+  }
+}

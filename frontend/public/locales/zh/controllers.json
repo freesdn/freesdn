@@ -1,0 +1,268 @@
+{
+  "ControllerDetailPage": {
+    "common": {
+      "notAvailable": "不适用",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "yes": "是",
+      "no": "否"
+    },
+    "status": {
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "error": "错误",
+      "syncing": "同步中",
+      "unknown": "未知"
+    },
+    "error": {
+      "notFound": "未找到控制器",
+      "backToControllers": "返回控制器列表"
+    },
+    "actions": {
+      "syncNow": "立即同步",
+      "testConnection": "测试连接"
+    },
+    "test": {
+      "successful": "连接成功",
+      "failed": "连接失败",
+      "failedMessage": "连接测试失败",
+      "version": "版本：{{version}}"
+    },
+    "toast": {
+      "syncFailed": {
+        "title": "同步失败",
+        "description": "无法同步控制器，请重试。"
+      },
+      "deleteFailed": {
+        "title": "删除失败",
+        "description": "无法删除控制器，请重试。"
+      }
+    },
+    "stats": {
+      "devices": "设备",
+      "clients": "客户端",
+      "poePower": "PoE 功率",
+      "ofBudget": "/ {{budget}}",
+      "firmware": "固件",
+      "upToDate": "已是最新"
+    },
+    "tabs": {
+      "overview": "概览",
+      "devices": "设备",
+      "firmware": "固件",
+      "settings": "设置"
+    },
+    "health": {
+      "title": "控制器运行状况",
+      "cpu": "CPU",
+      "memory": "内存",
+      "disk": "磁盘",
+      "uptime": "运行时间",
+      "unavailable": "此控制器版本无法提供运行状况指标。"
+    },
+    "breakdown": {
+      "title": "设备明细",
+      "total": "总计",
+      "online": "在线",
+      "offline": "离线",
+      "switches": "{{count}} 台交换机",
+      "accessPoints": "{{count}} 个 AP",
+      "gateways": "{{count}} 个网关",
+      "clients": "{{count}} 个客户端"
+    },
+    "poe": {
+      "title": "PoE 功率预算",
+      "consumedBudget": "已用 / 预算",
+      "remainingOne": "剩余 {{watts}}，覆盖 1 台 PoE 交换机",
+      "remainingOther": "剩余 {{watts}}，覆盖 {{count}} 台 PoE 交换机"
+    },
+    "sync": {
+      "title": "同步状态",
+      "autoSync": "自动同步",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "interval": "间隔",
+      "lastSync": "上次同步",
+      "duration": "时长",
+      "errorHistory": "错误历史（{{count}}）"
+    },
+    "devices": {
+      "title": "受管设备（{{count}}）",
+      "description": "从此控制器发现的所有设备",
+      "loadError": "加载设备数据失败。",
+      "online": "在线",
+      "offline": "离线",
+      "columns": {
+        "device": "设备",
+        "type": "类型",
+        "model": "型号",
+        "ipAddress": "IP 地址",
+        "cpu": "CPU",
+        "memory": "内存",
+        "uptime": "运行时间",
+        "status": "状态"
+      },
+      "empty": {
+        "title": "尚未发现任何设备",
+        "description": "运行同步以发现此控制器管理的设备。",
+        "action": "运行发现"
+      }
+    },
+    "firmware": {
+      "title": "固件状态",
+      "description": "所有受管设备的固件版本和升级状态",
+      "upToDateCount": "{{count}} 台已是最新",
+      "needsUpgradeOne": "{{count}} 台需要升级",
+      "needsUpgradeOther": "{{count}} 台需要升级",
+      "empty": "无可用的固件数据。运行同步以收集固件信息。",
+      "columns": {
+        "device": "设备",
+        "currentVersion": "当前版本",
+        "latestVersion": "最新版本",
+        "status": "状态"
+      },
+      "badge": {
+        "upgrade": "升级",
+        "current": "最新"
+      }
+    },
+    "connection": {
+      "title": "连接详情",
+      "host": "主机",
+      "port": "端口",
+      "ssl": "SSL/TLS",
+      "verifyCertificate": "验证证书",
+      "connectionMode": "连接模式"
+    },
+    "metadata": {
+      "title": "元数据",
+      "controllerId": "控制器 ID",
+      "type": "类型",
+      "active": "活动",
+      "created": "创建时间",
+      "updated": "更新时间"
+    },
+    "siteMappings": {
+      "title": "站点映射",
+      "description": "将控制器站点映射到 FreeSDN 站点"
+    },
+    "dangerZone": {
+      "title": "危险区域",
+      "description": "删除此控制器还将从 FreeSDN 中移除所有关联设备。",
+      "confirm": "删除控制器 \"{{name}}\"？这还将移除全部 {{count}} 台受管设备。",
+      "delete": "删除控制器"
+    }
+  },
+  "ControllersPage": {
+    "header": {
+      "title": "控制器",
+      "description": "管理 SDN 控制器和网关（Omada、UniFi、OPNsense、pfSense、MikroTik、OpenWrt）。摄像头、PBX 或虚拟机管理程序请使用各自的专用页面。"
+    },
+    "error": {
+      "loadFailed": "加载控制器失败"
+    },
+    "itemNameSingular": "控制器",
+    "itemNamePlural": "控制器",
+    "columns": {
+      "controller": "控制器",
+      "type": "类型",
+      "status": "状态",
+      "devices": "设备",
+      "version": "版本",
+      "lastSync": "上次同步"
+    },
+    "status": {
+      "disabled": "已禁用"
+    },
+    "statusLabels": {
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "error": "错误",
+      "syncing": "同步中",
+      "unreachable": "无法访问"
+    },
+    "lastSync": {
+      "took": "耗时 {{duration}}"
+    },
+    "actions": {
+      "label": "操作",
+      "syncNow": "立即同步",
+      "syncAria": "同步 {{name}}",
+      "menuAria": "{{name}} 的操作",
+      "viewDetails": "查看详情",
+      "editSettings": "编辑设置",
+      "testConnection": "测试连接",
+      "delete": "删除",
+      "export": "导出",
+      "addController": "添加控制器"
+    },
+    "stats": {
+      "totalControllers": {
+        "title": "控制器总数",
+        "description": "已配置的控制器"
+      },
+      "connected": {
+        "title": "已连接",
+        "percentOnline": "{{percent}}% 在线",
+        "noControllers": "无控制器"
+      },
+      "disconnected": {
+        "title": "已断开",
+        "description": "需要处理"
+      },
+      "totalDevices": {
+        "title": "设备总数",
+        "description": "受管设备"
+      }
+    },
+    "filters": {
+      "searchPlaceholder": "按名称、主机或类型搜索控制器…",
+      "allTypes": "所有类型",
+      "allStatuses": "所有状态",
+      "clearFilters": "清除筛选"
+    },
+    "bulkActions": {
+      "syncAll": "全部同步",
+      "delete": "删除"
+    },
+    "toast": {
+      "syncStarted": {
+        "title": "同步已开始",
+        "description": "已启动控制器同步。"
+      },
+      "syncFailed": {
+        "title": "同步失败",
+        "description": "无法同步控制器。"
+      },
+      "connectionSuccessful": {
+        "title": "连接成功",
+        "connected": "已连接",
+        "latency": "延迟：{{latency}}"
+      },
+      "connectionFailed": {
+        "title": "连接失败",
+        "description": "无法连接到控制器。"
+      },
+      "connectionTestFailed": {
+        "title": "连接测试失败",
+        "description": "无法连接到控制器。"
+      },
+      "bulkSyncStarted": {
+        "title": "批量同步已开始",
+        "description": "已为 {{count}} 个控制器启动同步。"
+      },
+      "bulkSyncFailed": {
+        "title": "批量同步失败",
+        "description": "部分控制器同步失败。"
+      },
+      "bulkDelete": {
+        "title": "批量删除",
+        "description": "为安全起见，请逐个删除控制器。"
+      },
+      "controllerDeleted": {
+        "title": "控制器已删除",
+        "description": "控制器已成功移除。"
+      }
+    }
+  }
+}

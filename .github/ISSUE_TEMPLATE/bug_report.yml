@@ -1,0 +1,137 @@
+name: Bug report
+description: Something is broken or behaving incorrectly. Please include reproduction steps.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Before continuing:
+        - **Security vulnerabilities go through the disclosure flow** in [SECURITY.md](../../blob/main/SECURITY.md), NOT this form.
+        - **Searched existing issues?** Please do that first - it's common for the same bug to be reported twice.
+        - **Redact secrets from logs.** API keys, passwords, tokens, customer data must not be pasted here.
+
+  - type: input
+    id: version
+    attributes:
+      label: FreeSDN version
+      description: What does `grep '^version' backend/pyproject.toml` print?
+      placeholder: "26.06.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which module or adapter is affected?
+      options:
+        - api / backend (generic)
+        - frontend (generic)
+        - auth / sessions / SSO
+        - websocket / realtime
+        - omada
+        - opnsense
+        - pfsense
+        - mikrotik
+        - proxmox
+        - hikvision
+        - freepbx
+        - grandstream
+        - unifi
+        - openwrt
+        - module - network
+        - module - firewall (incl. gateway orchestration)
+        - module - cameras
+        - module - voip
+        - module - hypervisor
+        - module - backup
+        - module - access_control
+        - module - ai
+        - module - observability (collector)
+        - migrations / alembic
+        - deploy / docker / nginx
+        - docs
+        - other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How bad is it?
+      options:
+        - Critical (data loss, security regression, app won't start)
+        - High (major feature broken, no workaround)
+        - Medium (feature partially broken, workaround exists)
+        - Low (cosmetic, minor friction)
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One paragraph - what went wrong?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Numbered steps, please. The author needs to reproduce this locally.
+      placeholder: |
+        1. Add an Omada controller via Discovery
+        2. Click "Sync devices"
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include screenshots if it's a UI issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Tail `docker compose logs api worker --tail=200` after reproducing. **Redact secrets before pasting.**
+      render: text
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, browser (if frontend), deploy mode (dev / self-signed / letsencrypt)
+      placeholder: |
+        OS: Ubuntu 24.04
+        Browser: Firefox 134
+        Deploy: ./install.sh --tier pro --domain freesdn.example.com
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have searched existing issues and this is not a duplicate
+          required: true
+        - label: This is NOT a security vulnerability (those go through SECURITY.md, not this form)
+          required: true
+        - label: I have redacted all secrets (API keys, passwords, tokens, customer data) from logs
+          required: true

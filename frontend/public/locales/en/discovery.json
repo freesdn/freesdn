@@ -1,0 +1,166 @@
+{
+  "DiscoveryPage": {
+    "header": {
+      "title": "Device Discovery",
+      "subtitle": "Scan your network, query controllers, or dispatch agent probes to find and adopt devices"
+    },
+    "status": {
+      "live": "Live",
+      "connecting": "Connecting..."
+    },
+    "tabs": {
+      "network": "Network Scan",
+      "controllers": "Controllers",
+      "agent": "Agent Scan",
+      "discovered": "Discovered Hosts",
+      "topology": "Topology"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete.",
+      "startDiscovery": "Failed to start discovery"
+    },
+    "ws": {
+      "discovering": "Discovering {{target}}...",
+      "devices": "devices",
+      "inProgress": "In progress...",
+      "discoveryFailed": "Discovery failed"
+    },
+    "networkScan": {
+      "title": "Network Scan",
+      "description": "Enter IP addresses, CIDR subnets, or ranges to scan your network",
+      "targetsPlaceholder": "e.g. 192.168.1.0/24, 10.0.0.1-50",
+      "fillFromSite": "Fill from site...",
+      "scan": "Scan",
+      "cancel": "Cancel",
+      "wizard": "Wizard",
+      "probeServices": "Probe services",
+      "resolveHostnames": "Resolve hostnames",
+      "ports": "Ports:"
+    },
+    "scanProgress": {
+      "scanning": "Scanning..."
+    },
+    "results": {
+      "discovered": "Discovered",
+      "manageable": "Manageable",
+      "status": "Status",
+      "duration": "Duration",
+      "devicesTitle": "Discovered Devices ({{count}})",
+      "searchPlaceholder": "Search results...",
+      "select": "Select",
+      "selectedOne": "{{count}} device selected",
+      "selectedOther": "{{count}} devices selected",
+      "bulkAdopt": "Bulk Adopt",
+      "emptyTitle": "No devices found",
+      "emptyDescription": "No devices found matching your criteria. Try adjusting your filters or running a new scan."
+    },
+    "ready": {
+      "title": "Ready to Scan",
+      "description": "Enter a target subnet or IP range above and click Scan. The scanner probes ports, identifies services, and classifies devices."
+    },
+    "controllerStats": {
+      "totalFound": "Total Found",
+      "newDevices": "New Devices",
+      "updated": "Updated",
+      "failed": "Failed"
+    },
+    "controllerDiscovery": {
+      "title": "Controller Discovery",
+      "description": "Discover devices from your registered controllers (Omada, Hikvision, OPNsense, pfSense, MikroTik)",
+      "allControllers": "All Controllers",
+      "searchPlaceholder": "Search controllers...",
+      "discovering": "Discovering...",
+      "startDiscovery": "Start Discovery",
+      "refresh": "Refresh"
+    },
+    "controllersTable": {
+      "title": "Controllers ({{count}})",
+      "empty": "No controllers found. Add a controller to start discovering devices.",
+      "never": "Never",
+      "columns": {
+        "name": "Name",
+        "type": "Type",
+        "host": "Host",
+        "status": "Status",
+        "lastSync": "Last Sync",
+        "actions": "Actions"
+      }
+    },
+    "drivers": {
+      "title": "Available Drivers ({{count}})",
+      "description": "Supported device drivers for controller discovery"
+    },
+    "agentScan": {
+      "title": "Agent-Based Deep Scan",
+      "description": "Dispatch scan tasks to remote agents for L2/L3 OS-level probes including ARP, NDP, LLDP, CDP, and passive listening. Provides the most complete device discovery.",
+      "targetPlaceholder": "e.g. 192.168.1.0/24",
+      "agentLabel": "Agent",
+      "agentPlaceholder": "Select an online agent...",
+      "noAgentsTitle": "No online agents",
+      "noAgentsDescription": "Agent scans need an online agent. Install and connect an agent for this site, then try again.",
+      "dispatch": "Dispatch Agent Scan",
+      "inProgress": "Agent scan in progress",
+      "taskId": "Task ID: {{id}}",
+      "l2Probes": {
+        "title": "L2 Probes",
+        "description": "ARP scanning, NDP for IPv6, passive MAC address table collection"
+      },
+      "protocolDiscovery": {
+        "title": "Protocol Discovery",
+        "description": "LLDP, CDP, mDNS, SSDP, and UPnP for automatic device identification"
+      },
+      "deepFingerprint": {
+        "title": "Deep Fingerprint",
+        "description": "OS detection, service version probing, banner grabbing, TLS certificate inspection"
+      }
+    },
+    "toast": {
+      "scanComplete": {
+        "title": "Scan Complete",
+        "description": "Discovered {{count}} devices"
+      },
+      "scanStarted": {
+        "title": "Scan Started"
+      },
+      "scanFailed": {
+        "title": "Scan Failed",
+        "description": "Could not start scan"
+      },
+      "scanCancelled": {
+        "title": "Scan Cancelled"
+      },
+      "cancelFailed": {
+        "title": "Cancel Failed",
+        "description": "Could not cancel scan"
+      },
+      "agentScanStarted": {
+        "title": "Agent Scan Started",
+        "description": "Deep scan dispatched to agent"
+      },
+      "agentScanFailed": {
+        "title": "Agent Scan Failed",
+        "description": "Could not dispatch agent scan"
+      },
+      "agentScanComplete": {
+        "title": "Agent Scan Complete",
+        "description": "Discovered hosts are available in the Discovered tab"
+      },
+      "bulkAdoptComplete": {
+        "title": "Bulk Adopt Complete",
+        "description": "{{succeeded}} adopted, {{failed}} failed"
+      },
+      "bulkAdoptFailed": {
+        "title": "Bulk Adopt Failed",
+        "description": "Could not adopt devices"
+      },
+      "noTargets": {
+        "title": "No targets",
+        "description": "Enter at least one IP, CIDR, or range"
+      },
+      "deviceAdopted": {
+        "title": "Device Adopted",
+        "description": "{{ip}} adopted successfully"
+      }
+    }
+  }
+}

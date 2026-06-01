@@ -1,0 +1,17 @@
+{
+  "//": "Tailscale serve config for the FreeSDN 'private access' addon. Exposes the FreeSDN edge on the tailnet at https://<hostname>.<tailnet>.ts.net with a Tailscale-issued cert. ${TS_CERT_DOMAIN} is substituted by the tailscale image. Proxies to the edge's internal HTTP port (use CADDY_SITE_ADDRESS=:80 on the edge so it serves plain HTTP internally and Tailscale terminates TLS).",
+  "TCP": {
+    "443": {
+      "HTTPS": true
+    }
+  },
+  "Web": {
+    "${TS_CERT_DOMAIN}:443": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://edge:80"
+        }
+      }
+    }
+  }
+}

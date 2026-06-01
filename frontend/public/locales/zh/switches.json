@@ -1,0 +1,671 @@
+{
+  "SwitchesPage": {
+    "actions": {
+      "back": "返回",
+      "refresh": "刷新",
+      "refreshing": "正在刷新...",
+      "retry": "重试",
+      "cancel": "取消",
+      "saveChanges": "保存更改",
+      "update": "更新",
+      "create": "创建",
+      "delete": "删除",
+      "manage": "管理",
+      "export": "导出",
+      "addSwitch": "添加交换机"
+    },
+    "menu": {
+      "configureStp": "配置 STP",
+      "viewMacTable": "查看 MAC 表",
+      "portMirroring": "端口镜像"
+    },
+    "capabilities": {
+      "limitedTitle": "功能受限",
+      "portControlLabel": "端口控制：",
+      "poeControlLabel": "PoE 控制：",
+      "portNotSupported": "此设备不支持端口管理",
+      "poeNotSupported": "此设备不支持 PoE 管理"
+    },
+    "summary": {
+      "ports": "端口",
+      "portsDownDisabled": "{{down}} 个断开，{{disabled}} 个已禁用",
+      "poePower": "PoE 功率",
+      "ofBudget": "总预算 {{budget}}W",
+      "cpu": "CPU",
+      "memory": "内存",
+      "uptime": "运行时间"
+    },
+    "tabs": {
+      "overview": "概览",
+      "ports": "端口",
+      "vlans": "VLAN",
+      "lags": "LAG",
+      "profiles": "配置文件",
+      "network": "网络",
+      "config": "配置",
+      "configHistory": "配置历史",
+      "logs": "日志",
+      "clients": "客户端",
+      "diagnostics": "诊断",
+      "advanced": "高级"
+    },
+    "clients": {
+      "loadFailedTitle": "加载客户端失败",
+      "loadFailedDesc": "无法从控制器获取已连接的客户端。控制器可能无法访问。"
+    },
+    "portDialog": {
+      "title": "配置 {{name}}",
+      "description": "调整端口设置，包括 VLAN、PoE、安全等",
+      "tabs": {
+        "general": "常规",
+        "vlan": "VLAN",
+        "poe": "PoE",
+        "security": "安全"
+      },
+      "portName": "端口名称",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "可选描述",
+      "portEnabled": "启用端口",
+      "flowControl": "流控制",
+      "flowControlHint": "802.3x 暂停帧",
+      "mtuHint": "帧大小（1500 = 标准，9216 = 巨型帧）",
+      "vlanMode": "VLAN 模式",
+      "vlanModeAccess": "接入",
+      "vlanModeTrunk": "中继",
+      "vlanModeHybrid": "混合",
+      "nativeVlan": "本征 VLAN (PVID)",
+      "taggedVlans": "带标签的 VLAN",
+      "taggedVlansPlaceholder": "例如：10, 20, 30",
+      "voiceVlan": "语音 VLAN",
+      "optional": "可选",
+      "poeEnabled": "启用 PoE",
+      "poeMode": "PoE 模式",
+      "poeModeAuto": "自动检测",
+      "poeModeManual": "手动",
+      "poeModeFixed": "固定",
+      "powerLimit": "功率上限 (W)",
+      "priority": "优先级",
+      "priorityLow": "低",
+      "priorityMedium": "中",
+      "priorityHigh": "高",
+      "priorityCritical": "关键",
+      "priorityHint": "当预算受限时，优先级较高的端口将优先供电",
+      "portSecurity": "端口安全",
+      "portSecurityHint": "限制此端口上的 MAC 地址",
+      "macAddressLimit": "MAC 地址上限",
+      "rateLimiting": "速率限制",
+      "rateLimitingHint": "每端口带宽控制",
+      "ingress": "入向 (kbps)",
+      "egress": "出向 (kbps)",
+      "stormControl": "风暴控制",
+      "stormControlHint": "防止广播/组播风暴",
+      "broadcastThreshold": "广播阈值 (pps)",
+      "multicastThreshold": "组播阈值 (pps)",
+      "unknownUnicastThreshold": "未知单播阈值 (pps)",
+      "portIsolation": "端口隔离",
+      "portIsolationHint": "阻止与其他隔离端口的通信"
+    },
+    "lagDialog": {
+      "editTitle": "编辑 LAG",
+      "createTitle": "创建 LAG",
+      "editDescription": "更新链路聚合组设置。",
+      "createDescription": "捆绑端口以增加带宽和冗余。",
+      "name": "名称",
+      "namePlaceholder": "例如 服务器上行链路",
+      "mode": "模式",
+      "modeStatic": "静态",
+      "lacpMode": "LACP 模式",
+      "lacpActive": "主动",
+      "lacpPassive": "被动",
+      "memberPorts": "成员端口",
+      "selected": "已选择：{{ports}}",
+      "none": "无"
+    },
+    "lagDelete": {
+      "title": "删除 LAG",
+      "description": "确定要删除 \"{{name}}\" 吗？成员端口将恢复为单独运行。"
+    },
+    "header": {
+      "title": "交换机与端口",
+      "description": "管理交换机配置、端口设置、VLAN 等"
+    },
+    "errorState": {
+      "message": "无法获取交换机数据。请检查您的连接并重试。"
+    },
+    "stats": {
+      "totalSwitches": "交换机总数",
+      "onlineCount": "{{count}} 在线",
+      "activePorts": "活动端口",
+      "portsUpTotal": "活动端口 / 总数",
+      "poePower": "PoE 功率",
+      "ofBudget": "总预算 {{budget}}W",
+      "portProfiles": "端口配置文件",
+      "portsUsing": "{{count}} 个端口正在使用"
+    },
+    "empty": {
+      "title": "未找到交换机",
+      "description": "尚未发现或配置任何交换机。运行发现扫描或添加控制器以填充此列表。"
+    },
+    "list": {
+      "portsUp": "{{up}}/{{total}} 个端口已连接",
+      "uptime": "运行时间",
+      "cpu": "CPU",
+      "memory": "内存",
+      "poe": "PoE",
+      "firmware": "固件",
+      "update": "更新",
+      "vlans": "VLAN",
+      "portStatus": "端口状态",
+      "portUp": "端口已连接",
+      "portDown": "端口断开",
+      "portDisabled": "端口已禁用"
+    },
+    "toast": {
+      "switchRefreshed": "交换机数据已刷新",
+      "switchRefreshedDesc": "已同步 {{clients}} 个客户端、{{entries}} 条 MAC 表项",
+      "switchRefreshFailed": "刷新交换机数据失败",
+      "ledUpdated": "LED 设置已更新",
+      "ledUpdateFailed": "更新 LED 设置失败",
+      "poeCycleInitiated": "已启动 PoE 重新供电",
+      "poeCycleFailed": "重启 PoE 端口失败",
+      "portBounced": "端口重启成功",
+      "portBounceFailed": "端口重启失败 · 端口可能仍处于禁用状态。请检查端口状态。",
+      "portEnabled": "端口已成功启用",
+      "portDisabled": "端口已成功禁用",
+      "portEnableFailed": "启用端口失败",
+      "portDisableFailed": "禁用端口失败",
+      "poeEnabled": "PoE 已成功启用",
+      "poeDisabled": "PoE 已成功禁用",
+      "poeEnableFailed": "启用 PoE 失败",
+      "poeDisableFailed": "禁用 PoE 失败",
+      "lagCreated": "LAG 创建成功",
+      "lagCreateFailed": "创建 LAG 失败",
+      "lagUpdated": "LAG 更新成功",
+      "lagUpdateFailed": "更新 LAG 失败",
+      "lagDeleted": "LAG 已删除",
+      "lagDeleteFailed": "删除 LAG 失败",
+      "vlanAssignmentsUpdated": "VLAN 分配已更新",
+      "vlanAssignmentsFailed": "更新 VLAN 分配失败",
+      "portConfigSaved": "端口配置已保存",
+      "portConfigSaveFailed": "保存端口配置失败",
+      "profileApplied": "已将配置文件应用到 {{count}} 个端口"
+    },
+    "applyProfile": {
+      "title": "应用端口配置文件",
+      "description": "将已保存的配置文件应用到选定的 {{count}} 个端口。",
+      "profileLabel": "配置文件",
+      "profilePlaceholder": "选择一个配置文件",
+      "noProfiles": "没有可用的配置文件。请先在“配置文件”选项卡中创建一个。",
+      "apply": "应用配置文件"
+    }
+  },
+  "AdvancedTab": {
+    "common": {
+      "apply": "应用",
+      "applying": "正在应用..."
+    },
+    "oui": {
+      "title": "基于 OUI 的 VLAN 分配",
+      "description": "根据已连接设备的 MAC OUI 前缀自动为端口分配 VLAN",
+      "prefixLabel": "OUI 前缀",
+      "vlanLabel": "VLAN",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "例如 IP 电话",
+      "addMapping": "添加映射",
+      "preview": "预览",
+      "previewToast": "预览：将更改 {{count}} 个端口",
+      "previewFailed": "OUI VLAN 预览失败",
+      "appliedToast": "已对 {{count}} 个端口应用 VLAN 更改",
+      "applyFailed": "OUI VLAN 分配失败"
+    },
+    "cli": {
+      "title": "CLI 配置文件",
+      "description": "一次性批量将端口配置应用到多个端口",
+      "profileNameLabel": "配置文件名称",
+      "profileNamePlaceholder": "例如 安全加固",
+      "portRangeLabel": "端口范围（以逗号分隔）",
+      "configLabel": "配置 (JSON)",
+      "keysHint": "键：{{keys}}",
+      "applyProfile": "应用配置文件",
+      "appliedToast": "配置文件已应用：{{succeeded}}/{{total}} 个端口",
+      "invalidJson": "无效的 JSON 配置",
+      "applyFailed": "配置文件应用失败"
+    }
+  },
+  "ConfigHistoryTab": {
+    "empty": {
+      "title": "无配置历史",
+      "description": "尚未记录此交换机的配置版本。检测到更改或触发备份时会创建配置快照。"
+    },
+    "card": {
+      "title": "配置历史",
+      "versionsRecorded": "已记录 {{count}} 个版本"
+    },
+    "table": {
+      "version": "版本",
+      "changeType": "更改类型",
+      "by": "操作者",
+      "firmware": "固件",
+      "date": "日期",
+      "actions": "操作"
+    },
+    "actions": {
+      "diffWithPrev": "与上一版本比较",
+      "close": "关闭"
+    },
+    "diff": {
+      "title": "配置差异：v{{a}} → v{{b}}",
+      "summary": "+{{added}} 新增，-{{removed}} 删除",
+      "sections": " • 区段：{{sections}}",
+      "noChanges": "这些版本之间没有更改。"
+    }
+  },
+  "ConfigTab": {
+    "common": {
+      "status": "状态",
+      "direction": "方向",
+      "on": "开",
+      "off": "关",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "active": "活动",
+      "inactive": "非活动",
+      "yes": "是",
+      "no": "否"
+    },
+    "stp": {
+      "title": "STP / RSTP 配置",
+      "description": "生成树协议设置",
+      "mode": "模式",
+      "priority": "优先级",
+      "helloTime": "Hello 时间",
+      "forwardDelay": "转发延迟",
+      "maxAge": "最大老化时间",
+      "rootBridge": "根桥",
+      "loading": "正在加载 STP 配置..."
+    },
+    "igmp": {
+      "title": "IGMP 侦听",
+      "description": "组播组管理",
+      "enabled": "已启用",
+      "version": "版本",
+      "fastLeave": "快速离开",
+      "querier": "查询器",
+      "queryInterval": "查询间隔",
+      "loading": "正在加载 IGMP 配置..."
+    },
+    "mirror": {
+      "title": "端口镜像",
+      "description": "流量镜像会话",
+      "destinationPort": "目标端口",
+      "portValue": "端口 {{port}}",
+      "sourcePorts": "源端口",
+      "loading": "正在加载镜像配置..."
+    },
+    "qos": {
+      "title": "QoS 配置",
+      "description": "服务质量设置",
+      "mode": "模式",
+      "trustMode": "信任模式",
+      "loading": "正在加载 QoS 配置..."
+    },
+    "dhcp": {
+      "title": "DHCP 侦听",
+      "description": "DHCP 安全过滤",
+      "verifyMac": "验证 MAC",
+      "trustedPorts": "信任端口",
+      "loading": "正在加载 DHCP 侦听配置..."
+    },
+    "acl": {
+      "title": "ACL 规则",
+      "rulesConfigured": "已配置 {{count}} 条规则",
+      "any": "任意",
+      "empty": "未配置 ACL 规则",
+      "columns": {
+        "name": "名称",
+        "action": "动作",
+        "protocol": "协议",
+        "source": "源",
+        "destination": "目标",
+        "direction": "方向",
+        "status": "状态"
+      }
+    }
+  },
+  "DiagnosticsTab": {
+    "targetLabel": "目标 IP / 主机名",
+    "cableTest": {
+      "title": "线缆测试",
+      "description": "测试端口的线缆质量",
+      "portNumber": "端口号",
+      "run": "运行线缆测试",
+      "running": "测试中...",
+      "toastComplete": "线缆测试完成",
+      "toastFailed": "线缆测试失败"
+    },
+    "ping": {
+      "title": "Ping",
+      "description": "从此设备执行 Ping",
+      "placeholder": "例如 8.8.8.8",
+      "run": "运行 Ping",
+      "running": "Ping 中...",
+      "toastComplete": "Ping 测试完成",
+      "toastFailed": "Ping 测试失败"
+    },
+    "traceroute": {
+      "title": "Traceroute",
+      "description": "从此设备跟踪路由",
+      "placeholder": "例如 1.1.1.1",
+      "run": "运行 Traceroute",
+      "running": "跟踪中...",
+      "toastComplete": "Traceroute 完成",
+      "toastFailed": "Traceroute 失败"
+    },
+    "results": {
+      "title": "诊断结果"
+    }
+  },
+  "LagsTab": {
+    "actions": {
+      "createLag": "创建 LAG",
+      "edit": "编辑",
+      "delete": "删除"
+    },
+    "empty": {
+      "title": "没有链路聚合组",
+      "description": "创建 LAG 以捆绑端口，提升带宽和冗余能力。"
+    },
+    "card": {
+      "subtitle": "LAG {{lagId}} • {{mode}}"
+    },
+    "fields": {
+      "memberPorts": "成员端口：",
+      "active": "活动：",
+      "speed": "速率：",
+      "speedValue": "{{value}} Mbps",
+      "mode": "模式："
+    }
+  },
+  "LogsTab": {
+    "alerts": {
+      "title": "活动告警",
+      "count": "{{count}} 条告警",
+      "noDescription": "无描述",
+      "empty": "无活动告警"
+    },
+    "events": {
+      "title": "事件日志",
+      "count": "{{count}} 条最近事件",
+      "empty": "未记录事件",
+      "columns": {
+        "time": "时间",
+        "level": "级别",
+        "category": "类别",
+        "message": "消息",
+        "device": "设备"
+      }
+    }
+  },
+  "NetworkTab": {
+    "lldp": {
+      "title": "LLDP 邻居",
+      "discovered": "已发现 {{count}} 个邻居",
+      "portFallback": "端口 {{index}}",
+      "empty": "未检测到 LLDP 邻居",
+      "columns": {
+        "port": "端口",
+        "neighborDevice": "邻居设备",
+        "neighborPort": "邻居端口",
+        "ip": "IP"
+      }
+    },
+    "routes": {
+      "title": "静态路由",
+      "configured": "已配置 {{count}} 条路由",
+      "empty": "未配置静态路由",
+      "status": {
+        "active": "活动",
+        "disabled": "已禁用"
+      },
+      "columns": {
+        "destination": "目标地址",
+        "mask": "掩码",
+        "gateway": "网关",
+        "metric": "度量值",
+        "status": "状态"
+      }
+    },
+    "dhcp": {
+      "title": "DHCP 配置",
+      "empty": "无可用的 DHCP 配置"
+    },
+    "mac": {
+      "title": "MAC 地址表",
+      "entries": "{{count}} 条记录",
+      "empty": "无 MAC 表记录",
+      "columns": {
+        "macAddress": "MAC 地址",
+        "vlan": "VLAN",
+        "port": "端口",
+        "type": "类型"
+      }
+    }
+  },
+  "OverviewTab": {
+    "portStatus": {
+      "title": "端口状态",
+      "description": "活动链路分布",
+      "up": "在线",
+      "down": "离线",
+      "disabled": "已禁用",
+      "linkSpeeds": "链路速率"
+    },
+    "poe": {
+      "title": "PoE 功率分析",
+      "description": "预算使用与分布",
+      "ofBudget": "共 {{budget}}W 预算（{{pct}}%）",
+      "delivering": "供电中",
+      "idle": "空闲",
+      "off": "PoE 关闭",
+      "topConsumers": "主要耗电设备"
+    },
+    "traffic": {
+      "title": "流量摘要",
+      "description": "端口吞吐量汇总",
+      "totalTx": "总发送",
+      "totalRx": "总接收",
+      "topPorts": "流量最高的端口",
+      "noData": "暂无端口数据"
+    },
+    "device": {
+      "title": "设备信息",
+      "description": "硬件与网络详情",
+      "model": "型号",
+      "vendor": "厂商",
+      "serialNumber": "序列号",
+      "macAddress": "MAC 地址",
+      "ipAddress": "IP 地址",
+      "ipv6Address": "IPv6 地址",
+      "controllerIp": "控制器 IP",
+      "firmware": "固件",
+      "hardwareVersion": "硬件版本",
+      "totalPorts": "端口总数",
+      "site": "站点",
+      "vlans": "VLAN",
+      "clients": "客户端",
+      "fanStatus": "风扇状态",
+      "status": "状态",
+      "temperature": "温度",
+      "updateAvailable": "有可用的固件更新",
+      "locatorLed": "定位 LED",
+      "ledActivating": "激活中...",
+      "flashLed": "闪烁 LED"
+    },
+    "lldp": {
+      "title": "已连接设备 (LLDP)",
+      "discovered_one": "发现 {{count}} 个邻居",
+      "discovered_other": "发现 {{count}} 个邻居",
+      "localPort": "本地端口",
+      "neighbor": "邻居",
+      "remotePort": "远程端口",
+      "speed": "速率",
+      "poe": "PoE"
+    }
+  },
+  "PortsTab": {
+    "toolbar": {
+      "searchPlaceholder": "搜索端口...",
+      "applyProfile": "应用配置 ({{count}})",
+      "clearSelection": "清除选择"
+    },
+    "portStatus": {
+      "title": "端口状态",
+      "description": "点击端口进行配置 • Shift+点击可多选"
+    },
+    "legend": {
+      "speed": {
+        "fastEthernet": "10/100 Mbps",
+        "gigabit": "1000 Mbps",
+        "multiGig": "2.5 Gbps",
+        "tenGig": "10 Gbps",
+        "disabled": "已禁用",
+        "disconnected": "已断开"
+      },
+      "icons": {
+        "poeDelivering": "PoE 供电中",
+        "lagMember": "LAG 成员",
+        "sfp": "SFP",
+        "uplink": "上行链路"
+      }
+    },
+    "tooltip": {
+      "status": "状态",
+      "enabledIdle": "已启用（空闲）",
+      "off": "关闭",
+      "module": "模块",
+      "vendor": "厂商",
+      "wavelength": "波长",
+      "temp": "温度",
+      "power": "功率"
+    },
+    "table": {
+      "port": "端口",
+      "status": "状态",
+      "connection": "连接",
+      "speed": "速率",
+      "type": "类型",
+      "txSum": "TX 合计",
+      "rxSum": "RX 合计",
+      "actions": "操作",
+      "trunk": "中继",
+      "access": "接入"
+    },
+    "poe": {
+      "enabled": "已启用",
+      "off": "关闭"
+    },
+    "traffic": {
+      "txBytes": "TX 字节",
+      "txPackets": "TX 数据包",
+      "txErrors": "TX 错误",
+      "rxBytes": "RX 字节",
+      "rxPackets": "RX 数据包",
+      "rxErrors": "RX 错误",
+      "utilization": "利用率"
+    },
+    "actions": {
+      "configure": "配置",
+      "bouncePort": "重启端口",
+      "poePowerCycle": "PoE 电源重启",
+      "disable": "禁用",
+      "enable": "启用",
+      "disablePoe": "禁用 PoE",
+      "enablePoe": "启用 PoE",
+      "controlNotSupported": "不支持端口控制"
+    }
+  },
+  "ProfilesTab": {
+    "actions": {
+      "createProfile": "创建配置文件",
+      "edit": "编辑",
+      "duplicate": "复制",
+      "delete": "删除"
+    },
+    "empty": {
+      "title": "没有端口配置文件",
+      "description": "创建端口配置文件以快速配置多个端口。"
+    },
+    "fields": {
+      "profileType": "配置文件类型：",
+      "portsUsing": "使用中的端口："
+    }
+  },
+  "SwitchClientsTab": {
+    "stats": {
+      "totalClients": "客户端总数",
+      "wired": "有线",
+      "wireless": "无线",
+      "totalTraffic": "总流量",
+      "downloadUpload": "下载 / 上传"
+    },
+    "columns": {
+      "client": "客户端",
+      "ipAddress": "IP 地址",
+      "macAddress": "MAC 地址",
+      "connection": "连接",
+      "vlan": "VLAN",
+      "signal": "信号",
+      "activity": "活动",
+      "traffic": "流量",
+      "uptime": "运行时间",
+      "lastSeen": "最后在线"
+    },
+    "connectionType": {
+      "wired": "有线",
+      "wireless": "无线"
+    },
+    "filters": {
+      "all": "全部",
+      "wired": "有线",
+      "wireless": "无线"
+    },
+    "unknownDevice": "未知设备",
+    "port": "端口 {{port}}",
+    "dbm": "{{value}} dBm",
+    "searchPlaceholder": "按名称、IP、MAC、SSID 搜索客户端...",
+    "itemName": "客户端",
+    "empty": {
+      "title": "无已连接的客户端",
+      "description": "当前没有客户端连接到此交换机。设备连接后客户端将显示在此处。"
+    }
+  },
+  "VlansTab": {
+    "view": {
+      "matrix": "矩阵视图",
+      "list": "列表视图"
+    },
+    "matrix": {
+      "changes": "{{count}} 项更改",
+      "title": "VLAN 到端口分配矩阵",
+      "toggleHint": "点击单元格切换：",
+      "untagged": "无标记（原生）",
+      "tagged": "已标记",
+      "emptyExcluded": "空 = 排除",
+      "portColumn": "端口",
+      "portRow": "端口 {{index}}"
+    },
+    "actions": {
+      "discard": "放弃",
+      "applyChanges": "应用更改",
+      "viewPorts": "查看端口"
+    },
+    "list": {
+      "title": "VLAN 配置",
+      "description": "分配到此交换机端口的 VLAN",
+      "portCounts": "{{untagged}} 个无标记，{{tagged}} 个已标记",
+      "dhcp": "DHCP",
+      "default": "默认",
+      "vlanName": "VLAN {{vid}}"
+    }
+  }
+}

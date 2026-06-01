@@ -1,0 +1,253 @@
+{
+  "AccessPointsPage": {
+    "common": {
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "active": "活动",
+      "default": "默认",
+      "yes": "是",
+      "no": "否",
+      "unknown": "未知",
+      "unknownLower": "未知",
+      "auto": "自动",
+      "ch": "信道",
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "保存中...",
+      "apply": "应用",
+      "applying": "应用中..."
+    },
+    "toast": {
+      "errorTitle": "错误",
+      "operationFailed": "操作失败",
+      "radioSettingsUpdated": "射频设置已更新",
+      "radioSettingsUpdatedDesc": "更改可能需要一些时间才能应用到所有 AP。"
+    },
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "adopting": "纳管中"
+    },
+    "header": {
+      "title": "接入点",
+      "description": "管理和监控网络中的无线接入点",
+      "export": "导出"
+    },
+    "stats": {
+      "totalApsTitle": "AP 总数",
+      "totalApsDescription": "已配置射频",
+      "onlineTitle": "在线",
+      "onlineDescription": "{{pct}}% 可达",
+      "noAps": "无 AP",
+      "offlineTitle": "离线",
+      "offlineDescription": "需要关注",
+      "totalClientsTitle": "客户端总数",
+      "totalClientsDescription": "当前已连接"
+    },
+    "list": {
+      "loadError": "无法加载接入点。请检查网络连接后重试。",
+      "searchPlaceholder": "按名称、型号、MAC 或 IP 搜索…",
+      "allSitesPlaceholder": "所有站点",
+      "allSites": "所有站点",
+      "allStatusesPlaceholder": "所有状态",
+      "allStatuses": "所有状态",
+      "clearFilters": "清除筛选",
+      "loading": "正在加载接入点...",
+      "emptyTitle": "未找到接入点",
+      "emptyDescription": "运行发现以查找网络中的接入点。"
+    },
+    "card": {
+      "clients": "客户端",
+      "radios": "射频",
+      "uptime": "运行时间"
+    },
+    "detail": {
+      "back": "返回",
+      "refresh": "刷新"
+    },
+    "actions": {
+      "rename": "重命名",
+      "locateFlashLed": "定位（闪烁 LED）",
+      "locate": "定位",
+      "reboot": "重启",
+      "upgrade": "升级",
+      "upgradeFirmware": "升级固件",
+      "forget": "移除",
+      "forgetDevice": "移除设备",
+      "viewDetails": "查看详情",
+      "reAdopt": "重新纳管",
+      "ledOn": "LED 开",
+      "ledOff": "LED 关"
+    },
+    "summary": {
+      "clients": "客户端",
+      "cpuMemory": "CPU / 内存",
+      "cpu": "CPU",
+      "mem": "内存",
+      "uptime": "运行时间",
+      "radios": "射频",
+      "noRadios": "无射频",
+      "controls": "控制",
+      "led": "LED",
+      "mesh": "Mesh"
+    },
+    "tabs": {
+      "overview": "概览",
+      "radios": "射频",
+      "ssids": "SSID",
+      "clients": "客户端",
+      "configuration": "配置",
+      "rfHealth": "射频健康",
+      "rogueAps": "非法 AP",
+      "radioSettings": "射频设置"
+    },
+    "overview": {
+      "deviceInformation": "设备信息",
+      "model": "型号",
+      "vendor": "厂商",
+      "macAddress": "MAC 地址",
+      "ipAddress": "IP 地址",
+      "serialNumber": "序列号",
+      "firmware": "固件",
+      "site": "站点",
+      "mesh": "Mesh",
+      "radioSummary": "射频摘要",
+      "noRadioData": "无可用射频数据"
+    },
+    "radio": {
+      "width": "频宽",
+      "txPower": "发射功率",
+      "clients": "客户端",
+      "channel": "信道",
+      "configure": "配置",
+      "bandRadio": "{{band}} 射频",
+      "noDataForAp": "此接入点无可用射频数据。"
+    },
+    "ssids": {
+      "overridesTitle": "SSID 覆盖",
+      "overridesCardDescription": "每个 AP 的 SSID 配置覆盖",
+      "overridesTabDescription": "每个 AP 的 SSID 覆盖允许为此特定接入点自定义网络名称和设置",
+      "noneConfigured": "未配置 SSID 覆盖",
+      "noneForAp": "此 AP 未配置 SSID 覆盖",
+      "colSsid": "SSID",
+      "colGlobalName": "全局名称",
+      "colSecurity": "安全",
+      "colBands": "频段",
+      "colVlan": "VLAN",
+      "colStatus": "状态"
+    },
+    "clients": {
+      "title": "已连接客户端",
+      "description": "当前连接到此接入点的设备",
+      "loading": "正在加载客户端...",
+      "emptyTitle": "当前无已连接客户端",
+      "emptyDescription": "当前连接到此接入点的设备将显示在此处。",
+      "colName": "名称",
+      "colMac": "MAC",
+      "colIp": "IP",
+      "colSsid": "SSID",
+      "colBand": "频段",
+      "colSignal": "信号",
+      "colRate": "速率",
+      "colUptime": "运行时间"
+    },
+    "config": {
+      "lanPort": "LAN 端口",
+      "lanPortDescription": "以太网上行链路配置",
+      "vlanEnabled": "已启用 VLAN",
+      "vlanId": "VLAN ID",
+      "poe": "PoE",
+      "powered": "已供电",
+      "location": "位置",
+      "locationDescription": "地理位置",
+      "latitude": "纬度",
+      "longitude": "经度",
+      "noLocationSet": "未设置位置",
+      "firmware": "固件",
+      "currentVersion": "当前版本",
+      "updateAvailableLabel": "可用更新",
+      "updateAvailable": "可用更新",
+      "upToDate": "已是最新",
+      "quickActions": "快捷操作"
+    },
+    "rfHealth": {
+      "noController": "没有可用于射频数据的控制器。",
+      "loadError": "加载射频健康数据失败。控制器可能无法访问，或此功能可能不受支持。",
+      "noChannelDataTitle": "无信道数据",
+      "noChannelDataDescription": "信道利用率数据尚不可用。此数据在 AP 运行期间收集。",
+      "utilization": "利用率",
+      "interference": "干扰",
+      "aps": "AP",
+      "clients": "客户端",
+      "channelHeatmap": "信道热力图",
+      "channelHeatmapDescription": "各接入点信道利用率的可视化概览",
+      "ap": "AP",
+      "noData": "无数据",
+      "low": "低",
+      "high": "高",
+      "utilizationByApTitle": "按 AP 的信道利用率",
+      "utilizationByApDescription": "每个接入点和频段的射频环境",
+      "colBand": "频段",
+      "colChannel": "信道",
+      "colWidth": "频宽",
+      "noiseFloor": "噪声基底"
+    },
+    "rogueAps": {
+      "noController": "没有可用于非法 AP 检测的控制器。",
+      "loadError": "加载非法 AP 数据失败。控制器可能无法访问，或此功能可能不受支持。",
+      "noneTitle": "未检测到非法 AP",
+      "noneDescription": "未检测到任何未授权或相邻的接入点。您的网络看起来很干净。",
+      "rogueApsLabel": "非法 AP",
+      "neighborApsLabel": "相邻 AP",
+      "knownApsLabel": "已知 AP",
+      "detectedTitle": "已检测到的接入点",
+      "detectedDescription": "由您的 AP 检测到的未授权和相邻接入点",
+      "colClassification": "分类",
+      "colBssid": "BSSID",
+      "colSsid": "SSID",
+      "colChannel": "信道",
+      "colBand": "频段",
+      "colSignal": "信号",
+      "colSecurity": "安全",
+      "colDetectedBy": "检测者",
+      "colLastSeen": "最后发现",
+      "hidden": "隐藏"
+    },
+    "radioSettings": {
+      "noController": "没有可用于射频设置的控制器。",
+      "loadError": "加载射频设置失败。控制器可能无法访问，或此功能可能不受支持。",
+      "noneTitle": "无射频设置",
+      "noneDescription": "此控制器没有可用的射频设置。",
+      "fastRoamingTitle": "快速漫游 (802.11k/r/v)",
+      "fastRoamingDescription": "启用接入点之间的无缝客户端切换。推荐用于 VoIP、视频和移动设备。",
+      "dot11rTitle": "802.11r（快速 BSS 切换）",
+      "dot11rDescription": "预先向相邻 AP 验证客户端，实现近乎即时的切换（<50ms）",
+      "dot11kTitle": "802.11k（无线电资源管理）",
+      "dot11kDescription": "为客户端提供 AP 邻居报告，以加快漫游决策",
+      "dot11vTitle": "802.11v（BSS 切换管理）",
+      "dot11vDescription": "允许 AP 向客户端推荐更优的 AP，以实现负载均衡和漫游",
+      "applyingChanges": "正在应用更改..."
+    },
+    "renameDialog": {
+      "title": "重命名接入点",
+      "description": "为此接入点输入新名称",
+      "nameLabel": "名称",
+      "namePlaceholder": "接入点名称"
+    },
+    "radioDialog": {
+      "title": "配置 {{band}} 射频",
+      "description": "调整此接入点的射频设置",
+      "channelOption": "信道 {{ch}}",
+      "txPowerLabel": "发射功率 (dBm)"
+    },
+    "confirm": {
+      "rebootTitle": "重启接入点",
+      "upgradeTitle": "升级固件",
+      "forgetTitle": "移除接入点",
+      "rebootDescription": "确定要重启 \"{{name}}\" 吗？已连接的客户端将暂时断开。",
+      "upgradeDescription": "确定要升级 \"{{name}}\" 的固件吗？设备将在此过程中重启。",
+      "forgetDescription": "确定要移除 \"{{name}}\" 吗？这将从控制器中删除该设备。",
+      "forgetDescriptionDetail": "确定要移除 \"{{name}}\" 吗？这将从控制器中删除该设备。您需要重新纳管才能再次管理它。"
+    }
+  }
+}

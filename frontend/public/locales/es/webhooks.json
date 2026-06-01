@@ -1,0 +1,129 @@
+{
+  "WebhooksPage": {
+    "validation": {
+      "nameRequired": "El nombre es obligatorio",
+      "urlRequired": "La URL es obligatoria",
+      "urlInvalid": "Debe ser una URL válida"
+    },
+    "create": {
+      "title": "Crear webhook",
+      "submit": "Crear webhook"
+    },
+    "fields": {
+      "name": {
+        "label": "Nombre",
+        "placeholder": "Mi webhook"
+      },
+      "url": {
+        "label": "URL"
+      },
+      "secret": {
+        "label": "Secreto (opcional)",
+        "placeholder": "Secreto de firma HMAC"
+      },
+      "eventTypes": {
+        "label": "Tipos de evento",
+        "add": "Agregar",
+        "description": "Déjelo vacío para recibir todos los eventos"
+      },
+      "enabled": "Habilitado",
+      "verifySsl": "Verificar TLS"
+    },
+    "deliveries": {
+      "title": "Historial de entregas",
+      "empty": "Aún no hay entregas",
+      "attempt": "Intento {{n}}",
+      "response": "Respuesta: {{code}}"
+    },
+    "toast": {
+      "error": "Error",
+      "success": "Éxito",
+      "unknownError": "Error desconocido",
+      "createFailed": "No se pudo crear el webhook: {{detail}}",
+      "updateFailed": "No se pudo actualizar el webhook: {{detail}}",
+      "deleteFailed": "No se pudo eliminar el webhook: {{detail}}",
+      "testDelivered": "¡Webhook de prueba entregado! Respuesta: {{status}}, Tiempo: {{time}}ms",
+      "testFailed": "Webhook de prueba {{status}}: {{error}}",
+      "testRequestFailed": "No se pudo probar el webhook: {{detail}}"
+    },
+    "columns": {
+      "webhook": "Webhook",
+      "status": "Estado",
+      "events": "Eventos",
+      "successful": "Correctas",
+      "failures": "Fallos",
+      "lastTriggered": "Última activación",
+      "active": "Activo"
+    },
+    "status": {
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado"
+    },
+    "events": {
+      "all": "Todos los eventos",
+      "typeOne": "{{count}} tipo",
+      "typeOther": "{{count}} tipos"
+    },
+    "never": "Nunca",
+    "actions": {
+      "menuLabel": "Acciones para {{name}}",
+      "test": "Probar webhook",
+      "viewDeliveries": "Ver entregas",
+      "deleteConfirm": "¿Está seguro de que desea eliminar este webhook?",
+      "delete": "Eliminar"
+    },
+    "header": {
+      "title": "Webhooks",
+      "description": "Administre las suscripciones de webhooks salientes para los eventos de FreeSDN.",
+      "export": "Exportar",
+      "addWebhook": "Agregar webhook"
+    },
+    "errorState": {
+      "message": "No se pudieron cargar los webhooks"
+    },
+    "stats": {
+      "total": {
+        "title": "Total de webhooks",
+        "description": "Puntos de conexión configurados"
+      },
+      "enabled": {
+        "title": "Habilitados",
+        "active": "{{percent}}% activos",
+        "none": "Sin webhooks"
+      },
+      "failing": {
+        "title": "Con fallos",
+        "description": "Tienen fallos recientes"
+      },
+      "deliveries": {
+        "title": "Entregas",
+        "description": "Correctas históricas"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar webhooks por nombre o URL…",
+      "allStatuses": "Todos los estados",
+      "failing": "Con fallos",
+      "clearFilters": "Borrar filtros"
+    },
+    "itemName": "webhook",
+    "itemNamePlural": "webhooks",
+    "bulk": {
+      "test": {
+        "label": "Probar",
+        "title": "Prueba masiva",
+        "description": "Prueba masiva: aún no implementada."
+      },
+      "disable": {
+        "label": "Deshabilitar",
+        "title": "Deshabilitación masiva",
+        "description": "Deshabilitación masiva: aún no implementada."
+      },
+      "delete": {
+        "label": "Eliminar",
+        "title": "Eliminación masiva",
+        "description": "Por seguridad, elimine los webhooks de forma individual."
+      }
+    }
+  }
+}

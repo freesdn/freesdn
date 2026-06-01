@@ -1,0 +1,3797 @@
+{
+  "FirewallPage": {
+    "header": {
+      "title": "Firewall",
+      "subtitle": "Network security · gateway integrations, rules, NAT, VPN, and IDS/IPS"
+    },
+    "tabs": {
+      "dashboard": "Dashboard",
+      "gateways": "Gateways",
+      "rules": "Rules",
+      "nat": "NAT",
+      "vpn": "VPN",
+      "ids": "IDS/IPS",
+      "logs": "Logs",
+      "orchestration": "Orchestration"
+    },
+    "actions": {
+      "addGateway": "Add Gateway",
+      "testConnection": "Test Connection",
+      "saveChanges": "Save Changes",
+      "refresh": "Refresh",
+      "viewDetails": "View Details",
+      "editGateway": "Edit Gateway",
+      "syncNow": "Sync Now",
+      "delete": "Delete",
+      "editRule": "Edit Rule",
+      "viewLogs": "View Logs",
+      "deleteRule": "Delete Rule",
+      "viewTraffic": "View Traffic",
+      "settings": "Settings",
+      "acknowledge": "Acknowledge"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "action": {
+      "allow": "Allow",
+      "pass": "Pass",
+      "deny": "Deny",
+      "block": "Block",
+      "reject": "Reject",
+      "log": "Log"
+    },
+    "vpnStatus": {
+      "up": "Connected",
+      "down": "Disconnected",
+      "connecting": "Connecting",
+      "error": "Error"
+    },
+    "severity": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low",
+      "info": "Info"
+    },
+    "syncStatus": {
+      "success": "Synced",
+      "failed": "Failed",
+      "syncing": "Syncing",
+      "never": "Never",
+      "idle": "Idle"
+    },
+    "alertStatus": {
+      "acknowledged": "Acknowledged",
+      "open": "Open"
+    },
+    "addDialog": {
+      "title": "Add Firewall Gateway",
+      "description": "Integrate an OPNsense, pfSense, MikroTik, or OpenWRT firewall to manage it from FreeSDN."
+    },
+    "editDialog": {
+      "title": "Edit Gateway · {{name}}",
+      "description": "Update connection settings, credentials, or sync configuration."
+    },
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "e.g. Main Office Firewall",
+      "firewallSoftware": "Firewall Software",
+      "selectFirewallType": "Select firewall type",
+      "hostIp": "Host / IP",
+      "hostPlaceholder": "e.g. 192.168.1.1 or fw.example.com",
+      "port": "Port",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "API key from System → Users → API keys",
+      "apiKeyKeepPlaceholder": "Leave blank to keep existing key",
+      "apiSecret": "API Secret",
+      "apiSecretPlaceholder": "API secret",
+      "apiSecretKeepPlaceholder": "Leave blank to keep existing secret",
+      "username": "Username",
+      "usernamePlaceholder": "admin",
+      "password": "Password",
+      "passwordPlaceholder": "Password",
+      "keepExistingPlaceholder": "Leave blank to keep existing",
+      "keepCurrentCredentials": "Leave empty to keep current credentials",
+      "descriptionOptional": "Description (optional)",
+      "descriptionPlaceholder": "Brief description",
+      "siteLocationOptional": "Site / Location (optional)",
+      "siteLocation": "Site / Location",
+      "assignToSite": "Assign to a site...",
+      "noSite": "No site",
+      "siteBindHint": "Bind this gateway to a site for cross-device referencing",
+      "siteBindHintOmada": "Bind to a site for cross-device referencing with Omada and other controllers",
+      "cannotBeChanged": "(cannot be changed)",
+      "verifySsl": "Verify SSL certificate",
+      "syncConfiguration": "Sync Configuration",
+      "enableAutoSync": "Enable automatic sync",
+      "syncInterval": "Sync Interval (seconds)"
+    },
+    "vendorFilter": {
+      "all": "All Vendors"
+    },
+    "stats": {
+      "gateways": "Gateways",
+      "online": "Online",
+      "offline": "Offline",
+      "rules": "Rules",
+      "vpnUp": "VPN Up",
+      "idsAlerts": "IDS Alerts",
+      "firewallRules": "Firewall Rules",
+      "natRules": "NAT Rules",
+      "vpnConnected": "VPN Connected",
+      "totalGateways": "Total Gateways",
+      "syncOk": "Sync OK",
+      "totalTunnels": "Total Tunnels",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "errors": "Errors",
+      "totalAlerts": "Total Alerts",
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "unacknowledged": "Unacknowledged"
+    },
+    "dashboard": {
+      "gatewayIntegrations": "Gateway Integrations",
+      "emptyTitle": "No firewalls connected",
+      "emptyDescription": "Add an OPNsense, pfSense, or MikroTik gateway to start managing your network security.",
+      "securityOverview": "Security Overview",
+      "recentAlerts": "Recent Alerts",
+      "recentTraffic": "Recent Traffic"
+    },
+    "gateways": {
+      "title": "Gateways",
+      "searchPlaceholder": "Search gateways..."
+    },
+    "rules": {
+      "title": "Firewall Rules",
+      "searchPlaceholder": "Search rules..."
+    },
+    "nat": {
+      "title": "NAT Rules",
+      "searchPlaceholder": "Search NAT rules..."
+    },
+    "vpn": {
+      "title": "VPN Tunnels",
+      "description": "Site-to-site and remote access VPN connections",
+      "searchPlaceholder": "Search VPN tunnels..."
+    },
+    "ids": {
+      "title": "IDS/IPS Alerts",
+      "description": "Intrusion detection and prevention alerts",
+      "searchPlaceholder": "Search IDS alerts..."
+    },
+    "logs": {
+      "title": "Firewall Logs",
+      "searchPlaceholder": "Search logs by IP, protocol..."
+    },
+    "gatewayColumns": {
+      "gateway": "Gateway",
+      "type": "Type",
+      "site": "Site",
+      "address": "Address",
+      "status": "Status",
+      "sync": "Sync",
+      "lastSeen": "Last Seen"
+    },
+    "ruleColumns": {
+      "rule": "Rule",
+      "source": "Source",
+      "destination": "Destination",
+      "protocol": "Protocol",
+      "action": "Action",
+      "status": "Status",
+      "hits": "Hits"
+    },
+    "natColumns": {
+      "rule": "Rule",
+      "type": "Type",
+      "original": "Original",
+      "translated": "Translated",
+      "protocol": "Protocol",
+      "interface": "Interface",
+      "status": "Status"
+    },
+    "vpnColumns": {
+      "tunnel": "Tunnel",
+      "local": "Local",
+      "remote": "Remote",
+      "status": "Status",
+      "traffic": "Traffic",
+      "connected": "Connected"
+    },
+    "alertColumns": {
+      "severity": "Severity",
+      "time": "Time",
+      "alert": "Alert",
+      "source": "Source",
+      "destination": "Destination",
+      "status": "Status"
+    },
+    "logColumns": {
+      "time": "Time",
+      "action": "Action",
+      "proto": "Proto",
+      "source": "Source",
+      "destination": "Destination",
+      "bytes": "Bytes"
+    },
+    "itemNames": {
+      "gateways": "gateways",
+      "firewallRules": "firewall rules",
+      "natRules": "NAT rules",
+      "vpnTunnels": "VPN tunnels",
+      "idsAlerts": "IDS alerts",
+      "alerts": "alerts",
+      "logEntries": "log entries"
+    },
+    "confirm": {
+      "deleteGateway": "Delete gateway \"{{name}}\"? This cannot be undone.",
+      "deleteRule": "Delete rule \"{{name}}\"?"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "operationFailed": "Operation failed",
+      "connectionOk": "Connection OK",
+      "connectionFailed": "Connection failed",
+      "testFailed": "Test failed",
+      "connectionTestFailed": "Connection test failed",
+      "gatewayFallback": "Gateway"
+    }
+  },
+  "MikroTikFirewallTab": {
+    "ruleFallback": "rule",
+    "dragToReorder": "Drag to reorder rule",
+    "no": "No",
+    "yes": "Yes",
+    "loading": "Loading RouterOS firewall…",
+    "aria": {
+      "editFilterRule": "Edit firewall rule {{label}}",
+      "deleteFilterRule": "Delete firewall rule {{label}}",
+      "editNatRule": "Edit NAT rule {{label}}",
+      "deleteNatRule": "Delete NAT rule {{label}}"
+    },
+    "toast": {
+      "filterCreateStaged": "Filter rule create staged",
+      "filterCreateFailed": "{{ctx}}Failed to stage filter create",
+      "filterUpdateStaged": "Filter rule update staged",
+      "filterUpdateFailed": "{{ctx}}Failed to stage filter update",
+      "filterDeleteStaged": "Filter rule delete staged",
+      "filterDeleteFailed": "{{ctx}}Failed to stage filter delete",
+      "reorderStaged": "Filter reorder staged",
+      "reorderFailed": "{{ctx}}Failed to stage reorder, reverted to server order",
+      "natCreateStaged": "NAT rule create staged",
+      "natCreateFailed": "{{ctx}}Failed to stage NAT create",
+      "natUpdateStaged": "NAT rule update staged",
+      "natUpdateFailed": "{{ctx}}Failed to stage NAT update",
+      "natDeleteStaged": "NAT rule delete staged",
+      "natDeleteFailed": "{{ctx}}Failed to stage NAT delete",
+      "cannotUpdate": "Cannot update rule",
+      "missingRuleId": "Rule has no RouterOS id (.id missing).",
+      "cannotDelete": "Cannot delete",
+      "missingRowId": "Row has no RouterOS id (.id missing)."
+    },
+    "kind": {
+      "filterRule": "filter rule",
+      "natRule": "NAT rule"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "discardReorder": "Discard reorder",
+      "stageReorder": "Stage reorder",
+      "addRule": "Add rule",
+      "addNatRule": "Add NAT rule",
+      "cancel": "Cancel",
+      "stageUpdate": "Stage update",
+      "stageCreate": "Stage create",
+      "stageDelete": "Stage delete"
+    },
+    "filter": {
+      "title": "Filter rules",
+      "description": "``/ip/firewall/filter`` chains · drag the grip to reorder, then stage the new order",
+      "loadError": "Failed to load filter rules",
+      "emptyTitle": "No filter rules",
+      "emptyDescription": "The /ip/firewall/filter chain is empty."
+    },
+    "nat": {
+      "title": "NAT rules",
+      "description": "``/ip/firewall/nat`` chains · srcnat & dstnat",
+      "loadError": "Failed to load NAT rules",
+      "emptyTitle": "No NAT rules",
+      "emptyDescription": "The /ip/firewall/nat chains are empty."
+    },
+    "columns": {
+      "chain": "Chain",
+      "action": "Action",
+      "proto": "Proto",
+      "src": "Src",
+      "dst": "Dst",
+      "dstPort": "Dst port",
+      "inIface": "In iface",
+      "enabled": "Enabled",
+      "comment": "Comment",
+      "actions": "Actions",
+      "toAddrs": "To addrs",
+      "toPorts": "To ports"
+    },
+    "fields": {
+      "chain": "Chain",
+      "action": "Action",
+      "protocol": "Protocol",
+      "srcAddress": "Src address",
+      "dstAddress": "Dst address",
+      "dstPort": "Dst port",
+      "inIface": "In iface",
+      "toAddresses": "To addresses",
+      "toPorts": "To ports",
+      "comment": "Comment"
+    },
+    "filterDialog": {
+      "editTitle": "Edit filter rule",
+      "addTitle": "Add filter rule",
+      "description": "Stage a change to RouterOS ``/ip/firewall/filter``."
+    },
+    "natDialog": {
+      "editTitle": "Edit NAT rule",
+      "addTitle": "Add NAT rule",
+      "description": "Stage a change to RouterOS ``/ip/firewall/nat``."
+    },
+    "deleteDialog": {
+      "title": "Stage delete · {{kind}}?",
+      "description": "Review the rule scope below before confirming. This stages a delete; the change applies via the Pending Changes panel."
+    }
+  },
+  "GatewayDetailPage": {
+    "header": {
+      "subtitle": "{{vendor}} at {{host}}:{{port}}"
+    },
+    "actions": {
+      "back": "Back",
+      "sync": "Sync",
+      "test": "Test",
+      "reboot": "Reboot",
+      "cancel": "Cancel",
+      "rebootNow": "Reboot Now"
+    },
+    "notFound": {
+      "title": "Gateway not found",
+      "back": "Back to Gateways"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "stats": {
+      "status": "Status",
+      "online": "Online",
+      "offline": "Offline",
+      "unknown": "Unknown",
+      "version": "Version",
+      "lastSync": "Last Sync",
+      "never": "Never",
+      "capabilities": "Capabilities",
+      "noneDetected": "None detected"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "firewallRules": "Firewall Rules",
+      "natPortFwd": "NAT / Port Fwd",
+      "vpn": "VPN",
+      "interfaces": "Interfaces",
+      "dhcp": "DHCP",
+      "dns": "DNS",
+      "aliases": "Aliases",
+      "routingArp": "Routing / ARP",
+      "idsIps": "IDS / IPS",
+      "trafficShaper": "Traffic Shaper",
+      "services": "Services",
+      "backups": "Backups",
+      "system": "System",
+      "monitoring": "Monitoring",
+      "diagnostics": "Diagnostics",
+      "logs": "Logs",
+      "syncLog": "Sync Log",
+      "ip": "IP",
+      "firewall": "Firewall",
+      "hotspot": "Hotspot",
+      "queues": "Queues",
+      "firmware": "Firmware",
+      "backup": "Backup",
+      "topology": "Topology",
+      "snmp": "SNMP"
+    },
+    "syncLogColumns": {
+      "started": "Started",
+      "status": "Status",
+      "duration": "Duration",
+      "itemsSynced": "Items Synced",
+      "failed": "Failed",
+      "error": "Error"
+    },
+    "logColumns": {
+      "time": "Time",
+      "process": "Process",
+      "message": "Message"
+    },
+    "diagnostics": {
+      "ping": "Ping",
+      "traceroute": "Traceroute",
+      "dnsLookup": "DNS lookup"
+    },
+    "toasts": {
+      "connectionOk": "Connection OK",
+      "connectionFailed": "Connection failed",
+      "error": "Error",
+      "testFailed": "Test failed",
+      "syncTriggered": "Sync triggered",
+      "syncTriggeredDesc": "Full sync has been started.",
+      "syncFailed": "Sync failed",
+      "syncFailedDesc": "Could not start sync",
+      "operationFailed": "Operation failed",
+      "requestFailed": "Request failed",
+      "serviceUpdated": "Service updated",
+      "failed": "Failed",
+      "serviceControlFailed": "Service control failed",
+      "backupCreated": "Backup created",
+      "backupFailed": "Backup failed",
+      "rebootInitiated": "Reboot initiated",
+      "rebootInitiatedDesc": "The gateway is rebooting · it will be offline briefly.",
+      "rebootFailed": "Reboot failed",
+      "diagnosticFailed": "{{label}} failed"
+    },
+    "resources": {
+      "firewallRule": "Firewall Rule",
+      "natRule": "NAT Rule",
+      "portForward": "Port Forward",
+      "wireguardServer": "WireGuard Server",
+      "wireguardPeer": "WireGuard Peer",
+      "openvpnInstance": "OpenVPN Instance",
+      "staticMapping": "Static Mapping",
+      "dnsOverride": "DNS Override",
+      "domainOverride": "Domain Override",
+      "alias": "Alias",
+      "staticRoute": "Static Route",
+      "shaperPipe": "Shaper Pipe",
+      "queue": "Queue",
+      "rule": "Rule",
+      "backup": "Backup"
+    },
+    "success": {
+      "sessionKilled": "Session killed",
+      "ipsecApplied": "IPsec changes applied",
+      "tunnelConnected": "Tunnel connected",
+      "tunnelDisconnected": "Tunnel disconnected",
+      "arpFlushed": "ARP table flushed",
+      "idsStarted": "IDS started",
+      "idsStopped": "IDS stopped",
+      "idsRestarted": "IDS restarted",
+      "idsRulesUpdated": "IDS rules updated",
+      "alertLogCleared": "Alert log cleared",
+      "ruleToggled": "Rule toggled",
+      "queueCreated": "Queue created",
+      "ruleCreated": "Rule created",
+      "backupReverted": "Backup reverted",
+      "configDownloaded": "Config downloaded",
+      "firmwareCheckComplete": "Firmware check complete",
+      "gatewayHalted": "Gateway halted"
+    },
+    "rebootDialog": {
+      "title": "Reboot Gateway?",
+      "intro": "This will reboot",
+      "target": "({{vendor}} at {{host}}).",
+      "warning": "The gateway will be offline for 1-3 minutes. All active VPN tunnels and sessions will be interrupted."
+    }
+  },
+  "GatewaySystemTab": {
+    "common": {
+      "yes": "Yes",
+      "no": "No",
+      "active": "Active",
+      "disabled": "Disabled",
+      "enabled": "Enabled"
+    },
+    "actions": {
+      "checkUpdates": "Check Updates",
+      "downloadConfig": "Download Config",
+      "halt": "Halt",
+      "haltConfirm": "This will HALT (power off) the gateway. Are you sure?"
+    },
+    "packages": {
+      "title": "Installed Packages",
+      "empty": "No packages found"
+    },
+    "plugins": {
+      "title": "Installed Plugins",
+      "empty": "No plugins found"
+    },
+    "cron": {
+      "title": "Cron Jobs",
+      "columns": {
+        "description": "Description",
+        "schedule": "Schedule",
+        "command": "Command",
+        "enabled": "Enabled"
+      }
+    },
+    "trust": {
+      "title": "Certificate Management",
+      "description": "Trust store: certificates, CAs, and CRLs",
+      "certificates": "Certificates",
+      "certificateAuthorities": "Certificate Authorities",
+      "revocationLists": "Revocation Lists",
+      "empty": "No certificates or CAs found in the trust store.",
+      "columns": {
+        "name": "Name",
+        "dn": "DN",
+        "keyLength": "Key Length",
+        "inUse": "In Use",
+        "ca": "CA",
+        "type": "Type"
+      }
+    },
+    "acme": {
+      "title": "ACME / Let's Encrypt",
+      "description": "Automated certificate management (os-acme-client)",
+      "certificates": "Certificates",
+      "accounts": "Accounts",
+      "validations": "Validations",
+      "actions": "Actions",
+      "certificatesHeading": "ACME Certificates",
+      "accountsHeading": "ACME Accounts",
+      "empty": "No ACME configuration found. Install os-acme-client to manage Let's Encrypt certificates.",
+      "columns": {
+        "name": "Name",
+        "domains": "Domain(s)",
+        "account": "Account",
+        "lastUpdate": "Last Update",
+        "status": "Status",
+        "email": "Email",
+        "ca": "CA"
+      }
+    },
+    "syslog": {
+      "title": "Syslog Destinations",
+      "description": "Remote syslog forwarding targets",
+      "empty": "No syslog destinations configured.",
+      "defaultDestination": "Destination {{n}}",
+      "columns": {
+        "description": "Description",
+        "transport": "Transport",
+        "hostname": "Hostname",
+        "port": "Port",
+        "level": "Level",
+        "status": "Status"
+      }
+    },
+    "ha": {
+      "title": "High Availability & Config Sync",
+      "description": "CARP HA status and configuration synchronization",
+      "empty": "HA/Config Sync not available. This may require CARP configuration."
+    },
+    "lifecycle": {
+      "title": "Certificate Lifecycle",
+      "description": "Certificates expiring within 30 days",
+      "checking": "Checking certificates…",
+      "totalCertificates": "Total Certificates",
+      "valid": "Valid",
+      "expiringSoon": "Expiring Soon",
+      "expired": "Expired",
+      "allValid": "All certificates are valid",
+      "columns": {
+        "certificate": "Certificate",
+        "cn": "CN",
+        "status": "Status",
+        "daysRemaining": "Days Remaining",
+        "expires": "Expires"
+      }
+    }
+  },
+  "GatewayServicesTab": {
+    "haproxy": {
+      "title": "HAProxy · Load Balancer",
+      "description": "Frontends, backends, and real servers",
+      "frontends": "Frontends",
+      "backends": "Backends",
+      "servers": "Servers",
+      "realServers": "Real Servers",
+      "empty": "No HAProxy configuration found. Install and configure os-haproxy to use the load balancer."
+    },
+    "captivePortal": {
+      "title": "Captive Portal",
+      "description": "Guest WiFi zones and active sessions",
+      "zoneFallback": "Zone {{n}}"
+    },
+    "services": {
+      "title": "System Services",
+      "description": "Running services on {{vendor}} · click to start / stop / restart",
+      "running": "Running",
+      "stopped": "Stopped",
+      "empty": "No services data available"
+    },
+    "proxy": {
+      "title": "Web Proxy (Squid)",
+      "description": "HTTP/HTTPS proxy settings and status",
+      "loading": "Loading proxy settings…",
+      "proxyStatus": "Proxy Status",
+      "service": "Service",
+      "sslBumping": "SSL Bumping",
+      "cache": "Cache",
+      "cacheSize": "Cache Size"
+    },
+    "blacklists": {
+      "title": "Proxy Blacklists",
+      "description": "Remote ACL / blacklist feeds",
+      "loading": "Loading blacklists…",
+      "empty": "No remote blacklists configured"
+    },
+    "columns": {
+      "name": "Name",
+      "bind": "Bind",
+      "mode": "Mode",
+      "defaultBackend": "Default Backend",
+      "ssl": "SSL",
+      "status": "Status",
+      "algorithm": "Algorithm",
+      "healthCheck": "Health Check",
+      "persistence": "Persistence",
+      "address": "Address",
+      "port": "Port",
+      "weight": "Weight",
+      "zoneId": "Zone ID",
+      "interfaces": "Interfaces",
+      "authServers": "Auth Servers",
+      "idleTimeout": "Idle Timeout",
+      "hardTimeout": "Hard Timeout",
+      "concurrent": "Concurrent",
+      "enabled": "Enabled",
+      "filename": "Filename",
+      "url": "URL",
+      "description": "Description"
+    },
+    "actions": {
+      "start": "Start",
+      "stop": "Stop",
+      "restart": "Restart",
+      "cancel": "Cancel"
+    },
+    "confirm": {
+      "title": "{{action}} {{name}}?",
+      "description": "{{action}} {{name}}? Connected clients may be disconnected."
+    },
+    "common": {
+      "yes": "Yes",
+      "no": "No",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "none": "None",
+      "unknown": "Unknown",
+      "on": "On",
+      "off": "Off"
+    }
+  },
+  "MikroTikInterfacesTab": {
+    "loading": "Loading RouterOS interfaces…",
+    "common": {
+      "yes": "Yes",
+      "no": "No",
+      "on": "On",
+      "off": "Off"
+    },
+    "columns": {
+      "name": "Name",
+      "mac": "MAC",
+      "mtu": "MTU",
+      "type": "Type",
+      "protocol": "Protocol",
+      "vlanFiltering": "VLAN filtering",
+      "running": "Running",
+      "enabled": "Enabled",
+      "rxBytes": "RX bytes",
+      "txBytes": "TX bytes",
+      "comment": "Comment",
+      "actions": "Actions"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "addBridge": "Add bridge",
+      "cancel": "Cancel",
+      "stageCreate": "Stage create",
+      "stageUpdate": "Stage update",
+      "stageDelete": "Stage delete",
+      "stageEnable": "Stage enable",
+      "stageDisable": "Stage disable",
+      "enable": "Enable",
+      "disable": "Disable",
+      "editBridgeAria": "Edit bridge {{name}}",
+      "deleteBridgeAria": "Delete bridge {{name}}"
+    },
+    "ethernet": {
+      "title": "Ethernet",
+      "description": "Physical ports · read-only counters and link state",
+      "loadError": "Failed to load ethernet interfaces",
+      "emptyTitle": "No ethernet interfaces",
+      "emptyDescription": "RouterOS returned no /interface/ethernet rows."
+    },
+    "bridges": {
+      "title": "Bridges",
+      "description": "L2 bridge interfaces · CRUD operations stage via Pending Changes",
+      "loadError": "Failed to load bridges",
+      "emptyTitle": "No bridges configured",
+      "emptyDescription": "Add a bridge to group ports into a single L2 segment."
+    },
+    "wireless": {
+      "title": "Wireless",
+      "description": "Wireless interfaces from /interface · read-only with enable/disable toggle",
+      "loadError": "Failed to load interfaces",
+      "emptyTitle": "No wireless interfaces",
+      "emptyDescription": "No wireless-type rows found. The wireless package may not be installed on this RouterOS."
+    },
+    "bridgeDialog": {
+      "addTitle": "Add bridge",
+      "editTitle": "Edit bridge",
+      "description": "Stage a change to RouterOS /interface/bridge. Apply via the Pending Changes panel.",
+      "mtuLabel": "MTU (optional)"
+    },
+    "deleteDialog": {
+      "title": "Delete bridge?",
+      "descriptionPrefix": "Stage a delete for bridge",
+      "descriptionSuffix": ". This cannot be undone after the staged change is applied."
+    },
+    "toggleDialog": {
+      "disableTitle": "Stage disable for wireless interface?",
+      "enableTitle": "Stage enable for wireless interface?",
+      "descriptionPrefix": "This stages a change for interface",
+      "descriptionSuffix": ". The change applies via the Pending Changes panel."
+    },
+    "toasts": {
+      "bridgeCreateStaged": "Bridge create staged",
+      "bridgeUpdateStaged": "Bridge update staged",
+      "bridgeDeleteStaged": "Bridge delete staged",
+      "toggleStaged": "Interface toggle staged",
+      "bridgeCreateFailed": "Failed to stage bridge create",
+      "bridgeUpdateFailed": "Failed to stage bridge update",
+      "bridgeDeleteFailed": "Failed to stage bridge delete",
+      "toggleFailed": "Failed to stage toggle",
+      "cannotUpdateTitle": "Cannot update bridge",
+      "cannotDeleteTitle": "Cannot delete bridge",
+      "missingIdDescription": "Bridge has no RouterOS id (.id missing)."
+    }
+  },
+  "MikroTikQueuesTab": {
+    "loading": "Loading RouterOS queues…",
+    "queueFallback": "queue",
+    "actions": {
+      "refresh": "Refresh",
+      "addQueue": "Add queue",
+      "cancel": "Cancel",
+      "stageUpdate": "Stage update",
+      "stageCreate": "Stage create",
+      "stageDelete": "Stage delete",
+      "editAria": "Edit simple queue {{name}}",
+      "deleteAria": "Delete simple queue {{name}}"
+    },
+    "simple": {
+      "title": "Simple queues",
+      "description": "``/queue/simple`` rows · per-target rate caps · full CRUD",
+      "loadError": "Failed to load simple queues",
+      "emptyTitle": "No simple queues",
+      "emptyDescription": "No /queue/simple rows on this router."
+    },
+    "tree": {
+      "title": "Queue tree (HTB)",
+      "description": "``/queue/tree`` rows · read-only for now. A hierarchical editor is planned; shown here so operators can review the active tree.",
+      "loadError": "Failed to load queue tree",
+      "emptyTitle": "No queue tree",
+      "emptyDescription": "No /queue/tree rows on this router."
+    },
+    "columns": {
+      "name": "Name",
+      "target": "Target",
+      "maxLimitUpDown": "Max limit (up/down)",
+      "priority": "Priority",
+      "parent": "Parent",
+      "enabled": "Enabled",
+      "comment": "Comment",
+      "actions": "Actions",
+      "packetMark": "Packet mark",
+      "queue": "Queue",
+      "maxLimit": "Max limit",
+      "limitAt": "Limit-at"
+    },
+    "enabled": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "dialog": {
+      "editTitle": "Edit simple queue",
+      "addTitle": "Add simple queue",
+      "description": "Stage a change to RouterOS ``/queue/simple``."
+    },
+    "form": {
+      "name": "Name",
+      "namePlaceholder": "guest-cap",
+      "target": "Target",
+      "targetPlaceholder": "192.168.88.0/24 or bridge-guest",
+      "maxLimitUp": "Max limit up",
+      "maxLimitDown": "Max limit down",
+      "priority": "Priority (1-8)",
+      "parent": "Parent",
+      "parentPlaceholder": "none",
+      "comment": "Comment"
+    },
+    "delete": {
+      "title": "Stage delete?",
+      "descriptionPrefix": "This stages a delete for simple queue",
+      "descriptionSuffix": "."
+    },
+    "toasts": {
+      "createStaged": "Simple queue create staged",
+      "createFailed": "Failed to stage queue create",
+      "updateStaged": "Simple queue update staged",
+      "updateFailed": "Failed to stage queue update",
+      "deleteStaged": "Simple queue delete staged",
+      "deleteFailed": "Failed to stage queue delete",
+      "cannotUpdateTitle": "Cannot update queue",
+      "cannotDeleteTitle": "Cannot delete queue",
+      "missingIdDescription": "Queue has no RouterOS id (.id missing)."
+    }
+  },
+  "MikroTikDnsTab": {
+    "loading": "Loading RouterOS DNS…",
+    "entryFallback": "entry",
+    "yes": "Yes",
+    "no": "No",
+    "actions": {
+      "refresh": "Refresh",
+      "addEntry": "Add entry",
+      "cancel": "Cancel",
+      "stageCreate": "Stage create",
+      "stageUpdate": "Stage update",
+      "stageDelete": "Stage delete",
+      "editAria": "Edit DNS entry {{name}}",
+      "deleteAria": "Delete DNS entry {{name}}"
+    },
+    "columns": {
+      "name": "Name",
+      "type": "Type",
+      "value": "Value",
+      "data": "Data",
+      "ttl": "TTL",
+      "enabled": "Enabled",
+      "static": "Static",
+      "comment": "Comment",
+      "actions": "Actions"
+    },
+    "static": {
+      "title": "Static DNS entries",
+      "description": "/ip/dns/static rows · full CRUD",
+      "loadError": "Failed to load DNS static",
+      "emptyTitle": "No static DNS entries",
+      "emptyDescription": "No /ip/dns/static rows on this router."
+    },
+    "cache": {
+      "title": "DNS cache",
+      "description": "/ip/dns/cache rows · read-only · refresh on demand",
+      "loadError": "Failed to load DNS cache",
+      "emptyTitle": "DNS cache is empty",
+      "emptyDescription": "No cached entries, RouterOS hasn't resolved anything recently."
+    },
+    "dialog": {
+      "editTitle": "Edit static DNS entry",
+      "addTitle": "Add static DNS entry",
+      "description": "Stage a change to RouterOS /ip/dns/static.",
+      "nameLabel": "Name (FQDN)",
+      "typeLabel": "Type",
+      "addressLabel": "IP address",
+      "cnameLabel": "Target hostname",
+      "textLabel": "Text",
+      "ttlLabel": "TTL (optional)",
+      "commentLabel": "Comment"
+    },
+    "deleteDialog": {
+      "title": "Stage delete?",
+      "descriptionPrefix": "This stages a delete for DNS entry"
+    },
+    "toasts": {
+      "createStaged": "DNS static create staged",
+      "updateStaged": "DNS static update staged",
+      "deleteStaged": "DNS static delete staged",
+      "createFailed": "Failed to stage static create",
+      "updateFailed": "Failed to stage static update",
+      "deleteFailed": "Failed to stage static delete",
+      "cannotUpdate": "Cannot update entry",
+      "cannotDelete": "Cannot delete entry",
+      "missingId": "Entry has no RouterOS id (.id missing)."
+    }
+  },
+  "GatewayDhcpTab": {
+    "leases": {
+      "title": "DHCP Leases",
+      "description": "Active DHCP assignments",
+      "searchPlaceholder": "Search leases...",
+      "unknownStatus": "unknown",
+      "columns": {
+        "ipAddress": "IP Address",
+        "mac": "MAC",
+        "hostname": "Hostname",
+        "interface": "Interface",
+        "status": "Status",
+        "expires": "Expires"
+      }
+    },
+    "static": {
+      "title": "Static Mappings",
+      "description": "Reserved DHCP addresses (MAC → IP)",
+      "addMapping": "Add Mapping",
+      "searchPlaceholder": "Search static maps...",
+      "columns": {
+        "mac": "MAC",
+        "ip": "IP",
+        "hostname": "Hostname",
+        "description": "Description",
+        "interface": "Interface"
+      }
+    },
+    "keaSubnets": {
+      "title": "Kea · DHCPv4 Subnets",
+      "description": "Kea DHCP server subnet configurations",
+      "empty": "No Kea DHCPv4 subnets configured. Use Kea DHCP server (os-kea) for subnet management.",
+      "columns": {
+        "subnet": "Subnet",
+        "description": "Description",
+        "pools": "Pools",
+        "interface": "Interface",
+        "gateway": "Gateway",
+        "dnsServers": "DNS Servers"
+      }
+    },
+    "keaLeases": {
+      "title": "Kea · Active Leases",
+      "description": "Active IPv4 leases from the Kea DHCP server",
+      "empty": "No active Kea DHCP leases found.",
+      "columns": {
+        "ipAddress": "IP Address",
+        "macAddress": "MAC Address",
+        "hostname": "Hostname",
+        "state": "State",
+        "expires": "Expires",
+        "subnetId": "Subnet ID"
+      }
+    },
+    "relay": {
+      "title": "DHCP Relay",
+      "description": "DHCP relay agent configuration",
+      "loading": "Loading DHCP relay…",
+      "status": "Status",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "relayServers": "Relay Servers",
+      "interface": "Interface",
+      "agentInfo": "Agent Info (Option 82)"
+    }
+  },
+  "GatewayNatTab": {
+    "columns": {
+      "type": "Type",
+      "protocol": "Proto",
+      "source": "Source",
+      "destination": "Destination",
+      "target": "Target",
+      "description": "Description",
+      "interface": "Interface",
+      "destPort": "Dest Port",
+      "enabled": "Enabled",
+      "externalIp": "External IP",
+      "internalIp": "Internal IP"
+    },
+    "actions": {
+      "sourceNat": "Source NAT",
+      "addForward": "Add Forward"
+    },
+    "natRules": {
+      "title": "NAT Rules",
+      "description": "Source and destination NAT rules"
+    },
+    "portForwards": {
+      "title": "Port Forwards",
+      "description": "DNAT / port forwarding rules"
+    },
+    "binat": {
+      "title": "1:1 NAT (Binat) Rules",
+      "description": "Static one-to-one network address translations",
+      "loading": "Loading 1:1 NAT rules…"
+    },
+    "values": {
+      "yes": "Yes",
+      "no": "No"
+    }
+  },
+  "UniFiDevicesTab": {
+    "title": "UniFi Devices",
+    "loading": "Loading devices…",
+    "empty": "No adopted devices on this controller. Use the \"Stage by MAC\" form above to stage actions against a specific device.",
+    "subtitle": {
+      "sitePrefix": "Site:",
+      "body": "· Stage restart / disable / PoE. Restart + disable are catastrophic, typed APPLY + site_admin required."
+    },
+    "stageByMac": {
+      "label": "Stage by MAC"
+    },
+    "fields": {
+      "port": "Port",
+      "poeMode": "PoE Mode"
+    },
+    "actions": {
+      "restart": "Restart",
+      "disable": "Disable",
+      "enable": "Enable",
+      "stagePoe": "Stage PoE",
+      "cancel": "Cancel",
+      "stage": "Stage"
+    },
+    "status": {
+      "disabled": "disabled"
+    },
+    "errors": {
+      "loadFailed": "Failed to load devices:",
+      "unknown": "Unknown error"
+    },
+    "toast": {
+      "staged": "Device {{kind}} staged",
+      "stageFailed": "Failed to stage change"
+    },
+    "operations": {
+      "restart": "restart",
+      "disable": "disable",
+      "enable": "enable",
+      "poeSet": "PoE set"
+    },
+    "dialog": {
+      "title": "Stage {{operation}}?",
+      "bodyPrefix": "Stage",
+      "bodyAgainst": "against",
+      "bodySuffix": "?",
+      "catastrophicPrefix": "This is a",
+      "catastrophicWord": "catastrophic",
+      "catastrophicMid": "change, the drawer will require typing",
+      "catastrophicSuffix": "at apply time and the operator must hold site_admin."
+    }
+  },
+  "GatewayOverviewTab": {
+    "stats": {
+      "cpuUsage": "CPU Usage",
+      "memory": "Memory",
+      "disk": "Disk",
+      "uptime": "Uptime",
+      "version": "Version",
+      "wanIp": "WAN IP",
+      "wanIpDescription": "Latency: {{latency}}ms, Loss: {{loss}}%",
+      "services": "Services",
+      "servicesRunning": "{{count}} running",
+      "servicesStopped": "{{count}} stopped",
+      "vpnTunnels": "VPN Tunnels"
+    },
+    "gatewayInfo": {
+      "title": "Gateway Information",
+      "name": "Name",
+      "vendor": "Vendor",
+      "host": "Host",
+      "sslVerify": "SSL Verify",
+      "hostname": "Hostname",
+      "version": "Version",
+      "model": "Model",
+      "credentials": "Credentials",
+      "configured": "Configured",
+      "missing": "Missing",
+      "created": "Created",
+      "updated": "Updated"
+    },
+    "firmware": {
+      "title": "Firmware & Sync",
+      "firmware": "Firmware",
+      "latestVersion": "Latest Version",
+      "updateAvailable": "Update Available",
+      "updateYes": "Yes ({{version}})",
+      "autoSync": "Auto Sync",
+      "interval": "Interval",
+      "syncStatus": "Sync Status",
+      "lastSync": "Last Sync",
+      "never": "Never",
+      "lastError": "Last Error",
+      "lastSeen": "Last Seen",
+      "capabilities": "Capabilities"
+    },
+    "wanHealth": {
+      "title": "WAN Gateway Health",
+      "gatewayFallback": "GW {{index}}",
+      "unknown": "Unknown",
+      "ip": "IP:",
+      "monitor": "Monitor:",
+      "latency": "Latency:",
+      "loss": "Loss:",
+      "jitter": "Jitter:",
+      "default": "Default"
+    },
+    "liveStatus": {
+      "title": "Live System Status",
+      "description": "Real-time data from the gateway"
+    },
+    "common": {
+      "yes": "Yes",
+      "no": "No",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    }
+  },
+  "GatewayBackupsTab": {
+    "columns": {
+      "filename": "Filename",
+      "date": "Date",
+      "size": "Size"
+    },
+    "actions": {
+      "revert": "Revert",
+      "createBackup": "Create Backup",
+      "cancel": "Cancel"
+    },
+    "backups": {
+      "title": "Configuration Backups",
+      "description": "Gateway configuration snapshots"
+    },
+    "diff": {
+      "title": "Configuration Diff",
+      "description": "Compare running config vs last backup",
+      "generating": "Generating diff…",
+      "changesDetected": "Changes Detected",
+      "noChanges": "No Changes"
+    },
+    "revertDialog": {
+      "title": "Revert configuration?",
+      "prefix": "Revert configuration to backup",
+      "suffix": "? This overwrites the running config (rules, certs, users, VPNs), destructive and not undoable."
+    }
+  },
+  "GatewayAliasesTab": {
+    "title": "Firewall Aliases",
+    "description": "Named groups of hosts, networks, or ports used in rules",
+    "searchPlaceholder": "Search aliases...",
+    "columns": {
+      "name": "Name",
+      "type": "Type",
+      "content": "Content",
+      "description": "Description",
+      "enabled": "Enabled"
+    },
+    "actions": {
+      "addAlias": "Add Alias"
+    }
+  },
+  "GatewayResourceDialogs": {
+    "toast": {
+      "successTitle": "Success",
+      "errorTitle": "Error",
+      "operationFailed": "Operation failed"
+    },
+    "actions": {
+      "cancel": "Cancel",
+      "create": "Create",
+      "update": "Update",
+      "delete": "Delete",
+      "deleting": "Deleting…",
+      "saving": "Saving…",
+      "creating": "Creating…",
+      "pushing": "Pushing…",
+      "pushRule": "Push Rule"
+    },
+    "options": {
+      "allow": "Allow",
+      "block": "Block",
+      "reject": "Reject",
+      "any": "Any",
+      "server": "Server",
+      "client": "Client",
+      "yes": "Yes",
+      "no": "No",
+      "active": "Active",
+      "alertOnly": "Alert only"
+    },
+    "fields": {
+      "action": "Action",
+      "protocol": "Protocol",
+      "source": "Source",
+      "sourcePort": "Source Port",
+      "destination": "Destination",
+      "destinationPort": "Destination Port",
+      "interface": "Interface",
+      "description": "Description",
+      "hostname": "Hostname",
+      "domain": "Domain",
+      "ipAddress": "IP Address",
+      "dnsServer": "DNS Server",
+      "port": "Port",
+      "macAddress": "MAC Address",
+      "extPort": "Ext. Port (dst)",
+      "targetIp": "Target IP",
+      "targetPort": "Target Port",
+      "srcAddressOpt": "Src Address (opt)",
+      "sourceNetwork": "Source Network",
+      "destinationNetwork": "Destination Network",
+      "natTarget": "NAT Target (IP)",
+      "name": "Name",
+      "type": "Type",
+      "listenPort": "Listen Port",
+      "tunnelAddresses": "Tunnel Addresses (comma-separated)",
+      "publicKey": "Public Key",
+      "allowedIps": "Allowed IPs (comma-separated)",
+      "endpointOptional": "Endpoint (optional)",
+      "keepalive": "Keep-alive (sec)",
+      "role": "Role",
+      "tunnelNetwork": "Tunnel Network",
+      "localNetwork": "Local Network",
+      "gateway": "Gateway",
+      "bandwidth": "Bandwidth",
+      "unit": "Unit",
+      "mask": "Mask",
+      "idsEnabled": "IDS Enabled",
+      "ipsMode": "IPS Mode (drop packets)",
+      "patternMatcher": "Pattern Matcher",
+      "interfacesCsv": "Interfaces (comma-separated)"
+    },
+    "placeholders": {
+      "any": "any",
+      "interfaceList": "wan, lan, opt1…",
+      "myserver": "myserver",
+      "interfaceAddress": "interface address",
+      "base64PublicKey": "Base64 public key",
+      "officeVpn": "Office VPN",
+      "uploadLimit": "Upload limit",
+      "aliasEntry": "10.0.0.1 or 192.168.1.0/24"
+    },
+    "delete": {
+      "title": "Delete {{resource}}",
+      "successMsg": "{{resource}} deleted",
+      "confirmBefore": "Are you sure you want to delete ",
+      "confirmAfter": "? This will apply immediately to the gateway and cannot be undone."
+    },
+    "rule": {
+      "title": "Push Firewall Rule",
+      "description": "Create a new firewall rule on the gateway",
+      "successMsg": "Firewall rule pushed"
+    },
+    "dnsOverride": {
+      "titleNew": "New DNS Host Override",
+      "titleEdit": "Edit DNS Host Override",
+      "description": "Map a hostname to an IP address",
+      "created": "DNS override created",
+      "updated": "DNS override updated"
+    },
+    "dnsDomainOverride": {
+      "titleNew": "New DNS Domain Override",
+      "titleEdit": "Edit DNS Domain Override",
+      "description": "Forward queries for a domain to a specific server",
+      "created": "Domain override created",
+      "updated": "Domain override updated"
+    },
+    "dhcpStatic": {
+      "titleNew": "New DHCP Static Mapping",
+      "titleEdit": "Edit DHCP Static Mapping",
+      "description": "Reserve an IP for a specific MAC address",
+      "created": "Static mapping created",
+      "updated": "Static mapping updated"
+    },
+    "portForward": {
+      "titleNew": "New Port Forward",
+      "titleEdit": "Edit Port Forward",
+      "description": "Forward external traffic to an internal host",
+      "created": "Port forward created",
+      "updated": "Port forward updated"
+    },
+    "sourceNat": {
+      "title": "New Source NAT Rule",
+      "description": "Masquerade or translate outbound traffic",
+      "created": "Source NAT rule created"
+    },
+    "alias": {
+      "titleNew": "New Alias",
+      "titleEdit": "Edit Alias",
+      "description": "Named group of hosts, networks, or ports",
+      "created": "Alias created",
+      "updated": "Alias updated",
+      "addEntry": "Add entry",
+      "contentLabel": "Content",
+      "contentDescription": "Add one host, network, or port per row.",
+      "emptyTitle": "No entries yet",
+      "emptyDescription": "Click Add entry to create the first item.",
+      "entryLabel": "Entry {{index}}",
+      "removeEntry": "Remove entry {{index}}"
+    },
+    "aliasTypes": {
+      "host": "Host(s)",
+      "network": "Network(s)",
+      "port": "Port(s)",
+      "url": "URL Table",
+      "external": "External"
+    },
+    "wireGuardServer": {
+      "title": "New WireGuard Server",
+      "description": "Create a new WireGuard tunnel interface",
+      "created": "WireGuard server created"
+    },
+    "wireGuardPeer": {
+      "title": "New WireGuard Peer",
+      "description": "Add a peer to a WireGuard server",
+      "created": "WireGuard peer created"
+    },
+    "openVpn": {
+      "title": "New OpenVPN Instance",
+      "description": "Create an OpenVPN server or client",
+      "created": "OpenVPN instance created"
+    },
+    "staticRoute": {
+      "title": "New Static Route",
+      "description": "Add a manually configured route",
+      "created": "Static route created"
+    },
+    "shaperPipe": {
+      "title": "New Shaper Pipe",
+      "description": "Bandwidth limiter pipe",
+      "created": "Shaper pipe created"
+    },
+    "ids": {
+      "title": "Edit IDS/IPS Settings",
+      "description": "Update intrusion detection configuration",
+      "updated": "IDS settings updated"
+    }
+  },
+  "MikroTikIpTab": {
+    "loading": "Loading RouterOS L3 config…",
+    "actions": {
+      "refresh": "Refresh",
+      "cancel": "Cancel",
+      "stageCreate": "Stage create",
+      "stageUpdate": "Stage update",
+      "stageDelete": "Stage delete"
+    },
+    "columns": {
+      "comment": "Comment",
+      "actions": "Actions"
+    },
+    "badges": {
+      "dynamic": "Dynamic",
+      "static": "Static",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "toasts": {
+      "addressCreateStaged": "Address create staged",
+      "addressCreateFailed": "Failed to stage address create",
+      "addressDeleteStaged": "Address delete staged",
+      "addressDeleteFailed": "Failed to stage address delete",
+      "routeCreateStaged": "Route create staged",
+      "routeCreateFailed": "Failed to stage route create",
+      "routeUpdateStaged": "Route update staged",
+      "routeUpdateFailed": "Failed to stage route update",
+      "routeDeleteStaged": "Route delete staged",
+      "routeDeleteFailed": "Failed to stage route delete",
+      "poolCreateStaged": "Pool create staged",
+      "poolCreateFailed": "Failed to stage pool create",
+      "poolUpdateStaged": "Pool update staged",
+      "poolUpdateFailed": "Failed to stage pool update",
+      "poolDeleteStaged": "Pool delete staged",
+      "poolDeleteFailed": "Failed to stage pool delete"
+    },
+    "errors": {
+      "cannotUpdateRoute": "Cannot update route",
+      "routeNoId": "Route has no RouterOS id (.id missing).",
+      "cannotUpdatePool": "Cannot update pool",
+      "poolNoId": "Pool has no RouterOS id (.id missing).",
+      "cannotDelete": "Cannot delete",
+      "rowNoId": "Row has no RouterOS id (.id missing)."
+    },
+    "deleteLabel": {
+      "address": "address {{value}}",
+      "route": "route to {{value}}",
+      "pool": "pool {{value}}"
+    },
+    "addresses": {
+      "title": "IP addresses",
+      "description": "/ip/address rows · create + delete (RouterOS has no stable PATCH for this table)",
+      "add": "Add address",
+      "loadError": "Failed to load IP addresses",
+      "emptyTitle": "No IP addresses",
+      "emptyDescription": "No /ip/address rows on this router.",
+      "fallbackLabel": "address",
+      "deleteAria": "Delete IP address {{label}}",
+      "columns": {
+        "address": "Address",
+        "network": "Network",
+        "interface": "Interface",
+        "dynamic": "Dynamic",
+        "disabled": "Disabled"
+      }
+    },
+    "routes": {
+      "title": "Static routes",
+      "description": "/ip/route rows · full CRUD",
+      "add": "Add route",
+      "loadError": "Failed to load routes",
+      "emptyTitle": "No routes",
+      "emptyDescription": "No /ip/route rows on this router.",
+      "fallbackLabel": "route",
+      "rowLabel": "{{dst}} via {{gateway}}",
+      "editAria": "Edit route {{label}}",
+      "deleteAria": "Delete route {{label}}",
+      "columns": {
+        "destination": "Destination",
+        "gateway": "Gateway",
+        "distance": "Distance",
+        "active": "Active",
+        "static": "Static"
+      }
+    },
+    "pools": {
+      "title": "IP pools",
+      "description": "/ip/pool rows · used by DHCP and PPP",
+      "add": "Add pool",
+      "loadError": "Failed to load IP pools",
+      "emptyTitle": "No IP pools",
+      "emptyDescription": "Create a pool to back a DHCP server or PPP profile.",
+      "fallbackLabel": "pool",
+      "editAria": "Edit IP pool {{label}}",
+      "deleteAria": "Delete IP pool {{label}}",
+      "columns": {
+        "name": "Name",
+        "ranges": "Ranges",
+        "nextPool": "Next pool"
+      }
+    },
+    "addressDialog": {
+      "title": "Add IP address",
+      "description": "Stage a change to RouterOS /ip/address.",
+      "addressLabel": "Address (CIDR)",
+      "interfaceLabel": "Interface",
+      "commentPlaceholder": "LAN gateway"
+    },
+    "routeDialog": {
+      "addTitle": "Add static route",
+      "editTitle": "Edit static route",
+      "description": "Stage a change to RouterOS /ip/route.",
+      "destinationLabel": "Destination (CIDR)",
+      "gatewayLabel": "Gateway",
+      "distanceLabel": "Distance",
+      "commentPlaceholder": "Upstream"
+    },
+    "poolDialog": {
+      "addTitle": "Add IP pool",
+      "editTitle": "Edit IP pool",
+      "description": "Stage a change to RouterOS /ip/pool.",
+      "nameLabel": "Name",
+      "rangesLabel": "Ranges",
+      "commentPlaceholder": "LAN clients"
+    },
+    "deleteDialog": {
+      "title": "Stage delete?",
+      "descriptionBefore": "This stages a delete for",
+      "descriptionAfter": "Apply via the Pending Changes panel."
+    }
+  },
+  "MikroTikDhcpTab": {
+    "loading": "Loading RouterOS DHCP…",
+    "common": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "makeStatic": "Make static",
+      "cancel": "Cancel",
+      "stageCreate": "Stage create",
+      "stageUpdate": "Stage update",
+      "stageDelete": "Stage delete",
+      "stageMapping": "Stage mapping"
+    },
+    "toasts": {
+      "serverCreateStaged": "DHCP server create staged",
+      "serverCreateFailed": "Failed to stage server create",
+      "serverUpdateStaged": "DHCP server update staged",
+      "serverUpdateFailed": "Failed to stage server update",
+      "serverDeleteStaged": "DHCP server delete staged",
+      "serverDeleteFailed": "Failed to stage server delete",
+      "staticCreateStaged": "Static lease create staged",
+      "staticCreateFailed": "Failed to stage static lease create",
+      "staticUpdateStaged": "Static lease update staged",
+      "staticUpdateFailed": "Failed to stage static lease update",
+      "staticDeleteStaged": "Static lease delete staged",
+      "staticDeleteFailed": "Failed to stage static lease delete",
+      "cannotUpdateServer": "Cannot update server",
+      "serverMissingId": "Server has no RouterOS id (.id missing).",
+      "cannotUpdateLease": "Cannot update lease",
+      "leaseMissingId": "Lease has no RouterOS id (.id missing).",
+      "cannotDelete": "Cannot delete",
+      "rowMissingId": "Row has no RouterOS id (.id missing)."
+    },
+    "deleteLabel": {
+      "server": "DHCP server {{name}}",
+      "static": "static lease {{address}} ({{mac}})"
+    },
+    "servers": {
+      "title": "DHCP servers",
+      "description": "`/ip/dhcp-server` instances · full CRUD",
+      "add": "Add server",
+      "loadError": "Failed to load DHCP servers",
+      "emptyTitle": "No DHCP servers",
+      "emptyDescription": "No /ip/dhcp-server rows on this router.",
+      "fallbackLabel": "server",
+      "editAria": "Edit DHCP server {{label}}",
+      "deleteAria": "Delete DHCP server {{label}}"
+    },
+    "serverColumns": {
+      "name": "Name",
+      "interface": "Interface",
+      "pool": "Pool",
+      "leaseTime": "Lease time",
+      "authoritative": "Authoritative",
+      "enabled": "Enabled",
+      "comment": "Comment",
+      "actions": "Actions"
+    },
+    "leases": {
+      "title": "Active leases",
+      "description": "Dynamic leases from RouterOS · read-only with \"Make static\" action",
+      "loadError": "Failed to load DHCP leases",
+      "emptyTitle": "No active leases",
+      "emptyDescription": "No dynamic lease rows on this router right now."
+    },
+    "leaseColumns": {
+      "ip": "IP",
+      "mac": "MAC",
+      "hostname": "Hostname",
+      "server": "Server",
+      "status": "Status",
+      "expires": "Expires",
+      "actions": "Actions"
+    },
+    "static": {
+      "title": "Static mappings",
+      "description": "`/ip/dhcp-server/lease` rows with dynamic=false · full CRUD",
+      "add": "Add mapping",
+      "emptyTitle": "No static mappings",
+      "emptyDescription": "Add one to bind a MAC to an IP.",
+      "fallbackLabel": "mapping",
+      "editAria": "Edit DHCP static mapping {{label}}",
+      "deleteAria": "Delete DHCP static mapping {{label}}"
+    },
+    "staticColumns": {
+      "ip": "IP",
+      "mac": "MAC",
+      "server": "Server",
+      "status": "Status",
+      "comment": "Comment",
+      "actions": "Actions"
+    },
+    "serverDialog": {
+      "editTitle": "Edit DHCP server",
+      "addTitle": "Add DHCP server",
+      "description": "Stage a change to RouterOS `/ip/dhcp-server`."
+    },
+    "serverForm": {
+      "name": "Name",
+      "interface": "Interface",
+      "pool": "Address pool",
+      "leaseTime": "Lease time",
+      "comment": "Comment"
+    },
+    "staticDialog": {
+      "editTitle": "Edit static mapping",
+      "addTitle": "Add static mapping",
+      "description": "Stage a change to RouterOS `/ip/dhcp-server/lease` (dynamic=false)."
+    },
+    "staticForm": {
+      "address": "IP address",
+      "mac": "MAC address",
+      "server": "Server (optional)",
+      "comment": "Comment"
+    },
+    "deleteDialog": {
+      "title": "Stage delete?",
+      "descriptionPrefix": "This stages a delete for",
+      "descriptionSuffix": "."
+    },
+    "makeStaticDialog": {
+      "title": "Stage static mapping?",
+      "descriptionPrefix": "This stages a static lease mapping",
+      "descriptionSuffix": "on RouterOS. Apply via the Pending Changes panel."
+    }
+  },
+  "MikroTikFirmwareTab": {
+    "loading": "Loading RouterOS firmware…",
+    "channels": {
+      "stable": "Stable",
+      "longTerm": "Long-term stable",
+      "testing": "Testing",
+      "development": "Development"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "checkForUpdates": "Check for updates",
+      "download": "Download",
+      "cancelDownload": "Cancel download",
+      "installReboot": "Install + reboot",
+      "switchChannel": "Switch channel",
+      "enable": "Enable",
+      "disable": "Disable",
+      "uninstall": "Uninstall",
+      "cancel": "Cancel",
+      "stageInstall": "Stage install"
+    },
+    "toasts": {
+      "checkStaged": "Update check staged",
+      "checkFailed": "Failed to stage update check",
+      "channelStaged": "Channel switch staged",
+      "channelFailed": "Failed to stage channel switch",
+      "downloadStaged": "Firmware download staged",
+      "downloadFailed": "Failed to stage download",
+      "cancelStaged": "Cancel-download staged",
+      "cancelFailed": "Failed to stage cancel",
+      "installStaged": "Firmware install staged",
+      "installStagedDescription": "After applying the pending change the device will reboot. Polling status every 5s.",
+      "installFailed": "Failed to stage install",
+      "enableStaged": "Package enable staged",
+      "enableFailed": "Failed to stage enable",
+      "disableStaged": "Package disable staged",
+      "disableFailed": "Failed to stage disable",
+      "uninstallStaged": "Package uninstall staged",
+      "uninstallFailed": "Failed to stage uninstall"
+    },
+    "currentState": {
+      "title": "Current state",
+      "description": "/system/package/update · installed RouterOS version + last check.",
+      "loadError": "Failed to load firmware status",
+      "empty": {
+        "title": "Firmware status unavailable",
+        "description": "The /system/package/update endpoint did not respond, the route may not be wired yet on this backend."
+      },
+      "installedVersion": "Installed version",
+      "currentChannel": "Current channel",
+      "lastChecked": "Last checked",
+      "status": "Status"
+    },
+    "availableUpdate": {
+      "title": "Available update",
+      "description": "Check, download, and install RouterOS updates from the configured channel.",
+      "latestAvailable": "Latest available",
+      "updateAvailable": "Update available",
+      "lastError": "Last error",
+      "installInFlight": "Install in flight"
+    },
+    "channel": {
+      "title": "Update channel",
+      "description": "Switch the package-update channel. RouterOS will pull the next check + download from the selected channel.",
+      "label": "Channel",
+      "placeholder": "Choose a channel"
+    },
+    "packages": {
+      "title": "Installed packages",
+      "description": "/system/package · per-package enable / disable / uninstall. Disabling a package takes effect on next reboot.",
+      "loadError": "Failed to load installed packages",
+      "empty": {
+        "title": "No packages reported",
+        "description": "The /system/package list was empty, backend route may be missing or device is on a minimal install."
+      },
+      "columns": {
+        "name": "Name",
+        "version": "Version",
+        "scheduled": "Scheduled",
+        "state": "State",
+        "actions": "Actions"
+      },
+      "state": {
+        "enabled": "Enabled",
+        "disabled": "Disabled"
+      }
+    },
+    "installDialog": {
+      "title": "Confirm firmware install",
+      "descriptionBefore": "This will reboot the device and disconnect all sessions. The current configuration will remain (RouterOS preserves /system/script and config on upgrade). Type",
+      "descriptionAfter": "to proceed.",
+      "tokenLabel": "Confirmation token",
+      "targetVersion": "Target version:",
+      "from": "from"
+    }
+  },
+  "AddGatewayPage": {
+    "header": {
+      "title": "Add Gateway",
+      "subtitle": "Connect a firewall or router to FreeSDN",
+      "backToGateways": "Back to Gateways"
+    },
+    "steps": {
+      "platform": "Platform",
+      "credentials": "Credentials",
+      "test": "Test",
+      "configure": "Configure"
+    },
+    "actions": {
+      "back": "Back",
+      "next": "Next",
+      "saving": "Saving...",
+      "addGateway": "Add Gateway"
+    },
+    "vendors": {
+      "auth": {
+        "apiKey": "API Key Auth",
+        "basic": "Username/Password"
+      },
+      "opnsense": {
+        "description": "Open-source firewall and routing platform by Deciso B.V.",
+        "docs": "Create API key in System → Access → Users → API keys"
+      },
+      "pfsense": {
+        "description": "Enterprise-grade firewall by Netgate (requires pfSense Plus w/ REST API)",
+        "docs": "Generate API credentials in System → REST API → Settings"
+      },
+      "mikrotik": {
+        "description": "RouterOS-powered networking platform (v7.1+ REST API)",
+        "docs": "Enable www-ssl service in IP → Services. Use admin credentials."
+      },
+      "openwrt": {
+        "description": "Open-source Linux router firmware with LuCI RPC / ubus API",
+        "docs": "Enable uhttpd with HTTPS. Use root or admin credentials."
+      }
+    },
+    "credentials": {
+      "connectionTitle": "{{vendor}} Connection",
+      "hostLabel": "Host / IP Address",
+      "hostPlaceholder": "192.168.1.1 or firewall.local",
+      "hostError": "Invalid host · use a hostname or IP address without spaces",
+      "portLabel": "Port",
+      "portError": "Port must be between 1 and 65535",
+      "apiKeyLabel": "API Key",
+      "apiKeyPlaceholder": "Enter API key",
+      "apiSecretLabel": "API Secret",
+      "apiSecretPlaceholder": "Enter API secret",
+      "usernameLabel": "Username",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter password",
+      "verifySsl": "Verify SSL certificate"
+    },
+    "test": {
+      "title": "Test Connection",
+      "description": "Verify that FreeSDN can reach your {{vendor}} at {{host}}:{{port}}",
+      "prompt": "Click the button below to test the connection",
+      "testing": "Testing...",
+      "testButton": "Test Connection",
+      "connecting": "Connecting to {{host}}...",
+      "resultSuccess": "Connection Successful",
+      "resultFailed": "Connection Failed",
+      "failedFallback": "Connection test failed",
+      "retest": "Re-test",
+      "detectedCapabilities": "Detected Capabilities",
+      "details": {
+        "hostname": "Hostname",
+        "version": "Version",
+        "model": "Model",
+        "latency": "Latency",
+        "latencyValue": "{{ms}}ms"
+      }
+    },
+    "configure": {
+      "title": "Configure Gateway",
+      "description": "Set a name and sync preferences for this {{vendor}} integration",
+      "nameLabel": "Gateway Name",
+      "nameHelper": "A friendly name to identify this gateway in FreeSDN",
+      "descriptionLabel": "Description (optional)",
+      "descriptionPlaceholder": "e.g. Main office perimeter firewall",
+      "sync": {
+        "heading": "Sync Settings",
+        "enableLabel": "Enable automatic sync",
+        "enableHelper": "Periodically pull status and configuration from this gateway",
+        "intervalLabel": "Sync interval (seconds)",
+        "intervalHelper": "Minimum 60 seconds. Recommended: 300 (5 minutes)"
+      },
+      "summary": {
+        "heading": "Summary",
+        "platform": "Platform",
+        "host": "Host",
+        "detectedHostname": "Detected Hostname",
+        "version": "Version",
+        "autoSync": "Auto Sync",
+        "everyN": "Every {{n}}s",
+        "disabled": "Disabled"
+      }
+    },
+    "toast": {
+      "connectionSuccess": {
+        "title": "Connection successful",
+        "description": "Connected to {{host}}"
+      },
+      "gatewayAdded": {
+        "title": "Gateway added",
+        "description": "{{name}} has been connected successfully."
+      },
+      "error": {
+        "title": "Error",
+        "fallback": "Failed to create gateway"
+      }
+    }
+  },
+  "MikroTikSystemTab": {
+    "loading": "Loading RouterOS system info…",
+    "liveState": "Live RouterOS state · refreshes every 30s",
+    "error": {
+      "loadFailed": "Failed to load RouterOS system info",
+      "noInfo": "No system info returned."
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "editName": "Edit name",
+      "editNtp": "Edit NTP",
+      "cancel": "Cancel",
+      "stageChange": "Stage change"
+    },
+    "identity": {
+      "title": "Identity",
+      "description": "Router name & hardware metadata",
+      "fields": {
+        "name": "Name",
+        "board": "Board",
+        "version": "RouterOS Version",
+        "architecture": "Architecture",
+        "serial": "Serial",
+        "factoryFirmware": "Factory firmware",
+        "currentFirmware": "Current firmware",
+        "upgradeAvailable": "Upgrade available"
+      }
+    },
+    "time": {
+      "title": "Time & NTP",
+      "description": "Router clock & time-sync configuration",
+      "fields": {
+        "date": "Date",
+        "time": "Time",
+        "timezone": "Timezone",
+        "dst": "DST"
+      },
+      "dstUnknown": "unknown",
+      "ntpNotice": "NTP servers are managed via the staged-change pipeline. The current values are not surfaced in this aggregated read, edit to overwrite primary / secondary servers and apply via the Pending Changes panel."
+    },
+    "resource": {
+      "title": "Resource usage",
+      "description": "Live CPU, memory, and uptime metrics",
+      "cpuLoad": "CPU load",
+      "cpuDetail": "{{cpu}} · {{count}}-core @ {{freq}} MHz",
+      "ramUsed": "RAM used",
+      "diskFree": "Disk free",
+      "uptime": "Uptime",
+      "ofTotal": "of {{total}} total",
+      "build": "build: {{build}}"
+    },
+    "health": {
+      "title": "Hardware health",
+      "columns": {
+        "sensor": "Sensor",
+        "value": "Value",
+        "type": "Type"
+      }
+    },
+    "identityDialog": {
+      "title": "Edit router identity",
+      "description": "Stage a change to RouterOS /system/identity. Apply from the Pending Changes panel.",
+      "nameLabel": "Name"
+    },
+    "ntpDialog": {
+      "title": "Edit NTP servers",
+      "description": "Stage a change to RouterOS /system/ntp/client. Apply from the Pending Changes panel.",
+      "primaryLabel": "Primary NTP server",
+      "secondaryLabel": "Secondary NTP server (optional)"
+    },
+    "toasts": {
+      "identityStaged": {
+        "title": "Identity update staged",
+        "description": "Apply via Pending Changes."
+      },
+      "identityFailed": {
+        "title": "Failed to stage identity change"
+      },
+      "ntpStaged": {
+        "title": "NTP update staged",
+        "description": "Apply via Pending Changes."
+      },
+      "ntpFailed": {
+        "title": "Failed to stage NTP change"
+      }
+    }
+  },
+  "GatewayIdsTab": {
+    "common": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "status": {
+      "running": "Running",
+      "stopped": "Stopped"
+    },
+    "actions": {
+      "start": "Start",
+      "stop": "Stop",
+      "restart": "Restart",
+      "updateRules": "Update Rules",
+      "edit": "Edit",
+      "clearAlerts": "Clear Alerts",
+      "cancel": "Cancel"
+    },
+    "alertColumns": {
+      "time": "Time",
+      "severity": "Severity",
+      "source": "Source",
+      "destination": "Destination",
+      "signature": "Signature",
+      "action": "Action"
+    },
+    "settings": {
+      "title": "IDS/IPS Settings",
+      "empty": "No IDS settings available",
+      "fields": {
+        "enabled": "Enabled",
+        "ipsMode": "IPS Mode",
+        "patternMatcher": "Pattern Matcher",
+        "interfaces": "Interfaces"
+      },
+      "values": {
+        "activeDrop": "Active (drop)",
+        "alertOnly": "Alert only"
+      }
+    },
+    "alerts": {
+      "title": "IDS Alerts ({{count}})",
+      "description": "Recent intrusion detection alerts",
+      "searchPlaceholder": "Search alerts..."
+    },
+    "rulesets": {
+      "title": "IDS Rulesets",
+      "description": "Installed rule categories",
+      "columns": {
+        "name": "Name",
+        "description": "Description",
+        "enabled": "Enabled"
+      }
+    },
+    "rules": {
+      "title": "IDS Rules ({{count}})",
+      "description": "Individual detection rules",
+      "searchPlaceholder": "Search IDS rules...",
+      "toggle": "Toggle",
+      "columns": {
+        "sid": "SID",
+        "description": "Description",
+        "severity": "Severity",
+        "enabled": "Enabled",
+        "actions": "Actions"
+      }
+    },
+    "crowdsec": {
+      "title": "CrowdSec IPS",
+      "description": "Collaborative intrusion prevention system",
+      "loading": "Loading CrowdSec…",
+      "service": "Service",
+      "unknown": "Unknown",
+      "alerts": "Alerts",
+      "activeDecisions": "Active Decisions",
+      "columns": {
+        "ipRange": "IP/Range",
+        "reason": "Reason",
+        "action": "Action",
+        "expires": "Expires"
+      }
+    },
+    "dialogs": {
+      "clearAlerts": {
+        "title": "Clear all IDS alerts?",
+        "description": "Clear all IDS alerts? This is irreversible."
+      },
+      "updateRules": {
+        "title": "Update IDS rules?",
+        "description": "Download and apply the latest IDS ruleset? This may take several minutes and temporarily increase CPU load."
+      }
+    }
+  },
+  "GatewayMonitoringTab": {
+    "common": {
+      "unknown": "Unknown",
+      "yes": "Yes",
+      "no": "No",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "stats": {
+      "temperature": "Temperature",
+      "diskUsage": "Disk Usage",
+      "health": "Health",
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "pfStates": "PF States"
+    },
+    "traffic": {
+      "title": "Traffic Statistics",
+      "address": "Address",
+      "rateIn": "Rate In",
+      "rateOut": "Rate Out",
+      "cumulative": "Cumulative",
+      "noData": "No traffic data"
+    },
+    "healthCheck": {
+      "title": "Health Check Details"
+    },
+    "gatewayHealth": {
+      "title": "Gateway Health",
+      "gatewayN": "Gateway {{n}}",
+      "ip": "IP",
+      "monitor": "Monitor",
+      "latency": "Latency",
+      "loss": "Loss",
+      "stddev": "Stddev"
+    },
+    "monit": {
+      "title": "Monit",
+      "description": "Service and system health monitoring",
+      "loading": "Loading Monit…",
+      "service": "Service",
+      "monitoredServices": "Monitored Services",
+      "tests": "Tests",
+      "alertRules": "Alert Rules",
+      "table": {
+        "name": "Name",
+        "type": "Type",
+        "address": "Address",
+        "enabled": "Enabled"
+      }
+    },
+    "telegraf": {
+      "title": "Telegraf",
+      "description": "Metrics collection agent",
+      "loading": "Loading Telegraf…",
+      "enabled": "Enabled",
+      "service": "Service",
+      "graphiteServer": "Graphite Server",
+      "influxUrl": "InfluxDB URL",
+      "influxDatabase": "InfluxDB Database"
+    },
+    "netflow": {
+      "title": "NetFlow / sFlow",
+      "description": "Network flow data collection and export",
+      "loading": "Loading NetFlow…",
+      "capture": "Capture",
+      "service": "Service",
+      "interfaces": "Interfaces",
+      "version": "NetFlow Version",
+      "listenPort": "Listen Port"
+    }
+  },
+  "MikroTikTopologyTab": {
+    "loading": "Loading RouterOS topology…",
+    "actions": {
+      "refresh": "Refresh"
+    },
+    "toast": {
+      "settingsStaged": "Discovery settings update staged",
+      "settingsStageFailed": "Failed to stage settings update"
+    },
+    "graph": {
+      "title": "Topology graph",
+      "description": "Discovered neighbors across LLDP, CDP, and MNDP. {{count}} neighbor(s) reported by the device.",
+      "loadError": "Failed to load topology",
+      "legend": "Legend:",
+      "empty": {
+        "title": "No neighbors discovered",
+        "description": "The device has not yet seen any L2 neighbors. This is normal on isolated networks (lab CHR) or before LLDP/CDP/MNDP traffic flows. Verify discovery is enabled on the right interface scope."
+      }
+    },
+    "settings": {
+      "title": "Neighbor discovery settings",
+      "description": "Which discovery protocols run and which interfaces they listen on.",
+      "edit": "Edit settings",
+      "loadError": "Failed to load discovery settings",
+      "protocolsEnabled": "Protocols enabled",
+      "interfaceScope": "Interface scope",
+      "empty": {
+        "title": "Discovery settings unavailable",
+        "description": "The /ip/neighbor/discovery-settings endpoint did not respond."
+      }
+    },
+    "lldp": {
+      "title": "LLDP per-interface",
+      "description": "/interface/lldp/interface, every interface with an LLDP neighbor visible.",
+      "loadError": "Failed to load LLDP interfaces",
+      "empty": {
+        "title": "No LLDP neighbors",
+        "description": "No interfaces reported an LLDP neighbor. Enable LLDP on the trunk port if you expect upstream switches to advertise."
+      },
+      "columns": {
+        "interface": "Interface",
+        "systemName": "Neighbor system-name",
+        "portId": "Neighbor port-id",
+        "mgmtAddress": "Mgmt address"
+      }
+    },
+    "dialog": {
+      "title": "Edit neighbor discovery settings",
+      "description": "Stages a change to /ip/neighbor/discovery-settings. Empty fields leave the existing value unchanged.",
+      "protocolLabel": "Protocols enabled",
+      "protocolHelp": "Comma-separated list. RouterOS supports lldp, cdp, mndp.",
+      "scopeLabel": "Interface list",
+      "scopeHelp": "Use all to listen everywhere, or a defined interface-list name.",
+      "badge": "Edges in the topology graph are colored by source protocol.",
+      "cancel": "Cancel",
+      "submit": "Stage update"
+    }
+  },
+  "GatewayShaperTab": {
+    "columns": {
+      "description": "Description",
+      "bandwidth": "Bandwidth",
+      "mask": "Mask",
+      "enabled": "Enabled",
+      "pipe": "Pipe",
+      "weight": "Weight",
+      "actions": "Actions",
+      "interface": "Interface",
+      "protocol": "Protocol",
+      "source": "Source",
+      "destination": "Destination",
+      "queue": "Queue"
+    },
+    "values": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "pipes": {
+      "title": "Shaper Pipes",
+      "description": "Bandwidth pipes"
+    },
+    "queues": {
+      "title": "Shaper Queues ({{count}})",
+      "description": "Weighted fair queuing"
+    },
+    "rules": {
+      "title": "Shaper Rules ({{count}})",
+      "description": "Traffic classification rules"
+    },
+    "actions": {
+      "addPipe": "Add Pipe",
+      "addQueue": "Add Queue",
+      "addRule": "Add Rule"
+    }
+  },
+  "UniFiNetworksTab": {
+    "title": "UniFi Networks",
+    "siteLabel": "Site:",
+    "description": "Stage VLAN create, plus per-network rename and delete. Subnet + DHCP fields are optional, leave empty for a VLAN-only (no L3) network.",
+    "loading": "Loading…",
+    "loadError": "Failed to load networks:",
+    "unknownError": "Unknown error",
+    "unnamed": "(unnamed)",
+    "dhcpOn": "DHCP on",
+    "form": {
+      "createVlan": "Create VLAN",
+      "vlanId": "VLAN ID (1-4094)",
+      "networkName": "Network name",
+      "networkNamePlaceholder": "Guest",
+      "subnet": "Subnet (optional)",
+      "enableDhcp": "Enable DHCP",
+      "dhcpStartPlaceholder": "DHCP start (10.10.0.6)",
+      "dhcpStopPlaceholder": "DHCP stop (10.10.0.254)",
+      "updateNetwork": "Update network",
+      "unchanged": "(unchanged)"
+    },
+    "actions": {
+      "stageVlanCreate": "Stage VLAN create",
+      "stageUpdate": "Stage update",
+      "stage": "Stage",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "title": "Stage VLAN create?",
+      "updateTitle": "Stage update?",
+      "deleteTitle": "Stage delete?",
+      "stagePrefix": "Stage",
+      "forVlan": "for VLAN",
+      "subnetLabel": "Subnet:",
+      "against": "for",
+      "suffix": ". The change applies via the Pending Changes drawer."
+    },
+    "toast": {
+      "staged": {
+        "title": "VLAN create staged",
+        "description": "VLAN {{vlanId}} ({{name}})"
+      },
+      "updated": {
+        "title": "Network update staged"
+      },
+      "deleted": {
+        "title": "Network delete staged"
+      },
+      "error": {
+        "title": "Failed to stage VLAN create"
+      }
+    }
+  },
+  "UniFiWlansTab": {
+    "title": "UniFi WLANs",
+    "siteLabel": "Site:",
+    "description": "· Stage PSK rotation and enable/disable. PSK is masked in the input and redacted in the drawer payload preview.",
+    "stageByWlanId": "Stage by WLAN ID",
+    "wlanIdPlaceholder": "WLAN ID (Mongo ObjectID)",
+    "newPskLabel": "New PSK (8-63 chars)",
+    "loadFailed": "Failed to load WLANs:",
+    "unknownError": "Unknown error",
+    "loading": "Loading…",
+    "empty": "No WLANs configured. Stage actions against a specific WLAN ID using the form above.",
+    "status": {
+      "disabled": "disabled",
+      "hidden": "hidden"
+    },
+    "actions": {
+      "stagePsk": "Stage PSK",
+      "stageEnable": "Stage enable",
+      "stageDisable": "Stage disable",
+      "enable": "Enable",
+      "disable": "Disable",
+      "cancel": "Cancel",
+      "stage": "Stage"
+    },
+    "toast": {
+      "pskStaged": "PSK rotation staged",
+      "enableStaged": "WLAN enable staged",
+      "disableStaged": "WLAN disable staged",
+      "stageFailed": "Failed to stage change"
+    },
+    "dialog": {
+      "rotatePskTitle": "Rotate PSK?",
+      "enableTitle": "Enable WLAN?",
+      "disableTitle": "Disable WLAN?",
+      "stagePrefix": "Stage",
+      "against": "against",
+      "pskNote": "The new PSK is sent over the same encrypted channel and is masked in the drawer payload."
+    }
+  },
+  "GatewayRulesTab": {
+    "title": "Firewall Rules",
+    "liveRulesFrom": "Live rules from {{vendor}}",
+    "pushRule": "Push Rule",
+    "searchPlaceholder": "Search rules...",
+    "notSuffix": " (not)",
+    "columns": {
+      "action": "Action",
+      "direction": "Dir",
+      "protocol": "Proto",
+      "source": "Source",
+      "destination": "Destination",
+      "interface": "Interface",
+      "gateway": "Gateway",
+      "description": "Description",
+      "enabled": "Enabled",
+      "log": "Log"
+    }
+  },
+  "GatewayLogsTab": {
+    "title": "System & Firewall Logs",
+    "description": "Recent log entries from the gateway",
+    "tabs": {
+      "firewall": "Firewall",
+      "system": "System"
+    },
+    "searchFirewall": "Search firewall logs...",
+    "searchSystem": "Search system logs..."
+  },
+  "OpenWrtTab": {
+    "common": {
+      "loading": "Loading…",
+      "disabled": "disabled",
+      "cancel": "Cancel"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "interfaces": "Interfaces",
+      "firewall": "Firewall",
+      "portForwards": "Port Forwards",
+      "dhcpLeases": "DHCP Leases",
+      "dhcpStatic": "DHCP Static",
+      "arp": "ARP / Neighbors"
+    },
+    "actions": {
+      "refresh": "Refresh"
+    },
+    "authError": "Cannot reach the OpenWrt device. Check credentials + connectivity.",
+    "toasts": {
+      "staged": {
+        "title": "Change staged",
+        "description": "{{msg}}, open Pending Changes to apply."
+      },
+      "stageFailed": {
+        "title": "Stage failed",
+        "unknown": "unknown error"
+      }
+    },
+    "staged": {
+      "deleteRule": "Delete firewall rule",
+      "newRule": "New firewall rule",
+      "deletePortForward": "Delete port forward",
+      "newPortForward": "New port forward",
+      "deleteStaticHost": "Delete static host",
+      "newStaticHost": "New static host"
+    },
+    "overview": {
+      "system": "System",
+      "hostname": "Hostname",
+      "model": "Model",
+      "openwrtVersion": "OpenWrt version",
+      "kernel": "Kernel",
+      "uptime": "Uptime",
+      "load": "Load (1/5/15)",
+      "memory": "Memory",
+      "total": "Total",
+      "available": "Available",
+      "cached": "Cached",
+      "buffered": "Buffered",
+      "used": "Used"
+    },
+    "interfaces": {
+      "title": "Network Interfaces",
+      "count": "{{n}} interfaces",
+      "empty": "No interfaces.",
+      "col": {
+        "interface": "Interface",
+        "device": "Device",
+        "ipv4": "IPv4",
+        "gateway": "Gateway",
+        "state": "State"
+      }
+    },
+    "firewall": {
+      "title": "Firewall Rules",
+      "count": "{{n}} rules",
+      "newRule": "New rule",
+      "empty": "No firewall rules.",
+      "confirmDelete": "Stage delete of rule '{{name}}'?",
+      "col": {
+        "name": "Name",
+        "srcDest": "Src → Dest",
+        "target": "Target",
+        "proto": "Proto",
+        "status": "Status"
+      }
+    },
+    "portForwards": {
+      "title": "Port Forwards",
+      "count": "{{n}} forwards",
+      "newForward": "New forward",
+      "empty": "No port forwards configured.",
+      "confirmDelete": "Stage delete of port forward '{{name}}'?",
+      "col": {
+        "name": "Name",
+        "external": "External (src:port)",
+        "internal": "Internal (dest:port)",
+        "proto": "Proto",
+        "status": "Status"
+      }
+    },
+    "dhcp": {
+      "title": "DHCP Leases",
+      "count": "{{n}} leases",
+      "empty": "No active DHCP leases.",
+      "col": {
+        "hostname": "Hostname",
+        "ipAddress": "IP Address",
+        "mac": "MAC",
+        "expires": "Expires"
+      }
+    },
+    "arp": {
+      "title": "ARP / Neighbors",
+      "count": "{{n}} entries",
+      "empty": "ARP table empty.",
+      "col": {
+        "ipAddress": "IP Address",
+        "macAddress": "MAC Address",
+        "interface": "Interface"
+      }
+    },
+    "dhcpStatic": {
+      "title": "DHCP Static Hosts",
+      "count": "{{n}} reservations",
+      "newReservation": "New reservation",
+      "emptyPrefix": "No static reservations. Click",
+      "emptySuffix": "to add one.",
+      "confirmDelete": "Stage delete of reservation '{{name}}'?",
+      "col": {
+        "hostname": "Hostname",
+        "macAddress": "MAC Address",
+        "ipAddress": "IP Address"
+      }
+    },
+    "ruleDialog": {
+      "title": "New firewall rule",
+      "name": "Name",
+      "zoneSrc": "Zone (src)",
+      "target": "Target",
+      "protocol": "Protocol",
+      "destPort": "Dest port",
+      "submit": "Stage rule"
+    },
+    "pfDialog": {
+      "title": "New port forward",
+      "name": "Name",
+      "sourceZone": "Source zone",
+      "protocol": "Protocol",
+      "externalPort": "External port",
+      "internalIp": "Internal IP",
+      "internalPort": "Internal port",
+      "submit": "Stage forward"
+    },
+    "hostDialog": {
+      "title": "New DHCP reservation",
+      "hostname": "Hostname",
+      "macAddress": "MAC address",
+      "ipAddress": "IP address",
+      "submit": "Stage reservation"
+    }
+  },
+  "MikroTikSnmpTab": {
+    "loading": "Loading RouterOS SNMP…",
+    "actions": {
+      "refresh": "Refresh",
+      "editSettings": "Edit settings",
+      "addTrap": "Add trap target",
+      "addV3User": "Add SNMPv3 user",
+      "edit": "Edit",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "stageUpdate": "Stage update",
+      "stageCreate": "Stage create",
+      "stageDelete": "Stage delete"
+    },
+    "toasts": {
+      "settingsStaged": "SNMP settings update staged",
+      "settingsFailed": "Failed to stage settings",
+      "trapStaged": "Trap target staged",
+      "trapFailed": "Failed to stage trap",
+      "trapDeleteStaged": "Trap delete staged",
+      "deleteFailed": "Failed to stage delete",
+      "v3UserStaged": "SNMPv3 user staged",
+      "v3UserFailed": "Failed to stage SNMPv3 user",
+      "v3UserDeleteStaged": "SNMPv3 user delete staged"
+    },
+    "server": {
+      "title": "SNMP server",
+      "description": "/snmp singleton · enable the daemon and set trap-community / contact / location metadata.",
+      "body": "Use the dialog to update SNMP server enable state and basic metadata. The /snmp/settings read is part of the existing security domain, operators can verify the staged change in the pending-changes queue before applying."
+    },
+    "traps": {
+      "title": "Trap targets",
+      "description": "/snmp/trap rows · destinations the router sends SNMP traps to.",
+      "loadError": "Failed to load trap targets",
+      "empty": {
+        "title": "No trap targets configured",
+        "description": "Add a trap target to forward SNMP notifications to a manager."
+      },
+      "columns": {
+        "address": "Address",
+        "port": "Port",
+        "version": "Version",
+        "community": "Community",
+        "comment": "Comment",
+        "actions": "Actions"
+      }
+    },
+    "v3Users": {
+      "title": "SNMPv3 users",
+      "description": "/snmp/community v3 rows · per-user auth + encryption. Passwords are write-only and never displayed.",
+      "loadError": "Failed to load SNMPv3 users",
+      "empty": {
+        "title": "No SNMPv3 users defined",
+        "description": "Add a user to enable authenticated + encrypted SNMP queries."
+      },
+      "columns": {
+        "name": "Name",
+        "authProtocol": "Auth protocol",
+        "encryptionProtocol": "Encryption protocol",
+        "addresses": "Addresses"
+      }
+    },
+    "settingsDialog": {
+      "title": "Edit SNMP server settings",
+      "description": "Stages a change to the /snmp singleton.",
+      "enable": "Enable SNMP server",
+      "trapCommunity": "Trap community",
+      "contact": "Contact",
+      "location": "Location",
+      "locationPlaceholder": "rack-3 / floor 2"
+    },
+    "trapDialog": {
+      "editTitle": "Edit trap target",
+      "addTitle": "Add trap target",
+      "description": "Stages a change to /snmp/trap.",
+      "address": "Address",
+      "port": "Port",
+      "version": "Version",
+      "community": "Community",
+      "comment": "Comment",
+      "commentPlaceholder": "primary NMS"
+    },
+    "trapDelete": {
+      "title": "Delete trap target",
+      "confirmPrefix": "Remove the trap to",
+      "confirmSuffix": "?"
+    },
+    "v3Dialog": {
+      "editTitle": "Edit SNMPv3 user",
+      "addTitle": "Add SNMPv3 user",
+      "description": "Passwords are write-only. On edit, leave the password fields empty to keep the existing values; type a new value to rotate.",
+      "name": "Name",
+      "authProtocol": "Auth protocol",
+      "encryptionProtocol": "Encryption protocol",
+      "authPassword": "Auth password",
+      "privacyPassword": "Privacy password",
+      "passwordKeepPlaceholder": "(leave empty to keep existing)",
+      "passwordMinPlaceholder": "min 8 chars",
+      "allowedAddresses": "Allowed addresses",
+      "comment": "Comment",
+      "commentPlaceholder": "prometheus snmp_exporter",
+      "securityNote": "Passwords are never read back from the device or stored client-side beyond submission."
+    },
+    "v3Delete": {
+      "title": "Delete SNMPv3 user",
+      "confirmPrefix": "Remove SNMPv3 user",
+      "confirmSuffix": "?"
+    }
+  },
+  "MikroTikHotspotTab": {
+    "loading": "Loading RouterOS hotspot…",
+    "common": {
+      "yes": "Yes",
+      "no": "No",
+      "default": "default"
+    },
+    "fallback": {
+      "server": "server",
+      "profile": "profile"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "addServer": "Add server",
+      "addProfile": "Add profile",
+      "cancel": "Cancel",
+      "stageCreate": "Stage create",
+      "stageUpdate": "Stage update",
+      "stageDelete": "Stage delete"
+    },
+    "columns": {
+      "name": "Name",
+      "interface": "Interface",
+      "pool": "Pool",
+      "profile": "Profile",
+      "enabled": "Enabled",
+      "comment": "Comment",
+      "actions": "Actions",
+      "rateLimit": "Rate limit",
+      "sessionTimeout": "Session timeout",
+      "idleTimeout": "Idle timeout",
+      "sharedUsers": "Shared users",
+      "user": "User",
+      "ip": "IP",
+      "mac": "MAC",
+      "uptime": "Uptime",
+      "server": "Server"
+    },
+    "fields": {
+      "name": "Name",
+      "interface": "Interface",
+      "addressPool": "Address pool",
+      "profile": "Profile",
+      "comment": "Comment",
+      "rateLimit": "Rate limit (rx/tx)",
+      "sessionTimeout": "Session timeout",
+      "idleTimeout": "Idle timeout",
+      "sharedUsers": "Shared users"
+    },
+    "servers": {
+      "title": "Hotspot servers",
+      "description": "per-interface bindings · full CRUD",
+      "loadError": "Failed to load hotspot servers",
+      "emptyTitle": "No hotspot servers",
+      "emptyDescription": "No /ip/hotspot rows on this router."
+    },
+    "profiles": {
+      "title": "User profiles",
+      "description": "rate / quota templates · full CRUD",
+      "loadError": "Failed to load hotspot user profiles",
+      "emptyTitle": "No user profiles",
+      "emptyDescription": "No /ip/hotspot/user/profile rows on this router."
+    },
+    "active": {
+      "title": "Active users",
+      "description": "· live sessions · refresh every 15s. Disconnect is planned (adapter wiring pending).",
+      "loadError": "Failed to load active sessions",
+      "emptyTitle": "No active sessions",
+      "emptyDescription": "No clients are currently logged into the hotspot.",
+      "disconnect": "Disconnect",
+      "disconnectTooltip": "Disconnect is planned, adapter wiring pending"
+    },
+    "aria": {
+      "editServer": "Edit hotspot server {{name}}",
+      "deleteServer": "Delete hotspot server {{name}}",
+      "editProfile": "Edit hotspot profile {{name}}",
+      "deleteProfile": "Delete hotspot profile {{name}}"
+    },
+    "serverDialog": {
+      "addTitle": "Add hotspot server",
+      "editTitle": "Edit hotspot server",
+      "description": "Stage a change to RouterOS ``/ip/hotspot``."
+    },
+    "profileDialog": {
+      "addTitle": "Add user profile",
+      "editTitle": "Edit user profile",
+      "description": "Stage a change to RouterOS ``/ip/hotspot/user/profile``."
+    },
+    "deleteDialog": {
+      "title": "Stage delete?",
+      "intro": "This stages a delete for"
+    },
+    "deleteLabel": {
+      "server": "hotspot server {{name}}",
+      "profile": "user profile {{name}}"
+    },
+    "errors": {
+      "cannotUpdateServerTitle": "Cannot update server",
+      "serverNoId": "Server has no RouterOS id (.id missing).",
+      "cannotUpdateProfileTitle": "Cannot update profile",
+      "profileNoId": "Profile has no RouterOS id (.id missing).",
+      "cannotDeleteTitle": "Cannot delete",
+      "rowNoId": "Row has no RouterOS id (.id missing)."
+    },
+    "toasts": {
+      "serverCreateStaged": "Hotspot server create staged",
+      "serverUpdateStaged": "Hotspot server update staged",
+      "serverDeleteStaged": "Hotspot server delete staged",
+      "serverCreateFailed": "Failed to stage server create",
+      "serverUpdateFailed": "Failed to stage server update",
+      "serverDeleteFailed": "Failed to stage server delete",
+      "profileCreateStaged": "Hotspot user-profile create staged",
+      "profileUpdateStaged": "Hotspot user-profile update staged",
+      "profileDeleteStaged": "Hotspot user-profile delete staged",
+      "profileCreateFailed": "Failed to stage profile create",
+      "profileUpdateFailed": "Failed to stage profile update",
+      "profileDeleteFailed": "Failed to stage profile delete"
+    }
+  },
+  "MikroTikBackupTab": {
+    "loading": "Loading RouterOS backups…",
+    "common": {
+      "cancel": "Cancel"
+    },
+    "actions": {
+      "createBinary": "Create binary backup",
+      "exportConfig": "Export config (.rsc)",
+      "uploadBackup": "Upload backup",
+      "refresh": "Refresh"
+    },
+    "savedBackups": {
+      "title": "Saved backups",
+      "description": "`/file` filtered to `.backup` and `.rsc`. Restore requires typed confirmation and reboots the device into the saved config."
+    },
+    "errors": {
+      "loadBackups": "Failed to load backups"
+    },
+    "empty": {
+      "title": "No backups on the device",
+      "description": "Create a binary backup or export the running config to get started."
+    },
+    "table": {
+      "filename": "Filename",
+      "type": "Type",
+      "size": "Size",
+      "created": "Created",
+      "actions": "Actions",
+      "kindOther": "other"
+    },
+    "rowActions": {
+      "download": "Download",
+      "restore": "Restore",
+      "delete": "Delete"
+    },
+    "toasts": {
+      "createSuccess": "Binary backup staged",
+      "createError": "Failed to stage backup",
+      "exportSuccess": "Text export staged",
+      "exportError": "Failed to stage export",
+      "uploadSuccess": "Backup upload staged",
+      "uploadError": "Failed to stage upload",
+      "deleteSuccess": "Backup delete staged",
+      "deleteError": "Failed to stage delete",
+      "restoreSuccess": "Backup restore staged",
+      "restoreSuccessDescription": "After applying the pending change, the device will reboot into the restored config.",
+      "restoreError": "Failed to stage restore",
+      "downloadSuccess": "Downloaded {{name}}",
+      "downloadError": "Download failed"
+    },
+    "createDialog": {
+      "title": "Create binary backup",
+      "description": "Stages a `/system/backup/save` call. The resulting `.backup` file lives in RouterOS storage and contains the full system state.",
+      "nameLabel": "Filename (no extension)",
+      "namePlaceholder": "pre-upgrade",
+      "passwordLabel": "Password (optional · encrypts the backup)",
+      "passwordPlaceholder": "(leave empty for unencrypted)",
+      "submit": "Stage create"
+    },
+    "exportDialog": {
+      "title": "Export config as .rsc",
+      "description": "Stages an `/export` call. The result is a human-readable RouterOS script saved to a `.rsc` file you can review before re-importing.",
+      "commentLabel": "Comment",
+      "commentPlaceholder": "config snapshot",
+      "encryptedLabel": "Encrypted export (passwords + keys included as ciphertext)",
+      "submit": "Stage export"
+    },
+    "uploadDialog": {
+      "title": "Upload backup",
+      "description": "Uploads a backup file to RouterOS storage. The file is parsed as utf-8 text, for `.backup` binaries, copy via SCP / Winbox instead.",
+      "chooseFileLabel": "Choose file",
+      "nameLabel": "Destination filename",
+      "namePlaceholder": "restore.rsc",
+      "charsLoaded": "{{count}} chars loaded",
+      "noFileSelected": "No file selected.",
+      "submit": "Stage upload"
+    },
+    "deleteDialog": {
+      "title": "Delete backup",
+      "descriptionPrefix": "Remove",
+      "descriptionSuffix": "from RouterOS storage? This stages a delete; apply via the pending-changes queue.",
+      "submit": "Stage delete"
+    },
+    "restoreDialog": {
+      "title": "Confirm restore",
+      "descriptionPrefix": "Restoring a backup REBOOTS the device into the saved config, all current state is lost. Type the filename",
+      "descriptionSuffix": "to proceed.",
+      "confirmLabel": "Type filename to confirm",
+      "passwordLabel": "Backup password (if any)",
+      "passwordPlaceholder": "(leave empty for unencrypted backups)",
+      "submit": "Stage restore"
+    }
+  },
+  "GatewayVpnTab": {
+    "columns": {
+      "name": "Name",
+      "port": "Port",
+      "tunnelAddress": "Tunnel Address",
+      "enabled": "Enabled",
+      "publicKey": "Public Key",
+      "allowedIps": "Allowed IPs",
+      "endpoint": "Endpoint",
+      "keepalive": "Keepalive",
+      "description": "Description",
+      "remote": "Remote",
+      "ike": "IKE",
+      "protocol": "Protocol",
+      "status": "Status",
+      "peer": "Peer",
+      "lastHandshake": "Last Handshake",
+      "transferRx": "Transfer RX",
+      "transferTx": "Transfer TX"
+    },
+    "actions": {
+      "server": "Server",
+      "peer": "Peer",
+      "instance": "Instance",
+      "kill": "Kill",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "applyChanges": "Apply Changes"
+    },
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "active": "Active",
+      "disabled": "Disabled",
+      "enabled": "Enabled",
+      "running": "Running",
+      "stopped": "Stopped"
+    },
+    "common": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "wireguard": {
+      "title": "WireGuard",
+      "description": "Servers and peers",
+      "servers": "Servers",
+      "peers": "Peers",
+      "empty": "No WireGuard configuration"
+    },
+    "handshakes": {
+      "title": "WireGuard Handshakes",
+      "description": "Latest peer handshake timestamps"
+    },
+    "openvpn": {
+      "title": "OpenVPN",
+      "summary": "{{instances}} instances, {{sessions}} active sessions",
+      "instanceFallback": "Instance {{index}}",
+      "tunnel": "Tunnel",
+      "protocol": "Protocol",
+      "port": "Port",
+      "local": "Local",
+      "activeSessions": "Active Sessions",
+      "connected": "Connected",
+      "empty": "No OpenVPN instances configured"
+    },
+    "ipsec": {
+      "title": "IPsec",
+      "description": "Phase 1 and Phase 2 tunnels",
+      "phase1": "Phase 1",
+      "phase2": "Phase 2",
+      "empty": "No IPsec tunnels configured"
+    },
+    "ipsecStatus": {
+      "title": "IPsec Live Status",
+      "description": "Real-time tunnel status from gateway"
+    },
+    "tailscale": {
+      "title": "Tailscale",
+      "description": "Mesh VPN via Tailscale",
+      "enabled": "Enabled",
+      "listenPort": "Listen Port",
+      "acceptDns": "Accept DNS",
+      "exitNode": "Exit Node",
+      "subnetRoutes": "Subnet Routes",
+      "ssh": "SSH",
+      "snat": "SNAT",
+      "advertising": "Advertising",
+      "accepting": "Accepting",
+      "exitNodePeers": "Exit Node Peers"
+    },
+    "rawStatus": {
+      "title": "VPN Raw Status"
+    }
+  },
+  "GatewayListPage": {
+    "header": {
+      "title": "Gateways",
+      "subtitle": "Manage firewall and router integrations"
+    },
+    "actions": {
+      "addGateway": "Add Gateway",
+      "viewDetails": "View Details",
+      "testConnection": "Test Connection",
+      "syncNow": "Sync Now",
+      "delete": "Delete"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "stats": {
+      "totalGateways": "Total Gateways",
+      "online": "Online",
+      "offlineCount": "{{count}} offline",
+      "allReachable": "All gateways reachable",
+      "syncOk": "Sync OK",
+      "failedCount": "{{count}} failed",
+      "platforms": "Platforms",
+      "noGateways": "No gateways yet"
+    },
+    "table": {
+      "title": "Firewall Gateways",
+      "description": "Integrated firewall and router platforms connected to FreeSDN",
+      "searchPlaceholder": "Search gateways..."
+    },
+    "filter": {
+      "allPlatforms": "All Platforms"
+    },
+    "columns": {
+      "gateway": "Gateway",
+      "platform": "Platform",
+      "status": "Status",
+      "version": "Version",
+      "sync": "Sync"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "unknown": "Unknown"
+    },
+    "syncStatus": {
+      "idle": "Idle",
+      "syncing": "Syncing",
+      "success": "Synced",
+      "failed": "Failed",
+      "never": "Never"
+    },
+    "gatewayFallback": "Gateway",
+    "toasts": {
+      "error": "Error",
+      "deleteFailed": "Failed to delete gateway",
+      "deleted": {
+        "title": "Gateway deleted",
+        "description": "The gateway integration has been removed."
+      },
+      "syncStarted": {
+        "title": "Sync started",
+        "description": "Gateway sync has been triggered."
+      },
+      "syncFailed": {
+        "title": "Sync failed",
+        "description": "Sync could not be started"
+      },
+      "connectionOk": {
+        "title": "Connection OK",
+        "description": "{{hostname}} · {{version}} ({{latency}}ms)"
+      },
+      "connectionFailed": {
+        "title": "Connection failed"
+      },
+      "testFailed": {
+        "title": "Test failed",
+        "description": "Connection test failed"
+      }
+    },
+    "dialogs": {
+      "delete": {
+        "title": "Delete Gateway",
+        "confirmPrefix": "Are you sure you want to remove",
+        "confirmSuffix": "? This will disconnect the gateway integration. The actual firewall appliance will not be affected.",
+        "cancel": "Cancel",
+        "confirm": "Delete"
+      }
+    }
+  },
+  "GatewayInterfacesTab": {
+    "interfaces": {
+      "title": "Network Interfaces",
+      "description": "Physical and virtual interfaces"
+    },
+    "vlan": {
+      "title": "VLAN Devices",
+      "description": "802.1Q VLAN configurations"
+    },
+    "lagg": {
+      "title": "LAGG (Link Aggregation)",
+      "description": "Bonded interface groups"
+    },
+    "virtualIps": {
+      "title": "Virtual IPs (CARP / Alias)",
+      "description": "HA and static IP aliases · {{count}} configured"
+    },
+    "ndp": {
+      "title": "IPv6 NDP Table",
+      "description": "Neighbour Discovery Protocol entries"
+    },
+    "bridges": {
+      "title": "Network Bridges",
+      "description": "Bridge interface configurations",
+      "loading": "Loading bridges…",
+      "empty": "No bridges configured"
+    },
+    "flushArpDialog": {
+      "title": "Flush ARP table?",
+      "description": "Flush ARP table? This will briefly disrupt every L2 conversation on the LAN."
+    },
+    "actions": {
+      "flushArp": "Flush ARP",
+      "cancel": "Cancel"
+    },
+    "status": {
+      "up": "Up",
+      "down": "Down"
+    },
+    "columns": {
+      "name": "Name",
+      "status": "Status",
+      "address": "Address",
+      "vlan": "VLAN",
+      "vlanTag": "VLAN Tag",
+      "parent": "Parent",
+      "device": "Device",
+      "type": "Type",
+      "mac": "MAC",
+      "mtu": "MTU",
+      "priority": "Priority",
+      "description": "Description",
+      "protocol": "Protocol",
+      "members": "Members",
+      "memberDetails": "Member Details",
+      "interface": "Interface",
+      "mode": "Mode",
+      "vhid": "VHID",
+      "ipv6Address": "IPv6 Address",
+      "expire": "Expire",
+      "linkLocal": "Link-local",
+      "bridgeId": "Bridge ID"
+    }
+  },
+  "MikroTikVpnTab": {
+    "loading": "Loading RouterOS VPN…",
+    "common": {
+      "yes": "Yes",
+      "no": "No",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "editSettings": "Edit settings",
+      "cancel": "Cancel",
+      "stageUpdate": "Stage update"
+    },
+    "fields": {
+      "enabled": "Enabled",
+      "defaultProfile": "Default profile",
+      "authentication": "Authentication",
+      "ipsec": "IPsec",
+      "maxMtu": "Max MTU",
+      "keepalive": "Keepalive"
+    },
+    "l2tp": {
+      "title": "L2TP server",
+      "description": "``/interface/l2tp-server/server`` · singleton settings",
+      "loadError": "Failed to load L2TP server",
+      "emptyTitle": "L2TP server not available",
+      "emptyDescription": "No /interface/l2tp-server/server response, the L2TP server package may not be installed."
+    },
+    "pptp": {
+      "title": "PPTP server",
+      "deprecated": "Deprecated",
+      "description": "``/interface/pptp-server/server`` · kept for legacy clients · MS-CHAPv2 only, prefer L2TP/IPsec or WireGuard.",
+      "loadError": "Failed to load PPTP server",
+      "emptyTitle": "PPTP server not available",
+      "emptyDescription": "No /interface/pptp-server/server response, the PPTP server package may not be installed."
+    },
+    "sstp": {
+      "title": "SSTP server",
+      "description": "SSTP requires a TLS certificate. Cert provisioning and server-row settings are planned (the security tab covers the cert store today).",
+      "emptyTitle": "SSTP settings not surfaced yet",
+      "emptyDescription": "Use the System / certificates panel to manage the cert store; an SSTP-specific settings dialog is planned for a future release."
+    },
+    "dialog": {
+      "titleL2tp": "Edit L2TP server",
+      "titlePptp": "Edit PPTP server",
+      "descriptionL2tp": "Stage a change to /interface/l2tp-server/server (singleton).",
+      "descriptionPptp": "Stage a change to /interface/pptp-server/server (singleton). PPTP is deprecated; prefer L2TP/IPsec or WireGuard.",
+      "enableServer": "Enable server",
+      "useIpsec": "Use IPsec",
+      "ipsecSecretLabel": "IPsec shared secret",
+      "ipsecSecretPlaceholder": "(leave blank to keep current, only set to rotate)",
+      "ipsecSecretHelp": "The current secret is never displayed. Type a new value only when rotating it."
+    },
+    "toasts": {
+      "l2tpStaged": "L2TP server update staged",
+      "l2tpStageFailed": "Failed to stage L2TP update",
+      "pptpStaged": "PPTP server update staged",
+      "pptpStageFailed": "Failed to stage PPTP update"
+    }
+  },
+  "GatewayDnsTab": {
+    "common": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "overrideColumns": {
+      "host": "Host",
+      "domain": "Domain",
+      "type": "Type",
+      "serverIp": "Server / IP",
+      "fqdn": "FQDN",
+      "description": "Description",
+      "enabled": "Enabled"
+    },
+    "domainColumns": {
+      "domain": "Domain",
+      "server": "Server",
+      "port": "Port",
+      "description": "Description"
+    },
+    "resolverStatus": {
+      "title": "DNS Resolver Status",
+      "description": "Unbound DNS resolver live status from the gateway",
+      "unavailable": "Unbound status not available"
+    },
+    "hostOverrides": {
+      "title": "Host Overrides",
+      "description": "Custom DNS A/AAAA records",
+      "add": "Add Override",
+      "searchPlaceholder": "Search host overrides..."
+    },
+    "domainOverrides": {
+      "title": "Domain Overrides",
+      "description": "DNS forwarding per domain",
+      "add": "Add Domain"
+    },
+    "dynamicDns": {
+      "title": "Dynamic DNS",
+      "description": "DynDNS accounts and update status (os-dyndns)",
+      "columns": {
+        "description": "Description",
+        "service": "Service",
+        "hostname": "Hostname",
+        "username": "Username",
+        "interface": "Interface",
+        "currentIp": "Current IP",
+        "status": "Status"
+      },
+      "accountFallback": "Account {{n}}",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "empty": "No Dynamic DNS accounts configured. Install os-dyndns to manage dynamic DNS."
+    }
+  },
+  "UniFiClientsTab": {
+    "title": "UniFi Clients",
+    "description": {
+      "sitePrefix": "Site:",
+      "rest": "· Stage block / unblock / forget. Changes appear in the Pending Changes drawer until applied."
+    },
+    "stageByMac": {
+      "label": "Stage by MAC"
+    },
+    "actions": {
+      "stageBlock": "Stage block",
+      "block": "Block",
+      "stageUnblock": "Stage unblock",
+      "unblock": "Unblock",
+      "stageReconnect": "Stage reconnect",
+      "reconnect": "Reconnect",
+      "stageForget": "Stage forget",
+      "forget": "Forget"
+    },
+    "ops": {
+      "block": "block",
+      "unblock": "unblock",
+      "reconnect": "reconnect",
+      "forget": "forget"
+    },
+    "error": {
+      "loadFailed": "Failed to load clients:",
+      "unknown": "Unknown error"
+    },
+    "loading": "Loading clients…",
+    "empty": "No connected clients reported by the controller. Use the \"Stage by MAC\" form above to stage actions against a specific client.",
+    "blocked": "blocked",
+    "dialog": {
+      "title": "Stage {{op}}?",
+      "descriptionPrefix": "Stage",
+      "descriptionAgainst": "against",
+      "descriptionSuffix": "? The change applies via the Pending Changes drawer.",
+      "cancel": "Cancel",
+      "confirm": "Stage {{op}}"
+    },
+    "toast": {
+      "staged": {
+        "title": "Client {{op}} staged"
+      },
+      "stageFailed": {
+        "title": "Failed to stage change"
+      },
+      "macRequired": {
+        "title": "MAC required",
+        "description": "Enter a client MAC address before staging."
+      }
+    }
+  },
+  "UniFiFirewallTab": {
+    "title": "UniFi Firewall",
+    "siteLabel": "Site:",
+    "description": "Stage zone-based policy, zone, NAT, group, and classic rule create/delete. The zone matrix is read-only. Changes appear in the Pending Changes drawer until applied.",
+    "loading": "Loading…",
+    "loadError": "Failed to load firewall config:",
+    "unknownError": "Unknown error",
+    "unnamed": "(unnamed)",
+    "empty": "No entries for this resource. Stage a create using the form above.",
+    "matrixEmpty": "No zone matrix reported by the controller.",
+    "status": {
+      "disabled": "disabled"
+    },
+    "views": {
+      "policies": "Policies",
+      "zones": "Zones",
+      "zoneMatrix": "Zone matrix (read-only)",
+      "nat": "NAT",
+      "groups": "Groups",
+      "rules": "Rules (classic)"
+    },
+    "viewsSingular": {
+      "policies": "policy",
+      "zones": "zone",
+      "nat": "NAT rule",
+      "groups": "group",
+      "rules": "rule"
+    },
+    "matrix": {
+      "allow": "allow",
+      "deny": "deny"
+    },
+    "fields": {
+      "view": "View",
+      "name": "Name",
+      "namePlaceholder": "e.g. Allow LAN to WAN"
+    },
+    "form": {
+      "create": "Create {{resource}}"
+    },
+    "actions": {
+      "stageCreate": "Stage create",
+      "stage": "Stage",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "createTitle": "Stage create?",
+      "deleteTitle": "Stage delete?",
+      "stagePrefix": "Stage",
+      "against": "for",
+      "suffix": ". The change applies via the Pending Changes drawer."
+    },
+    "toast": {
+      "created": {
+        "title": "Firewall create staged"
+      },
+      "deleted": {
+        "title": "Firewall delete staged"
+      },
+      "stageFailed": {
+        "title": "Failed to stage change"
+      }
+    }
+  },
+  "UniFiTrafficTab": {
+    "title": "UniFi Traffic",
+    "siteLabel": "Site:",
+    "description": "Stage traffic rule, traffic route, and QoS create/delete. Changes appear in the Pending Changes drawer until applied.",
+    "loading": "Loading…",
+    "loadError": "Failed to load traffic config:",
+    "unknownError": "Unknown error",
+    "empty": "No entries for this resource. Stage a create using the form above.",
+    "status": {
+      "disabled": "disabled"
+    },
+    "resources": {
+      "rules": "Traffic rules",
+      "routes": "Traffic routes",
+      "qos": "QoS rules"
+    },
+    "resourcesSingular": {
+      "rules": "traffic rule",
+      "routes": "traffic route",
+      "qos": "QoS rule"
+    },
+    "fields": {
+      "resource": "Resource",
+      "name": "Name",
+      "namePlaceholder": "e.g. Throttle guest VLAN"
+    },
+    "form": {
+      "create": "Create {{resource}}"
+    },
+    "actions": {
+      "stageCreate": "Stage create",
+      "stage": "Stage",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "createTitle": "Stage create?",
+      "deleteTitle": "Stage delete?",
+      "stagePrefix": "Stage",
+      "against": "for",
+      "suffix": ". The change applies via the Pending Changes drawer."
+    },
+    "toast": {
+      "created": {
+        "title": "Traffic create staged"
+      },
+      "deleted": {
+        "title": "Traffic delete staged"
+      },
+      "stageFailed": {
+        "title": "Failed to stage change"
+      }
+    }
+  },
+  "UniFiDnsTab": {
+    "title": "UniFi DNS",
+    "siteLabel": "Site:",
+    "description": "Stage static and dynamic DNS record create/delete. Changes appear in the Pending Changes drawer until applied.",
+    "loading": "Loading…",
+    "loadError": "Failed to load DNS records:",
+    "unknownError": "Unknown error",
+    "empty": "No records for this kind. Stage a create using the form above.",
+    "status": {
+      "disabled": "disabled"
+    },
+    "kinds": {
+      "static": "Static DNS",
+      "dynamic": "Dynamic DNS"
+    },
+    "fields": {
+      "recordKind": "Kind",
+      "name": "Name / host",
+      "namePlaceholder": "host.lan",
+      "value": "Value / target",
+      "valuePlaceholder": "10.0.1.50",
+      "recordType": "Record type"
+    },
+    "form": {
+      "createStatic": "Create static record",
+      "createDynamic": "Create dynamic record"
+    },
+    "actions": {
+      "stageCreate": "Stage create",
+      "stage": "Stage",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "createTitle": "Stage create?",
+      "deleteTitle": "Stage delete?",
+      "stagePrefix": "Stage",
+      "against": "for",
+      "suffix": ". The change applies via the Pending Changes drawer."
+    },
+    "toast": {
+      "created": {
+        "title": "DNS create staged"
+      },
+      "deleted": {
+        "title": "DNS delete staged"
+      },
+      "stageFailed": {
+        "title": "Failed to stage change"
+      }
+    }
+  },
+  "UniFiRoutingTab": {
+    "title": "UniFi Routing",
+    "siteLabel": "Site:",
+    "description": "Stage static-route create / delete. The change appears in the Pending Changes drawer until applied.",
+    "loading": "Loading…",
+    "loadError": "Failed to load routes:",
+    "unknownError": "Unknown error",
+    "empty": "No static routes. Stage a create using the form above.",
+    "status": {
+      "disabled": "disabled"
+    },
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "to-branch",
+      "network": "Destination network",
+      "nexthop": "Next hop"
+    },
+    "form": {
+      "createRoute": "Create static route"
+    },
+    "actions": {
+      "stageCreate": "Stage create",
+      "stage": "Stage",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "createTitle": "Stage create?",
+      "deleteTitle": "Stage delete?",
+      "stagePrefix": "Stage",
+      "against": "for",
+      "suffix": ". The change applies via the Pending Changes drawer."
+    },
+    "toast": {
+      "created": {
+        "title": "Route create staged"
+      },
+      "deleted": {
+        "title": "Route delete staged"
+      },
+      "stageFailed": {
+        "title": "Failed to stage change"
+      }
+    }
+  },
+  "UniFiVpnTab": {
+    "title": "UniFi VPN",
+    "siteLabel": "Site:",
+    "description": "Stage VPN-network create / delete. Peer and key details are refined in the drawer payload preview.",
+    "loading": "Loading…",
+    "loadError": "Failed to load VPN networks:",
+    "unknownError": "Unknown error",
+    "empty": "No VPN networks. Stage a create using the form above.",
+    "status": {
+      "disabled": "disabled"
+    },
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "site-to-site-hq",
+      "vpnType": "VPN type"
+    },
+    "form": {
+      "createVpn": "Create VPN network"
+    },
+    "actions": {
+      "stageCreate": "Stage create",
+      "stage": "Stage",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "createTitle": "Stage create?",
+      "deleteTitle": "Stage delete?",
+      "stagePrefix": "Stage",
+      "against": "for",
+      "suffix": ". The change applies via the Pending Changes drawer."
+    },
+    "toast": {
+      "created": {
+        "title": "VPN create staged"
+      },
+      "deleted": {
+        "title": "VPN delete staged"
+      },
+      "stageFailed": {
+        "title": "Failed to stage change"
+      }
+    }
+  },
+  "UniFiSwitchTab": {
+    "title": "UniFi Switch Ports",
+    "siteLabel": "Site:",
+    "description": "Stage per-port PoE, profile, rename and power-cycle. All actions stage against a switch MAC + port.",
+    "loading": "Loading…",
+    "loadError": "Failed to load switches:",
+    "unknownError": "Unknown error",
+    "empty": "No switches adopted. Stage actions against a switch MAC using the form above.",
+    "portLabel": "port {{port}}",
+    "portShort": "P{{port}}",
+    "portCount": "{{count}} ports",
+    "status": {
+      "disabled": "disabled"
+    },
+    "fields": {
+      "mac": "Switch MAC",
+      "port": "Port",
+      "poeMode": "PoE mode",
+      "profileId": "Port profile ID",
+      "profileIdPlaceholder": "Mongo ObjectID",
+      "portName": "Port name",
+      "portNamePlaceholder": "Uplink"
+    },
+    "form": {
+      "stageByMac": "Stage by switch MAC + port"
+    },
+    "operations": {
+      "set_poe": "Set PoE",
+      "port_profile": "Set port profile",
+      "power_cycle": "Power-cycle port",
+      "update_port": "Update port"
+    },
+    "actions": {
+      "stagePoe": "Stage PoE",
+      "stageProfile": "Stage profile",
+      "stageUpdate": "Stage update",
+      "stagePowerCycle": "Stage power-cycle",
+      "select": "Select",
+      "stage": "Stage",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "title": "{{operation}}?",
+      "stagePrefix": "Stage",
+      "against": "against",
+      "onPort": "on port",
+      "suffix": ". The change applies via the Pending Changes drawer.",
+      "powerCyclePrefix": "This",
+      "powerCycleWord": "interrupts the link",
+      "powerCycleSuffix": "on that port and requires a typed APPLY in the drawer."
+    },
+    "toast": {
+      "staged": "Switch {{kind}} staged",
+      "stageFailed": "Failed to stage change"
+    }
+  },
+  "UniFiPortProfilesTab": {
+    "title": "UniFi Port Profiles",
+    "siteLabel": "Site:",
+    "description": "Stage port-profile create / delete. Forwarding, VLAN and PoE details are refined in the drawer payload preview.",
+    "loading": "Loading…",
+    "loadError": "Failed to load port profiles:",
+    "unknownError": "Unknown error",
+    "empty": "No port profiles. Stage a create using the form above.",
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "All / Native"
+    },
+    "form": {
+      "createProfile": "Create port profile"
+    },
+    "actions": {
+      "stageCreate": "Stage create",
+      "stage": "Stage",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "createTitle": "Stage create?",
+      "deleteTitle": "Stage delete?",
+      "stagePrefix": "Stage",
+      "against": "for",
+      "suffix": ". The change applies via the Pending Changes drawer."
+    },
+    "toast": {
+      "created": {
+        "title": "Port profile create staged"
+      },
+      "deleted": {
+        "title": "Port profile delete staged"
+      },
+      "stageFailed": {
+        "title": "Failed to stage change"
+      }
+    }
+  },
+  "UniFiRadiosTab": {
+    "title": "UniFi Radios",
+    "siteLabel": "Site:",
+    "description": "Stage per-radio channel, TX power and width on APs. Blank fields are omitted from the payload.",
+    "loading": "Loading…",
+    "loadError": "Failed to load radios:",
+    "unknownError": "Unknown error",
+    "empty": "No APs with radios. Stage an update against an AP MAC using the form above.",
+    "bands": {
+      "ng": "2.4 GHz (ng)",
+      "na": "5 GHz (na)",
+      "6e": "6 GHz (6e)"
+    },
+    "fields": {
+      "mac": "AP MAC",
+      "band": "Band",
+      "channel": "Channel",
+      "channelPlaceholder": "auto / 36",
+      "width": "Channel width (MHz)",
+      "txPowerMode": "TX power mode",
+      "txPower": "TX power (dBm)",
+      "txPowerPlaceholder": "e.g. 20",
+      "unset": "(unset)"
+    },
+    "form": {
+      "stageUpdate": "Stage radio update"
+    },
+    "actions": {
+      "stageUpdate": "Stage update",
+      "select": "Select",
+      "stage": "Stage",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "title": "Stage radio update?",
+      "stagePrefix": "Stage",
+      "against": "against",
+      "suffix": ". The change applies via the Pending Changes drawer."
+    },
+    "toast": {
+      "staged": {
+        "title": "Radio update staged"
+      },
+      "stageFailed": {
+        "title": "Failed to stage change"
+      }
+    }
+  },
+  "UniFiWlanGroupsTab": {
+    "title": "UniFi WLAN Groups",
+    "siteLabel": "Site:",
+    "description": "Stage WLAN-group create / delete. SSID membership is assigned in the drawer payload preview.",
+    "loading": "Loading…",
+    "loadError": "Failed to load WLAN groups:",
+    "unknownError": "Unknown error",
+    "empty": "No WLAN groups. Stage a create using the form above.",
+    "wlanCount": "{{count}} SSIDs",
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "Default"
+    },
+    "form": {
+      "createGroup": "Create WLAN group"
+    },
+    "actions": {
+      "stageCreate": "Stage create",
+      "stage": "Stage",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "createTitle": "Stage create?",
+      "deleteTitle": "Stage delete?",
+      "stagePrefix": "Stage",
+      "against": "for",
+      "suffix": ". The change applies via the Pending Changes drawer."
+    },
+    "toast": {
+      "created": {
+        "title": "WLAN group create staged"
+      },
+      "deleted": {
+        "title": "WLAN group delete staged"
+      },
+      "stageFailed": {
+        "title": "Failed to stage change"
+      }
+    }
+  },
+  "GatewayRoutingTab": {
+    "staticRoutes": {
+      "title": "Static Routes",
+      "description": "Manually configured routes",
+      "addRoute": "Add Route",
+      "columns": {
+        "network": "Network",
+        "gateway": "Gateway",
+        "description": "Description",
+        "active": "Active"
+      }
+    },
+    "routingTable": {
+      "title": "Routing Table",
+      "description": "Full kernel routing table",
+      "searchPlaceholder": "Search routes...",
+      "columns": {
+        "destination": "Destination",
+        "gateway": "Gateway",
+        "interface": "Interface",
+        "flags": "Flags",
+        "type": "Type"
+      }
+    },
+    "arpTable": {
+      "title": "ARP Table",
+      "description": "IP-to-MAC address mappings",
+      "searchPlaceholder": "Search ARP...",
+      "permanent": "Permanent",
+      "dynamic": "Dynamic",
+      "columns": {
+        "ip": "IP Address",
+        "mac": "MAC",
+        "hostname": "Hostname",
+        "interface": "Interface",
+        "manufacturer": "Manufacturer",
+        "type": "Type"
+      }
+    }
+  },
+  "GatewayDiagnosticsTab": {
+    "diagnostics": {
+      "title": "Network Diagnostics",
+      "description": "Run ping, traceroute, and DNS lookups from the gateway",
+      "hostPlaceholder": "Enter hostname or IP (e.g. 8.8.8.8, google.com)"
+    },
+    "actions": {
+      "ping": "Ping",
+      "traceroute": "Traceroute",
+      "dnsLookup": "DNS Lookup"
+    },
+    "results": {
+      "ping": "Ping Result",
+      "traceroute": "Traceroute Result",
+      "dnsLookup": "DNS Lookup Result"
+    },
+    "connections": {
+      "title": "Active Connections (PF States)",
+      "description": "Current network connections tracked by the firewall",
+      "searchPlaceholder": "Search connections...",
+      "columns": {
+        "protocol": "Protocol",
+        "source": "Source",
+        "destination": "Destination",
+        "state": "State",
+        "direction": "Direction",
+        "bytes": "Bytes"
+      }
+    }
+  },
+  "UniFiRadiusTab": {
+    "title": "RADIUS Users",
+    "siteLabel": "Site:",
+    "description": "Stage built-in RADIUS user create / delete (WPA-Enterprise + port auth). Changes apply via the Pending Changes drawer.",
+    "form": { "create": "Stage a new RADIUS user" },
+    "fields": {
+      "name": "Username",
+      "namePlaceholder": "e.g. alice",
+      "password": "Password",
+      "passwordPlaceholder": "RADIUS secret"
+    },
+    "actions": { "stageCreate": "Stage create", "cancel": "Cancel", "stage": "Stage" },
+    "loadError": "Failed to load RADIUS users:",
+    "unknownError": "Unknown error",
+    "loading": "Loading RADIUS users…",
+    "empty": "No RADIUS users on this controller. Use the form above to stage one.",
+    "toast": {
+      "created": { "title": "RADIUS user create staged" },
+      "deleted": { "title": "RADIUS user delete staged" },
+      "stageFailed": { "title": "Failed to stage change" }
+    },
+    "dialog": {
+      "createTitle": "Stage RADIUS user?",
+      "deleteTitle": "Stage RADIUS user delete?",
+      "stagePrefix": "Stage",
+      "against": "for",
+      "suffix": "? The change applies via the Pending Changes drawer."
+    }
+  },
+  "UniFiHotspotTab": {
+    "title": "Hotspot",
+    "siteLabel": "Site:",
+    "description": "Stage guest vouchers + portal operators. Changes apply via the Pending Changes drawer.",
+    "kinds": { "voucher": "Vouchers", "operator": "Operators" },
+    "form": { "createVoucher": "Generate guest vouchers", "createOperator": "Stage a portal operator" },
+    "fields": {
+      "kind": "Resource",
+      "count": "Count",
+      "expireMinutes": "Expires (min)",
+      "quota": "Uses",
+      "note": "Note",
+      "notePlaceholder": "optional label",
+      "name": "Username",
+      "password": "Password"
+    },
+    "actions": {
+      "stageVoucher": "Stage vouchers",
+      "stageOperator": "Stage operator",
+      "cancel": "Cancel",
+      "stage": "Stage"
+    },
+    "loadError": "Failed to load hotspot data:",
+    "unknownError": "Unknown error",
+    "loading": "Loading…",
+    "empty": "Nothing here yet. Use the form above to stage a create.",
+    "toast": {
+      "created": { "title": "Hotspot create staged" },
+      "deleted": { "title": "Hotspot delete staged" },
+      "stageFailed": { "title": "Failed to stage change" }
+    },
+    "dialog": {
+      "createTitle": "Stage hotspot create?",
+      "deleteTitle": "Stage hotspot delete?",
+      "createBody": "Stage this hotspot create? The change applies via the Pending Changes drawer.",
+      "deleteBody": "Stage delete of {{label}}? The change applies via the Pending Changes drawer."
+    }
+  },
+  "UniFiControllerPage": {
+    "subtitle": "UniFi Network at {{host}}:{{port}} · site={{site}}",
+    "actions": {
+      "back": "Back"
+    },
+    "tabs": {
+      "clients": "Clients",
+      "devices": "Devices",
+      "wlans": "WLANs",
+      "networks": "Networks",
+      "firewall": "Firewall",
+      "traffic": "Traffic",
+      "dns": "DNS",
+      "routing": "Routing",
+      "vpn": "VPN",
+      "switch": "Switch Ports",
+      "portProfiles": "Port Profiles",
+      "radios": "Radios",
+      "wlanGroups": "WLAN Groups",
+      "radius": "RADIUS",
+      "hotspot": "Hotspot"
+    },
+    "errors": {
+      "missingId": "Missing controller id.",
+      "loadFailed": "Failed to load controller:",
+      "unknown": "Unknown error",
+      "notUnifi": {
+        "before": "Controller",
+        "middle": "is not a UniFi controller (type=",
+        "after": ")."
+      }
+    }
+  },
+  "GatewaySyncTab": {
+    "title": "Sync History",
+    "description": "Recent synchronization events",
+    "actions": {
+      "syncNow": "Sync Now"
+    }
+  }
+}

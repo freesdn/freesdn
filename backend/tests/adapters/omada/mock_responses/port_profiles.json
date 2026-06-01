@@ -1,0 +1,22 @@
+[
+    {
+        "id": "prof-001",
+        "profileId": "prof-001",
+        "name": "Access-VLAN10",
+        "nativeVlan": 10,
+        "taggedVlans": [],
+        "untaggedVlans": [10],
+        "pvid": 10,
+        "type": "access"
+    },
+    {
+        "id": "prof-002",
+        "profileId": "prof-002",
+        "name": "Trunk-All",
+        "nativeVlan": 1,
+        "taggedVlans": [10, 20, 30, 100],
+        "untaggedVlans": [1],
+        "pvid": 1,
+        "type": "trunk"
+    }
+]

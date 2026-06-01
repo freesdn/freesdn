@@ -1,0 +1,200 @@
+{
+  "PoEPage": {
+    "common": {
+      "cancel": "Cancelar"
+    },
+    "header": {
+      "title": "Gestión de PoE",
+      "description": "Supervise y controle Power over Ethernet en toda su red",
+      "analytics": "Análisis"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "capability": {
+      "title": "Control de PoE no disponible",
+      "defaultReason": "Este dispositivo no admite el control de PoE."
+    },
+    "stats": {
+      "totalPower": {
+        "title": "Potencia total",
+        "description": "de {{budget}}W ({{percent}}%)"
+      },
+      "activePorts": {
+        "title": "Puertos activos",
+        "description": "Suministrando energía"
+      },
+      "switches": {
+        "title": "Switches PoE",
+        "description": "{{count}} con fallos"
+      },
+      "budgetWarnings": {
+        "title": "Avisos de presupuesto",
+        "description": "Cerca/por encima del presupuesto"
+      }
+    },
+    "tabs": {
+      "devices": "Dispositivos",
+      "ports": "Puertos",
+      "schedules": "Programaciones"
+    },
+    "pdTypes": {
+      "access_point": "Punto de acceso",
+      "camera": "Cámara",
+      "ip_phone": "Teléfono IP",
+      "iot": "Dispositivo IoT",
+      "unknown": "Desconocido"
+    },
+    "modes": {
+      "auto": "Automático",
+      "passive24": "Pasivo 24V",
+      "passive48": "Pasivo 48V",
+      "disabled": "Deshabilitado"
+    },
+    "devices": {
+      "empty": {
+        "title": "No se encontraron switches PoE",
+        "description": "Agregue controladores con switches compatibles con PoE para verlos aquí. Los presupuestos de PoE y el consumo por puerto aparecerán cuando los dispositivos reporten."
+      },
+      "card": {
+        "portsSummary": "{{total}} puertos PoE • {{active}} activos",
+        "powerUsage": "Uso de energía",
+        "active": "Activos",
+        "disabled": "Deshabilitados",
+        "idle": "Inactivos",
+        "fault": "Fallo",
+        "budgetWarning": "Uso del presupuesto de energía al {{percent}}%"
+      }
+    },
+    "ports": {
+      "searchPlaceholder": "Buscar puertos...",
+      "allDevicesPlaceholder": "Todos los dispositivos",
+      "allDevices": "Todos los dispositivos",
+      "bulk": {
+        "enable": "Habilitar ({{count}})",
+        "disable": "Deshabilitar ({{count}})",
+        "cancel": "Cancelar",
+        "select": "Selección múltiple"
+      },
+      "table": {
+        "port": "Puerto",
+        "device": "Dispositivo",
+        "status": "Estado",
+        "mode": "Modo",
+        "power": "Potencia",
+        "connectedDevice": "Dispositivo conectado",
+        "actions": "Acciones"
+      },
+      "statuses": {
+        "delivering": "suministrando",
+        "searching": "buscando",
+        "fault": "fallo",
+        "disabled": "deshabilitado"
+      },
+      "tooltip": {
+        "class": "Clase: {{value}}",
+        "voltage": "Voltaje: {{value}}V"
+      },
+      "menu": {
+        "configure": "Configurar",
+        "powerCycle": "Reiniciar alimentación",
+        "disablePoe": "Deshabilitar PoE",
+        "enablePoe": "Habilitar PoE"
+      },
+      "notSupported": "Control de PoE no admitido"
+    },
+    "schedules": {
+      "create": "Crear programación",
+      "menu": {
+        "edit": "Editar",
+        "delete": "Eliminar"
+      },
+      "actions": {
+        "enable": "Habilitar",
+        "disable": "Deshabilitar",
+        "limit": "Limitar"
+      },
+      "card": {
+        "action": "Acción:",
+        "actionValue": "{{action}} PoE",
+        "time": "Hora:",
+        "days": "Días:",
+        "affects": "Afecta:",
+        "affectsValue": "{{count}} puertos",
+        "nextRun": "Próxima ejecución: {{time}}"
+      },
+      "dayNames": {
+        "mon": "Lun",
+        "tue": "Mar",
+        "wed": "Mié",
+        "thu": "Jue",
+        "fri": "Vie",
+        "sat": "Sáb",
+        "sun": "Dom"
+      },
+      "empty": {
+        "title": "Sin programaciones",
+        "description": "Cree una programación para controlar automáticamente la energía PoE",
+        "notSupported": "La programación de PoE no es compatible con este dispositivo"
+      }
+    },
+    "portDialog": {
+      "title": "Configurar {{name}}",
+      "description": "Ajuste la configuración de PoE para este puerto",
+      "poeEnabled": "PoE habilitado",
+      "poeMode": "Modo PoE",
+      "modeOptions": {
+        "auto": "Detección automática"
+      },
+      "powerLimit": "Límite de potencia",
+      "priority": "Prioridad",
+      "priorityOptions": {
+        "critical": "Crítica",
+        "high": "Alta",
+        "low": "Baja"
+      },
+      "priorityHelp": "Los puertos de mayor prioridad mantienen la energía durante restricciones de presupuesto",
+      "save": "Guardar cambios"
+    },
+    "scheduleDialog": {
+      "title": "Crear programación de PoE",
+      "description": "Programe el control automático de la energía PoE",
+      "name": "Nombre de la programación",
+      "namePlaceholder": "p. ej., Ahorro de energía nocturno",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": "Descripción opcional",
+      "device": "Switch",
+      "devicePlaceholder": "Selecciona un switch",
+      "ports": "Puertos",
+      "portsSelectDeviceFirst": "Selecciona un switch para elegir puertos",
+      "portsLoading": "Cargando puertos...",
+      "portsEmpty": "No se encontraron puertos PoE en este switch",
+      "portsRequired": "Selecciona al menos un puerto para que esta programación tenga efecto",
+      "action": "Acción",
+      "actionOptions": {
+        "disable": "Deshabilitar PoE",
+        "enable": "Habilitar PoE",
+        "limit": "Aplicar límite de potencia"
+      },
+      "startTime": "Hora de inicio",
+      "endTime": "Hora de fin",
+      "days": "Días",
+      "dayInitials": {
+        "mon": "L",
+        "tue": "M",
+        "wed": "X",
+        "thu": "J",
+        "fri": "V",
+        "sat": "S",
+        "sun": "D"
+      }
+    },
+    "toast": {
+      "updated": "Configuración PoE actualizada",
+      "updateFailed": "No se pudo actualizar PoE",
+      "reset": "Ciclo de energía iniciado",
+      "resetFailed": "No se pudo reiniciar el puerto",
+      "bulkUpdateFailed": "No se pudieron actualizar los puertos PoE en lote"
+    }
+  }
+}

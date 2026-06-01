@@ -1,0 +1,1468 @@
+{
+  "BackupAgeTab": {
+    "thresholds": {
+      "12h": "12 hours",
+      "24h": "24 hours",
+      "48h": "48 hours",
+      "72h": "72 hours",
+      "7d": "7 days"
+    },
+    "age": {
+      "never": "Never"
+    },
+    "labels": {
+      "threshold": "Threshold:"
+    },
+    "summary": {
+      "totalVMs": "Total VMs",
+      "backedUpOk": "Backed Up (OK)",
+      "stale": "Stale",
+      "neverBackedUp": "Never Backed Up"
+    },
+    "table": {
+      "vmid": "VMID",
+      "name": "Name",
+      "node": "Node",
+      "lastBackup": "Last Backup",
+      "age": "Age",
+      "status": "Status"
+    },
+    "status": {
+      "ok": "OK",
+      "stale": "Stale",
+      "never": "Never"
+    },
+    "empty": {
+      "noVMs": "No VMs found in backup age report.",
+      "noBackups": "No backups found for the selected criteria."
+    },
+    "errors": {
+      "loadBanner": "Failed to load the backup-age report. The data below may be stale or empty.",
+      "loadReport": "Failed to load backup age report",
+      "selectNodeStorage": "Select node and storage"
+    },
+    "actions": {
+      "retry": "Retry",
+      "preview": "Preview",
+      "pruneNow": "Prune Now"
+    },
+    "prune": {
+      "title": "Prune Backups",
+      "node": "Node",
+      "selectNode": "Select node",
+      "storage": "Storage (backup-capable)",
+      "selectStorage": "Select storage",
+      "keepLast": "Keep Last",
+      "keepHourly": "Keep Hourly",
+      "keepDaily": "Keep Daily",
+      "keepWeekly": "Keep Weekly",
+      "keepMonthly": "Keep Monthly",
+      "keepYearly": "Keep Yearly",
+      "vmidFilter": "VMID Filter (optional)",
+      "allVMs": "All VMs"
+    },
+    "dialog": {
+      "title": "Prune backups",
+      "description": "This will permanently delete every backup on {{storage}} (node {{node}}) that does not match the retention policy below. Backups that are pruned cannot be recovered.",
+      "confirmLabel": "Prune backups"
+    },
+    "previewTable": {
+      "backup": "Backup",
+      "vmid": "VMID",
+      "size": "Size",
+      "date": "Date",
+      "action": "Action",
+      "remove": "Remove",
+      "keep": "Keep"
+    },
+    "toast": {
+      "previewFailed": "Preview failed",
+      "pruneCompleted": "Prune completed",
+      "pruneFailed": "Prune failed"
+    }
+  },
+  "CephTab": {
+    "status": {
+      "unknown": "Unknown",
+      "clusterStatus": "Cluster Status",
+      "osds": "OSDs",
+      "osdSummary": "{{total}} total · {{up}} up · {{in}} in",
+      "pgs": "PGs",
+      "pools": "Pools",
+      "usage": "Usage"
+    },
+    "storage": {
+      "title": "Storage",
+      "used": "Used",
+      "available": "Available",
+      "total": "Total",
+      "capacity": "Capacity"
+    },
+    "empty": {
+      "noNodes": {
+        "title": "No nodes available",
+        "description": "Add nodes to query Ceph status."
+      },
+      "notAvailable": {
+        "title": "Ceph not available",
+        "description": "Ceph does not appear to be configured on this cluster. Install and configure Ceph on your Proxmox nodes to enable distributed storage."
+      },
+      "statusUnavailable": {
+        "title": "Ceph status unavailable",
+        "description": "Could not retrieve Ceph status. Ceph may not be configured on this cluster."
+      }
+    },
+    "osds": {
+      "title": "OSDs",
+      "up": "up",
+      "down": "down",
+      "yes": "yes",
+      "no": "no",
+      "columns": {
+        "id": "ID",
+        "name": "Name",
+        "status": "Status",
+        "in": "In",
+        "size": "Size",
+        "used": "Used",
+        "available": "Available",
+        "crushWeight": "Crush Weight"
+      }
+    },
+    "pools": {
+      "title": "Pools",
+      "columns": {
+        "name": "Name",
+        "size": "Size (Replicas)",
+        "pgNum": "PG Num",
+        "crushRule": "Crush Rule",
+        "usage": "Usage"
+      }
+    },
+    "monitors": {
+      "title": "Monitors",
+      "columns": {
+        "name": "Name",
+        "address": "Address",
+        "rank": "Rank"
+      }
+    }
+  },
+  "CertificatesTab": {
+    "title": "Node Certificates",
+    "status": {
+      "unknown": "Unknown",
+      "expired": "Expired",
+      "daysLeft": "{{days}}d left"
+    },
+    "error": {
+      "fetchFailed": "Could not fetch certificate data from one or more nodes."
+    },
+    "empty": {
+      "title": "No certificates found",
+      "description": "No certificate data available from the cluster nodes."
+    },
+    "columns": {
+      "node": "Node",
+      "subject": "Subject",
+      "issuer": "Issuer",
+      "fingerprint": "Fingerprint",
+      "validFrom": "Valid From",
+      "expires": "Expires",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "actions": {
+      "renew": "Renew",
+      "upload": "Upload",
+      "cancel": "Cancel",
+      "uploadCertificate": "Upload Certificate"
+    },
+    "confirm": {
+      "renew": "Renew ACME certificate on {{node}}? This may briefly interrupt HTTPS."
+    },
+    "dialog": {
+      "title": "Upload Custom Certificate",
+      "description": "Upload a custom TLS certificate for node {{node}}.",
+      "certLabel": "Certificate (PEM)",
+      "keyLabel": "Private Key (PEM)",
+      "forceOverwrite": "Force overwrite",
+      "restartServices": "Restart services"
+    },
+    "toast": {
+      "renewStarted": {
+        "title": "ACME Renewal Started",
+        "description": "Certificate renewal initiated on {{node}}"
+      },
+      "renewFailed": {
+        "title": "Renewal Failed",
+        "description": "Could not initiate ACME renewal"
+      },
+      "uploadSuccess": {
+        "title": "Certificate Uploaded",
+        "description": "Custom certificate installed on {{node}}"
+      },
+      "uploadFailed": {
+        "title": "Upload Failed",
+        "description": "Could not upload custom certificate"
+      }
+    }
+  },
+  "ClusterLogTab": {
+    "title": "Cluster Log",
+    "entriesCount": "{{count}} entries",
+    "autoRefresh": "Auto-refresh: 15s",
+    "error": {
+      "fetch": "Could not fetch cluster log entries."
+    },
+    "empty": {
+      "title": "No log entries",
+      "description": "No cluster log entries found."
+    },
+    "columns": {
+      "time": "Time",
+      "node": "Node",
+      "severity": "Severity",
+      "tag": "Tag",
+      "user": "User",
+      "message": "Message"
+    },
+    "severity": {
+      "error": "error",
+      "warning": "warning",
+      "info": "info"
+    }
+  },
+  "AddHypervisorDialog": {
+    "title": "Add Hypervisor",
+    "description": "Connect a Proxmox VE server to manage virtual machines and containers.",
+    "submitLabel": "Add Hypervisor",
+    "proxmoxVe": "Proxmox VE",
+    "tokenIdFormatPrefix": "Format:",
+    "fields": {
+      "name": "Name *",
+      "site": "Site *",
+      "host": "Host Address *",
+      "port": "Port *",
+      "authMethod": "Authentication Method",
+      "tokenId": "API Token ID *",
+      "tokenSecret": "API Token Secret *",
+      "username": "Username *",
+      "password": "Password *",
+      "realm": "Realm",
+      "useSsl": "Use SSL/TLS",
+      "useSslHint": "Connect using HTTPS",
+      "verifySsl": "Verify SSL Certificate",
+      "verifySslHint": "Disable for self-signed certs (common with Proxmox)"
+    },
+    "placeholders": {
+      "name": "e.g., Production Proxmox Cluster",
+      "site": "Select a site",
+      "host": "e.g., 192.168.1.100 or pve.local",
+      "tokenId": "e.g., root@pam!freesdn"
+    },
+    "authModes": {
+      "token": "API Token",
+      "password": "Username / Password"
+    },
+    "authDescriptions": {
+      "token": "API tokens are recommended. Create one in Proxmox → Datacenter → Permissions → API Tokens.",
+      "password": "Use a Proxmox user account. Less secure than API tokens."
+    },
+    "realms": {
+      "pam": "Linux PAM (pam)",
+      "pve": "Proxmox VE (pve)",
+      "ldap": "LDAP",
+      "ad": "Active Directory"
+    },
+    "test": {
+      "heading": "Connection Test",
+      "hint": "Verify connectivity before adding",
+      "button": "Test Connection",
+      "testing": "Testing...",
+      "successful": "Connection Successful",
+      "failedLabel": "Connection Failed",
+      "failed": "Connection test failed",
+      "latency": "Latency",
+      "latencyValue": "{{value}}ms",
+      "version": "Version"
+    },
+    "validation": {
+      "nameRequired": "Name is required",
+      "siteRequired": "Please select a site",
+      "hostRequired": "Host address is required",
+      "tokenIdRequired": "API Token ID is required",
+      "tokenSecretRequired": "API Token Secret is required",
+      "usernameRequired": "Username is required",
+      "passwordRequired": "Password is required",
+      "tokenIdAndSecretRequired": "API Token ID and Secret are required",
+      "usernameAndPasswordRequired": "Username and Password are required"
+    }
+  },
+  "BackupJobDialog": {
+    "validation": {
+      "timeRequired": "Time is required",
+      "storageRequired": "Storage is required"
+    },
+    "toasts": {
+      "created": "Backup job created",
+      "updated": "Backup job updated"
+    },
+    "title": {
+      "edit": "Edit Backup Job",
+      "create": "Create Backup Job"
+    },
+    "description": {
+      "edit": "Editing backup job {{id}}",
+      "create": "Configure a new scheduled backup job."
+    },
+    "submit": {
+      "update": "Update Job",
+      "create": "Create Job"
+    },
+    "days": {
+      "mon": "Monday",
+      "tue": "Tuesday",
+      "wed": "Wednesday",
+      "thu": "Thursday",
+      "fri": "Friday",
+      "sat": "Saturday",
+      "sun": "Sunday"
+    },
+    "fields": {
+      "day": {
+        "label": "Day",
+        "placeholder": "Day",
+        "everyDay": "Every day"
+      },
+      "time": {
+        "label": "Time"
+      },
+      "storage": {
+        "label": "Storage"
+      },
+      "vmid": {
+        "label": "VM IDs (optional)",
+        "placeholder": "100,101,200 (empty = all)",
+        "description": "Comma-separated VMIDs. Leave empty to back up all."
+      },
+      "node": {
+        "label": "Node (optional)",
+        "allNodes": "All nodes"
+      },
+      "mode": {
+        "label": "Mode",
+        "snapshot": "Snapshot",
+        "suspend": "Suspend",
+        "stop": "Stop"
+      },
+      "compress": {
+        "label": "Compression",
+        "none": "None"
+      },
+      "mailto": {
+        "label": "Mail to (optional)"
+      },
+      "enabled": {
+        "label": "Enabled"
+      }
+    }
+  },
+  "BulkActionBar": {
+    "selectedCount": "{{count}} selected",
+    "actions": {
+      "start": "Start",
+      "shutdown": "Shutdown",
+      "forceStop": "Force Stop",
+      "reboot": "Reboot",
+      "migrate": "Migrate",
+      "delete": "Delete"
+    },
+    "confirm": {
+      "start": "Start {{count}} VMs/CTs?",
+      "shutdown": "Shutdown {{count}} VMs/CTs?",
+      "stop": "Force stop {{count}} VMs/CTs?",
+      "reboot": "Reboot {{count}} VMs/CTs?",
+      "delete": "Delete {{count}} VMs/CTs? This cannot be undone. Ensure all are stopped."
+    },
+    "toast": {
+      "actionCompleteTitle": "Bulk action complete",
+      "actionCompleteDescription": "{{succeeded}} succeeded, {{failed}} failed",
+      "actionFailedTitle": "Bulk action failed",
+      "migrationStarted": "Migration started for {{count}} VMs"
+    },
+    "results": {
+      "title": "Bulk Operation Results",
+      "close": "Close"
+    },
+    "migrate": {
+      "title": "Bulk Migrate {{count}} VMs/CTs",
+      "description": "Migrate selected items to a target node.",
+      "submit": "Migrate {{count}} Items",
+      "targetNodeLabel": "Target Node",
+      "targetNodePlaceholder": "Select target node",
+      "targetNodeRequired": "Select a target node",
+      "onlineLabel": "Online migration (live)"
+    }
+  },
+  "EditConfigDialog": {
+    "vm": "VM",
+    "ct": "CT",
+    "dialogDescription": "Edit configuration on {{node}}. Changes may require a reboot to take effect.",
+    "submit": {
+      "saving": "Saving...",
+      "save": "Save Changes"
+    },
+    "toast": {
+      "updated": "Configuration updated",
+      "noChanges": "No changes to save",
+      "updateFailed": "Update failed"
+    },
+    "tabs": {
+      "general": "General",
+      "disks": "Disks ({{count}})",
+      "network": "Network ({{count}})",
+      "guestAgent": "Guest Agent"
+    },
+    "fields": {
+      "cpuCores": "CPU Cores",
+      "memory": "Memory (MB)",
+      "memoryGb": "{{gb}} GB",
+      "balloon": "Balloon Memory (MB)",
+      "balloonHelp": "0 = disabled. KSM/ballooning allows dynamic memory allocation.",
+      "tags": "Tags",
+      "tagsHelp": "Semicolon-separated tags",
+      "description": "Description",
+      "descriptionPlaceholder": "VM description...",
+      "startOnBoot": "Start on boot"
+    },
+    "disks": {
+      "empty": "No disk configurations found.",
+      "disk": "Disk",
+      "configuration": "Configuration"
+    },
+    "network": {
+      "empty": "No network interfaces configured.",
+      "interface": "Interface",
+      "configuration": "Configuration"
+    },
+    "agent": {
+      "unavailable": "Guest agent not available. Install qemu-guest-agent inside the VM.",
+      "hostname": "Hostname",
+      "os": "OS",
+      "interface": "Interface",
+      "mac": "MAC",
+      "ipAddresses": "IP Addresses"
+    }
+  },
+  "UploadDialog": {
+    "title": "Upload to Storage",
+    "description": "Upload an ISO image or container template to {{storage}} on {{node}}",
+    "toast": {
+      "startedTitle": "Upload started",
+      "startedDescription": "{{fileName}} uploading to {{storage}}",
+      "failedTitle": "Upload failed"
+    },
+    "submit": {
+      "upload": "Upload",
+      "uploading": "Uploading..."
+    },
+    "errors": {
+      "noFileSelected": "No file selected"
+    },
+    "fields": {
+      "contentType": "Content Type",
+      "file": "File"
+    },
+    "contentTypes": {
+      "iso": "ISO Image",
+      "vztmpl": "Container Template"
+    },
+    "dropzone": {
+      "selectFile": "Click to select a file",
+      "isoHint": ".iso, .img files",
+      "tmplHint": ".tar.gz, .tar.xz, .tar.zst files"
+    }
+  },
+  "GuestDetailDrawer": {
+    "header": {
+      "vmFallback": "VM {{vmid}}",
+      "ct": "CT",
+      "vm": "VM",
+      "nodeUptime": "Node: {{node}} · Uptime: {{uptime}}",
+      "ipSuffix": " · IP: {{ip}}"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "firewall": "Firewall",
+      "config": "Config",
+      "cloudInit": "Cloud-Init"
+    },
+    "actions": {
+      "start": "Start",
+      "shutdown": "Shutdown",
+      "reboot": "Reboot"
+    },
+    "confirms": {
+      "shutdown": "Shutdown {{kind}} {{vmid}}?",
+      "reboot": "Reboot {{kind}} {{vmid}}?",
+      "deleteRule": "Delete firewall rule #{{pos}}?",
+      "regenerate": "Regenerate the Cloud-Init drive? This will re-create the drive image with the current settings."
+    },
+    "overview": {
+      "cpu": "CPU",
+      "cpuValue": "{{percent}}% of {{cores}} core(s)",
+      "memory": "Memory",
+      "memoryValue": "{{used}} MB / {{total}} MB",
+      "disk": "Disk",
+      "diskValue": "{{used}} GB / {{total}} GB",
+      "node": "Node",
+      "uptime": "Uptime: {{uptime}}",
+      "networkIn": "Network In",
+      "networkOut": "Network Out",
+      "ipAddress": "IP Address",
+      "osType": "OS Type",
+      "haState": "HA State",
+      "lock": "Lock",
+      "tags": "Tags"
+    },
+    "firewall": {
+      "heading": "Guest Firewall Rules",
+      "addRule": "Add Rule",
+      "cancel": "Cancel",
+      "action": "Action",
+      "direction": "Direction",
+      "inbound": "Inbound",
+      "outbound": "Outbound",
+      "protocol": "Protocol",
+      "destPort": "Dest Port",
+      "sourceOptional": "Source (optional)",
+      "commentOptional": "Comment (optional)",
+      "commentPlaceholder": "Allow HTTP",
+      "createRule": "Create Rule",
+      "loadError": "Failed to load firewall rules.",
+      "empty": "No firewall rules configured for this guest.",
+      "colDir": "Dir",
+      "colAction": "Action",
+      "colProto": "Proto",
+      "colSource": "Source",
+      "colDport": "D.Port",
+      "colComment": "Comment"
+    },
+    "config": {
+      "heading": "Configuration",
+      "loadError": "Failed to load configuration.",
+      "empty": "No configuration data available.",
+      "colKey": "Key",
+      "colValue": "Value",
+      "pending": "pending"
+    },
+    "cloudInit": {
+      "heading": "Cloud-Init Configuration",
+      "loadError": "Failed to load Cloud-Init config.",
+      "user": "User",
+      "password": "Password",
+      "passwordPlaceholder": "Leave blank to keep current, type new to change",
+      "sshKeys": "SSH Public Keys",
+      "sshKeysPlaceholder": "Leave blank to keep current, paste new keys to replace",
+      "ipConfig": "IP Config (ipconfig0)",
+      "ipConfigPlaceholder": "Leave blank to keep, or: ip=dhcp / ip=10.0.0.1/24,gw=10.0.0.1",
+      "nameserver": "Nameserver",
+      "searchDomain": "Search Domain",
+      "save": "Save",
+      "regenerateDrive": "Regenerate Drive"
+    },
+    "toasts": {
+      "cloudInitSaved": "Cloud-Init config saved",
+      "saveFailed": "Save failed",
+      "cloudInitRegenerated": "Cloud-Init drive regenerated",
+      "regenerateFailed": "Regenerate failed",
+      "ruleCreated": "Firewall rule created",
+      "createRuleFailed": "Create rule failed",
+      "ruleDeleted": "Firewall rule deleted",
+      "deleteRuleFailed": "Delete rule failed"
+    }
+  },
+  "KioskMode": {
+    "header": {
+      "title": "FreeSDN Hypervisor"
+    },
+    "error": {
+      "connectionLost": "Connection lost · dashboard data unavailable",
+      "autoRetrying": "Auto-retrying every 10 seconds..."
+    },
+    "metrics": {
+      "cpuUsage": "CPU Usage",
+      "memoryUsage": "Memory Usage",
+      "storageUsage": "Storage Usage",
+      "cores": "{{count}} cores",
+      "total": "{{value}} total",
+      "nodeStatus": "Node Status",
+      "nodesOnline": "{{online}} / {{total}} online",
+      "virtualMachines": "Virtual Machines",
+      "containers": "Containers",
+      "running": "running"
+    }
+  },
+  "MonitoringTab": {
+    "noData": "No data available",
+    "errorState": "Could not load monitoring data. The node or VM may be unreachable.",
+    "timeframes": {
+      "hour": "Last Hour",
+      "day": "Last Day",
+      "week": "Last Week",
+      "month": "Last Month"
+    },
+    "controls": {
+      "timeframe": "Timeframe:",
+      "node": "Node:",
+      "vmCt": "VM/CT:",
+      "nodeMetricsPlaceholder": "Node metrics",
+      "nodeOption": "Node: {{node}}"
+    },
+    "charts": {
+      "cpu": {
+        "title": "CPU Usage",
+        "cpu": "CPU"
+      },
+      "memory": {
+        "title": "Memory Usage",
+        "used": "Used",
+        "total": "Total"
+      },
+      "network": {
+        "title": "Network I/O",
+        "in": "In",
+        "out": "Out"
+      },
+      "disk": {
+        "title": "Disk I/O",
+        "read": "Read",
+        "write": "Write"
+      }
+    },
+    "alerts": {
+      "title": "Alert Settings",
+      "cpuThreshold": "CPU Threshold (%)",
+      "memoryThreshold": "Memory Threshold (%)",
+      "fireAfter": "Fire after N breaches",
+      "resolveAfter": "Resolve after N normal",
+      "hysteresisInfo": "Hysteresis prevents alert flapping. An alert fires only after the threshold is breached for N consecutive readings, and resolves only after N consecutive normal readings."
+    }
+  },
+  "PBSTab": {
+    "toast": {
+      "pruneStarted": {
+        "title": "Prune started",
+        "description": "Backup pruning has been initiated."
+      },
+      "pruneFailed": {
+        "title": "Prune failed",
+        "description": "Failed to prune backups"
+      }
+    },
+    "storageError": {
+      "prefix": "Failed to load storage pools: ",
+      "unknown": "unknown error",
+      "suffix": "Backup configuration shown below may be incomplete."
+    },
+    "controls": {
+      "nodeLabel": "Node:",
+      "nodePlaceholder": "Select node",
+      "storageLabel": "Storage:",
+      "storagePlaceholder": "Select storage",
+      "noBackupStorage": "No backup storage found",
+      "vmidLabel": "VMID:",
+      "vmidPlaceholder": "All"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "pruneBackups": "Prune Backups",
+      "cancel": "Cancel",
+      "pruneNow": "Prune Now"
+    },
+    "summary": {
+      "totalBackups": "Total Backups",
+      "keep": "Keep",
+      "remove": "Remove"
+    },
+    "empty": {
+      "noStorage": {
+        "title": "No backup storage found",
+        "description": "This node has no PBS or backup-capable storage configured. Add a Proxmox Backup Server storage to enable backup management."
+      },
+      "notPbs": {
+        "title": "Prune not available for this storage",
+        "description": "does not support prune preview. Only Proxmox Backup Server (PBS) storages support backup pruning.",
+        "noPbsConfigured": "No PBS storage is configured on this node."
+      },
+      "noStorageOnNode": "No backup-capable storage found on this node.",
+      "noSnapshots": "No backup snapshots found in this storage."
+    },
+    "pruneError": "Failed to load prune preview. The storage may not support prune operations.",
+    "table": {
+      "title": "Backup Prune Preview",
+      "vmid": "VMID",
+      "type": "Type",
+      "created": "Created",
+      "size": "Size",
+      "mark": "Mark"
+    },
+    "mark": {
+      "keep": "Keep",
+      "remove": "Remove"
+    },
+    "dialog": {
+      "title": "Prune Backups",
+      "descriptionPrefix": "Configure retention policy and prune backups on",
+      "descriptionSuffix": "This will permanently delete backups marked for removal.",
+      "keepLast": "Keep Last",
+      "keepDaily": "Keep Daily",
+      "keepWeekly": "Keep Weekly",
+      "keepMonthly": "Keep Monthly",
+      "filteringToVmid": "Filtering to VMID:"
+    }
+  },
+  "ReplicationTab": {
+    "title": "Replication Jobs",
+    "jobCount": {
+      "one": "{{count}} job",
+      "other": "{{count}} jobs"
+    },
+    "status": {
+      "disabled": "Disabled",
+      "error": "Error",
+      "degraded": "Degraded",
+      "ok": "OK"
+    },
+    "columns": {
+      "id": "ID",
+      "type": "Type",
+      "source": "Source",
+      "target": "Target",
+      "guest": "Guest",
+      "schedule": "Schedule",
+      "rate": "Rate",
+      "status": "Status",
+      "lastSync": "Last Sync"
+    },
+    "empty": {
+      "title": "No replication jobs",
+      "description": "No replication jobs are configured for this cluster."
+    },
+    "log": {
+      "empty": "No log entries available."
+    },
+    "error": {
+      "fetch": "Could not fetch replication data from the cluster."
+    }
+  },
+  "SdnTab": {
+    "heading": "Software-Defined Networking",
+    "errorState": {
+      "message": "Could not fetch SDN data from the cluster."
+    },
+    "common": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "actions": {
+      "createZone": "Create Zone",
+      "createVnet": "Create VNet",
+      "applySdn": "Apply SDN",
+      "cancel": "Cancel"
+    },
+    "confirms": {
+      "applySdn": "Apply SDN configuration? This will update the network configuration across the entire cluster.",
+      "deleteZone": "Delete zone {{zone}}?",
+      "deleteVnet": "Delete VNet {{vnet}}?"
+    },
+    "toasts": {
+      "sdnApplied": {
+        "title": "SDN Applied",
+        "description": "SDN configuration applied to cluster."
+      },
+      "applyFailed": {
+        "title": "Apply Failed",
+        "description": "Could not apply SDN configuration"
+      },
+      "zoneCreated": {
+        "title": "Zone Created"
+      },
+      "vnetCreated": {
+        "title": "VNet Created"
+      },
+      "createFailed": {
+        "title": "Create Failed"
+      },
+      "createZoneFailed": {
+        "description": "Could not create SDN zone"
+      },
+      "createVnetFailed": {
+        "description": "Could not create SDN VNet"
+      },
+      "zoneDeleted": {
+        "title": "Zone Deleted"
+      },
+      "vnetDeleted": {
+        "title": "VNet Deleted"
+      },
+      "deleteFailed": {
+        "title": "Delete Failed"
+      }
+    },
+    "zones": {
+      "title": "Zones",
+      "empty": {
+        "title": "No SDN zones",
+        "description": "No SDN zones configured for this cluster."
+      },
+      "columns": {
+        "zone": "Zone",
+        "type": "Type",
+        "nodes": "Nodes",
+        "mtu": "MTU",
+        "bridge": "Bridge",
+        "state": "State",
+        "actions": "Actions"
+      }
+    },
+    "vnets": {
+      "title": "VNets",
+      "empty": {
+        "title": "No SDN VNets",
+        "description": "No SDN VNets configured for this cluster."
+      },
+      "columns": {
+        "vnet": "VNet",
+        "zone": "Zone",
+        "tag": "Tag",
+        "vlanAware": "VLAN Aware",
+        "state": "State",
+        "actions": "Actions"
+      }
+    },
+    "controllers": {
+      "title": "SDN Controllers",
+      "empty": {
+        "title": "No SDN controllers",
+        "description": "No SDN controllers configured for this cluster."
+      },
+      "columns": {
+        "controller": "Controller",
+        "type": "Type",
+        "node": "Node",
+        "state": "State"
+      }
+    },
+    "zoneDialog": {
+      "title": "Create SDN Zone",
+      "description": "Create a new SDN zone for the cluster.",
+      "fields": {
+        "name": "Zone Name",
+        "type": "Type",
+        "nodes": "Nodes (comma-separated, optional)",
+        "bridge": "Bridge (optional)",
+        "mtu": "MTU (optional)"
+      }
+    },
+    "vnetDialog": {
+      "title": "Create SDN VNet",
+      "description": "Create a new virtual network in an SDN zone.",
+      "fields": {
+        "name": "VNet Name",
+        "zone": "Zone",
+        "zonePlaceholder": "Select zone",
+        "alias": "Alias (optional)",
+        "tag": "VLAN Tag (optional)",
+        "vlanAware": "VLAN Aware"
+      }
+    }
+  },
+  "SubscriptionsTab": {
+    "status": {
+      "active": "Active",
+      "expired": "Expired",
+      "none": "No Subscription",
+      "unknown": "Unknown"
+    },
+    "errors": {
+      "fetchFailed": "Could not fetch subscription data from one or more nodes.",
+      "partialBanner": "One or more subscription queries failed, the counts below may be incomplete. Affected nodes show \"Unknown\" status in the table."
+    },
+    "table": {
+      "title": "Node Subscriptions",
+      "node": "Node",
+      "status": "Status",
+      "level": "Level",
+      "product": "Product",
+      "serverId": "Server ID",
+      "key": "Key",
+      "nextDueDate": "Next Due Date"
+    }
+  },
+  "TemplatesTab": {
+    "actions": {
+      "deploy": "Deploy",
+      "deploying": "Deploying...",
+      "cancel": "Cancel"
+    },
+    "error": {
+      "fetch": "Could not fetch template data from the cluster."
+    },
+    "empty": {
+      "title": "No templates found",
+      "description": "Convert a VM or container to a template to use it here. Right-click any stopped VM/CT and select 'Convert to Template'."
+    },
+    "card": {
+      "fallbackName": "Template {{vmid}}",
+      "cores": "{{count}} cores",
+      "memoryMb": "{{value}} MB",
+      "diskGb": "{{value}} GB"
+    },
+    "dialog": {
+      "title": "Deploy from Template",
+      "description": "Clone \"{{name}}\" (#{{vmid}}) into a new {{target}}",
+      "targetContainer": "container",
+      "targetVm": "VM",
+      "newVmid": "New VMID",
+      "nextPlaceholder": "Next: {{vmid}}",
+      "name": "Name",
+      "targetNode": "Target Node",
+      "sameNode": "Same node",
+      "fullClone": "Full clone (independent copy)"
+    },
+    "toast": {
+      "deployStarted": {
+        "title": "Deployment started",
+        "description": "Cloning template {{name}}"
+      },
+      "deployFailed": {
+        "title": "Deploy failed"
+      }
+    }
+  },
+  "UpdatesTab": {
+    "toast": {
+      "refreshed": {
+        "title": "APT Refreshed",
+        "description": "Package index refreshed on {{node}}"
+      },
+      "refreshFailed": {
+        "title": "Refresh Failed",
+        "description": "Could not refresh APT on {{node}}"
+      }
+    },
+    "error": {
+      "fetch": "Could not fetch APT update data from one or more nodes."
+    },
+    "summary": {
+      "title": "Update Summary",
+      "updatesAvailable": "updates available",
+      "ofNodes": "of {{total}} nodes"
+    },
+    "actions": {
+      "refreshNode": "Refresh {{node}}"
+    },
+    "empty": {
+      "upToDate": "All nodes are up to date."
+    },
+    "table": {
+      "node": "Node",
+      "package": "Package",
+      "currentVersion": "Current Version",
+      "availableVersion": "Available Version",
+      "origin": "Origin"
+    }
+  },
+  "HypervisorPage": {
+    "header": {
+      "title": "Hypervisor",
+      "subtitle": "Proxmox VE cluster management"
+    },
+    "selectCluster": "Select cluster",
+    "noController": {
+      "title": "No Proxmox hypervisors found",
+      "description": "Add a Proxmox VE hypervisor to manage virtual machines and containers."
+    },
+    "common": {
+      "unknown": "Unknown",
+      "unknownLower": "unknown",
+      "all": "All",
+      "yes": "Yes",
+      "no": "No",
+      "nodeLabel": "Node:",
+      "virtualMachines": "virtual machines",
+      "containers": "containers",
+      "containerLower": "container"
+    },
+    "actions": {
+      "create": "Create",
+      "newVm": "New Virtual Machine",
+      "newContainer": "New Container",
+      "kiosk": "Kiosk",
+      "kioskTooltip": "Kiosk Mode (NOC display)",
+      "addHypervisor": "Add Hypervisor",
+      "refresh": "Refresh",
+      "edit": "Edit",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "close": "Close",
+      "creating": "Creating..."
+    },
+    "tabs": {
+      "fleet": "Fleet Overview",
+      "dashboard": "Dashboard",
+      "nodes": "Nodes",
+      "vms": "Virtual Machines",
+      "containers": "Containers",
+      "storage": "Storage",
+      "tasks": "Tasks",
+      "backup": "Backup",
+      "firewall": "Firewall",
+      "ha": "HA",
+      "pools": "Pools",
+      "templates": "Templates",
+      "monitoring": "Monitoring",
+      "updates": "Updates",
+      "certificates": "Certificates",
+      "subscriptions": "Subscriptions",
+      "sdn": "SDN",
+      "replication": "Replication",
+      "clusterLog": "Cluster Log",
+      "ceph": "Ceph",
+      "backupAge": "Backup Age",
+      "pbs": "PBS"
+    },
+    "stats": {
+      "clusters": "Clusters",
+      "nodes": "Nodes",
+      "vms": "VMs",
+      "containers": "Containers",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "storage": "Storage",
+      "cluster": "Cluster",
+      "ha": "HA",
+      "coresCount": "{{count}} cores",
+      "quorate": "Quorate",
+      "noQuorum": "No quorum",
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "taskStatus": {
+      "completed": "Completed",
+      "running": "Running",
+      "warning": "Warning",
+      "error": "Error"
+    },
+    "tableHeaders": {
+      "name": "Name",
+      "type": "Type",
+      "status": "Status",
+      "node": "Node",
+      "disk": "Disk",
+      "tags": "Tags",
+      "actions": "Actions",
+      "description": "Description",
+      "size": "Size",
+      "storage": "Storage"
+    },
+    "fleet": {
+      "loadError": "Failed to load fleet dashboard",
+      "emptyTitle": "No Proxmox clusters",
+      "emptyDescription": "Add Proxmox controllers to see fleet overview.",
+      "taskStatistics": "Task Statistics",
+      "nodeCount": "{{count}} node(s)",
+      "noQuorumSuffix": " (no quorum!)",
+      "vmsCts": "VMs/CTs"
+    },
+    "dashboard": {
+      "loadError": "Failed to load dashboard",
+      "cpuUsage": "CPU Usage",
+      "memoryUsage": "Memory Usage",
+      "storageUsage": "Storage Usage"
+    },
+    "nodes": {
+      "loadError": "Failed to load nodes",
+      "emptyTitle": "No nodes found",
+      "unknownCpu": "Unknown CPU",
+      "reboot": "Reboot",
+      "shutdown": "Shutdown",
+      "cpuCores": "CPU ({{count}} cores)",
+      "uptime": "Uptime",
+      "guests": "Guests",
+      "version": "Version",
+      "memoryByGuest": "Memory by Guest ({{count}} running)",
+      "rebootConfirm": {
+        "title": "Reboot node {{node}}",
+        "description": "Rebooting node \"{{node}}\" cycles every VM and container running on it. Operator should already have HA failover OR a maintenance window in place.",
+        "confirmLabel": "Reboot node"
+      },
+      "shutdownConfirm": {
+        "title": "Shutdown node {{node}}",
+        "description": "Shutting down node \"{{node}}\" stops ALL VMs and containers on it. The node will require manual power-on (or out-of-band IPMI) to come back. Verify HA failover is configured before proceeding.",
+        "confirmLabel": "Shutdown node"
+      }
+    },
+    "nodeDetail": {
+      "overview": "Overview",
+      "services": "Services",
+      "disks": "Disks",
+      "network": "Network",
+      "sensors": "Sensors",
+      "processor": "Processor",
+      "rootFilesystem": "Root Filesystem",
+      "coresUsed": "{{count}} cores · {{percent}}% used",
+      "usedPercent": "{{value}} used ({{percent}}%)",
+      "vmsRunning": "{{total}} VMs · {{running}} running",
+      "ctsRunning": "{{total}} CTs · {{running}} running",
+      "pveVersion": "PVE Version",
+      "topGuestsByMemory": "Top Guests by Memory",
+      "noServices": "No services data available.",
+      "service": "Service",
+      "state": "State",
+      "noDisks": "No disk information available.",
+      "device": "Device",
+      "model": "Model",
+      "serial": "Serial",
+      "health": "Health",
+      "noSmart": "No SMART attributes available for this disk.",
+      "smartAttributes": "SMART Attributes",
+      "attribute": "Attribute",
+      "value": "Value",
+      "worst": "Worst",
+      "threshold": "Threshold",
+      "raw": "Raw",
+      "noInterfaces": "No network interfaces found.",
+      "interface": "Interface",
+      "address": "Address",
+      "gateway": "Gateway",
+      "bridgePorts": "Bridge Ports",
+      "active": "Active",
+      "noGuestsOnNode": "No {{type}} on this node",
+      "noSensors": "No sensor data available for this node.",
+      "sensorIndex": "Sensor {{index}}"
+    },
+    "vmTable": {
+      "loadError": "Failed to load {{label}}",
+      "emptyTitle": "No {{label}} found",
+      "deleteConfirm": {
+        "title": "Delete {{kind}} {{vmid}}",
+        "description": "This permanently removes {{kind}} {{vmid}} ({{name}}) on node {{node}} including ALL its disks. There is no undo.",
+        "confirmLabel": "Delete {{kind}}"
+      }
+    },
+    "vmActions": {
+      "start": "Start",
+      "shutdown": "Shutdown",
+      "reboot": "Reboot",
+      "suspend": "Suspend",
+      "forceStop": "Force-stop",
+      "forceStopMenu": "Force Stop",
+      "resume": "Resume",
+      "createSnapshot": "Create Snapshot",
+      "snapshots": "Snapshots",
+      "clone": "Clone",
+      "migrate": "Migrate",
+      "resizeDisk": "Resize Disk",
+      "backupNow": "Backup Now",
+      "editConfig": "Edit Config",
+      "console": "Console (VNC)",
+      "delete": "Delete",
+      "rollback": "Rollback"
+    },
+    "vmConfirm": {
+      "shutdown": {
+        "title": "Shutdown VM {{vmid}}",
+        "description": "Sends a graceful shutdown signal to {{name}} ({{kind}} {{vmid}}) on node {{node}}. The guest OS gets a chance to flush and exit cleanly. If it ignores the signal the VM stays running."
+      },
+      "reboot": {
+        "title": "Reboot VM {{vmid}}",
+        "description": "Reboots {{name}} ({{kind}} {{vmid}}) on node {{node}}. The guest OS does its normal restart cycle."
+      },
+      "suspend": {
+        "title": "Suspend VM {{vmid}}",
+        "description": "Pauses {{name}} ({{kind}} {{vmid}}) on node {{node}}. Network connections drop; the guest is frozen in memory until resumed."
+      },
+      "forceStop": {
+        "title": "Force-stop VM {{vmid}}",
+        "description": "Immediately KILLS the qemu/lxc process for {{name}} ({{kind}} {{vmid}}) on node {{node}}. Equivalent to yanking the power cord, unflushed disk writes are lost; databases inside the guest may corrupt. Prefer Shutdown unless the guest is hung."
+      }
+    },
+    "storage": {
+      "loadError": "Failed to load storage",
+      "emptyTitle": "No storage pools found",
+      "uploadIso": "Upload ISO/Template",
+      "shared": "Shared",
+      "nodeColon": "Node: {{node}}",
+      "contentColon": "Content: {{content}}",
+      "contentLabel": "Content:",
+      "noContentMatch": "No content matching filters.",
+      "empty": "Storage is empty.",
+      "format": "Format",
+      "content": "Content",
+      "restore": "Restore",
+      "contentTypes": {
+        "all": "All",
+        "templates": "Templates",
+        "backups": "Backups",
+        "diskImages": "Disk Images",
+        "snippets": "Snippets"
+      }
+    },
+    "tasks": {
+      "loadError": "Failed to load tasks",
+      "emptyTitle": "No recent tasks",
+      "user": "User",
+      "started": "Started",
+      "ended": "Ended",
+      "taskWord": "task",
+      "stopConfirm": {
+        "title": "Stop running task",
+        "description": "Cancels {{type}} {{upid}}... mid-execution. The operation may leave partial state (a half-applied snapshot, an interrupted backup, etc.) that requires manual cleanup.",
+        "confirmLabel": "Stop task"
+      }
+    },
+    "backup": {
+      "heading": "Backup Jobs",
+      "createJob": "Create Job",
+      "loadError": "Failed to load backup jobs",
+      "emptyTitle": "No backup jobs configured",
+      "emptyDescription": "Create a backup job to protect your VMs and containers.",
+      "schedule": "Schedule",
+      "mode": "Mode",
+      "compress": "Compress",
+      "enabled": "Enabled",
+      "deleteConfirm": {
+        "title": "Delete backup job",
+        "description": "Removes the backup job definition \"{{id}}\". No backups already taken are deleted, but the scheduled job will stop running. To remove existing backups too, prune from the storage tab afterward.",
+        "confirmLabel": "Delete job"
+      }
+    },
+    "firewall": {
+      "heading": "Cluster Firewall Rules",
+      "addRule": "Add Rule",
+      "createRule": "Create Rule",
+      "loadError": "Failed to load firewall rules",
+      "emptyTitle": "No firewall rules",
+      "emptyDescription": "Cluster-level firewall rules appear here.",
+      "action": "Action",
+      "protocol": "Protocol",
+      "source": "Source",
+      "dest": "Dest",
+      "dport": "D.Port",
+      "comment": "Comment",
+      "ruleWord": "rule",
+      "deleteConfirm": {
+        "title": "Delete firewall rule #{{pos}}",
+        "description": "Removes cluster firewall rule at position {{pos}} (action={{action}}, type={{type}}). Network traffic that this rule was permitting will start matching whatever rule sits below it, verify the chain after deleting.",
+        "confirmLabel": "Delete rule"
+      }
+    },
+    "ha": {
+      "loadError": "Failed to load HA resources",
+      "resourcesHeading": "HA Resources",
+      "addResource": "Add Resource",
+      "resourcesEmptyTitle": "No HA resources",
+      "resourcesEmptyDescription": "Add VMs/CTs to HA for automatic failover and recovery.",
+      "state": "State",
+      "group": "Group",
+      "request": "Request",
+      "maxRelocate": "Max Relocate",
+      "maxRestart": "Max Restart",
+      "groupsHeading": "HA Groups",
+      "addGroup": "Add Group",
+      "noGroups": "No HA groups configured.",
+      "nodes": "Nodes",
+      "noFailback": "No Failback",
+      "restricted": "Restricted",
+      "removeResourceConfirm": {
+        "title": "Remove HA management",
+        "description": "Stops HA from managing {{sid}}. The VM/CT itself keeps running, but automatic failover and restart-on-crash stop applying. If the host crashes the guest will NOT migrate automatically.",
+        "confirmLabel": "Remove from HA"
+      },
+      "deleteGroupConfirm": {
+        "title": "Delete HA group {{group}}",
+        "description": "Removes HA group \"{{group}}\". Any HA-managed VM/CT that referenced this group loses its preferred-nodes/priority configuration and may fail to migrate or restart on the right host. Verify no HA resource references this group before deleting.",
+        "confirmLabel": "Delete group"
+      }
+    },
+    "pools": {
+      "loadError": "Failed to load pools",
+      "emptyTitle": "No resource pools",
+      "emptyDescription": "Create resource pools in Proxmox VE Datacenter → Permissions → Pools.",
+      "noDescription": "No description",
+      "membersCount": "{{count}} members"
+    },
+    "toast": {
+      "vmCreationStarted": "VM creation started",
+      "vmCreationFailed": "VM creation failed",
+      "containerCreationStarted": "Container creation started",
+      "containerCreationFailed": "Container creation failed",
+      "deletionStarted": "Deletion started",
+      "deleteFailed": "Delete failed",
+      "haResourceCreated": "HA resource created",
+      "haResourceCreationFailed": "HA resource creation failed",
+      "haResourceRemoved": "HA resource removed",
+      "haResourceRemoveFailed": "Failed to remove HA resource",
+      "haGroupCreated": "HA group created",
+      "haGroupCreationFailed": "HA group creation failed",
+      "haGroupDeleted": "HA group deleted",
+      "haGroupDeleteFailed": "Failed to delete HA group",
+      "actionSent": "{{action}} sent",
+      "vmOnNode": "VM {{vmid}} on {{node}}",
+      "actionFailed": "Action failed",
+      "shutdownInitiated": "Shutdown initiated",
+      "shutdownFailed": "Shutdown failed",
+      "rebootInitiated": "Reboot initiated",
+      "rebootFailed": "Reboot failed",
+      "cloneStarted": "Clone started",
+      "cloneFailed": "Clone failed",
+      "migrationStarted": "Migration started",
+      "migrationFailed": "Migration failed",
+      "diskResized": "Disk resized",
+      "resizeFailed": "Resize failed",
+      "snapshotCreated": "Snapshot created",
+      "snapshotFailed": "Snapshot failed",
+      "rollbackStarted": "Rollback started",
+      "snapshotLabel": "Snapshot: {{name}}",
+      "rollbackFailed": "Rollback failed",
+      "snapshotDeleted": "Snapshot deleted",
+      "firewallRuleCreated": "Firewall rule created",
+      "createFailed": "Create failed",
+      "taskStopRequested": "Task stop requested",
+      "stopFailed": "Stop failed",
+      "backupStarted": "Backup started",
+      "backupFailed": "Backup failed",
+      "backupJobDeleted": "Backup job deleted",
+      "firewallRuleDeleted": "Firewall rule deleted",
+      "restoreStarted": "Restore started",
+      "restoreFailed": "Restore failed",
+      "consoleOpened": "Console opened in new window",
+      "consoleFailed": "Console failed"
+    },
+    "snapshotDialog": {
+      "title": "Create Snapshot",
+      "description": "Create a point-in-time snapshot for VM {{vmid}} on {{node}}",
+      "nameLabel": "Snapshot Name",
+      "descLabel": "Description (optional)",
+      "descPlaceholder": "Before upgrade..."
+    },
+    "snapshotListDialog": {
+      "title": "Snapshots · VM {{vmid}}",
+      "description": "Manage snapshots for VM {{vmid}} on {{node}}",
+      "empty": "No snapshots found.",
+      "created": "Created",
+      "rollbackConfirm": {
+        "title": "Rollback to snapshot {{name}}",
+        "description": "Reverts {{kind}} {{vmid}} on node {{node}} to the state captured in snapshot \"{{name}}\". The current running state, including ALL changes since this snapshot was taken, will be DISCARDED. Operator should stop the VM first to avoid filesystem corruption."
+      },
+      "deleteConfirm": {
+        "title": "Delete snapshot {{name}}",
+        "description": "Permanently removes snapshot \"{{name}}\" from {{kind}} {{vmid}} on node {{node}}. The snapshot's stored state is unrecoverable after this completes. If you'd planned to roll back to this snapshot, do that FIRST.",
+        "confirmLabel": "Delete snapshot"
+      }
+    },
+    "cloneDialog": {
+      "title": "Clone VM {{vmid}}",
+      "description": "Clone \"{{name}}\" from {{node}}",
+      "newVmid": "New VMID",
+      "vmidPlaceholder": "e.g. 200",
+      "fullClone": "Full clone (independent copy)",
+      "cloning": "Cloning..."
+    },
+    "migrateDialog": {
+      "title": "Migrate VM {{vmid}}",
+      "description": "Migrate from {{node}} to another node",
+      "targetNode": "Target Node",
+      "selectTargetNode": "Select target node",
+      "onlineMigration": "Online migration (live)",
+      "migrating": "Migrating..."
+    },
+    "resizeDialog": {
+      "title": "Resize Disk · VM {{vmid}}",
+      "description": "Extend disk size on {{node}}",
+      "sizeHint": "Use +10G to add 10GB, or 50G for absolute size",
+      "resizing": "Resizing...",
+      "resize": "Resize"
+    },
+    "backupDialog": {
+      "title": "Backup VM {{vmid}}",
+      "description": "Run a manual backup on {{node}}",
+      "compression": "Compression",
+      "modeSnapshot": "Snapshot",
+      "modeSuspend": "Suspend",
+      "modeStop": "Stop",
+      "compressNone": "None",
+      "starting": "Starting...",
+      "startBackup": "Start Backup"
+    },
+    "firewallDialog": {
+      "title": "Add Firewall Rule",
+      "description": "Create a new firewall rule on {{node}}",
+      "direction": "Direction",
+      "inbound": "Inbound",
+      "outbound": "Outbound",
+      "sourceOptional": "Source (optional)",
+      "destOptional": "Destination (optional)",
+      "dportOptional": "Destination Port (optional)",
+      "commentOptional": "Comment (optional)",
+      "commentPlaceholder": "Allow HTTP"
+    },
+    "taskLogDialog": {
+      "title": "Task Log",
+      "empty": "No log entries."
+    },
+    "createDialog": {
+      "titleVm": "Create Virtual Machine",
+      "titleCt": "Create Container",
+      "descriptionVm": "Create a new QEMU/KVM virtual machine on the selected node.",
+      "descriptionCt": "Create a new LXC container on the selected node.",
+      "hostname": "Hostname",
+      "selectNode": "Select node",
+      "osTemplate": "OS Template",
+      "osTemplateHint": "Full path to container template (storage:vztmpl/filename)",
+      "isoImage": "ISO Image (optional)",
+      "isoHint": "Full path to ISO file (storage:iso/filename)",
+      "cpuCores": "CPU Cores",
+      "memoryMb": "Memory (MB)",
+      "rootDiskSize": "Root Disk Size",
+      "diskSize": "Disk Size",
+      "diskHintCt": "Size in GB (number only)",
+      "diskHintVm": "e.g. 32G, 100G",
+      "startAfterCreation": "Start after creation",
+      "createVm": "Create VM",
+      "createCt": "Create Container"
+    },
+    "haResourceDialog": {
+      "description": "Add a VM or container to High Availability management.",
+      "serviceId": "Service ID (SID)",
+      "sidHint": "Format: vm:VMID or ct:VMID",
+      "haGroupOptional": "HA Group (optional)",
+      "noneAnyNode": "None (any node)",
+      "none": "None",
+      "emptyForNoGroup": "Leave empty for no group",
+      "adding": "Adding..."
+    },
+    "haGroupDialog": {
+      "title": "Create HA Group",
+      "description": "Define a group of nodes for HA resource placement.",
+      "groupName": "Group Name",
+      "nodesHint": "Comma-separated node list with optional priority (node:priority)",
+      "noFailback": "No failback",
+      "restricted": "Restricted (only run on group nodes)",
+      "commentPlaceholder": "Production cluster nodes",
+      "createGroup": "Create Group"
+    },
+    "restoreDialog": {
+      "title": "Restore from Backup",
+      "description": "Restore a VM/CT from a backup archive.",
+      "archive": "Archive",
+      "vmidRequired": "VMID (required)",
+      "targetStorage": "Target Storage",
+      "startAfterRestore": "Start after restore",
+      "uniqueMac": "Unique MAC addresses"
+    }
+  }
+}

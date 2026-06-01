@@ -1,0 +1,1170 @@
+{
+  "title": "摄像头",
+  "streams": "视频流",
+  "recordings": "录像",
+  "events": "事件",
+  "ptz": "PTZ 控制",
+  "liveView": "实时画面",
+  "playback": "回放",
+  "cameraName": "摄像头名称",
+  "resolution": "分辨率",
+  "fps": "帧率",
+  "codec": "编解码器",
+  "status": "状态",
+  "online": "在线",
+  "offline": "离线",
+  "recording": "录制中",
+  "motionDetected": "检测到移动",
+  "noMotion": "无移动",
+  "snapshot": "快照",
+  "fullscreen": "全屏",
+  "pan": "水平转动",
+  "tilt": "垂直转动",
+  "zoom": "变焦",
+  "preset": "预置位",
+  "nvrSettings": "NVR 设置",
+  "retentionDays": "保留天数",
+  "storageUsed": "已用存储",
+  "wall": {
+    "replay": {
+      "forbidden": "即时回放需要站点管理员角色",
+      "forbiddenDetail": "您至少需要站点管理员角色才能使用即时回放。请联系您的管理员以获取访问权限。",
+      "failed": "即时回放失败"
+    }
+  },
+  "CameraDetailPage": {
+    "common": {
+      "yes": "是",
+      "no": "否",
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    },
+    "notFound": {
+      "title": "未找到摄像头",
+      "description": "您查找的摄像头不存在或已被移除。",
+      "backToCameras": "返回摄像头列表"
+    },
+    "header": {
+      "channel": "通道 {{channel}}",
+      "back": "返回"
+    },
+    "tabs": {
+      "overview": "概览",
+      "liveView": "实时画面",
+      "ptz": "PTZ",
+      "image": "图像",
+      "recordings": "录像",
+      "events": "事件",
+      "detection": "检测",
+      "schedule": "计划",
+      "health": "健康状态",
+      "access": "访问"
+    },
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "recording": "录制中",
+      "error": "错误",
+      "unknown": "未知"
+    },
+    "overview": {
+      "deviceInformation": "设备信息",
+      "resolution": "分辨率",
+      "fields": {
+        "name": "名称",
+        "ipAddress": "IP 地址",
+        "port": "端口",
+        "macAddress": "MAC 地址",
+        "vendor": "厂商",
+        "model": "型号",
+        "firmware": "固件",
+        "serialNumber": "序列号",
+        "cameraType": "摄像头类型",
+        "deviceType": "设备类型",
+        "location": "位置",
+        "floor": "楼层",
+        "nvrChannel": "NVR 通道",
+        "lastSeen": "最后在线",
+        "created": "创建时间"
+      },
+      "capabilities": {
+        "title": "功能",
+        "ptz": "PTZ",
+        "audio": "音频",
+        "twoWayAudio": "双向音频",
+        "infrared": "红外",
+        "motionDetection": "移动侦测",
+        "recording": "录制"
+      },
+      "streamUrls": {
+        "title": "视频流地址",
+        "mainStream": "主码流",
+        "subStream": "子码流"
+      },
+      "encryption": {
+        "title": "视频流加密",
+        "description": "如果此 Hikvision 摄像头/NVR 已启用视频流加密，请输入加密密钥以解密 RTSP 视频流。",
+        "keyLabel": "加密密钥",
+        "keyPlaceholder": "输入加密密钥（十六进制）",
+        "saveKey": "保存密钥",
+        "removeKey": "删除密钥",
+        "saved": "已保存",
+        "keyConfigured": "已配置加密密钥",
+        "savedToast": "加密密钥已保存",
+        "saveFailedToast": "保存加密密钥失败"
+      }
+    },
+    "stream": {
+      "connecting": "正在连接视频流...",
+      "mainStreamHd": "主码流 (HD)",
+      "subStreamSd": "子码流 (SD)",
+      "unavailable": "视频流不可用",
+      "retry": "重试",
+      "offline": "摄像头离线",
+      "unableToConnect": "无法连接到视频流",
+      "switchToSub": "切换到子码流 (SD)",
+      "switchToMain": "切换到主码流 (HD)",
+      "downloadSnapshot": "下载快照"
+    },
+    "ptz": {
+      "control": "PTZ 控制",
+      "zoom": "变焦",
+      "speed": "速度",
+      "presets": "预置位",
+      "presetName": "预置位 {{id}}",
+      "noPresets": "未配置预置位",
+      "commandFailed": "PTZ 命令失败"
+    },
+    "image": {
+      "title": "图像设置",
+      "unsaved": "未保存",
+      "loading": "正在加载图像设置...",
+      "unavailable": "无法加载图像设置。此摄像头可能不支持图像调整。",
+      "retry": "重试",
+      "brightness": "亮度",
+      "contrast": "对比度",
+      "saturation": "饱和度",
+      "sharpness": "锐度",
+      "hue": "色调",
+      "exposureMode": "曝光模式",
+      "irCutFilter": "IR 滤光片",
+      "backlight": "背光",
+      "wdr": "WDR",
+      "noiseReduction": "降噪",
+      "reset": "重置",
+      "save": "保存",
+      "saveError": "保存设置失败。请重试。",
+      "saveSuccess": "设置保存成功。",
+      "saveFailedToast": "保存图像设置失败"
+    },
+    "recordings": {
+      "exportClip": {
+        "title": "导出视频片段",
+        "start": "开始",
+        "end": "结束",
+        "exporting": "正在导出…",
+        "downloadClip": "下载片段",
+        "downloadSuccess": "片段下载成功！",
+        "duration": "时长",
+        "maxHours": "（最长 4 小时）",
+        "watermark": "嵌入证据链水印",
+        "custodyHint": "开启水印后，操作员和导出时间会嵌入片段中，且导出会记录到审计日志。关闭则下载未经更改的 NVR 原始录像。"
+      },
+      "evidence": {
+        "title": "证据保全",
+        "hold": "保全为证据",
+        "holdHint": "将该时间段从 NVR 复制到防篡改存储，并附带 SHA-256 哈希（法律保全）",
+        "held": "已创建证据保全, 正在后台归档",
+        "holdFailed": "无法创建证据保全",
+        "statusReady": "已封存",
+        "statusArchiving": "归档中…",
+        "statusFailed": "失败",
+        "watermarked": "含水印",
+        "download": "下载封存副本",
+        "release": "解除保全（删除归档）",
+        "confirmRelease": "确定解除此证据保全吗？归档副本及其哈希将被永久删除。",
+        "hint": "保全是服务器端的持久副本，使用 SHA-256 哈希封存以保证证据链。它们在 NVR 保留期轮转后仍然存在，并记录到审计日志中。"
+      },
+      "list": {
+        "title": "录像",
+        "startDate": "开始日期",
+        "endDate": "结束日期",
+        "to": "至",
+        "unknown": "未知",
+        "durationLabel": "时长",
+        "exportThisClip": "导出此片段",
+        "empty": "此时间段内未找到录像",
+        "notSupported": "此摄像机的 NVR 不支持录像检索"
+      },
+      "errors": {
+        "endAfterStart": "结束时间必须晚于开始时间",
+        "maxDuration": "片段最长时长为 4 小时",
+        "exportFailed": "导出失败"
+      }
+    }
+  },
+  "CameraDisplayWall": {
+    "toolbar": {
+      "fill": "填充（{{count}}）",
+      "snapshots": "快照",
+      "live": "实时"
+    },
+    "status": {
+      "summary": "{{active}} 个活动 · {{online}}/{{total}} 在线"
+    },
+    "display": {
+      "heading": "显示",
+      "cameraLabels": "摄像头标签",
+      "clockOverlay": "时钟叠加"
+    },
+    "streamQuality": {
+      "heading": "流质量",
+      "sub": "子码流（快速）",
+      "main": "主码流（HD）"
+    },
+    "shortcuts": {
+      "heading": "快捷键",
+      "row1": "F · 全屏 · L · 实时/快照 · H · 标签",
+      "row2": "← → · 翻页 · Esc · 退出聚焦"
+    },
+    "empty": {
+      "title": "未显示任何摄像头",
+      "autoFill": "用在线摄像头自动填充"
+    }
+  },
+  "CamerasPage": {
+    "title": "摄像头",
+    "headerDescription": "{{total}} 个摄像头 · {{online}} 个在线",
+    "searchPlaceholder": "搜索摄像头...",
+    "unknown": "未知",
+    "unknownCamera": "未知摄像头",
+    "itemNameCameras": "摄像头",
+    "itemNameCamera": "摄像头",
+    "snapshot": {
+      "alt": "摄像头缩略图"
+    },
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "recording": "录制中",
+      "error": "错误",
+      "unknown": "未知"
+    },
+    "features": {
+      "audio": "音频"
+    },
+    "card": {
+      "healthTitle": "{{fps}} fps · {{kbps}} kbps"
+    },
+    "actions": {
+      "liveView": "实时查看",
+      "cancel": "取消",
+      "saving": "保存中...",
+      "update": "更新",
+      "create": "创建",
+      "saveView": "保存视图",
+      "displayWall": "显示墙",
+      "multiPlayback": "多路回放",
+      "liveWall": "实时墙",
+      "select": "选择",
+      "addCamera": "添加摄像头",
+      "views": "视图",
+      "retry": "重试",
+      "refresh": "刷新",
+      "detail": "详情",
+      "ptzControl": "PTZ 控制",
+      "settings": "设置",
+      "delete": "删除",
+      "deleteViewAria": "删除视图 {{name}}"
+    },
+    "groupDialog": {
+      "editTitle": "编辑分组",
+      "createTitle": "创建摄像头分组",
+      "nameLabel": "分组名称",
+      "namePlaceholder": "例如：停车场",
+      "descriptionLabel": "描述",
+      "optional": "（可选）",
+      "descriptionPlaceholder": "简要描述...",
+      "colorLabel": "颜色",
+      "selectCameras": "选择摄像头",
+      "selectedCount": "已选 {{count}} 个",
+      "deselectAll": "取消全选",
+      "selectAll": "全选（{{count}}）",
+      "clearSelection": "清除选择",
+      "noMatchTitle": "没有符合筛选条件的摄像头",
+      "noMatchDescription": "请尝试调整搜索或筛选条件。",
+      "selectColor": "选择颜色 {{color}}"
+    },
+    "saveViewDialog": {
+      "title": "保存自定义视图",
+      "nameLabel": "视图名称",
+      "namePlaceholder": "例如：前门入口",
+      "shareLabel": "与团队共享",
+      "summary": "布局：{{layout}} · {{count}} 个摄像头"
+    },
+    "sidebar": {
+      "groups": "分组",
+      "allCameras": "所有摄像头",
+      "newGroup": "新建分组",
+      "filters": "筛选",
+      "deleteGroupAria": "删除分组 {{name}}"
+    },
+    "filters": {
+      "all": "全部",
+      "allNvrs": "所有 NVR",
+      "standalone": "独立",
+      "allStatus": "所有状态",
+      "statusLabel": "状态",
+      "allStatuses": "所有状态",
+      "vendorLabel": "厂商",
+      "allVendors": "所有厂商",
+      "floorLabel": "楼层",
+      "allFloors": "所有楼层",
+      "zoneLabel": "区域",
+      "allZones": "所有区域",
+      "featuresLabel": "功能",
+      "ptzOnly": "仅 PTZ",
+      "audioOnly": "仅音频",
+      "clearFilters": "清除筛选"
+    },
+    "tabs": {
+      "dashboard": "仪表板",
+      "list": "列表"
+    },
+    "viewModes": {
+      "grid": "网格",
+      "liveWall": "实时墙",
+      "events": "事件",
+      "health": "健康",
+      "fleetHealth": "设备健康"
+    },
+    "stats": {
+      "totalCameras": "摄像头总数",
+      "allRegistered": "全部已注册",
+      "online": "在线",
+      "reachable": "{{percent}}% 可达",
+      "noCameras": "暂无摄像头",
+      "recording": "录制中",
+      "activelyRecording": "正在录制",
+      "issues": "问题",
+      "issuesDescription": "{{offline}} 个离线 · {{errors}} 个错误"
+    },
+    "columns": {
+      "camera": "摄像头",
+      "ipAddress": "IP 地址",
+      "location": "位置",
+      "status": "状态",
+      "features": "功能"
+    },
+    "error": {
+      "loadCamerasTitle": "加载摄像头失败",
+      "unexpected": "发生意外错误。"
+    },
+    "empty": {
+      "noCamerasTitle": "未找到摄像头",
+      "noCamerasDescription": "请调整筛选条件或添加新摄像头。"
+    },
+    "pagination": {
+      "previous": "上一页",
+      "next": "下一页",
+      "pageOf": "第 {{current}} 页，共 {{total}} 页",
+      "cameraCount": "（{{count}} 个摄像头）",
+      "cameraTotal": "{{count}} 个摄像头",
+      "serverPage": "第 {{current}}/{{total}} 组",
+      "range": "{{from}}-{{to}}，共 {{total}}"
+    },
+    "events": {
+      "eventTypePlaceholder": "事件类型",
+      "allTypes": "所有类型",
+      "types": {
+        "motion": "移动侦测",
+        "lineCross": "越界",
+        "intrusion": "入侵",
+        "tamper": "篡改",
+        "videoLoss": "视频丢失",
+        "faceDetect": "人脸检测",
+        "audioDetect": "音频检测",
+        "face": "人脸"
+      },
+      "unacknowledged": "未确认",
+      "acknowledged": "已确认",
+      "acknowledgeN": "确认 {{count}} 个",
+      "loadFailed": "加载事件失败。",
+      "emptyTitle": "暂无事件",
+      "emptyDescription": "检测到摄像头事件时将在此处显示。",
+      "ack": "已确认",
+      "acknowledge": "确认"
+    },
+    "health": {
+      "loadFailed": "加载设备健康数据失败。",
+      "total": "总数",
+      "avgBitrate": "平均码率",
+      "totalBandwidth": "总带宽",
+      "perCameraTitle": "各摄像头健康状况",
+      "healthy": "健康",
+      "degraded": "降级",
+      "emptyTitle": "暂无摄像头",
+      "emptyDescription": "添加摄像头以查看健康指标。"
+    },
+    "templates": {
+      "title": "录制模板",
+      "newTemplate": "新建模板",
+      "namePrompt": "模板名称：",
+      "descriptionPrompt": "描述（可选）：",
+      "empty": "暂无录制模板。创建一个即可批量为摄像头应用计划。",
+      "builtIn": "内置",
+      "applyToSelected": "应用于已选的 {{count}} 个",
+      "deleteTemplateAria": "删除模板 {{name}}",
+      "createDialogTitle": "新建录像模板",
+      "createDialogDescription": "创建可批量应用于摄像机的模板。",
+      "nameLabel": "模板名称",
+      "namePlaceholder": "例如：24/7 连续",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "简要描述…"
+    },
+    "bulk": {
+      "openInLiveWall": "在实时墙中打开",
+      "assignGroup": "分配分组",
+      "noGroups": "暂无分组 · 请先创建一个"
+    },
+    "confirm": {
+      "deleteGroup": "删除分组“{{name}}”？",
+      "deleteView": "删除视图“{{name}}”？",
+      "deleteTemplate": "删除模板“{{name}}”？",
+      "deleteCameras": "删除 {{count}} 个摄像头？此操作无法撤销。"
+    },
+    "eventToasts": {
+      "motion": "检测到移动",
+      "lineCross": "越界",
+      "intrusion": "检测到入侵",
+      "tamper": "摄像头被篡改",
+      "videoLoss": "视频信号丢失",
+      "faceDetect": "检测到人脸",
+      "audioDetect": "检测到音频",
+      "genericEvent": "摄像头事件"
+    },
+    "toasts": {
+      "updateGroupFailed": "更新分组失败",
+      "createGroupFailed": "创建分组失败",
+      "saveViewFailed": "保存视图失败",
+      "deleteGroupFailed": "删除分组失败",
+      "deleteViewFailed": "删除视图失败",
+      "ackEventFailed": "确认事件失败",
+      "eventsAcknowledged": "已确认 {{count}} 个事件",
+      "ackEventsFailed": "确认事件失败",
+      "templateDeleted": "模板已删除",
+      "deleteTemplateFailed": "删除模板失败",
+      "camerasDeleted": "已删除 {{count}} 个摄像头",
+      "camerasDeletedPartial": "{{total}} 个中已删除 {{succeeded}} 个，{{failed}} 个失败",
+      "deleteCamerasFailed": "删除摄像头失败",
+      "camerasAddedToGroup": "摄像头已添加到分组",
+      "assignGroupFailed": "将摄像头分配到分组失败",
+      "templateCreated": "模板“{{name}}”已创建",
+      "createTemplateFailed": "创建模板失败",
+      "scheduleApplied": "已为 {{count}} 个摄像头应用计划",
+      "applyScheduleFailed": "应用计划失败"
+    },
+    "deleteDialog": {
+      "groupTitle": "删除分组？",
+      "groupDescription": "删除分组“{{name}}”？此操作无法撤销。",
+      "viewTitle": "删除已保存的视图？",
+      "viewDescription": "删除视图“{{name}}”？此操作无法撤销。",
+      "templateTitle": "删除模板？",
+      "templateDescription": "删除模板“{{name}}”？此操作无法撤销。",
+      "bulkTitle": "删除摄像机？",
+      "bulkDescription": "删除 {{count}} 个摄像机？此操作无法撤销。"
+    }
+  },
+  "CameraWallPage": {
+    "title": "摄像头墙",
+    "description": "{{count}} 个可用摄像头",
+    "actions": {
+      "displayMode": "显示模式",
+      "backToCameras": "返回摄像头"
+    },
+    "errors": {
+      "loadFailed": "加载摄像头失败。"
+    }
+  },
+  "CameraWallPopout": {
+    "documentTitle": "摄像头墙",
+    "loading": "正在加载摄像头...",
+    "error": "加载摄像头失败。请检查网络连接后重新加载。"
+  },
+  "MultiPlaybackPage": {
+    "header": {
+      "title": "多摄像头回放",
+      "description": "用于事件调查的同步录像回放"
+    },
+    "actions": {
+      "backToCameras": "返回摄像头"
+    },
+    "error": {
+      "loadFailed": "加载摄像头失败。"
+    },
+    "empty": {
+      "title": "选择摄像头以开始",
+      "description": "从侧边栏中选择最多 4 个摄像头以开始同步回放"
+    },
+    "status": {
+      "online": "在线",
+      "offline": "离线"
+    },
+    "cell": {
+      "cameraOffline": "摄像头离线",
+      "streamError": "视频流错误",
+      "noRecording": "此时间点无录像"
+    },
+    "picker": {
+      "title": "摄像头",
+      "searchPlaceholder": "搜索摄像头...",
+      "active": "已选",
+      "noCamerasFound": "未找到摄像头"
+    },
+    "controls": {
+      "back1Minute": "后退 1 分钟",
+      "back10Seconds": "后退 10 秒",
+      "forward10Seconds": "前进 10 秒",
+      "forward1Minute": "前进 1 分钟"
+    },
+    "timeline": {
+      "shared": "共享时间轴"
+    },
+    "ranges": {
+      "1h": "1 小时",
+      "4h": "4 小时",
+      "12h": "12 小时",
+      "24h": "24 小时",
+      "3d": "3 天",
+      "7d": "7 天"
+    },
+    "mode": {
+      "label": "回放模式",
+      "smooth": "流畅",
+      "frames": "逐帧",
+      "smoothHint": "“流畅”使用 HLS 视频（Hikvision 类 NVR）；“逐帧”每秒抓取 JPEG 快照，适用于所有 NVR。不支持流畅回放的摄像机会自动回退到逐帧。"
+    },
+    "evidence": {
+      "title": "证据导出",
+      "camerasInGrid": "在网格中",
+      "start": "开始",
+      "duration": "时长",
+      "watermark": "水印",
+      "holdN": "保全 {{count}} 个摄像机",
+      "hint": "将网格中每个摄像机的同一时间段封存到防篡改存储，并附带 SHA-256 哈希--每个摄像机一段片段，符合法庭要求的证据链。",
+      "held": "已为 {{count}} 个摄像机创建证据保全, 正在后台归档",
+      "failed": "无法创建证据保全",
+      "releaseFailed": "无法释放证据保全",
+      "holdsTitle": "这些摄像机的保全",
+      "downloadBundle": "下载打包 ({{count}})"
+    }
+  },
+  "CameraReportsPage": {
+    "title": "摄像机报告",
+    "description": "每日摄像机系统摘要--在线率、在线摄像机数和事件量",
+    "dailySummary": "每日摘要",
+    "uptime": "在线率",
+    "online": "在线",
+    "events24h": "事件（24小时）",
+    "samples": "采样数",
+    "generated": "生成于",
+    "empty": {
+      "title": "暂无报告",
+      "description": "当摄像机开始上报健康状态后，每晚会自动生成一份每日摘要。"
+    },
+    "error": {
+      "title": "无法加载报告",
+      "description": "获取摄像机报告时出现问题。"
+    }
+  },
+  "NVRDetailPage": {
+    "common": {
+      "yes": "是",
+      "no": "否"
+    },
+    "timeAgo": {
+      "never": "从不",
+      "justNow": "刚刚",
+      "minutes": "{{n}} 分钟前",
+      "hours": "{{n}} 小时前",
+      "days": "{{n}} 天前"
+    },
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "recording": "录制中",
+      "rebooting": "重启中",
+      "error": "错误",
+      "unknown": "未知"
+    },
+    "smart": {
+      "unknown": "未知",
+      "healthy": "正常",
+      "warning": "警告",
+      "critical": "严重"
+    },
+    "notFound": {
+      "title": "未找到 NVR",
+      "description": "无法加载请求的 NVR。",
+      "back": "返回 NVR 列表"
+    },
+    "actions": {
+      "sync": "同步",
+      "syncing": "同步中…",
+      "settings": "设置"
+    },
+    "menu": {
+      "refreshStorage": "刷新存储",
+      "refreshSystemInfo": "刷新系统信息",
+      "rebootNvr": "重启 NVR",
+      "deleteNvr": "删除 NVR"
+    },
+    "confirm": {
+      "reboot": "重启此 NVR？视频流将被中断。",
+      "delete": "删除 NVR “{{name}}”？此操作无法撤销。"
+    },
+    "toasts": {
+      "syncSuccess": "NVR 同步成功",
+      "syncFailed": "NVR 同步失败",
+      "deleteFailed": "删除 NVR 失败",
+      "rebootSent": "已发送重启命令",
+      "rebootFailed": "重启命令失败",
+      "encKeySaved": "加密密钥已保存",
+      "encKeySaveFailed": "保存加密密钥失败",
+      "searchFailed": "录像搜索失败",
+      "redactedUrlCopied": "已将脱敏 URL 复制到剪贴板",
+      "redactedUrlCopiedShort": "已复制脱敏 URL",
+      "saveSettingsFailed": "保存 NVR 设置失败"
+    },
+    "stats": {
+      "channels": "通道",
+      "online": "在线",
+      "offline": "离线",
+      "recording": "录制中",
+      "cpu": "CPU",
+      "storage": "存储"
+    },
+    "tabs": {
+      "overview": "概览",
+      "channels": "通道 ({{n}})",
+      "storage": "存储",
+      "network": "网络",
+      "playback": "回放",
+      "channelStatus": "通道状态",
+      "holidays": "节假日"
+    },
+    "deviceInfo": {
+      "title": "设备信息",
+      "name": "名称",
+      "ipAddress": "IP 地址",
+      "model": "型号",
+      "vendor": "厂商",
+      "firmware": "固件",
+      "serialNumber": "序列号",
+      "macAddress": "MAC 地址",
+      "channelCapacity": "通道容量",
+      "deviceType": "设备类型",
+      "deviceId": "设备 ID",
+      "hardwareVer": "硬件版本",
+      "encoderVer": "编码器版本",
+      "firmwareDate": "固件日期"
+    },
+    "health": {
+      "title": "状态与健康",
+      "status": "状态",
+      "lastSeen": "最后在线",
+      "lastSynced": "最后同步",
+      "created": "创建时间",
+      "cpu": "CPU",
+      "memory": "内存",
+      "storage": "存储"
+    },
+    "time": {
+      "nvrClock": "NVR 时钟",
+      "timeMode": "时间模式",
+      "manual": "手动",
+      "ntpServer": "NTP 服务器"
+    },
+    "tracks": {
+      "title": "录像轨道 ({{n}})",
+      "trackId": "轨道 ID",
+      "channel": "通道",
+      "type": "类型",
+      "enabled": "已启用",
+      "loop": "循环",
+      "description": "描述",
+      "showingCount": "显示 {{total}} 条中的 {{shown}} 条",
+      "showAll": "显示全部",
+      "showLess": "收起"
+    },
+    "encryption": {
+      "title": "视频流加密",
+      "configured": "已配置",
+      "description": "此 NVR 上所有摄像头共享的加密密钥，应用于 RTSP 视频流 URL。",
+      "placeholder": "输入十六进制加密密钥",
+      "saveKey": "保存密钥",
+      "remove": "移除",
+      "saved": "已保存",
+      "saveError": "保存加密密钥失败。请重试。"
+    },
+    "channels": {
+      "empty": "未找到通道。请尝试同步 NVR。",
+      "syncNow": "立即同步",
+      "chShort": "CH {{n}}",
+      "audio": "音频",
+      "rec": "REC",
+      "detailsTitle": "通道详情",
+      "chHeader": "CH",
+      "name": "名称",
+      "status": "状态",
+      "ipAddress": "IP 地址",
+      "model": "型号",
+      "capabilities": "功能",
+      "recording": "录制",
+      "loadError": "无法加载通道。",
+      "emptyTitle": "无通道",
+      "snapshotUrlCopied": "快照 URL 已复制到剪贴板",
+      "snapshotUrlFailed": "复制快照 URL 失败",
+      "exportCsv": "导出 CSV",
+      "exportSelected": "导出所选（CSV）",
+      "selectedCount": "已选择 {{n}} 个",
+      "clearSelection": "清除",
+      "selectHint": "选择要导出的通道，或使用每行的操作菜单。",
+      "selectAllAria": "选择所有通道",
+      "selectRowAria": "选择通道 {{name}}",
+      "actions": "操作",
+      "rowActionsAria": "{{name}} 的操作",
+      "actionViewLive": "查看实时",
+      "actionOpenPlayback": "打开回放",
+      "actionCopySnapshot": "复制快照 URL",
+      "actionOpenDetail": "打开通道详情"
+    },
+    "storage": {
+      "realtimeTitle": "实时存储与健康",
+      "disksDetected": "检测到 {{n}} 块磁盘",
+      "disksNeedAttention": "· {{n}} 块磁盘需要关注",
+      "refresh": "刷新",
+      "totalCapacity": "总容量",
+      "used": "已用",
+      "free": "可用",
+      "diskHealth": "磁盘健康",
+      "pctUtilised": "已使用 {{pct}}%",
+      "pctAvailable": "可用 {{pct}}%",
+      "issues": "{{n}} 个问题",
+      "attentionRequired": "需要立即处理",
+      "allGood": "一切正常",
+      "disksHealthy": "{{n}} 块磁盘健康",
+      "usedValue": "已用 {{value}}",
+      "freeValue": "可用 {{value}}",
+      "freeOfTotal": "可用 {{free}}，共 {{total}}",
+      "pctOfTotal": "{{total}} 的 {{pct}}%",
+      "utilisationRemaining": "使用率 {{pct}}% · 剩余 {{remaining}}",
+      "usedCached": "已用 {{value}}（缓存）",
+      "totalValue": "共 {{value}}",
+      "cachedNote": "缓存值 · 点击刷新获取实时数据",
+      "unavailableOffline": "存储数据不可用。NVR 可能已离线。",
+      "notAvailable": "存储数据不可用。",
+      "liveError": "无法加载实时存储数据--下方数值可能为缓存或不可用。"
+    },
+    "forecast": {
+      "title": "存储预测",
+      "dailyRateLabel": "估计每日速率",
+      "dailyRateValue": "~{{value}} GB/天",
+      "daysRemainingLabel": "剩余天数",
+      "daysRemainingValue": "~{{n}} 天",
+      "criticalTitle": "存储严重不足",
+      "criticalBody": "请考虑启用仅移动侦测录制或扩展存储容量。",
+      "mediumTip": "提示：启用仅移动侦测录制可将存储寿命延长至约 {{n}} 天。",
+      "estimateBadge": "估算",
+      "estimateDisclaimer": "基于单次使用快照估算，而非实测趋势。仅供粗略参考。",
+      "daysRemainingValueEstimate": "约 {{n}} 天",
+      "watchBody": "预计可用空间正在减少。请在采取措施前留意未来几天的使用情况。"
+    },
+    "disks": {
+      "title": "单个磁盘 ({{n}})",
+      "diskN": "磁盘 {{n}}",
+      "hddN": "HDD #{{n}}",
+      "typePrefix": "类型：{{value}}",
+      "propertyPrefix": "属性：{{value}}",
+      "snPrefix": "序列号：{{value}}",
+      "statusUnknown": "未知",
+      "smartLabel": "S.M.A.R.T. {{status}}",
+      "temperature": "温度",
+      "powerOnTime": "通电时间",
+      "model": "型号",
+      "serialNumber": "序列号",
+      "firmware": "固件",
+      "diskType": "磁盘类型",
+      "property": "属性",
+      "smartTest": "SMART 测试",
+      "smartTestProgress": "完成 {{pct}}%"
+    },
+    "smartTable": {
+      "title": "S.M.A.R.T. 属性 ({{n}})",
+      "id": "ID",
+      "attribute": "属性",
+      "current": "当前值",
+      "worst": "最差值",
+      "threshold": "阈值",
+      "raw": "原始值",
+      "status": "状态",
+      "exportCsv": "导出 CSV"
+    },
+    "network": {
+      "loading": "正在加载网络配置…",
+      "offline": "NVR 已离线。网络数据不可用。",
+      "timeNtpTitle": "时间与 NTP",
+      "deviceTime": "设备时间",
+      "timeMode": "时间模式",
+      "timeZone": "时区",
+      "ntpServer": "NTP 服务器",
+      "ntpPort": "NTP 端口",
+      "interfacesTitle": "网络接口 ({{n}})",
+      "interface": "接口",
+      "ipAddress": "IP 地址",
+      "subnet": "子网",
+      "gateway": "网关",
+      "speed": "速度",
+      "auto": "自动",
+      "loadError": "无法加载网络配置。",
+      "empty": "无可用的网络配置。"
+    },
+    "playback": {
+      "offline": "NVR 已离线。回放不可用。",
+      "searchTitle": "录像搜索",
+      "searchDescription": "按通道、日期和时间范围搜索录制的视频。",
+      "channel": "通道",
+      "selectChannel": "选择通道",
+      "chPrefix": "CH {{n}} · ",
+      "start": "开始",
+      "end": "结束",
+      "searching": "搜索中…",
+      "search": "搜索",
+      "streamTitle": "回放视频流",
+      "rtspUrl": "RTSP 回放 URL",
+      "copyUrl": "复制 URL",
+      "vlcHint": "在 VLC 或任何兼容 RTSP 的播放器中打开此 URL 以查看录制的视频。",
+      "segmentsTitle": "录像片段 ({{n}})",
+      "noRecordings": "在所选时间范围内未找到录像。",
+      "startTime": "开始时间",
+      "endTime": "结束时间",
+      "duration": "时长",
+      "type": "类型",
+      "codec": "编解码器",
+      "actions": "操作",
+      "durationValue": "{{m}} 分 {{s}} 秒",
+      "recTypeContinuous": "连续",
+      "recTypeMotion": "移动侦测",
+      "recTypeAlarm": "报警",
+      "recTypeRecording": "录制",
+      "playFromStart": "从开始时间播放",
+      "closePlayer": "关闭播放器",
+      "play": "播放",
+      "exportCsv": "导出 CSV",
+      "jumpNow": "跳到现在",
+      "selectChannelPrompt": "选择一个通道以开始回放",
+      "advancedTitle": "录像检索、片段与流地址",
+      "back1m": "后退 1 分钟",
+      "back10s": "后退 10 秒",
+      "fwd10s": "前进 10 秒",
+      "fwd1m": "前进 1 分钟",
+      "inlinePlayerTitle": "录像回放",
+      "inlinePlayerFrom": "从 {{time}} 开始播放",
+      "inlinePlayerUnavailable": "无法内嵌回放：{{reason}}。请改用下方的 RTSP URL 在 VLC 或其他播放器中播放。"
+    },
+    "channelStatus": {
+      "error": "加载通道状态失败。NVR 可能无法访问。",
+      "title": "通道状态（{{n}} 个通道）",
+      "online": "在线",
+      "offline": "离线",
+      "channelN": "通道 {{n}}"
+    },
+    "settings": {
+      "title": "NVR 设置",
+      "description": "更新 NVR 配置。更改 IP 地址需要删除并重新导入。",
+      "name": "名称",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "可选描述",
+      "port": "端口",
+      "ipAddress": "IP 地址",
+      "serialNumber": "序列号",
+      "cancel": "取消",
+      "saving": "保存中…",
+      "save": "保存"
+    },
+    "aria": {
+      "back": "返回 NVR 列表",
+      "moreActions": "更多操作",
+      "openChannel": "打开通道 {{name}}",
+      "showKey": "显示加密密钥",
+      "hideKey": "隐藏加密密钥"
+    },
+    "overview": {
+      "sysInfoError": "无法加载实时系统信息--CPU、内存和时钟详情可能不可用。"
+    },
+    "confirmReboot": {
+      "title": "重启 NVR？",
+      "description": "这将重启“{{name}}”。设备重启期间录像和实时视频流将中断。",
+      "cancel": "取消",
+      "confirm": "重启"
+    },
+    "confirmDelete": {
+      "title": "删除 NVR？",
+      "description": "这将从 FreeSDN 永久删除“{{name}}”及其通道关联。此操作无法撤销。",
+      "cancel": "取消",
+      "confirm": "删除"
+    },
+    "holidays": {
+      "title": "节假日（{{n}}）",
+      "description": "节假日时段会覆盖 NVR 上的正常录像计划。",
+      "offline": "NVR 离线--节假日设置不可用。",
+      "loading": "正在加载节假日…",
+      "loadError": "无法加载节假日设置。",
+      "emptyTitle": "未配置节假日",
+      "empty": "此 NVR 未定义节假日时段。",
+      "save": "保存节假日",
+      "saving": "正在保存…",
+      "saveSuccess": "节假日设置已保存",
+      "saveError": "保存节假日设置失败",
+      "colId": "ID",
+      "colName": "名称",
+      "colMode": "模式",
+      "colRange": "范围（月/日）",
+      "colEnabled": "已启用",
+      "unnamed": "节假日 {{n}}",
+      "toggleAria": "切换节假日 {{name}}",
+      "descriptionEditable": "添加、编辑或删除节假日计划条目，然后保存以应用到 NVR。",
+      "add": "添加节假日",
+      "emptyEditable": "未配置节假日条目。添加一个以开始。",
+      "newHolidayName": "新建节假日",
+      "colStart": "开始（月/日）",
+      "colEnd": "结束（月/日）",
+      "colActions": "操作",
+      "namePlaceholder": "节假日名称",
+      "nameAria": "节假日 {{n}} 的名称",
+      "mode": {
+        "date": "日期",
+        "week": "周",
+        "month": "月"
+      },
+      "startMonthAria": "节假日 {{n}} 的开始月份",
+      "startDayAria": "节假日 {{n}} 的开始日期",
+      "endMonthAria": "节假日 {{n}} 的结束月份",
+      "endDayAria": "节假日 {{n}} 的结束日期",
+      "deleteAria": "删除节假日 {{name}}",
+      "unsavedNote": "您有未保存的更改。点击保存以应用到 NVR。"
+    },
+    "csv": {
+      "name": "名称",
+      "channelId": "通道 ID",
+      "status": "状态",
+      "ipAddress": "IP 地址",
+      "model": "型号",
+      "vendor": "厂商",
+      "startTime": "开始时间",
+      "endTime": "结束时间",
+      "durationSeconds": "时长（秒）",
+      "type": "类型",
+      "codec": "编解码",
+      "smartId": "ID",
+      "smartName": "属性",
+      "smartCurrent": "当前值",
+      "smartWorst": "最差值",
+      "smartThreshold": "阈值",
+      "smartRaw": "原始值",
+      "smartStatus": "状态"
+    }
+  },
+  "NVRListPage": {
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "recording": "录制中",
+      "error": "错误",
+      "unknown": "未知"
+    },
+    "storage": {
+      "notAvailable": "不可用",
+      "used": "已用 {{size}}",
+      "free": "可用 {{size}}",
+      "percentOf": "{{total}} 的 {{pct}}%"
+    },
+    "actions": {
+      "viewDetails": "查看详情",
+      "syncChannels": "同步通道",
+      "delete": "删除",
+      "export": "导出",
+      "addNvr": "添加 NVR"
+    },
+    "card": {
+      "channel": "{{count}} 个通道",
+      "channels": "{{count}} 个通道",
+      "online": "{{count}} 个在线",
+      "firmware": "固件 {{version}}",
+      "unknownVendor": "未知厂商",
+      "synced": "已同步 {{date}}",
+      "neverSynced": "从未同步"
+    },
+    "header": {
+      "title": "NVR 管理",
+      "description": "{{total}} 个 NVR · {{online}} 个在线"
+    },
+    "stats": {
+      "totalNvrs": "NVR 总数",
+      "configuredRecorders": "已配置的录像机",
+      "online": "在线",
+      "reachable": "{{pct}}% 可达",
+      "noNvrs": "无 NVR",
+      "offline": "离线",
+      "needsAttention": "需要关注",
+      "activeStreams": "活动流",
+      "fpsTarget": "目标 {{fps}} FPS",
+      "noLiveStreams": "无实时流"
+    },
+    "toolbar": {
+      "searchPlaceholder": "按名称、IP、型号或序列号搜索 NVR…",
+      "allStatuses": "所有状态",
+      "clearFilters": "清除筛选",
+      "gridView": "网格视图",
+      "tableView": "表格视图"
+    },
+    "error": {
+      "loadFailed": "加载 NVR 失败"
+    },
+    "empty": {
+      "title": "尚未注册 NVR",
+      "description": "从摄像头页面导入您的第一台 NVR 即可开始，或直接在此处添加一台。"
+    },
+    "table": {
+      "nvr": "NVR",
+      "serialNumber": "序列号：{{serial}}",
+      "status": "状态",
+      "ipAddress": "IP 地址",
+      "model": "型号",
+      "channels": "通道",
+      "storage": "存储",
+      "firmware": "固件",
+      "lastSynced": "上次同步",
+      "never": "从未",
+      "itemName": "NVR"
+    },
+    "bulk": {
+      "itemName": "NVR",
+      "syncAll": "全部同步",
+      "deleteToast": {
+        "title": "批量删除",
+        "description": "为确保安全，请逐个删除 NVR。"
+      }
+    },
+    "deleteDialog": {
+      "title": "删除 NVR",
+      "confirmPrefix": "确定要删除",
+      "confirmSuffix": "这将移除该 NVR 及所有关联的摄像头记录。此操作无法撤销。",
+      "cancel": "取消",
+      "deleting": "删除中...",
+      "delete": "删除"
+    },
+    "toasts": {
+      "syncSuccess": "已同步 {{count}} 个通道",
+      "syncFailed": "同步 NVR 失败",
+      "deleteFailed": "删除 NVR 失败"
+    }
+  },
+  "HLSPlayer": {
+    "errors": {
+      "streamFailed": "多次恢复尝试后视频流仍失败",
+      "playbackError": "原生 HLS 播放错误",
+      "notSupported": "此浏览器不支持 HLS",
+      "networkError": "网络错误：无法加载视频流",
+      "mediaError": "媒体错误：视频流格式问题",
+      "streamError": "视频流错误：{{details}}"
+    }
+  },
+  "RecordedHlsPlayer": {
+    "starting": "正在启动回放…",
+    "startFailed": "无法启动录像回放。",
+    "notSupported": "此设备不支持录像回放。",
+    "notDecodable": "此 NVR 无法回放该摄像机的录像--其录制的视频流无法解码。实时画面仍可正常查看。"
+  },
+  "CameraEventsPage": {
+    "title": "事件回顾",
+    "description": "摄像机与 NVR 事件--移动侦测、智能检测、防拆与视频丢失告警。",
+    "unreviewed": "{{count}} 条未回顾",
+    "reviewAllShown": "回顾全部显示项",
+    "play": "回放",
+    "playAtTime": "在此刻打开录像回放",
+    "searchPlaceholder": "搜索任何内容…",
+    "categories": {
+      "all": "全部",
+      "person": "人员",
+      "vehicle": "车辆",
+      "motion": "移动",
+      "line": "越界",
+      "intrusion": "区域入侵",
+      "face": "人脸",
+      "tamper": "篡改",
+      "audio": "音频"
+    },
+    "push": {
+      "enable": "启用提醒",
+      "enabled": "提醒已开启",
+      "denied": "通知已在浏览器设置中被阻止",
+      "failed": "无法更改通知设置",
+      "enabledToast": "已为此浏览器启用推送提醒",
+      "disabledToast": "已停用推送提醒"
+    },
+    "filters": {
+      "camera": "摄像机",
+      "allCameras": "所有摄像机",
+      "allTypes": "所有类型",
+      "unreviewed": "未回顾",
+      "reviewed": "已回顾",
+      "allStatus": "全部"
+    },
+    "types": {
+      "motion": "移动侦测",
+      "lineCross": "越界侦测",
+      "intrusion": "区域入侵",
+      "face": "人脸",
+      "tamper": "防拆",
+      "videoLoss": "视频丢失"
+    },
+    "range": {
+      "h1": "最近 1 小时",
+      "h24": "最近 24 小时",
+      "d7": "最近 7 天",
+      "d30": "最近 30 天"
+    },
+    "error": "无法加载事件。",
+    "loading": "正在加载事件…",
+    "empty": {
+      "title": "暂无事件",
+      "description": "当 NVR 在所选时段内检测到移动、智能事件或告警时，事件将显示在此处。"
+    },
+    "unknownCamera": "未知摄像机",
+    "new": "新",
+    "reviewed": "已回顾",
+    "review": "回顾",
+    "loadMore": "加载更多",
+    "maxEventsReached": "正在显示最近的 {{max}} 条事件。请缩小时间范围或筛选条件以查看更多。",
+    "toasts": {
+      "ackFailed": "标记为已回顾失败",
+      "bulkAcked": "已将 {{count}} 条事件标记为已回顾"
+    }
+  },
+  "RegionEditor": {
+    "snapshotAlt": "摄像机快照",
+    "lineHint": "{{count}}/2 个点--点击放置绊线",
+    "polygonHint": "{{count}}/{{max}} 个点--点击添加，拖动移动",
+    "removePoint": "删除点",
+    "undo": "撤销",
+    "clear": "清除"
+  },
+  "RegionEditDialog": {
+    "lineDesc": "在图像上点击两个点以放置绊线。",
+    "polygonDesc": "点击添加点、拖动调整。至少 3 个点构成区域。",
+    "loadingSnapshot": "正在加载摄像机快照…",
+    "cancel": "取消",
+    "save": "保存区域"
+  }
+}

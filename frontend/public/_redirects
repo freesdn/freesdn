@@ -1,0 +1,7 @@
+# Cloudflare Pages SPA fallback (demo.freesdn.org).
+# This app uses react-router BrowserRouter, so client-side routes like
+# /devices or /sites are real browser paths with no matching file on disk.
+# Pages serves existing static files first (assets, sw.js, favicon, _headers),
+# then rewrites every other path to the app shell with a 200 so deep links and
+# in-app refreshes load the SPA instead of returning a 404.
+/*    /index.html    200

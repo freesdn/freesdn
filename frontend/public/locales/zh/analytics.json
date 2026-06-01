@@ -1,0 +1,345 @@
+{
+  "AnalyticsPage": {
+    "title": "分析",
+    "actions": {
+      "export": "导出"
+    },
+    "errors": {
+      "loadFailed": "加载分析数据失败"
+    },
+    "subtitle": {
+      "updated": "更新于 {{timestamp}} · {{window}} 时间窗口",
+      "default": "实时的设备群、安全、客户端和流量洞察"
+    },
+    "tabs": {
+      "overview": "概览",
+      "insights": "洞察",
+      "wifi": "Wi-Fi",
+      "clients": "客户端",
+      "traffic": "流量"
+    },
+    "common": {
+      "noData": "无数据",
+      "noDataAvailable": "暂无可用数据",
+      "wired": "有线",
+      "wireless": "无线",
+      "clients": "客户端",
+      "total": "合计"
+    },
+    "overview": {
+      "organizationHealth": "组织健康度",
+      "acrossSitesDevices": "覆盖 {{siteCount}} {{sites}} · {{deviceCount}} {{devices}}",
+      "unit": {
+        "site": "个站点",
+        "sites": "个站点",
+        "device": "台设备",
+        "devices": "台设备"
+      },
+      "peak": "峰值 {{value}}%",
+      "peakTemp": "峰值 {{value}}°C",
+      "noTelemetry": "无遥测数据",
+      "online": "在线",
+      "offline": "离线",
+      "devicesLabel": "台设备",
+      "cpuLabel": "CPU",
+      "cpuBarName": "CPU %",
+      "memoryLabel": "内存",
+      "memoryBarName": "内存 %",
+      "stats": {
+        "healthScore": "健康评分",
+        "devices": "设备",
+        "devicesDesc": "{{online}} 在线 · {{offline}} 离线",
+        "networkClients": "网络客户端",
+        "networkClientsDesc": "{{online}} 在线",
+        "activeAlerts": "活动告警",
+        "activeAlertsDesc": "共 {{total}} 起事件",
+        "avgCpu": "平均 CPU",
+        "avgMemory": "平均内存",
+        "avgTemperature": "平均温度",
+        "portHealth": "端口健康度",
+        "portHealthDesc": "{{down}} 个断开 · {{errors}} 个错误"
+      },
+      "healthStatus": {
+        "healthy": "健康",
+        "degraded": "降级",
+        "critical": "严重"
+      },
+      "siteHealth": {
+        "title": "站点健康度",
+        "description": "组织内各站点的健康评分",
+        "empty": "未配置站点",
+        "tooltip": "健康度",
+        "barName": "健康度 %"
+      },
+      "devicesByType": {
+        "title": "按类型分布的设备",
+        "description": "各设备类别的在线/离线情况",
+        "empty": "无设备数据"
+      },
+      "devicesByManufacturer": {
+        "title": "按厂商分布的设备",
+        "description": "设备群中的厂商构成",
+        "empty": "无厂商数据"
+      },
+      "controllers": {
+        "title": "控制器",
+        "description": "已注册 {{count}} 个",
+        "empty": "未配置控制器"
+      },
+      "topCpu": {
+        "title": "CPU 占用最高",
+        "description": "时间窗口内 CPU 使用率最高的设备",
+        "empty": "无 CPU 遥测数据"
+      },
+      "topMemory": {
+        "title": "内存占用最高",
+        "description": "时间窗口内内存使用率最高的设备",
+        "empty": "无内存遥测数据"
+      }
+    },
+    "insights": {
+      "securityPosture": "安全态势",
+      "eventsLabel": "事件",
+      "totalLabel": "合计",
+      "stats": {
+        "healthScore": "健康评分",
+        "totalTraffic": "总流量",
+        "totalTrafficDesc": "{{tx}} TX · {{rx}} RX",
+        "devicesOnline": "在线设备",
+        "devicesOnlineDesc": "{{degraded}} 降级 · {{offline}} 离线",
+        "avgClientSignal": "客户端平均信号"
+      },
+      "security": {
+        "failedLogins": "登录失败次数",
+        "activeIpBlocks": "活动 IP 封禁",
+        "unresolvedAnomalies": "未解决异常",
+        "securityEvents": "安全事件",
+        "lastHours": "最近 {{hours}} 小时"
+      },
+      "incidentStatus": {
+        "open": "未处理",
+        "investigating": "调查中",
+        "resolved": "已解决",
+        "other": "其他"
+      },
+      "auditByLevel": {
+        "title": "按级别分布的审计事件",
+        "description": "共 {{count}} 个事件",
+        "empty": "无审计数据"
+      },
+      "auditBySource": {
+        "title": "按来源分布的审计",
+        "description": "按资源类型的活动",
+        "empty": "无来源数据"
+      },
+      "incidents": {
+        "title": "事件",
+        "description": "共 {{total}} 起 · {{open}} 起未处理",
+        "empty": "无事件 · 一切正常"
+      }
+    },
+    "wifi": {
+      "radar": {
+        "signalStrength": "信号强度",
+        "signalQuality": "信号质量",
+        "bandDiversity": "频段多样性",
+        "connectivity": "连接性"
+      },
+      "stats": {
+        "wirelessClients": "无线客户端",
+        "ofTotal": "共 {{total}} 个",
+        "avgSignal": "平均信号",
+        "clientUpload": "客户端上传",
+        "clientDownload": "客户端下载"
+      },
+      "bandDistribution": {
+        "title": "客户端频段分布",
+        "description": "按无线电频段划分的无线客户端，含有线"
+      },
+      "signalQuality": {
+        "title": "信号质量分布",
+        "description": "按 dBm 区间 · 越高越好",
+        "empty": "无信号样本"
+      },
+      "topSsids": {
+        "title": "客户端数量最多的 SSID",
+        "description": "最热门的无线网络",
+        "empty": "无 SSID 数据"
+      },
+      "healthProfile": {
+        "title": "Wi-Fi 健康画像",
+        "description": "信号、质量、多样性和在线时长的综合评分",
+        "radarName": "健康度"
+      }
+    },
+    "clients": {
+      "signalRating": {
+        "excellent": "极佳",
+        "good": "良好",
+        "fair": "一般",
+        "weak": "较弱",
+        "poor": "差"
+      },
+      "stats": {
+        "totalClients": "客户端总数",
+        "online": "在线",
+        "reachable": "{{pct}}% 可达"
+      },
+      "connectionType": {
+        "title": "连接类型",
+        "description": "有线与无线的构成"
+      },
+      "bandDistribution": {
+        "title": "频段分布",
+        "description": "按无线电频段划分的无线客户端构成",
+        "empty": "无无线客户端"
+      },
+      "ssidDistribution": {
+        "title": "SSID 分布",
+        "description": "热门无线网络",
+        "empty": "无 SSID 数据"
+      },
+      "signalQuality": {
+        "title": "客户端信号质量",
+        "description": "按 dBm 区间的分布",
+        "empty": "暂无可用信号数据"
+      },
+      "clientTraffic": {
+        "title": "客户端流量",
+        "totalDesc": "合计 {{total}}",
+        "uploadTx": "上传 (TX)",
+        "downloadRx": "下载 (RX)"
+      },
+      "avgSignalStrength": {
+        "title": "平均信号强度",
+        "description": "覆盖所有无线客户端",
+        "empty": "无信号数据",
+        "dbmAverage": "dBm 平均值"
+      }
+    },
+    "traffic": {
+      "portsLabel": "端口",
+      "bytesLabel": "字节",
+      "trafficLabel": "流量",
+      "portStatusLabel": {
+        "up": "已连接",
+        "down": "已断开",
+        "other": "其他"
+      },
+      "trafficCompare": {
+        "portTx": "端口 TX",
+        "portRx": "端口 RX",
+        "clientTx": "客户端 TX",
+        "clientRx": "客户端 RX"
+      },
+      "stats": {
+        "totalPorts": "端口总数",
+        "totalPortsDesc": "{{up}} 个已连接 · {{down}} 个已断开",
+        "portUpload": "端口上传",
+        "portDownload": "端口下载",
+        "poePower": "PoE 功率",
+        "poePortsCount": "{{count}} 个 PoE 端口"
+      },
+      "siteColumns": {
+        "site": "站点",
+        "devices": "设备",
+        "online": "在线",
+        "offline": "离线",
+        "health": "健康度"
+      },
+      "portStatus": {
+        "title": "端口状态",
+        "description": "共 {{count}} 个端口",
+        "empty": "无端口遥测数据"
+      },
+      "trafficBreakdown": {
+        "title": "流量明细",
+        "description": "按接口方向的字节数",
+        "empty": "未记录流量"
+      },
+      "poeBudget": {
+        "title": "PoE 功率预算",
+        "description": "{{count}} 个启用 PoE 的端口",
+        "wattsConsumed": "消耗瓦数"
+      },
+      "portErrors": {
+        "title": "端口错误",
+        "recentDetected": "检测到近期错误",
+        "healthy": "健康 · 无错误",
+        "totalErrors": "端口错误总数",
+        "noErrorsDetected": "未检测到端口错误"
+      },
+      "siteOverview": {
+        "title": "站点概览",
+        "description": "各站点的设备数量与健康度",
+        "itemName": "站点"
+      }
+    }
+  },
+  "CrossSiteComparisonPage": {
+    "header": {
+      "title": "跨站点对比",
+      "description": "并排查看组织内每个站点的指标"
+    },
+    "error": {
+      "loadFailed": "加载对比失败。请尝试刷新。"
+    },
+    "summary": {
+      "sites": "站点",
+      "devicesOnline": "在线设备",
+      "phones": "电话",
+      "openAlerts": "未处理告警（{{critical}} 个严重）"
+    },
+    "outliers": {
+      "title": "值得关注的异常项",
+      "mostOpenAlerts": "未处理告警最多：",
+      "criticalCount": "（{{critical}} 个严重）",
+      "lowestOnlinePct": "在线率最低：",
+      "reachable": "（{{total}} 个中 {{online}} 个可达）",
+      "firmwareCompliance": "固件合规性："
+    },
+    "table": {
+      "title": "各站点指标",
+      "metric": "指标"
+    },
+    "sections": {
+      "devices": "设备",
+      "phones": "电话 (VoIP)",
+      "alerts": "告警",
+      "controllers": "控制器",
+      "firmwareCompliance": "固件合规性"
+    },
+    "rows": {
+      "total": "总计",
+      "onlinePct": "在线率",
+      "switches": "交换机",
+      "accessPoints": "接入点",
+      "cameras": "摄像头",
+      "totalPhones": "电话总数",
+      "managed": "已纳管",
+      "open": "未处理",
+      "last24h": "近 24 小时",
+      "last7d": "近 7 天",
+      "compliant": "合规"
+    },
+    "subtext": {
+      "online": "{{count}} 个在线",
+      "registered": "{{count}} 个已注册",
+      "critical": "{{count}} 个严重",
+      "connected": "{{count}} 个已连接"
+    },
+    "footer": {
+      "generated": "生成于 {{timestamp}} · 每 30 秒刷新一次"
+    },
+    "empty": {
+      "prefix": "您的组织中没有站点。",
+      "createOne": "创建一个",
+      "suffix": "以开始对比。",
+      "before": "你的组织中没有站点。",
+      "after": "即可开始对比。"
+    },
+    "errors": {
+      "loadFailed": "加载对比失败。请尝试刷新。"
+    }
+  }
+}

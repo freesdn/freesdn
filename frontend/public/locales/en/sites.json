@@ -1,0 +1,487 @@
+{
+  "SiteDetailPage": {
+    "common": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "error": "Error",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving…",
+      "done": "Done",
+      "copied": "Copied",
+      "clickToCopy": "Click to copy"
+    },
+    "actions": {
+      "sync": "Sync",
+      "edit": "Edit",
+      "retry": "Retry",
+      "backToSites": "Back to Sites",
+      "viewAllDevices": "View All Devices",
+      "deleteSite": "Delete Site",
+      "configureVpn": "Configure VPN",
+      "setupVpn": "Setup VPN",
+      "manageAgents": "Manage Agents",
+      "deployAgent": "Deploy Agent",
+      "fullInventory": "Full Inventory",
+      "copy": "Copy"
+    },
+    "header": {
+      "subnetCount": "{{count}} subnet",
+      "subnetCount_other": "{{count}} subnets"
+    },
+    "stats": {
+      "controllers": "Controllers",
+      "devices": "Devices",
+      "online": "Online",
+      "offline": "Offline",
+      "health": "Health",
+      "devicesOffline": "{{count}} device offline",
+      "devicesOffline_other": "{{count}} devices offline"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "network": "Network",
+      "vpn": "VPN",
+      "agent": "Agent",
+      "devices": "Devices",
+      "settings": "Settings"
+    },
+    "fields": {
+      "name": "Name",
+      "slug": "Slug",
+      "id": "ID",
+      "gatewayIp": "Gateway IP",
+      "status": "Status",
+      "subnets": "Subnets",
+      "description": "Description",
+      "address": "Address",
+      "city": "City",
+      "country": "Country",
+      "timezone": "Timezone",
+      "timeFormat": "Time Format",
+      "dateFormat": "Date Format",
+      "created": "Created",
+      "updated": "Updated"
+    },
+    "errors": {
+      "loadFailedTitle": "Failed to load site",
+      "loadFailedDesc": "Site not found or network error"
+    },
+    "toasts": {
+      "siteUpdated": "Site updated",
+      "updateFailed": "Failed to update site",
+      "deleteFailed": "Failed to delete site"
+    },
+    "deviceTable": {
+      "device": "Device",
+      "status": "Status",
+      "ipAddress": "IP Address",
+      "model": "Model",
+      "lastSeen": "Last Seen"
+    },
+    "deviceTypes": {
+      "switch": "Switch",
+      "access_point": "Access Point",
+      "router": "Router",
+      "gateway": "Gateway",
+      "firewall": "Firewall",
+      "camera": "Camera",
+      "nvr": "NVR",
+      "voip_phone": "VoIP Phone",
+      "pbx": "PBX",
+      "server": "Server",
+      "hypervisor": "Hypervisor",
+      "other": "Other"
+    },
+    "statuses": {
+      "online": "Online",
+      "offline": "Offline",
+      "degraded": "Degraded",
+      "adopting": "Adopting",
+      "provisioning": "Provisioning",
+      "unknown": "Unknown"
+    },
+    "relative": {
+      "never": "Never",
+      "justNow": "Just now",
+      "minutesAgo": "{{n}}m ago",
+      "hoursAgo": "{{n}}h ago",
+      "daysAgo": "{{n}}d ago"
+    },
+    "overview": {
+      "siteInformation": "Site Information",
+      "locationAndTime": "Location & Time",
+      "vpnStatus": "VPN Status",
+      "noVpnConfigured": "No VPN configured",
+      "agentStatus": "Agent Status",
+      "noAgentsDeployed": "No agents deployed",
+      "deviceHealthSummary": "Device Health Summary",
+      "devicesOnlineRatio": "{{online}} of {{total}} devices online"
+    },
+    "devices": {
+      "titleAt": "Devices at {{name}}",
+      "itemName": "devices"
+    },
+    "deleteDialog": {
+      "title": "Delete \"{{name}}\"?",
+      "description": "This will soft-delete the site and all associated controllers and devices.",
+      "deleting": "Deleting…"
+    },
+    "network": {
+      "siteGateway": "Site Gateway",
+      "gatewayIpPlaceholder": "e.g. 192.168.1.1",
+      "notConfigured": "Not configured",
+      "routeToSubnets": "Route to subnets",
+      "noSubnets": "No subnets",
+      "subnets": "Subnets",
+      "scanAllSubnets": "Scan All Subnets",
+      "addSubnet": "Add Subnet",
+      "addSubnetDesc": "Define a network subnet at this site for discovery and monitoring.",
+      "emptyTitle": "No subnets configured",
+      "emptyDesc": "Add subnets to enable network scanning and device discovery",
+      "addFirstSubnet": "Add First Subnet",
+      "confirmRemoveSubnet": "Remove this subnet?",
+      "invalidIpTitle": "Invalid IP",
+      "invalidIpDesc": "Enter a valid IP address like 192.168.1.1",
+      "scanStartedTitle": "Scan started",
+      "scanStartedDesc": "Network scan task dispatched to agent",
+      "scanFailedTitle": "Scan failed",
+      "scanFailedDesc": "Failed to start scan",
+      "validation": {
+        "cidrRequired": "CIDR is required",
+        "cidrInvalid": "Enter a valid CIDR like 192.168.1.0/24",
+        "vlanRange": "VLAN ID must be 1-4094"
+      },
+      "errors": {
+        "noOnlineAgent": "No online agent at this site",
+        "noSubnetsToScan": "No subnets configured to scan"
+      },
+      "form": {
+        "cidr": "CIDR *",
+        "namePlaceholder": "Management",
+        "vlanId": "VLAN ID",
+        "descriptionPlaceholder": "Optional description"
+      }
+    },
+    "vpn": {
+      "provider": "Provider",
+      "lastCheck": "Last Check",
+      "configurations": "VPN Configurations",
+      "addVpnConfig": "Add VPN Config",
+      "primary": "Primary",
+      "disabled": "Disabled",
+      "noEndpointConfigured": "No endpoint configured",
+      "viaBrain": "via Brain",
+      "setPrimary": "Set Primary",
+      "confirmRemoveConfig": "Remove this VPN configuration?",
+      "addConfigTitle": "Add VPN Configuration",
+      "addConfigDesc": "Add an additional VPN connection to this site",
+      "enabled": "Enabled",
+      "autoConnect": "Auto-connect",
+      "createConfig": "Create Config",
+      "connection": "VPN Connection",
+      "connectionDesc": "Configure VPN connectivity to reach this site's local network",
+      "test": "Test",
+      "importOvpn": "Import .ovpn",
+      "addVpn": "Add VPN",
+      "setup": "Setup",
+      "tailscaleHostname": "Tailscale Hostname",
+      "endpoint": "Endpoint",
+      "healthCheckIp": "Health Check IP",
+      "lastHealthCheck": "Last Health Check",
+      "advertisedSubnets": "Advertised Subnets",
+      "noVpnTitle": "No VPN Configured",
+      "noVpnDesc": "Set up a VPN connection to reach devices on this site's local network. FreeSDN supports Tailscale, WireGuard, OpenVPN, Netbird, ZeroTier, and IPsec.",
+      "connectViaBrain": "Connect via Brain",
+      "manualSetup": "Manual Setup",
+      "vpnEnabled": "VPN enabled",
+      "saveVpnConfig": "Save VPN Config",
+      "loadFailedTitle": "Failed to load VPN configuration",
+      "loadFailedDesc": "Check that the VPN API is reachable, then try refreshing.",
+      "preflight": {
+        "checking": "Checking VPN connectivity...",
+        "directAccess": "Direct Access (no VPN)",
+        "skipped": "skipped",
+        "connected": "VPN Connected",
+        "connectedWithLatency": "VPN Connected ({{ms}}ms)",
+        "active": "active",
+        "unreachable": "VPN Unreachable · check VPN configuration",
+        "unreachableBadge": "unreachable"
+      },
+      "brain": {
+        "title": "Connect via Brain (Gateway)",
+        "description": "Your firewall/gateway already has VPN servers. Connect through it to reach all site subnets.",
+        "syncSubnets": "Sync Subnets",
+        "discoverVpn": "Discover VPN",
+        "serversOn": "VPN Servers on {{name}}",
+        "noServersFound": "No VPN servers found. Configure OpenVPN or WireGuard on the firewall first.",
+        "openvpnLabel": "OpenVPN: {{description}}",
+        "protocolPort": "{{protocol}} port {{port}}",
+        "wireguardLabel": "WireGuard: {{name}}",
+        "port": "Port {{port}}",
+        "ipsecLabel": "IPsec: {{description}}",
+        "import": "Import"
+      },
+      "form": {
+        "tailscaleNode": "Tailscale Node Name",
+        "tailscaleHostname": "Tailscale Hostname / IP",
+        "interface": "Interface",
+        "configPath": "Config Path (on FreeSDN server)",
+        "openvpnHint": "Or use \"Import .ovpn\" button above to paste config content directly.",
+        "peerId": "Peer ID",
+        "group": "Group",
+        "zerotierNetworkId": "ZeroTier Network ID",
+        "zerotierHint": "16-character network ID from your ZeroTier Central dashboard",
+        "healthCheckIpPlaceholder": "IP to ping for health checks (e.g. site gateway)",
+        "remoteSubnets": "Remote Subnets (comma-separated)",
+        "localSubnets": "Local Subnets (comma-separated)"
+      },
+      "ovpnDialog": {
+        "title": "Import OpenVPN Config",
+        "description": "Paste the contents of your .ovpn file. Works with any OpenVPN server (OPNsense, pfSense, MikroTik, or standalone).",
+        "submit": "Import Config",
+        "hint": "Embedded certificates (<ca>, <cert>, <key>) are supported. Script directives (up/down/plugin) are rejected for security."
+      },
+      "methods": {
+        "title": "Connection Methods",
+        "description": "Choose the approach that fits your infrastructure",
+        "brainTitle": "Brain (Gateway VPN)",
+        "recommended": "Recommended",
+        "brainDesc": "Your OPNsense / pfSense / MikroTik already has OpenVPN or WireGuard. FreeSDN connects as a client · zero extra software at the site.",
+        "tailscaleDesc": "Zero-config mesh VPN. Install on any device, enable subnet routing. Easiest setup.",
+        "wireguardDesc": "Lightweight, fast tunnel. Use the Agent tab to auto-generate WireGuard configs, or configure manually.",
+        "openvpnDesc": "Enterprise standard. Export .ovpn from your firewall and import above. Works through corporate firewalls on TCP/443."
+      },
+      "validation": {
+        "pasteConfig": "Paste your OpenVPN config",
+        "configTooLarge": "Config too large"
+      },
+      "toasts": {
+        "saved": "VPN configuration saved",
+        "saveFailed": "Failed to save VPN config",
+        "testPassed": "VPN Test Passed",
+        "latency": "Latency: {{ms}}ms",
+        "testFailed": "VPN Test Failed",
+        "siteNotReachable": "Site not reachable",
+        "testError": "Test Error",
+        "connectivityFailed": "Connectivity test failed",
+        "discoveryFailed": "Discovery failed",
+        "couldNotReachBrain": "Could not reach brain",
+        "imported": "Imported!",
+        "importFailed": "Import failed",
+        "importConfigFailed": "Failed to import config",
+        "subnetsSynced": "Subnets synced",
+        "syncFailed": "Sync failed",
+        "syncSubnetsFailed": "Failed to sync subnets",
+        "ovpnImported": "OpenVPN config imported",
+        "ovpnEndpoint": "Endpoint: {{endpoint}}:{{port}}",
+        "configAdded": "VPN configuration added",
+        "createConfigFailed": "Failed to create VPN config",
+        "configRemoved": "VPN configuration removed",
+        "removeConfigFailed": "Failed to remove VPN config",
+        "primaryUpdated": "Primary VPN updated",
+        "setPrimaryFailed": "Failed to set primary config"
+      }
+    },
+    "reachability": {
+      "title": "Device Reachability",
+      "reachableCount": "{{reachable}}/{{total}} reachable",
+      "description": "Check which devices at this site are reachable over the VPN tunnel.",
+      "check": "Check Reachability",
+      "deviceName": "Device Name",
+      "type": "Type",
+      "ip": "IP",
+      "latency": "Latency",
+      "noDevices": "No devices found at this site to check reachability.",
+      "instruction": "Click \"Check Reachability\" to test connectivity to each device at this site."
+    },
+    "agent": {
+      "siteAgents": "Site Agents",
+      "siteAgentsDesc": "Agents deployed at this site for local network discovery and management",
+      "registerAgent": "Register Agent",
+      "emptyTitle": "No Agents Deployed",
+      "emptyDesc": "Deploy a FreeSDN agent at this site to enable local network scanning, device discovery, and remote management.",
+      "deployFirstAgent": "Deploy First Agent",
+      "pendingApproval": "Pending Approval",
+      "lastSeen": "Last seen: {{time}}",
+      "approve": "Approve",
+      "agentName": "Agent Name",
+      "register": "Register",
+      "registerDialog": {
+        "title": "Register New Agent",
+        "description": "Register a FreeSDN agent for site \"{{name}}\". The agent will need the credentials below to connect.",
+        "generateWireguard": "Generate WireGuard VPN config (zero-touch)",
+        "wireguardHint": "Generates a WireGuard keypair and config for the agent to auto-connect back to FreeSDN.",
+        "serverPublicKey": "Server Public Key",
+        "serverPublicKeyPlaceholder": "FreeSDN server's WireGuard public key",
+        "serverEndpoint": "Server Endpoint",
+        "agentVpnAddress": "Agent VPN Address"
+      },
+      "result": {
+        "saveCredentials": "Save these credentials now · the API key will NOT be shown again.",
+        "agentId": "Agent ID",
+        "apiKey": "API Key (one-time)",
+        "websocketUrl": "WebSocket URL",
+        "wgPrivateKeyWarning": "This config contains the agent's WireGuard private key. Copy it now and store securely · it will not be shown again.",
+        "wgAgentConfig": "WireGuard Agent Config",
+        "configCopied": "Config copied",
+        "addToServerConf": "Add to Server wg0.conf",
+        "peerBlockCopied": "Peer block copied"
+      },
+      "guide": {
+        "title": "Agent Deployment Guide",
+        "step1": "Click \"Register Agent\" above to get credentials",
+        "step2Before": "Download the FreeSDN agent from the",
+        "step2Link": "Downloads page",
+        "step3": "Install the agent on any machine at the site (Linux, Windows, macOS)",
+        "step4": "Configure with credentials:",
+        "step5": "Approve the agent, then trigger subnet scans from the Network tab"
+      },
+      "toasts": {
+        "registered": "Agent registered",
+        "registerFailed": "Failed to register agent",
+        "approved": "Agent approved",
+        "approveFailed": "Failed to approve agent"
+      }
+    },
+    "settings": {
+      "title": "Site Configuration",
+      "siteIsActive": "Site is active",
+      "saveChanges": "Save Changes",
+      "autoAdopt": {
+        "heading": "Discovery auto-adopt",
+        "toggleLabel": "Auto-adopt high-confidence discoveries",
+        "toggleDesc": "Skip the Adopt step for discovered hosts that match a known vendor driver (UniFi, MikroTik, Grandstream, Sangoma, etc.). Unknown hosts still need manual review. Off by default.",
+        "minConfidence": "Minimum vendor confidence (0.0-1.0)",
+        "minConfidenceHint": "Default 0.7. Higher = fewer false adoptions but more legitimate devices stuck in Discovered."
+      }
+    }
+  },
+  "SitesPage": {
+    "header": {
+      "title": "Sites",
+      "description": "Manage physical and logical locations across your organisation."
+    },
+    "actions": {
+      "addSite": "Add Site",
+      "export": "Export",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "viewDetails": "View Details",
+      "editSite": "Edit Site",
+      "deleteSite": "Delete Site",
+      "actionsFor": "Actions for {{name}}"
+    },
+    "stats": {
+      "total": {
+        "title": "Total Sites",
+        "description": "Configured locations"
+      },
+      "active": {
+        "title": "Active",
+        "percent": "{{percent}}% active",
+        "none": "No sites"
+      },
+      "devices": {
+        "title": "Devices",
+        "description": "Across all sites"
+      },
+      "online": {
+        "title": "Online",
+        "description": "Currently reachable"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search sites by name, city, or country…",
+      "allOrganizations": "All Organizations",
+      "allStatuses": "All statuses",
+      "clearFilters": "Clear filters"
+    },
+    "columns": {
+      "site": "Site",
+      "status": "Status",
+      "controllers": "Controllers",
+      "devices": "Devices",
+      "timezone": "Timezone",
+      "updated": "Updated"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "time": {
+      "justNow": "Just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago"
+    },
+    "fields": {
+      "name": "Name",
+      "slug": "Slug",
+      "description": "Description",
+      "city": "City",
+      "country": "Country",
+      "timezone": "Timezone",
+      "address": "Address"
+    },
+    "placeholders": {
+      "name": "Headquarters",
+      "slug": "headquarters",
+      "description": "Main corporate office…",
+      "city": "New York",
+      "country": "USA",
+      "address": "123 Main Street"
+    },
+    "hints": {
+      "slug": "URL-safe identifier. Lowercase letters, numbers, hyphens only."
+    },
+    "validation": {
+      "nameRequired": "Name is required",
+      "slugRequired": "Slug is required",
+      "slugFormat": "Lowercase letters, numbers, and hyphens only"
+    },
+    "dialogs": {
+      "create": {
+        "title": "Create Site",
+        "description": "Add a new physical or logical location to organise your infrastructure.",
+        "submit": "Create Site"
+      },
+      "edit": {
+        "title": "Edit Site",
+        "description": "Update the site details.",
+        "submit": "Save Changes"
+      },
+      "delete": {
+        "title": "Delete \"{{name}}\"?",
+        "description": "This will soft-delete the site and all its associated controllers and devices. This action can be reversed by an administrator.",
+        "deleting": "Deleting…",
+        "confirm": "Delete Site"
+      }
+    },
+    "toasts": {
+      "createFailed": {
+        "title": "Create failed",
+        "description": "Could not create site. Please try again."
+      },
+      "updateFailed": {
+        "title": "Update failed",
+        "description": "Could not update site. Please try again."
+      },
+      "deleteFailed": {
+        "title": "Delete failed",
+        "description": "Could not delete site. Please try again."
+      },
+      "export": {
+        "title": "Export",
+        "description": "Bulk export: not yet implemented."
+      },
+      "bulkDelete": {
+        "title": "Bulk Delete",
+        "description": "Please delete sites individually for safety."
+      }
+    },
+    "errors": {
+      "loadFailed": "Failed to load sites"
+    }
+  }
+}

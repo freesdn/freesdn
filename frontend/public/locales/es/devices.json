@@ -1,0 +1,385 @@
+{
+  "title": "Dispositivos",
+  "device": "Dispositivo",
+  "devices": "Dispositivos",
+  "deviceCount": "{{count}} dispositivo",
+  "deviceCount_other": "{{count}} dispositivos",
+  "noDevices": "No se encontraron dispositivos",
+  "addDevice": "Agregar dispositivo",
+  "adoptDevice": "Adoptar dispositivo",
+  "discoverDevices": "Descubrir dispositivos",
+  "status": {
+    "online": "En línea",
+    "offline": "Fuera de línea",
+    "warning": "Advertencia",
+    "error": "Error",
+    "unknown": "Desconocido",
+    "provisioning": "Aprovisionando",
+    "upgrading": "Actualizando",
+    "rebooting": "Reiniciando"
+  },
+  "types": {
+    "switch": "Switch",
+    "router": "Router",
+    "accessPoint": "Punto de acceso",
+    "camera": "Cámara",
+    "gateway": "Gateway",
+    "controller": "Controlador",
+    "firewall": "Firewall",
+    "server": "Servidor",
+    "phone": "Teléfono VoIP",
+    "unknown": "Desconocido"
+  },
+  "actions": {
+    "reboot": "Reiniciar",
+    "rebootConfirm": "¿Está seguro de que desea reiniciar este dispositivo?",
+    "provision": "Aprovisionar",
+    "locate": "Localizar",
+    "locateDescription": "Parpadear los LEDs del dispositivo para ayudar a localizarlo",
+    "upgrade": "Actualizar firmware",
+    "upgradeConfirm": "¿Actualizar a la versión {{version}}?",
+    "backup": "Respaldar configuración",
+    "restore": "Restaurar configuración",
+    "adopt": "Adoptar",
+    "forget": "Olvidar",
+    "forgetConfirm": "¿Está seguro de que desea olvidar este dispositivo?"
+  },
+  "properties": {
+    "name": "Nombre",
+    "ipAddress": "Dirección IP",
+    "macAddress": "Dirección MAC",
+    "model": "Modelo",
+    "manufacturer": "Fabricante",
+    "firmware": "Firmware",
+    "uptime": "Tiempo activo",
+    "lastSeen": "Última vez visto",
+    "site": "Sitio",
+    "location": "Ubicación",
+    "serialNumber": "Número de serie",
+    "temperature": "Temperatura",
+    "cpuUsage": "Uso de CPU",
+    "memoryUsage": "Uso de memoria"
+  },
+  "tabs": {
+    "overview": "Resumen",
+    "ports": "Puertos",
+    "clients": "Clientes",
+    "configuration": "Configuración",
+    "logs": "Registros",
+    "statistics": "Estadísticas"
+  },
+  "filters": {
+    "allDevices": "Todos los dispositivos",
+    "onlineOnly": "Solo en línea",
+    "offlineOnly": "Solo fuera de línea",
+    "byType": "Por tipo",
+    "bySite": "Por sitio"
+  },
+  "DevicesPage": {
+    "title": "Inventario de dispositivos",
+    "description": "Vista general de la infraestructura en tiempo real · {{n}} dispositivos en tu red",
+    "descriptionShort": "Vista general de la infraestructura en tiempo real",
+    "noData": "Sin datos",
+    "unknownVendor": "Desconocido",
+    "itemName": "dispositivo",
+    "itemNamePlural": "dispositivos",
+    "error": {
+      "message": "No se pudo conectar al inventario de dispositivos. Verifica que el servidor de la API esté en ejecución."
+    },
+    "tabs": {
+      "dashboard": "Panel",
+      "devices": "Dispositivos"
+    },
+    "actions": {
+      "exportCsv": "Exportar CSV",
+      "actionsFor": "Acciones para {{name}}",
+      "viewDetails": "Ver detalles",
+      "reboot": "Reiniciar",
+      "exportConfig": "Exportar configuración"
+    },
+    "badges": {
+      "unmanaged": "No gestionado"
+    },
+    "columns": {
+      "device": "Dispositivo",
+      "type": "Tipo",
+      "vendor": "Fabricante",
+      "modelFirmware": "Modelo / Firmware",
+      "uptime": "Tiempo activo",
+      "cpu": "CPU",
+      "memory": "Memoria",
+      "ports": "Puertos",
+      "lastSeen": "Visto por última vez"
+    },
+    "lastSeen": {
+      "never": "Nunca",
+      "justNow": "Justo ahora",
+      "minutesAgo": "hace {{n}} min",
+      "hoursAgo": "hace {{n}} h",
+      "daysAgo": "hace {{n}} d"
+    },
+    "statusOptions": {
+      "online": "En línea",
+      "offline": "Desconectado",
+      "degraded": "Degradado",
+      "adopting": "Adoptando",
+      "provisioning": "Aprovisionando",
+      "adoptionFailed": "Adopción fallida",
+      "unknown": "Desconocido"
+    },
+    "stats": {
+      "total": {
+        "title": "Total de dispositivos"
+      },
+      "online": {
+        "title": "En línea",
+        "availability": "{{percent}}% de disponibilidad",
+        "noDevices": "Sin dispositivos"
+      },
+      "offline": {
+        "title": "Desconectado",
+        "degraded": "{{n}} degradados",
+        "needsAttention": "Requiere atención"
+      },
+      "pending": {
+        "title": "Pendiente",
+        "awaitingAdoption": "En espera de adopción"
+      },
+      "managedUnmanaged": "{{managed}} gestionados · {{unmanaged}} no gestionados"
+    },
+    "cards": {
+      "healthOverview": "Resumen de estado",
+      "byType": "Por tipo",
+      "byVendor": "Por fabricante"
+    },
+    "metrics": {
+      "online": "En línea",
+      "offline": "Desconectado",
+      "degraded": "Degradado",
+      "pending": "Pendiente",
+      "avgCpu": "CPU promedio",
+      "avgMemory": "Memoria promedio"
+    },
+    "filters": {
+      "searchPlaceholder": "Buscar por nombre, IP, MAC, modelo o fabricante…",
+      "byTypeAria": "Filtrar por tipo de dispositivo",
+      "byStatusAria": "Filtrar por estado",
+      "byVendorAria": "Filtrar por fabricante",
+      "byManagementAria": "Filtrar por estado de gestión",
+      "allTypes": "Todos los tipos",
+      "allStatuses": "Todos los estados",
+      "allVendors": "Todos los fabricantes",
+      "all": "Todos",
+      "managed": "Gestionado",
+      "unmanaged": "No gestionado",
+      "clear": "Limpiar",
+      "countAll": "{{n}} dispositivos",
+      "countFiltered": "Mostrando {{shown}} de {{total}}"
+    },
+    "toasts": {
+      "noRebootEligible": {
+        "title": "No hay dispositivos aptos para reiniciar",
+        "description": "El reinicio solo se aplica a dispositivos en línea."
+      },
+      "rebootInitiated": {
+        "title": "Reinicio iniciado",
+        "description": "Reiniciando {{n}} dispositivo(s)."
+      },
+      "exportQueued": {
+        "title": "Exportación en cola",
+        "description": "Exportando {{n}} registro(s) de dispositivos."
+      },
+      "bulkDelete": {
+        "title": "Eliminación masiva",
+        "description": "Por seguridad, elimina los dispositivos individualmente."
+      }
+    },
+    "bulkActions": {
+      "reboot": "Reiniciar",
+      "export": "Exportar",
+      "delete": "Eliminar"
+    }
+  },
+  "DeviceDetailPage": {
+    "deviceTypes": {
+      "switch": "Switch",
+      "access_point": "Punto de acceso",
+      "router": "Router",
+      "gateway": "Puerta de enlace",
+      "firewall": "Firewall",
+      "camera": "Cámara",
+      "nvr": "NVR",
+      "dvr": "DVR",
+      "access_control": "Control de acceso",
+      "intercom": "Intercomunicador",
+      "voip_phone": "Teléfono VoIP",
+      "pbx": "PBX",
+      "server": "Servidor",
+      "iot": "IoT",
+      "sensor": "Sensor",
+      "other": "Otro"
+    },
+    "statuses": {
+      "online": "En línea",
+      "offline": "Desconectado",
+      "degraded": "Degradado",
+      "adopting": "Adoptando",
+      "provisioning": "Aprovisionando",
+      "adoption_failed": "Adopción fallida",
+      "unknown": "Desconocido"
+    },
+    "detailRow": {
+      "clickToCopy": "Clic para copiar"
+    },
+    "uptime": {
+      "dhm": "{{d}} d {{h}} h {{m}} min",
+      "hm": "{{h}} h {{m}} min",
+      "m": "{{m}} min"
+    },
+    "relative": {
+      "never": "Nunca",
+      "justNow": "Justo ahora",
+      "minutesAgo": "hace {{n}} min",
+      "hoursAgo": "hace {{n}} h",
+      "daysAgo": "hace {{n}} d"
+    },
+    "manage": {
+      "nvr": "Gestionar NVR",
+      "camera": "Gestionar cámara",
+      "switch": "Gestionar switch",
+      "accessPoint": "Gestionar AP",
+      "phone": "Gestionar teléfono",
+      "pbx": "Gestionar PBX",
+      "firewall": "Gestionar firewall",
+      "gateway": "Gestionar puerta de enlace",
+      "default": "Gestionar"
+    },
+    "common": {
+      "yes": "Sí",
+      "no": "No"
+    },
+    "error": {
+      "title": "Error al cargar el dispositivo",
+      "notFound": "Dispositivo no encontrado o error de red",
+      "backToInventory": "Volver al inventario",
+      "retry": "Reintentar"
+    },
+    "toast": {
+      "credentialUpdated": "Credencial actualizada",
+      "updateFailed": "Error al actualizar"
+    },
+    "badge": {
+      "unmanaged": "No gestionado"
+    },
+    "actions": {
+      "sync": "Sincronizar",
+      "reboot": "Reiniciar"
+    },
+    "menu": {
+      "editDevice": "Editar dispositivo",
+      "changeCredential": "Cambiar credencial",
+      "assignCredential": "Asignar credencial",
+      "reprobe": "Volver a sondear (sincronizar ahora)",
+      "backupConfig": "Copia de configuración",
+      "upgradeFirmware": "Actualizar firmware",
+      "removeDevice": "Eliminar dispositivo"
+    },
+    "banner": {
+      "adoptionInProgress": {
+        "title": "Adopción en curso",
+        "withController": "Esperando a que el controlador valide este dispositivo. Se conectará una vez que la próxima sincronización del controlador lo confirme.",
+        "noController": "Este dispositivo aún no tiene controlador ni fuente de actividad. Asigna una credencial (para que un adaptador pueda alcanzarlo) o deja que el agente lo vuelva a observar en el próximo escaneo."
+      },
+      "agentDiscovery": {
+        "title": "Rastreado mediante descubrimiento por agente",
+        "description": "Ningún controlador gestiona este dispositivo: su estado en línea depende de que el agente del sitio lo vuelva a observar en la red. Se mostrará desconectado si el agente deja de verlo durante 30 minutos. Asigna una credencial para habilitar la gestión a nivel de adaptador (copia de configuración, reinicio, etc.)."
+      }
+    },
+    "stats": {
+      "uptime": "Tiempo activo",
+      "sinceLastReboot": "Desde el último reinicio",
+      "activePorts": "Puertos activos",
+      "connectedClients": "Clientes conectados",
+      "activeConnections": "Conexiones activas"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "network": "Red",
+      "ports": "Puertos ({{count}})",
+      "system": "Sistema"
+    },
+    "identity": {
+      "title": "Identidad del dispositivo",
+      "name": "Nombre",
+      "type": "Tipo",
+      "manufacturer": "Fabricante",
+      "model": "Modelo",
+      "serialNumber": "Número de serie",
+      "macAddress": "Dirección MAC",
+      "firmware": "Firmware"
+    },
+    "location": {
+      "title": "Ubicación y gestión",
+      "status": "Estado",
+      "managed": "Gestionado",
+      "active": "Activo",
+      "location": "Ubicación",
+      "floor": "Piso",
+      "room": "Sala",
+      "lastSeen": "Visto por última vez",
+      "notes": "Notas"
+    },
+    "networkConfig": {
+      "title": "Configuración de red",
+      "ipAddress": "Dirección IP",
+      "macAddress": "Dirección MAC",
+      "connectionType": "Tipo de conexión",
+      "vlanId": "ID de VLAN",
+      "controllerId": "ID del controlador",
+      "siteId": "ID del sitio",
+      "externalId": "ID externo"
+    },
+    "portSummary": {
+      "title": "Resumen de puertos",
+      "utilization": "Uso de puertos",
+      "total": "Total",
+      "active": "Activos",
+      "unused": "Sin usar",
+      "noData": "No hay datos de puertos disponibles"
+    },
+    "portManagement": {
+      "title": "Gestión de puertos",
+      "description": "{{active}} de {{total}} puertos activos ({{pct}} % de uso)",
+      "portTooltip": "Puerto {{n}} · {{state}}",
+      "active": "Activo",
+      "inactive": "Inactivo"
+    },
+    "systemHealth": {
+      "title": "Estado del sistema",
+      "cpu": "CPU",
+      "memory": "Memoria",
+      "uptime": "Tiempo activo",
+      "connectedClients": "Clientes conectados"
+    },
+    "metadata": {
+      "title": "Metadatos y marcas de tiempo",
+      "deviceId": "ID del dispositivo",
+      "created": "Creado",
+      "lastUpdated": "Última actualización",
+      "lastSeen": "Visto por última vez",
+      "connectionType": "Tipo de conexión",
+      "vlan": "VLAN",
+      "capabilities": "Capacidades",
+      "metadataHeading": "Metadatos"
+    },
+    "credDialog": {
+      "titleChange": "Cambiar credencial",
+      "titleAssign": "Asignar credencial",
+      "description": "Adjunta una credencial almacenada para que los adaptadores puedan autenticarse en {{name}}. Necesario para la copia de configuración, el reinicio y otras operaciones gestionadas en dispositivos independientes.",
+      "selectPlaceholder": "Selecciona una credencial…",
+      "noCredentials": "No se encontraron credenciales. Crea una primero en la página de Credenciales.",
+      "cancel": "Cancelar",
+      "save": "Guardar"
+    }
+  }
+}

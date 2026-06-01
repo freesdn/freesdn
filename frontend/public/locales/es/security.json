@@ -1,0 +1,165 @@
+{
+  "SecurityAuditPage": {
+    "header": {
+      "title": "Auditoría de seguridad",
+      "description": "Supervise los eventos de seguridad y el cumplimiento"
+    },
+    "actions": {
+      "exportLog": "Exportar registro"
+    },
+    "summary": {
+      "totalEvents": "Eventos totales",
+      "failedLogins": "Inicios de sesión fallidos",
+      "suspiciousActivity": "Actividad sospechosa",
+      "criticalEvents": "Eventos críticos"
+    },
+    "detail": {
+      "title": "Detalles del evento",
+      "details": "Detalles"
+    },
+    "fields": {
+      "eventType": "Tipo de evento",
+      "severity": "Gravedad",
+      "outcome": "Resultado",
+      "timestamp": "Marca de tiempo",
+      "sourceIp": "IP de origen",
+      "action": "Acción",
+      "resourceType": "Tipo de recurso",
+      "userId": "ID de usuario"
+    },
+    "anomalies": {
+      "heading": "Anomalías de seguridad detectadas",
+      "detected": "Detectado: {{time}}"
+    },
+    "toast": {
+      "successTitle": "Éxito",
+      "errorTitle": "Error",
+      "exportStarted": "Exportación iniciada. Se le notificará cuando esté lista.",
+      "exportFailed": "No se pudo iniciar la exportación: {{error}}"
+    },
+    "errors": {
+      "loadEvents": "No se pudieron cargar los eventos de seguridad",
+      "partialLoad": "Algunos datos no se pudieron cargar. Los resultados pueden estar incompletos."
+    },
+    "filters": {
+      "allEventTypes": "Todos los tipos de evento",
+      "allSeverities": "Todas las gravedades"
+    },
+    "eventTypes": {
+      "loginSuccess": "Inicio de sesión exitoso",
+      "loginFailure": "Inicio de sesión fallido",
+      "permissionDenied": "Permiso denegado",
+      "apiAccess": "Acceso a la API",
+      "dataExport": "Exportación de datos"
+    },
+    "severity": {
+      "low": "Baja",
+      "medium": "Media",
+      "high": "Alta",
+      "critical": "Crítica"
+    },
+    "period": {
+      "lastHour": "Última hora",
+      "last6Hours": "Últimas 6 horas",
+      "last24Hours": "Últimas 24 horas",
+      "last7Days": "Últimos 7 días",
+      "last30Days": "Últimos 30 días"
+    },
+    "empty": {
+      "noEvents": "No se encontraron eventos de seguridad para los filtros seleccionados"
+    },
+    "table": {
+      "eventType": "Tipo de evento",
+      "severity": "Gravedad",
+      "outcome": "Resultado",
+      "sourceIp": "IP de origen",
+      "action": "Acción",
+      "time": "Hora"
+    },
+    "pagination": {
+      "showing": "Mostrando {{from}} a {{to}} de {{total}} eventos",
+      "previous": "Anterior",
+      "next": "Siguiente"
+    }
+  },
+  "SecurityPage": {
+    "title": "Seguridad",
+    "description": "Supervisa eventos de seguridad y registros de auditoría",
+    "tabs": {
+      "securityEvents": "Eventos de seguridad",
+      "auditLogs": "Registros de auditoría"
+    },
+    "actions": {
+      "export": "Exportar"
+    },
+    "export": {
+      "successTitle": "Exportación completada",
+      "successDescription": "Se ha descargado la exportación del registro de auditoría.",
+      "truncatedTitle": "Exportación truncada",
+      "truncatedDescription": "Se exportaron las primeras {{limit}} de {{total}} filas coincidentes. Reduzca el rango de fechas para exportar el resto.",
+      "errorTitle": "Error en la exportación",
+      "errorDescription": "No se pudieron exportar los registros de auditoría."
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "stats": {
+      "totalEvents": "Total de eventos",
+      "critical": "Crítico",
+      "highSeverity": "Severidad alta",
+      "unreviewed": "Sin revisar"
+    },
+    "severity": {
+      "all": "Toda la severidad",
+      "critical": "Crítico",
+      "high": "Alto",
+      "medium": "Medio",
+      "low": "Bajo"
+    },
+    "actionFilter": {
+      "all": "Todas las acciones",
+      "create": "Crear",
+      "update": "Actualizar",
+      "delete": "Eliminar",
+      "login": "Inicio de sesión",
+      "logout": "Cierre de sesión"
+    },
+    "events": {
+      "searchPlaceholder": "Buscar eventos...",
+      "severityPlaceholder": "Severidad",
+      "emptyTitle": "Sin eventos de seguridad",
+      "emptyDescription": "Aún no se ha registrado ningún evento de seguridad.",
+      "unreviewed": "Sin revisar",
+      "reviewed": "Revisado",
+      "pendingReview": "Revisión pendiente",
+      "eventFrom": "Evento de {{source}}",
+      "unknownSource": "desconocido"
+    },
+    "audit": {
+      "searchPlaceholder": "Buscar registros de auditoría...",
+      "actionPlaceholder": "Acción",
+      "emptyTitle": "Sin registros de auditoría",
+      "emptyDescription": "Aún no se ha registrado ningún registro de auditoría."
+    },
+    "fields": {
+      "riskScore": "Puntuación de riesgo",
+      "severity": "Severidad",
+      "status": "Estado",
+      "user": "Usuario",
+      "ipAddress": "Dirección IP",
+      "location": "Ubicación",
+      "description": "Descripción",
+      "riskFactors": "Factores de riesgo",
+      "userAgent": "Agente de usuario",
+      "additionalDetails": "Detalles adicionales",
+      "resourceType": "Tipo de recurso",
+      "actor": "Actor",
+      "resource": "Recurso",
+      "error": "Error",
+      "changes": "Cambios"
+    },
+    "common": {
+      "notAvailable": "N/D"
+    }
+  }
+}

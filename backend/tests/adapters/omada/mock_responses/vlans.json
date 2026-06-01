@@ -1,0 +1,41 @@
+[
+    {
+        "id": "net-001",
+        "networkId": "net-001",
+        "name": "LAN",
+        "vlanId": 1,
+        "subnet": "192.168.1.0/24",
+        "gateway": "192.168.1.1",
+        "subnetMask": "255.255.255.0",
+        "purpose": "corporate",
+        "dhcpEnable": true,
+        "dhcpRange": "192.168.1.100-192.168.1.200",
+        "igmpSnooping": false
+    },
+    {
+        "id": "net-002",
+        "networkId": "net-002",
+        "name": "VoIP",
+        "vlanId": 20,
+        "subnet": "192.168.20.0/24",
+        "gateway": "192.168.20.1",
+        "subnetMask": "255.255.255.0",
+        "purpose": "voice",
+        "dhcpEnable": true,
+        "dhcpRange": "192.168.20.100-192.168.20.200",
+        "igmpSnooping": false
+    },
+    {
+        "id": "net-003",
+        "networkId": "net-003",
+        "name": "Guest",
+        "vlanId": 100,
+        "subnet": "192.168.100.0/24",
+        "gateway": "192.168.100.1",
+        "subnetMask": "255.255.255.0",
+        "purpose": "guest",
+        "dhcpEnable": true,
+        "dhcpRange": "192.168.100.50-192.168.100.200",
+        "igmpSnooping": false
+    }
+]

@@ -1,0 +1,174 @@
+{
+  "IntegrationsPage": {
+    "header": {
+      "title": "集成",
+      "description": "将 FreeSDN 连接到外部服务和自动化平台。"
+    },
+    "errors": {
+      "loadFailed": "加载集成失败"
+    },
+    "common": {
+      "never": "从不",
+      "unknownError": "未知错误"
+    },
+    "itemName": "集成",
+    "itemNamePlural": "集成",
+    "actions": {
+      "export": "导出",
+      "addIntegration": "添加集成",
+      "sendTestEvent": "发送测试事件",
+      "deliveryHistory": "投递历史",
+      "delete": "删除",
+      "replay": "重放",
+      "replayAll": "全部重放",
+      "menuFor": "{{name}} 的操作"
+    },
+    "stats": {
+      "total": {
+        "title": "集成总数",
+        "description": "已配置的连接"
+      },
+      "enabled": {
+        "title": "已启用",
+        "descriptionActive": "{{pct}}% 处于活动状态",
+        "descriptionNone": "无已启用"
+      },
+      "failing": {
+        "title": "失败中",
+        "description": "上次投递失败"
+      },
+      "deliveries7d": {
+        "title": "投递量（7 天）",
+        "description": "过去一周"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "按名称或类型搜索集成…",
+      "allTypes": "所有类型",
+      "allStatuses": "所有状态",
+      "statusEnabled": "已启用",
+      "statusDisabled": "已禁用",
+      "statusFailing": "失败中",
+      "clearFilters": "清除筛选"
+    },
+    "columns": {
+      "integration": "集成",
+      "status": "状态",
+      "events": "事件",
+      "deliveries7d": "投递量（7 天）",
+      "successRate": "成功率",
+      "lastDelivery": "上次投递",
+      "active": "活动"
+    },
+    "status": {
+      "disabled": "已禁用",
+      "lastFailed": "上次失败",
+      "active": "活动"
+    },
+    "events": {
+      "all": "所有事件",
+      "typeCount": "{{n}} 种类型",
+      "typeCountPlural": "{{n}} 种类型"
+    },
+    "confirm": {
+      "delete": "删除此集成？这也会移除所有投递历史。"
+    },
+    "toasts": {
+      "createFailed": "创建集成失败",
+      "updateFailed": "更新集成失败",
+      "deleteFailed": "删除集成失败",
+      "testDelivered": "测试事件已投递",
+      "testFailed": "测试失败",
+      "replayFailed": "重放失败",
+      "replayAllFailed": "全部重放失败"
+    },
+    "bulk": {
+      "test": {
+        "label": "测试",
+        "title": "批量测试",
+        "description": "批量测试：尚未实现。"
+      },
+      "disable": {
+        "label": "禁用",
+        "title": "批量禁用",
+        "description": "批量禁用：尚未实现。"
+      },
+      "delete": {
+        "label": "删除",
+        "title": "批量删除",
+        "description": "为安全起见，请逐个删除集成。"
+      }
+    },
+    "validation": {
+      "typeRequired": "请选择集成类型",
+      "nameRequired": "集成名称为必填项",
+      "urlInvalid": "必须是有效的 URL"
+    },
+    "wizard": {
+      "title": "新建集成",
+      "description": "只需几步即可将 FreeSDN 连接到外部服务。",
+      "submit": "创建集成",
+      "steps": {
+        "type": "选择类型",
+        "configure": "配置",
+        "events": "选择事件"
+      },
+      "fields": {
+        "name": {
+          "label": "集成名称",
+          "placeholder": "集成名称",
+          "placeholderTyped": "我的 {{type}} 集成"
+        },
+        "url": {
+          "label": "Webhook URL",
+          "descN8n": "从 n8n 工作流触发节点复制 “Webhook URL”。",
+          "descSlack": "在你的 Slack 应用设置中创建一个传入 webhook。",
+          "descPagerduty": "使用你的 PagerDuty Events API v2 集成 URL。",
+          "descDefault": "将接收 FreeSDN 事件负载的 HTTPS 端点。"
+        },
+        "secret": {
+          "label": "HMAC 密钥（可选）",
+          "placeholder": "用于请求签名验证的共享密钥",
+          "descPrefix": "FreeSDN 使用 HMAC-SHA256 对每次投递进行签名。请在你的端点中验证",
+          "descSuffix": "请求头。"
+        },
+        "description": {
+          "label": "描述（可选）",
+          "placeholder": "此集成用于什么？"
+        },
+        "verifySsl": {
+          "label": "验证 SSL 证书"
+        }
+      },
+      "events": {
+        "choosePrefix": "选择要发送到以下目标的事件：",
+        "defaultsPreselected": "已预选此集成类型的默认事件。",
+        "selectedCount": "已选择 {{count}} 种事件类型",
+        "selectedCountPlural": "已选择 {{count}} 种事件类型"
+      },
+      "success": {
+        "heading": "{{name}} 已创建！",
+        "subtitle": "发送测试事件以验证连接是否正常。",
+        "testDelivered": "测试事件已投递",
+        "httpStats": "HTTP {{code}} · {{ms}} 毫秒",
+        "testFailed": "测试失败",
+        "closeLabel": "完成"
+      }
+    },
+    "history": {
+      "title": "投递历史",
+      "tabs": {
+        "deliveries": "最近投递",
+        "dlq": "死信队列"
+      },
+      "noDeliveries": "暂无投递",
+      "attempt": "· 第 {{n}} 次尝试",
+      "http": "HTTP {{code}}",
+      "dlqEmpty": "没有死信条目 · 所有投递均正常。",
+      "attemptsCount": "· {{n}} 次尝试",
+      "unknownFailure": "未知失败",
+      "finalAttempt": "最后一次尝试：{{time}}",
+      "replayed": "已重放：{{time}}"
+    }
+  }
+}

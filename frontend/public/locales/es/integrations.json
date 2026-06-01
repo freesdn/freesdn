@@ -1,0 +1,174 @@
+{
+  "IntegrationsPage": {
+    "header": {
+      "title": "Integraciones",
+      "description": "Conecta FreeSDN con servicios externos y plataformas de automatización."
+    },
+    "errors": {
+      "loadFailed": "No se pudieron cargar las integraciones"
+    },
+    "common": {
+      "never": "Nunca",
+      "unknownError": "Error desconocido"
+    },
+    "itemName": "integración",
+    "itemNamePlural": "integraciones",
+    "actions": {
+      "export": "Exportar",
+      "addIntegration": "Agregar integración",
+      "sendTestEvent": "Enviar evento de prueba",
+      "deliveryHistory": "Historial de entregas",
+      "delete": "Eliminar",
+      "replay": "Reintentar",
+      "replayAll": "Reintentar todo",
+      "menuFor": "Acciones para {{name}}"
+    },
+    "stats": {
+      "total": {
+        "title": "Total de integraciones",
+        "description": "Conexiones configuradas"
+      },
+      "enabled": {
+        "title": "Habilitadas",
+        "descriptionActive": "{{pct}}% activas",
+        "descriptionNone": "Ninguna habilitada"
+      },
+      "failing": {
+        "title": "Con fallos",
+        "description": "Última entrega fallida"
+      },
+      "deliveries7d": {
+        "title": "Entregas (7 d)",
+        "description": "Última semana"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar integraciones por nombre o tipo…",
+      "allTypes": "Todos los tipos",
+      "allStatuses": "Todos los estados",
+      "statusEnabled": "Habilitadas",
+      "statusDisabled": "Deshabilitadas",
+      "statusFailing": "Con fallos",
+      "clearFilters": "Borrar filtros"
+    },
+    "columns": {
+      "integration": "Integración",
+      "status": "Estado",
+      "events": "Eventos",
+      "deliveries7d": "Entregas (7 d)",
+      "successRate": "Tasa de éxito",
+      "lastDelivery": "Última entrega",
+      "active": "Activa"
+    },
+    "status": {
+      "disabled": "Deshabilitada",
+      "lastFailed": "Última fallida",
+      "active": "Activa"
+    },
+    "events": {
+      "all": "Todos los eventos",
+      "typeCount": "{{n}} tipo",
+      "typeCountPlural": "{{n}} tipos"
+    },
+    "confirm": {
+      "delete": "¿Eliminar esta integración? Esto también elimina todo el historial de entregas."
+    },
+    "toasts": {
+      "createFailed": "No se pudo crear la integración",
+      "updateFailed": "No se pudo actualizar la integración",
+      "deleteFailed": "No se pudo eliminar la integración",
+      "testDelivered": "Evento de prueba entregado",
+      "testFailed": "Prueba fallida",
+      "replayFailed": "Reintento fallido",
+      "replayAllFailed": "Reintento de todo fallido"
+    },
+    "bulk": {
+      "test": {
+        "label": "Probar",
+        "title": "Prueba masiva",
+        "description": "Prueba masiva: aún no implementada."
+      },
+      "disable": {
+        "label": "Deshabilitar",
+        "title": "Deshabilitación masiva",
+        "description": "Deshabilitación masiva: aún no implementada."
+      },
+      "delete": {
+        "label": "Eliminar",
+        "title": "Eliminación masiva",
+        "description": "Por seguridad, elimina las integraciones de forma individual."
+      }
+    },
+    "validation": {
+      "typeRequired": "Elige un tipo de integración",
+      "nameRequired": "El nombre de la integración es obligatorio",
+      "urlInvalid": "Debe ser una URL válida"
+    },
+    "wizard": {
+      "title": "Nueva integración",
+      "description": "Conecta FreeSDN con un servicio externo en unos pocos pasos.",
+      "submit": "Crear integración",
+      "steps": {
+        "type": "Elegir tipo",
+        "configure": "Configurar",
+        "events": "Seleccionar eventos"
+      },
+      "fields": {
+        "name": {
+          "label": "Nombre de la integración",
+          "placeholder": "Nombre de la integración",
+          "placeholderTyped": "Mi integración de {{type}}"
+        },
+        "url": {
+          "label": "URL del webhook",
+          "descN8n": "Copia la \"URL del webhook\" desde el nodo de activación de tu flujo de n8n.",
+          "descSlack": "Crea un webhook entrante en la configuración de tu aplicación de Slack.",
+          "descPagerduty": "Usa la URL de integración de tu Events API v2 de PagerDuty.",
+          "descDefault": "El endpoint HTTPS que recibirá las cargas útiles de eventos de FreeSDN."
+        },
+        "secret": {
+          "label": "Secreto HMAC (opcional)",
+          "placeholder": "Secreto compartido para verificar la firma de la solicitud",
+          "descPrefix": "FreeSDN firma cada entrega con HMAC-SHA256. Verifica el encabezado",
+          "descSuffix": "en tu endpoint."
+        },
+        "description": {
+          "label": "Descripción (opcional)",
+          "placeholder": "¿Para qué sirve esta integración?"
+        },
+        "verifySsl": {
+          "label": "Verificar certificado SSL"
+        }
+      },
+      "events": {
+        "choosePrefix": "Elige qué eventos enviar a",
+        "defaultsPreselected": "Los valores predeterminados para este tipo de integración están preseleccionados.",
+        "selectedCount": "{{count}} tipo de evento seleccionado",
+        "selectedCountPlural": "{{count}} tipos de eventos seleccionados"
+      },
+      "success": {
+        "heading": "¡{{name}} creada!",
+        "subtitle": "Envía un evento de prueba para verificar que la conexión funciona.",
+        "testDelivered": "Evento de prueba entregado",
+        "httpStats": "HTTP {{code}} · {{ms}} ms",
+        "testFailed": "Prueba fallida",
+        "closeLabel": "Listo"
+      }
+    },
+    "history": {
+      "title": "Historial de entregas",
+      "tabs": {
+        "deliveries": "Entregas recientes",
+        "dlq": "Cola de mensajes fallidos"
+      },
+      "noDeliveries": "Aún no hay entregas",
+      "attempt": "· Intento {{n}}",
+      "http": "HTTP {{code}}",
+      "dlqEmpty": "No hay entradas fallidas · todas las entregas están en buen estado.",
+      "attemptsCount": "· {{n}} intentos",
+      "unknownFailure": "Fallo desconocido",
+      "finalAttempt": "Último intento: {{time}}",
+      "replayed": "Reintentado: {{time}}"
+    }
+  }
+}

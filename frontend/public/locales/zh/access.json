@@ -1,0 +1,26 @@
+{
+  "AccessControlPage": {
+    "title": "访问控制",
+    "description": "物理访问控制管理",
+    "comingSoon": "即将推出",
+    "comingSoonDescription": "物理访问控制集成计划在未来版本中推出。届时此处将提供门禁控制器、持卡人和事件管理功能。",
+    "features": {
+      "doorManagement": {
+        "title": "门禁管理",
+        "desc": "实时监控并控制门、闸门和栏杆。"
+      },
+      "cardholders": {
+        "title": "持卡人与凭证",
+        "desc": "管理门禁卡、PIN 和生物识别凭证。"
+      },
+      "eventHistory": {
+        "title": "事件历史",
+        "desc": "完整的访问事件审计记录，支持搜索和导出。"
+      },
+      "accessPolicies": {
+        "title": "访问策略",
+        "desc": "基于时间的计划、防尾随和多因素规则。"
+      }
+    }
+  }
+}

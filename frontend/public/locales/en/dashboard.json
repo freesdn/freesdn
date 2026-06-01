@@ -1,0 +1,179 @@
+{
+  "title": "Dashboard",
+  "welcome": "Welcome back, {{name}}",
+  "lastUpdated": "Last updated {{time}}",
+  "refresh": "Refresh",
+  "customize": "Customize Dashboard",
+  "widgets": {
+    "deviceStatus": "Device Status",
+    "networkOverview": "Network Overview",
+    "alerts": "Alerts",
+    "clients": "Connected Clients",
+    "throughput": "Throughput",
+    "uptime": "System Uptime",
+    "events": "Recent Events",
+    "topology": "Network Topology"
+  },
+  "stats": {
+    "totalDevices": "Total Devices",
+    "onlineDevices": "Online",
+    "offlineDevices": "Offline",
+    "totalClients": "Total Clients",
+    "wiredClients": "Wired",
+    "wirelessClients": "Wireless",
+    "activeAlerts": "Active Alerts",
+    "criticalAlerts": "Critical",
+    "warningAlerts": "Warning"
+  },
+  "quickActions": {
+    "title": "Quick Actions",
+    "scanNetwork": "Scan Network",
+    "addDevice": "Add Device",
+    "viewAlerts": "View Alerts",
+    "manageUsers": "Manage Users"
+  },
+  "health": {
+    "title": "System Health",
+    "healthy": "All systems operational",
+    "degraded": "Some services degraded",
+    "critical": "Critical issues detected"
+  },
+  "DashboardPage": {
+    "title": "Dashboard",
+    "subtitle": {
+      "global": "Global overview across all sites",
+      "site": "{{site}} · {{count}} devices online",
+      "defaultSite": "Site"
+    },
+    "actions": {
+      "addWidget": "Add Widget",
+      "reset": "Reset",
+      "resetTooltip": "Restore the default widget set",
+      "done": "Done",
+      "customize": "Customize",
+      "customizeTooltip": "Add or remove dashboard widgets"
+    },
+    "customize": {
+      "allWidgetsAdded": "All widgets are already on your dashboard."
+    },
+    "error": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "stats": {
+      "sites": {
+        "title": "Sites",
+        "subtitle": "Active locations"
+      },
+      "controllers": {
+        "title": "Controllers",
+        "subtitle": "Connected"
+      },
+      "devices": {
+        "title": "Devices",
+        "subtitle": "Online"
+      },
+      "cameras": {
+        "title": "Cameras",
+        "subtitle": "{{count}} recording"
+      }
+    },
+    "siteHealth": {
+      "title": "Site Health",
+      "devicesOnline": "{{online}}/{{total}} devices online",
+      "controllerCount": "{{count}} controller",
+      "controllerCount_plural": "{{count}} controllers"
+    },
+    "empty": {
+      "title": "Your dashboard is empty",
+      "description": "Click Customize above to add widgets, or restore the default layout.",
+      "restoreButton": "Restore default layout"
+    },
+    "traffic": {
+      "downloadMbps": "Download (Mbps)",
+      "uploadMbps": "Upload (Mbps)",
+      "noData": "No traffic data available",
+      "last24h": "Last 24h"
+    },
+    "networkHealth": {
+      "notAvailable": "N/A",
+      "windowLabel": "{{hours}}h window"
+    },
+    "services": {
+      "apiServer": "API Server",
+      "database": "Database",
+      "redisCache": "Redis Cache"
+    },
+    "activity": {
+      "severityStatus": "Severity: {{severity}} - Status: {{status}}"
+    },
+    "camera": {
+      "unknown": "Unknown"
+    }
+  },
+  "DashboardWidgetCard": {
+    "dragHandle": {
+      "ariaLabel": "Drag to reorder {{title}} widget",
+      "title": "Drag to reorder"
+    },
+    "remove": {
+      "ariaLabel": "Remove {{title}} widget",
+      "title": "Remove {{title}}"
+    }
+  },
+  "extraWidgets": {
+    "cpu": {
+      "empty": "No CPU telemetry yet"
+    },
+    "memory": {
+      "empty": "No memory telemetry yet"
+    },
+    "manufacturer": {
+      "empty": "No manufacturer data"
+    },
+    "wifiBands": {
+      "empty": "No wireless clients"
+    },
+    "ssids": {
+      "empty": "No SSID data",
+      "clientCount": "{{count}} client",
+      "clientCountPlural": "{{count}} clients"
+    },
+    "poe": {
+      "acrossPorts": "across {{count}} PoE port",
+      "acrossPortsPlural": "across {{count}} PoE ports",
+      "avgPerPort": "Avg/Port",
+      "active": "Active"
+    },
+    "security": {
+      "failedLogins": "Failed logins",
+      "ipBlocks": "IP blocks",
+      "anomalies": "Anomalies",
+      "secEvents": "Sec. events",
+      "lastHours": "Last {{hours}}h"
+    },
+    "audit": {
+      "empty": "No audit events",
+      "totalEvents": "total events"
+    },
+    "incidents": {
+      "allClear": "All clear",
+      "noneInWindow": "No incidents in this window",
+      "open": "Open",
+      "investigating": "Investigating",
+      "resolved": "Resolved",
+      "viewAll": "View all incidents"
+    },
+    "ports": {
+      "empty": "No port data",
+      "portsUp": "{{pct}}% ports up",
+      "up": "Up",
+      "down": "Down",
+      "errors": "Errors",
+      "aggregateTraffic": "{{value}} aggregate traffic"
+    },
+    "siteHealth": {
+      "empty": "No sites configured",
+      "deviceCount": "{{count}} dev"
+    }
+  }
+}

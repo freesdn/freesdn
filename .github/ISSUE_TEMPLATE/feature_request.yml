@@ -1,0 +1,84 @@
+name: Feature request
+description: Suggest a capability, adapter, or improvement for the team to build.
+title: "[feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. A note on how this works:
+        - FreeSDN is **developed in-house and does not accept code PRs** (see [CONTRIBUTING.md](../../blob/main/CONTRIBUTING.md)). A feature request asks the team to build it; it is not a promise that it will be built.
+        - **New vendor support is fastest via hardware donation.** Adapters are written and tested against real hardware. See [DONATE.md](../../blob/main/DONATE.md).
+        - **Searched existing issues and Discussions first?** Please do, to avoid duplicates.
+        - For open-ended "would this fit?" conversations, prefer [Discussions](https://github.com/freesdn/freesdn/discussions).
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of FreeSDN would this touch?
+      options:
+        - new vendor / adapter support
+        - api / backend
+        - frontend / UI
+        - module - network
+        - module - firewall (incl. gateway orchestration)
+        - module - cameras
+        - module - voip
+        - module - hypervisor
+        - module - backup
+        - module - access_control
+        - module - ai
+        - module - observability (collector)
+        - fabric / automation / interconnect
+        - agent (site-local discovery)
+        - plugins / SDK
+        - deploy / docker / install
+        - docs
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case and the pain today, not just the proposed solution.
+      placeholder: |
+        I run X alongside FreeSDN and currently have to ... because ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should FreeSDN do? Be concrete about the expected workflow.
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Vendor / model (if this is vendor support)
+      description: Exact make, model, and firmware version. Leave blank if not applicable.
+      placeholder: "e.g. TP-Link Omada ER7212PC, firmware 1.2.0"
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds you have considered
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have searched existing issues and Discussions and this is not a duplicate
+          required: true
+        - label: I understand FreeSDN does not accept code PRs and this is a request, not a commitment
+          required: true

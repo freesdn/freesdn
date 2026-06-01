@@ -1,0 +1,72 @@
+{
+  "PendingChangesPage": {
+    "header": {
+      "title": "Cambios pendientes",
+      "description": "Todas las escrituras preparadas en VPN, firmware, perfiles, firewall y WiFi. Las lecturas se ejecutan en vivo; las escrituras esperan aquí su aplicación explícita."
+    },
+    "filter": {
+      "title": "Filtro",
+      "controller": "Controlador",
+      "chooseController": "Elegir controlador",
+      "site": "Sitio",
+      "chooseSite": "Elegir sitio",
+      "status": "Estado"
+    },
+    "status": {
+      "pending": "Pendiente",
+      "applied": "Aplicado",
+      "discarded": "Descartado",
+      "failed": "Fallido"
+    },
+    "empty": {
+      "pickControllerSite": "Elige un controlador y un sitio",
+      "inboxZero": "Bandeja vacía",
+      "noStatusChanges": "Sin cambios en estado {{status}}",
+      "noneWaiting": "No hay cambios esperando para aplicarse."
+    },
+    "list": {
+      "countOne": "{{count}} cambio",
+      "countOther": "{{count}} cambios",
+      "gateNote": "El botón Aplicar está restringido en el servidor; las implementaciones de producción lo rechazan a menos que OMADA_READ_ONLY esté desactivado."
+    },
+    "table": {
+      "feature": "Función",
+      "op": "Operación",
+      "target": "Destino",
+      "notes": "Notas",
+      "created": "Creado",
+      "status": "Estado",
+      "actions": "Acciones",
+      "failureTooltip": "Error: {{reason}}"
+    },
+    "actions": {
+      "discardTooltip": "Descartar este cambio",
+      "applyTooltip": "Aplicar al controlador en vivo",
+      "apply": "Aplicar"
+    },
+    "confirmApply": {
+      "title": "¿Aplicar al controlador en vivo?",
+      "description": "Esto enviará el cambio al controlador Omada. El indicador del servidor OMADA_READ_ONLY también debe estar desactivado para que la aplicación tenga éxito; de lo contrario, la solicitud se rechaza con un 403. No hay deshacer: verifica primero los datos.",
+      "cancel": "Cancelar",
+      "apply": "Aplicar"
+    },
+    "toasts": {
+      "discarded": {
+        "title": "Cambio descartado"
+      },
+      "discardFailed": {
+        "title": "Error al descartar"
+      },
+      "applied": {
+        "title": "Cambio aplicado",
+        "description": "Enviado al controlador en vivo."
+      },
+      "applyRefused": {
+        "title": "Aplicación rechazada"
+      }
+    },
+    "errors": {
+      "loadFailed": "No se pudieron cargar los cambios pendientes"
+    }
+  }
+}

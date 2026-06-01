@@ -1,0 +1,21 @@
+# FreeSDN go2rtc restream sidecar.
+#
+# Streams are NOT defined here - the FreeSDN backend registers/unregisters them
+# dynamically per camera via the go2rtc API (PUT /api/streams). This file only
+# configures listeners + logging. The API is reached by the backend over the
+# internal docker network (http://go2rtc:1984); the browser never talks to
+# go2rtc directly - it goes through the authenticated FreeSDN MSE proxy.
+api:
+  listen: ":1984"
+
+rtsp:
+  listen: ":8554"
+
+# The WebRTC listener is configured but unused; live video is delivered via MSE
+# over the authenticated FreeSDN API WebSocket.
+webrtc:
+  listen: ":8555"
+
+log:
+  level: info
+  format: text

@@ -1,0 +1,12 @@
+# Force LF line endings for shell scripts (required for Docker/Linux)
+*.sh text eol=lf
+
+# Force LF for Dockerfiles and compose files
+Dockerfile* text eol=lf
+docker-compose*.yml text eol=lf
+
+# Force LF for SQL init scripts
+*.sql text eol=lf
+
+# Force LF for nginx configs
+*.conf text eol=lf

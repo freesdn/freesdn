@@ -1,0 +1,345 @@
+{
+  "AnalyticsPage": {
+    "title": "Analytics",
+    "actions": {
+      "export": "Export"
+    },
+    "errors": {
+      "loadFailed": "Failed to load analytics data"
+    },
+    "subtitle": {
+      "updated": "Updated {{timestamp}} · {{window}} window",
+      "default": "Real-time fleet, security, client and traffic insights"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "insights": "Insights",
+      "wifi": "Wi-Fi",
+      "clients": "Clients",
+      "traffic": "Traffic"
+    },
+    "common": {
+      "noData": "No data",
+      "noDataAvailable": "No data available",
+      "wired": "Wired",
+      "wireless": "Wireless",
+      "clients": "Clients",
+      "total": "Total"
+    },
+    "overview": {
+      "organizationHealth": "Organization Health",
+      "acrossSitesDevices": "Across {{siteCount}} {{sites}} · {{deviceCount}} {{devices}}",
+      "unit": {
+        "site": "site",
+        "sites": "sites",
+        "device": "device",
+        "devices": "devices"
+      },
+      "peak": "Peak {{value}}%",
+      "peakTemp": "Peak {{value}}°C",
+      "noTelemetry": "No telemetry",
+      "online": "Online",
+      "offline": "Offline",
+      "devicesLabel": "devices",
+      "cpuLabel": "CPU",
+      "cpuBarName": "CPU %",
+      "memoryLabel": "Memory",
+      "memoryBarName": "Memory %",
+      "stats": {
+        "healthScore": "Health Score",
+        "devices": "Devices",
+        "devicesDesc": "{{online}} online · {{offline}} offline",
+        "networkClients": "Network Clients",
+        "networkClientsDesc": "{{online}} online",
+        "activeAlerts": "Active Alerts",
+        "activeAlertsDesc": "{{total}} total incidents",
+        "avgCpu": "Avg CPU",
+        "avgMemory": "Avg Memory",
+        "avgTemperature": "Avg Temperature",
+        "portHealth": "Port Health",
+        "portHealthDesc": "{{down}} down · {{errors}} errors"
+      },
+      "healthStatus": {
+        "healthy": "Healthy",
+        "degraded": "Degraded",
+        "critical": "Critical"
+      },
+      "siteHealth": {
+        "title": "Site Health",
+        "description": "Per-site health score across the organization",
+        "empty": "No sites configured",
+        "tooltip": "Health",
+        "barName": "Health %"
+      },
+      "devicesByType": {
+        "title": "Devices by Type",
+        "description": "Online/offline split per device class",
+        "empty": "No device data"
+      },
+      "devicesByManufacturer": {
+        "title": "Devices by Manufacturer",
+        "description": "Vendor mix across the fleet",
+        "empty": "No manufacturer data"
+      },
+      "controllers": {
+        "title": "Controllers",
+        "description": "{{count}} registered",
+        "empty": "No controllers configured"
+      },
+      "topCpu": {
+        "title": "Top CPU Consumers",
+        "description": "Highest CPU utilization in the window",
+        "empty": "No CPU telemetry"
+      },
+      "topMemory": {
+        "title": "Top Memory Consumers",
+        "description": "Highest memory utilization in the window",
+        "empty": "No memory telemetry"
+      }
+    },
+    "insights": {
+      "securityPosture": "Security Posture",
+      "eventsLabel": "Events",
+      "totalLabel": "Total",
+      "stats": {
+        "healthScore": "Health Score",
+        "totalTraffic": "Total Traffic",
+        "totalTrafficDesc": "{{tx}} TX · {{rx}} RX",
+        "devicesOnline": "Devices Online",
+        "devicesOnlineDesc": "{{degraded}} degraded · {{offline}} offline",
+        "avgClientSignal": "Avg Client Signal"
+      },
+      "security": {
+        "failedLogins": "Failed Logins",
+        "activeIpBlocks": "Active IP Blocks",
+        "unresolvedAnomalies": "Unresolved Anomalies",
+        "securityEvents": "Security Events",
+        "lastHours": "Last {{hours}}h"
+      },
+      "incidentStatus": {
+        "open": "Open",
+        "investigating": "Investigating",
+        "resolved": "Resolved",
+        "other": "Other"
+      },
+      "auditByLevel": {
+        "title": "Audit Events by Level",
+        "description": "{{count}} total events",
+        "empty": "No audit data"
+      },
+      "auditBySource": {
+        "title": "Audit by Source",
+        "description": "Activity by resource type",
+        "empty": "No source data"
+      },
+      "incidents": {
+        "title": "Incidents",
+        "description": "{{total}} total · {{open}} open",
+        "empty": "No incidents · all clear"
+      }
+    },
+    "wifi": {
+      "radar": {
+        "signalStrength": "Signal Strength",
+        "signalQuality": "Signal Quality",
+        "bandDiversity": "Band Diversity",
+        "connectivity": "Connectivity"
+      },
+      "stats": {
+        "wirelessClients": "Wireless Clients",
+        "ofTotal": "of {{total}} total",
+        "avgSignal": "Avg Signal",
+        "clientUpload": "Client Upload",
+        "clientDownload": "Client Download"
+      },
+      "bandDistribution": {
+        "title": "Client Band Distribution",
+        "description": "Wireless clients per radio band, plus wired"
+      },
+      "signalQuality": {
+        "title": "Signal Quality Distribution",
+        "description": "Per dBm bucket · higher is better",
+        "empty": "No signal samples"
+      },
+      "topSsids": {
+        "title": "Top SSIDs by Client Count",
+        "description": "Most popular wireless networks",
+        "empty": "No SSID data"
+      },
+      "healthProfile": {
+        "title": "Wi-Fi Health Profile",
+        "description": "Composite score across signal, quality, diversity and uptime",
+        "radarName": "Health"
+      }
+    },
+    "clients": {
+      "signalRating": {
+        "excellent": "Excellent",
+        "good": "Good",
+        "fair": "Fair",
+        "weak": "Weak",
+        "poor": "Poor"
+      },
+      "stats": {
+        "totalClients": "Total Clients",
+        "online": "Online",
+        "reachable": "{{pct}}% reachable"
+      },
+      "connectionType": {
+        "title": "Connection Type",
+        "description": "Wired vs wireless mix"
+      },
+      "bandDistribution": {
+        "title": "Band Distribution",
+        "description": "Wireless client breakdown by radio band",
+        "empty": "No wireless clients"
+      },
+      "ssidDistribution": {
+        "title": "SSID Distribution",
+        "description": "Top wireless networks",
+        "empty": "No SSID data"
+      },
+      "signalQuality": {
+        "title": "Client Signal Quality",
+        "description": "Distribution across dBm buckets",
+        "empty": "No signal data available"
+      },
+      "clientTraffic": {
+        "title": "Client Traffic",
+        "totalDesc": "Total {{total}}",
+        "uploadTx": "Upload (TX)",
+        "downloadRx": "Download (RX)"
+      },
+      "avgSignalStrength": {
+        "title": "Average Signal Strength",
+        "description": "Across all wireless clients",
+        "empty": "No signal data",
+        "dbmAverage": "dBm average"
+      }
+    },
+    "traffic": {
+      "portsLabel": "Ports",
+      "bytesLabel": "Bytes",
+      "trafficLabel": "Traffic",
+      "portStatusLabel": {
+        "up": "Up",
+        "down": "Down",
+        "other": "Other"
+      },
+      "trafficCompare": {
+        "portTx": "Port TX",
+        "portRx": "Port RX",
+        "clientTx": "Client TX",
+        "clientRx": "Client RX"
+      },
+      "stats": {
+        "totalPorts": "Total Ports",
+        "totalPortsDesc": "{{up}} up · {{down}} down",
+        "portUpload": "Port Upload",
+        "portDownload": "Port Download",
+        "poePower": "PoE Power",
+        "poePortsCount": "{{count}} PoE ports"
+      },
+      "siteColumns": {
+        "site": "Site",
+        "devices": "Devices",
+        "online": "Online",
+        "offline": "Offline",
+        "health": "Health"
+      },
+      "portStatus": {
+        "title": "Port Status",
+        "description": "{{count}} total ports",
+        "empty": "No port telemetry"
+      },
+      "trafficBreakdown": {
+        "title": "Traffic Breakdown",
+        "description": "Bytes by interface direction",
+        "empty": "No traffic recorded"
+      },
+      "poeBudget": {
+        "title": "PoE Power Budget",
+        "description": "{{count}} PoE-enabled ports",
+        "wattsConsumed": "Watts consumed"
+      },
+      "portErrors": {
+        "title": "Port Errors",
+        "recentDetected": "Recent errors detected",
+        "healthy": "Healthy · no errors",
+        "totalErrors": "Total port errors",
+        "noErrorsDetected": "No port errors detected"
+      },
+      "siteOverview": {
+        "title": "Site Overview",
+        "description": "Per-site device counts and health",
+        "itemName": "sites"
+      }
+    }
+  },
+  "CrossSiteComparisonPage": {
+    "header": {
+      "title": "Cross-Site Comparison",
+      "description": "Side-by-side metrics across every site in your organization"
+    },
+    "error": {
+      "loadFailed": "Failed to load comparison. Try refreshing."
+    },
+    "summary": {
+      "sites": "Sites",
+      "devicesOnline": "Devices online",
+      "phones": "Phones",
+      "openAlerts": "Open alerts ({{critical}} critical)"
+    },
+    "outliers": {
+      "title": "Outliers worth a look",
+      "mostOpenAlerts": "Most open alerts:",
+      "criticalCount": "({{critical}} critical)",
+      "lowestOnlinePct": "Lowest online %:",
+      "reachable": "({{online}} of {{total}} reachable)",
+      "firmwareCompliance": "Firmware compliance:"
+    },
+    "table": {
+      "title": "Per-Site Metrics",
+      "metric": "Metric"
+    },
+    "sections": {
+      "devices": "Devices",
+      "phones": "Phones (VoIP)",
+      "alerts": "Alerts",
+      "controllers": "Controllers",
+      "firmwareCompliance": "Firmware Compliance"
+    },
+    "rows": {
+      "total": "Total",
+      "onlinePct": "Online %",
+      "switches": "Switches",
+      "accessPoints": "Access Points",
+      "cameras": "Cameras",
+      "totalPhones": "Total phones",
+      "managed": "Managed",
+      "open": "Open",
+      "last24h": "Last 24h",
+      "last7d": "Last 7d",
+      "compliant": "Compliant"
+    },
+    "subtext": {
+      "online": "{{count}} online",
+      "registered": "{{count}} registered",
+      "critical": "{{count}} critical",
+      "connected": "{{count}} connected"
+    },
+    "footer": {
+      "generated": "Generated {{timestamp}} · refreshes every 30s"
+    },
+    "empty": {
+      "prefix": "No sites in your organization.",
+      "createOne": "Create one",
+      "suffix": "to start comparing.",
+      "before": "No sites in your organization.",
+      "after": "to start comparing."
+    },
+    "errors": {
+      "loadFailed": "Failed to load comparison. Try refreshing."
+    }
+  }
+}

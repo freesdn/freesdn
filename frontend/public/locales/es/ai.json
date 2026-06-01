@@ -1,0 +1,50 @@
+{
+  "AIAssistantPage": {
+    "title": "Asistente de IA",
+    "toolCall": {
+      "calledTools": "Se llamó a {{count}} herramienta",
+      "calledToolsPlural": "Se llamó a {{count}} herramientas",
+      "result": "resultado"
+    },
+    "message": {
+      "usingTools": "Usando herramientas..."
+    },
+    "conversation": {
+      "untitled": "Nueva conversación",
+      "empty": "Aún no hay conversaciones",
+      "loadError": "No se pudo cargar la conversación",
+      "retry": "Reintentar"
+    },
+    "provider": {
+      "label": "Proveedor",
+      "ollamaLocal": "Ollama (Local)"
+    },
+    "header": {
+      "tokens": "{{value}} tokens"
+    },
+    "hero": {
+      "title": "Asistente de IA de FreeSDN",
+      "description": "Pregúntame sobre tus dispositivos de red, VLAN, alertas y más. Puedo ejecutar diagnósticos y ayudarte a resolver problemas."
+    },
+    "suggestions": {
+      "offlineDevices": "Listar todos los dispositivos sin conexión",
+      "activeAlerts": "Mostrar alertas activas",
+      "vlansOnSite": "¿Qué VLAN están configuradas en site-1?",
+      "switchHealth": "Comprobar el estado de switch-core-01"
+    },
+    "status": {
+      "thinking": "Pensando...",
+      "sendFailed": "No se pudo enviar el mensaje"
+    },
+    "input": {
+      "placeholder": "Pregunta sobre tu red...",
+      "hint": "Pulsa Enter para enviar · Mayús+Enter para una nueva línea"
+    },
+    "deleteDialog": {
+      "title": "¿Eliminar conversación?",
+      "description": "Esto eliminará permanentemente la conversación y todos sus mensajes.",
+      "cancel": "Cancelar",
+      "confirm": "Eliminar"
+    }
+  }
+}

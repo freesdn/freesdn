@@ -1,0 +1,200 @@
+{
+  "PoEPage": {
+    "common": {
+      "cancel": "Cancel"
+    },
+    "header": {
+      "title": "PoE Management",
+      "description": "Monitor and control Power over Ethernet across your network",
+      "analytics": "Analytics"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "capability": {
+      "title": "PoE Control Not Available",
+      "defaultReason": "This device does not support PoE control."
+    },
+    "stats": {
+      "totalPower": {
+        "title": "Total Power",
+        "description": "of {{budget}}W ({{percent}}%)"
+      },
+      "activePorts": {
+        "title": "Active Ports",
+        "description": "Delivering power"
+      },
+      "switches": {
+        "title": "PoE Switches",
+        "description": "{{count}} with faults"
+      },
+      "budgetWarnings": {
+        "title": "Budget Warnings",
+        "description": "Near/over budget"
+      }
+    },
+    "tabs": {
+      "devices": "Devices",
+      "ports": "Ports",
+      "schedules": "Schedules"
+    },
+    "pdTypes": {
+      "access_point": "Access Point",
+      "camera": "Camera",
+      "ip_phone": "IP Phone",
+      "iot": "IoT Device",
+      "unknown": "Unknown"
+    },
+    "modes": {
+      "auto": "Auto",
+      "passive24": "Passive 24V",
+      "passive48": "Passive 48V",
+      "disabled": "Disabled"
+    },
+    "devices": {
+      "empty": {
+        "title": "No PoE switches found",
+        "description": "Add controllers with PoE-capable switches to see them here. PoE budgets and per-port draw will appear once devices report in."
+      },
+      "card": {
+        "portsSummary": "{{total}} PoE ports • {{active}} active",
+        "powerUsage": "Power Usage",
+        "active": "Active",
+        "disabled": "Disabled",
+        "idle": "Idle",
+        "fault": "Fault",
+        "budgetWarning": "Power budget usage at {{percent}}%"
+      }
+    },
+    "ports": {
+      "searchPlaceholder": "Search ports...",
+      "allDevicesPlaceholder": "All devices",
+      "allDevices": "All Devices",
+      "bulk": {
+        "enable": "Enable ({{count}})",
+        "disable": "Disable ({{count}})",
+        "cancel": "Cancel",
+        "select": "Bulk Select"
+      },
+      "table": {
+        "port": "Port",
+        "device": "Device",
+        "status": "Status",
+        "mode": "Mode",
+        "power": "Power",
+        "connectedDevice": "Connected Device",
+        "actions": "Actions"
+      },
+      "statuses": {
+        "delivering": "delivering",
+        "searching": "searching",
+        "fault": "fault",
+        "disabled": "disabled"
+      },
+      "tooltip": {
+        "class": "Class: {{value}}",
+        "voltage": "Voltage: {{value}}V"
+      },
+      "menu": {
+        "configure": "Configure",
+        "powerCycle": "Power Cycle",
+        "disablePoe": "Disable PoE",
+        "enablePoe": "Enable PoE"
+      },
+      "notSupported": "PoE control not supported"
+    },
+    "schedules": {
+      "create": "Create Schedule",
+      "menu": {
+        "edit": "Edit",
+        "delete": "Delete"
+      },
+      "actions": {
+        "enable": "Enable",
+        "disable": "Disable",
+        "limit": "Limit"
+      },
+      "card": {
+        "action": "Action:",
+        "actionValue": "{{action}} PoE",
+        "time": "Time:",
+        "days": "Days:",
+        "affects": "Affects:",
+        "affectsValue": "{{count}} ports",
+        "nextRun": "Next run: {{time}}"
+      },
+      "dayNames": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat",
+        "sun": "Sun"
+      },
+      "empty": {
+        "title": "No Schedules",
+        "description": "Create a schedule to automatically control PoE power",
+        "notSupported": "PoE scheduling not supported on this device"
+      }
+    },
+    "portDialog": {
+      "title": "Configure {{name}}",
+      "description": "Adjust PoE settings for this port",
+      "poeEnabled": "PoE Enabled",
+      "poeMode": "PoE Mode",
+      "modeOptions": {
+        "auto": "Auto Detect"
+      },
+      "powerLimit": "Power Limit",
+      "priority": "Priority",
+      "priorityOptions": {
+        "critical": "Critical",
+        "high": "High",
+        "low": "Low"
+      },
+      "priorityHelp": "Higher priority ports maintain power during budget constraints",
+      "save": "Save Changes"
+    },
+    "scheduleDialog": {
+      "title": "Create PoE Schedule",
+      "description": "Schedule automatic PoE power control",
+      "name": "Schedule Name",
+      "namePlaceholder": "e.g., Night Power Save",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "device": "Switch",
+      "devicePlaceholder": "Select a switch",
+      "ports": "Ports",
+      "portsSelectDeviceFirst": "Select a switch to choose ports",
+      "portsLoading": "Loading ports...",
+      "portsEmpty": "No PoE ports found on this switch",
+      "portsRequired": "Select at least one port for this schedule to take effect",
+      "action": "Action",
+      "actionOptions": {
+        "disable": "Disable PoE",
+        "enable": "Enable PoE",
+        "limit": "Apply Power Limit"
+      },
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "days": "Days",
+      "dayInitials": {
+        "mon": "M",
+        "tue": "T",
+        "wed": "W",
+        "thu": "T",
+        "fri": "F",
+        "sat": "S",
+        "sun": "S"
+      }
+    },
+    "toast": {
+      "updated": "PoE settings updated",
+      "updateFailed": "Failed to update PoE",
+      "reset": "Power cycle started",
+      "resetFailed": "Failed to power-cycle the port",
+      "bulkUpdateFailed": "Failed to bulk update PoE ports"
+    }
+  }
+}

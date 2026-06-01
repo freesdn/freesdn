@@ -1,0 +1,587 @@
+{
+  "TailscaleSetupWizard": {
+    "adminConsole": "Tailscale 管理控制台",
+    "states": {
+      "not_installed": {
+        "label": "未安装",
+        "description": "此容器中未安装 Tailscale。"
+      },
+      "daemon_stopped": {
+        "label": "守护进程已停止",
+        "description": "Tailscale 守护进程未运行。请启动它以继续。"
+      },
+      "needs_login": {
+        "label": "需要身份验证",
+        "description": "Tailscale 守护进程正在运行但未通过身份验证。请登录以加入您的 tailnet。"
+      },
+      "awaiting_auth": {
+        "label": "等待授权",
+        "description": "在浏览器中打开授权 URL 以完成登录。"
+      },
+      "connected": {
+        "label": "已连接",
+        "description": "Tailscale 已连接，可用于网状网络。"
+      },
+      "error": {
+        "label": "错误",
+        "description": "Tailscale 设置发生错误。"
+      }
+    },
+    "nodeInfo": {
+      "title": "Tailscale 节点信息",
+      "hostname": "主机名",
+      "tailscaleIp": "Tailscale IP",
+      "tailnet": "Tailnet",
+      "magicDns": "MagicDNS",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "peers": "对等节点",
+      "peerCount": "{{count}} 台设备",
+      "ipv6": "IPv6",
+      "notAvailable": "无"
+    },
+    "fields": {
+      "hostname": "主机名",
+      "hostnameHelp": "此节点在您的 tailnet 中显示的名称。"
+    },
+    "authKeyForm": {
+      "authKeyLabel": "身份验证密钥",
+      "authKeyHelpPrefix": "从以下位置生成身份验证密钥：",
+      "authKeyHelpSuffix": "。使用可重用或一次性密钥。",
+      "authenticating": "正在验证...",
+      "connect": "使用身份验证密钥连接"
+    },
+    "advanced": {
+      "show": "显示",
+      "hide": "隐藏",
+      "label": "高级选项"
+    },
+    "options": {
+      "acceptRoutes": {
+        "label": "接受路由",
+        "description": "接受对等节点通告的子网路由",
+        "descriptionLogin": "接受来自其他节点的子网路由 (--accept-routes)"
+      },
+      "advertiseRoutes": {
+        "label": "通告路由",
+        "description": "以逗号分隔的 CIDR 子网，向您的 tailnet 公开。"
+      },
+      "exitNode": {
+        "label": "通告为出口节点",
+        "description": "通过此节点路由所有对等流量"
+      },
+      "shieldsUp": {
+        "label": "盾牌防护",
+        "description": "阻止来自 tailnet 对等节点的入站连接",
+        "descriptionLogin": "阻止来自其他 tailnet 节点的入站连接"
+      },
+      "acceptDns": {
+        "label": "接受 DNS",
+        "description": "使用您 tailnet 中的 MagicDNS 名称服务器"
+      }
+    },
+    "interactive": {
+      "generating": "正在生成登录 URL...",
+      "loginViaBrowser": "通过浏览器登录",
+      "openUrlInstruction": "在浏览器中打开下面的 URL，以授权此节点加入您的 tailnet。",
+      "openInBrowser": "在浏览器中打开",
+      "autoUpdateNote": "授权后，状态将自动更新。"
+    },
+    "configure": {
+      "title": "配置",
+      "description": "无需重新进行身份验证即可修改 Tailscale 代理设置。",
+      "applying": "正在应用...",
+      "apply": "应用配置"
+    },
+    "authenticate": {
+      "title": "验证 Tailscale",
+      "description": "选择如何使用您的 Tailscale 账户对此 FreeSDN 节点进行身份验证。",
+      "authKeyTab": "身份验证密钥",
+      "browserTab": "浏览器登录"
+    },
+    "authKeyTip": {
+      "label": "身份验证密钥（推荐）：",
+      "prefix": "从以下位置生成预身份验证密钥：",
+      "suffix": "。这允许在无需浏览器交互的情况下进行无头注册 · 非常适合生产环境部署。"
+    },
+    "loading": {
+      "title": "正在检查 Tailscale 状态...",
+      "description": "正在查询 Tailscale 代理设置状态。"
+    },
+    "statusError": {
+      "title": "无法检查设置状态",
+      "description": "无法访问 Tailscale 设置端点。请确保后端正在运行。"
+    },
+    "notInstalled": {
+      "title": "未安装 Tailscale",
+      "description": "API 容器未安装 Tailscale。使用更新后的 Dockerfile 重新构建容器以安装 Tailscale。"
+    },
+    "daemonStopped": {
+      "title": "启动 Tailscale 守护进程",
+      "descriptionPrefix": "Tailscale 已安装，但",
+      "descriptionSuffix": "守护进程未运行。启动它以开始身份验证流程。",
+      "starting": "正在启动守护进程...",
+      "start": "启动 Tailscale 守护进程"
+    },
+    "unexpectedState": {
+      "title": "意外状态",
+      "descriptionPrefix": "Tailscale 处于状态"
+    },
+    "quickActions": {
+      "title": "快速操作",
+      "refreshStatus": "刷新状态",
+      "disconnect": "断开连接",
+      "logout": "登出"
+    },
+    "confirm": {
+      "disconnect": "断开与 Tailscale 网络的连接？",
+      "logout": "登出将取消此节点在您 tailnet 中的授权。是否继续？"
+    },
+    "actions": {
+      "copy": "复制",
+      "retry": "重试",
+      "refresh": "刷新",
+      "reconnect": "重新连接"
+    },
+    "toast": {
+      "copied": {
+        "title": "已复制",
+        "description": "{{label}}已复制到剪贴板"
+      },
+      "copyFailed": {
+        "title": "复制失败",
+        "description": "剪贴板访问被拒绝"
+      },
+      "loginUrlCopied": "登录 URL 已复制到剪贴板",
+      "warning": "警告",
+      "daemonStarted": "守护进程已启动",
+      "startDaemonFailed": "启动守护进程失败",
+      "connected": "已连接！",
+      "joinedTailnet": "已作为 {{hostname}} 加入 tailnet",
+      "loginFailed": "登录失败",
+      "authFailed": "身份验证失败",
+      "loginUrlReady": "登录 URL 已就绪",
+      "loginUrlReadyDescription": "在浏览器中打开该 URL 以授权此节点。",
+      "interactiveLoginFailed": "交互式登录失败",
+      "configured": "已配置",
+      "configureFailed": "配置失败",
+      "disconnected": "已断开连接",
+      "disconnectFailed": "断开连接失败",
+      "reconnected": "已重新连接",
+      "reconnectFailed": "重新连接失败",
+      "loggedOut": "已登出",
+      "logoutFailed": "登出失败"
+    }
+  },
+  "VPNPage": {
+    "common": {
+      "error": "错误",
+      "cancel": "取消",
+      "delete": "删除",
+      "saving": "保存中...",
+      "ping": "Ping",
+      "connected": "已连接",
+      "offline": "离线",
+      "online": "在线",
+      "na": "不适用",
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    },
+    "reconnect": {
+      "resetToast": "重连已重置",
+      "resetFailed": "重置重连失败",
+      "retrying": "正在重连... 第 {{attempt}}/{{max}} 次尝试（{{seconds}}秒后重试）",
+      "exhausted": "自动重连已耗尽",
+      "reset": "重置"
+    },
+    "health": {
+      "title": "健康历史",
+      "uptime": "在线时长：",
+      "avg": "平均：{{value}}ms",
+      "max": "最大：{{value}}ms",
+      "loadError": "加载健康历史失败",
+      "noData": "此时间范围内无健康检查数据",
+      "healthy": "健康",
+      "unhealthy": "不健康",
+      "latency": "延迟："
+    },
+    "connectionCard": {
+      "endpoint": "端点：",
+      "localIp": "本地 IP：",
+      "latency": "延迟：",
+      "traffic": "流量：",
+      "uptime": "在线时长：",
+      "disconnectConfirm": "断开 VPN 连接“{{name}}”？",
+      "disconnect": "断开连接",
+      "connect": "连接",
+      "editAria": "编辑连接",
+      "deleteAria": "删除连接",
+      "hideHealth": "隐藏健康历史",
+      "showHealth": "显示健康历史"
+    },
+    "connectionForm": {
+      "updatedToast": "连接已更新",
+      "createdToast": "连接已创建",
+      "updatedDesc": "{{name}} 已成功更新。",
+      "createdDesc": "{{name}} 已成功创建。",
+      "saveFailed": "保存连接失败",
+      "editTitle": "编辑 VPN 连接",
+      "newTitle": "新建 VPN 连接",
+      "editDescription": "在下方更新连接设置。",
+      "newDescription": "配置一个连接到远程网络的新 VPN 连接。",
+      "connectionName": "连接名称",
+      "connectionNamePlaceholder": "例如：办公室 WireGuard",
+      "vpnProvider": "VPN 提供商",
+      "endpoint": "端点",
+      "port": "端口",
+      "localIp": "本地 IP",
+      "remoteIp": "远程 IP",
+      "allowedIps": "允许的 IP",
+      "allowedIpsHelp": "通过此隧道路由的 CIDR 列表，以逗号分隔。",
+      "dnsServers": "DNS 服务器",
+      "openvpnSettings": "OpenVPN 设置",
+      "configFilePath": "配置文件路径",
+      "ovpnConfigContent": "OpenVPN 配置 (.ovpn)",
+      "ovpnConfigContentHelp": "粘贴完整的 .ovpn 客户端配置（内联 ca/cert/key）。连接所必需。脚本/management 指令将被拒绝。",
+      "wireguardSettings": "WireGuard 设置",
+      "wgConfigContent": "WireGuard 配置",
+      "wgConfigContentHelp": "粘贴完整的 wg-quick 配置（Interface + Peer）。连接所必需。PostUp/PreUp/PostDown/PreDown 将被拒绝。",
+      "protocol": "协议",
+      "netbirdSettings": "Netbird 设置",
+      "setupKey": "设置密钥",
+      "setupKeyPlaceholder": "来自 Netbird 控制台的设置密钥",
+      "managementUrl": "管理 URL",
+      "updateConnection": "更新连接",
+      "createConnection": "创建连接"
+    },
+    "deleteDialog": {
+      "deletedToast": "连接已删除",
+      "deletedDesc": "{{name}} 已移除。",
+      "deleteFailed": "删除连接失败",
+      "title": "删除 VPN 连接",
+      "confirmPrefix": "确定要删除",
+      "confirmSuffix": "吗？此操作无法撤销。",
+      "deleting": "删除中..."
+    },
+    "tailscaleNode": {
+      "tailscaleIp": "Tailscale IP",
+      "publicIp": "公网 IP",
+      "os": "操作系统",
+      "relay": "中继",
+      "advertisedRoutes": "通告的路由：",
+      "tags": "标签："
+    },
+    "netbirdPeer": {
+      "ipAddress": "IP 地址",
+      "connection": "连接",
+      "directP2P": "直连 (P2P)",
+      "relay": "中继",
+      "relayWith": "中继 ({{relay}})",
+      "lastHandshake": "上次握手",
+      "routes": "路由："
+    },
+    "siteConfig": {
+      "updatedToast": "站点 VPN 已更新",
+      "updatedDesc": "已保存 {{name}} 的 VPN 配置。",
+      "saveFailed": "保存站点 VPN 配置失败",
+      "title": "为 {{name}} 配置 VPN",
+      "description": "设置 VPN 访问以连接到此站点网络中的设备。",
+      "vpnType": "VPN 类型",
+      "directNoVpn": "直连（无 VPN）",
+      "tailscaleHostname": "Tailscale 主机名",
+      "tailscaleHostnamePlaceholder": "例如：分支机构路由器",
+      "tailscaleHostnameHelp": "提供访问此站点网络的 Tailscale 机器名称。",
+      "wireguardInterface": "WireGuard 接口",
+      "peerId": "对等节点 ID",
+      "peerIdPlaceholder": "此站点的 Netbird 对等节点 ID",
+      "networkGroup": "网络组",
+      "remoteSubnets": "远程子网",
+      "remoteSubnetsHelp": "可通过此 VPN 连接访问的子网列表，以逗号分隔。",
+      "healthCheckIp": "健康检查 IP",
+      "healthCheckIpHelp": "用于 VPN 健康监测的 ping 目标 IP 地址。",
+      "saveConfiguration": "保存配置"
+    },
+    "templateDialog": {
+      "createdToast": "模板已创建",
+      "createdDesc": "{{name}} 已创建。",
+      "createFailed": "创建模板失败",
+      "title": "新建隧道模板",
+      "description": "创建可重用的站点到站点 VPN 隧道模板。",
+      "templateName": "模板名称",
+      "templateNamePlaceholder": "例如：分支 WireGuard S2S",
+      "vpnType": "VPN 类型",
+      "topology": "拓扑",
+      "topologyPointToPoint": "点对点",
+      "topologyHubSpoke": "中心辐射",
+      "topologyFullMesh": "全网状",
+      "defaultSubnets": "默认子网",
+      "defaultSubnetsHelp": "默认包含的 CIDR，以逗号分隔。",
+      "creating": "创建中...",
+      "createTemplate": "创建模板"
+    },
+    "toasts": {
+      "pingResult": "Ping 结果",
+      "reachable": "可达 ({{latency}}ms)",
+      "unreachable": "不可达",
+      "operationFailed": "操作失败",
+      "success": "成功",
+      "notice": "提示",
+      "actionFailed": "操作失败",
+      "tunnelAction": "隧道操作",
+      "tunnelRemoved": "隧道已移除",
+      "tunnelRemovedDesc": "隧道已拆除。",
+      "teardownFailed": "拆除失败",
+      "certScanComplete": "证书扫描完成",
+      "certScanCompleteDesc": "已扫描 {{scanned}} 个证书，更新 {{updated}} 个，错误 {{errors}} 个。",
+      "certScanFailed": "证书扫描失败"
+    },
+    "wsEvents": {
+      "connectionDown": "VPN 连接断开",
+      "connectionDownNamed": "{{name}} 已断开连接。",
+      "connectionDownGeneric": "一个 VPN 连接已断开。",
+      "connectionRestored": "VPN 连接已恢复",
+      "connectionRestoredNamed": "{{name}} 已重新上线。",
+      "connectionRestoredGeneric": "一个 VPN 连接已恢复。",
+      "healthDegraded": "VPN 健康状况下降",
+      "healthDegradedGeneric": "VPN 健康状况已下降。",
+      "tunnelStatusChanged": "隧道状态已变更",
+      "tunnelStatusChangedNamed": "{{name}} 现在为 {{status}}。",
+      "tunnelStatusChangedGeneric": "一个 VPN 隧道的状态已变更。",
+      "updated": "已更新",
+      "reconnectStarted": "重连已开始",
+      "reconnectStartedNamed": "正在尝试重连 {{name}}...",
+      "reconnectStartedGeneric": "VPN 重连尝试已开始。",
+      "reconnectFailed": "重连失败",
+      "reconnectFailedNamed": "{{name}} 的所有重连尝试均已耗尽。",
+      "reconnectFailedGeneric": "VPN 重连尝试已耗尽。"
+    },
+    "eventColumns": {
+      "time": "时间",
+      "type": "类型",
+      "severity": "严重程度",
+      "title": "标题",
+      "site": "站点"
+    },
+    "header": {
+      "title": "VPN 管理",
+      "description": "通过 Tailscale、WireGuard、OpenVPN 和 Netbird 管理 VPN 隧道，实现远程站点访问"
+    },
+    "errors": {
+      "someDataFailed": "部分数据加载失败。结果可能不完整。"
+    },
+    "coexistence": {
+      "title": "已同时配置 Tailscale 和 NetBird",
+      "body": "两个覆盖网络都使用 100.64.0.0/10 网段，在同一主机上可能冲突。FreeSDN 会自动以 --netfilter-mode=off 运行 Tailscale 使其共存。权衡：关闭 netfilter 后，Tailscale 的出口节点（exit-node）和子网路由将无法工作；如需使用，请设置 FREESDN_TAILSCALE_NETFILTER_MODE=on 并接受与 NetBird 冲突的风险。如果某个网络中的设备无法访问，请重新连接 Tailscale，并避免两个网络之间的对等 IP 重叠。"
+    },
+    "stats": {
+      "activeConnections": "活动连接",
+      "activeConnectionsDesc": "共 {{total}} 个已配置",
+      "peersOnline": "{{count}} 个对等节点在线",
+      "peersConnected": "{{count}} 个对等节点已连接",
+      "onlinePeers": "在线对等节点",
+      "onlinePeersDesc": "跨所有提供商",
+      "sitesWithVpn": "已启用 VPN 的站点",
+      "sitesWithVpnDesc": "已配置的站点"
+    },
+    "providers": {
+      "tailscale": "Tailscale",
+      "netbird": "Netbird",
+      "wireguard": "WireGuard",
+      "openvpn": "OpenVPN",
+      "meshVpn": "网状 VPN",
+      "p2pMesh": "P2P 网状",
+      "tunnelVpn": "隧道 VPN",
+      "classicVpn": "经典 VPN",
+      "activeCount": "{{count}} 个活动",
+      "tunnelsConfigured": "{{count}} 个隧道已配置",
+      "connectionsConfigured": "{{count}} 个连接已配置"
+    },
+    "overview": {
+      "tailscaleNetwork": "Tailscale 网络",
+      "hostname": "主机名：",
+      "tailscaleIp": "Tailscale IP：",
+      "tailnet": "Tailnet：",
+      "magicDns": "Magic DNS：",
+      "netbirdNetwork": "Netbird 网络",
+      "ip": "IP：",
+      "fqdn": "FQDN：",
+      "interface": "接口：",
+      "peers": "对等节点：",
+      "allConnections": "所有 VPN 连接",
+      "emptyTitle": "暂无 VPN 连接",
+      "emptyDescription": "尚未配置任何 VPN 连接。创建您的第一个连接以开始管理远程网络访问。",
+      "emptyAction": "创建第一个连接"
+    },
+    "actions": {
+      "newConnection": "新建连接",
+      "createTemplate": "创建模板"
+    },
+    "connections": {
+      "heading": "VPN 连接",
+      "subtitle": "创建、编辑和管理跨提供商的所有 VPN 连接。",
+      "emptyTitle": "暂无 VPN 连接",
+      "emptyDescription": "添加 VPN 连接以管理 Tailscale、WireGuard、OpenVPN 或 Netbird 隧道，实现远程网络访问。",
+      "emptyAction": "创建连接"
+    },
+    "tabs": {
+      "overview": "概览",
+      "connections": "连接",
+      "discovery": "发现",
+      "sites": "站点配置",
+      "events": "事件",
+      "metrics": "指标",
+      "tunnels": "隧道",
+      "topology": "拓扑",
+      "conflicts": "路由冲突",
+      "certificates": "证书"
+    },
+    "overlayDiscovery": {
+      "heading": "在你的网格中发现",
+      "subtitle": "在已连接的覆盖网络（Tailscale / NetBird）上发现的设备。采纳以进行管理，或忽略它。",
+      "refresh": "刷新",
+      "loadError": "加载覆盖网络发现失败。",
+      "emptyTitle": "未发现设备",
+      "emptyOffBody": "未连接覆盖网络。启用 VPN 提供商（Tailscale 或 NetBird），以便 FreeSDN 查看你网格中的设备。",
+      "emptyOnBody": "尚未在你的网格中发现其他设备。新的对等节点将自动显示在此处。",
+      "noSiteTitle": "请先选择站点",
+      "noSiteBody": "在采纳已发现的设备之前，请在顶部栏中选择一个站点。",
+      "ignoredTitle": "已忽略设备"
+    },
+    "tailscaleTab": {
+      "tailnetPeers": "Tailnet 对等节点",
+      "emptyTitle": "暂无 Tailscale 对等节点",
+      "emptyDescription": "没有其他设备连接到您的 Tailscale 网络。在远程站点设备上安装 Tailscale 以启用安全的网状网络。"
+    },
+    "netbirdTab": {
+      "connectedNoPeersTitle": "Netbird 已连接 · 无对等节点",
+      "connectedNoPeersDescription": "您的 Netbird 客户端已连接，但没有可用的对等节点。将机器添加到您的 Netbird 网络中即可在此处看到它们。",
+      "notConnectedTitle": "Netbird 未连接",
+      "notConnectedDescription": "安装并连接 Netbird 以启用点对点网状网络。Netbird 提供基于 WireGuard 的连接和零配置网络。",
+      "getNetbird": "获取 Netbird"
+    },
+    "sitesTab": {
+      "heading": "站点 VPN 配置",
+      "subtitle": "为每个站点配置 VPN 访问，以启用远程设备发现和管理。",
+      "noAddress": "未配置地址",
+      "configureVpn": "配置 VPN",
+      "emptyTitle": "未配置站点",
+      "emptyDescription": "请先创建站点，然后为每个站点的网络配置 VPN 访问。"
+    },
+    "eventsTab": {
+      "heading": "VPN 事件",
+      "subtitle": "所有 VPN 连接和隧道的实时事件日志。",
+      "severityLabel": "严重程度：",
+      "loadError": "加载 VPN 事件失败。",
+      "searchPlaceholder": "搜索事件...",
+      "emptyTitle": "暂无 VPN 事件",
+      "emptyDescription": "未记录任何事件。VPN 连接状态变化时将显示事件。",
+      "emptyDescriptionFiltered": "未记录严重程度为“{{severity}}”的事件。VPN 连接状态变化时将显示事件。"
+    },
+    "severity": {
+      "all": "全部",
+      "info": "信息",
+      "warning": "警告",
+      "error": "错误",
+      "critical": "严重"
+    },
+    "metricsTab": {
+      "heading": "VPN 指标",
+      "subtitle": "所有 VPN 连接的聚合流量和延迟指标。",
+      "loadError": "加载 VPN 指标失败。",
+      "totalRx": "总接收",
+      "totalRxDesc": "接收的总数据量",
+      "totalTx": "总发送",
+      "totalTxDesc": "发送的总数据量",
+      "avgLatency": "平均延迟",
+      "avgLatencyDesc": "跨所有连接",
+      "connections": "连接",
+      "connectionsDesc": "跟踪的活动连接",
+      "connectionsByProvider": "按提供商分类的连接",
+      "connectionCount": "{{count}} 个连接",
+      "rx": "RX：{{value}}",
+      "tx": "TX：{{value}}",
+      "latency": "延迟：{{value}}",
+      "emptyTitle": "暂无可用指标",
+      "emptyDescription": "连接处于活动状态并传输数据后，将显示 VPN 指标。"
+    },
+    "tunnelsTab": {
+      "heading": "站点到站点隧道",
+      "subtitle": "基于模板编排和管理站点到站点 VPN 隧道。",
+      "loadError": "加载隧道数据失败。",
+      "templates": "模板",
+      "created": "创建于 {{date}}",
+      "subnetCount": "{{count}} 个子网",
+      "noTemplates": "尚无隧道模板。创建一个模板以开始。",
+      "activeTunnels": "活动隧道",
+      "enable": "启用",
+      "disable": "禁用",
+      "disableConfirm": "禁用此隧道？流量将停止传输。",
+      "teardownConfirm": "拆除 {{siteA}} 与 {{siteB}} 之间的隧道？",
+      "siteA": "站点 A",
+      "siteB": "站点 B",
+      "teardownAria": "拆除隧道",
+      "provisioned": "配置于 {{date}}",
+      "lastCheck": "上次检查 {{date}}",
+      "emptyTitle": "暂无站点到站点隧道",
+      "emptyDescription": "请先创建隧道模板，然后在站点之间配置隧道。"
+    },
+    "conflictsTab": {
+      "loadError": "加载路由冲突数据失败。",
+      "heading": "路由冲突分析",
+      "sourcesScanned": "已扫描 {{count}} 个来源",
+      "noConflictsTitle": "未检测到路由冲突",
+      "noConflictsDescription": "所有 VPN 路由均正常，无重叠子网。",
+      "colSubnet": "子网",
+      "colSourceA": "来源 A",
+      "colSourceB": "来源 B",
+      "colSeverity": "严重程度",
+      "colOverlapType": "重叠类型"
+    },
+    "certsTab": {
+      "loadError": "加载证书数据失败。",
+      "heading": "证书到期跟踪",
+      "scanning": "扫描中...",
+      "scanCertificates": "扫描证书",
+      "emptyTitle": "未找到证书",
+      "emptyDescription": "运行证书扫描以发现并跟踪 VPN 证书的到期日期。",
+      "colSite": "站点",
+      "colVpnType": "VPN 类型",
+      "colSubject": "主题",
+      "colExpiresAt": "到期时间",
+      "colDaysRemaining": "剩余天数",
+      "colSeverity": "严重程度"
+    }
+  },
+  "VPNTopologyTab": {
+    "tunnelCount": {
+      "one": "{{count}} 条隧道",
+      "other": "{{count}} 条隧道"
+    },
+    "error": {
+      "title": "加载拓扑数据失败",
+      "description": "请确认 VPN 和站点 API 可访问，然后重试刷新。"
+    },
+    "empty": {
+      "title": "未配置 S2S 隧道",
+      "description": "创建隧道模板并配置站点到站点隧道，即可在此查看网络拓扑。"
+    },
+    "summary": {
+      "siteCount": {
+        "one": "{{count}} 个站点",
+        "other": "{{count}} 个站点"
+      },
+      "tunnelCount": {
+        "one": "{{count}} 条隧道",
+        "other": "{{count}} 条隧道"
+      },
+      "site": {
+        "one": "{{count}} 个站点",
+        "other": "{{count}} 个站点"
+      },
+      "tunnel": {
+        "one": "{{count}} 条隧道",
+        "other": "{{count}} 条隧道"
+      }
+    }
+  }
+}

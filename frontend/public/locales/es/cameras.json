@@ -1,0 +1,1170 @@
+{
+  "title": "Cámaras",
+  "streams": "Transmisiones",
+  "recordings": "Grabaciones",
+  "events": "Eventos",
+  "ptz": "Control PTZ",
+  "liveView": "Vista en vivo",
+  "playback": "Reproducción",
+  "cameraName": "Nombre de la cámara",
+  "resolution": "Resolución",
+  "fps": "FPS",
+  "codec": "Códec",
+  "status": "Estado",
+  "online": "En línea",
+  "offline": "Desconectada",
+  "recording": "Grabando",
+  "motionDetected": "Movimiento detectado",
+  "noMotion": "Sin movimiento",
+  "snapshot": "Captura",
+  "fullscreen": "Pantalla completa",
+  "pan": "Paneo",
+  "tilt": "Inclinación",
+  "zoom": "Zoom",
+  "preset": "Preajuste",
+  "nvrSettings": "Configuración del NVR",
+  "retentionDays": "Retención (días)",
+  "storageUsed": "Almacenamiento usado",
+  "wall": {
+    "replay": {
+      "forbidden": "La repetición instantánea requiere el rol de administrador del sitio",
+      "forbiddenDetail": "Necesitas al menos el rol de administrador del sitio para usar la repetición instantánea. Contacta a tu administrador para obtener acceso.",
+      "failed": "Error en la repetición instantánea"
+    }
+  },
+  "CameraDetailPage": {
+    "common": {
+      "yes": "Sí",
+      "no": "No",
+      "enabled": "Activado",
+      "disabled": "Desactivado"
+    },
+    "notFound": {
+      "title": "Cámara no encontrada",
+      "description": "La cámara que buscas no existe o ha sido eliminada.",
+      "backToCameras": "Volver a Cámaras"
+    },
+    "header": {
+      "channel": "Canal {{channel}}",
+      "back": "Volver"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "liveView": "Vista en vivo",
+      "ptz": "PTZ",
+      "image": "Imagen",
+      "recordings": "Grabaciones",
+      "events": "Eventos",
+      "detection": "Detección",
+      "schedule": "Programación",
+      "health": "Estado",
+      "access": "Acceso"
+    },
+    "status": {
+      "online": "En línea",
+      "offline": "Sin conexión",
+      "recording": "Grabando",
+      "error": "Error",
+      "unknown": "Desconocido"
+    },
+    "overview": {
+      "deviceInformation": "Información del dispositivo",
+      "resolution": "Resolución",
+      "fields": {
+        "name": "Nombre",
+        "ipAddress": "Dirección IP",
+        "port": "Puerto",
+        "macAddress": "Dirección MAC",
+        "vendor": "Fabricante",
+        "model": "Modelo",
+        "firmware": "Firmware",
+        "serialNumber": "Número de serie",
+        "cameraType": "Tipo de cámara",
+        "deviceType": "Tipo de dispositivo",
+        "location": "Ubicación",
+        "floor": "Piso",
+        "nvrChannel": "Canal NVR",
+        "lastSeen": "Visto por última vez",
+        "created": "Creado"
+      },
+      "capabilities": {
+        "title": "Capacidades",
+        "ptz": "PTZ",
+        "audio": "Audio",
+        "twoWayAudio": "Audio bidireccional",
+        "infrared": "Infrarrojo",
+        "motionDetection": "Detección de movimiento",
+        "recording": "Grabación"
+      },
+      "streamUrls": {
+        "title": "URL de transmisión",
+        "mainStream": "Transmisión principal",
+        "subStream": "Transmisión secundaria"
+      },
+      "encryption": {
+        "title": "Cifrado de transmisión",
+        "description": "Si el cifrado de transmisión está habilitado en esta cámara/NVR Hikvision, ingresa la clave de cifrado para descifrar la transmisión RTSP.",
+        "keyLabel": "Clave de cifrado",
+        "keyPlaceholder": "Ingresa la clave de cifrado (hex)",
+        "saveKey": "Guardar clave",
+        "removeKey": "Eliminar clave",
+        "saved": "Guardado",
+        "keyConfigured": "Clave de cifrado configurada",
+        "savedToast": "Clave de cifrado guardada",
+        "saveFailedToast": "No se pudo guardar la clave de cifrado"
+      }
+    },
+    "stream": {
+      "connecting": "Conectando a la transmisión...",
+      "mainStreamHd": "Transmisión principal (HD)",
+      "subStreamSd": "Transmisión secundaria (SD)",
+      "unavailable": "Transmisión no disponible",
+      "retry": "Reintentar",
+      "offline": "Cámara sin conexión",
+      "unableToConnect": "No se puede conectar a la transmisión",
+      "switchToSub": "Cambiar a transmisión secundaria (SD)",
+      "switchToMain": "Cambiar a transmisión principal (HD)",
+      "downloadSnapshot": "Descargar instantánea"
+    },
+    "ptz": {
+      "control": "Control PTZ",
+      "zoom": "Zoom",
+      "speed": "Velocidad",
+      "presets": "Posiciones predefinidas",
+      "presetName": "Posición {{id}}",
+      "noPresets": "No hay posiciones predefinidas configuradas",
+      "commandFailed": "El comando PTZ falló"
+    },
+    "image": {
+      "title": "Ajustes de imagen",
+      "unsaved": "Sin guardar",
+      "loading": "Cargando ajustes de imagen...",
+      "unavailable": "No se pueden cargar los ajustes de imagen. Es posible que esta cámara no admita el ajuste de imagen.",
+      "retry": "Reintentar",
+      "brightness": "Brillo",
+      "contrast": "Contraste",
+      "saturation": "Saturación",
+      "sharpness": "Nitidez",
+      "hue": "Tono",
+      "exposureMode": "Modo de exposición",
+      "irCutFilter": "Filtro de corte IR",
+      "backlight": "Contraluz",
+      "wdr": "WDR",
+      "noiseReduction": "Reducción de ruido",
+      "reset": "Restablecer",
+      "save": "Guardar",
+      "saveError": "No se pudieron guardar los ajustes. Inténtalo de nuevo.",
+      "saveSuccess": "Ajustes guardados correctamente.",
+      "saveFailedToast": "No se pudieron guardar los ajustes de imagen"
+    },
+    "recordings": {
+      "exportClip": {
+        "title": "Exportar clip de video",
+        "start": "Inicio",
+        "end": "Fin",
+        "exporting": "Exportando…",
+        "downloadClip": "Descargar clip",
+        "downloadSuccess": "¡Clip descargado correctamente!",
+        "duration": "Duración",
+        "maxHours": "(máx. 4 horas)",
+        "watermark": "Grabar marca de cadena de custodia",
+        "custodyHint": "Con la marca activada, el operador y la hora de exportación se graban en el clip y la exportación queda registrada en la auditoría. Desactívela para descargar la grabación original del NVR sin cambios."
+      },
+      "evidence": {
+        "title": "Retenciones de evidencia",
+        "hold": "Retener como evidencia",
+        "holdHint": "Copia esta ventana de tiempo del NVR a un almacenamiento a prueba de manipulaciones con un hash SHA-256 (retención legal)",
+        "held": "Retención de evidencia creada, archivando en segundo plano",
+        "holdFailed": "No se pudo crear la retención de evidencia",
+        "statusReady": "Sellado",
+        "statusArchiving": "Archivando…",
+        "statusFailed": "Falló",
+        "watermarked": "con marca",
+        "download": "Descargar copia sellada",
+        "release": "Liberar retención (eliminar archivo)",
+        "confirmRelease": "¿Liberar esta retención de evidencia? La copia archivada y su hash se eliminarán permanentemente.",
+        "hint": "Las retenciones son copias duraderas del lado del servidor, selladas con un hash SHA-256 para la cadena de custodia. Sobreviven a la rotación de retención del NVR y quedan registradas en la auditoría."
+      },
+      "list": {
+        "title": "Grabaciones",
+        "startDate": "Fecha de inicio",
+        "endDate": "Fecha de fin",
+        "to": "a",
+        "unknown": "Desconocido",
+        "durationLabel": "Duración",
+        "exportThisClip": "Exportar este clip",
+        "empty": "No se encontraron grabaciones para este período",
+        "notSupported": "La búsqueda de grabaciones no es compatible con el NVR de esta cámara"
+      },
+      "errors": {
+        "endAfterStart": "La hora de fin debe ser posterior a la hora de inicio",
+        "maxDuration": "La duración máxima del clip es de 4 horas",
+        "exportFailed": "Error al exportar"
+      }
+    }
+  },
+  "CameraDisplayWall": {
+    "toolbar": {
+      "fill": "Llenar ({{count}})",
+      "snapshots": "Instantáneas",
+      "live": "En vivo"
+    },
+    "status": {
+      "summary": "{{active}} activas · {{online}}/{{total}} en línea"
+    },
+    "display": {
+      "heading": "Visualización",
+      "cameraLabels": "Etiquetas de cámara",
+      "clockOverlay": "Superposición de reloj"
+    },
+    "streamQuality": {
+      "heading": "Calidad de transmisión",
+      "sub": "Flujo secundario (rápido)",
+      "main": "Flujo principal (HD)"
+    },
+    "shortcuts": {
+      "heading": "Atajos",
+      "row1": "F · Pantalla completa · L · En vivo/Instantánea · H · Etiquetas",
+      "row2": "← → · Páginas · Esc · Salir del enfoque"
+    },
+    "empty": {
+      "title": "No hay cámaras en pantalla",
+      "autoFill": "Llenar automáticamente con cámaras en línea"
+    }
+  },
+  "CamerasPage": {
+    "title": "Cámaras",
+    "headerDescription": "{{total}} cámaras · {{online}} en línea",
+    "searchPlaceholder": "Buscar cámaras...",
+    "unknown": "Desconocido",
+    "unknownCamera": "Cámara desconocida",
+    "itemNameCameras": "cámaras",
+    "itemNameCamera": "cámara",
+    "snapshot": {
+      "alt": "miniatura de cámara"
+    },
+    "status": {
+      "online": "En línea",
+      "offline": "Desconectada",
+      "recording": "Grabando",
+      "error": "Error",
+      "unknown": "Desconocido"
+    },
+    "features": {
+      "audio": "Audio"
+    },
+    "card": {
+      "healthTitle": "{{fps}} fps · {{kbps}} kbps"
+    },
+    "actions": {
+      "liveView": "Vista en vivo",
+      "cancel": "Cancelar",
+      "saving": "Guardando...",
+      "update": "Actualizar",
+      "create": "Crear",
+      "saveView": "Guardar vista",
+      "displayWall": "Muro de pantallas",
+      "multiPlayback": "Multirreproducción",
+      "liveWall": "Muro en vivo",
+      "select": "Seleccionar",
+      "addCamera": "Agregar cámara",
+      "views": "Vistas",
+      "retry": "Reintentar",
+      "refresh": "Actualizar",
+      "detail": "Detalle",
+      "ptzControl": "Control PTZ",
+      "settings": "Configuración",
+      "delete": "Eliminar",
+      "deleteViewAria": "Eliminar vista {{name}}"
+    },
+    "groupDialog": {
+      "editTitle": "Editar grupo",
+      "createTitle": "Crear grupo de cámaras",
+      "nameLabel": "Nombre del grupo",
+      "namePlaceholder": "p. ej. Estacionamiento",
+      "descriptionLabel": "Descripción",
+      "optional": "(opcional)",
+      "descriptionPlaceholder": "Descripción breve...",
+      "colorLabel": "Color",
+      "selectCameras": "Seleccionar cámaras",
+      "selectedCount": "{{count}} seleccionadas",
+      "deselectAll": "Deseleccionar todo",
+      "selectAll": "Seleccionar todo ({{count}})",
+      "clearSelection": "Borrar selección",
+      "noMatchTitle": "Ninguna cámara coincide con los filtros",
+      "noMatchDescription": "Intenta ajustar tu búsqueda o los criterios de filtro.",
+      "selectColor": "Seleccionar color {{color}}"
+    },
+    "saveViewDialog": {
+      "title": "Guardar vista personalizada",
+      "nameLabel": "Nombre de la vista",
+      "namePlaceholder": "p. ej. Entrada principal",
+      "shareLabel": "Compartir con el equipo",
+      "summary": "Diseño: {{layout}} · {{count}} cámara(s)"
+    },
+    "sidebar": {
+      "groups": "Grupos",
+      "allCameras": "Todas las cámaras",
+      "newGroup": "Nuevo grupo",
+      "filters": "Filtros",
+      "deleteGroupAria": "Eliminar grupo {{name}}"
+    },
+    "filters": {
+      "all": "Todas",
+      "allNvrs": "Todos los NVR",
+      "standalone": "Independiente",
+      "allStatus": "Todos los estados",
+      "statusLabel": "Estado",
+      "allStatuses": "Todos los estados",
+      "vendorLabel": "Fabricante",
+      "allVendors": "Todos los fabricantes",
+      "floorLabel": "Piso",
+      "allFloors": "Todos los pisos",
+      "zoneLabel": "Zona",
+      "allZones": "Todas las zonas",
+      "featuresLabel": "Funciones",
+      "ptzOnly": "Solo PTZ",
+      "audioOnly": "Solo audio",
+      "clearFilters": "Borrar filtros"
+    },
+    "tabs": {
+      "dashboard": "Panel",
+      "list": "Lista"
+    },
+    "viewModes": {
+      "grid": "Cuadrícula",
+      "liveWall": "Muro en vivo",
+      "events": "Eventos",
+      "health": "Estado",
+      "fleetHealth": "Estado de la flota"
+    },
+    "stats": {
+      "totalCameras": "Total de cámaras",
+      "allRegistered": "Todas registradas",
+      "online": "En línea",
+      "reachable": "{{percent}}% accesibles",
+      "noCameras": "Sin cámaras",
+      "recording": "Grabando",
+      "activelyRecording": "Grabando activamente",
+      "issues": "Problemas",
+      "issuesDescription": "{{offline}} desconectadas · {{errors}} errores"
+    },
+    "columns": {
+      "camera": "Cámara",
+      "ipAddress": "Dirección IP",
+      "location": "Ubicación",
+      "status": "Estado",
+      "features": "Funciones"
+    },
+    "error": {
+      "loadCamerasTitle": "No se pudieron cargar las cámaras",
+      "unexpected": "Ocurrió un error inesperado."
+    },
+    "empty": {
+      "noCamerasTitle": "No se encontraron cámaras",
+      "noCamerasDescription": "Ajusta tus filtros o agrega una nueva cámara."
+    },
+    "pagination": {
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "pageOf": "{{current}} de {{total}}",
+      "cameraCount": "({{count}} cámaras)",
+      "cameraTotal": "{{count}} cámaras",
+      "serverPage": "conjunto {{current}}/{{total}}",
+      "range": "{{from}}-{{to}} de {{total}}"
+    },
+    "events": {
+      "eventTypePlaceholder": "Tipo de evento",
+      "allTypes": "Todos los tipos",
+      "types": {
+        "motion": "Movimiento",
+        "lineCross": "Cruce de línea",
+        "intrusion": "Intrusión",
+        "tamper": "Manipulación",
+        "videoLoss": "Pérdida de video",
+        "faceDetect": "Detección de rostro",
+        "audioDetect": "Detección de audio",
+        "face": "Rostro"
+      },
+      "unacknowledged": "Sin confirmar",
+      "acknowledged": "Confirmado",
+      "acknowledgeN": "Confirmar {{count}}",
+      "loadFailed": "No se pudieron cargar los eventos.",
+      "emptyTitle": "Sin eventos",
+      "emptyDescription": "Los eventos de las cámaras aparecerán aquí cuando se detecten.",
+      "ack": "Conf.",
+      "acknowledge": "Confirmar"
+    },
+    "health": {
+      "loadFailed": "No se pudieron cargar los datos de estado de la flota.",
+      "total": "Total",
+      "avgBitrate": "Tasa de bits promedio",
+      "totalBandwidth": "Ancho de banda total",
+      "perCameraTitle": "Estado por cámara",
+      "healthy": "Saludable",
+      "degraded": "Degradada",
+      "emptyTitle": "Sin cámaras",
+      "emptyDescription": "Agrega cámaras para ver las métricas de estado."
+    },
+    "templates": {
+      "title": "Plantillas de grabación",
+      "newTemplate": "Nueva plantilla",
+      "namePrompt": "Nombre de la plantilla:",
+      "descriptionPrompt": "Descripción (opcional):",
+      "empty": "No hay plantillas de grabación. Crea una para aplicar horarios a las cámaras de forma masiva.",
+      "builtIn": "Integrada",
+      "applyToSelected": "Aplicar a {{count}} seleccionadas",
+      "deleteTemplateAria": "Eliminar plantilla {{name}}",
+      "createDialogTitle": "Nueva plantilla de grabación",
+      "createDialogDescription": "Cree una plantilla que pueda aplicar a las cámaras de forma masiva.",
+      "nameLabel": "Nombre de la plantilla",
+      "namePlaceholder": "p. ej., 24/7 continuo",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": "Breve descripción..."
+    },
+    "bulk": {
+      "openInLiveWall": "Abrir en el muro en vivo",
+      "assignGroup": "Asignar grupo",
+      "noGroups": "Sin grupos · crea uno primero"
+    },
+    "confirm": {
+      "deleteGroup": "¿Eliminar el grupo \"{{name}}\"?",
+      "deleteView": "¿Eliminar la vista \"{{name}}\"?",
+      "deleteTemplate": "¿Eliminar la plantilla \"{{name}}\"?",
+      "deleteCameras": "¿Eliminar {{count}} cámara(s)? Esta acción no se puede deshacer."
+    },
+    "eventToasts": {
+      "motion": "Movimiento detectado",
+      "lineCross": "Cruce de línea",
+      "intrusion": "Intrusión detectada",
+      "tamper": "Manipulación de cámara",
+      "videoLoss": "Señal de video perdida",
+      "faceDetect": "Rostro detectado",
+      "audioDetect": "Audio detectado",
+      "genericEvent": "Evento de cámara"
+    },
+    "toasts": {
+      "updateGroupFailed": "No se pudo actualizar el grupo",
+      "createGroupFailed": "No se pudo crear el grupo",
+      "saveViewFailed": "No se pudo guardar la vista",
+      "deleteGroupFailed": "No se pudo eliminar el grupo",
+      "deleteViewFailed": "No se pudo eliminar la vista",
+      "ackEventFailed": "No se pudo confirmar el evento",
+      "eventsAcknowledged": "{{count}} evento(s) confirmado(s)",
+      "ackEventsFailed": "No se pudieron confirmar los eventos",
+      "templateDeleted": "Plantilla eliminada",
+      "deleteTemplateFailed": "No se pudo eliminar la plantilla",
+      "camerasDeleted": "{{count}} cámara(s) eliminada(s)",
+      "camerasDeletedPartial": "{{succeeded}} de {{total}} eliminadas, {{failed}} fallaron",
+      "deleteCamerasFailed": "No se pudieron eliminar las cámaras",
+      "camerasAddedToGroup": "Cámaras añadidas al grupo",
+      "assignGroupFailed": "No se pudieron asignar las cámaras al grupo",
+      "templateCreated": "Plantilla \"{{name}}\" creada",
+      "createTemplateFailed": "No se pudo crear la plantilla",
+      "scheduleApplied": "Horario aplicado a {{count}} cámara(s)",
+      "applyScheduleFailed": "No se pudo aplicar el horario"
+    },
+    "deleteDialog": {
+      "groupTitle": "¿Eliminar grupo?",
+      "groupDescription": "¿Eliminar el grupo \"{{name}}\"? Esto no se puede deshacer.",
+      "viewTitle": "¿Eliminar vista guardada?",
+      "viewDescription": "¿Eliminar la vista \"{{name}}\"? Esto no se puede deshacer.",
+      "templateTitle": "¿Eliminar plantilla?",
+      "templateDescription": "¿Eliminar la plantilla \"{{name}}\"? Esto no se puede deshacer.",
+      "bulkTitle": "¿Eliminar cámaras?",
+      "bulkDescription": "¿Eliminar {{count}} cámara(s)? Esto no se puede deshacer."
+    }
+  },
+  "CameraWallPage": {
+    "title": "Muro de cámaras",
+    "description": "{{count}} cámaras disponibles",
+    "actions": {
+      "displayMode": "Modo de visualización",
+      "backToCameras": "Volver a cámaras"
+    },
+    "errors": {
+      "loadFailed": "Error al cargar las cámaras."
+    }
+  },
+  "CameraWallPopout": {
+    "documentTitle": "Muro de cámaras",
+    "loading": "Cargando cámaras...",
+    "error": "No se pudieron cargar las cámaras. Verifica tu conexión y vuelve a cargar."
+  },
+  "MultiPlaybackPage": {
+    "header": {
+      "title": "Reproducción multicámara",
+      "description": "Reproducción de grabaciones sincronizada para investigación de incidentes"
+    },
+    "actions": {
+      "backToCameras": "Volver a cámaras"
+    },
+    "error": {
+      "loadFailed": "Error al cargar las cámaras."
+    },
+    "empty": {
+      "title": "Seleccione cámaras para comenzar",
+      "description": "Elija hasta 4 cámaras de la barra lateral para iniciar la reproducción sincronizada"
+    },
+    "status": {
+      "online": "En línea",
+      "offline": "Desconectada"
+    },
+    "cell": {
+      "cameraOffline": "Cámara desconectada",
+      "streamError": "Error de transmisión",
+      "noRecording": "Sin grabación en este momento"
+    },
+    "picker": {
+      "title": "Cámaras",
+      "searchPlaceholder": "Buscar cámaras...",
+      "active": "Activa",
+      "noCamerasFound": "No se encontraron cámaras"
+    },
+    "controls": {
+      "back1Minute": "Retroceder 1 minuto",
+      "back10Seconds": "Retroceder 10 segundos",
+      "forward10Seconds": "Avanzar 10 segundos",
+      "forward1Minute": "Avanzar 1 minuto"
+    },
+    "timeline": {
+      "shared": "Línea de tiempo compartida"
+    },
+    "ranges": {
+      "1h": "1 hora",
+      "4h": "4 horas",
+      "12h": "12 horas",
+      "24h": "24 horas",
+      "3d": "3 días",
+      "7d": "7 días"
+    },
+    "mode": {
+      "label": "Modo de reproducción",
+      "smooth": "Fluido",
+      "frames": "Fotogramas",
+      "smoothHint": "Fluido usa vídeo HLS (NVR tipo Hikvision); Fotogramas avanza instantáneas JPEG por segundo y funciona en todos los NVR. Las cámaras que no admiten reproducción fluida vuelven a Fotogramas automáticamente."
+    },
+    "evidence": {
+      "title": "Exportar evidencia",
+      "camerasInGrid": "en la cuadrícula",
+      "start": "Inicio",
+      "duration": "Duración",
+      "watermark": "Marca de agua",
+      "holdN": "Retener {{count}} cámaras",
+      "hint": "Sella la misma ventana de cada cámara de la cuadrícula en almacenamiento a prueba de manipulaciones con un hash SHA-256, un clip por cámara, cadena de custodia válida en tribunales.",
+      "held": "Retención de evidencia creada para {{count}} cámaras, archivando en segundo plano",
+      "failed": "No se pudieron crear las retenciones de evidencia",
+      "releaseFailed": "No se pudo liberar la retención de evidencia",
+      "holdsTitle": "Retenciones de estas cámaras",
+      "downloadBundle": "Descargar paquete ({{count}})"
+    }
+  },
+  "CameraReportsPage": {
+    "title": "Informes de cámaras",
+    "description": "Resúmenes diarios del sistema de cámaras: tiempo activo, cámaras en línea y volumen de eventos",
+    "dailySummary": "Resumen diario",
+    "uptime": "tiempo activo",
+    "online": "en línea",
+    "events24h": "eventos (24 h)",
+    "samples": "muestras",
+    "generated": "Generado",
+    "empty": {
+      "title": "Aún no hay informes",
+      "description": "Se genera automáticamente un resumen diario cada noche una vez que las cámaras reportan su estado."
+    },
+    "error": {
+      "title": "No se pudieron cargar los informes",
+      "description": "Hubo un problema al obtener los informes de cámaras."
+    }
+  },
+  "NVRDetailPage": {
+    "common": {
+      "yes": "Sí",
+      "no": "No"
+    },
+    "timeAgo": {
+      "never": "nunca",
+      "justNow": "ahora mismo",
+      "minutes": "hace {{n}} min",
+      "hours": "hace {{n}} h",
+      "days": "hace {{n}} d"
+    },
+    "status": {
+      "online": "En línea",
+      "offline": "Desconectado",
+      "recording": "Grabando",
+      "rebooting": "Reiniciando",
+      "error": "Error",
+      "unknown": "Desconocido"
+    },
+    "smart": {
+      "unknown": "Desconocido",
+      "healthy": "Correcto",
+      "warning": "Advertencia",
+      "critical": "Crítico"
+    },
+    "notFound": {
+      "title": "NVR no encontrado",
+      "description": "No se pudo cargar el NVR solicitado.",
+      "back": "Volver a NVR"
+    },
+    "actions": {
+      "sync": "Sincronizar",
+      "syncing": "Sincronizando…",
+      "settings": "Ajustes"
+    },
+    "menu": {
+      "refreshStorage": "Actualizar almacenamiento",
+      "refreshSystemInfo": "Actualizar info del sistema",
+      "rebootNvr": "Reiniciar NVR",
+      "deleteNvr": "Eliminar NVR"
+    },
+    "confirm": {
+      "reboot": "¿Reiniciar este NVR? Las transmisiones se interrumpirán.",
+      "delete": "¿Eliminar el NVR \"{{name}}\"? Esta acción no se puede deshacer."
+    },
+    "toasts": {
+      "syncSuccess": "NVR sincronizado correctamente",
+      "syncFailed": "Error al sincronizar el NVR",
+      "deleteFailed": "Error al eliminar el NVR",
+      "rebootSent": "Comando de reinicio enviado",
+      "rebootFailed": "Error en el comando de reinicio",
+      "encKeySaved": "Clave de cifrado guardada",
+      "encKeySaveFailed": "Error al guardar la clave de cifrado",
+      "searchFailed": "Error en la búsqueda de grabaciones",
+      "redactedUrlCopied": "URL redactada copiada al portapapeles",
+      "redactedUrlCopiedShort": "URL redactada copiada",
+      "saveSettingsFailed": "Error al guardar los ajustes del NVR"
+    },
+    "stats": {
+      "channels": "Canales",
+      "online": "En línea",
+      "offline": "Desconectados",
+      "recording": "Grabando",
+      "cpu": "CPU",
+      "storage": "Almacenamiento"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "channels": "Canales ({{n}})",
+      "storage": "Almacenamiento",
+      "network": "Red",
+      "playback": "Reproducción",
+      "channelStatus": "Estado de canales",
+      "holidays": "Días festivos"
+    },
+    "deviceInfo": {
+      "title": "Información del dispositivo",
+      "name": "Nombre",
+      "ipAddress": "Dirección IP",
+      "model": "Modelo",
+      "vendor": "Fabricante",
+      "firmware": "Firmware",
+      "serialNumber": "Número de serie",
+      "macAddress": "Dirección MAC",
+      "channelCapacity": "Capacidad de canales",
+      "deviceType": "Tipo de dispositivo",
+      "deviceId": "ID de dispositivo",
+      "hardwareVer": "Ver. de hardware",
+      "encoderVer": "Ver. de codificador",
+      "firmwareDate": "Fecha de firmware"
+    },
+    "health": {
+      "title": "Estado y salud",
+      "status": "Estado",
+      "lastSeen": "Visto por última vez",
+      "lastSynced": "Última sincronización",
+      "created": "Creado",
+      "cpu": "CPU",
+      "memory": "Memoria",
+      "storage": "Almacenamiento"
+    },
+    "time": {
+      "nvrClock": "Reloj del NVR",
+      "timeMode": "Modo de hora",
+      "manual": "Manual",
+      "ntpServer": "Servidor NTP"
+    },
+    "tracks": {
+      "title": "Pistas de grabación ({{n}})",
+      "trackId": "ID de pista",
+      "channel": "Canal",
+      "type": "Tipo",
+      "enabled": "Habilitada",
+      "loop": "Bucle",
+      "description": "Descripción",
+      "showingCount": "Mostrando {{shown}} de {{total}}",
+      "showAll": "Mostrar todo",
+      "showLess": "Mostrar menos"
+    },
+    "encryption": {
+      "title": "Cifrado de transmisión",
+      "configured": "Configurado",
+      "description": "Clave de cifrado compartida por todas las cámaras de este NVR. Se aplica a las URL de transmisión RTSP.",
+      "placeholder": "Introduzca la clave de cifrado hexadecimal",
+      "saveKey": "Guardar clave",
+      "remove": "Quitar",
+      "saved": "Guardado",
+      "saveError": "No se pudo guardar la clave de cifrado. Inténtelo de nuevo."
+    },
+    "channels": {
+      "empty": "No se encontraron canales. Intente sincronizar el NVR.",
+      "syncNow": "Sincronizar ahora",
+      "chShort": "CH {{n}}",
+      "audio": "Audio",
+      "rec": "REC",
+      "detailsTitle": "Detalles del canal",
+      "chHeader": "CH",
+      "name": "Nombre",
+      "status": "Estado",
+      "ipAddress": "Dirección IP",
+      "model": "Modelo",
+      "capabilities": "Capacidades",
+      "recording": "Grabación",
+      "loadError": "No se pudieron cargar los canales.",
+      "emptyTitle": "Sin canales",
+      "snapshotUrlCopied": "URL de instantánea copiada al portapapeles",
+      "snapshotUrlFailed": "No se pudo copiar la URL de la instantánea",
+      "exportCsv": "Exportar CSV",
+      "exportSelected": "Exportar seleccionados (CSV)",
+      "selectedCount": "{{n}} seleccionados",
+      "clearSelection": "Borrar",
+      "selectHint": "Seleccione canales para exportar, o use el menú de acciones de cada fila.",
+      "selectAllAria": "Seleccionar todos los canales",
+      "selectRowAria": "Seleccionar canal {{name}}",
+      "actions": "Acciones",
+      "rowActionsAria": "Acciones para {{name}}",
+      "actionViewLive": "Ver en vivo",
+      "actionOpenPlayback": "Abrir reproducción",
+      "actionCopySnapshot": "Copiar URL de instantánea",
+      "actionOpenDetail": "Abrir detalle del canal"
+    },
+    "storage": {
+      "realtimeTitle": "Almacenamiento y salud en tiempo real",
+      "disksDetected": "{{n}} disco(s) detectado(s)",
+      "disksNeedAttention": "· {{n}} disco(s) requieren atención",
+      "refresh": "Actualizar",
+      "totalCapacity": "Capacidad total",
+      "used": "Usado",
+      "free": "Libre",
+      "diskHealth": "Salud del disco",
+      "pctUtilised": "{{pct}}% utilizado",
+      "pctAvailable": "{{pct}}% disponible",
+      "issues": "{{n}} problema(s)",
+      "attentionRequired": "Requiere atención inmediata",
+      "allGood": "Todo correcto",
+      "disksHealthy": "{{n}} disco(s) en buen estado",
+      "usedValue": "{{value}} usado",
+      "freeValue": "{{value}} libre",
+      "freeOfTotal": "{{free}} libre de {{total}}",
+      "pctOfTotal": "{{pct}}% de {{total}}",
+      "utilisationRemaining": "{{pct}}% de uso · {{remaining}} restante",
+      "usedCached": "{{value}} usado (en caché)",
+      "totalValue": "{{value}} en total",
+      "cachedNote": "Valores en caché · haga clic en Actualizar para datos en vivo",
+      "unavailableOffline": "Datos de almacenamiento no disponibles. El NVR puede estar desconectado.",
+      "notAvailable": "Datos de almacenamiento no disponibles.",
+      "liveError": "No se pudieron cargar los datos de almacenamiento en vivo: las cifras siguientes pueden estar en caché o no disponibles."
+    },
+    "forecast": {
+      "title": "Previsión de almacenamiento",
+      "dailyRateLabel": "Tasa diaria estimada",
+      "dailyRateValue": "~{{value}} GB/día",
+      "daysRemainingLabel": "Días restantes",
+      "daysRemainingValue": "~{{n}} días",
+      "criticalTitle": "Almacenamiento críticamente bajo",
+      "criticalBody": "Considere habilitar la grabación solo por movimiento o ampliar la capacidad de almacenamiento.",
+      "mediumTip": "Consejo: Habilite la grabación solo por movimiento para extender la vida del almacenamiento a aproximadamente {{n}} días.",
+      "estimateBadge": "Estimación",
+      "estimateDisclaimer": "Estimado a partir de una sola muestra de uso, no de una tendencia medida. Tómelo como una guía aproximada.",
+      "daysRemainingValueEstimate": "~{{n}} días",
+      "watchBody": "El espacio libre estimado se está agotando. Vigile la utilización durante los próximos días antes de actuar."
+    },
+    "disks": {
+      "title": "Discos individuales ({{n}})",
+      "diskN": "Disco {{n}}",
+      "hddN": "HDD n.º {{n}}",
+      "typePrefix": "Tipo: {{value}}",
+      "propertyPrefix": "Propiedad: {{value}}",
+      "snPrefix": "N/S: {{value}}",
+      "statusUnknown": "desconocido",
+      "smartLabel": "S.M.A.R.T. {{status}}",
+      "temperature": "Temperatura",
+      "powerOnTime": "Tiempo encendido",
+      "model": "Modelo",
+      "serialNumber": "Número de serie",
+      "firmware": "Firmware",
+      "diskType": "Tipo de disco",
+      "property": "Propiedad",
+      "smartTest": "Prueba SMART",
+      "smartTestProgress": "{{pct}}% completado"
+    },
+    "smartTable": {
+      "title": "Atributos S.M.A.R.T. ({{n}})",
+      "id": "ID",
+      "attribute": "Atributo",
+      "current": "Actual",
+      "worst": "Peor",
+      "threshold": "Umbral",
+      "raw": "Bruto",
+      "status": "Estado",
+      "exportCsv": "Exportar CSV"
+    },
+    "network": {
+      "loading": "Cargando configuración de red…",
+      "offline": "El NVR está desconectado. Datos de red no disponibles.",
+      "timeNtpTitle": "Hora y NTP",
+      "deviceTime": "Hora del dispositivo",
+      "timeMode": "Modo de hora",
+      "timeZone": "Zona horaria",
+      "ntpServer": "Servidor NTP",
+      "ntpPort": "Puerto NTP",
+      "interfacesTitle": "Interfaces de red ({{n}})",
+      "interface": "Interfaz",
+      "ipAddress": "Dirección IP",
+      "subnet": "Subred",
+      "gateway": "Puerta de enlace",
+      "speed": "Velocidad",
+      "auto": "Automático",
+      "loadError": "No se pudo cargar la configuración de red.",
+      "empty": "No hay configuración de red disponible."
+    },
+    "playback": {
+      "offline": "El NVR está desconectado. Reproducción no disponible.",
+      "searchTitle": "Búsqueda de grabaciones",
+      "searchDescription": "Busque material grabado por canal, fecha y rango de tiempo.",
+      "channel": "Canal",
+      "selectChannel": "Seleccionar canal",
+      "chPrefix": "CH {{n}} · ",
+      "start": "Inicio",
+      "end": "Fin",
+      "searching": "Buscando…",
+      "search": "Buscar",
+      "streamTitle": "Transmisión de reproducción",
+      "rtspUrl": "URL de reproducción RTSP",
+      "copyUrl": "Copiar URL",
+      "vlcHint": "Abra esta URL en VLC o en cualquier reproductor compatible con RTSP para ver el material grabado.",
+      "segmentsTitle": "Segmentos de grabación ({{n}})",
+      "noRecordings": "No se encontraron grabaciones para el rango de tiempo seleccionado.",
+      "startTime": "Hora de inicio",
+      "endTime": "Hora de fin",
+      "duration": "Duración",
+      "type": "Tipo",
+      "codec": "Códec",
+      "actions": "Acciones",
+      "durationValue": "{{m}} min {{s}} s",
+      "recTypeContinuous": "Continua",
+      "recTypeMotion": "Movimiento",
+      "recTypeAlarm": "Alarma",
+      "recTypeRecording": "Grabación",
+      "playFromStart": "Reproducir desde la hora de inicio",
+      "closePlayer": "Cerrar reproductor",
+      "play": "Reproducir",
+      "exportCsv": "Exportar CSV",
+      "jumpNow": "Ir a ahora",
+      "selectChannelPrompt": "Seleccione un canal para iniciar la reproducción",
+      "advancedTitle": "Búsqueda de grabaciones, segmentos y URL de transmisión",
+      "back1m": "Atrás 1 minuto",
+      "back10s": "Atrás 10 segundos",
+      "fwd10s": "Adelante 10 segundos",
+      "fwd1m": "Adelante 1 minuto",
+      "inlinePlayerTitle": "Reproducción grabada",
+      "inlinePlayerFrom": "Reproduciendo desde {{time}}",
+      "inlinePlayerUnavailable": "Reproducción integrada no disponible: {{reason}}. Use la URL RTSP de abajo en VLC u otro reproductor."
+    },
+    "channelStatus": {
+      "error": "Error al cargar el estado de los canales. El NVR puede estar inaccesible.",
+      "title": "Estado de canales ({{n}} canales)",
+      "online": "En línea",
+      "offline": "Desconectado",
+      "channelN": "Canal {{n}}"
+    },
+    "settings": {
+      "title": "Ajustes del NVR",
+      "description": "Actualice la configuración del NVR. Los cambios de dirección IP requieren eliminar y volver a importar.",
+      "name": "Nombre",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": "Descripción opcional",
+      "port": "Puerto",
+      "ipAddress": "Dirección IP",
+      "serialNumber": "Número de serie",
+      "cancel": "Cancelar",
+      "saving": "Guardando…",
+      "save": "Guardar"
+    },
+    "aria": {
+      "back": "Volver a la lista de NVR",
+      "moreActions": "Más acciones",
+      "openChannel": "Abrir canal {{name}}",
+      "showKey": "Mostrar clave de cifrado",
+      "hideKey": "Ocultar clave de cifrado"
+    },
+    "overview": {
+      "sysInfoError": "No se pudo cargar la información del sistema en vivo: los detalles de CPU, memoria y reloj pueden no estar disponibles."
+    },
+    "confirmReboot": {
+      "title": "¿Reiniciar NVR?",
+      "description": "Esto reiniciará \"{{name}}\". La grabación y las transmisiones en vivo se interrumpirán mientras el dispositivo se reinicia.",
+      "cancel": "Cancelar",
+      "confirm": "Reiniciar"
+    },
+    "confirmDelete": {
+      "title": "¿Eliminar NVR?",
+      "description": "Esto elimina permanentemente \"{{name}}\" y sus asociaciones de canales de FreeSDN. Esta acción no se puede deshacer.",
+      "cancel": "Cancelar",
+      "confirm": "Eliminar"
+    },
+    "holidays": {
+      "title": "Días festivos ({{n}})",
+      "description": "Los períodos festivos anulan la programación de grabación normal en el NVR.",
+      "offline": "El NVR está fuera de línea: la configuración de días festivos no está disponible.",
+      "loading": "Cargando días festivos…",
+      "loadError": "No se pudo cargar la configuración de días festivos.",
+      "emptyTitle": "Sin días festivos configurados",
+      "empty": "Este NVR no tiene períodos festivos definidos.",
+      "save": "Guardar días festivos",
+      "saving": "Guardando…",
+      "saveSuccess": "Configuración de días festivos guardada",
+      "saveError": "No se pudo guardar la configuración de días festivos",
+      "colId": "ID",
+      "colName": "Nombre",
+      "colMode": "Modo",
+      "colRange": "Rango (MM/DD)",
+      "colEnabled": "Habilitado",
+      "unnamed": "Día festivo {{n}}",
+      "toggleAria": "Alternar día festivo {{name}}",
+      "descriptionEditable": "Agregue, edite o elimine entradas del calendario de días festivos, luego guarde para aplicarlas al NVR.",
+      "add": "Agregar día festivo",
+      "emptyEditable": "No hay entradas de días festivos configuradas. Agregue una para comenzar.",
+      "newHolidayName": "Nuevo día festivo",
+      "colStart": "Inicio (M/D)",
+      "colEnd": "Fin (M/D)",
+      "colActions": "Acciones",
+      "namePlaceholder": "Nombre del día festivo",
+      "nameAria": "Nombre del día festivo {{n}}",
+      "mode": {
+        "date": "Fecha",
+        "week": "Semana",
+        "month": "Mes"
+      },
+      "startMonthAria": "Mes de inicio del día festivo {{n}}",
+      "startDayAria": "Día de inicio del día festivo {{n}}",
+      "endMonthAria": "Mes de fin del día festivo {{n}}",
+      "endDayAria": "Día de fin del día festivo {{n}}",
+      "deleteAria": "Eliminar día festivo {{name}}",
+      "unsavedNote": "Tiene cambios sin guardar. Haga clic en Guardar para aplicarlos al NVR."
+    },
+    "csv": {
+      "name": "Nombre",
+      "channelId": "ID de canal",
+      "status": "Estado",
+      "ipAddress": "Dirección IP",
+      "model": "Modelo",
+      "vendor": "Fabricante",
+      "startTime": "Hora de inicio",
+      "endTime": "Hora de fin",
+      "durationSeconds": "Duración (s)",
+      "type": "Tipo",
+      "codec": "Códec",
+      "smartId": "ID",
+      "smartName": "Atributo",
+      "smartCurrent": "Actual",
+      "smartWorst": "Peor",
+      "smartThreshold": "Umbral",
+      "smartRaw": "Valor bruto",
+      "smartStatus": "Estado"
+    }
+  },
+  "NVRListPage": {
+    "status": {
+      "online": "En línea",
+      "offline": "Desconectado",
+      "recording": "Grabando",
+      "error": "Error",
+      "unknown": "Desconocido"
+    },
+    "storage": {
+      "notAvailable": "N/D",
+      "used": "{{size}} usado",
+      "free": "{{size}} libre",
+      "percentOf": "{{pct}}% de {{total}}"
+    },
+    "actions": {
+      "viewDetails": "Ver detalles",
+      "syncChannels": "Sincronizar canales",
+      "delete": "Eliminar",
+      "export": "Exportar",
+      "addNvr": "Agregar NVR"
+    },
+    "card": {
+      "channel": "{{count}} canal",
+      "channels": "{{count}} canales",
+      "online": "{{count}} en línea",
+      "firmware": "FW {{version}}",
+      "unknownVendor": "Fabricante desconocido",
+      "synced": "Sincronizado {{date}}",
+      "neverSynced": "Nunca sincronizado"
+    },
+    "header": {
+      "title": "Gestión de NVR",
+      "description": "{{total}} NVR · {{online}} en línea"
+    },
+    "stats": {
+      "totalNvrs": "Total de NVR",
+      "configuredRecorders": "Grabadoras configuradas",
+      "online": "En línea",
+      "reachable": "{{pct}}% accesibles",
+      "noNvrs": "Sin NVR",
+      "offline": "Desconectado",
+      "needsAttention": "Requiere atención",
+      "activeStreams": "Transmisiones activas",
+      "fpsTarget": "{{fps}} FPS objetivo",
+      "noLiveStreams": "Sin transmisiones en vivo"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar NVR por nombre, IP, modelo o número de serie…",
+      "allStatuses": "Todos los estados",
+      "clearFilters": "Borrar filtros",
+      "gridView": "Vista de cuadrícula",
+      "tableView": "Vista de tabla"
+    },
+    "error": {
+      "loadFailed": "Error al cargar los NVR"
+    },
+    "empty": {
+      "title": "No hay NVR registrados",
+      "description": "Importa tu primer NVR desde la página de Cámaras para empezar, o agrega uno directamente aquí."
+    },
+    "table": {
+      "nvr": "NVR",
+      "serialNumber": "N/S: {{serial}}",
+      "status": "Estado",
+      "ipAddress": "Dirección IP",
+      "model": "Modelo",
+      "channels": "Canales",
+      "storage": "Almacenamiento",
+      "firmware": "Firmware",
+      "lastSynced": "Última sincronización",
+      "never": "Nunca",
+      "itemName": "NVR"
+    },
+    "bulk": {
+      "itemName": "NVR",
+      "syncAll": "Sincronizar todo",
+      "deleteToast": {
+        "title": "Eliminación masiva",
+        "description": "Por seguridad, elimina los NVR de forma individual."
+      }
+    },
+    "deleteDialog": {
+      "title": "Eliminar NVR",
+      "confirmPrefix": "¿Seguro que deseas eliminar",
+      "confirmSuffix": "Esto eliminará el NVR y todos los registros de cámaras asociados. Esta acción no se puede deshacer.",
+      "cancel": "Cancelar",
+      "deleting": "Eliminando...",
+      "delete": "Eliminar"
+    },
+    "toasts": {
+      "syncSuccess": "{{count}} canales sincronizados",
+      "syncFailed": "No se pudo sincronizar el NVR",
+      "deleteFailed": "No se pudo eliminar el NVR"
+    }
+  },
+  "HLSPlayer": {
+    "errors": {
+      "streamFailed": "La transmisión falló tras varios intentos de recuperación",
+      "playbackError": "Error de reproducción HLS nativa",
+      "notSupported": "HLS no es compatible con este navegador",
+      "networkError": "Error de red: no se pudo cargar la transmisión",
+      "mediaError": "Error de medios: problema con el formato de la transmisión",
+      "streamError": "Error de transmisión: {{details}}"
+    }
+  },
+  "RecordedHlsPlayer": {
+    "starting": "Iniciando reproducción…",
+    "startFailed": "No se pudo iniciar la reproducción grabada.",
+    "notSupported": "La reproducción de vídeo grabado no está disponible para este dispositivo.",
+    "notDecodable": "Este NVR no puede reproducir grabaciones de esta cámara: su flujo de vídeo grabado no es decodificable. La vista en vivo sigue funcionando."
+  },
+  "CameraEventsPage": {
+    "title": "Revisión",
+    "description": "Eventos de cámaras y NVR: movimiento, detecciones inteligentes, sabotaje y pérdida de vídeo.",
+    "unreviewed": "{{count}} sin revisar",
+    "reviewAllShown": "Revisar todo lo mostrado",
+    "play": "Reproducir",
+    "playAtTime": "Abrir la reproducción grabada en este momento",
+    "searchPlaceholder": "Buscar cualquier cosa…",
+    "categories": {
+      "all": "Todo",
+      "person": "Persona",
+      "vehicle": "Vehículo",
+      "motion": "Movimiento",
+      "line": "Cruce de línea",
+      "intrusion": "Intrusión",
+      "face": "Rostro",
+      "tamper": "Sabotaje",
+      "audio": "Audio"
+    },
+    "push": {
+      "enable": "Activar alertas",
+      "enabled": "Alertas activas",
+      "denied": "Las notificaciones están bloqueadas en la configuración del navegador",
+      "failed": "No se pudo cambiar la configuración de notificaciones",
+      "enabledToast": "Alertas push activadas para este navegador",
+      "disabledToast": "Alertas push desactivadas"
+    },
+    "filters": {
+      "camera": "Cámara",
+      "allCameras": "Todas las cámaras",
+      "allTypes": "Todos los tipos",
+      "unreviewed": "Sin revisar",
+      "reviewed": "Revisados",
+      "allStatus": "Todos"
+    },
+    "types": {
+      "motion": "Movimiento",
+      "lineCross": "Cruce de línea",
+      "intrusion": "Intrusión",
+      "face": "Rostro",
+      "tamper": "Sabotaje",
+      "videoLoss": "Pérdida de vídeo"
+    },
+    "range": {
+      "h1": "Última hora",
+      "h24": "Últimas 24 horas",
+      "d7": "Últimos 7 días",
+      "d30": "Últimos 30 días"
+    },
+    "error": "No se pudieron cargar los eventos.",
+    "loading": "Cargando eventos…",
+    "empty": {
+      "title": "Sin eventos",
+      "description": "Los eventos aparecen aquí a medida que sus NVR detectan movimiento, eventos inteligentes o alarmas en el período seleccionado."
+    },
+    "unknownCamera": "Cámara desconocida",
+    "new": "Nuevo",
+    "reviewed": "Revisado",
+    "review": "Revisar",
+    "loadMore": "Cargar más",
+    "maxEventsReached": "Mostrando los {{max}} eventos más recientes. Acota el rango de tiempo o los filtros para ver más.",
+    "toasts": {
+      "ackFailed": "No se pudo marcar como revisado",
+      "bulkAcked": "{{count}} eventos marcados como revisados"
+    }
+  },
+  "RegionEditor": {
+    "snapshotAlt": "Instantánea de la cámara",
+    "lineHint": "{{count}}/2 puntos, haga clic para colocar la línea",
+    "polygonHint": "{{count}}/{{max}} puntos, clic para añadir, arrastrar para mover",
+    "removePoint": "Quitar punto",
+    "undo": "Deshacer",
+    "clear": "Borrar"
+  },
+  "RegionEditDialog": {
+    "lineDesc": "Haga clic en dos puntos de la imagen para colocar la línea.",
+    "polygonDesc": "Haga clic para añadir puntos y arrastre para ajustar. Se necesitan al menos 3 puntos.",
+    "loadingSnapshot": "Cargando instantánea de la cámara…",
+    "cancel": "Cancelar",
+    "save": "Guardar área"
+  }
+}

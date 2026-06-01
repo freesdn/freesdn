@@ -1,0 +1,200 @@
+{
+  "PoEPage": {
+    "common": {
+      "cancel": "取消"
+    },
+    "header": {
+      "title": "PoE 管理",
+      "description": "监控和控制整个网络的以太网供电",
+      "analytics": "分析"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败。结果可能不完整。"
+    },
+    "capability": {
+      "title": "PoE 控制不可用",
+      "defaultReason": "此设备不支持 PoE 控制。"
+    },
+    "stats": {
+      "totalPower": {
+        "title": "总功率",
+        "description": "共 {{budget}}W（{{percent}}%）"
+      },
+      "activePorts": {
+        "title": "活动端口",
+        "description": "正在供电"
+      },
+      "switches": {
+        "title": "PoE 交换机",
+        "description": "{{count}} 个存在故障"
+      },
+      "budgetWarnings": {
+        "title": "预算警告",
+        "description": "接近/超出预算"
+      }
+    },
+    "tabs": {
+      "devices": "设备",
+      "ports": "端口",
+      "schedules": "计划"
+    },
+    "pdTypes": {
+      "access_point": "接入点",
+      "camera": "摄像头",
+      "ip_phone": "IP 电话",
+      "iot": "IoT 设备",
+      "unknown": "未知"
+    },
+    "modes": {
+      "auto": "自动",
+      "passive24": "无源 24V",
+      "passive48": "无源 48V",
+      "disabled": "已禁用"
+    },
+    "devices": {
+      "empty": {
+        "title": "未找到 PoE 交换机",
+        "description": "添加带有支持 PoE 的交换机的控制器即可在此处查看。设备上报后将显示 PoE 预算和每端口功耗。"
+      },
+      "card": {
+        "portsSummary": "{{total}} 个 PoE 端口 • {{active}} 个活动",
+        "powerUsage": "功率使用",
+        "active": "活动",
+        "disabled": "已禁用",
+        "idle": "空闲",
+        "fault": "故障",
+        "budgetWarning": "功率预算使用率为 {{percent}}%"
+      }
+    },
+    "ports": {
+      "searchPlaceholder": "搜索端口...",
+      "allDevicesPlaceholder": "所有设备",
+      "allDevices": "所有设备",
+      "bulk": {
+        "enable": "启用（{{count}}）",
+        "disable": "禁用（{{count}}）",
+        "cancel": "取消",
+        "select": "批量选择"
+      },
+      "table": {
+        "port": "端口",
+        "device": "设备",
+        "status": "状态",
+        "mode": "模式",
+        "power": "功率",
+        "connectedDevice": "已连接设备",
+        "actions": "操作"
+      },
+      "statuses": {
+        "delivering": "供电中",
+        "searching": "搜索中",
+        "fault": "故障",
+        "disabled": "已禁用"
+      },
+      "tooltip": {
+        "class": "等级：{{value}}",
+        "voltage": "电压：{{value}}V"
+      },
+      "menu": {
+        "configure": "配置",
+        "powerCycle": "重新上电",
+        "disablePoe": "禁用 PoE",
+        "enablePoe": "启用 PoE"
+      },
+      "notSupported": "不支持 PoE 控制"
+    },
+    "schedules": {
+      "create": "创建计划",
+      "menu": {
+        "edit": "编辑",
+        "delete": "删除"
+      },
+      "actions": {
+        "enable": "启用",
+        "disable": "禁用",
+        "limit": "限制"
+      },
+      "card": {
+        "action": "操作：",
+        "actionValue": "{{action}} PoE",
+        "time": "时间：",
+        "days": "日期：",
+        "affects": "影响：",
+        "affectsValue": "{{count}} 个端口",
+        "nextRun": "下次运行：{{time}}"
+      },
+      "dayNames": {
+        "mon": "周一",
+        "tue": "周二",
+        "wed": "周三",
+        "thu": "周四",
+        "fri": "周五",
+        "sat": "周六",
+        "sun": "周日"
+      },
+      "empty": {
+        "title": "暂无计划",
+        "description": "创建计划以自动控制 PoE 供电",
+        "notSupported": "此设备不支持 PoE 计划"
+      }
+    },
+    "portDialog": {
+      "title": "配置 {{name}}",
+      "description": "调整此端口的 PoE 设置",
+      "poeEnabled": "已启用 PoE",
+      "poeMode": "PoE 模式",
+      "modeOptions": {
+        "auto": "自动检测"
+      },
+      "powerLimit": "功率限制",
+      "priority": "优先级",
+      "priorityOptions": {
+        "critical": "关键",
+        "high": "高",
+        "low": "低"
+      },
+      "priorityHelp": "优先级较高的端口在预算受限时保持供电",
+      "save": "保存更改"
+    },
+    "scheduleDialog": {
+      "title": "创建 PoE 计划",
+      "description": "计划自动控制 PoE 供电",
+      "name": "计划名称",
+      "namePlaceholder": "例如：夜间节能",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "可选描述",
+      "device": "交换机",
+      "devicePlaceholder": "选择交换机",
+      "ports": "端口",
+      "portsSelectDeviceFirst": "请先选择交换机以选择端口",
+      "portsLoading": "正在加载端口...",
+      "portsEmpty": "此交换机上未找到 PoE 端口",
+      "portsRequired": "请至少选择一个端口，此计划才能生效",
+      "action": "操作",
+      "actionOptions": {
+        "disable": "禁用 PoE",
+        "enable": "启用 PoE",
+        "limit": "应用功率限制"
+      },
+      "startTime": "开始时间",
+      "endTime": "结束时间",
+      "days": "日期",
+      "dayInitials": {
+        "mon": "一",
+        "tue": "二",
+        "wed": "三",
+        "thu": "四",
+        "fri": "五",
+        "sat": "六",
+        "sun": "日"
+      }
+    },
+    "toast": {
+      "updated": "PoE 设置已更新",
+      "updateFailed": "更新 PoE 失败",
+      "reset": "已开始电源重启",
+      "resetFailed": "端口电源重启失败",
+      "bulkUpdateFailed": "批量更新 PoE 端口失败"
+    }
+  }
+}

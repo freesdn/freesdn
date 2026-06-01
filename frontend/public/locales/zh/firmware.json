@@ -1,0 +1,229 @@
+{
+  "FirmwarePage": {
+    "header": {
+      "title": "固件管理",
+      "description": "在你的设备上管理和部署固件更新"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败。结果可能不完整。"
+    },
+    "common": {
+      "never": "从不",
+      "notAvailable": "不适用",
+      "unknown": "未知"
+    },
+    "stats": {
+      "totalDevices": "设备总数",
+      "managedDevices": "受管设备",
+      "upToDate": "已是最新",
+      "updatesAvailable": "可用更新",
+      "devicesNeedUpdating": "台设备需要更新",
+      "criticalUpdates": "关键更新",
+      "securityUpdatesPending": "待处理的安全更新"
+    },
+    "banner": {
+      "upgradeInProgress": "固件升级进行中",
+      "devicesCompleted": "已完成 {{completed}}/{{total}} 台设备"
+    },
+    "tabs": {
+      "devices": "设备",
+      "repository": "仓库",
+      "jobs": "任务",
+      "schedules": "计划"
+    },
+    "filters": {
+      "searchPlaceholder": "搜索设备...",
+      "vendor": "厂商",
+      "allVendors": "所有厂商",
+      "type": "类型",
+      "updatesOnly": "仅显示有可用更新"
+    },
+    "deviceTypes": {
+      "all": "所有类型",
+      "accessPoint": "接入点",
+      "switch": "交换机",
+      "router": "路由器",
+      "gateway": "网关",
+      "firewall": "防火墙",
+      "camera": "摄像头",
+      "nvr": "NVR",
+      "dvr": "DVR",
+      "accessControl": "门禁",
+      "intercom": "对讲机",
+      "voipPhone": "VoIP 电话",
+      "iot": "IoT 设备",
+      "sensor": "传感器"
+    },
+    "viewMode": {
+      "table": "表格",
+      "byVersion": "按版本"
+    },
+    "bulk": {
+      "selected": "已选 {{count}} 项",
+      "deselectAll": "取消全选"
+    },
+    "actions": {
+      "uploadFirmware": "上传固件",
+      "viewDetails": "查看详情",
+      "hideDetails": "隐藏详情",
+      "checkForUpdates": "检查更新",
+      "upgrade": "升级",
+      "upgradeCount": "升级 ({{count}})",
+      "upgradeNow": "立即升级",
+      "versionHistory": "版本历史",
+      "cancel": "取消",
+      "retryFailed": "重试失败项",
+      "edit": "编辑",
+      "runNow": "立即运行",
+      "delete": "删除",
+      "close": "关闭"
+    },
+    "table": {
+      "device": "设备",
+      "type": "类型",
+      "currentVersion": "当前版本",
+      "latestVersion": "最新版本",
+      "status": "状态",
+      "lastChecked": "上次检查",
+      "actions": "操作"
+    },
+    "status": {
+      "upToDate": "已是最新",
+      "critical": "关键",
+      "updateAvailable": "有可用更新"
+    },
+    "grouped": {
+      "deviceCount": "{{count}} 台设备",
+      "criticalUpdateNeeded": "需要关键更新",
+      "updateTo": "更新至 {{version}}",
+      "latest": "最新",
+      "upgradeAll": "全部升级 ({{count}})"
+    },
+    "repository": {
+      "loading": "正在加载固件仓库...",
+      "emptyTitle": "仓库中没有固件",
+      "emptyDescription": "上传固件文件即可开始。",
+      "security": "安全",
+      "latest": "最新",
+      "recommended": "推荐",
+      "cached": "已缓存",
+      "released": "发布日期：",
+      "size": "大小：",
+      "installed": "已安装：",
+      "installedCount": "{{upToDate}} / {{total}} 台设备",
+      "releaseNotes": "发行说明"
+    },
+    "jobs": {
+      "status": "状态",
+      "version": "版本",
+      "devices": "设备",
+      "progress": "进度",
+      "started": "开始时间",
+      "initiatedBy": "发起人",
+      "failedCount": "（{{count}} 个失败）",
+      "empty": "暂无升级任务"
+    },
+    "rollout": {
+      "title": "分阶段部署进度",
+      "completed": "已完成 ({{count}})",
+      "inProgress": "进行中 ({{count}})",
+      "failed": "失败 ({{count}})",
+      "pending": "待处理",
+      "perDeviceHint": "任务运行中或完成后可查看每台设备的详情。点击任务以刷新。",
+      "startedAt": "开始：{{time}}",
+      "completedAt": "完成：{{time}}",
+      "backupBeforeUpgrade": "升级前备份",
+      "autoRollbackEnabled": "已启用自动回滚"
+    },
+    "schedules": {
+      "create": "创建计划",
+      "loading": "正在加载计划...",
+      "emptyTitle": "暂无计划",
+      "emptyDescription": "创建计划以自动执行固件更新。",
+      "target": "目标：",
+      "allTypes": "所有类型",
+      "schedule": "计划：",
+      "frequencyAt": "{{frequency}} {{time}}",
+      "totalRuns": "运行总次数：",
+      "lastRun": "上次运行：",
+      "nextRun": "下次运行：{{time}}"
+    },
+    "upgradeDialog": {
+      "title": "升级固件",
+      "description": "为 {{count}} 台设备配置固件升级",
+      "targetFirmware": "目标固件",
+      "selectFirmwarePlaceholder": "选择固件版本",
+      "criticalSuffix": "（关键）",
+      "scheduleOptional": "计划（可选）",
+      "leaveEmptyHint": "留空则立即开始",
+      "backupBefore": "升级前备份",
+      "backupBeforeHint": "更新前创建配置备份",
+      "rollbackOnFailure": "失败时回滚",
+      "rollbackOnFailureHint": "升级失败时恢复到先前版本",
+      "scheduleUpgrade": "计划升级",
+      "startUpgrade": "开始升级"
+    },
+    "releaseNotesDialog": {
+      "released": "发布于 {{date}}",
+      "noNotes": "暂无发行说明。"
+    },
+    "uploadDialog": {
+      "title": "上传固件",
+      "description": "上传固件镜像并填写其元数据",
+      "file": "固件文件",
+      "vendor": "厂商",
+      "vendorPlaceholder": "例如：Hikvision",
+      "model": "型号",
+      "modelPlaceholder": "例如：DS-2CD2143G0",
+      "version": "版本",
+      "versionPlaceholder": "例如：5.7.3",
+      "releaseType": "发布类型",
+      "releaseTypes": {
+        "stable": "稳定版",
+        "beta": "测试版",
+        "rc": "候选版本"
+      }
+    },
+    "scheduleDialog": {
+      "title": "创建升级计划",
+      "description": "设置自动固件更新",
+      "name": "计划名称",
+      "namePlaceholder": "例如：每周 AP 更新",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "可选描述",
+      "scheduleType": "计划类型",
+      "frequency": {
+        "weekly": "每周",
+        "monthly": "每月",
+        "onRelease": "有新版本时"
+      },
+      "dayOfWeek": "星期几",
+      "time": "时间",
+      "autoLatest": "自动更新到最新版本",
+      "autoLatestHint": "自动使用最新的稳定版本"
+    },
+    "days": {
+      "monday": "星期一",
+      "tuesday": "星期二",
+      "wednesday": "星期三",
+      "thursday": "星期四",
+      "friday": "星期五",
+      "saturday": "星期六",
+      "sunday": "星期日"
+    },
+    "batch": {
+      "title": "固件升级",
+      "description": "正在将所选设备升级到目标固件版本",
+      "jobCreated": "任务已创建",
+      "failedToStart": "启动失败",
+      "cancelled": "已取消"
+    },
+    "toasts": {
+      "operationFailed": "操作失败",
+      "validationError": "验证错误",
+      "selectFirmware": "请选择固件版本",
+      "upgradeFailed": "升级失败",
+      "unknownError": "未知错误"
+    }
+  }
+}

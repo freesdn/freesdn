@@ -1,0 +1,127 @@
+{
+  "AutomationPage": {
+    "header": {
+      "title": "Automatización",
+      "description": "Gestiona reglas y flujos de trabajo de automatización",
+      "createRule": "Crear regla"
+    },
+    "tabs": {
+      "rules": "Reglas ({{n}})",
+      "history": "Historial de ejecución"
+    },
+    "filters": {
+      "allTriggers": "Todos los disparadores",
+      "allStatus": "Todos los estados",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "refresh": "Actualizar"
+    },
+    "triggerTypes": {
+      "event": "Evento",
+      "schedule": "Programación",
+      "threshold": "Umbral",
+      "manual": "Manual",
+      "webhook": "Webhook"
+    },
+    "actionTypes": {
+      "deviceReboot": "Reiniciar dispositivo",
+      "devicePoeCycle": "Ciclo PoE",
+      "deviceLocate": "Localizar dispositivo",
+      "deviceConfig": "Aplicar configuración",
+      "networkBlockClient": "Bloquear cliente",
+      "networkUnblockClient": "Desbloquear cliente",
+      "networkQuarantine": "Poner en cuarentena",
+      "alertCreate": "Crear alerta",
+      "alertResolve": "Resolver alerta",
+      "notifyEmail": "Enviar correo",
+      "notifyWebhook": "Enviar webhook",
+      "notifySlack": "Notificar a Slack",
+      "notifyInApp": "Notificación en la app",
+      "scriptRun": "Ejecutar script",
+      "apiCall": "Llamada API"
+    },
+    "status": {
+      "active": "activa",
+      "paused": "pausada",
+      "error": "error",
+      "disabled": "deshabilitada"
+    },
+    "ruleCard": {
+      "noDescription": "Sin descripción",
+      "actionsCount": "{{n}} acciones",
+      "executionsCount": "{{n}} ejecuciones",
+      "lastTriggered": "Última: {{date}}",
+      "priority": "Prioridad: {{value}}",
+      "cooldown": "• Tiempo de espera: {{value}} s",
+      "actions": {
+        "edit": "Editar",
+        "runNow": "Ejecutar ahora",
+        "delete": "Eliminar"
+      }
+    },
+    "executionRow": {
+      "success": "correcto",
+      "failed": "fallido",
+      "actionsCount": "{{n}} acciones"
+    },
+    "historyTable": {
+      "rule": "Regla",
+      "status": "Estado",
+      "actions": "Acciones",
+      "duration": "Duración",
+      "time": "Hora",
+      "error": "Error"
+    },
+    "empty": {
+      "rules": {
+        "title": "No hay reglas de automatización",
+        "description": "Comienza creando tu primera regla de automatización. Las reglas ejecutan acciones automáticamente cuando los eventos coinciden con tus condiciones.",
+        "action": "Crear regla"
+      },
+      "history": {
+        "title": "Aún no hay historial de ejecución",
+        "description": "Una vez que se activen tus reglas de automatización, sus registros de ejecución aparecerán aquí."
+      }
+    },
+    "createModal": {
+      "title": "Crear regla de automatización",
+      "submitLabel": "Crear regla",
+      "fields": {
+        "name": {
+          "label": "Nombre de la regla *",
+          "placeholder": "p. ej. Reiniciar APs desconectados"
+        },
+        "description": {
+          "label": "Descripción",
+          "placeholder": "Descripción opcional de lo que hace esta regla"
+        },
+        "triggerType": {
+          "label": "Tipo de disparador *"
+        },
+        "action": {
+          "label": "Acción *"
+        },
+        "priority": {
+          "label": "Prioridad"
+        },
+        "cooldown": {
+          "label": "Tiempo de espera (segundos)"
+        }
+      }
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "successTitle": "Listo",
+      "updateFailed": "No se pudo actualizar la regla: {{error}}",
+      "deleteFailed": "No se pudo eliminar la regla: {{error}}",
+      "triggerFailed": "No se pudo activar la regla: {{error}}",
+      "triggered": "Regla activada correctamente"
+    },
+    "confirm": {
+      "delete": "¿Seguro que quieres eliminar esta regla?"
+    },
+    "errors": {
+      "loadFailed": "No se pudieron cargar los datos de automatización"
+    }
+  }
+}

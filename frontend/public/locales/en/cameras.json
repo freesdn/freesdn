@@ -1,0 +1,1170 @@
+{
+  "title": "Cameras",
+  "streams": "Streams",
+  "recordings": "Recordings",
+  "events": "Events",
+  "ptz": "PTZ Control",
+  "liveView": "Live View",
+  "playback": "Playback",
+  "cameraName": "Camera Name",
+  "resolution": "Resolution",
+  "fps": "FPS",
+  "codec": "Codec",
+  "status": "Status",
+  "online": "Online",
+  "offline": "Offline",
+  "recording": "Recording",
+  "motionDetected": "Motion Detected",
+  "noMotion": "No Motion",
+  "snapshot": "Snapshot",
+  "fullscreen": "Fullscreen",
+  "pan": "Pan",
+  "tilt": "Tilt",
+  "zoom": "Zoom",
+  "preset": "Preset",
+  "nvrSettings": "NVR Settings",
+  "retentionDays": "Retention (Days)",
+  "storageUsed": "Storage Used",
+  "wall": {
+    "replay": {
+      "forbidden": "Instant replay requires the site-admin role",
+      "forbiddenDetail": "You need at least the site-admin role to use instant replay. Contact your administrator for access.",
+      "failed": "Instant replay failed"
+    }
+  },
+  "CameraDetailPage": {
+    "common": {
+      "yes": "Yes",
+      "no": "No",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "notFound": {
+      "title": "Camera not found",
+      "description": "The camera you're looking for doesn't exist or has been removed.",
+      "backToCameras": "Back to Cameras"
+    },
+    "header": {
+      "channel": "Channel {{channel}}",
+      "back": "Back"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "liveView": "Live View",
+      "ptz": "PTZ",
+      "image": "Image",
+      "recordings": "Recordings",
+      "events": "Events",
+      "detection": "Detection",
+      "schedule": "Schedule",
+      "health": "Health",
+      "access": "Access"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "recording": "Recording",
+      "error": "Error",
+      "unknown": "Unknown"
+    },
+    "overview": {
+      "deviceInformation": "Device Information",
+      "resolution": "Resolution",
+      "fields": {
+        "name": "Name",
+        "ipAddress": "IP Address",
+        "port": "Port",
+        "macAddress": "MAC Address",
+        "vendor": "Vendor",
+        "model": "Model",
+        "firmware": "Firmware",
+        "serialNumber": "Serial Number",
+        "cameraType": "Camera Type",
+        "deviceType": "Device Type",
+        "location": "Location",
+        "floor": "Floor",
+        "nvrChannel": "NVR Channel",
+        "lastSeen": "Last Seen",
+        "created": "Created"
+      },
+      "capabilities": {
+        "title": "Capabilities",
+        "ptz": "PTZ",
+        "audio": "Audio",
+        "twoWayAudio": "Two-Way Audio",
+        "infrared": "Infrared",
+        "motionDetection": "Motion Detection",
+        "recording": "Recording"
+      },
+      "streamUrls": {
+        "title": "Stream URLs",
+        "mainStream": "Main Stream",
+        "subStream": "Sub Stream"
+      },
+      "encryption": {
+        "title": "Stream Encryption",
+        "description": "If stream encryption is enabled on this Hikvision camera/NVR, enter the encryption key to decrypt the RTSP stream.",
+        "keyLabel": "Encryption Key",
+        "keyPlaceholder": "Enter encryption key (hex)",
+        "saveKey": "Save Key",
+        "removeKey": "Remove Key",
+        "saved": "Saved",
+        "keyConfigured": "Encryption key configured",
+        "savedToast": "Encryption key saved",
+        "saveFailedToast": "Failed to save encryption key"
+      }
+    },
+    "stream": {
+      "connecting": "Connecting to stream...",
+      "mainStreamHd": "Main Stream (HD)",
+      "subStreamSd": "Sub Stream (SD)",
+      "unavailable": "Stream unavailable",
+      "retry": "Retry",
+      "offline": "Camera Offline",
+      "unableToConnect": "Unable to connect to stream",
+      "switchToSub": "Switch to Sub Stream (SD)",
+      "switchToMain": "Switch to Main Stream (HD)",
+      "downloadSnapshot": "Download Snapshot"
+    },
+    "ptz": {
+      "control": "PTZ Control",
+      "zoom": "Zoom",
+      "speed": "Speed",
+      "presets": "Presets",
+      "presetName": "Preset {{id}}",
+      "noPresets": "No presets configured",
+      "commandFailed": "PTZ command failed"
+    },
+    "image": {
+      "title": "Image Settings",
+      "unsaved": "Unsaved",
+      "loading": "Loading image settings...",
+      "unavailable": "Unable to load image settings. This camera may not support image adjustment.",
+      "retry": "Retry",
+      "brightness": "Brightness",
+      "contrast": "Contrast",
+      "saturation": "Saturation",
+      "sharpness": "Sharpness",
+      "hue": "Hue",
+      "exposureMode": "Exposure Mode",
+      "irCutFilter": "IR Cut Filter",
+      "backlight": "Backlight",
+      "wdr": "WDR",
+      "noiseReduction": "Noise Reduction",
+      "reset": "Reset",
+      "save": "Save",
+      "saveError": "Failed to save settings. Please try again.",
+      "saveSuccess": "Settings saved successfully.",
+      "saveFailedToast": "Failed to save image settings"
+    },
+    "recordings": {
+      "exportClip": {
+        "title": "Export Video Clip",
+        "start": "Start",
+        "end": "End",
+        "exporting": "Exporting…",
+        "downloadClip": "Download Clip",
+        "downloadSuccess": "Clip downloaded successfully!",
+        "duration": "Duration",
+        "maxHours": "(max 4 hours)",
+        "watermark": "Burn chain-of-custody watermark",
+        "custodyHint": "With the watermark on, the operator and export time are burned into the clip and the export is recorded in the audit log. Turn it off to download the original NVR footage unchanged."
+      },
+      "evidence": {
+        "title": "Evidence holds",
+        "hold": "Hold as evidence",
+        "holdHint": "Copy this time window off the NVR to tamper-evident storage with a SHA-256 hash (legal hold)",
+        "held": "Evidence hold created, archiving in the background",
+        "holdFailed": "Could not create evidence hold",
+        "statusReady": "Sealed",
+        "statusArchiving": "Archiving…",
+        "statusFailed": "Failed",
+        "watermarked": "watermarked",
+        "download": "Download sealed copy",
+        "release": "Release hold (delete archive)",
+        "confirmRelease": "Release this evidence hold? The archived copy and its hash will be permanently deleted.",
+        "hint": "Holds are durable, server-side copies sealed with a SHA-256 hash for chain-of-custody. They survive NVR retention rollover and are recorded in the audit log."
+      },
+      "list": {
+        "title": "Recordings",
+        "startDate": "Start date",
+        "endDate": "End date",
+        "to": "to",
+        "unknown": "Unknown",
+        "durationLabel": "Duration",
+        "exportThisClip": "Export this clip",
+        "empty": "No recordings found for this period",
+        "notSupported": "Recording search isn't supported for this camera's NVR"
+      },
+      "errors": {
+        "endAfterStart": "End time must be after start time",
+        "maxDuration": "Maximum clip duration is 4 hours",
+        "exportFailed": "Export failed"
+      }
+    }
+  },
+  "CameraDisplayWall": {
+    "toolbar": {
+      "fill": "Fill ({{count}})",
+      "snapshots": "Snapshots",
+      "live": "Live"
+    },
+    "status": {
+      "summary": "{{active}} active · {{online}}/{{total}} online"
+    },
+    "display": {
+      "heading": "Display",
+      "cameraLabels": "Camera Labels",
+      "clockOverlay": "Clock Overlay"
+    },
+    "streamQuality": {
+      "heading": "Stream Quality",
+      "sub": "Sub Stream (fast)",
+      "main": "Main Stream (HD)"
+    },
+    "shortcuts": {
+      "heading": "Shortcuts",
+      "row1": "F · Fullscreen · L · Live/Snapshot · H · Labels",
+      "row2": "← → · Pages · Esc · Exit focus"
+    },
+    "empty": {
+      "title": "No cameras displayed",
+      "autoFill": "Auto-Fill with Online Cameras"
+    }
+  },
+  "CamerasPage": {
+    "title": "Cameras",
+    "headerDescription": "{{total}} cameras · {{online}} online",
+    "searchPlaceholder": "Search cameras...",
+    "unknown": "Unknown",
+    "unknownCamera": "Unknown camera",
+    "itemNameCameras": "cameras",
+    "itemNameCamera": "camera",
+    "snapshot": {
+      "alt": "camera thumbnail"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "recording": "Recording",
+      "error": "Error",
+      "unknown": "Unknown"
+    },
+    "features": {
+      "audio": "Audio"
+    },
+    "card": {
+      "healthTitle": "{{fps}} fps · {{kbps}} kbps"
+    },
+    "actions": {
+      "liveView": "Live View",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "update": "Update",
+      "create": "Create",
+      "saveView": "Save View",
+      "displayWall": "Display Wall",
+      "multiPlayback": "Multi-Playback",
+      "liveWall": "Live Wall",
+      "select": "Select",
+      "addCamera": "Add Camera",
+      "views": "Views",
+      "retry": "Retry",
+      "refresh": "Refresh",
+      "detail": "Detail",
+      "ptzControl": "PTZ Control",
+      "settings": "Settings",
+      "delete": "Delete",
+      "deleteViewAria": "Delete view {{name}}"
+    },
+    "groupDialog": {
+      "editTitle": "Edit Group",
+      "createTitle": "Create Camera Group",
+      "nameLabel": "Group Name",
+      "namePlaceholder": "e.g. Parking Lot",
+      "descriptionLabel": "Description",
+      "optional": "(optional)",
+      "descriptionPlaceholder": "Brief description...",
+      "colorLabel": "Color",
+      "selectCameras": "Select Cameras",
+      "selectedCount": "{{count}} selected",
+      "deselectAll": "Deselect all",
+      "selectAll": "Select all ({{count}})",
+      "clearSelection": "Clear selection",
+      "noMatchTitle": "No cameras match filters",
+      "noMatchDescription": "Try adjusting your search or filter criteria.",
+      "selectColor": "Select color {{color}}"
+    },
+    "saveViewDialog": {
+      "title": "Save Custom View",
+      "nameLabel": "View Name",
+      "namePlaceholder": "e.g. Front Entrance",
+      "shareLabel": "Share with team",
+      "summary": "Layout: {{layout}} · {{count}} camera(s)"
+    },
+    "sidebar": {
+      "groups": "Groups",
+      "allCameras": "All Cameras",
+      "newGroup": "New Group",
+      "filters": "Filters",
+      "deleteGroupAria": "Delete group {{name}}"
+    },
+    "filters": {
+      "all": "All",
+      "allNvrs": "All NVRs",
+      "standalone": "Standalone",
+      "allStatus": "All Status",
+      "statusLabel": "Status",
+      "allStatuses": "All Statuses",
+      "vendorLabel": "Vendor",
+      "allVendors": "All Vendors",
+      "floorLabel": "Floor",
+      "allFloors": "All Floors",
+      "zoneLabel": "Zone",
+      "allZones": "All Zones",
+      "featuresLabel": "Features",
+      "ptzOnly": "PTZ Only",
+      "audioOnly": "Audio Only",
+      "clearFilters": "Clear Filters"
+    },
+    "tabs": {
+      "dashboard": "Dashboard",
+      "list": "List"
+    },
+    "viewModes": {
+      "grid": "Grid",
+      "liveWall": "Live Wall",
+      "events": "Events",
+      "health": "Health",
+      "fleetHealth": "Fleet Health"
+    },
+    "stats": {
+      "totalCameras": "Total Cameras",
+      "allRegistered": "All registered",
+      "online": "Online",
+      "reachable": "{{percent}}% reachable",
+      "noCameras": "No cameras",
+      "recording": "Recording",
+      "activelyRecording": "Actively recording",
+      "issues": "Issues",
+      "issuesDescription": "{{offline}} offline · {{errors}} errors"
+    },
+    "columns": {
+      "camera": "Camera",
+      "ipAddress": "IP Address",
+      "location": "Location",
+      "status": "Status",
+      "features": "Features"
+    },
+    "error": {
+      "loadCamerasTitle": "Failed to load cameras",
+      "unexpected": "An unexpected error occurred."
+    },
+    "empty": {
+      "noCamerasTitle": "No cameras found",
+      "noCamerasDescription": "Adjust your filters or add a new camera."
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "pageOf": "{{current}} of {{total}}",
+      "cameraCount": "({{count}} cameras)",
+      "cameraTotal": "{{count}} cameras",
+      "serverPage": "set {{current}}/{{total}}",
+      "range": "{{from}}-{{to}} of {{total}}"
+    },
+    "events": {
+      "eventTypePlaceholder": "Event type",
+      "allTypes": "All Types",
+      "types": {
+        "motion": "Motion",
+        "lineCross": "Line Crossing",
+        "intrusion": "Intrusion",
+        "tamper": "Tampering",
+        "videoLoss": "Video Loss",
+        "faceDetect": "Face Detection",
+        "audioDetect": "Audio Detection",
+        "face": "Face"
+      },
+      "unacknowledged": "Unacknowledged",
+      "acknowledged": "Acknowledged",
+      "acknowledgeN": "Acknowledge {{count}}",
+      "loadFailed": "Failed to load events.",
+      "emptyTitle": "No events",
+      "emptyDescription": "Camera events will appear here when detected.",
+      "ack": "Ack",
+      "acknowledge": "Acknowledge"
+    },
+    "health": {
+      "loadFailed": "Failed to load fleet health data.",
+      "total": "Total",
+      "avgBitrate": "Avg Bitrate",
+      "totalBandwidth": "Total Bandwidth",
+      "perCameraTitle": "Per-Camera Health",
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "emptyTitle": "No cameras",
+      "emptyDescription": "Add cameras to view health metrics."
+    },
+    "templates": {
+      "title": "Recording Templates",
+      "newTemplate": "New Template",
+      "namePrompt": "Template name:",
+      "descriptionPrompt": "Description (optional):",
+      "empty": "No recording templates. Create one to apply schedules to cameras in bulk.",
+      "builtIn": "Built-in",
+      "applyToSelected": "Apply to {{count}} selected",
+      "deleteTemplateAria": "Delete template {{name}}",
+      "createDialogTitle": "New Recording Template",
+      "createDialogDescription": "Create a template you can apply to cameras in bulk.",
+      "nameLabel": "Template Name",
+      "namePlaceholder": "e.g. 24/7 Continuous",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Brief description..."
+    },
+    "bulk": {
+      "openInLiveWall": "Open in Live Wall",
+      "assignGroup": "Assign Group",
+      "noGroups": "No groups · create one first"
+    },
+    "confirm": {
+      "deleteGroup": "Delete group \"{{name}}\"?",
+      "deleteView": "Delete view \"{{name}}\"?",
+      "deleteTemplate": "Delete template \"{{name}}\"?",
+      "deleteCameras": "Delete {{count}} camera(s)? This cannot be undone."
+    },
+    "eventToasts": {
+      "motion": "Motion detected",
+      "lineCross": "Line crossing",
+      "intrusion": "Intrusion detected",
+      "tamper": "Camera tampering",
+      "videoLoss": "Video signal lost",
+      "faceDetect": "Face detected",
+      "audioDetect": "Audio detected",
+      "genericEvent": "Camera event"
+    },
+    "toasts": {
+      "updateGroupFailed": "Failed to update group",
+      "createGroupFailed": "Failed to create group",
+      "saveViewFailed": "Failed to save view",
+      "deleteGroupFailed": "Failed to delete group",
+      "deleteViewFailed": "Failed to delete view",
+      "ackEventFailed": "Failed to acknowledge event",
+      "eventsAcknowledged": "{{count}} event(s) acknowledged",
+      "ackEventsFailed": "Failed to acknowledge events",
+      "templateDeleted": "Template deleted",
+      "deleteTemplateFailed": "Failed to delete template",
+      "camerasDeleted": "{{count}} camera(s) deleted",
+      "camerasDeletedPartial": "{{succeeded}} of {{total}} deleted, {{failed}} failed",
+      "deleteCamerasFailed": "Failed to delete cameras",
+      "camerasAddedToGroup": "Cameras added to group",
+      "assignGroupFailed": "Failed to assign cameras to group",
+      "templateCreated": "Template \"{{name}}\" created",
+      "createTemplateFailed": "Failed to create template",
+      "scheduleApplied": "Schedule applied to {{count}} camera(s)",
+      "applyScheduleFailed": "Failed to apply schedule"
+    },
+    "deleteDialog": {
+      "groupTitle": "Delete group?",
+      "groupDescription": "Delete group \"{{name}}\"? This cannot be undone.",
+      "viewTitle": "Delete saved view?",
+      "viewDescription": "Delete view \"{{name}}\"? This cannot be undone.",
+      "templateTitle": "Delete template?",
+      "templateDescription": "Delete template \"{{name}}\"? This cannot be undone.",
+      "bulkTitle": "Delete cameras?",
+      "bulkDescription": "Delete {{count}} camera(s)? This cannot be undone."
+    }
+  },
+  "CameraWallPage": {
+    "title": "Camera Wall",
+    "description": "{{count}} cameras available",
+    "actions": {
+      "displayMode": "Display Mode",
+      "backToCameras": "Back to Cameras"
+    },
+    "errors": {
+      "loadFailed": "Failed to load cameras."
+    }
+  },
+  "CameraWallPopout": {
+    "documentTitle": "Camera Wall",
+    "loading": "Loading cameras...",
+    "error": "Failed to load cameras. Check your connection and reload."
+  },
+  "MultiPlaybackPage": {
+    "header": {
+      "title": "Multi-Camera Playback",
+      "description": "Synchronized recording playback for incident investigation"
+    },
+    "actions": {
+      "backToCameras": "Back to Cameras"
+    },
+    "error": {
+      "loadFailed": "Failed to load cameras."
+    },
+    "empty": {
+      "title": "Select cameras to begin",
+      "description": "Choose up to 4 cameras from the sidebar to start synchronized playback"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline"
+    },
+    "cell": {
+      "cameraOffline": "Camera Offline",
+      "streamError": "Stream Error",
+      "noRecording": "No recording at this time"
+    },
+    "picker": {
+      "title": "Cameras",
+      "searchPlaceholder": "Search cameras...",
+      "active": "Active",
+      "noCamerasFound": "No cameras found"
+    },
+    "controls": {
+      "back1Minute": "Back 1 minute",
+      "back10Seconds": "Back 10 seconds",
+      "forward10Seconds": "Forward 10 seconds",
+      "forward1Minute": "Forward 1 minute"
+    },
+    "timeline": {
+      "shared": "Shared Timeline"
+    },
+    "ranges": {
+      "1h": "1 Hour",
+      "4h": "4 Hours",
+      "12h": "12 Hours",
+      "24h": "24 Hours",
+      "3d": "3 Days",
+      "7d": "7 Days"
+    },
+    "mode": {
+      "label": "Playback mode",
+      "smooth": "Smooth",
+      "frames": "Frames",
+      "smoothHint": "Smooth uses HLS video (Hikvision-class NVRs); Frames steps per-second JPEG snapshots and works on every NVR. Cameras that can't do smooth playback fall back to Frames automatically."
+    },
+    "evidence": {
+      "title": "Evidence export",
+      "camerasInGrid": "in grid",
+      "start": "Start",
+      "duration": "Duration",
+      "watermark": "Watermark",
+      "holdN": "Hold {{count}} cameras",
+      "hint": "Seals the same window from every camera in the grid to tamper-evident storage with a SHA-256 hash, one clip each, court-grade chain-of-custody.",
+      "held": "Evidence hold created for {{count}} cameras, archiving in the background",
+      "failed": "Could not create evidence holds",
+      "releaseFailed": "Could not release evidence hold",
+      "holdsTitle": "Holds for these cameras",
+      "downloadBundle": "Download bundle ({{count}})"
+    }
+  },
+  "CameraReportsPage": {
+    "title": "Camera Reports",
+    "description": "Daily camera-system summaries, uptime, online cameras, and event volume",
+    "dailySummary": "Daily summary",
+    "uptime": "uptime",
+    "online": "online",
+    "events24h": "events (24h)",
+    "samples": "samples",
+    "generated": "Generated",
+    "empty": {
+      "title": "No reports yet",
+      "description": "A daily summary is generated automatically each night once cameras are reporting health."
+    },
+    "error": {
+      "title": "Couldn't load reports",
+      "description": "There was a problem fetching camera reports."
+    }
+  },
+  "NVRDetailPage": {
+    "common": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "timeAgo": {
+      "never": "never",
+      "justNow": "just now",
+      "minutes": "{{n}}m ago",
+      "hours": "{{n}}h ago",
+      "days": "{{n}}d ago"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "recording": "Recording",
+      "rebooting": "Rebooting",
+      "error": "Error",
+      "unknown": "Unknown"
+    },
+    "smart": {
+      "unknown": "Unknown",
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical"
+    },
+    "notFound": {
+      "title": "NVR Not Found",
+      "description": "The requested NVR could not be loaded.",
+      "back": "Back to NVRs"
+    },
+    "actions": {
+      "sync": "Sync",
+      "syncing": "Syncing…",
+      "settings": "Settings"
+    },
+    "menu": {
+      "refreshStorage": "Refresh Storage",
+      "refreshSystemInfo": "Refresh System Info",
+      "rebootNvr": "Reboot NVR",
+      "deleteNvr": "Delete NVR"
+    },
+    "confirm": {
+      "reboot": "Reboot this NVR? Streams will be interrupted.",
+      "delete": "Delete NVR \"{{name}}\"? This cannot be undone."
+    },
+    "toasts": {
+      "syncSuccess": "NVR synced successfully",
+      "syncFailed": "NVR sync failed",
+      "deleteFailed": "Failed to delete NVR",
+      "rebootSent": "Reboot command sent",
+      "rebootFailed": "Reboot command failed",
+      "encKeySaved": "Encryption key saved",
+      "encKeySaveFailed": "Failed to save encryption key",
+      "searchFailed": "Recording search failed",
+      "redactedUrlCopied": "Redacted URL copied to clipboard",
+      "redactedUrlCopiedShort": "Redacted URL copied",
+      "saveSettingsFailed": "Failed to save NVR settings"
+    },
+    "stats": {
+      "channels": "Channels",
+      "online": "Online",
+      "offline": "Offline",
+      "recording": "Recording",
+      "cpu": "CPU",
+      "storage": "Storage"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "channels": "Channels ({{n}})",
+      "storage": "Storage",
+      "network": "Network",
+      "playback": "Playback",
+      "channelStatus": "Channel Status",
+      "holidays": "Holidays"
+    },
+    "deviceInfo": {
+      "title": "Device Information",
+      "name": "Name",
+      "ipAddress": "IP Address",
+      "model": "Model",
+      "vendor": "Vendor",
+      "firmware": "Firmware",
+      "serialNumber": "Serial Number",
+      "macAddress": "MAC Address",
+      "channelCapacity": "Channel Capacity",
+      "deviceType": "Device Type",
+      "deviceId": "Device ID",
+      "hardwareVer": "Hardware Ver.",
+      "encoderVer": "Encoder Ver.",
+      "firmwareDate": "Firmware Date"
+    },
+    "health": {
+      "title": "Status & Health",
+      "status": "Status",
+      "lastSeen": "Last Seen",
+      "lastSynced": "Last Synced",
+      "created": "Created",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "storage": "Storage"
+    },
+    "time": {
+      "nvrClock": "NVR Clock",
+      "timeMode": "Time Mode",
+      "manual": "Manual",
+      "ntpServer": "NTP Server"
+    },
+    "tracks": {
+      "title": "Recording Tracks ({{n}})",
+      "trackId": "Track ID",
+      "channel": "Channel",
+      "type": "Type",
+      "enabled": "Enabled",
+      "loop": "Loop",
+      "description": "Description",
+      "showingCount": "Showing {{shown}} of {{total}}",
+      "showAll": "Show all",
+      "showLess": "Show less"
+    },
+    "encryption": {
+      "title": "Stream Encryption",
+      "configured": "Configured",
+      "description": "Encryption key shared by all cameras on this NVR. Applied to RTSP stream URLs.",
+      "placeholder": "Enter hex encryption key",
+      "saveKey": "Save Key",
+      "remove": "Remove",
+      "saved": "Saved",
+      "saveError": "Failed to save the encryption key. Please try again."
+    },
+    "channels": {
+      "empty": "No channels found. Try syncing the NVR.",
+      "syncNow": "Sync Now",
+      "chShort": "CH {{n}}",
+      "audio": "Audio",
+      "rec": "REC",
+      "detailsTitle": "Channel Details",
+      "chHeader": "CH",
+      "name": "Name",
+      "status": "Status",
+      "ipAddress": "IP Address",
+      "model": "Model",
+      "capabilities": "Capabilities",
+      "recording": "Recording",
+      "loadError": "Failed to load channels.",
+      "emptyTitle": "No channels",
+      "snapshotUrlCopied": "Snapshot URL copied to clipboard",
+      "snapshotUrlFailed": "Failed to copy snapshot URL",
+      "exportCsv": "Export CSV",
+      "exportSelected": "Export selected (CSV)",
+      "selectedCount": "{{n}} selected",
+      "clearSelection": "Clear",
+      "selectHint": "Select channels to export, or use the actions menu on each row.",
+      "selectAllAria": "Select all channels",
+      "selectRowAria": "Select channel {{name}}",
+      "actions": "Actions",
+      "rowActionsAria": "Actions for {{name}}",
+      "actionViewLive": "View live",
+      "actionOpenPlayback": "Open playback",
+      "actionCopySnapshot": "Copy snapshot URL",
+      "actionOpenDetail": "Open channel detail"
+    },
+    "storage": {
+      "realtimeTitle": "Real-Time Storage & Health",
+      "disksDetected": "{{n}} disk(s) detected",
+      "disksNeedAttention": "· {{n}} disk(s) need attention",
+      "refresh": "Refresh",
+      "totalCapacity": "Total Capacity",
+      "used": "Used",
+      "free": "Free",
+      "diskHealth": "Disk Health",
+      "pctUtilised": "{{pct}}% utilised",
+      "pctAvailable": "{{pct}}% available",
+      "issues": "{{n}} Issue(s)",
+      "attentionRequired": "Immediate attention required",
+      "allGood": "All Good",
+      "disksHealthy": "{{n}} disk(s) healthy",
+      "usedValue": "{{value}} used",
+      "freeValue": "{{value}} free",
+      "freeOfTotal": "{{free}} free of {{total}}",
+      "pctOfTotal": "{{pct}}% of {{total}}",
+      "utilisationRemaining": "{{pct}}% utilisation · {{remaining}} remaining",
+      "usedCached": "{{value}} used (cached)",
+      "totalValue": "{{value}} total",
+      "cachedNote": "Cached values · click Refresh for live data",
+      "unavailableOffline": "Storage data unavailable. NVR may be offline.",
+      "notAvailable": "Storage data not available.",
+      "liveError": "Live storage data could not be loaded, figures below may be cached or unavailable."
+    },
+    "forecast": {
+      "title": "Storage Forecast",
+      "dailyRateLabel": "Estimated daily rate",
+      "dailyRateValue": "~{{value}} GB/day",
+      "daysRemainingLabel": "Days remaining",
+      "daysRemainingValue": "~{{n}} days",
+      "criticalTitle": "Storage critically low",
+      "criticalBody": "Consider enabling motion-only recording or expanding storage capacity.",
+      "mediumTip": "Tip: Enable motion-only recording to extend storage life to approximately {{n}} days.",
+      "estimateBadge": "Estimate",
+      "estimateDisclaimer": "Estimated from a single usage snapshot, not a measured trend. Treat as a rough guide.",
+      "daysRemainingValueEstimate": "~{{n}} days",
+      "watchBody": "Estimated free space is getting low. Keep an eye on utilisation over the next few days before acting."
+    },
+    "disks": {
+      "title": "Individual Disks ({{n}})",
+      "diskN": "Disk {{n}}",
+      "hddN": "HDD #{{n}}",
+      "typePrefix": "Type: {{value}}",
+      "propertyPrefix": "Property: {{value}}",
+      "snPrefix": "S/N: {{value}}",
+      "statusUnknown": "unknown",
+      "smartLabel": "S.M.A.R.T. {{status}}",
+      "temperature": "Temperature",
+      "powerOnTime": "Power-On Time",
+      "model": "Model",
+      "serialNumber": "Serial Number",
+      "firmware": "Firmware",
+      "diskType": "Disk Type",
+      "property": "Property",
+      "smartTest": "SMART Test",
+      "smartTestProgress": "{{pct}}% complete"
+    },
+    "smartTable": {
+      "title": "S.M.A.R.T. Attributes ({{n}})",
+      "id": "ID",
+      "attribute": "Attribute",
+      "current": "Current",
+      "worst": "Worst",
+      "threshold": "Threshold",
+      "raw": "Raw",
+      "status": "Status",
+      "exportCsv": "Export CSV"
+    },
+    "network": {
+      "loading": "Loading network configuration…",
+      "offline": "NVR is offline. Network data unavailable.",
+      "timeNtpTitle": "Time & NTP",
+      "deviceTime": "Device Time",
+      "timeMode": "Time Mode",
+      "timeZone": "Time Zone",
+      "ntpServer": "NTP Server",
+      "ntpPort": "NTP Port",
+      "interfacesTitle": "Network Interfaces ({{n}})",
+      "interface": "Interface",
+      "ipAddress": "IP Address",
+      "subnet": "Subnet",
+      "gateway": "Gateway",
+      "speed": "Speed",
+      "auto": "Auto",
+      "loadError": "Failed to load network configuration.",
+      "empty": "No network configuration available."
+    },
+    "playback": {
+      "offline": "NVR is offline. Playback unavailable.",
+      "searchTitle": "Recording Search",
+      "searchDescription": "Search for recorded footage by channel, date, and time range.",
+      "channel": "Channel",
+      "selectChannel": "Select channel",
+      "chPrefix": "CH {{n}} · ",
+      "start": "Start",
+      "end": "End",
+      "searching": "Searching…",
+      "search": "Search",
+      "streamTitle": "Playback Stream",
+      "rtspUrl": "RTSP Playback URL",
+      "copyUrl": "Copy URL",
+      "vlcHint": "Open this URL in VLC or any RTSP-compatible player to view the recorded footage.",
+      "segmentsTitle": "Recording Segments ({{n}})",
+      "noRecordings": "No recordings found for the selected time range.",
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "duration": "Duration",
+      "type": "Type",
+      "codec": "Codec",
+      "actions": "Actions",
+      "durationValue": "{{m}}m {{s}}s",
+      "recTypeContinuous": "Continuous",
+      "recTypeMotion": "Motion",
+      "recTypeAlarm": "Alarm",
+      "recTypeRecording": "Recording",
+      "playFromStart": "Play from start time",
+      "closePlayer": "Close player",
+      "play": "Play",
+      "exportCsv": "Export CSV",
+      "jumpNow": "Jump to now",
+      "selectChannelPrompt": "Select a channel to begin playback",
+      "advancedTitle": "Recording search, segments & stream URL",
+      "back1m": "Back 1 minute",
+      "back10s": "Back 10 seconds",
+      "fwd10s": "Forward 10 seconds",
+      "fwd1m": "Forward 1 minute",
+      "inlinePlayerTitle": "Recorded playback",
+      "inlinePlayerFrom": "Playing from {{time}}",
+      "inlinePlayerUnavailable": "Inline playback unavailable: {{reason}}. Use the RTSP URL below in VLC or another player instead."
+    },
+    "channelStatus": {
+      "error": "Failed to load channel status. The NVR may be unreachable.",
+      "title": "Channel Status ({{n}} channels)",
+      "online": "Online",
+      "offline": "Offline",
+      "channelN": "Channel {{n}}"
+    },
+    "settings": {
+      "title": "NVR Settings",
+      "description": "Update the NVR configuration. IP address changes require deleting and re-importing.",
+      "name": "Name",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "port": "Port",
+      "ipAddress": "IP Address",
+      "serialNumber": "Serial Number",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "save": "Save"
+    },
+    "aria": {
+      "back": "Back to NVR list",
+      "moreActions": "More actions",
+      "openChannel": "Open channel {{name}}",
+      "showKey": "Show encryption key",
+      "hideKey": "Hide encryption key"
+    },
+    "overview": {
+      "sysInfoError": "Live system information could not be loaded, CPU, memory and clock details may be unavailable."
+    },
+    "confirmReboot": {
+      "title": "Reboot NVR?",
+      "description": "This will reboot \"{{name}}\". Recording and live streams will be interrupted while the device restarts.",
+      "cancel": "Cancel",
+      "confirm": "Reboot"
+    },
+    "confirmDelete": {
+      "title": "Delete NVR?",
+      "description": "This permanently removes \"{{name}}\" and its channel associations from FreeSDN. This action cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "holidays": {
+      "title": "Holidays ({{n}})",
+      "description": "Holiday periods override the normal recording schedule on the NVR.",
+      "offline": "NVR is offline, holiday settings are unavailable.",
+      "loading": "Loading holidays…",
+      "loadError": "Failed to load holiday settings.",
+      "emptyTitle": "No holidays configured",
+      "empty": "This NVR has no holiday periods defined.",
+      "save": "Save holidays",
+      "saving": "Saving…",
+      "saveSuccess": "Holiday settings saved",
+      "saveError": "Failed to save holiday settings",
+      "colId": "ID",
+      "colName": "Name",
+      "colMode": "Mode",
+      "colRange": "Range (MM/DD)",
+      "colEnabled": "Enabled",
+      "unnamed": "Holiday {{n}}",
+      "toggleAria": "Toggle holiday {{name}}",
+      "descriptionEditable": "Add, edit, or remove holiday schedule entries, then Save to apply them to the NVR.",
+      "add": "Add holiday",
+      "emptyEditable": "No holiday entries configured. Add one to get started.",
+      "newHolidayName": "New Holiday",
+      "colStart": "Start (M/D)",
+      "colEnd": "End (M/D)",
+      "colActions": "Actions",
+      "namePlaceholder": "Holiday name",
+      "nameAria": "Name for holiday {{n}}",
+      "mode": {
+        "date": "Date",
+        "week": "Week",
+        "month": "Month"
+      },
+      "startMonthAria": "Start month for holiday {{n}}",
+      "startDayAria": "Start day for holiday {{n}}",
+      "endMonthAria": "End month for holiday {{n}}",
+      "endDayAria": "End day for holiday {{n}}",
+      "deleteAria": "Delete holiday {{name}}",
+      "unsavedNote": "You have unsaved changes. Click Save to apply them to the NVR."
+    },
+    "csv": {
+      "name": "Name",
+      "channelId": "Channel ID",
+      "status": "Status",
+      "ipAddress": "IP Address",
+      "model": "Model",
+      "vendor": "Vendor",
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "durationSeconds": "Duration (s)",
+      "type": "Type",
+      "codec": "Codec",
+      "smartId": "ID",
+      "smartName": "Attribute",
+      "smartCurrent": "Current",
+      "smartWorst": "Worst",
+      "smartThreshold": "Threshold",
+      "smartRaw": "Raw Value",
+      "smartStatus": "Status"
+    }
+  },
+  "NVRListPage": {
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "recording": "Recording",
+      "error": "Error",
+      "unknown": "Unknown"
+    },
+    "storage": {
+      "notAvailable": "N/A",
+      "used": "{{size}} used",
+      "free": "{{size}} free",
+      "percentOf": "{{pct}}% of {{total}}"
+    },
+    "actions": {
+      "viewDetails": "View Details",
+      "syncChannels": "Sync Channels",
+      "delete": "Delete",
+      "export": "Export",
+      "addNvr": "Add NVR"
+    },
+    "card": {
+      "channel": "{{count}} channel",
+      "channels": "{{count}} channels",
+      "online": "{{count}} online",
+      "firmware": "FW {{version}}",
+      "unknownVendor": "Unknown vendor",
+      "synced": "Synced {{date}}",
+      "neverSynced": "Never synced"
+    },
+    "header": {
+      "title": "NVR Management",
+      "description": "{{total}} NVRs · {{online}} online"
+    },
+    "stats": {
+      "totalNvrs": "Total NVRs",
+      "configuredRecorders": "Configured recorders",
+      "online": "Online",
+      "reachable": "{{pct}}% reachable",
+      "noNvrs": "No NVRs",
+      "offline": "Offline",
+      "needsAttention": "Needs attention",
+      "activeStreams": "Active Streams",
+      "fpsTarget": "{{fps}} fps target",
+      "noLiveStreams": "No live streams"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search NVRs by name, IP, model, or serial…",
+      "allStatuses": "All statuses",
+      "clearFilters": "Clear filters",
+      "gridView": "Grid view",
+      "tableView": "Table view"
+    },
+    "error": {
+      "loadFailed": "Failed to load NVRs"
+    },
+    "empty": {
+      "title": "No NVRs registered",
+      "description": "Import your first NVR from the Cameras page to get started, or add one directly here."
+    },
+    "table": {
+      "nvr": "NVR",
+      "serialNumber": "S/N: {{serial}}",
+      "status": "Status",
+      "ipAddress": "IP Address",
+      "model": "Model",
+      "channels": "Channels",
+      "storage": "Storage",
+      "firmware": "Firmware",
+      "lastSynced": "Last Synced",
+      "never": "Never",
+      "itemName": "NVRs"
+    },
+    "bulk": {
+      "itemName": "NVR",
+      "syncAll": "Sync All",
+      "deleteToast": {
+        "title": "Bulk Delete",
+        "description": "Please delete NVRs individually for safety."
+      }
+    },
+    "deleteDialog": {
+      "title": "Delete NVR",
+      "confirmPrefix": "Are you sure you want to delete",
+      "confirmSuffix": "This will remove the NVR and all associated camera records. This action cannot be undone.",
+      "cancel": "Cancel",
+      "deleting": "Deleting...",
+      "delete": "Delete"
+    },
+    "toasts": {
+      "syncSuccess": "Synced {{count}} channels",
+      "syncFailed": "Failed to sync NVR",
+      "deleteFailed": "Failed to delete NVR"
+    }
+  },
+  "HLSPlayer": {
+    "errors": {
+      "streamFailed": "Stream failed after multiple recovery attempts",
+      "playbackError": "Native HLS playback error",
+      "notSupported": "HLS is not supported in this browser",
+      "networkError": "Network error: unable to load stream",
+      "mediaError": "Media error: stream format issue",
+      "streamError": "Stream error: {{details}}"
+    }
+  },
+  "RecordedHlsPlayer": {
+    "starting": "Starting playback…",
+    "startFailed": "Couldn't start recorded playback.",
+    "notSupported": "Recorded video playback isn't available for this device.",
+    "notDecodable": "This NVR can't play back recordings for this camera, its recorded video stream isn't decodable. Live view still works."
+  },
+  "CameraEventsPage": {
+    "title": "Review",
+    "description": "Camera & NVR events, motion, smart detections, tamper and video-loss alerts.",
+    "unreviewed": "{{count}} unreviewed",
+    "reviewAllShown": "Review all shown",
+    "play": "Play",
+    "playAtTime": "Open recorded playback at this moment",
+    "searchPlaceholder": "Find anything…",
+    "categories": {
+      "all": "All",
+      "person": "Person",
+      "vehicle": "Vehicle",
+      "motion": "Motion",
+      "line": "Line crossing",
+      "intrusion": "Intrusion",
+      "face": "Face",
+      "tamper": "Tamper",
+      "audio": "Audio"
+    },
+    "push": {
+      "enable": "Enable alerts",
+      "enabled": "Alerts on",
+      "denied": "Notifications are blocked in your browser settings",
+      "failed": "Couldn't change notification settings",
+      "enabledToast": "Push alerts enabled for this browser",
+      "disabledToast": "Push alerts disabled"
+    },
+    "filters": {
+      "camera": "Camera",
+      "allCameras": "All cameras",
+      "allTypes": "All types",
+      "unreviewed": "Unreviewed",
+      "reviewed": "Reviewed",
+      "allStatus": "All"
+    },
+    "types": {
+      "motion": "Motion",
+      "lineCross": "Line crossing",
+      "intrusion": "Intrusion",
+      "face": "Face",
+      "tamper": "Tamper",
+      "videoLoss": "Video loss"
+    },
+    "range": {
+      "h1": "Last hour",
+      "h24": "Last 24 hours",
+      "d7": "Last 7 days",
+      "d30": "Last 30 days"
+    },
+    "error": "Failed to load events.",
+    "loading": "Loading events…",
+    "empty": {
+      "title": "No events",
+      "description": "Events appear here as your NVRs detect motion, smart events, or alarms in the selected window."
+    },
+    "unknownCamera": "Unknown camera",
+    "new": "New",
+    "reviewed": "Reviewed",
+    "review": "Review",
+    "loadMore": "Load more",
+    "maxEventsReached": "Showing the {{max}} most recent events. Narrow the time range or filters to see more.",
+    "toasts": {
+      "ackFailed": "Failed to mark reviewed",
+      "bulkAcked": "Marked {{count}} events reviewed"
+    }
+  },
+  "RegionEditor": {
+    "snapshotAlt": "Camera snapshot",
+    "lineHint": "{{count}}/2 points, click to place the tripwire",
+    "polygonHint": "{{count}}/{{max}} points, click to add, drag to move",
+    "removePoint": "Remove point",
+    "undo": "Undo",
+    "clear": "Clear"
+  },
+  "RegionEditDialog": {
+    "lineDesc": "Click two points on the image to place the tripwire line.",
+    "polygonDesc": "Click to add points and drag to adjust. At least 3 points form the zone.",
+    "loadingSnapshot": "Loading camera snapshot…",
+    "cancel": "Cancel",
+    "save": "Save area"
+  }
+}

@@ -1,0 +1,19 @@
+# FreeSDN is free and open source under AGPL-3.0. The custom link below points to
+# https://freesdn.org/support, which explains the two optional ways people can help:
+#
+#   1. DONATE HARDWARE - ship a device to hardware@freesdn.org. Ownership transfers
+#      permanently. During reverse-engineering the device may be modified, reflashed,
+#      bricked, or destroyed. It will not be returned and there is no compensation.
+#      In return, that vendor/model gets first-class support and ongoing test coverage
+#      in FreeSDN, and donors are credited (opt-in) on the supporters wall.
+#      This is how new vendor support gets built: donate the gear, it becomes
+#      everyone's compatibility.
+#
+#   2. FUEL THE BUILD - the team builds and reviews with AI tooling, so gifting a
+#      Claude (Anthropic) or OpenAI Codex subscription to fuel@freesdn.org directly
+#      funds ongoing development as we expand vendor coverage. Optional.
+#
+# If you want to say hello, contact hello@freesdn.org.
+# Security reports go to security@freesdn.org or GitHub private vulnerability reporting.
+
+custom: ["https://freesdn.org/support"]

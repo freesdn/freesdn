@@ -1,0 +1,126 @@
+{
+  "UsersPage": {
+    "header": {
+      "title": "Usuarios",
+      "description": "Administra las cuentas de usuario, los roles y los permisos de acceso.",
+      "export": "Exportar",
+      "addUser": "Agregar usuario"
+    },
+    "loadError": "No se pudieron cargar los usuarios",
+    "itemNameSingular": "usuario",
+    "itemNamePlural": "usuarios",
+    "roles": {
+      "super_admin": "Superadministrador",
+      "org_admin": "Administrador de organización",
+      "operator": "Operador",
+      "viewer": "Lector",
+      "api_key": "Clave de API"
+    },
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "pending": "Pendiente"
+    },
+    "mfa": {
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado"
+    },
+    "time": {
+      "never": "Nunca",
+      "justNow": "Ahora mismo",
+      "minutesAgo": "hace {{n}} min",
+      "hoursAgo": "hace {{n}} h",
+      "daysAgo": "hace {{n}} d"
+    },
+    "columns": {
+      "user": "Usuario",
+      "role": "Rol",
+      "status": "Estado",
+      "mfa": "MFA",
+      "lastLogin": "Último inicio de sesión"
+    },
+    "stats": {
+      "totalUsers": "Total de usuarios",
+      "registeredAccounts": "Cuentas registradas",
+      "active": "Activos",
+      "percentActive": "{{percent}}% activos",
+      "administrators": "Administradores",
+      "orgSuperAdmins": "Administradores de org/super",
+      "mfaEnabled": "MFA habilitado",
+      "percentSecured": "{{percent}}% protegidos",
+      "noUsers": "Sin usuarios"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar usuarios por nombre, correo o nombre de usuario…",
+      "allRoles": "Todos los roles",
+      "allStatuses": "Todos los estados",
+      "clearFilters": "Borrar filtros"
+    },
+    "actions": {
+      "menuLabel": "Acciones para {{name}}",
+      "edit": "Editar usuario",
+      "manageSiteAccess": "Administrar acceso a sitios",
+      "sendPasswordReset": "Enviar restablecimiento de contraseña",
+      "enableAccount": "Habilitar cuenta",
+      "disableAccount": "Deshabilitar cuenta",
+      "delete": "Eliminar usuario",
+      "deleteConfirm": "¿Eliminar al usuario \"{{name}}\"? Esta acción no se puede deshacer."
+    },
+    "bulk": {
+      "sendInvite": "Enviar invitación",
+      "inviteTitle": "Invitación masiva",
+      "inviteDescription": "Invitación masiva: aún no implementada.",
+      "disable": "Deshabilitar",
+      "disableTitle": "Deshabilitación masiva",
+      "disableDescription": "Deshabilitación masiva: aún no implementada.",
+      "delete": "Eliminar",
+      "deleteTitle": "Eliminación masiva",
+      "deleteDescription": "Por seguridad, elimina los usuarios de forma individual."
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "createError": "No se pudo crear el usuario",
+      "deleteError": "No se pudo eliminar el usuario",
+      "updateError": "No se pudo actualizar el usuario"
+    },
+    "siteAccess": {
+      "title": "Acceso a sitios · {{name}}",
+      "adminDescription": "Los administradores tienen acceso implícito a todos los sitios. Estas selecciones son solo informativas.",
+      "userDescription": "Selecciona a qué sitios puede acceder este usuario. Si no se selecciona ningún sitio, el usuario no tiene restricciones de acceso a nivel de sitio (acceso abierto heredado).",
+      "noSites": "No hay sitios disponibles.",
+      "selectedCount": "{{selected}} de {{total}} seleccionados",
+      "selectAll": "Seleccionar todo",
+      "clear": "Borrar",
+      "cancel": "Cancelar",
+      "saving": "Guardando…",
+      "save": "Guardar acceso",
+      "saveError": "No se pudo guardar el acceso a sitios",
+      "loadError": "No se pudieron cargar los sitios. Inténtalo de nuevo."
+    },
+    "addUser": {
+      "title": "Agregar nuevo usuario",
+      "description": "Crea una nueva cuenta de usuario. Recibirá un correo para configurar su contraseña.",
+      "submit": "Crear usuario",
+      "fields": {
+        "email": "Correo electrónico",
+        "username": "Nombre de usuario",
+        "fullName": "Nombre completo",
+        "password": "Contraseña",
+        "passwordPlaceholder": "Mínimo 12 caracteres",
+        "role": "Rol",
+        "rolePlaceholder": "Seleccionar rol"
+      },
+      "roleOptions": {
+        "super_admin": "Superadministrador - Acceso total",
+        "org_admin": "Administrador de organización - Gestión de la organización",
+        "operator": "Operador - Administrar dispositivos",
+        "viewer": "Lector - Solo lectura"
+      },
+      "validation": {
+        "email": "Se requiere un correo electrónico válido",
+        "username": "El nombre de usuario es obligatorio",
+        "password": "La contraseña debe tener al menos 12 caracteres"
+      }
+    }
+  }
+}

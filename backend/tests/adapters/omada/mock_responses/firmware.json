@@ -1,0 +1,9 @@
+{
+    "currentVersion": "1.6.3",
+    "latestVersion": "1.7.0",
+    "needUpgrade": true,
+    "releaseNotes": "Bug fixes and performance improvements",
+    "downloadUrl": "https://static.tp-link.com/firmware/TL-SG3428_v1_1.7.0.bin",
+    "releaseDate": "2024-12-01",
+    "fileSize": 15728640
+}

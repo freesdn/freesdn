@@ -1,0 +1,1468 @@
+{
+  "BackupAgeTab": {
+    "thresholds": {
+      "12h": "12 horas",
+      "24h": "24 horas",
+      "48h": "48 horas",
+      "72h": "72 horas",
+      "7d": "7 días"
+    },
+    "age": {
+      "never": "Nunca"
+    },
+    "labels": {
+      "threshold": "Umbral:"
+    },
+    "summary": {
+      "totalVMs": "Total de VM",
+      "backedUpOk": "Con copia (OK)",
+      "stale": "Obsoletas",
+      "neverBackedUp": "Sin copia nunca"
+    },
+    "table": {
+      "vmid": "VMID",
+      "name": "Nombre",
+      "node": "Nodo",
+      "lastBackup": "Última copia",
+      "age": "Antigüedad",
+      "status": "Estado"
+    },
+    "status": {
+      "ok": "OK",
+      "stale": "Obsoleta",
+      "never": "Nunca"
+    },
+    "empty": {
+      "noVMs": "No se encontraron VM en el informe de antigüedad de copias.",
+      "noBackups": "No se encontraron copias para los criterios seleccionados."
+    },
+    "errors": {
+      "loadBanner": "No se pudo cargar el informe de antigüedad de copias. Los datos siguientes pueden estar obsoletos o vacíos.",
+      "loadReport": "No se pudo cargar el informe de antigüedad de copias",
+      "selectNodeStorage": "Selecciona un nodo y almacenamiento"
+    },
+    "actions": {
+      "retry": "Reintentar",
+      "preview": "Vista previa",
+      "pruneNow": "Purgar ahora"
+    },
+    "prune": {
+      "title": "Purgar copias de seguridad",
+      "node": "Nodo",
+      "selectNode": "Selecciona un nodo",
+      "storage": "Almacenamiento (compatible con copias)",
+      "selectStorage": "Selecciona almacenamiento",
+      "keepLast": "Conservar últimas",
+      "keepHourly": "Conservar por hora",
+      "keepDaily": "Conservar diarias",
+      "keepWeekly": "Conservar semanales",
+      "keepMonthly": "Conservar mensuales",
+      "keepYearly": "Conservar anuales",
+      "vmidFilter": "Filtro de VMID (opcional)",
+      "allVMs": "Todas las VM"
+    },
+    "dialog": {
+      "title": "Purgar copias de seguridad",
+      "description": "Esto eliminará de forma permanente todas las copias en {{storage}} (nodo {{node}}) que no cumplan la política de retención siguiente. Las copias purgadas no se pueden recuperar.",
+      "confirmLabel": "Purgar copias de seguridad"
+    },
+    "previewTable": {
+      "backup": "Copia",
+      "vmid": "VMID",
+      "size": "Tamaño",
+      "date": "Fecha",
+      "action": "Acción",
+      "remove": "Eliminar",
+      "keep": "Conservar"
+    },
+    "toast": {
+      "previewFailed": "Error en la vista previa",
+      "pruneCompleted": "Purga completada",
+      "pruneFailed": "Error al purgar"
+    }
+  },
+  "CephTab": {
+    "status": {
+      "unknown": "Desconocido",
+      "clusterStatus": "Estado del clúster",
+      "osds": "OSDs",
+      "osdSummary": "{{total}} en total · {{up}} activos · {{in}} dentro",
+      "pgs": "PGs",
+      "pools": "Grupos",
+      "usage": "Uso"
+    },
+    "storage": {
+      "title": "Almacenamiento",
+      "used": "Usado",
+      "available": "Disponible",
+      "total": "Total",
+      "capacity": "Capacidad"
+    },
+    "empty": {
+      "noNodes": {
+        "title": "No hay nodos disponibles",
+        "description": "Agregue nodos para consultar el estado de Ceph."
+      },
+      "notAvailable": {
+        "title": "Ceph no disponible",
+        "description": "Ceph no parece estar configurado en este clúster. Instale y configure Ceph en sus nodos Proxmox para habilitar el almacenamiento distribuido."
+      },
+      "statusUnavailable": {
+        "title": "Estado de Ceph no disponible",
+        "description": "No se pudo obtener el estado de Ceph. Es posible que Ceph no esté configurado en este clúster."
+      }
+    },
+    "osds": {
+      "title": "OSDs",
+      "up": "activo",
+      "down": "inactivo",
+      "yes": "sí",
+      "no": "no",
+      "columns": {
+        "id": "ID",
+        "name": "Nombre",
+        "status": "Estado",
+        "in": "Dentro",
+        "size": "Tamaño",
+        "used": "Usado",
+        "available": "Disponible",
+        "crushWeight": "Peso Crush"
+      }
+    },
+    "pools": {
+      "title": "Grupos",
+      "columns": {
+        "name": "Nombre",
+        "size": "Tamaño (réplicas)",
+        "pgNum": "Núm. PG",
+        "crushRule": "Regla Crush",
+        "usage": "Uso"
+      }
+    },
+    "monitors": {
+      "title": "Monitores",
+      "columns": {
+        "name": "Nombre",
+        "address": "Dirección",
+        "rank": "Rango"
+      }
+    }
+  },
+  "CertificatesTab": {
+    "title": "Certificados de nodo",
+    "status": {
+      "unknown": "Desconocido",
+      "expired": "Caducado",
+      "daysLeft": "{{days}} d restantes"
+    },
+    "error": {
+      "fetchFailed": "No se pudieron obtener los datos del certificado de uno o varios nodos."
+    },
+    "empty": {
+      "title": "No se encontraron certificados",
+      "description": "No hay datos de certificados disponibles de los nodos del clúster."
+    },
+    "columns": {
+      "node": "Nodo",
+      "subject": "Asunto",
+      "issuer": "Emisor",
+      "fingerprint": "Huella digital",
+      "validFrom": "Válido desde",
+      "expires": "Caduca",
+      "status": "Estado",
+      "actions": "Acciones"
+    },
+    "actions": {
+      "renew": "Renovar",
+      "upload": "Cargar",
+      "cancel": "Cancelar",
+      "uploadCertificate": "Cargar certificado"
+    },
+    "confirm": {
+      "renew": "¿Renovar el certificado ACME en {{node}}? Esto puede interrumpir brevemente HTTPS."
+    },
+    "dialog": {
+      "title": "Cargar certificado personalizado",
+      "description": "Cargue un certificado TLS personalizado para el nodo {{node}}.",
+      "certLabel": "Certificado (PEM)",
+      "keyLabel": "Clave privada (PEM)",
+      "forceOverwrite": "Forzar sobrescritura",
+      "restartServices": "Reiniciar servicios"
+    },
+    "toast": {
+      "renewStarted": {
+        "title": "Renovación ACME iniciada",
+        "description": "Renovación del certificado iniciada en {{node}}"
+      },
+      "renewFailed": {
+        "title": "Error en la renovación",
+        "description": "No se pudo iniciar la renovación ACME"
+      },
+      "uploadSuccess": {
+        "title": "Certificado cargado",
+        "description": "Certificado personalizado instalado en {{node}}"
+      },
+      "uploadFailed": {
+        "title": "Error de carga",
+        "description": "No se pudo cargar el certificado personalizado"
+      }
+    }
+  },
+  "ClusterLogTab": {
+    "title": "Registro del clúster",
+    "entriesCount": "{{count}} entradas",
+    "autoRefresh": "Actualización automática: 15s",
+    "error": {
+      "fetch": "No se pudieron obtener las entradas del registro del clúster."
+    },
+    "empty": {
+      "title": "Sin entradas de registro",
+      "description": "No se encontraron entradas en el registro del clúster."
+    },
+    "columns": {
+      "time": "Hora",
+      "node": "Nodo",
+      "severity": "Gravedad",
+      "tag": "Etiqueta",
+      "user": "Usuario",
+      "message": "Mensaje"
+    },
+    "severity": {
+      "error": "error",
+      "warning": "advertencia",
+      "info": "info"
+    }
+  },
+  "AddHypervisorDialog": {
+    "title": "Agregar hipervisor",
+    "description": "Conecta un servidor Proxmox VE para administrar máquinas virtuales y contenedores.",
+    "submitLabel": "Agregar hipervisor",
+    "proxmoxVe": "Proxmox VE",
+    "tokenIdFormatPrefix": "Formato:",
+    "fields": {
+      "name": "Nombre *",
+      "site": "Sitio *",
+      "host": "Dirección del host *",
+      "port": "Puerto *",
+      "authMethod": "Método de autenticación",
+      "tokenId": "ID de token de API *",
+      "tokenSecret": "Secreto de token de API *",
+      "username": "Usuario *",
+      "password": "Contraseña *",
+      "realm": "Dominio",
+      "useSsl": "Usar SSL/TLS",
+      "useSslHint": "Conectar mediante HTTPS",
+      "verifySsl": "Verificar certificado SSL",
+      "verifySslHint": "Desactívalo para certificados autofirmados (comunes en Proxmox)"
+    },
+    "placeholders": {
+      "name": "p. ej., Clúster Proxmox de producción",
+      "site": "Selecciona un sitio",
+      "host": "p. ej., 192.168.1.100 o pve.local",
+      "tokenId": "p. ej., root@pam!freesdn"
+    },
+    "authModes": {
+      "token": "Token de API",
+      "password": "Usuario / Contraseña"
+    },
+    "authDescriptions": {
+      "token": "Se recomiendan los tokens de API. Crea uno en Proxmox → Centro de datos → Permisos → Tokens de API.",
+      "password": "Usa una cuenta de usuario de Proxmox. Menos seguro que los tokens de API."
+    },
+    "realms": {
+      "pam": "Linux PAM (pam)",
+      "pve": "Proxmox VE (pve)",
+      "ldap": "LDAP",
+      "ad": "Active Directory"
+    },
+    "test": {
+      "heading": "Prueba de conexión",
+      "hint": "Verifica la conectividad antes de agregar",
+      "button": "Probar conexión",
+      "testing": "Probando...",
+      "successful": "Conexión exitosa",
+      "failedLabel": "Conexión fallida",
+      "failed": "La prueba de conexión falló",
+      "latency": "Latencia",
+      "latencyValue": "{{value}} ms",
+      "version": "Versión"
+    },
+    "validation": {
+      "nameRequired": "El nombre es obligatorio",
+      "siteRequired": "Selecciona un sitio",
+      "hostRequired": "La dirección del host es obligatoria",
+      "tokenIdRequired": "El ID de token de API es obligatorio",
+      "tokenSecretRequired": "El secreto de token de API es obligatorio",
+      "usernameRequired": "El usuario es obligatorio",
+      "passwordRequired": "La contraseña es obligatoria",
+      "tokenIdAndSecretRequired": "Se requieren el ID y el secreto del token de API",
+      "usernameAndPasswordRequired": "Se requieren el usuario y la contraseña"
+    }
+  },
+  "BackupJobDialog": {
+    "validation": {
+      "timeRequired": "La hora es obligatoria",
+      "storageRequired": "El almacenamiento es obligatorio"
+    },
+    "toasts": {
+      "created": "Trabajo de copia de seguridad creado",
+      "updated": "Trabajo de copia de seguridad actualizado"
+    },
+    "title": {
+      "edit": "Editar trabajo de copia de seguridad",
+      "create": "Crear trabajo de copia de seguridad"
+    },
+    "description": {
+      "edit": "Editando trabajo de copia de seguridad {{id}}",
+      "create": "Configura un nuevo trabajo de copia de seguridad programado."
+    },
+    "submit": {
+      "update": "Actualizar trabajo",
+      "create": "Crear trabajo"
+    },
+    "days": {
+      "mon": "Lunes",
+      "tue": "Martes",
+      "wed": "Miércoles",
+      "thu": "Jueves",
+      "fri": "Viernes",
+      "sat": "Sábado",
+      "sun": "Domingo"
+    },
+    "fields": {
+      "day": {
+        "label": "Día",
+        "placeholder": "Día",
+        "everyDay": "Todos los días"
+      },
+      "time": {
+        "label": "Hora"
+      },
+      "storage": {
+        "label": "Almacenamiento"
+      },
+      "vmid": {
+        "label": "ID de VM (opcional)",
+        "placeholder": "100,101,200 (vacío = todas)",
+        "description": "VMID separados por comas. Deja vacío para respaldar todas."
+      },
+      "node": {
+        "label": "Nodo (opcional)",
+        "allNodes": "Todos los nodos"
+      },
+      "mode": {
+        "label": "Modo",
+        "snapshot": "Instantánea",
+        "suspend": "Suspender",
+        "stop": "Detener"
+      },
+      "compress": {
+        "label": "Compresión",
+        "none": "Ninguna"
+      },
+      "mailto": {
+        "label": "Enviar correo a (opcional)"
+      },
+      "enabled": {
+        "label": "Habilitado"
+      }
+    }
+  },
+  "BulkActionBar": {
+    "selectedCount": "{{count}} seleccionados",
+    "actions": {
+      "start": "Iniciar",
+      "shutdown": "Apagar",
+      "forceStop": "Forzar detención",
+      "reboot": "Reiniciar",
+      "migrate": "Migrar",
+      "delete": "Eliminar"
+    },
+    "confirm": {
+      "start": "¿Iniciar {{count}} VM/CT?",
+      "shutdown": "¿Apagar {{count}} VM/CT?",
+      "stop": "¿Forzar la detención de {{count}} VM/CT?",
+      "reboot": "¿Reiniciar {{count}} VM/CT?",
+      "delete": "¿Eliminar {{count}} VM/CT? Esta acción no se puede deshacer. Asegúrate de que todos estén detenidos."
+    },
+    "toast": {
+      "actionCompleteTitle": "Acción masiva completada",
+      "actionCompleteDescription": "{{succeeded}} con éxito, {{failed}} con error",
+      "actionFailedTitle": "Error en la acción masiva",
+      "migrationStarted": "Migración iniciada para {{count}} VM"
+    },
+    "results": {
+      "title": "Resultados de la operación masiva",
+      "close": "Cerrar"
+    },
+    "migrate": {
+      "title": "Migración masiva de {{count}} VM/CT",
+      "description": "Migra los elementos seleccionados a un nodo de destino.",
+      "submit": "Migrar {{count}} elementos",
+      "targetNodeLabel": "Nodo de destino",
+      "targetNodePlaceholder": "Selecciona el nodo de destino",
+      "targetNodeRequired": "Selecciona un nodo de destino",
+      "onlineLabel": "Migración en línea (en vivo)"
+    }
+  },
+  "EditConfigDialog": {
+    "vm": "VM",
+    "ct": "CT",
+    "dialogDescription": "Editar la configuración en {{node}}. Los cambios pueden requerir un reinicio para aplicarse.",
+    "submit": {
+      "saving": "Guardando...",
+      "save": "Guardar cambios"
+    },
+    "toast": {
+      "updated": "Configuración actualizada",
+      "noChanges": "No hay cambios que guardar",
+      "updateFailed": "Error al actualizar"
+    },
+    "tabs": {
+      "general": "General",
+      "disks": "Discos ({{count}})",
+      "network": "Red ({{count}})",
+      "guestAgent": "Agente invitado"
+    },
+    "fields": {
+      "cpuCores": "Núcleos de CPU",
+      "memory": "Memoria (MB)",
+      "memoryGb": "{{gb}} GB",
+      "balloon": "Memoria de globo (MB)",
+      "balloonHelp": "0 = desactivado. KSM/ballooning permite la asignación dinámica de memoria.",
+      "tags": "Etiquetas",
+      "tagsHelp": "Etiquetas separadas por punto y coma",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Descripción de la VM...",
+      "startOnBoot": "Iniciar al arrancar"
+    },
+    "disks": {
+      "empty": "No se encontraron configuraciones de disco.",
+      "disk": "Disco",
+      "configuration": "Configuración"
+    },
+    "network": {
+      "empty": "No hay interfaces de red configuradas.",
+      "interface": "Interfaz",
+      "configuration": "Configuración"
+    },
+    "agent": {
+      "unavailable": "El agente invitado no está disponible. Instale qemu-guest-agent dentro de la VM.",
+      "hostname": "Nombre de host",
+      "os": "SO",
+      "interface": "Interfaz",
+      "mac": "MAC",
+      "ipAddresses": "Direcciones IP"
+    }
+  },
+  "UploadDialog": {
+    "title": "Subir al almacenamiento",
+    "description": "Sube una imagen ISO o una plantilla de contenedor a {{storage}} en {{node}}",
+    "toast": {
+      "startedTitle": "Subida iniciada",
+      "startedDescription": "Subiendo {{fileName}} a {{storage}}",
+      "failedTitle": "Error en la subida"
+    },
+    "submit": {
+      "upload": "Subir",
+      "uploading": "Subiendo..."
+    },
+    "errors": {
+      "noFileSelected": "No se ha seleccionado ningún archivo"
+    },
+    "fields": {
+      "contentType": "Tipo de contenido",
+      "file": "Archivo"
+    },
+    "contentTypes": {
+      "iso": "Imagen ISO",
+      "vztmpl": "Plantilla de contenedor"
+    },
+    "dropzone": {
+      "selectFile": "Haz clic para seleccionar un archivo",
+      "isoHint": "Archivos .iso, .img",
+      "tmplHint": "Archivos .tar.gz, .tar.xz, .tar.zst"
+    }
+  },
+  "GuestDetailDrawer": {
+    "header": {
+      "vmFallback": "VM {{vmid}}",
+      "ct": "CT",
+      "vm": "VM",
+      "nodeUptime": "Nodo: {{node}} · Tiempo activo: {{uptime}}",
+      "ipSuffix": " · IP: {{ip}}"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "firewall": "Firewall",
+      "config": "Configuración",
+      "cloudInit": "Cloud-Init"
+    },
+    "actions": {
+      "start": "Iniciar",
+      "shutdown": "Apagar",
+      "reboot": "Reiniciar"
+    },
+    "confirms": {
+      "shutdown": "¿Apagar {{kind}} {{vmid}}?",
+      "reboot": "¿Reiniciar {{kind}} {{vmid}}?",
+      "deleteRule": "¿Eliminar la regla de firewall n.º {{pos}}?",
+      "regenerate": "¿Regenerar la unidad de Cloud-Init? Esto volverá a crear la imagen de la unidad con la configuración actual."
+    },
+    "overview": {
+      "cpu": "CPU",
+      "cpuValue": "{{percent}}% de {{cores}} núcleo(s)",
+      "memory": "Memoria",
+      "memoryValue": "{{used}} MB / {{total}} MB",
+      "disk": "Disco",
+      "diskValue": "{{used}} GB / {{total}} GB",
+      "node": "Nodo",
+      "uptime": "Tiempo activo: {{uptime}}",
+      "networkIn": "Red entrada",
+      "networkOut": "Red salida",
+      "ipAddress": "Dirección IP",
+      "osType": "Tipo de SO",
+      "haState": "Estado HA",
+      "lock": "Bloqueo",
+      "tags": "Etiquetas"
+    },
+    "firewall": {
+      "heading": "Reglas de firewall del invitado",
+      "addRule": "Agregar regla",
+      "cancel": "Cancelar",
+      "action": "Acción",
+      "direction": "Dirección",
+      "inbound": "Entrante",
+      "outbound": "Saliente",
+      "protocol": "Protocolo",
+      "destPort": "Puerto destino",
+      "sourceOptional": "Origen (opcional)",
+      "commentOptional": "Comentario (opcional)",
+      "commentPlaceholder": "Permitir HTTP",
+      "createRule": "Crear regla",
+      "loadError": "No se pudieron cargar las reglas de firewall.",
+      "empty": "No hay reglas de firewall configuradas para este invitado.",
+      "colDir": "Dir",
+      "colAction": "Acción",
+      "colProto": "Proto",
+      "colSource": "Origen",
+      "colDport": "Puerto D.",
+      "colComment": "Comentario"
+    },
+    "config": {
+      "heading": "Configuración",
+      "loadError": "No se pudo cargar la configuración.",
+      "empty": "No hay datos de configuración disponibles.",
+      "colKey": "Clave",
+      "colValue": "Valor",
+      "pending": "pendiente"
+    },
+    "cloudInit": {
+      "heading": "Configuración de Cloud-Init",
+      "loadError": "No se pudo cargar la configuración de Cloud-Init.",
+      "user": "Usuario",
+      "password": "Contraseña",
+      "passwordPlaceholder": "Deje en blanco para mantener la actual, escriba una nueva para cambiarla",
+      "sshKeys": "Claves públicas SSH",
+      "sshKeysPlaceholder": "Deje en blanco para mantener las actuales, pegue claves nuevas para reemplazarlas",
+      "ipConfig": "Configuración IP (ipconfig0)",
+      "ipConfigPlaceholder": "Deje en blanco para mantener, o: ip=dhcp / ip=10.0.0.1/24,gw=10.0.0.1",
+      "nameserver": "Servidor DNS",
+      "searchDomain": "Dominio de búsqueda",
+      "save": "Guardar",
+      "regenerateDrive": "Regenerar unidad"
+    },
+    "toasts": {
+      "cloudInitSaved": "Configuración de Cloud-Init guardada",
+      "saveFailed": "Error al guardar",
+      "cloudInitRegenerated": "Unidad de Cloud-Init regenerada",
+      "regenerateFailed": "Error al regenerar",
+      "ruleCreated": "Regla de firewall creada",
+      "createRuleFailed": "Error al crear la regla",
+      "ruleDeleted": "Regla de firewall eliminada",
+      "deleteRuleFailed": "Error al eliminar la regla"
+    }
+  },
+  "KioskMode": {
+    "header": {
+      "title": "FreeSDN Hypervisor"
+    },
+    "error": {
+      "connectionLost": "Conexión perdida · datos del panel no disponibles",
+      "autoRetrying": "Reintentando automáticamente cada 10 segundos..."
+    },
+    "metrics": {
+      "cpuUsage": "Uso de CPU",
+      "memoryUsage": "Uso de memoria",
+      "storageUsage": "Uso de almacenamiento",
+      "cores": "{{count}} núcleos",
+      "total": "{{value}} en total",
+      "nodeStatus": "Estado de los nodos",
+      "nodesOnline": "{{online}} / {{total}} en línea",
+      "virtualMachines": "Máquinas virtuales",
+      "containers": "Contenedores",
+      "running": "en ejecución"
+    }
+  },
+  "MonitoringTab": {
+    "noData": "No hay datos disponibles",
+    "errorState": "No se pudieron cargar los datos de monitoreo. El nodo o la VM pueden estar inaccesibles.",
+    "timeframes": {
+      "hour": "Última hora",
+      "day": "Último día",
+      "week": "Última semana",
+      "month": "Último mes"
+    },
+    "controls": {
+      "timeframe": "Periodo:",
+      "node": "Nodo:",
+      "vmCt": "VM/CT:",
+      "nodeMetricsPlaceholder": "Métricas del nodo",
+      "nodeOption": "Nodo: {{node}}"
+    },
+    "charts": {
+      "cpu": {
+        "title": "Uso de CPU",
+        "cpu": "CPU"
+      },
+      "memory": {
+        "title": "Uso de memoria",
+        "used": "Usada",
+        "total": "Total"
+      },
+      "network": {
+        "title": "E/S de red",
+        "in": "Entrada",
+        "out": "Salida"
+      },
+      "disk": {
+        "title": "E/S de disco",
+        "read": "Lectura",
+        "write": "Escritura"
+      }
+    },
+    "alerts": {
+      "title": "Configuración de alertas",
+      "cpuThreshold": "Umbral de CPU (%)",
+      "memoryThreshold": "Umbral de memoria (%)",
+      "fireAfter": "Activar tras N infracciones",
+      "resolveAfter": "Resolver tras N lecturas normales",
+      "hysteresisInfo": "La histéresis evita las alertas intermitentes. Una alerta se activa solo después de que el umbral se supere durante N lecturas consecutivas, y se resuelve solo tras N lecturas normales consecutivas."
+    }
+  },
+  "PBSTab": {
+    "toast": {
+      "pruneStarted": {
+        "title": "Depuración iniciada",
+        "description": "Se ha iniciado la depuración de copias de seguridad."
+      },
+      "pruneFailed": {
+        "title": "Error en la depuración",
+        "description": "No se pudieron depurar las copias de seguridad"
+      }
+    },
+    "storageError": {
+      "prefix": "No se pudieron cargar los grupos de almacenamiento: ",
+      "unknown": "error desconocido",
+      "suffix": "La configuración de copias de seguridad que se muestra a continuación puede estar incompleta."
+    },
+    "controls": {
+      "nodeLabel": "Nodo:",
+      "nodePlaceholder": "Seleccionar nodo",
+      "storageLabel": "Almacenamiento:",
+      "storagePlaceholder": "Seleccionar almacenamiento",
+      "noBackupStorage": "No se encontró almacenamiento de copias de seguridad",
+      "vmidLabel": "VMID:",
+      "vmidPlaceholder": "Todos"
+    },
+    "actions": {
+      "refresh": "Actualizar",
+      "pruneBackups": "Depurar copias de seguridad",
+      "cancel": "Cancelar",
+      "pruneNow": "Depurar ahora"
+    },
+    "summary": {
+      "totalBackups": "Copias de seguridad totales",
+      "keep": "Conservar",
+      "remove": "Eliminar"
+    },
+    "empty": {
+      "noStorage": {
+        "title": "No se encontró almacenamiento de copias de seguridad",
+        "description": "Este nodo no tiene PBS ni almacenamiento compatible con copias de seguridad configurado. Agregue un almacenamiento de Proxmox Backup Server para habilitar la gestión de copias de seguridad."
+      },
+      "notPbs": {
+        "title": "La depuración no está disponible para este almacenamiento",
+        "description": "no admite la vista previa de depuración. Solo los almacenamientos de Proxmox Backup Server (PBS) admiten la depuración de copias de seguridad.",
+        "noPbsConfigured": "No hay almacenamiento PBS configurado en este nodo."
+      },
+      "noStorageOnNode": "No se encontró almacenamiento compatible con copias de seguridad en este nodo.",
+      "noSnapshots": "No se encontraron instantáneas de copia de seguridad en este almacenamiento."
+    },
+    "pruneError": "No se pudo cargar la vista previa de depuración. Es posible que el almacenamiento no admita operaciones de depuración.",
+    "table": {
+      "title": "Vista previa de depuración de copias de seguridad",
+      "vmid": "VMID",
+      "type": "Tipo",
+      "created": "Creado",
+      "size": "Tamaño",
+      "mark": "Marca"
+    },
+    "mark": {
+      "keep": "Conservar",
+      "remove": "Eliminar"
+    },
+    "dialog": {
+      "title": "Depurar copias de seguridad",
+      "descriptionPrefix": "Configure la política de retención y depure las copias de seguridad en",
+      "descriptionSuffix": "Esto eliminará permanentemente las copias de seguridad marcadas para eliminación.",
+      "keepLast": "Conservar últimas",
+      "keepDaily": "Conservar diarias",
+      "keepWeekly": "Conservar semanales",
+      "keepMonthly": "Conservar mensuales",
+      "filteringToVmid": "Filtrando por VMID:"
+    }
+  },
+  "ReplicationTab": {
+    "title": "Trabajos de replicación",
+    "jobCount": {
+      "one": "{{count}} trabajo",
+      "other": "{{count}} trabajos"
+    },
+    "status": {
+      "disabled": "Deshabilitado",
+      "error": "Error",
+      "degraded": "Degradado",
+      "ok": "OK"
+    },
+    "columns": {
+      "id": "ID",
+      "type": "Tipo",
+      "source": "Origen",
+      "target": "Destino",
+      "guest": "Invitado",
+      "schedule": "Programación",
+      "rate": "Velocidad",
+      "status": "Estado",
+      "lastSync": "Última sincronización"
+    },
+    "empty": {
+      "title": "Sin trabajos de replicación",
+      "description": "No hay trabajos de replicación configurados para este clúster."
+    },
+    "log": {
+      "empty": "No hay entradas de registro disponibles."
+    },
+    "error": {
+      "fetch": "No se pudieron obtener los datos de replicación del clúster."
+    }
+  },
+  "SdnTab": {
+    "heading": "Redes definidas por software",
+    "errorState": {
+      "message": "No se pudieron obtener los datos de SDN del clúster."
+    },
+    "common": {
+      "yes": "Sí",
+      "no": "No"
+    },
+    "actions": {
+      "createZone": "Crear zona",
+      "createVnet": "Crear VNet",
+      "applySdn": "Aplicar SDN",
+      "cancel": "Cancelar"
+    },
+    "confirms": {
+      "applySdn": "¿Aplicar la configuración de SDN? Esto actualizará la configuración de red en todo el clúster.",
+      "deleteZone": "¿Eliminar la zona {{zone}}?",
+      "deleteVnet": "¿Eliminar la VNet {{vnet}}?"
+    },
+    "toasts": {
+      "sdnApplied": {
+        "title": "SDN aplicado",
+        "description": "Configuración de SDN aplicada al clúster."
+      },
+      "applyFailed": {
+        "title": "Error al aplicar",
+        "description": "No se pudo aplicar la configuración de SDN"
+      },
+      "zoneCreated": {
+        "title": "Zona creada"
+      },
+      "vnetCreated": {
+        "title": "VNet creada"
+      },
+      "createFailed": {
+        "title": "Error al crear"
+      },
+      "createZoneFailed": {
+        "description": "No se pudo crear la zona de SDN"
+      },
+      "createVnetFailed": {
+        "description": "No se pudo crear la VNet de SDN"
+      },
+      "zoneDeleted": {
+        "title": "Zona eliminada"
+      },
+      "vnetDeleted": {
+        "title": "VNet eliminada"
+      },
+      "deleteFailed": {
+        "title": "Error al eliminar"
+      }
+    },
+    "zones": {
+      "title": "Zonas",
+      "empty": {
+        "title": "Sin zonas de SDN",
+        "description": "No hay zonas de SDN configuradas para este clúster."
+      },
+      "columns": {
+        "zone": "Zona",
+        "type": "Tipo",
+        "nodes": "Nodos",
+        "mtu": "MTU",
+        "bridge": "Puente",
+        "state": "Estado",
+        "actions": "Acciones"
+      }
+    },
+    "vnets": {
+      "title": "VNets",
+      "empty": {
+        "title": "Sin VNets de SDN",
+        "description": "No hay VNets de SDN configuradas para este clúster."
+      },
+      "columns": {
+        "vnet": "VNet",
+        "zone": "Zona",
+        "tag": "Etiqueta",
+        "vlanAware": "Compatible con VLAN",
+        "state": "Estado",
+        "actions": "Acciones"
+      }
+    },
+    "controllers": {
+      "title": "Controladores de SDN",
+      "empty": {
+        "title": "Sin controladores de SDN",
+        "description": "No hay controladores de SDN configurados para este clúster."
+      },
+      "columns": {
+        "controller": "Controlador",
+        "type": "Tipo",
+        "node": "Nodo",
+        "state": "Estado"
+      }
+    },
+    "zoneDialog": {
+      "title": "Crear zona de SDN",
+      "description": "Crear una nueva zona de SDN para el clúster.",
+      "fields": {
+        "name": "Nombre de la zona",
+        "type": "Tipo",
+        "nodes": "Nodos (separados por comas, opcional)",
+        "bridge": "Puente (opcional)",
+        "mtu": "MTU (opcional)"
+      }
+    },
+    "vnetDialog": {
+      "title": "Crear VNet de SDN",
+      "description": "Crear una nueva red virtual en una zona de SDN.",
+      "fields": {
+        "name": "Nombre de la VNet",
+        "zone": "Zona",
+        "zonePlaceholder": "Seleccionar zona",
+        "alias": "Alias (opcional)",
+        "tag": "Etiqueta VLAN (opcional)",
+        "vlanAware": "Compatible con VLAN"
+      }
+    }
+  },
+  "SubscriptionsTab": {
+    "status": {
+      "active": "Activa",
+      "expired": "Expirada",
+      "none": "Sin suscripción",
+      "unknown": "Desconocido"
+    },
+    "errors": {
+      "fetchFailed": "No se pudieron obtener los datos de suscripción de uno o más nodos.",
+      "partialBanner": "Una o más consultas de suscripción fallaron; los recuentos a continuación pueden estar incompletos. Los nodos afectados muestran el estado \"Desconocido\" en la tabla."
+    },
+    "table": {
+      "title": "Suscripciones de nodos",
+      "node": "Nodo",
+      "status": "Estado",
+      "level": "Nivel",
+      "product": "Producto",
+      "serverId": "ID de servidor",
+      "key": "Clave",
+      "nextDueDate": "Próxima fecha de vencimiento"
+    }
+  },
+  "TemplatesTab": {
+    "actions": {
+      "deploy": "Desplegar",
+      "deploying": "Desplegando...",
+      "cancel": "Cancelar"
+    },
+    "error": {
+      "fetch": "No se pudieron obtener los datos de plantillas del clúster."
+    },
+    "empty": {
+      "title": "No se encontraron plantillas",
+      "description": "Convierte una VM o un contenedor en plantilla para usarla aquí. Haz clic derecho en cualquier VM/CT detenida y selecciona 'Convertir en plantilla'."
+    },
+    "card": {
+      "fallbackName": "Plantilla {{vmid}}",
+      "cores": "{{count}} núcleos",
+      "memoryMb": "{{value}} MB",
+      "diskGb": "{{value}} GB"
+    },
+    "dialog": {
+      "title": "Desplegar desde plantilla",
+      "description": "Clonar \"{{name}}\" (#{{vmid}}) en {{target}} nuevo",
+      "targetContainer": "un contenedor",
+      "targetVm": "una VM",
+      "newVmid": "Nuevo VMID",
+      "nextPlaceholder": "Siguiente: {{vmid}}",
+      "name": "Nombre",
+      "targetNode": "Nodo de destino",
+      "sameNode": "Mismo nodo",
+      "fullClone": "Clon completo (copia independiente)"
+    },
+    "toast": {
+      "deployStarted": {
+        "title": "Despliegue iniciado",
+        "description": "Clonando plantilla {{name}}"
+      },
+      "deployFailed": {
+        "title": "Error al desplegar"
+      }
+    }
+  },
+  "UpdatesTab": {
+    "toast": {
+      "refreshed": {
+        "title": "APT actualizado",
+        "description": "Índice de paquetes actualizado en {{node}}"
+      },
+      "refreshFailed": {
+        "title": "Error al actualizar",
+        "description": "No se pudo actualizar APT en {{node}}"
+      }
+    },
+    "error": {
+      "fetch": "No se pudieron obtener los datos de actualización de APT de uno o más nodos."
+    },
+    "summary": {
+      "title": "Resumen de actualizaciones",
+      "updatesAvailable": "actualizaciones disponibles",
+      "ofNodes": "de {{total}} nodos"
+    },
+    "actions": {
+      "refreshNode": "Actualizar {{node}}"
+    },
+    "empty": {
+      "upToDate": "Todos los nodos están actualizados."
+    },
+    "table": {
+      "node": "Nodo",
+      "package": "Paquete",
+      "currentVersion": "Versión actual",
+      "availableVersion": "Versión disponible",
+      "origin": "Origen"
+    }
+  },
+  "HypervisorPage": {
+    "header": {
+      "title": "Hipervisor",
+      "subtitle": "Gestión de clúster Proxmox VE"
+    },
+    "selectCluster": "Seleccionar clúster",
+    "noController": {
+      "title": "No se encontraron hipervisores Proxmox",
+      "description": "Agregue un hipervisor Proxmox VE para gestionar máquinas virtuales y contenedores."
+    },
+    "common": {
+      "unknown": "Desconocido",
+      "unknownLower": "desconocido",
+      "all": "Todos",
+      "yes": "Sí",
+      "no": "No",
+      "nodeLabel": "Nodo:",
+      "virtualMachines": "máquinas virtuales",
+      "containers": "contenedores",
+      "containerLower": "contenedor"
+    },
+    "actions": {
+      "create": "Crear",
+      "newVm": "Nueva máquina virtual",
+      "newContainer": "Nuevo contenedor",
+      "kiosk": "Quiosco",
+      "kioskTooltip": "Modo quiosco (pantalla NOC)",
+      "addHypervisor": "Agregar hipervisor",
+      "refresh": "Actualizar",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "cancel": "Cancelar",
+      "close": "Cerrar",
+      "creating": "Creando..."
+    },
+    "tabs": {
+      "fleet": "Vista de flota",
+      "dashboard": "Panel",
+      "nodes": "Nodos",
+      "vms": "Máquinas virtuales",
+      "containers": "Contenedores",
+      "storage": "Almacenamiento",
+      "tasks": "Tareas",
+      "backup": "Copia de seguridad",
+      "firewall": "Firewall",
+      "ha": "HA",
+      "pools": "Grupos",
+      "templates": "Plantillas",
+      "monitoring": "Monitoreo",
+      "updates": "Actualizaciones",
+      "certificates": "Certificados",
+      "subscriptions": "Suscripciones",
+      "sdn": "SDN",
+      "replication": "Replicación",
+      "clusterLog": "Registro del clúster",
+      "ceph": "Ceph",
+      "backupAge": "Antigüedad de copias",
+      "pbs": "PBS"
+    },
+    "stats": {
+      "clusters": "Clústeres",
+      "nodes": "Nodos",
+      "vms": "VMs",
+      "containers": "Contenedores",
+      "cpu": "CPU",
+      "memory": "Memoria",
+      "storage": "Almacenamiento",
+      "cluster": "Clúster",
+      "ha": "HA",
+      "coresCount": "{{count}} núcleos",
+      "quorate": "Con quórum",
+      "noQuorum": "Sin quórum",
+      "active": "Activo",
+      "inactive": "Inactivo"
+    },
+    "taskStatus": {
+      "completed": "Completadas",
+      "running": "En ejecución",
+      "warning": "Advertencia",
+      "error": "Error"
+    },
+    "tableHeaders": {
+      "name": "Nombre",
+      "type": "Tipo",
+      "status": "Estado",
+      "node": "Nodo",
+      "disk": "Disco",
+      "tags": "Etiquetas",
+      "actions": "Acciones",
+      "description": "Descripción",
+      "size": "Tamaño",
+      "storage": "Almacenamiento"
+    },
+    "fleet": {
+      "loadError": "No se pudo cargar el panel de flota",
+      "emptyTitle": "No hay clústeres Proxmox",
+      "emptyDescription": "Agregue controladores Proxmox para ver la vista de flota.",
+      "taskStatistics": "Estadísticas de tareas",
+      "nodeCount": "{{count}} nodo(s)",
+      "noQuorumSuffix": " (¡sin quórum!)",
+      "vmsCts": "VMs/CTs"
+    },
+    "dashboard": {
+      "loadError": "No se pudo cargar el panel",
+      "cpuUsage": "Uso de CPU",
+      "memoryUsage": "Uso de memoria",
+      "storageUsage": "Uso de almacenamiento"
+    },
+    "nodes": {
+      "loadError": "No se pudieron cargar los nodos",
+      "emptyTitle": "No se encontraron nodos",
+      "unknownCpu": "CPU desconocida",
+      "reboot": "Reiniciar",
+      "shutdown": "Apagar",
+      "cpuCores": "CPU ({{count}} núcleos)",
+      "uptime": "Tiempo activo",
+      "guests": "Invitados",
+      "version": "Versión",
+      "memoryByGuest": "Memoria por invitado ({{count}} en ejecución)",
+      "rebootConfirm": {
+        "title": "Reiniciar nodo {{node}}",
+        "description": "Reiniciar el nodo \"{{node}}\" reinicia todas las VMs y contenedores que se ejecutan en él. El operador debe tener conmutación por error HA O una ventana de mantenimiento ya configurada.",
+        "confirmLabel": "Reiniciar nodo"
+      },
+      "shutdownConfirm": {
+        "title": "Apagar nodo {{node}}",
+        "description": "Apagar el nodo \"{{node}}\" detiene TODAS las VMs y contenedores en él. El nodo requerirá encendido manual (o IPMI fuera de banda) para volver. Verifique que la conmutación por error HA esté configurada antes de continuar.",
+        "confirmLabel": "Apagar nodo"
+      }
+    },
+    "nodeDetail": {
+      "overview": "Resumen",
+      "services": "Servicios",
+      "disks": "Discos",
+      "network": "Red",
+      "sensors": "Sensores",
+      "processor": "Procesador",
+      "rootFilesystem": "Sistema de archivos raíz",
+      "coresUsed": "{{count}} núcleos · {{percent}}% usado",
+      "usedPercent": "{{value}} usado ({{percent}}%)",
+      "vmsRunning": "{{total}} VMs · {{running}} en ejecución",
+      "ctsRunning": "{{total}} CTs · {{running}} en ejecución",
+      "pveVersion": "Versión de PVE",
+      "topGuestsByMemory": "Principales invitados por memoria",
+      "noServices": "No hay datos de servicios disponibles.",
+      "service": "Servicio",
+      "state": "Estado",
+      "noDisks": "No hay información de discos disponible.",
+      "device": "Dispositivo",
+      "model": "Modelo",
+      "serial": "Número de serie",
+      "health": "Salud",
+      "noSmart": "No hay atributos SMART disponibles para este disco.",
+      "smartAttributes": "Atributos SMART",
+      "attribute": "Atributo",
+      "value": "Valor",
+      "worst": "Peor",
+      "threshold": "Umbral",
+      "raw": "Bruto",
+      "noInterfaces": "No se encontraron interfaces de red.",
+      "interface": "Interfaz",
+      "address": "Dirección",
+      "gateway": "Puerta de enlace",
+      "bridgePorts": "Puertos de puente",
+      "active": "Activo",
+      "noGuestsOnNode": "No hay {{type}} en este nodo",
+      "noSensors": "No hay datos de sensores disponibles para este nodo.",
+      "sensorIndex": "Sensor {{index}}"
+    },
+    "vmTable": {
+      "loadError": "No se pudo cargar {{label}}",
+      "emptyTitle": "No se encontraron {{label}}",
+      "deleteConfirm": {
+        "title": "Eliminar {{kind}} {{vmid}}",
+        "description": "Esto elimina permanentemente {{kind}} {{vmid}} ({{name}}) en el nodo {{node}} incluyendo TODOS sus discos. No se puede deshacer.",
+        "confirmLabel": "Eliminar {{kind}}"
+      }
+    },
+    "vmActions": {
+      "start": "Iniciar",
+      "shutdown": "Apagar",
+      "reboot": "Reiniciar",
+      "suspend": "Suspender",
+      "forceStop": "Forzar parada",
+      "forceStopMenu": "Forzar parada",
+      "resume": "Reanudar",
+      "createSnapshot": "Crear instantánea",
+      "snapshots": "Instantáneas",
+      "clone": "Clonar",
+      "migrate": "Migrar",
+      "resizeDisk": "Redimensionar disco",
+      "backupNow": "Copia ahora",
+      "editConfig": "Editar configuración",
+      "console": "Consola (VNC)",
+      "delete": "Eliminar",
+      "rollback": "Revertir"
+    },
+    "vmConfirm": {
+      "shutdown": {
+        "title": "Apagar VM {{vmid}}",
+        "description": "Envía una señal de apagado controlado a {{name}} ({{kind}} {{vmid}}) en el nodo {{node}}. El SO invitado tiene la oportunidad de vaciar datos y salir limpiamente. Si ignora la señal, la VM seguirá en ejecución."
+      },
+      "reboot": {
+        "title": "Reiniciar VM {{vmid}}",
+        "description": "Reinicia {{name}} ({{kind}} {{vmid}}) en el nodo {{node}}. El SO invitado realiza su ciclo normal de reinicio."
+      },
+      "suspend": {
+        "title": "Suspender VM {{vmid}}",
+        "description": "Pausa {{name}} ({{kind}} {{vmid}}) en el nodo {{node}}. Las conexiones de red se cortan; el invitado queda congelado en memoria hasta reanudarse."
+      },
+      "forceStop": {
+        "title": "Forzar parada de VM {{vmid}}",
+        "description": "MATA inmediatamente el proceso qemu/lxc de {{name}} ({{kind}} {{vmid}}) en el nodo {{node}}. Equivale a tirar del cable de alimentación, se pierden las escrituras de disco sin vaciar; las bases de datos del invitado pueden corromperse. Prefiera Apagar a menos que el invitado esté colgado."
+      }
+    },
+    "storage": {
+      "loadError": "No se pudo cargar el almacenamiento",
+      "emptyTitle": "No se encontraron grupos de almacenamiento",
+      "uploadIso": "Subir ISO/plantilla",
+      "shared": "Compartido",
+      "nodeColon": "Nodo: {{node}}",
+      "contentColon": "Contenido: {{content}}",
+      "contentLabel": "Contenido:",
+      "noContentMatch": "No hay contenido que coincida con los filtros.",
+      "empty": "El almacenamiento está vacío.",
+      "format": "Formato",
+      "content": "Contenido",
+      "restore": "Restaurar",
+      "contentTypes": {
+        "all": "Todos",
+        "templates": "Plantillas",
+        "backups": "Copias de seguridad",
+        "diskImages": "Imágenes de disco",
+        "snippets": "Fragmentos"
+      }
+    },
+    "tasks": {
+      "loadError": "No se pudieron cargar las tareas",
+      "emptyTitle": "No hay tareas recientes",
+      "user": "Usuario",
+      "started": "Iniciada",
+      "ended": "Finalizada",
+      "taskWord": "tarea",
+      "stopConfirm": {
+        "title": "Detener tarea en ejecución",
+        "description": "Cancela {{type}} {{upid}}... a mitad de ejecución. La operación puede dejar un estado parcial (una instantánea aplicada a medias, una copia de seguridad interrumpida, etc.) que requiere limpieza manual.",
+        "confirmLabel": "Detener tarea"
+      }
+    },
+    "backup": {
+      "heading": "Trabajos de copia de seguridad",
+      "createJob": "Crear trabajo",
+      "loadError": "No se pudieron cargar los trabajos de copia de seguridad",
+      "emptyTitle": "No hay trabajos de copia configurados",
+      "emptyDescription": "Cree un trabajo de copia para proteger sus VMs y contenedores.",
+      "schedule": "Programación",
+      "mode": "Modo",
+      "compress": "Compresión",
+      "enabled": "Habilitado",
+      "deleteConfirm": {
+        "title": "Eliminar trabajo de copia",
+        "description": "Elimina la definición del trabajo de copia \"{{id}}\". No se eliminan las copias ya realizadas, pero el trabajo programado dejará de ejecutarse. Para eliminar también las copias existentes, púrguelas desde la pestaña de almacenamiento después.",
+        "confirmLabel": "Eliminar trabajo"
+      }
+    },
+    "firewall": {
+      "heading": "Reglas de firewall del clúster",
+      "addRule": "Agregar regla",
+      "createRule": "Crear regla",
+      "loadError": "No se pudieron cargar las reglas de firewall",
+      "emptyTitle": "No hay reglas de firewall",
+      "emptyDescription": "Las reglas de firewall a nivel de clúster aparecen aquí.",
+      "action": "Acción",
+      "protocol": "Protocolo",
+      "source": "Origen",
+      "dest": "Destino",
+      "dport": "Puerto dest.",
+      "comment": "Comentario",
+      "ruleWord": "regla",
+      "deleteConfirm": {
+        "title": "Eliminar regla de firewall n.º {{pos}}",
+        "description": "Elimina la regla de firewall del clúster en la posición {{pos}} (acción={{action}}, tipo={{type}}). El tráfico de red que esta regla permitía comenzará a coincidir con la regla que esté debajo, verifique la cadena después de eliminar.",
+        "confirmLabel": "Eliminar regla"
+      }
+    },
+    "ha": {
+      "loadError": "No se pudieron cargar los recursos HA",
+      "resourcesHeading": "Recursos HA",
+      "addResource": "Agregar recurso",
+      "resourcesEmptyTitle": "No hay recursos HA",
+      "resourcesEmptyDescription": "Agregue VMs/CTs a HA para conmutación por error y recuperación automáticas.",
+      "state": "Estado",
+      "group": "Grupo",
+      "request": "Solicitud",
+      "maxRelocate": "Máx. reubicaciones",
+      "maxRestart": "Máx. reinicios",
+      "groupsHeading": "Grupos HA",
+      "addGroup": "Agregar grupo",
+      "noGroups": "No hay grupos HA configurados.",
+      "nodes": "Nodos",
+      "noFailback": "Sin reconmutación",
+      "restricted": "Restringido",
+      "removeResourceConfirm": {
+        "title": "Quitar gestión HA",
+        "description": "Detiene la gestión HA de {{sid}}. La VM/CT en sí sigue en ejecución, pero la conmutación por error automática y el reinicio tras caída dejan de aplicarse. Si el host se cae, el invitado NO migrará automáticamente.",
+        "confirmLabel": "Quitar de HA"
+      },
+      "deleteGroupConfirm": {
+        "title": "Eliminar grupo HA {{group}}",
+        "description": "Elimina el grupo HA \"{{group}}\". Cualquier VM/CT gestionada por HA que hacía referencia a este grupo pierde su configuración de nodos preferidos/prioridad y puede fallar al migrar o reiniciar en el host correcto. Verifique que ningún recurso HA haga referencia a este grupo antes de eliminar.",
+        "confirmLabel": "Eliminar grupo"
+      }
+    },
+    "pools": {
+      "loadError": "No se pudieron cargar los grupos",
+      "emptyTitle": "No hay grupos de recursos",
+      "emptyDescription": "Cree grupos de recursos en Proxmox VE Centro de datos → Permisos → Grupos.",
+      "noDescription": "Sin descripción",
+      "membersCount": "{{count}} miembros"
+    },
+    "toast": {
+      "vmCreationStarted": "Creación de VM iniciada",
+      "vmCreationFailed": "Error al crear la VM",
+      "containerCreationStarted": "Creación de contenedor iniciada",
+      "containerCreationFailed": "Error al crear el contenedor",
+      "deletionStarted": "Eliminación iniciada",
+      "deleteFailed": "Error al eliminar",
+      "haResourceCreated": "Recurso HA creado",
+      "haResourceCreationFailed": "Error al crear el recurso HA",
+      "haResourceRemoved": "Recurso HA eliminado",
+      "haResourceRemoveFailed": "No se pudo quitar el recurso HA",
+      "haGroupCreated": "Grupo HA creado",
+      "haGroupCreationFailed": "Error al crear el grupo HA",
+      "haGroupDeleted": "Grupo HA eliminado",
+      "haGroupDeleteFailed": "No se pudo eliminar el grupo HA",
+      "actionSent": "{{action}} enviado",
+      "vmOnNode": "VM {{vmid}} en {{node}}",
+      "actionFailed": "Acción fallida",
+      "shutdownInitiated": "Apagado iniciado",
+      "shutdownFailed": "Error al apagar",
+      "rebootInitiated": "Reinicio iniciado",
+      "rebootFailed": "Error al reiniciar",
+      "cloneStarted": "Clonación iniciada",
+      "cloneFailed": "Error al clonar",
+      "migrationStarted": "Migración iniciada",
+      "migrationFailed": "Error en la migración",
+      "diskResized": "Disco redimensionado",
+      "resizeFailed": "Error al redimensionar",
+      "snapshotCreated": "Instantánea creada",
+      "snapshotFailed": "Error en la instantánea",
+      "rollbackStarted": "Reversión iniciada",
+      "snapshotLabel": "Instantánea: {{name}}",
+      "rollbackFailed": "Error en la reversión",
+      "snapshotDeleted": "Instantánea eliminada",
+      "firewallRuleCreated": "Regla de firewall creada",
+      "createFailed": "Error al crear",
+      "taskStopRequested": "Detención de tarea solicitada",
+      "stopFailed": "Error al detener",
+      "backupStarted": "Copia de seguridad iniciada",
+      "backupFailed": "Error en la copia de seguridad",
+      "backupJobDeleted": "Trabajo de copia eliminado",
+      "firewallRuleDeleted": "Regla de firewall eliminada",
+      "restoreStarted": "Restauración iniciada",
+      "restoreFailed": "Error en la restauración",
+      "consoleOpened": "Consola abierta en una nueva ventana",
+      "consoleFailed": "Error en la consola"
+    },
+    "snapshotDialog": {
+      "title": "Crear instantánea",
+      "description": "Crear una instantánea en un momento dado para la VM {{vmid}} en {{node}}",
+      "nameLabel": "Nombre de la instantánea",
+      "descLabel": "Descripción (opcional)",
+      "descPlaceholder": "Antes de actualizar..."
+    },
+    "snapshotListDialog": {
+      "title": "Instantáneas · VM {{vmid}}",
+      "description": "Gestionar instantáneas de la VM {{vmid}} en {{node}}",
+      "empty": "No se encontraron instantáneas.",
+      "created": "Creada",
+      "rollbackConfirm": {
+        "title": "Revertir a la instantánea {{name}}",
+        "description": "Revierte {{kind}} {{vmid}} en el nodo {{node}} al estado capturado en la instantánea \"{{name}}\". El estado actual en ejecución, incluyendo TODOS los cambios desde que se tomó esta instantánea, se DESCARTARÁ. El operador debe detener la VM primero para evitar corrupción del sistema de archivos."
+      },
+      "deleteConfirm": {
+        "title": "Eliminar instantánea {{name}}",
+        "description": "Elimina permanentemente la instantánea \"{{name}}\" de {{kind}} {{vmid}} en el nodo {{node}}. El estado almacenado de la instantánea es irrecuperable después de esto. Si planeaba revertir a esta instantánea, hágalo PRIMERO.",
+        "confirmLabel": "Eliminar instantánea"
+      }
+    },
+    "cloneDialog": {
+      "title": "Clonar VM {{vmid}}",
+      "description": "Clonar \"{{name}}\" desde {{node}}",
+      "newVmid": "Nuevo VMID",
+      "vmidPlaceholder": "p. ej. 200",
+      "fullClone": "Clon completo (copia independiente)",
+      "cloning": "Clonando..."
+    },
+    "migrateDialog": {
+      "title": "Migrar VM {{vmid}}",
+      "description": "Migrar desde {{node}} a otro nodo",
+      "targetNode": "Nodo de destino",
+      "selectTargetNode": "Seleccionar nodo de destino",
+      "onlineMigration": "Migración en línea (en vivo)",
+      "migrating": "Migrando..."
+    },
+    "resizeDialog": {
+      "title": "Redimensionar disco · VM {{vmid}}",
+      "description": "Ampliar el tamaño del disco en {{node}}",
+      "sizeHint": "Use +10G para añadir 10GB, o 50G para un tamaño absoluto",
+      "resizing": "Redimensionando...",
+      "resize": "Redimensionar"
+    },
+    "backupDialog": {
+      "title": "Copia de seguridad de VM {{vmid}}",
+      "description": "Ejecutar una copia de seguridad manual en {{node}}",
+      "compression": "Compresión",
+      "modeSnapshot": "Instantánea",
+      "modeSuspend": "Suspender",
+      "modeStop": "Detener",
+      "compressNone": "Ninguna",
+      "starting": "Iniciando...",
+      "startBackup": "Iniciar copia"
+    },
+    "firewallDialog": {
+      "title": "Agregar regla de firewall",
+      "description": "Crear una nueva regla de firewall en {{node}}",
+      "direction": "Dirección",
+      "inbound": "Entrante",
+      "outbound": "Saliente",
+      "sourceOptional": "Origen (opcional)",
+      "destOptional": "Destino (opcional)",
+      "dportOptional": "Puerto de destino (opcional)",
+      "commentOptional": "Comentario (opcional)",
+      "commentPlaceholder": "Permitir HTTP"
+    },
+    "taskLogDialog": {
+      "title": "Registro de tareas",
+      "empty": "No hay entradas de registro."
+    },
+    "createDialog": {
+      "titleVm": "Crear máquina virtual",
+      "titleCt": "Crear contenedor",
+      "descriptionVm": "Crear una nueva máquina virtual QEMU/KVM en el nodo seleccionado.",
+      "descriptionCt": "Crear un nuevo contenedor LXC en el nodo seleccionado.",
+      "hostname": "Nombre de host",
+      "selectNode": "Seleccionar nodo",
+      "osTemplate": "Plantilla de SO",
+      "osTemplateHint": "Ruta completa a la plantilla del contenedor (storage:vztmpl/archivo)",
+      "isoImage": "Imagen ISO (opcional)",
+      "isoHint": "Ruta completa al archivo ISO (storage:iso/archivo)",
+      "cpuCores": "Núcleos de CPU",
+      "memoryMb": "Memoria (MB)",
+      "rootDiskSize": "Tamaño del disco raíz",
+      "diskSize": "Tamaño del disco",
+      "diskHintCt": "Tamaño en GB (solo número)",
+      "diskHintVm": "p. ej. 32G, 100G",
+      "startAfterCreation": "Iniciar tras la creación",
+      "createVm": "Crear VM",
+      "createCt": "Crear contenedor"
+    },
+    "haResourceDialog": {
+      "description": "Agregar una VM o contenedor a la gestión de alta disponibilidad.",
+      "serviceId": "ID de servicio (SID)",
+      "sidHint": "Formato: vm:VMID o ct:VMID",
+      "haGroupOptional": "Grupo HA (opcional)",
+      "noneAnyNode": "Ninguno (cualquier nodo)",
+      "none": "Ninguno",
+      "emptyForNoGroup": "Dejar vacío para ningún grupo",
+      "adding": "Agregando..."
+    },
+    "haGroupDialog": {
+      "title": "Crear grupo HA",
+      "description": "Definir un grupo de nodos para la ubicación de recursos HA.",
+      "groupName": "Nombre del grupo",
+      "nodesHint": "Lista de nodos separados por comas con prioridad opcional (nodo:prioridad)",
+      "noFailback": "Sin reconmutación",
+      "restricted": "Restringido (solo ejecutar en nodos del grupo)",
+      "commentPlaceholder": "Nodos del clúster de producción",
+      "createGroup": "Crear grupo"
+    },
+    "restoreDialog": {
+      "title": "Restaurar desde copia de seguridad",
+      "description": "Restaurar una VM/CT desde un archivo de copia de seguridad.",
+      "archive": "Archivo",
+      "vmidRequired": "VMID (obligatorio)",
+      "targetStorage": "Almacenamiento de destino",
+      "startAfterRestore": "Iniciar tras la restauración",
+      "uniqueMac": "Direcciones MAC únicas"
+    }
+  }
+}

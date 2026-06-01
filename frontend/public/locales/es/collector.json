@@ -1,0 +1,133 @@
+{
+  "LogExplorerPage": {
+    "header": {
+      "title": "Explorador de registros",
+      "description": "Busca y filtra mensajes de syslog y trampas SNMP recopilados"
+    },
+    "errors": {
+      "loadFailed": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "filters": {
+      "title": "Filtros",
+      "startTime": "Hora de inicio",
+      "endTime": "Hora de fin",
+      "searchPlaceholder": "Buscar mensajes...",
+      "allTypes": "Todos los tipos",
+      "typeSyslog": "Syslog",
+      "typeSnmpTrap": "Trampa SNMP",
+      "allSeverities": "Todas las severidades"
+    },
+    "presets": {
+      "last15min": "Últimos 15 min",
+      "last1hour": "Última 1 hora",
+      "last6hours": "Últimas 6 horas",
+      "last24hours": "Últimas 24 horas",
+      "last7days": "Últimos 7 días"
+    },
+    "severity": {
+      "emergency": "Emergencia",
+      "alert": "Alerta",
+      "critical": "Crítico",
+      "error": "Error",
+      "warning": "Advertencia",
+      "notice": "Aviso",
+      "info": "Información",
+      "debug": "Depuración"
+    },
+    "results": {
+      "title": "Resultados",
+      "count": "{{total}} resultados"
+    },
+    "actions": {
+      "exportCsv": "Exportar CSV"
+    },
+    "table": {
+      "timestamp": "Marca de tiempo",
+      "type": "Tipo",
+      "severity": "Severidad",
+      "sourceIp": "IP de origen",
+      "message": "Mensaje",
+      "typeSnmpShort": "SNMP",
+      "typeSyslogShort": "Syslog"
+    },
+    "detail": {
+      "sourceIp": "IP de origen:",
+      "deviceId": "ID de dispositivo:",
+      "hostname": "Nombre de host:",
+      "hostnameLabel": "Nombre de host",
+      "app": "Aplicación:",
+      "facility": "Recurso:",
+      "enterpriseOid": "OID de empresa:",
+      "trapType": "Tipo de trampa:",
+      "varbinds": "Varbinds:",
+      "fullMessage": "Mensaje completo:"
+    },
+    "pagination": {
+      "pageOf": "Página {{page}} de {{pages}}",
+      "previous": "Anterior",
+      "next": "Siguiente"
+    },
+    "empty": {
+      "title": "No se encontraron registros",
+      "description": "No se encontraron registros para los filtros seleccionados. Intenta ajustar el rango de tiempo o quitar filtros."
+    }
+  },
+  "CollectorPage": {
+    "status": {
+      "running": "En ejecución",
+      "stopped": "Detenido"
+    },
+    "toast": {
+      "operationFailed": "La operación falló"
+    },
+    "header": {
+      "title": "Recolector de red",
+      "subtitle": "Receptor de traps SNMP, Syslog y NetFlow"
+    },
+    "actions": {
+      "refresh": "Actualizar",
+      "configure": "Configurar",
+      "saveConfiguration": "Guardar configuración",
+      "close": "Cerrar"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "services": {
+      "snmpTrap": "Receptor de traps SNMP",
+      "syslog": "Receptor de Syslog",
+      "netflow": "Receptor de NetFlow"
+    },
+    "config": {
+      "title": "Configuración del recolector",
+      "description": "Números de puerto y ajustes de retención",
+      "snmpTrap": "Trap SNMP",
+      "syslog": "Syslog",
+      "netflow": "NetFlow",
+      "port": "Puerto",
+      "community": "Comunidad",
+      "logRetention": "Retención de registros (días)",
+      "flowRetention": "Retención de flujos (días)"
+    },
+    "stats": {
+      "events24h": "Eventos (24 h)",
+      "bySeverity24h": "Por gravedad (24 h)",
+      "topSources24h": "Fuentes principales (24 h)"
+    },
+    "stream": {
+      "title": "Flujo de eventos en vivo",
+      "autoRefresh": "Actualización automática 5 s"
+    },
+    "table": {
+      "time": "Hora",
+      "type": "Tipo",
+      "severity": "Gravedad",
+      "sourceIp": "IP de origen",
+      "message": "Mensaje"
+    },
+    "empty": {
+      "title": "Aún no se han recopilado eventos",
+      "description": "Habilita un servicio de recolección arriba y configura tus dispositivos para que envíen traps SNMP, mensajes syslog o datos NetFlow."
+    }
+  }
+}

@@ -1,0 +1,69 @@
+# FreeSDN - universal edge (Caddy). One file replaces the nginx http-only/ssl
+# templates + certbot + the cert scripts. TLS is automatic and driven entirely
+# by CADDY_SITE_ADDRESS:
+#
+#   :80                      → plain HTTP  (default; behind an upstream LB, or local)
+#   localhost / 127.0.0.1    → HTTPS via Caddy's INTERNAL CA  (homelab, no domain)
+#   freesdn.example.com      → HTTPS via Let's Encrypt, auto-obtained + renewed (SMB/pro)
+#
+# No other change is needed to switch modes - Caddy provisions/renews certs itself.
+
+{
+	admin off
+	email {$CADDY_ACME_EMAIL:admin@example.com}
+}
+
+{$CADDY_SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	# Cap request bodies (matches the old nginx client_max_body_size 50m).
+	request_body {
+		max_size 50MB
+	}
+
+	# Transport/info headers that are universally safe on EVERY response,
+	# including /api. HSTS is ignored by browsers over plain HTTP, so it is safe
+	# to send in every mode. The framing + CSP headers are NOT set here on
+	# purpose - they would override (and weaken) the API middleware's own
+	# stronger per-response headers (X-Frame-Options: DENY + a CSP with
+	# frame-ancestors 'none'/base-uri/form-action). Those are applied only to the
+	# SPA handle below, so /api JSON keeps the app's hardened headers untouched.
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
+
+	# Liveness probe for the Docker healthcheck.
+	handle /health {
+		respond "healthy" 200
+	}
+
+	# API + WebSocket + streams. reverse_proxy auto-detects the WebSocket
+	# Upgrade handshake; flush_interval -1 disables response buffering so
+	# camera MSE/MJPEG and SSE streams (which ride through /api) flow in
+	# real time instead of being buffered. NO framing/CSP header override here -
+	# the app sets its own (stricter) ones per response.
+	handle /api* {
+		reverse_proxy {$API_UPSTREAM:api:8000} {
+			flush_interval -1
+		}
+	}
+
+	# Single-page app: long-cache the fingerprinted assets, fall back to
+	# index.html for client-side routes. Framing + CSP belong to the HTML app
+	# surface, so they are scoped here (not at the site level above).
+	handle {
+		header {
+			X-Frame-Options "SAMEORIGIN"
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self'; object-src 'none'; frame-ancestors 'self';"
+		}
+		root * /srv
+		@assets path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server
+	}
+}

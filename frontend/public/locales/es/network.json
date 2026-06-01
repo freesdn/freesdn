@@ -1,0 +1,506 @@
+{
+  "title": "Red",
+  "vlans": "VLAN",
+  "wifi": "Redes WiFi",
+  "switchPorts": "Puertos del switch",
+  "clients": "Clientes de red",
+  "topology": "Topología",
+  "ssids": "SSID",
+  "portProfiles": "Perfiles de puerto",
+  "vlanId": "ID de VLAN",
+  "vlanName": "Nombre de VLAN",
+  "subnet": "Subred",
+  "gateway": "Puerta de enlace",
+  "dhcpEnabled": "DHCP habilitado",
+  "ssidName": "Nombre del SSID",
+  "security": "Seguridad",
+  "band": "Banda",
+  "channel": "Canal",
+  "enabled": "Habilitado",
+  "disabled": "Deshabilitado",
+  "portNumber": "Puerto",
+  "portName": "Nombre del puerto",
+  "speed": "Velocidad",
+  "duplex": "Dúplex",
+  "poeStatus": "Estado PoE",
+  "linkStatus": "Estado del enlace",
+  "connected": "Conectado",
+  "disconnected": "Desconectado",
+  "clientName": "Nombre del cliente",
+  "macAddress": "Dirección MAC",
+  "ipAddress": "Dirección IP",
+  "connectionType": "Tipo de conexión",
+  "wired": "Cableado",
+  "wireless": "Inalámbrico",
+  "signalStrength": "Intensidad de señal",
+  "uptime": "Tiempo activo",
+  "WifiNetworksPage": {
+    "page": {
+      "title": "Redes WiFi",
+      "description": "Administra las redes inalámbricas (SSID) en todos los controladores",
+      "descriptionShort": "Administra las redes inalámbricas y los SSID",
+      "loadError": "No se pudieron cargar las redes WiFi"
+    },
+    "stats": {
+      "totalNetworks": "Total de redes",
+      "configuredSsids": "SSID configurados",
+      "active": "Activas",
+      "percentEnabled": "{{percent}}% habilitadas",
+      "noNetworks": "Sin redes",
+      "guest": "Invitados",
+      "guestSsids": "SSID de invitados",
+      "hidden": "Ocultas",
+      "nonBroadcasting": "Sin difusión"
+    },
+    "filters": {
+      "searchPlaceholder": "Buscar redes por SSID, VLAN o seguridad…",
+      "allStatuses": "Todos los estados",
+      "guestOnly": "Solo invitados",
+      "allBands": "Todas las bandas",
+      "dualBand": "Banda dual",
+      "clearFilters": "Limpiar filtros"
+    },
+    "columns": {
+      "network": "Red",
+      "status": "Estado",
+      "security": "Seguridad",
+      "band": "Banda",
+      "features": "Funciones"
+    },
+    "status": {
+      "active": "Activa",
+      "disabled": "Deshabilitada"
+    },
+    "toggle": {
+      "on": "Activado",
+      "off": "Desactivado"
+    },
+    "pills": {
+      "isolated": "Aislada",
+      "steering": "Dirección",
+      "limited": "Limitada"
+    },
+    "itemName": "red",
+    "itemNamePlural": "redes",
+    "actions": {
+      "addNetwork": "Agregar red",
+      "export": "Exportar",
+      "viewDetails": "Ver detalles",
+      "enable": "Habilitar",
+      "disable": "Deshabilitar",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "cancel": "Cancelar",
+      "saving": "Guardando…",
+      "creating": "Creando…",
+      "saveChanges": "Guardar cambios",
+      "createNetwork": "Crear red",
+      "deleting": "Eliminando…",
+      "deleteNetwork": "Eliminar red"
+    },
+    "security": {
+      "modes": {
+        "open": "Abierta (sin seguridad)",
+        "wpa2Personal": "WPA2 Personal",
+        "wpa3Personal": "WPA3 Personal",
+        "wpa2Enterprise": "WPA2 Enterprise",
+        "wpa3Enterprise": "WPA3 Enterprise",
+        "wpaWpa2Mixed": "WPA/WPA2 mixta",
+        "wpa2Wpa3Mixed": "WPA2/WPA3 mixta",
+        "wpa2Wpa3Transition": "Transición WPA2/WPA3",
+        "wpaWpa2MixedLegacy": "WPA/WPA2 mixta (heredada)"
+      }
+    },
+    "features": {
+      "clientIsolation": "Aislamiento de clientes",
+      "bandSteering": "Direccionamiento de banda",
+      "fastRoaming": "Itinerancia rápida (802.11r)",
+      "hiddenSsid": "SSID oculto",
+      "guestNetwork": "Red de invitados",
+      "rateLimiting": "Límite de velocidad",
+      "macFiltering": "Filtrado MAC",
+      "captivePortal": "Portal cautivo",
+      "schedule": "Programación"
+    },
+    "detail": {
+      "wlanGroup": "Grupo WLAN: {{name}}",
+      "wifiNetwork": "Red WiFi",
+      "idLabel": "ID: {{id}}",
+      "cards": {
+        "security": "Seguridad",
+        "band": "Banda",
+        "vlan": "VLAN",
+        "type": "Tipo"
+      },
+      "vlanValue": "VLAN {{id}}",
+      "defaultVlan": "Predeterminada",
+      "typeGuest": "Invitados",
+      "typePrivate": "Privada",
+      "featuresTitle": "Funciones y ajustes",
+      "featuresDescription": "Configuración actual de funciones para este SSID",
+      "rateLimitingTitle": "Límite de velocidad",
+      "download": "Descarga",
+      "upload": "Subida",
+      "mbps": "{{value}} Mbps",
+      "unlimited": "Ilimitado"
+    },
+    "form": {
+      "createTitle": "Crear red WiFi",
+      "editTitle": "Editar red WiFi",
+      "createDescription": "Agrega una nueva red WiFi/SSID. Se creará automáticamente en el controlador.",
+      "editDescription": "Modifica los ajustes de la red WiFi. Los cambios se enviarán al controlador.",
+      "tabs": {
+        "basic": "Básico",
+        "security": "Seguridad",
+        "advanced": "Avanzado",
+        "qos": "QoS"
+      },
+      "fields": {
+        "ssid": "SSID (nombre de red)",
+        "band": "Banda",
+        "vlanId": "ID de VLAN",
+        "enabled": "Habilitada",
+        "securityMode": "Modo de seguridad",
+        "preSharedKey": "Clave precompartida",
+        "hiddenNetwork": "Red oculta"
+      },
+      "placeholders": {
+        "ssid": "MyNetwork",
+        "defaultVlan": "VLAN predeterminada",
+        "unchanged": "(sin cambios)",
+        "minChars": "Mínimo 8 caracteres",
+        "unlimited": "Ilimitado"
+      },
+      "bandOptions": {
+        "both": "Ambas (2.4 y 5 GHz)",
+        "band24": "Solo 2.4 GHz",
+        "band5": "Solo 5 GHz",
+        "all": "Todas las bandas"
+      },
+      "help": {
+        "wpaPassword": "Las contraseñas WPA deben tener entre 8 y 63 caracteres ASCII.",
+        "hiddenNetwork": "No difundir el SSID en las balizas"
+      },
+      "advanced": {
+        "clientIsolation": {
+          "label": "Aislamiento de clientes",
+          "desc": "Bloquear el tráfico inalámbrico entre clientes"
+        },
+        "bandSteering": {
+          "label": "Direccionamiento de banda",
+          "desc": "Preferir que los clientes compatibles con 5 GHz se conecten en 5 GHz"
+        },
+        "fastRoaming": {
+          "label": "Itinerancia rápida (802.11r)",
+          "desc": "Habilitar la transición rápida de BSS para un traspaso fluido entre AP"
+        }
+      },
+      "qos": {
+        "enableRateLimiting": "Habilitar límite de velocidad",
+        "capBandwidth": "Limitar el ancho de banda por cliente",
+        "downloadLimit": "Límite de descarga (Mbps)",
+        "uploadLimit": "Límite de subida (Mbps)"
+      }
+    },
+    "deleteDialog": {
+      "title": "¿Eliminar la red WiFi?",
+      "description": "¿Seguro que deseas eliminar «{{ssid}}»? Esto desconectará a todos los clientes que usan actualmente esta red y la eliminará del controlador."
+    },
+    "toast": {
+      "bulkDeleteTitle": "Eliminación masiva",
+      "bulkDeleteDescription": "Por seguridad, elimina las redes de forma individual."
+    }
+  },
+  "NetworkClientsPage": {
+    "header": {
+      "title": "Clientes de red",
+      "description": "Ver y administrar los dispositivos conectados en todos los controladores",
+      "descriptionShort": "Ver y administrar los dispositivos conectados"
+    },
+    "error": {
+      "loadFailed": "No se pudieron cargar los clientes"
+    },
+    "stats": {
+      "totalClients": "Total de clientes",
+      "onlineCount": "{{value}} en línea",
+      "online": "En línea",
+      "connectedPercent": "{{percent}} % conectados",
+      "noClients": "Sin clientes",
+      "wireless": "Inalámbricos",
+      "wifiClients": "Clientes WiFi",
+      "wired": "Cableados",
+      "ethernetClients": "Clientes Ethernet"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar clientes por nombre, MAC, IP o fabricante…",
+      "clearFilters": "Borrar filtros"
+    },
+    "filters": {
+      "allConnections": "Todas las conexiones",
+      "allStatuses": "Todos los estados"
+    },
+    "connection": {
+      "wireless": "Inalámbrica",
+      "wired": "Cableada"
+    },
+    "status": {
+      "online": "En línea",
+      "offline": "Desconectado",
+      "blocked": "Bloqueado"
+    },
+    "columns": {
+      "client": "Cliente",
+      "status": "Estado",
+      "connection": "Conexión",
+      "ipAddress": "Dirección IP",
+      "macAddress": "Dirección MAC",
+      "signal": "Señal",
+      "traffic": "Tráfico",
+      "lastSeen": "Visto por última vez"
+    },
+    "fields": {
+      "status": "Estado",
+      "connection": "Conexión",
+      "ipAddress": "Dirección IP",
+      "macAddress": "Dirección MAC",
+      "ssid": "SSID",
+      "signal": "Señal",
+      "hostname": "Nombre de host",
+      "vendor": "Fabricante",
+      "unknown": "Desconocido",
+      "unknownVendor": "Fabricante desconocido",
+      "firstSeen": "Visto por primera vez",
+      "lastSeen": "Visto por última vez"
+    },
+    "sheet": {
+      "description": "Detalles y estadísticas del cliente",
+      "connectionInfo": "Información de conexión",
+      "deviceInfo": "Información del dispositivo",
+      "trafficStatistics": "Estadísticas de tráfico"
+    },
+    "traffic": {
+      "downloaded": "Descargado",
+      "uploaded": "Subido"
+    },
+    "timeAgo": {
+      "never": "Nunca",
+      "justNow": "Ahora mismo",
+      "minutes": "hace {{value}} min",
+      "hours": "hace {{value}} h",
+      "days": "hace {{value}} d"
+    },
+    "actions": {
+      "export": "Exportar",
+      "viewDetails": "Ver detalles",
+      "block": "Bloquear",
+      "unblock": "Desbloquear",
+      "delete": "Eliminar",
+      "cancel": "Cancelar"
+    },
+    "itemName": {
+      "singular": "cliente",
+      "plural": "clientes"
+    },
+    "toast": {
+      "clientUpdated": "Cliente actualizado",
+      "actionFailed": "La acción falló",
+      "bulkDelete": {
+        "title": "Eliminación masiva",
+        "description": "Por seguridad, elimine los clientes de forma individual."
+      }
+    },
+    "dialog": {
+      "unblockTitle": "¿Desbloquear cliente?",
+      "blockTitle": "¿Bloquear cliente?",
+      "unblockDescription": "Permitir que \"{{name}}\" se vuelva a conectar a la red.",
+      "blockDescription": "Impedir que \"{{name}}\" acceda a la red. El cliente se desconectará de inmediato.",
+      "processing": "Procesando…"
+    }
+  },
+  "NetworkDashboardPage": {
+    "header": {
+      "title": "Resumen de red",
+      "subtitle": "Supervise y administre su infraestructura de red"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "stats": {
+      "totalDevices": "Dispositivos totales",
+      "onlineCount": "{{count}} en línea",
+      "networkClients": "Clientes de red",
+      "activeCount": "{{count}} activos",
+      "vlans": "VLAN",
+      "networkSegments": "Segmentos de red",
+      "wifiNetworks": "Redes WiFi",
+      "ssidsConfigured": "SSID configurados"
+    },
+    "quickAccess": {
+      "heading": "Acceso rápido",
+      "vlans": {
+        "title": "VLAN",
+        "description": "Administre la segmentación de red"
+      },
+      "wifi": {
+        "title": "Redes WiFi",
+        "description": "Configure los SSID inalámbricos"
+      },
+      "clients": {
+        "title": "Clientes",
+        "description": "Vea los dispositivos conectados"
+      },
+      "ports": {
+        "title": "Puertos de switch",
+        "description": "Administre las configuraciones de puertos"
+      }
+    },
+    "deviceTypes": {
+      "switch": "Switches",
+      "accessPoint": "Puntos de acceso",
+      "gateway": "Puertas de enlace",
+      "router": "Enrutadores",
+      "other": "Otros"
+    },
+    "deviceBreakdown": {
+      "title": "Tipos de dispositivo",
+      "description": "Desglose por categoría de dispositivo",
+      "empty": "No se encontraron dispositivos"
+    },
+    "clientBreakdown": {
+      "title": "Conexiones de clientes",
+      "description": "Desglose por cable e inalámbrico",
+      "wireless": "Inalámbrico",
+      "wired": "Por cable",
+      "percentWireless": "{{percent}}% inalámbrico",
+      "percentWired": "{{percent}}% por cable",
+      "blockedClients": "Clientes bloqueados"
+    },
+    "health": {
+      "title": "Estado de la red",
+      "description": "Estado general de la infraestructura",
+      "excellent": "Excelente",
+      "good": "Bueno",
+      "fair": "Regular",
+      "critical": "Crítico",
+      "online": "En línea",
+      "offline": "Desconectado"
+    },
+    "topology": {
+      "title": "Topología de red",
+      "description": "Mapa visual de su infraestructura de red",
+      "viewFullMap": "Ver mapa completo",
+      "devicesCount": "{{count}} dispositivos",
+      "connectedVia": "conectados mediante",
+      "linksCount": "{{count}} enlaces",
+      "noData": "No hay datos de topología disponibles",
+      "openViewer": "Abrir el visor de topología interactivo"
+    }
+  },
+  "VlansPage": {
+    "dhcp": {
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado"
+    },
+    "header": {
+      "title": "VLAN",
+      "description": "Administra las LAN virtuales y la segmentación de red"
+    },
+    "tabs": {
+      "vlans": "VLAN",
+      "alignment": "Alineación"
+    },
+    "actions": {
+      "addVlan": "Agregar VLAN",
+      "export": "Exportar",
+      "edit": "Editar",
+      "delete": "Eliminar"
+    },
+    "columns": {
+      "vlanId": "ID de VLAN",
+      "name": "Nombre",
+      "gateway": "Puerta de enlace",
+      "subnet": "Subred",
+      "dhcp": "DHCP",
+      "dhcpRange": "Rango DHCP"
+    },
+    "stats": {
+      "totalVlans": "Total de VLAN",
+      "rangeValue": "Rango {{range}}",
+      "dhcpEnabled": "DHCP habilitado",
+      "percentOfVlans": "{{percent}}% de las VLAN",
+      "noVlans": "Sin VLAN",
+      "withGateway": "Con puerta de enlace",
+      "routedVlans": "VLAN enrutadas",
+      "vlanRange": "Rango de VLAN",
+      "lowestHighestId": "ID más bajo, más alto"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar VLAN por ID, nombre o puerta de enlace…",
+      "allDhcp": "Todos los DHCP",
+      "dhcpEnabled": "DHCP habilitado",
+      "dhcpDisabled": "DHCP deshabilitado",
+      "clearFilters": "Limpiar filtros"
+    },
+    "itemName": "VLAN",
+    "itemNamePlural": "VLAN",
+    "form": {
+      "editTitle": "Editar VLAN",
+      "createTitle": "Crear VLAN",
+      "editDescription": "Modifica la configuración de la VLAN a continuación.",
+      "createDescription": "Agrega una nueva VLAN a la configuración de tu red.",
+      "vlanId": "ID de VLAN",
+      "name": "Nombre",
+      "namePlaceholder": "p. ej., Administración",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Descripción opcional",
+      "gateway": "Puerta de enlace",
+      "gatewayPlaceholder": "p. ej., 192.168.1.1",
+      "subnetMask": "Máscara de subred",
+      "subnetMaskPlaceholder": "p. ej., 255.255.255.0",
+      "dhcpServer": "Servidor DHCP",
+      "dhcpServerHelp": "Habilita DHCP para la asignación automática de IP",
+      "dhcpStart": "Inicio DHCP",
+      "dhcpStartPlaceholder": "p. ej., 192.168.1.100",
+      "dhcpEnd": "Fin DHCP",
+      "dhcpEndPlaceholder": "p. ej., 192.168.1.200",
+      "cancel": "Cancelar",
+      "saving": "Guardando...",
+      "creating": "Creando...",
+      "saveChanges": "Guardar cambios",
+      "createSubmit": "Crear VLAN"
+    },
+    "alignment": {
+      "scoreTitle": "Puntuación de alineación de VLAN",
+      "scoreSummary": "{{vlans}} VLAN en {{controllers}} controladores",
+      "matrixTitle": "Matriz VLAN x Controlador",
+      "matrixDescription": "Muestra qué VLAN están presentes en qué controladores",
+      "syncAll": "Sincronizar todo",
+      "syncAllConfirm": "¿Sincronizar todas las VLAN desalineadas en todos los controladores? Esto copiará las VLAN faltantes desde un controlador de origen.",
+      "columnVlan": "VLAN",
+      "columnName": "Nombre",
+      "columnStatus": "Estado",
+      "present": "Presente",
+      "different": "Diferente",
+      "noSubnet": "sin subred",
+      "missing": "Faltante",
+      "copy": "Copiar"
+    },
+    "deleteDialog": {
+      "title": "¿Eliminar VLAN?",
+      "description": "¿Seguro que deseas eliminar la VLAN {{vlanId}} ({{name}})? Esta acción no se puede deshacer y puede afectar a los dispositivos que usan esta VLAN.",
+      "deleting": "Eliminando..."
+    },
+    "errors": {
+      "loadFailed": "No se pudieron cargar las VLAN"
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "successTitle": "Éxito",
+      "operationFailed": "La operación falló",
+      "distributeSuccess": "VLAN distribuida correctamente.",
+      "distributeFailed": "No se pudo distribuir la VLAN: {{error}}",
+      "bulkDeleteTitle": "Eliminación masiva",
+      "bulkDeleteMessage": "Elimina las VLAN individualmente por seguridad."
+    }
+  }
+}

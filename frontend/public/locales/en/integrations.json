@@ -1,0 +1,174 @@
+{
+  "IntegrationsPage": {
+    "header": {
+      "title": "Integrations",
+      "description": "Connect FreeSDN to external services and automation platforms."
+    },
+    "errors": {
+      "loadFailed": "Failed to load integrations"
+    },
+    "common": {
+      "never": "Never",
+      "unknownError": "Unknown error"
+    },
+    "itemName": "integration",
+    "itemNamePlural": "integrations",
+    "actions": {
+      "export": "Export",
+      "addIntegration": "Add Integration",
+      "sendTestEvent": "Send Test Event",
+      "deliveryHistory": "Delivery History",
+      "delete": "Delete",
+      "replay": "Replay",
+      "replayAll": "Replay All",
+      "menuFor": "Actions for {{name}}"
+    },
+    "stats": {
+      "total": {
+        "title": "Total Integrations",
+        "description": "Configured connections"
+      },
+      "enabled": {
+        "title": "Enabled",
+        "descriptionActive": "{{pct}}% active",
+        "descriptionNone": "None enabled"
+      },
+      "failing": {
+        "title": "Failing",
+        "description": "Last delivery failed"
+      },
+      "deliveries7d": {
+        "title": "Deliveries (7d)",
+        "description": "Past week"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search integrations by name or type…",
+      "allTypes": "All types",
+      "allStatuses": "All statuses",
+      "statusEnabled": "Enabled",
+      "statusDisabled": "Disabled",
+      "statusFailing": "Failing",
+      "clearFilters": "Clear filters"
+    },
+    "columns": {
+      "integration": "Integration",
+      "status": "Status",
+      "events": "Events",
+      "deliveries7d": "Deliveries (7d)",
+      "successRate": "Success Rate",
+      "lastDelivery": "Last Delivery",
+      "active": "Active"
+    },
+    "status": {
+      "disabled": "Disabled",
+      "lastFailed": "Last failed",
+      "active": "Active"
+    },
+    "events": {
+      "all": "All events",
+      "typeCount": "{{n}} type",
+      "typeCountPlural": "{{n}} types"
+    },
+    "confirm": {
+      "delete": "Delete this integration? This also removes all delivery history."
+    },
+    "toasts": {
+      "createFailed": "Failed to create integration",
+      "updateFailed": "Failed to update integration",
+      "deleteFailed": "Failed to delete integration",
+      "testDelivered": "Test event delivered",
+      "testFailed": "Test failed",
+      "replayFailed": "Replay failed",
+      "replayAllFailed": "Replay all failed"
+    },
+    "bulk": {
+      "test": {
+        "label": "Test",
+        "title": "Bulk Test",
+        "description": "Bulk test: not yet implemented."
+      },
+      "disable": {
+        "label": "Disable",
+        "title": "Bulk Disable",
+        "description": "Bulk disable: not yet implemented."
+      },
+      "delete": {
+        "label": "Delete",
+        "title": "Bulk Delete",
+        "description": "Please delete integrations individually for safety."
+      }
+    },
+    "validation": {
+      "typeRequired": "Please choose an integration type",
+      "nameRequired": "Integration name is required",
+      "urlInvalid": "Must be a valid URL"
+    },
+    "wizard": {
+      "title": "New Integration",
+      "description": "Connect FreeSDN to an external service in a few steps.",
+      "submit": "Create Integration",
+      "steps": {
+        "type": "Choose Type",
+        "configure": "Configure",
+        "events": "Select Events"
+      },
+      "fields": {
+        "name": {
+          "label": "Integration Name",
+          "placeholder": "Integration name",
+          "placeholderTyped": "My {{type}} Integration"
+        },
+        "url": {
+          "label": "Webhook URL",
+          "descN8n": "Copy the \"Webhook URL\" from your n8n workflow trigger node.",
+          "descSlack": "Create an incoming webhook in your Slack app settings.",
+          "descPagerduty": "Use your PagerDuty Events API v2 integration URL.",
+          "descDefault": "The HTTPS endpoint that will receive FreeSDN event payloads."
+        },
+        "secret": {
+          "label": "HMAC Secret (optional)",
+          "placeholder": "Shared secret for request signature verification",
+          "descPrefix": "FreeSDN signs each delivery with HMAC-SHA256. Verify the",
+          "descSuffix": "header in your endpoint."
+        },
+        "description": {
+          "label": "Description (optional)",
+          "placeholder": "What is this integration for?"
+        },
+        "verifySsl": {
+          "label": "Verify SSL certificate"
+        }
+      },
+      "events": {
+        "choosePrefix": "Choose which events to send to",
+        "defaultsPreselected": "Defaults for this integration type are pre-selected.",
+        "selectedCount": "{{count}} event type selected",
+        "selectedCountPlural": "{{count}} event types selected"
+      },
+      "success": {
+        "heading": "{{name}} created!",
+        "subtitle": "Send a test event to verify the connection is working.",
+        "testDelivered": "Test event delivered",
+        "httpStats": "HTTP {{code}} · {{ms}}ms",
+        "testFailed": "Test failed",
+        "closeLabel": "Done"
+      }
+    },
+    "history": {
+      "title": "Delivery History",
+      "tabs": {
+        "deliveries": "Recent Deliveries",
+        "dlq": "Dead-Letter Queue"
+      },
+      "noDeliveries": "No deliveries yet",
+      "attempt": "· Attempt {{n}}",
+      "http": "HTTP {{code}}",
+      "dlqEmpty": "No dead-letter entries · all deliveries are healthy.",
+      "attemptsCount": "· {{n}} attempts",
+      "unknownFailure": "Unknown failure",
+      "finalAttempt": "Final attempt: {{time}}",
+      "replayed": "Replayed: {{time}}"
+    }
+  }
+}

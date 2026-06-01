@@ -1,0 +1,127 @@
+{
+  "AutomationPage": {
+    "header": {
+      "title": "自动化",
+      "description": "管理自动化规则和工作流",
+      "createRule": "创建规则"
+    },
+    "tabs": {
+      "rules": "规则 ({{n}})",
+      "history": "执行历史"
+    },
+    "filters": {
+      "allTriggers": "所有触发器",
+      "allStatus": "所有状态",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "refresh": "刷新"
+    },
+    "triggerTypes": {
+      "event": "事件",
+      "schedule": "计划",
+      "threshold": "阈值",
+      "manual": "手动",
+      "webhook": "Webhook"
+    },
+    "actionTypes": {
+      "deviceReboot": "重启设备",
+      "devicePoeCycle": "PoE 重启",
+      "deviceLocate": "定位设备",
+      "deviceConfig": "应用配置",
+      "networkBlockClient": "阻止客户端",
+      "networkUnblockClient": "解除阻止客户端",
+      "networkQuarantine": "隔离",
+      "alertCreate": "创建告警",
+      "alertResolve": "解决告警",
+      "notifyEmail": "发送邮件",
+      "notifyWebhook": "发送 Webhook",
+      "notifySlack": "通知 Slack",
+      "notifyInApp": "应用内通知",
+      "scriptRun": "运行脚本",
+      "apiCall": "API 调用"
+    },
+    "status": {
+      "active": "活动",
+      "paused": "已暂停",
+      "error": "错误",
+      "disabled": "已禁用"
+    },
+    "ruleCard": {
+      "noDescription": "无描述",
+      "actionsCount": "{{n}} 个操作",
+      "executionsCount": "{{n}} 次执行",
+      "lastTriggered": "最近: {{date}}",
+      "priority": "优先级: {{value}}",
+      "cooldown": "• 冷却时间: {{value}} 秒",
+      "actions": {
+        "edit": "编辑",
+        "runNow": "立即运行",
+        "delete": "删除"
+      }
+    },
+    "executionRow": {
+      "success": "成功",
+      "failed": "失败",
+      "actionsCount": "{{n}} 个操作"
+    },
+    "historyTable": {
+      "rule": "规则",
+      "status": "状态",
+      "actions": "操作",
+      "duration": "时长",
+      "time": "时间",
+      "error": "错误"
+    },
+    "empty": {
+      "rules": {
+        "title": "暂无自动化规则",
+        "description": "创建您的第一条自动化规则即可开始。当事件匹配您的条件时，规则会自动触发操作。",
+        "action": "创建规则"
+      },
+      "history": {
+        "title": "暂无执行历史",
+        "description": "自动化规则触发后，其执行记录将显示在此处。"
+      }
+    },
+    "createModal": {
+      "title": "创建自动化规则",
+      "submitLabel": "创建规则",
+      "fields": {
+        "name": {
+          "label": "规则名称 *",
+          "placeholder": "例如：重启离线 AP"
+        },
+        "description": {
+          "label": "描述",
+          "placeholder": "此规则功能的可选描述"
+        },
+        "triggerType": {
+          "label": "触发器类型 *"
+        },
+        "action": {
+          "label": "操作 *"
+        },
+        "priority": {
+          "label": "优先级"
+        },
+        "cooldown": {
+          "label": "冷却时间（秒）"
+        }
+      }
+    },
+    "toast": {
+      "errorTitle": "错误",
+      "successTitle": "成功",
+      "updateFailed": "更新规则失败: {{error}}",
+      "deleteFailed": "删除规则失败: {{error}}",
+      "triggerFailed": "触发规则失败: {{error}}",
+      "triggered": "规则已成功触发"
+    },
+    "confirm": {
+      "delete": "确定要删除此规则吗？"
+    },
+    "errors": {
+      "loadFailed": "加载自动化数据失败"
+    }
+  }
+}

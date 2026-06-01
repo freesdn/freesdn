@@ -1,0 +1,64 @@
+# =============================================================================
+# FreeSDN Tailscale "private access" addon  (OPT-IN, CAPLESS)
+# =============================================================================
+# Reach the FreeSDN web UI privately over your tailnet — like the TrueNAS
+# Tailscale app — with NO public port and NO privileged container. Runs
+# tailscaled in USERSPACE mode (no /dev/net/tun, no NET_ADMIN) and uses
+# `tailscale serve` to expose the FreeSDN edge at:
+#     https://<TS_HOSTNAME>.<your-tailnet>.ts.net
+#
+# This is the "ingress" job from docs.freesdn.org. It is independent
+# of the privileged VPN sidecar (docker-compose.vpn.yml) — you can run this alone
+# on an otherwise fully-capless stack.
+#
+# Usage:
+#   1) Create a Tailscale (or Headscale) auth key; put it in .env as TS_AUTHKEY.
+#   2) Set the edge to serve plain HTTP internally (the tailnet itself is encrypted):
+#        CADDY_SITE_ADDRESS=:80
+#   3) Bring it up layered on the base:
+#        docker compose --env-file .env.<tier> -f docker-compose.yml -f docker-compose.tailscale.yml up -d
+#   4) Reach FreeSDN at  http(s)://<TS_HOSTNAME>.<your-tailnet>.ts.net
+#
+# HTTPS vs HTTP (verified live):
+#   - The HTTPS serve in serve.json REQUIRES MagicDNS HTTPS certs enabled on your
+#     tailnet (Admin console -> DNS -> "Enable HTTPS"). Without it tailscaled logs
+#     "not able to issue TLS certs" and the serve config does NOT apply.
+#   - HTTP works with no tailnet setting and is still fully encrypted (the tailnet
+#     transport is WireGuard). To use HTTP instead of HTTPS, after `up` run:
+#        docker exec freesdn-tailscale-access tailscale serve --bg --http=80 http://edge:80
+#     (or enable HTTPS on the tailnet to use the declarative serve.json as-is).
+#
+# Headscale: set TS_EXTRA_ARGS=--login-server=https://your-headscale.example
+# (the Tailscale client speaks the same protocol to a self-hosted Headscale).
+
+services:
+  tailscale-access:
+    image: tailscale/tailscale:${TAILSCALE_VERSION:-stable}
+    container_name: freesdn-tailscale-access
+    hostname: ${TS_HOSTNAME:-freesdn}
+    restart: unless-stopped
+    init: true
+    environment:
+      # A reusable/ephemeral tailnet auth key. REQUIRED — compose errors if unset.
+      TS_AUTHKEY: ${TS_AUTHKEY:?set TS_AUTHKEY (a Tailscale/Headscale auth key) to enable the Tailscale access addon}
+      # CAPLESS: userspace networking — no tun device, no NET_ADMIN, no root caps.
+      TS_USERSPACE: "true"
+      TS_STATE_DIR: /var/lib/tailscale
+      # Declarative `tailscale serve` config (proxies the tailnet -> the edge).
+      TS_SERVE_CONFIG: /config/serve.json
+      # e.g. --login-server=https://your-headscale.example for self-hosted Headscale
+      TS_EXTRA_ARGS: ${TS_EXTRA_ARGS:-}
+    volumes:
+      - tailscale_access_state:/var/lib/tailscale
+      - ./docker/tailscale/serve.json:/config/serve.json:ro
+    # capless by design — intentionally NO `cap_add` and NO `devices`.
+    networks: [default]
+    depends_on:
+      edge:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+volumes:
+  tailscale_access_state:

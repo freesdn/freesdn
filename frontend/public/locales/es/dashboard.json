@@ -1,0 +1,179 @@
+{
+  "title": "Panel de control",
+  "welcome": "Bienvenido de nuevo, {{name}}",
+  "lastUpdated": "Última actualización {{time}}",
+  "refresh": "Actualizar",
+  "customize": "Personalizar panel",
+  "widgets": {
+    "deviceStatus": "Estado de dispositivos",
+    "networkOverview": "Resumen de red",
+    "alerts": "Alertas",
+    "clients": "Clientes conectados",
+    "throughput": "Rendimiento",
+    "uptime": "Tiempo de actividad",
+    "events": "Eventos recientes",
+    "topology": "Topología de red"
+  },
+  "stats": {
+    "totalDevices": "Total de dispositivos",
+    "onlineDevices": "En línea",
+    "offlineDevices": "Fuera de línea",
+    "totalClients": "Total de clientes",
+    "wiredClients": "Cableados",
+    "wirelessClients": "Inalámbricos",
+    "activeAlerts": "Alertas activas",
+    "criticalAlerts": "Críticas",
+    "warningAlerts": "Advertencias"
+  },
+  "quickActions": {
+    "title": "Acciones rápidas",
+    "scanNetwork": "Escanear red",
+    "addDevice": "Agregar dispositivo",
+    "viewAlerts": "Ver alertas",
+    "manageUsers": "Gestionar usuarios"
+  },
+  "health": {
+    "title": "Salud del sistema",
+    "healthy": "Todos los sistemas operativos",
+    "degraded": "Algunos servicios degradados",
+    "critical": "Se detectaron problemas críticos"
+  },
+  "DashboardPage": {
+    "title": "Panel de control",
+    "subtitle": {
+      "global": "Vista global de todos los sitios",
+      "site": "{{site}} · {{count}} dispositivos en línea",
+      "defaultSite": "Sitio"
+    },
+    "actions": {
+      "addWidget": "Agregar widget",
+      "reset": "Restablecer",
+      "resetTooltip": "Restaurar el conjunto de widgets predeterminado",
+      "done": "Listo",
+      "customize": "Personalizar",
+      "customizeTooltip": "Agregar o quitar widgets del panel"
+    },
+    "customize": {
+      "allWidgetsAdded": "Todos los widgets ya están en tu panel."
+    },
+    "error": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "stats": {
+      "sites": {
+        "title": "Sitios",
+        "subtitle": "Ubicaciones activas"
+      },
+      "controllers": {
+        "title": "Controladores",
+        "subtitle": "Conectados"
+      },
+      "devices": {
+        "title": "Dispositivos",
+        "subtitle": "En línea"
+      },
+      "cameras": {
+        "title": "Cámaras",
+        "subtitle": "{{count}} grabando"
+      }
+    },
+    "siteHealth": {
+      "title": "Estado del sitio",
+      "devicesOnline": "{{online}}/{{total}} dispositivos en línea",
+      "controllerCount": "{{count}} controlador",
+      "controllerCount_plural": "{{count}} controladores"
+    },
+    "empty": {
+      "title": "Tu panel está vacío",
+      "description": "Haz clic en Personalizar arriba para agregar widgets o restaurar el diseño predeterminado.",
+      "restoreButton": "Restaurar diseño predeterminado"
+    },
+    "traffic": {
+      "downloadMbps": "Descarga (Mbps)",
+      "uploadMbps": "Subida (Mbps)",
+      "noData": "No hay datos de tráfico disponibles",
+      "last24h": "Últimas 24 h"
+    },
+    "networkHealth": {
+      "notAvailable": "N/D",
+      "windowLabel": "Ventana de {{hours}} h"
+    },
+    "services": {
+      "apiServer": "Servidor API",
+      "database": "Base de datos",
+      "redisCache": "Caché Redis"
+    },
+    "activity": {
+      "severityStatus": "Gravedad: {{severity}} - Estado: {{status}}"
+    },
+    "camera": {
+      "unknown": "Desconocido"
+    }
+  },
+  "DashboardWidgetCard": {
+    "dragHandle": {
+      "ariaLabel": "Arrastra para reordenar el widget {{title}}",
+      "title": "Arrastra para reordenar"
+    },
+    "remove": {
+      "ariaLabel": "Eliminar el widget {{title}}",
+      "title": "Eliminar {{title}}"
+    }
+  },
+  "extraWidgets": {
+    "cpu": {
+      "empty": "Aún no hay telemetría de CPU"
+    },
+    "memory": {
+      "empty": "Aún no hay telemetría de memoria"
+    },
+    "manufacturer": {
+      "empty": "No hay datos de fabricantes"
+    },
+    "wifiBands": {
+      "empty": "No hay clientes inalámbricos"
+    },
+    "ssids": {
+      "empty": "No hay datos de SSID",
+      "clientCount": "{{count}} cliente",
+      "clientCountPlural": "{{count}} clientes"
+    },
+    "poe": {
+      "acrossPorts": "en {{count}} puerto PoE",
+      "acrossPortsPlural": "en {{count}} puertos PoE",
+      "avgPerPort": "Prom./puerto",
+      "active": "Activos"
+    },
+    "security": {
+      "failedLogins": "Inicios fallidos",
+      "ipBlocks": "Bloqueos de IP",
+      "anomalies": "Anomalías",
+      "secEvents": "Eventos seg.",
+      "lastHours": "Últimas {{hours}} h"
+    },
+    "audit": {
+      "empty": "No hay eventos de auditoría",
+      "totalEvents": "eventos totales"
+    },
+    "incidents": {
+      "allClear": "Todo en orden",
+      "noneInWindow": "Sin incidentes en este período",
+      "open": "Abiertos",
+      "investigating": "En investigación",
+      "resolved": "Resueltos",
+      "viewAll": "Ver todos los incidentes"
+    },
+    "ports": {
+      "empty": "No hay datos de puertos",
+      "portsUp": "{{pct}}% de puertos activos",
+      "up": "Activos",
+      "down": "Inactivos",
+      "errors": "Errores",
+      "aggregateTraffic": "{{value}} de tráfico total"
+    },
+    "siteHealth": {
+      "empty": "No hay sitios configurados",
+      "deviceCount": "{{count}} disp."
+    }
+  }
+}

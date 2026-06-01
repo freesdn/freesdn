@@ -1,0 +1,166 @@
+{
+  "DiscoveryPage": {
+    "header": {
+      "title": "Descubrimiento de dispositivos",
+      "subtitle": "Escanee su red, consulte controladores o despache sondas de agente para encontrar y adoptar dispositivos"
+    },
+    "status": {
+      "live": "En vivo",
+      "connecting": "Conectando..."
+    },
+    "tabs": {
+      "network": "Escaneo de red",
+      "controllers": "Controladores",
+      "agent": "Escaneo de agente",
+      "discovered": "Hosts descubiertos",
+      "topology": "Topología"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos.",
+      "startDiscovery": "No se pudo iniciar el descubrimiento"
+    },
+    "ws": {
+      "discovering": "Descubriendo {{target}}...",
+      "devices": "dispositivos",
+      "inProgress": "En curso...",
+      "discoveryFailed": "Error en el descubrimiento"
+    },
+    "networkScan": {
+      "title": "Escaneo de red",
+      "description": "Ingrese direcciones IP, subredes CIDR o rangos para escanear su red",
+      "targetsPlaceholder": "p. ej. 192.168.1.0/24, 10.0.0.1-50",
+      "fillFromSite": "Rellenar desde sitio...",
+      "scan": "Escanear",
+      "cancel": "Cancelar",
+      "wizard": "Asistente",
+      "probeServices": "Sondear servicios",
+      "resolveHostnames": "Resolver nombres de host",
+      "ports": "Puertos:"
+    },
+    "scanProgress": {
+      "scanning": "Escaneando..."
+    },
+    "results": {
+      "discovered": "Descubiertos",
+      "manageable": "Administrables",
+      "status": "Estado",
+      "duration": "Duración",
+      "devicesTitle": "Dispositivos descubiertos ({{count}})",
+      "searchPlaceholder": "Buscar resultados...",
+      "select": "Seleccionar",
+      "selectedOne": "{{count}} dispositivo seleccionado",
+      "selectedOther": "{{count}} dispositivos seleccionados",
+      "bulkAdopt": "Adoptar en lote",
+      "emptyTitle": "No se encontraron dispositivos",
+      "emptyDescription": "No se encontraron dispositivos que coincidan con sus criterios. Intente ajustar los filtros o ejecutar un nuevo escaneo."
+    },
+    "ready": {
+      "title": "Listo para escanear",
+      "description": "Ingrese una subred o rango de IP de destino arriba y haga clic en Escanear. El escáner sondea puertos, identifica servicios y clasifica dispositivos."
+    },
+    "controllerStats": {
+      "totalFound": "Total encontrados",
+      "newDevices": "Dispositivos nuevos",
+      "updated": "Actualizados",
+      "failed": "Fallidos"
+    },
+    "controllerDiscovery": {
+      "title": "Descubrimiento de controladores",
+      "description": "Descubra dispositivos desde sus controladores registrados (Omada, Hikvision, OPNsense, pfSense, MikroTik)",
+      "allControllers": "Todos los controladores",
+      "searchPlaceholder": "Buscar controladores...",
+      "discovering": "Descubriendo...",
+      "startDiscovery": "Iniciar descubrimiento",
+      "refresh": "Actualizar"
+    },
+    "controllersTable": {
+      "title": "Controladores ({{count}})",
+      "empty": "No se encontraron controladores. Agregue un controlador para comenzar a descubrir dispositivos.",
+      "never": "Nunca",
+      "columns": {
+        "name": "Nombre",
+        "type": "Tipo",
+        "host": "Host",
+        "status": "Estado",
+        "lastSync": "Última sincronización",
+        "actions": "Acciones"
+      }
+    },
+    "drivers": {
+      "title": "Controladores disponibles ({{count}})",
+      "description": "Controladores de dispositivos compatibles para el descubrimiento de controladores"
+    },
+    "agentScan": {
+      "title": "Escaneo profundo basado en agente",
+      "description": "Despache tareas de escaneo a agentes remotos para sondas de nivel de SO L2/L3, incluyendo ARP, NDP, LLDP, CDP y escucha pasiva. Ofrece el descubrimiento de dispositivos más completo.",
+      "targetPlaceholder": "p. ej. 192.168.1.0/24",
+      "agentLabel": "Agente",
+      "agentPlaceholder": "Seleccione un agente en línea...",
+      "noAgentsTitle": "No hay agentes en línea",
+      "noAgentsDescription": "Los escaneos de agente requieren un agente en línea. Instale y conecte un agente para este sitio e inténtelo de nuevo.",
+      "dispatch": "Despachar escaneo de agente",
+      "inProgress": "Escaneo de agente en curso",
+      "taskId": "ID de tarea: {{id}}",
+      "l2Probes": {
+        "title": "Sondas L2",
+        "description": "Escaneo ARP, NDP para IPv6, recopilación pasiva de la tabla de direcciones MAC"
+      },
+      "protocolDiscovery": {
+        "title": "Descubrimiento de protocolos",
+        "description": "LLDP, CDP, mDNS, SSDP y UPnP para la identificación automática de dispositivos"
+      },
+      "deepFingerprint": {
+        "title": "Huella digital profunda",
+        "description": "Detección de SO, sondeo de versiones de servicio, captura de banners, inspección de certificados TLS"
+      }
+    },
+    "toast": {
+      "scanComplete": {
+        "title": "Escaneo completado",
+        "description": "Se descubrieron {{count}} dispositivos"
+      },
+      "scanStarted": {
+        "title": "Escaneo iniciado"
+      },
+      "scanFailed": {
+        "title": "Error en el escaneo",
+        "description": "No se pudo iniciar el escaneo"
+      },
+      "scanCancelled": {
+        "title": "Escaneo cancelado"
+      },
+      "cancelFailed": {
+        "title": "Error al cancelar",
+        "description": "No se pudo cancelar el escaneo"
+      },
+      "agentScanStarted": {
+        "title": "Escaneo de agente iniciado",
+        "description": "Escaneo profundo despachado al agente"
+      },
+      "agentScanFailed": {
+        "title": "Error en el escaneo de agente",
+        "description": "No se pudo despachar el escaneo de agente"
+      },
+      "agentScanComplete": {
+        "title": "Escaneo de agente completado",
+        "description": "Los hosts descubiertos están disponibles en la pestaña Descubiertos"
+      },
+      "bulkAdoptComplete": {
+        "title": "Adopción en lote completada",
+        "description": "{{succeeded}} adoptados, {{failed}} fallidos"
+      },
+      "bulkAdoptFailed": {
+        "title": "Error en la adopción en lote",
+        "description": "No se pudieron adoptar los dispositivos"
+      },
+      "noTargets": {
+        "title": "Sin objetivos",
+        "description": "Ingrese al menos una IP, CIDR o rango"
+      },
+      "deviceAdopted": {
+        "title": "Dispositivo adoptado",
+        "description": "{{ip}} adoptado correctamente"
+      }
+    }
+  }
+}

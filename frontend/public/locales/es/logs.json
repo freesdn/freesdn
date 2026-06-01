@@ -1,0 +1,149 @@
+{
+  "LogsPage": {
+    "common": {
+      "na": "N/D"
+    },
+    "header": {
+      "title": "Registros y auditoría",
+      "subtitle": "Flujo unificado de actividad del sistema y resumen de estado"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "allLogs": "Todos los registros"
+    },
+    "levels": {
+      "debug": "Depuración",
+      "info": "Información",
+      "warning": "Advertencia",
+      "error": "Error",
+      "critical": "Crítico",
+      "success": "Correcto"
+    },
+    "sources": {
+      "api": "API",
+      "auth": "Autenticación",
+      "device": "Dispositivo",
+      "database": "Base de datos",
+      "system": "Sistema",
+      "user": "Acción de usuario",
+      "network": "Red",
+      "scheduler": "Programador"
+    },
+    "timeRanges": {
+      "1h": "Última hora",
+      "6h": "Últimas 6 horas",
+      "24h": "Últimas 24 horas",
+      "7d": "Últimos 7 días",
+      "30d": "Últimos 30 días"
+    },
+    "attentionTypes": {
+      "security": "seguridad",
+      "error": "error",
+      "anomaly": "anomalía",
+      "incident": "incidente"
+    },
+    "charts": {
+      "noData": "Sin datos",
+      "eventsErrors": "{{events}} eventos / {{errors}} errores"
+    },
+    "metric": {
+      "trendVsPrior": "{{pct}}% frente al periodo anterior",
+      "viewDetails": "Ver detalles"
+    },
+    "overview": {
+      "loadError": "No se pudieron cargar los datos de estado del sistema. Inténtalo de nuevo.",
+      "loading": "Cargando estado del sistema...",
+      "kpi": {
+        "events24h": "Eventos (24 h)",
+        "inSevenDays": "{{count}} en 7 días",
+        "errors": "Errores",
+        "warnings": "Advertencias",
+        "critical": "Críticos",
+        "successRate": "Tasa de éxito",
+        "openIncidents": "Incidentes abiertos",
+        "failedLogins24h": "Inicios de sesión fallidos (24 h)",
+        "ipBlocksActive": "Bloqueos de IP activos",
+        "avgResponse": "Respuesta media",
+        "p95Subtitle": "P95: {{ms}} ms"
+      },
+      "activity": {
+        "title": "Actividad de 7 días",
+        "description": "Eventos, errores y advertencias por día",
+        "legendTotal": "Total",
+        "legendErrors": "Errores",
+        "legendWarnings": "Advertencias"
+      },
+      "attention": {
+        "title": "Requiere atención",
+        "description": "Elementos críticos de todos los módulos",
+        "allClear": "Todo en orden · ningún elemento requiere atención"
+      },
+      "performance": {
+        "title": "Rendimiento",
+        "avgResponse": "Respuesta media",
+        "p95Response": "Respuesta P95",
+        "successRate": "Tasa de éxito",
+        "errorRate": "Tasa de errores"
+      },
+      "pulse": {
+        "title": "Pulso del sistema",
+        "events24h": "Eventos (24 h)",
+        "events7d": "Eventos (7 d)",
+        "unresolvedAnomalies": "Anomalías sin resolver",
+        "activeIpBlocks": "Bloqueos de IP activos"
+      },
+      "quickLinks": {
+        "title": "Enlaces rápidos",
+        "description": "Ir a las páginas dedicadas",
+        "securityOps": "Operaciones de seguridad",
+        "incidentMgmt": "Gestión de incidentes",
+        "alertTriage": "Clasificación de alertas",
+        "analyticsDashboard": "Panel de analíticas"
+      }
+    },
+    "entry": {
+      "user": "Usuario:",
+      "ip": "IP:",
+      "request": "Solicitud:",
+      "device": "Dispositivo:",
+      "site": "Sitio:"
+    },
+    "allLogs": {
+      "loadError": "No se pudieron cargar los registros. Inténtalo de nuevo.",
+      "loading": "Cargando registros...",
+      "searchPlaceholder": "Buscar registros...",
+      "allSources": "Todas las fuentes",
+      "live": "En vivo",
+      "exportJson": "JSON",
+      "exportCsv": "CSV",
+      "stats": {
+        "totalEvents": "Eventos totales",
+        "errors": "Errores",
+        "warnings": "Advertencias",
+        "errorRate": "Tasa de errores",
+        "avgResponse": "Respuesta media"
+      },
+      "charts": {
+        "hourlyActivity": "Actividad por hora",
+        "levelDistribution": "Distribución por nivel"
+      },
+      "filters": {
+        "label": "Filtros:",
+        "level": "Nivel: {{value}}",
+        "source": "Fuente: {{value}}",
+        "search": "Búsqueda: {{value}}",
+        "clearAll": "Borrar todo"
+      },
+      "empty": {
+        "title": "No se encontraron entradas de registro",
+        "description": "Prueba a ajustar los filtros o el intervalo de tiempo"
+      },
+      "pagination": {
+        "showing": "Mostrando {{from}}-{{to}} de {{total}} entradas",
+        "previous": "Anterior",
+        "next": "Siguiente",
+        "pageOf": "Página {{page}} de {{pages}}"
+      }
+    }
+  }
+}

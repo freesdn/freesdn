@@ -1,0 +1,20 @@
+{
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v2/sites",
+        "query": "currentPage=1&currentPageSize=100"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "text": "{\"errorCode\": 0, \"msg\": \"Success.\", \"result\": {\"totalRows\": 1, \"currentPage\": 1, \"currentSize\": 100, \"data\": [{\"id\": \"5f3e9a7c2b1d4e0099aa1234\", \"name\": \"HQ\", \"region\": \"United States\", \"timeZone\": \"UTC\", \"scenario\": \"Office\", \"type\": 0, \"primary\": true}]}}"
+        }
+      }
+    }
+  ]
+}

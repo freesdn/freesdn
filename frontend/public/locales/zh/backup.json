@@ -1,0 +1,539 @@
+{
+  "BackupsPage": {
+    "header": {
+      "title": "配置备份",
+      "description": "可移植的配置快照--站点、控制器、设备、用户、自动化规则"
+    },
+    "actions": {
+      "newBackup": "新建备份",
+      "createBackup": "创建备份",
+      "storageLocations": "存储位置",
+      "download": "下载",
+      "restore": "还原",
+      "viewDetails": "查看详情",
+      "delete": "删除",
+      "deleteBackup": "删除备份",
+      "createSchedule": "创建计划",
+      "pauseSchedule": "暂停计划",
+      "resumeSchedule": "恢复计划",
+      "editSchedule": "编辑计划",
+      "runNow": "立即运行",
+      "deleteSchedule": "删除计划",
+      "updateSchedule": "更新计划",
+      "cancel": "取消",
+      "close": "关闭",
+      "previewChanges": "预览更改",
+      "restoreNow": "立即还原",
+      "selectItem": "选择 {{name}}"
+    },
+    "common": {
+      "encrypted": "已加密"
+    },
+    "scopeBanner": {
+      "title": "这是配置快照，而非完整系统备份",
+      "part1Before": "此处的",
+      "part1After": "归档文件导出站点、控制器、设备、用户和自动化规则--旨在在实例之间迁移配置或保留可移植的设置模板。对于灾难恢复（审计日志 + 哈希链、加密凭据、代理注册表、插件安装状态、各模块的 VoIP/摄像头/虚拟机管理程序数据），请使用",
+      "part2": "容器输出并遵循"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败。结果可能不完整。"
+    },
+    "quickActions": {
+      "title": "快速操作",
+      "subtitle": "即时导出或导入您的配置",
+      "exporting": "正在导出...",
+      "exportConfig": "导出配置",
+      "reading": "正在读取...",
+      "importConfig": "导入配置"
+    },
+    "stats": {
+      "totalBackups": "备份总数",
+      "completed": "已完成",
+      "failed": "失败",
+      "storageUsed": "已用存储",
+      "activeSchedules": "{{count}} 个活动计划"
+    },
+    "storageCta": {
+      "noneTitle": "未配置存储位置",
+      "noneDescription": "设置备份的存储位置 · 本地磁盘、NFS、S3 或其他目标。",
+      "configure": "配置存储",
+      "countOne": "{{count}} 个存储位置",
+      "countMany": "{{count}} 个存储位置",
+      "configuredForBackups": "已为备份配置",
+      "manage": "管理位置"
+    },
+    "timeline": {
+      "title": "备份时间线",
+      "lastN": "最近 {{count}} 个备份",
+      "oldest": "最早",
+      "mostRecent": "最新"
+    },
+    "tabs": {
+      "backups": "备份",
+      "schedules": "计划",
+      "history": "历史记录"
+    },
+    "filters": {
+      "searchPlaceholder": "搜索备份...",
+      "statusPlaceholder": "按状态筛选",
+      "allStatus": "所有状态"
+    },
+    "status": {
+      "pending": "待处理",
+      "inProgress": "进行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消"
+    },
+    "empty": {
+      "noBackups": {
+        "title": "尚无备份",
+        "description": "创建您的第一个备份以保护设备配置。备份可手动触发或按计划运行。"
+      },
+      "noSchedules": {
+        "title": "尚无计划",
+        "description": "设置自动备份，使您的配置按重复周期捕获 · 每天、每周或自定义 cron。"
+      },
+      "noHistory": {
+        "title": "无备份历史记录",
+        "description": "任何备份作业完成后，已完成的备份将在此处以时间顺序显示。"
+      }
+    },
+    "rollbackBadge": {
+      "label": "还原前快照",
+      "tooltip": "在还原前自动捕获。还原此快照可撤销该还原。"
+    },
+    "schedules": {
+      "heading": "自动备份计划",
+      "subheading": "配置带保留策略的自动备份",
+      "active": "活动",
+      "paused": "已暂停",
+      "keepBackups": "保留 {{count}} 个备份",
+      "retainDays": "保留 {{count}} 天",
+      "lastRun": "上次运行",
+      "nextRun": "下次运行",
+      "manualRunName": "{{name}} - 手动运行",
+      "manualRunDescription": "手动运行计划：{{name}}"
+    },
+    "history": {
+      "heading": "备份历史记录",
+      "subheading": "所有备份操作的完整时间线",
+      "scheduled": "已计划"
+    },
+    "include": {
+      "title": "包含在备份中",
+      "devices": "设备",
+      "vlans": "VLAN",
+      "ssids": "SSID",
+      "users": "用户",
+      "automation": "自动化"
+    },
+    "createDialog": {
+      "title": "创建新备份",
+      "description": "创建您的配置的备份",
+      "nameLabel": "备份名称",
+      "namePlaceholder": "例如，升级前备份",
+      "backupTypeLabel": "备份类型",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "可选描述",
+      "siteLabel": "站点（可选）",
+      "allSites": "所有站点",
+      "storageLabel": "存储位置",
+      "manageStorageLink": "管理存储位置",
+      "retentionLabel": "保留（天）",
+      "encryptionLabel": "加密",
+      "encryptionHelp": "加密备份数据",
+      "fullBackupLabel": "完整备份（包含所有密钥）",
+      "fullBackupHelp": "包含每个凭据、VPN 密钥和用户登录。使用你设置的口令封装，可移植到其他实例。关闭 = 不含密钥的配置快照（.fsdn）。",
+      "fullBackupWarnLabel": "此文件包含你的所有密码。",
+      "fullBackupWarnText": "任何拥有此 .fsdnvault 文件和口令的人都能接管你的整个部署——请像保管密码库一样保管它。常规配置备份（.fsdn）才是可安全分享的那个。",
+      "passphraseLabel": "备份口令",
+      "passphrasePlaceholder": "至少 12 个字符——恢复时需要它"
+    },
+    "backupTypeOptions": {
+      "full": "完整备份",
+      "deviceConfig": "仅设备配置",
+      "siteConfig": "仅站点配置"
+    },
+    "backupTypeLabels": {
+      "full": "完整备份",
+      "deviceConfig": "设备配置",
+      "siteConfig": "站点配置",
+      "rollbackSlot": "还原前快照"
+    },
+    "storageOptions": {
+      "local": "本地存储",
+      "s3": "Amazon S3 / S3 兼容",
+      "s3Short": "Amazon S3",
+      "sftp": "SFTP 服务器",
+      "ftp": "FTP/FTPS 服务器",
+      "googleDrive": "Google Drive",
+      "dropbox": "Dropbox",
+      "webdav": "WebDAV（Nextcloud/ownCloud）",
+      "configuredLocations": "已配置的位置",
+      "default": "默认"
+    },
+    "storageTypeLabels": {
+      "local": "本地磁盘",
+      "s3": "Amazon S3",
+      "sftp": "SFTP",
+      "ftp": "FTP/FTPS",
+      "nfs": "NFS",
+      "googleDrive": "Google Drive",
+      "dropbox": "Dropbox",
+      "webdav": "WebDAV"
+    },
+    "deleteDialog": {
+      "title": "删除备份",
+      "description": "确定要删除此备份吗？此操作无法撤销。"
+    },
+    "restoreDialog": {
+      "title": "从备份还原",
+      "description": "从“{{name}}”还原配置",
+      "created": "创建时间",
+      "size": "大小",
+      "type": "类型",
+      "security": "安全",
+      "modulesTitle": "要还原的模块",
+      "allModules": "所有模块",
+      "selectedCount": "已选择 {{total}} 个中的 {{selected}} 个",
+      "readingManifest": "正在读取备份清单…",
+      "manifestError": "无法读取备份清单。下方旧版的“还原内容”开关仍然适用。",
+      "restoreModuleAria": "还原 {{module}} 模块",
+      "schemaBadge": "架构 {{version}}",
+      "itemCount": "{{count}} 个项目",
+      "noRestorableModules": "此实例上该备份中没有可还原的模块--请检查架构兼容性 / 已安装的模块。",
+      "whatToRestore": "还原内容",
+      "options": "选项",
+      "overwriteTitle": "覆盖现有项",
+      "overwriteHelp": "用备份数据替换现有配置",
+      "warningLabel": "警告：",
+      "warningText": "还原将修改您当前的配置。建议先运行模拟以预览更改。",
+      "credentialNoteLabel": "不包含密钥。",
+      "credentialNoteText": "配置快照不包含控制器、设备、摄像头和 PBX 密码、VPN 密钥及其他机密——还原后需为已还原的控制器或设备重新输入。如需包含机密的完整灾难恢复，请使用 pg-backup 容器输出。",
+      "passphraseLabel": "备份口令（完整备份必填）",
+      "passphrasePlaceholder": "创建此 .fsdnvault 时使用的口令",
+      "confirmTypePrefix": "输入",
+      "confirmTypeOr": "或",
+      "confirmTypeSuffix": "以确认",
+      "confirmPlaceholder": "输入以确认破坏性还原"
+    },
+    "dryRun": {
+      "header": "模拟预览 · 尚未应用任何内容",
+      "createCount": "+{{count}} 创建",
+      "updateCount": "~{{count}} 更新",
+      "skipCount": "{{count}} 跳过",
+      "errorCount": "{{count}} 错误",
+      "skippedSuffix": "已跳过 {{count}} 个",
+      "noChanges": "无更改"
+    },
+    "scheduleDialog": {
+      "editTitle": "编辑备份计划",
+      "createTitle": "创建备份计划",
+      "description": "配置带保留策略的自动备份",
+      "nameLabel": "计划名称",
+      "namePlaceholder": "例如，每日配置备份",
+      "descriptionLabel": "描述（可选）",
+      "descriptionPlaceholder": "此计划的可选描述",
+      "scheduleLabel": "计划",
+      "hideHelp": "隐藏帮助",
+      "showHelp": "显示帮助",
+      "cronFormatLabel": "Cron 格式：",
+      "cronFormatValue": "分 时 日 月 周",
+      "cronExampleLabel": "示例：",
+      "cronExampleValue": "= 每天凌晨 2:00",
+      "quickPresets": "快速预设",
+      "selectPreset": "选择预设...",
+      "cronExpressionLabel": "Cron 表达式",
+      "timezone": "时区",
+      "retentionPolicy": "保留策略",
+      "maxBackupsLabel": "最大备份数",
+      "maxBackupsHelp": "保留最近 {{count}} 个备份（最旧的将被删除）",
+      "retentionDaysLabel": "保留天数",
+      "retentionDaysHelp": "删除超过 {{count}} 天的备份",
+      "encryptFilesHelp": "加密备份文件"
+    },
+    "cronPresets": {
+      "everyHour": {
+        "label": "每小时",
+        "description": "在每小时开始时运行"
+      },
+      "daily2am": {
+        "label": "每天凌晨 2 点",
+        "description": "每天凌晨 2:00 运行"
+      },
+      "dailyMidnight": {
+        "label": "每天午夜",
+        "description": "每天午夜运行"
+      },
+      "weeklySunday": {
+        "label": "每周（周日）",
+        "description": "每周日凌晨 2:00 运行"
+      },
+      "weeklyMonday": {
+        "label": "每周（周一）",
+        "description": "每周一凌晨 2:00 运行"
+      },
+      "monthly1st": {
+        "label": "每月（1 日）",
+        "description": "在每月 1 日运行"
+      },
+      "every6h": {
+        "label": "每 6 小时",
+        "description": "每 6 小时运行一次"
+      },
+      "every12h": {
+        "label": "每 12 小时",
+        "description": "每天运行两次"
+      }
+    },
+    "timezones": {
+      "easternUs": "东部时间（美国）",
+      "centralUs": "中部时间（美国）",
+      "mountainUs": "山地时间（美国）",
+      "pacificUs": "太平洋时间（美国）",
+      "londonUk": "伦敦（英国）",
+      "parisEu": "巴黎（欧盟）",
+      "tokyoJapan": "东京（日本）",
+      "sydneyAustralia": "悉尼（澳大利亚）"
+    },
+    "deleteScheduleDialog": {
+      "title": "删除计划",
+      "description": "确定要删除此备份计划吗？此计划已创建的现有备份不会受到影响。"
+    },
+    "detailDialog": {
+      "title": "备份详情",
+      "status": "状态",
+      "storage": "存储",
+      "yes": "是",
+      "expires": "到期",
+      "includedInBackup": "已包含在备份中"
+    },
+    "importDialog": {
+      "title": "导入配置",
+      "description": "在导入前查看配置文件",
+      "contains": "此导入包含：",
+      "sites": "站点",
+      "controllers": "控制器",
+      "metadataCreated": "创建时间：",
+      "metadataBy": "创建者：",
+      "metadataVersion": "版本：",
+      "unknown": "未知",
+      "warning": "导入将添加或更新配置。ID 匹配的现有项目可能会被覆盖。",
+      "importing": "正在导入...",
+      "importNow": "立即导入"
+    },
+    "bulk": {
+      "itemName": "备份",
+      "deleteConfirm": "删除 {{count}} 个备份？"
+    },
+    "validation": {
+      "nameRequired": "备份名称为必填项"
+    },
+    "time": {
+      "never": "从未",
+      "justNow": "刚刚",
+      "minutesAgo": "{{n}} 分钟前",
+      "hoursAgo": "{{n}} 小时前",
+      "daysAgo": "{{n}} 天前"
+    },
+    "cron": {
+      "invalid": "无效的 cron",
+      "runWord": "运行",
+      "nextDayAt": "下一个 {{day}} {{time}}",
+      "dayOfMonthAt": "{{ordinal}} {{time}}",
+      "everyNHours": "每 {{n}} 小时",
+      "dailyAt": "每天 {{time}}",
+      "days": {
+        "sunday": "周日",
+        "monday": "周一",
+        "tuesday": "周二",
+        "wednesday": "周三",
+        "thursday": "周四",
+        "friday": "周五",
+        "saturday": "周六"
+      }
+    },
+    "toasts": {
+      "error": "错误",
+      "backupStarted": {
+        "title": "备份已开始",
+        "message": "备份作业已加入队列"
+      },
+      "createBackupFailed": "创建备份失败",
+      "backupDeleted": {
+        "title": "备份已删除",
+        "message": "备份已成功删除"
+      },
+      "deleteBackupFailed": "删除备份失败",
+      "scheduleUpdated": {
+        "title": "计划已更新",
+        "message": "备份计划已更新"
+      },
+      "scheduleToggled": {
+        "message": "备份计划已切换"
+      },
+      "toggleScheduleFailed": "切换计划失败",
+      "dryRunComplete": {
+        "title": "模拟完成",
+        "message": "请查看下方预览的更改，然后确认以还原。"
+      },
+      "restoreStarted": {
+        "title": "还原已开始",
+        "message": "还原作业已开始"
+      },
+      "restoreFailed": "启动还原失败",
+      "scheduleCreated": {
+        "title": "计划已创建",
+        "message": "备份计划已成功创建"
+      },
+      "createScheduleFailed": "创建计划失败",
+      "updateScheduleFailed": "更新计划失败",
+      "scheduleDeleted": {
+        "title": "计划已删除",
+        "message": "备份计划已删除"
+      },
+      "deleteScheduleFailed": "删除计划失败",
+      "downloadFailed": {
+        "title": "下载失败"
+      },
+      "downloadBackupFailed": "下载备份失败",
+      "exportComplete": {
+        "title": "导出完成",
+        "message": "配置备份已成功下载"
+      },
+      "exportFailed": {
+        "title": "导出失败"
+      },
+      "exportConfigFailed": "导出配置失败",
+      "importFailed": {
+        "title": "导入失败"
+      },
+      "readImportFailed": "读取导入文件失败",
+      "importComplete": {
+        "title": "导入完成",
+        "message": "配置已成功导入"
+      },
+      "importConfigFailed": "导入配置失败"
+    }
+  },
+  "StorageLocationsPage": {
+    "header": {
+      "title": "存储位置",
+      "subtitle": "配置备份的存储位置 · 本地磁盘、云或远程服务器。",
+      "backToBackups": "返回备份"
+    },
+    "actions": {
+      "add": "添加存储位置",
+      "testConnection": "测试连接",
+      "edit": "编辑",
+      "delete": "删除",
+      "cancel": "取消",
+      "close": "关闭"
+    },
+    "filters": {
+      "searchPlaceholder": "搜索存储位置...",
+      "allTypes": "所有类型",
+      "refresh": "刷新"
+    },
+    "badges": {
+      "default": "默认"
+    },
+    "status": {
+      "active": "启用",
+      "inactive": "停用",
+      "connected": "已连接",
+      "failed": "失败",
+      "testing": "测试中..."
+    },
+    "footer": {
+      "lastTested": "上次测试 {{date}}",
+      "neverTested": "从未测试",
+      "created": "创建于 {{date}}"
+    },
+    "empty": {
+      "title": "尚未配置存储位置",
+      "description": "添加存储位置即可开始将备份保存到本地磁盘、S3 存储桶、SFTP 服务器、Google Drive、Dropbox 等。",
+      "action": "添加您的第一个存储位置"
+    },
+    "supportedBackends": {
+      "heading": "支持的存储后端"
+    },
+    "deleteDialog": {
+      "title": "删除存储位置",
+      "confirmPrefix": "确定要删除",
+      "confirmSuffix": "吗？存储在该位置的现有备份不会被删除，但您将无法通过 FreeSDN 访问它们。"
+    },
+    "testResult": {
+      "titlePassed": "连接测试通过",
+      "titleFailed": "连接测试失败",
+      "status": "状态",
+      "success": "成功",
+      "failed": "失败",
+      "message": "消息",
+      "latency": "延迟",
+      "latencyValue": "{{ms}} ms",
+      "details": "详细信息"
+    },
+    "formDialog": {
+      "createTitle": "添加存储位置",
+      "editTitle": "编辑存储位置",
+      "createDescription": "为您的备份配置新的目标位置。",
+      "editDescription": "更新设置。将凭据字段留空以保留现有值。",
+      "editDescriptionNamed": "更新 {{name}} 的设置。将凭据字段留空以保留现有值。",
+      "submitCreate": "创建",
+      "submitSave": "保存更改"
+    },
+    "form": {
+      "name": "名称",
+      "namePlaceholder": "例如 生产 S3 存储桶",
+      "description": "描述",
+      "descriptionPlaceholder": "可选描述",
+      "storageType": "存储类型",
+      "storageTypePlaceholder": "选择存储类型...",
+      "loadingTypes": "正在加载存储类型...",
+      "loadTypesFailed": "加载存储类型失败",
+      "noTypesAvailable": "没有可用的存储类型",
+      "cannotBeChanged": "（无法更改）",
+      "connectionSettings": "连接设置",
+      "updateConnectionSettings": "更新连接设置",
+      "leaveEmptyHint": "将字段留空以保留现有值",
+      "showSecrets": "显示密钥",
+      "hideSecrets": "隐藏密钥",
+      "setAsDefault": "设为默认",
+      "setAsDefaultHint": "默认将此位置用于新备份"
+    },
+    "dynamicField": {
+      "leaveEmptyPlaceholder": "留空以保留现有值",
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    },
+    "validation": {
+      "nameRequired": "名称为必填项",
+      "storageTypeRequired": "存储类型为必填项",
+      "fieldRequired": "{{field}} 为必填项"
+    },
+    "notifications": {
+      "error": "错误",
+      "created": {
+        "title": "已创建存储位置",
+        "message": "存储位置已成功创建。"
+      },
+      "createFailed": "创建存储位置失败。",
+      "updated": {
+        "title": "已更新存储位置",
+        "message": "更改已保存。"
+      },
+      "updateFailed": "更新存储位置失败。",
+      "deleted": {
+        "title": "已删除存储位置",
+        "message": "存储位置已删除。"
+      },
+      "deleteFailed": "删除存储位置失败。",
+      "testFailed": {
+        "title": "测试失败",
+        "message": "连接测试失败。"
+      }
+    }
+  }
+}

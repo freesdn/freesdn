@@ -1,0 +1,295 @@
+{
+  "RolesPage": {
+    "header": {
+      "title": "角色与权限",
+      "description": "管理组织的角色和细粒度权限授予。"
+    },
+    "errors": {
+      "loadFailed": "加载角色失败"
+    },
+    "tabs": {
+      "roles": "角色",
+      "matrix": "权限矩阵"
+    },
+    "columns": {
+      "role": "角色",
+      "type": "类型",
+      "level": "级别",
+      "permissions": "权限",
+      "users": "用户"
+    },
+    "type": {
+      "system": "系统",
+      "custom": "自定义",
+      "default": "默认"
+    },
+    "stats": {
+      "totalRoles": {
+        "title": "角色总数",
+        "description": "所有已定义的角色"
+      },
+      "systemRoles": {
+        "title": "系统角色",
+        "description": "内置层级"
+      },
+      "customRoles": {
+        "title": "自定义角色",
+        "description": "用户创建"
+      },
+      "usersAssigned": {
+        "title": "已分配用户",
+        "description": "跨所有角色"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "按名称、slug 或描述搜索角色…",
+      "allTypes": "所有类型",
+      "clearFilters": "清除筛选"
+    },
+    "itemName": "角色",
+    "itemNamePlural": "角色",
+    "actions": {
+      "export": "导出",
+      "createRole": "创建角色",
+      "updateRole": "更新角色",
+      "actions": "操作",
+      "actionsForRole": "{{name}} 的操作",
+      "viewPermissions": "查看权限",
+      "edit": "编辑",
+      "editRole": "编辑角色",
+      "delete": "删除",
+      "deleting": "正在删除...",
+      "cancel": "取消",
+      "close": "关闭",
+      "saving": "正在保存..."
+    },
+    "toasts": {
+      "export": {
+        "title": "导出",
+        "description": "批量导出：尚未实现。"
+      },
+      "bulkDelete": {
+        "title": "批量删除",
+        "summary": "已删除 {{ok}} 个，{{failed}} 个失败，跳过 {{skipped}} 个系统角色",
+        "nothingTitle": "无可删除项",
+        "nothingDescription": "系统角色无法删除。"
+      }
+    },
+    "deleteDialog": {
+      "title": "删除角色",
+      "confirm": "确定要删除 <strong>{{name}}</strong> 吗？此操作无法撤销。",
+      "warningOne": "警告：当前有 {{count}} 个用户已分配到此角色。",
+      "warningMany": "警告：当前有 {{count}} 个用户已分配到此角色。"
+    },
+    "matrix": {
+      "permissionHeader": "权限"
+    },
+    "levels": {
+      "superAdmin": "超级管理员",
+      "admin": "管理员",
+      "orgAdmin": "组织管理员",
+      "siteAdmin": "站点管理员",
+      "operator": "操作员",
+      "viewer": "查看者",
+      "guest": "访客"
+    },
+    "categories": {
+      "usersAccess": "用户与访问",
+      "devices": "设备",
+      "controllers": "控制器",
+      "sites": "站点",
+      "monitoringAlerts": "监控与告警",
+      "securityAudit": "安全与审计",
+      "settings": "设置"
+    },
+    "roleDialog": {
+      "editTitle": "编辑角色",
+      "createTitle": "创建角色",
+      "editDescription": "更新角色信息和权限",
+      "createDescription": "定义具有自定义权限的新角色",
+      "nameLabel": "名称 *",
+      "namePlaceholder": "例如：网络管理员",
+      "slugLabel": "Slug",
+      "slugPlaceholder": "自动生成",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "描述此角色的用途...",
+      "levelLabel": "级别 (1-100)",
+      "levelHelp": "级别越高，权限越大",
+      "optionsLabel": "选项",
+      "defaultRoleLabel": "新用户的默认角色",
+      "permissionsLabel": "权限",
+      "permissionsCount": "{{selected}} / {{total}}"
+    },
+    "viewDialog": {
+      "noDescription": "未提供描述",
+      "usersLabel": "用户",
+      "permissionsLabel": "权限",
+      "levelLabel": "级别",
+      "permissionBreakdown": "权限明细",
+      "slug": "Slug",
+      "roleId": "角色 ID"
+    },
+    "permissions": {
+      "user": {
+        "read": {
+          "label": "查看用户",
+          "description": "查看用户列表和详情"
+        },
+        "create": {
+          "label": "创建用户",
+          "description": "创建新的用户账户"
+        },
+        "update": {
+          "label": "更新用户",
+          "description": "修改用户信息"
+        },
+        "delete": {
+          "label": "删除用户",
+          "description": "移除用户账户"
+        }
+      },
+      "role": {
+        "read": {
+          "label": "查看角色",
+          "description": "查看角色列表和详情"
+        },
+        "create": {
+          "label": "创建角色",
+          "description": "创建新角色"
+        },
+        "update": {
+          "label": "更新角色",
+          "description": "修改角色权限"
+        },
+        "delete": {
+          "label": "删除角色",
+          "description": "移除角色"
+        }
+      },
+      "device": {
+        "read": {
+          "label": "查看设备",
+          "description": "查看设备列表和详情"
+        },
+        "create": {
+          "label": "创建设备",
+          "description": "添加新设备"
+        },
+        "update": {
+          "label": "更新设备",
+          "description": "修改设备设置"
+        },
+        "delete": {
+          "label": "删除设备",
+          "description": "移除设备"
+        },
+        "actions": {
+          "label": "设备操作",
+          "description": "执行重启、PoE 重启等操作"
+        }
+      },
+      "controller": {
+        "read": {
+          "label": "查看控制器",
+          "description": "查看控制器列表"
+        },
+        "create": {
+          "label": "创建控制器",
+          "description": "添加新控制器"
+        },
+        "update": {
+          "label": "更新控制器",
+          "description": "修改控制器设置"
+        },
+        "delete": {
+          "label": "删除控制器",
+          "description": "移除控制器"
+        },
+        "sync": {
+          "label": "同步控制器",
+          "description": "触发控制器同步"
+        }
+      },
+      "site": {
+        "read": {
+          "label": "查看站点",
+          "description": "查看站点列表和详情"
+        },
+        "create": {
+          "label": "创建站点",
+          "description": "创建新站点"
+        },
+        "update": {
+          "label": "更新站点",
+          "description": "修改站点设置"
+        },
+        "delete": {
+          "label": "删除站点",
+          "description": "移除站点"
+        }
+      },
+      "alert": {
+        "read": {
+          "label": "查看告警",
+          "description": "查看告警列表"
+        },
+        "create": {
+          "label": "创建告警",
+          "description": "创建告警规则"
+        },
+        "update": {
+          "label": "更新告警",
+          "description": "修改告警规则"
+        },
+        "delete": {
+          "label": "删除告警",
+          "description": "移除告警规则"
+        },
+        "acknowledge": {
+          "label": "确认告警",
+          "description": "确认/忽略告警"
+        }
+      },
+      "audit": {
+        "read": {
+          "label": "查看审计日志",
+          "description": "访问审计记录"
+        },
+        "export": {
+          "label": "导出审计日志",
+          "description": "导出审计数据"
+        },
+        "security": {
+          "label": "查看安全事件",
+          "description": "访问安全事件"
+        }
+      },
+      "security": {
+        "manage": {
+          "label": "管理安全",
+          "description": "管理安全设置"
+        }
+      },
+      "setting": {
+        "read": {
+          "label": "查看设置",
+          "description": "查看系统设置"
+        },
+        "update": {
+          "label": "更新设置",
+          "description": "修改系统设置"
+        }
+      },
+      "integration": {
+        "read": {
+          "label": "查看集成",
+          "description": "查看集成配置"
+        },
+        "manage": {
+          "label": "管理集成",
+          "description": "配置集成"
+        }
+      }
+    }
+  }
+}

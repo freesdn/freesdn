@@ -1,0 +1,81 @@
+{
+  "DriversPage": {
+    "title": "驱动",
+    "description": "浏览受支持的设备驱动目录。",
+    "itemName": "驱动",
+    "itemNamePlural": "驱动",
+    "errors": {
+      "loadFailed": "加载驱动失败"
+    },
+    "columns": {
+      "driver": "驱动",
+      "version": "版本",
+      "deviceTypes": "设备类型",
+      "capabilities": "功能"
+    },
+    "actions": {
+      "export": "导出",
+      "viewDetails": "查看详情",
+      "actionsFor": "{{name}} 的操作"
+    },
+    "stats": {
+      "totalDrivers": {
+        "title": "驱动总数",
+        "description": "可用驱动"
+      },
+      "vendors": {
+        "title": "厂商",
+        "description": "受支持的厂商"
+      },
+      "deviceTypes": {
+        "title": "设备类型",
+        "description": "受支持的类别"
+      },
+      "capabilities": {
+        "title": "功能",
+        "description": "功能总数"
+      }
+    },
+    "filters": {
+      "searchPlaceholder": "按名称、厂商或设备类型搜索驱动…",
+      "allVendors": "所有厂商",
+      "allDeviceTypes": "所有设备类型",
+      "clearFilters": "清除筛选"
+    },
+    "deviceTypes": {
+      "switches": "交换机",
+      "routers": "路由器",
+      "accessPoints": "接入点",
+      "cameras": "摄像头",
+      "nvrs": "NVR"
+    },
+    "toasts": {
+      "export": {
+        "title": "导出",
+        "description": "批量导出：尚未实现。"
+      }
+    },
+    "dialog": {
+      "versionLabel": "版本 {{version}}"
+    },
+    "tabs": {
+      "overview": "概览",
+      "capabilities": "功能",
+      "configuration": "配置"
+    },
+    "overview": {
+      "driverId": "驱动 ID",
+      "version": "版本",
+      "vendor": "厂商",
+      "supportedDeviceTypes": "受支持的设备类型",
+      "descriptionHeading": "描述",
+      "viewDocumentation": "查看文档"
+    },
+    "capabilities": {
+      "empty": "此驱动没有记录具体功能。"
+    },
+    "config": {
+      "empty": "此驱动没有可用的配置架构。"
+    }
+  }
+}

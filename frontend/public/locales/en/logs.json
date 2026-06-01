@@ -1,0 +1,149 @@
+{
+  "LogsPage": {
+    "common": {
+      "na": "N/A"
+    },
+    "header": {
+      "title": "Logs & Audit Trail",
+      "subtitle": "Unified system activity stream and health overview"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "allLogs": "All Logs"
+    },
+    "levels": {
+      "debug": "Debug",
+      "info": "Info",
+      "warning": "Warning",
+      "error": "Error",
+      "critical": "Critical",
+      "success": "Success"
+    },
+    "sources": {
+      "api": "API",
+      "auth": "Authentication",
+      "device": "Device",
+      "database": "Database",
+      "system": "System",
+      "user": "User Action",
+      "network": "Network",
+      "scheduler": "Scheduler"
+    },
+    "timeRanges": {
+      "1h": "Last Hour",
+      "6h": "Last 6 Hours",
+      "24h": "Last 24 Hours",
+      "7d": "Last 7 Days",
+      "30d": "Last 30 Days"
+    },
+    "attentionTypes": {
+      "security": "security",
+      "error": "error",
+      "anomaly": "anomaly",
+      "incident": "incident"
+    },
+    "charts": {
+      "noData": "No data",
+      "eventsErrors": "{{events}} events / {{errors}} errors"
+    },
+    "metric": {
+      "trendVsPrior": "{{pct}}% vs prior",
+      "viewDetails": "View details"
+    },
+    "overview": {
+      "loadError": "Failed to load system health data. Please try again.",
+      "loading": "Loading system health...",
+      "kpi": {
+        "events24h": "Events (24h)",
+        "inSevenDays": "{{count}} in 7 days",
+        "errors": "Errors",
+        "warnings": "Warnings",
+        "critical": "Critical",
+        "successRate": "Success Rate",
+        "openIncidents": "Open Incidents",
+        "failedLogins24h": "Failed Logins (24h)",
+        "ipBlocksActive": "IP Blocks Active",
+        "avgResponse": "Avg Response",
+        "p95Subtitle": "P95: {{ms}}ms"
+      },
+      "activity": {
+        "title": "7-Day Activity",
+        "description": "Events, errors, and warnings per day",
+        "legendTotal": "Total",
+        "legendErrors": "Errors",
+        "legendWarnings": "Warnings"
+      },
+      "attention": {
+        "title": "Needs Attention",
+        "description": "Critical items from across all modules",
+        "allClear": "All clear · no items need attention"
+      },
+      "performance": {
+        "title": "Performance",
+        "avgResponse": "Avg Response",
+        "p95Response": "P95 Response",
+        "successRate": "Success Rate",
+        "errorRate": "Error Rate"
+      },
+      "pulse": {
+        "title": "System Pulse",
+        "events24h": "Events (24h)",
+        "events7d": "Events (7d)",
+        "unresolvedAnomalies": "Unresolved Anomalies",
+        "activeIpBlocks": "Active IP Blocks"
+      },
+      "quickLinks": {
+        "title": "Quick Links",
+        "description": "Jump to dedicated pages",
+        "securityOps": "Security Operations",
+        "incidentMgmt": "Incident Management",
+        "alertTriage": "Alert Triage",
+        "analyticsDashboard": "Analytics Dashboard"
+      }
+    },
+    "entry": {
+      "user": "User:",
+      "ip": "IP:",
+      "request": "Request:",
+      "device": "Device:",
+      "site": "Site:"
+    },
+    "allLogs": {
+      "loadError": "Failed to load log data. Please try again.",
+      "loading": "Loading logs...",
+      "searchPlaceholder": "Search logs...",
+      "allSources": "All Sources",
+      "live": "Live",
+      "exportJson": "JSON",
+      "exportCsv": "CSV",
+      "stats": {
+        "totalEvents": "Total Events",
+        "errors": "Errors",
+        "warnings": "Warnings",
+        "errorRate": "Error Rate",
+        "avgResponse": "Avg Response"
+      },
+      "charts": {
+        "hourlyActivity": "Hourly Activity",
+        "levelDistribution": "Level Distribution"
+      },
+      "filters": {
+        "label": "Filters:",
+        "level": "Level: {{value}}",
+        "source": "Source: {{value}}",
+        "search": "Search: {{value}}",
+        "clearAll": "Clear all"
+      },
+      "empty": {
+        "title": "No log entries found",
+        "description": "Try adjusting your filters or time range"
+      },
+      "pagination": {
+        "showing": "Showing {{from}}-{{to}} of {{total}} entries",
+        "previous": "Previous",
+        "next": "Next",
+        "pageOf": "Page {{page}} of {{pages}}"
+      }
+    }
+  }
+}

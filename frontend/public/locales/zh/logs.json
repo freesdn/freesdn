@@ -1,0 +1,149 @@
+{
+  "LogsPage": {
+    "common": {
+      "na": "不适用"
+    },
+    "header": {
+      "title": "日志与审计跟踪",
+      "subtitle": "统一的系统活动流和运行状况概览"
+    },
+    "tabs": {
+      "overview": "概览",
+      "allLogs": "全部日志"
+    },
+    "levels": {
+      "debug": "调试",
+      "info": "信息",
+      "warning": "警告",
+      "error": "错误",
+      "critical": "严重",
+      "success": "成功"
+    },
+    "sources": {
+      "api": "API",
+      "auth": "身份验证",
+      "device": "设备",
+      "database": "数据库",
+      "system": "系统",
+      "user": "用户操作",
+      "network": "网络",
+      "scheduler": "调度器"
+    },
+    "timeRanges": {
+      "1h": "最近 1 小时",
+      "6h": "最近 6 小时",
+      "24h": "最近 24 小时",
+      "7d": "最近 7 天",
+      "30d": "最近 30 天"
+    },
+    "attentionTypes": {
+      "security": "安全",
+      "error": "错误",
+      "anomaly": "异常",
+      "incident": "事件"
+    },
+    "charts": {
+      "noData": "无数据",
+      "eventsErrors": "{{events}} 个事件 / {{errors}} 个错误"
+    },
+    "metric": {
+      "trendVsPrior": "较上期 {{pct}}%",
+      "viewDetails": "查看详情"
+    },
+    "overview": {
+      "loadError": "无法加载系统运行状况数据。请重试。",
+      "loading": "正在加载系统运行状况...",
+      "kpi": {
+        "events24h": "事件 (24 小时)",
+        "inSevenDays": "7 天内 {{count}} 个",
+        "errors": "错误",
+        "warnings": "警告",
+        "critical": "严重",
+        "successRate": "成功率",
+        "openIncidents": "未结事件",
+        "failedLogins24h": "登录失败 (24 小时)",
+        "ipBlocksActive": "活动 IP 封锁",
+        "avgResponse": "平均响应",
+        "p95Subtitle": "P95: {{ms}}ms"
+      },
+      "activity": {
+        "title": "7 天活动",
+        "description": "每日事件、错误和警告",
+        "legendTotal": "总计",
+        "legendErrors": "错误",
+        "legendWarnings": "警告"
+      },
+      "attention": {
+        "title": "需要关注",
+        "description": "来自所有模块的关键项",
+        "allClear": "一切正常 · 无需关注的项目"
+      },
+      "performance": {
+        "title": "性能",
+        "avgResponse": "平均响应",
+        "p95Response": "P95 响应",
+        "successRate": "成功率",
+        "errorRate": "错误率"
+      },
+      "pulse": {
+        "title": "系统脉搏",
+        "events24h": "事件 (24 小时)",
+        "events7d": "事件 (7 天)",
+        "unresolvedAnomalies": "未解决异常",
+        "activeIpBlocks": "活动 IP 封锁"
+      },
+      "quickLinks": {
+        "title": "快速链接",
+        "description": "跳转到专用页面",
+        "securityOps": "安全运营",
+        "incidentMgmt": "事件管理",
+        "alertTriage": "告警分流",
+        "analyticsDashboard": "分析仪表板"
+      }
+    },
+    "entry": {
+      "user": "用户:",
+      "ip": "IP:",
+      "request": "请求:",
+      "device": "设备:",
+      "site": "站点:"
+    },
+    "allLogs": {
+      "loadError": "无法加载日志数据。请重试。",
+      "loading": "正在加载日志...",
+      "searchPlaceholder": "搜索日志...",
+      "allSources": "所有来源",
+      "live": "实时",
+      "exportJson": "JSON",
+      "exportCsv": "CSV",
+      "stats": {
+        "totalEvents": "事件总数",
+        "errors": "错误",
+        "warnings": "警告",
+        "errorRate": "错误率",
+        "avgResponse": "平均响应"
+      },
+      "charts": {
+        "hourlyActivity": "每小时活动",
+        "levelDistribution": "级别分布"
+      },
+      "filters": {
+        "label": "筛选条件:",
+        "level": "级别: {{value}}",
+        "source": "来源: {{value}}",
+        "search": "搜索: {{value}}",
+        "clearAll": "全部清除"
+      },
+      "empty": {
+        "title": "未找到日志条目",
+        "description": "请尝试调整筛选条件或时间范围"
+      },
+      "pagination": {
+        "showing": "显示第 {{from}}-{{to}} 条，共 {{total}} 条",
+        "previous": "上一页",
+        "next": "下一页",
+        "pageOf": "第 {{page}} 页，共 {{pages}} 页"
+      }
+    }
+  }
+}

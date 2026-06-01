@@ -1,0 +1,587 @@
+{
+  "TailscaleSetupWizard": {
+    "adminConsole": "Tailscale Admin Console",
+    "states": {
+      "not_installed": {
+        "label": "Not Installed",
+        "description": "Tailscale is not installed in this container."
+      },
+      "daemon_stopped": {
+        "label": "Daemon Stopped",
+        "description": "The Tailscale daemon is not running. Start it to continue."
+      },
+      "needs_login": {
+        "label": "Needs Authentication",
+        "description": "Tailscale daemon is running but not authenticated. Log in to join your tailnet."
+      },
+      "awaiting_auth": {
+        "label": "Awaiting Authorization",
+        "description": "Open the authorization URL in your browser to complete login."
+      },
+      "connected": {
+        "label": "Connected",
+        "description": "Tailscale is connected and ready for mesh networking."
+      },
+      "error": {
+        "label": "Error",
+        "description": "An error occurred with the Tailscale setup."
+      }
+    },
+    "nodeInfo": {
+      "title": "Tailscale Node Info",
+      "hostname": "Hostname",
+      "tailscaleIp": "Tailscale IP",
+      "tailnet": "Tailnet",
+      "magicDns": "MagicDNS",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "peers": "Peers",
+      "peerCount": "{{count}} devices",
+      "ipv6": "IPv6",
+      "notAvailable": "N/A"
+    },
+    "fields": {
+      "hostname": "Hostname",
+      "hostnameHelp": "The name this node will appear as in your tailnet."
+    },
+    "authKeyForm": {
+      "authKeyLabel": "Auth Key",
+      "authKeyHelpPrefix": "Generate an auth key from",
+      "authKeyHelpSuffix": ". Use a reusable or single-use key.",
+      "authenticating": "Authenticating...",
+      "connect": "Connect with Auth Key"
+    },
+    "advanced": {
+      "show": "Show",
+      "hide": "Hide",
+      "label": "Advanced Options"
+    },
+    "options": {
+      "acceptRoutes": {
+        "label": "Accept Routes",
+        "description": "Accept subnet routes advertised by peers",
+        "descriptionLogin": "Accept subnet routes from other nodes (--accept-routes)"
+      },
+      "advertiseRoutes": {
+        "label": "Advertise Routes",
+        "description": "Comma-separated CIDR subnets to expose to your tailnet."
+      },
+      "exitNode": {
+        "label": "Advertise as Exit Node",
+        "description": "Route all peer traffic through this node"
+      },
+      "shieldsUp": {
+        "label": "Shields Up",
+        "description": "Block incoming connections from tailnet peers",
+        "descriptionLogin": "Block incoming connections from other tailnet nodes"
+      },
+      "acceptDns": {
+        "label": "Accept DNS",
+        "description": "Use MagicDNS nameservers from your tailnet"
+      }
+    },
+    "interactive": {
+      "generating": "Generating Login URL...",
+      "loginViaBrowser": "Login via Browser",
+      "openUrlInstruction": "Open the URL below in your browser to authorize this node on your tailnet.",
+      "openInBrowser": "Open in Browser",
+      "autoUpdateNote": "After authorizing, the status will update automatically."
+    },
+    "configure": {
+      "title": "Configuration",
+      "description": "Modify Tailscale agent settings without re-authenticating.",
+      "applying": "Applying...",
+      "apply": "Apply Configuration"
+    },
+    "authenticate": {
+      "title": "Authenticate Tailscale",
+      "description": "Choose how to authenticate this FreeSDN node with your Tailscale account.",
+      "authKeyTab": "Auth Key",
+      "browserTab": "Browser Login"
+    },
+    "authKeyTip": {
+      "label": "Auth Key (Recommended):",
+      "prefix": "Generate a pre-auth key from the",
+      "suffix": ". This allows headless enrollment without browser interaction · ideal for production deployments."
+    },
+    "loading": {
+      "title": "Checking Tailscale Status...",
+      "description": "Querying the Tailscale agent setup status."
+    },
+    "statusError": {
+      "title": "Unable to Check Setup Status",
+      "description": "Could not reach the Tailscale setup endpoint. Ensure the backend is running."
+    },
+    "notInstalled": {
+      "title": "Tailscale Not Installed",
+      "description": "The API container does not have Tailscale installed. Rebuild the container with the updated Dockerfile to install Tailscale."
+    },
+    "daemonStopped": {
+      "title": "Start Tailscale Daemon",
+      "descriptionPrefix": "Tailscale is installed but the",
+      "descriptionSuffix": "daemon is not running. Start it to begin the authentication process.",
+      "starting": "Starting Daemon...",
+      "start": "Start Tailscale Daemon"
+    },
+    "unexpectedState": {
+      "title": "Unexpected State",
+      "descriptionPrefix": "Tailscale is in state"
+    },
+    "quickActions": {
+      "title": "Quick Actions",
+      "refreshStatus": "Refresh Status",
+      "disconnect": "Disconnect",
+      "logout": "Logout"
+    },
+    "confirm": {
+      "disconnect": "Disconnect from Tailscale network?",
+      "logout": "Logout will de-authorize this node from your tailnet. Continue?"
+    },
+    "actions": {
+      "copy": "Copy",
+      "retry": "Retry",
+      "refresh": "Refresh",
+      "reconnect": "Reconnect"
+    },
+    "toast": {
+      "copied": {
+        "title": "Copied",
+        "description": "{{label}} copied to clipboard"
+      },
+      "copyFailed": {
+        "title": "Copy failed",
+        "description": "Clipboard access denied"
+      },
+      "loginUrlCopied": "Login URL copied to clipboard",
+      "warning": "Warning",
+      "daemonStarted": "Daemon Started",
+      "startDaemonFailed": "Failed to start daemon",
+      "connected": "Connected!",
+      "joinedTailnet": "Joined tailnet as {{hostname}}",
+      "loginFailed": "Login Failed",
+      "authFailed": "Authentication failed",
+      "loginUrlReady": "Login URL Ready",
+      "loginUrlReadyDescription": "Open the URL in your browser to authorize this node.",
+      "interactiveLoginFailed": "Interactive login failed",
+      "configured": "Configured",
+      "configureFailed": "Configuration failed",
+      "disconnected": "Disconnected",
+      "disconnectFailed": "Disconnect failed",
+      "reconnected": "Reconnected",
+      "reconnectFailed": "Reconnect failed",
+      "loggedOut": "Logged Out",
+      "logoutFailed": "Logout failed"
+    }
+  },
+  "VPNPage": {
+    "common": {
+      "error": "Error",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "saving": "Saving...",
+      "ping": "Ping",
+      "connected": "Connected",
+      "offline": "Offline",
+      "online": "Online",
+      "na": "N/A",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "reconnect": {
+      "resetToast": "Reconnect reset",
+      "resetFailed": "Failed to reset reconnect",
+      "retrying": "Reconnecting... attempt {{attempt}}/{{max}} (next retry in {{seconds}}s)",
+      "exhausted": "Auto-reconnect exhausted",
+      "reset": "Reset"
+    },
+    "health": {
+      "title": "Health History",
+      "uptime": "Uptime:",
+      "avg": "Avg: {{value}}ms",
+      "max": "Max: {{value}}ms",
+      "loadError": "Failed to load health history",
+      "noData": "No health check data for this time range",
+      "healthy": "Healthy",
+      "unhealthy": "Unhealthy",
+      "latency": "Latency:"
+    },
+    "connectionCard": {
+      "endpoint": "Endpoint:",
+      "localIp": "Local IP:",
+      "latency": "Latency:",
+      "traffic": "Traffic:",
+      "uptime": "Uptime:",
+      "disconnectConfirm": "Disconnect VPN connection \"{{name}}\"?",
+      "disconnect": "Disconnect",
+      "connect": "Connect",
+      "editAria": "Edit connection",
+      "deleteAria": "Delete connection",
+      "hideHealth": "Hide Health History",
+      "showHealth": "Show Health History"
+    },
+    "connectionForm": {
+      "updatedToast": "Connection updated",
+      "createdToast": "Connection created",
+      "updatedDesc": "{{name}} has been updated successfully.",
+      "createdDesc": "{{name}} has been created successfully.",
+      "saveFailed": "Failed to save connection",
+      "editTitle": "Edit VPN Connection",
+      "newTitle": "New VPN Connection",
+      "editDescription": "Update the connection settings below.",
+      "newDescription": "Configure a new VPN connection to a remote network.",
+      "connectionName": "Connection Name",
+      "connectionNamePlaceholder": "e.g., Office WireGuard",
+      "vpnProvider": "VPN Provider",
+      "endpoint": "Endpoint",
+      "port": "Port",
+      "localIp": "Local IP",
+      "remoteIp": "Remote IP",
+      "allowedIps": "Allowed IPs",
+      "allowedIpsHelp": "Comma-separated list of CIDRs routed through this tunnel.",
+      "dnsServers": "DNS Servers",
+      "openvpnSettings": "OpenVPN Settings",
+      "configFilePath": "Config File Path",
+      "ovpnConfigContent": "OpenVPN Config (.ovpn)",
+      "ovpnConfigContentHelp": "Paste the full .ovpn client config (inline ca/cert/key). Required to connect. Script/management directives are rejected.",
+      "wireguardSettings": "WireGuard Settings",
+      "wgConfigContent": "WireGuard Config",
+      "wgConfigContentHelp": "Paste the full wg-quick config (Interface + Peer). Required to connect. PostUp/PreUp/PostDown/PreDown are rejected.",
+      "protocol": "Protocol",
+      "netbirdSettings": "Netbird Settings",
+      "setupKey": "Setup Key",
+      "setupKeyPlaceholder": "Setup key from Netbird dashboard",
+      "managementUrl": "Management URL",
+      "updateConnection": "Update Connection",
+      "createConnection": "Create Connection"
+    },
+    "deleteDialog": {
+      "deletedToast": "Connection deleted",
+      "deletedDesc": "{{name}} has been removed.",
+      "deleteFailed": "Failed to delete connection",
+      "title": "Delete VPN Connection",
+      "confirmPrefix": "Are you sure you want to delete",
+      "confirmSuffix": "? This action cannot be undone.",
+      "deleting": "Deleting..."
+    },
+    "tailscaleNode": {
+      "tailscaleIp": "Tailscale IP",
+      "publicIp": "Public IP",
+      "os": "OS",
+      "relay": "Relay",
+      "advertisedRoutes": "Advertised Routes:",
+      "tags": "Tags:"
+    },
+    "netbirdPeer": {
+      "ipAddress": "IP Address",
+      "connection": "Connection",
+      "directP2P": "Direct (P2P)",
+      "relay": "Relay",
+      "relayWith": "Relay ({{relay}})",
+      "lastHandshake": "Last Handshake",
+      "routes": "Routes:"
+    },
+    "siteConfig": {
+      "updatedToast": "Site VPN updated",
+      "updatedDesc": "VPN configuration for {{name}} saved.",
+      "saveFailed": "Failed to save site VPN config",
+      "title": "Configure VPN for {{name}}",
+      "description": "Set up VPN access to reach devices on this site's network.",
+      "vpnType": "VPN Type",
+      "directNoVpn": "Direct (No VPN)",
+      "tailscaleHostname": "Tailscale Hostname",
+      "tailscaleHostnamePlaceholder": "e.g., branch-office-router",
+      "tailscaleHostnameHelp": "The Tailscale machine name that provides access to this site's network.",
+      "wireguardInterface": "WireGuard Interface",
+      "peerId": "Peer ID",
+      "peerIdPlaceholder": "Netbird peer ID for this site",
+      "networkGroup": "Network Group",
+      "remoteSubnets": "Remote Subnets",
+      "remoteSubnetsHelp": "Comma-separated list of subnets accessible through this VPN connection.",
+      "healthCheckIp": "Health Check IP",
+      "healthCheckIpHelp": "IP address to ping for VPN health monitoring.",
+      "saveConfiguration": "Save Configuration"
+    },
+    "templateDialog": {
+      "createdToast": "Template created",
+      "createdDesc": "{{name}} has been created.",
+      "createFailed": "Failed to create template",
+      "title": "New Tunnel Template",
+      "description": "Create a reusable template for site-to-site VPN tunnels.",
+      "templateName": "Template Name",
+      "templateNamePlaceholder": "e.g., Branch WireGuard S2S",
+      "vpnType": "VPN Type",
+      "topology": "Topology",
+      "topologyPointToPoint": "Point-to-Point",
+      "topologyHubSpoke": "Hub & Spoke",
+      "topologyFullMesh": "Full Mesh",
+      "defaultSubnets": "Default Subnets",
+      "defaultSubnetsHelp": "Comma-separated CIDRs to include by default.",
+      "creating": "Creating...",
+      "createTemplate": "Create Template"
+    },
+    "toasts": {
+      "pingResult": "Ping Result",
+      "reachable": "Reachable ({{latency}}ms)",
+      "unreachable": "Unreachable",
+      "operationFailed": "Operation failed",
+      "success": "Success",
+      "notice": "Notice",
+      "actionFailed": "Action failed",
+      "tunnelAction": "Tunnel action",
+      "tunnelRemoved": "Tunnel removed",
+      "tunnelRemovedDesc": "The tunnel has been torn down.",
+      "teardownFailed": "Teardown failed",
+      "certScanComplete": "Certificate scan complete",
+      "certScanCompleteDesc": "Scanned {{scanned}} certs, updated {{updated}}, errors {{errors}}.",
+      "certScanFailed": "Certificate scan failed"
+    },
+    "wsEvents": {
+      "connectionDown": "VPN Connection Down",
+      "connectionDownNamed": "{{name}} has disconnected.",
+      "connectionDownGeneric": "A VPN connection went down.",
+      "connectionRestored": "VPN Connection Restored",
+      "connectionRestoredNamed": "{{name}} is back online.",
+      "connectionRestoredGeneric": "A VPN connection was restored.",
+      "healthDegraded": "VPN Health Degraded",
+      "healthDegradedGeneric": "VPN health has degraded.",
+      "tunnelStatusChanged": "Tunnel Status Changed",
+      "tunnelStatusChangedNamed": "{{name}} is now {{status}}.",
+      "tunnelStatusChangedGeneric": "A VPN tunnel status has changed.",
+      "updated": "updated",
+      "reconnectStarted": "Reconnection Started",
+      "reconnectStartedNamed": "Attempting to reconnect {{name}}...",
+      "reconnectStartedGeneric": "VPN reconnection attempt started.",
+      "reconnectFailed": "Reconnection Failed",
+      "reconnectFailedNamed": "All reconnection attempts for {{name}} have been exhausted.",
+      "reconnectFailedGeneric": "VPN reconnection attempts exhausted."
+    },
+    "eventColumns": {
+      "time": "Time",
+      "type": "Type",
+      "severity": "Severity",
+      "title": "Title",
+      "site": "Site"
+    },
+    "header": {
+      "title": "VPN Management",
+      "description": "Manage VPN tunnels across Tailscale, WireGuard, OpenVPN, and Netbird for remote site access"
+    },
+    "errors": {
+      "someDataFailed": "Some data failed to load. Results may be incomplete."
+    },
+    "coexistence": {
+      "title": "Tailscale and NetBird are both configured",
+      "body": "Both overlays use the 100.64.0.0/10 range and can conflict on one host. FreeSDN automatically runs Tailscale with --netfilter-mode=off so they coexist. Trade-off: with netfilter off, Tailscale exit-node and subnet routing stop working — if you need those, set FREESDN_TAILSCALE_NETFILTER_MODE=on and accept the NetBird conflict risk. If a device on one overlay is unreachable, reconnect Tailscale and avoid overlapping peer IPs across the two networks."
+    },
+    "stats": {
+      "activeConnections": "Active Connections",
+      "activeConnectionsDesc": "of {{total}} configured",
+      "peersOnline": "{{count}} peers online",
+      "peersConnected": "{{count}} peers connected",
+      "onlinePeers": "Online Peers",
+      "onlinePeersDesc": "Across all providers",
+      "sitesWithVpn": "Sites with VPN",
+      "sitesWithVpnDesc": "Configured sites"
+    },
+    "providers": {
+      "tailscale": "Tailscale",
+      "netbird": "Netbird",
+      "wireguard": "WireGuard",
+      "openvpn": "OpenVPN",
+      "meshVpn": "Mesh VPN",
+      "p2pMesh": "P2P Mesh",
+      "tunnelVpn": "Tunnel VPN",
+      "classicVpn": "Classic VPN",
+      "activeCount": "{{count}} active",
+      "tunnelsConfigured": "{{count}} tunnels configured",
+      "connectionsConfigured": "{{count}} connections configured"
+    },
+    "overview": {
+      "tailscaleNetwork": "Tailscale Network",
+      "hostname": "Hostname:",
+      "tailscaleIp": "Tailscale IP:",
+      "tailnet": "Tailnet:",
+      "magicDns": "Magic DNS:",
+      "netbirdNetwork": "Netbird Network",
+      "ip": "IP:",
+      "fqdn": "FQDN:",
+      "interface": "Interface:",
+      "peers": "Peers:",
+      "allConnections": "All VPN Connections",
+      "emptyTitle": "No VPN Connections",
+      "emptyDescription": "No VPN connections configured yet. Create your first connection to start managing remote network access.",
+      "emptyAction": "Create First Connection"
+    },
+    "actions": {
+      "newConnection": "New Connection",
+      "createTemplate": "Create Template"
+    },
+    "connections": {
+      "heading": "VPN Connections",
+      "subtitle": "Create, edit, and manage all VPN connections across providers.",
+      "emptyTitle": "No VPN Connections",
+      "emptyDescription": "Add VPN connections to manage Tailscale, WireGuard, OpenVPN, or Netbird tunnels for remote network access.",
+      "emptyAction": "Create Connection"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "connections": "Connections",
+      "discovery": "Discovery",
+      "sites": "Site Config",
+      "events": "Events",
+      "metrics": "Metrics",
+      "tunnels": "Tunnels",
+      "topology": "Topology",
+      "conflicts": "Route Conflicts",
+      "certificates": "Certificates"
+    },
+    "overlayDiscovery": {
+      "heading": "Discovered on your mesh",
+      "subtitle": "Devices found on your connected overlay (Tailscale / NetBird). Adopt one to manage it, or ignore it.",
+      "refresh": "Refresh",
+      "loadError": "Failed to load overlay discovery.",
+      "emptyTitle": "No devices discovered",
+      "emptyOffBody": "No overlay is connected. Enable a VPN provider (Tailscale or NetBird) so FreeSDN can see the devices on your mesh.",
+      "emptyOnBody": "No other devices were found on your mesh yet. New peers will appear here automatically.",
+      "noSiteTitle": "Select a site first",
+      "noSiteBody": "Choose a site in the top bar before adopting a discovered device.",
+      "ignoredTitle": "Device ignored"
+    },
+    "tailscaleTab": {
+      "tailnetPeers": "Tailnet Peers",
+      "emptyTitle": "No Tailscale Peers",
+      "emptyDescription": "No other devices are connected to your Tailscale network. Install Tailscale on remote site devices to enable secure mesh networking."
+    },
+    "netbirdTab": {
+      "connectedNoPeersTitle": "Netbird Connected · No Peers",
+      "connectedNoPeersDescription": "Your Netbird client is connected but no peers are available. Add machines to your Netbird network to see them here.",
+      "notConnectedTitle": "Netbird Not Connected",
+      "notConnectedDescription": "Install and connect Netbird to enable peer-to-peer mesh networking. Netbird provides WireGuard-based connectivity with zero-config networking.",
+      "getNetbird": "Get Netbird"
+    },
+    "sitesTab": {
+      "heading": "Site VPN Configuration",
+      "subtitle": "Configure VPN access for each site to enable remote device discovery and management.",
+      "noAddress": "No address configured",
+      "configureVpn": "Configure VPN",
+      "emptyTitle": "No Sites Configured",
+      "emptyDescription": "Create sites first, then configure VPN access for each site's network."
+    },
+    "eventsTab": {
+      "heading": "VPN Events",
+      "subtitle": "Real-time event log for all VPN connections and tunnels.",
+      "severityLabel": "Severity:",
+      "loadError": "Failed to load VPN events.",
+      "searchPlaceholder": "Search events...",
+      "emptyTitle": "No VPN Events",
+      "emptyDescription": "No events recorded. Events will appear as VPN connections change state.",
+      "emptyDescriptionFiltered": "No events recorded with severity \"{{severity}}\". Events will appear as VPN connections change state."
+    },
+    "severity": {
+      "all": "all",
+      "info": "info",
+      "warning": "warning",
+      "error": "error",
+      "critical": "critical"
+    },
+    "metricsTab": {
+      "heading": "VPN Metrics",
+      "subtitle": "Aggregate traffic and latency metrics across all VPN connections.",
+      "loadError": "Failed to load VPN metrics.",
+      "totalRx": "Total RX",
+      "totalRxDesc": "Total data received",
+      "totalTx": "Total TX",
+      "totalTxDesc": "Total data transmitted",
+      "avgLatency": "Avg Latency",
+      "avgLatencyDesc": "Across all connections",
+      "connections": "Connections",
+      "connectionsDesc": "Active connections tracked",
+      "connectionsByProvider": "Connections by Provider",
+      "connectionCount": "{{count}} connections",
+      "rx": "RX: {{value}}",
+      "tx": "TX: {{value}}",
+      "latency": "Latency: {{value}}",
+      "emptyTitle": "No Metrics Available",
+      "emptyDescription": "VPN metrics will appear once connections are active and transmitting data."
+    },
+    "tunnelsTab": {
+      "heading": "Site-to-Site Tunnels",
+      "subtitle": "Orchestrate and manage site-to-site VPN tunnels from templates.",
+      "loadError": "Failed to load tunnel data.",
+      "templates": "Templates",
+      "created": "Created {{date}}",
+      "subnetCount": "{{count}} subnets",
+      "noTemplates": "No tunnel templates yet. Create a template to get started.",
+      "activeTunnels": "Active Tunnels",
+      "enable": "Enable",
+      "disable": "Disable",
+      "disableConfirm": "Disable this tunnel? Traffic will stop flowing.",
+      "teardownConfirm": "Tear down tunnel between {{siteA}} and {{siteB}}?",
+      "siteA": "Site A",
+      "siteB": "Site B",
+      "teardownAria": "Tear down tunnel",
+      "provisioned": "Provisioned {{date}}",
+      "lastCheck": "Last check {{date}}",
+      "emptyTitle": "No Site-to-Site Tunnels",
+      "emptyDescription": "Create a tunnel template first, then provision tunnels between your sites."
+    },
+    "conflictsTab": {
+      "loadError": "Failed to load route conflict data.",
+      "heading": "Route Conflict Analysis",
+      "sourcesScanned": "{{count}} sources scanned",
+      "noConflictsTitle": "No route conflicts detected",
+      "noConflictsDescription": "All VPN routes are clean with no overlapping subnets.",
+      "colSubnet": "Subnet",
+      "colSourceA": "Source A",
+      "colSourceB": "Source B",
+      "colSeverity": "Severity",
+      "colOverlapType": "Overlap Type"
+    },
+    "certsTab": {
+      "loadError": "Failed to load certificate data.",
+      "heading": "Certificate Expiry Tracking",
+      "scanning": "Scanning...",
+      "scanCertificates": "Scan Certificates",
+      "emptyTitle": "No Certificates Found",
+      "emptyDescription": "Run a certificate scan to discover and track VPN certificate expiry dates.",
+      "colSite": "Site",
+      "colVpnType": "VPN Type",
+      "colSubject": "Subject",
+      "colExpiresAt": "Expires At",
+      "colDaysRemaining": "Days Remaining",
+      "colSeverity": "Severity"
+    }
+  },
+  "VPNTopologyTab": {
+    "tunnelCount": {
+      "one": "{{count}} tunnel",
+      "other": "{{count}} tunnels"
+    },
+    "error": {
+      "title": "Failed to load topology data",
+      "description": "Check that the VPN and Sites APIs are reachable, then try refreshing."
+    },
+    "empty": {
+      "title": "No S2S Tunnels Configured",
+      "description": "Create a tunnel template and provision site-to-site tunnels to see the network topology here."
+    },
+    "summary": {
+      "siteCount": {
+        "one": "{{count}} site",
+        "other": "{{count}} sites"
+      },
+      "tunnelCount": {
+        "one": "{{count}} tunnel",
+        "other": "{{count}} tunnels"
+      },
+      "site": {
+        "one": "{{count}} site",
+        "other": "{{count}} sites"
+      },
+      "tunnel": {
+        "one": "{{count}} tunnel",
+        "other": "{{count}} tunnels"
+      }
+    }
+  }
+}

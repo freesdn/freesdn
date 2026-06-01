@@ -1,0 +1,459 @@
+{
+  "AgentDetailPage": {
+    "loading": "Cargando…",
+    "backToAgents": "Volver a agentes",
+    "defaultDescription": "Agente de sitio remoto",
+    "relative": {
+      "never": "nunca",
+      "secondsAgo": "hace {{n}} s",
+      "minutesAgo": "hace {{n}} min",
+      "hoursAgo": "hace {{n}} h",
+      "daysAgo": "hace {{n}} d"
+    },
+    "errors": {
+      "noAgentId": "No hay id de agente en la URL.",
+      "notFound": "Agente no encontrado."
+    },
+    "toast": {
+      "alertConfigSaved": "Configuración de alertas guardada",
+      "saveFailed": "Error al guardar"
+    },
+    "offlineAlert": {
+      "title": "Alerta de desconexión enviada",
+      "body": "Notificado el {{when}}. Cuando este agente se reconecte, el indicador de alerta se restablecerá y la próxima transición a desconectado generará una nueva notificación."
+    },
+    "stats": {
+      "status": "Estado",
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "schedules": "Programaciones",
+      "pinnedCount": "{{n}} fijadas",
+      "runs24h": "Ejecuciones (24 h)",
+      "failedCount": "{{n}} fallidas",
+      "allSucceeded": "Todas correctas",
+      "discoveries": "Descubrimientos",
+      "adoptedCount": "{{n}} adoptados"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "schedules": "Programaciones",
+      "runs": "Ejecuciones",
+      "discoveries": "Descubrimientos",
+      "topology": "Topología",
+      "adHoc": "Escaneos ad hoc",
+      "settings": "Configuración"
+    },
+    "details": {
+      "title": "Detalles del agente",
+      "id": "ID",
+      "type": "Tipo",
+      "version": "Versión",
+      "site": "Sitio",
+      "lastHeartbeat": "Último latido",
+      "approved": "Aprobado",
+      "yes": "sí",
+      "no": "no"
+    },
+    "alertsDialog": {
+      "trigger": "Configurar alertas de desconexión",
+      "title": "Alertas de desconexión para {{name}}",
+      "description": "El backend genera una alerta cuando el último latido de este agente es anterior al umbral indicado abajo. Una alerta por cada transición a desconectado (no satura en cada ciclo).",
+      "emailLabel": "Destinatarios de correo (separados por comas)",
+      "slackLabel": "Canal de Slack",
+      "thresholdLabel": "Umbral de desconexión (segundos, mín. 60, predeterminado 180)",
+      "cancel": "Cancelar",
+      "save": "Guardar"
+    },
+    "schedules": {
+      "empty": "Ninguna programación apunta a este agente. Las programaciones de todo el sitio también aparecerán aquí una vez creadas.",
+      "columns": {
+        "name": "Nombre",
+        "type": "Tipo",
+        "cron": "Cron",
+        "targets": "Objetivos",
+        "lastFired": "Última ejecución",
+        "status": "Estado"
+      },
+      "pinned": "fijada",
+      "siteWide": "todo el sitio",
+      "disabled": "deshabilitada"
+    },
+    "runs": {
+      "empty": "Aún no se han registrado ejecuciones para este agente.",
+      "columns": {
+        "status": "Estado",
+        "schedule": "Programación",
+        "when": "Cuándo",
+        "duration": "Duración",
+        "devices": "Dispositivos",
+        "error": "Error"
+      }
+    },
+    "discoveries": {
+      "empty": "Este agente no ha contribuido con ningún descubrimiento.",
+      "columns": {
+        "ip": "IP",
+        "mac": "MAC",
+        "vendor": "Fabricante",
+        "hostname": "Nombre de host",
+        "lastSeen": "Visto por última vez",
+        "status": "Estado"
+      },
+      "adopted": "adoptado",
+      "new": "nuevo"
+    },
+    "topology": {
+      "empty": "Este agente aún no ha capturado enlaces LLDP/CDP. El detector del agente necesita privilegios de socket sin procesar y un conmutador que difunda LLDP en el mismo dominio de difusión.",
+      "columns": {
+        "protocol": "Protocolo",
+        "localInterface": "Interfaz local",
+        "neighborChassis": "Chasis vecino",
+        "neighborPort": "Puerto vecino",
+        "system": "Sistema",
+        "vlan": "VLAN",
+        "lastSeen": "Visto por última vez"
+      }
+    }
+  },
+  "AgentReleasesPage": {
+    "header": {
+      "title": "Versiones del agente",
+      "description": "Sube, promueve y retira binarios del agente. Los daemons conectados consultan esta lista en cada intervalo de actualización automática y se actualizan solos con protección de reversión."
+    },
+    "card": {
+      "title": "Versiones"
+    },
+    "actions": {
+      "uploadRelease": "Subir versión",
+      "cancel": "Cancelar",
+      "uploading": "Subiendo…",
+      "uploadAndPublish": "Subir y publicar",
+      "uploadPublish": "Subir y publicar"
+    },
+    "dialog": {
+      "title": "Subir binario del agente"
+    },
+    "form": {
+      "binaryFile": "Archivo binario",
+      "version": "Versión",
+      "platform": "Plataforma",
+      "type": "Tipo",
+      "releaseNotes": "Notas de la versión",
+      "releaseNotesPlaceholder": "Qué incluye esta compilación…",
+      "prereleaseLabel": "Marcar como versión preliminar (no actualizará automáticamente los agentes existentes)",
+      "markPrerelease": "Marcar como versión preliminar (no actualizará automáticamente los agentes existentes)",
+      "uploadingProgress": "Subiendo {{percent}} %…"
+    },
+    "upload": {
+      "progress": "Subiendo {{percent}} %…"
+    },
+    "states": {
+      "error": "No se pudieron cargar las versiones.",
+      "loading": "Cargando…",
+      "empty": "Aún no hay versiones. Sube un binario arriba para publicar la primera."
+    },
+    "table": {
+      "version": "Versión",
+      "platform": "Plataforma",
+      "type": "Tipo",
+      "size": "Tamaño",
+      "sha256": "SHA-256",
+      "downloads": "Descargas",
+      "status": "Estado",
+      "published": "Publicado"
+    },
+    "badges": {
+      "latest": "más reciente",
+      "prerelease": "preliminar"
+    },
+    "rowActions": {
+      "download": "Descargar binario",
+      "markLatest": "Marcar como más reciente",
+      "delete": "Eliminar versión"
+    },
+    "confirmDelete": "¿Eliminar la versión {{version}} ({{platform}}/{{agentType}})?",
+    "toasts": {
+      "uploaded": {
+        "title": "Versión subida",
+        "description": "{{version}} ({{platform}}/{{agentType}}) ahora es la más reciente"
+      },
+      "uploadFailed": {
+        "title": "Error al subir"
+      },
+      "promoted": {
+        "title": "Marcada como más reciente",
+        "description": "{{version}} ahora es la más reciente para {{platform}}/{{agentType}}"
+      },
+      "deleted": {
+        "title": "Versión eliminada"
+      }
+    },
+    "confirm": {
+      "delete": "¿Eliminar la versión {{version}} ({{platform}}/{{type}})?"
+    }
+  },
+  "AgentsPage": {
+    "title": "Agentes remotos",
+    "description": "Administra los agentes de sitio remotos para el descubrimiento de red distribuido.",
+    "loadError": "No se pudieron cargar los agentes",
+    "searchPlaceholder": "Buscar agentes por nombre, sitio o IP…",
+    "itemName": "agente",
+    "itemNamePlural": "agentes",
+    "never": "Nunca",
+    "pendingApproval": "Aprobación pendiente",
+    "partialLoadWarning": "No se pudieron cargar algunos datos. Los resultados podrían estar incompletos.",
+    "columns": {
+      "agent": "Agente",
+      "type": "Tipo",
+      "status": "Estado",
+      "site": "Sitio",
+      "lastIp": "Última IP",
+      "lastHeartbeat": "Último latido"
+    },
+    "agentTypes": {
+      "site": "Agente de sitio",
+      "scanner": "Escáner",
+      "collector": "Colector",
+      "gateway": "Puerta de enlace"
+    },
+    "statuses": {
+      "online": "En línea",
+      "offline": "Fuera de línea",
+      "connecting": "Conectando",
+      "error": "Error",
+      "maintenance": "Mantenimiento"
+    },
+    "filters": {
+      "allStatuses": "Todos los estados",
+      "allTypes": "Todos los tipos",
+      "clear": "Borrar filtros"
+    },
+    "actions": {
+      "export": "Exportar",
+      "registerAgent": "Registrar agente",
+      "menuAria": "Acciones para {{name}}",
+      "approveAgent": "Aprobar agente",
+      "runScan": "Ejecutar escaneo",
+      "disconnect": "Desconectar",
+      "disconnectConfirm": "¿Seguro que deseas eliminar este agente?",
+      "menuLabel": "Acciones para {{name}}"
+    },
+    "stats": {
+      "total": {
+        "title": "Total de agentes",
+        "description": "Agentes registrados"
+      },
+      "online": {
+        "title": "En línea",
+        "description": "Conectados y en buen estado"
+      },
+      "offline": {
+        "title": "Fuera de línea",
+        "description": "Desconectados"
+      },
+      "pendingApproval": {
+        "title": "Aprobación pendiente",
+        "description": "En espera de aprobación"
+      },
+      "totalAgents": {
+        "title": "Total de agentes",
+        "description": "Agentes registrados"
+      }
+    },
+    "fleet": {
+      "activeSchedules": {
+        "title": "Programaciones activas",
+        "description": "{{count}} en total"
+      },
+      "runs24h": {
+        "title": "Ejecuciones (24 h)",
+        "failed": "{{count}} fallidas",
+        "allSucceeded": "Todas correctas"
+      },
+      "discoveredHosts": {
+        "title": "Hosts descubiertos",
+        "description": "{{count}} sin adoptar"
+      },
+      "lastRun": {
+        "title": "Última ejecución",
+        "description": "Ejecución más reciente",
+        "none": "Aún sin ejecuciones",
+        "mostRecent": "Ejecución más reciente",
+        "noRuns": "Aún sin ejecuciones"
+      }
+    },
+    "toasts": {
+      "approveFailed": {
+        "title": "Error al aprobar",
+        "description": "No se pudo aprobar el agente."
+      },
+      "disconnectFailed": {
+        "title": "Error al desconectar",
+        "description": "No se pudo desconectar el agente."
+      }
+    },
+    "bulk": {
+      "approve": {
+        "label": "Aprobar",
+        "title": "Aprobación masiva completada",
+        "result": "{{ok}} aprobados",
+        "resultWithFailures": "{{ok}} aprobados, {{fail}} fallidos",
+        "toastTitle": "Aprobación masiva completada"
+      },
+      "disable": {
+        "label": "Deshabilitar",
+        "title": "Deshabilitación masiva completada",
+        "result": "{{ok}}/{{total}} deshabilitados",
+        "toastTitle": "Deshabilitación masiva completada"
+      },
+      "delete": {
+        "label": "Eliminar",
+        "title": "Eliminación masiva completada",
+        "confirm": "¿Eliminar {{count}} agente(s)? Esto elimina el registro de forma reversible; los descubrimientos y las ejecuciones existentes se conservan.",
+        "result": "{{ok}} eliminados",
+        "resultWithFailures": "{{ok}} eliminados, {{fail}} fallidos",
+        "toastTitle": "Eliminación masiva completada"
+      }
+    },
+    "register": {
+      "title": "Registrar nuevo agente",
+      "description": "Genera credenciales para que un agente de sitio remoto se conecte a esta instancia de FreeSDN.",
+      "submit": "Registrar agente",
+      "submitting": "Registrando...",
+      "copyAll": "Copiar todo",
+      "done": "Listo",
+      "success": {
+        "title": "Agente registrado correctamente",
+        "description": "Guarda estas credenciales de forma segura. La clave del agente no se volverá a mostrar."
+      },
+      "fields": {
+        "agentId": "ID del agente",
+        "agentKey": "Clave del agente",
+        "websocketUrl": "URL de WebSocket",
+        "envVars": "Variables de entorno",
+        "site": "Sitio",
+        "sitePlaceholder": "Selecciona un sitio para este agente",
+        "name": "Nombre del agente",
+        "namePlaceholder": "p. ej., Agente de la sucursal",
+        "type": "Tipo de agente",
+        "description": "Descripción (opcional)",
+        "descriptionPlaceholder": "Breve descripción del propósito del agente",
+        "agentType": "Tipo de agente",
+        "descriptionLabel": "Descripción (opcional)"
+      },
+      "validation": {
+        "site": "Selecciona un sitio",
+        "name": "El nombre del agente es obligatorio",
+        "siteRequired": "Selecciona un sitio",
+        "nameRequired": "El nombre del agente es obligatorio"
+      }
+    },
+    "pageHeader": {
+      "title": "Agentes remotos",
+      "description": "Administra los agentes de sitios remotos para el descubrimiento de red distribuido."
+    },
+    "errors": {
+      "loadFailed": "No se pudieron cargar los agentes"
+    },
+    "partialFailure": "Algunos datos no se pudieron cargar. Los resultados pueden estar incompletos.",
+    "itemNameSingular": "agente",
+    "status": {
+      "online": "En línea",
+      "offline": "Sin conexión",
+      "connecting": "Conectando",
+      "error": "Error",
+      "maintenance": "Mantenimiento",
+      "pendingApproval": "Aprobación pendiente"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar agentes por nombre, sitio o IP…",
+      "allStatuses": "Todos los estados",
+      "allTypes": "Todos los tipos",
+      "clearFilters": "Limpiar filtros"
+    }
+  },
+  "DownloadsPage": {
+    "copy": {
+      "copied": "Copiado al portapapeles",
+      "copy": "Copiar al portapapeles"
+    },
+    "platform": {
+      "yourOs": "Tu sistema operativo",
+      "daemonAndDesktopAvailable": "Agente de servicio y aplicación de escritorio disponibles",
+      "daemonAvailable": "Agente de servicio disponible",
+      "desktopAvailable": "Aplicación de escritorio disponible",
+      "noReleases": "Aún no hay versiones disponibles",
+      "daemonAgent": "Agente de servicio",
+      "desktopApp": "Aplicación de escritorio",
+      "comingSoon": "Próximamente",
+      "installInstructions": "Instrucciones de instalación"
+    },
+    "header": {
+      "title": "Descargas del agente",
+      "description": "Descarga el agente de FreeSDN para el descubrimiento y la gestión de redes en sitios remotos"
+    },
+    "errorBanner": "No se pudieron cargar los metadatos de descarga del agente · se muestran las instrucciones de instalación de reserva.",
+    "infoBanner": {
+      "title": "Dos tipos de agente disponibles",
+      "daemonDesc": "Servicio sin interfaz que se ejecuta las 24 horas como servicio del sistema. Se conecta mediante WebSocket para la supervisión persistente y los escaneos activados de forma remota.",
+      "desktopDesc": "Aplicación con interfaz gráfica para el escaneo de red bajo demanda y el descubrimiento de dispositivos."
+    },
+    "features": {
+      "protocols": {
+        "title": "14 protocolos de descubrimiento",
+        "desc": "ARP, ICMP, TCP, HTTP, SNMP, ONVIF, RTSP, mDNS, SSDP, SIP, NetBIOS, DNS, Banner, SADP"
+      },
+      "secure": {
+        "title": "Seguro de forma predeterminada",
+        "desc": "Credenciales almacenadas en el llavero del sistema operativo, verificación de claves SHA-256, aprobación del administrador requerida"
+      },
+      "multiSite": {
+        "title": "Compatibilidad con múltiples sitios",
+        "desc": "Implementa agentes en cada sitio · un único servidor FreeSDN gestiona todas las ubicaciones de forma centralizada"
+      }
+    },
+    "quickStart": {
+      "title": "Inicio rápido",
+      "description": "Conecta un agente en 4 pasos",
+      "steps": {
+        "download": {
+          "title": "Descargar",
+          "desc": "Descarga el agente para tu plataforma desde arriba"
+        },
+        "register": {
+          "title": "Registrar",
+          "desc": "Ejecuta freesdn-agent register --server <URL>"
+        },
+        "approve": {
+          "title": "Aprobar",
+          "desc": "Ve a la página de Agentes en FreeSDN y aprueba el nuevo agente"
+        },
+        "connect": {
+          "title": "Conectar",
+          "desc": "Ejecuta freesdn-agent daemon · el agente se conecta automáticamente"
+        }
+      },
+      "subtitle": "Conecta un agente en 4 pasos"
+    },
+    "versionInfo": {
+      "latest": "Última versión del agente: v{{version}}",
+      "server": "Versión del servidor: v{{version}}"
+    },
+    "error": {
+      "loadFailed": "No se pudieron cargar los metadatos de descarga del agente · se muestran instrucciones de instalación alternativas."
+    },
+    "yourOs": "Tu SO",
+    "availability": {
+      "both": "Agente daemon y aplicación de escritorio disponibles",
+      "daemon": "Agente daemon disponible",
+      "desktop": "Aplicación de escritorio disponible",
+      "none": "Aún no hay versiones disponibles"
+    },
+    "buttons": {
+      "daemonAgent": "Agente daemon",
+      "desktopApp": "Aplicación de escritorio",
+      "comingSoon": "Próximamente"
+    },
+    "installInstructions": "Instrucciones de instalación"
+  }
+}

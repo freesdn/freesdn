@@ -1,0 +1,268 @@
+{
+  "ControllerDetailPage": {
+    "common": {
+      "notAvailable": "N/D",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "yes": "Sí",
+      "no": "No"
+    },
+    "status": {
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "error": "Error",
+      "syncing": "Sincronizando",
+      "unknown": "Desconocido"
+    },
+    "error": {
+      "notFound": "Controlador no encontrado",
+      "backToControllers": "Volver a Controladores"
+    },
+    "actions": {
+      "syncNow": "Sincronizar ahora",
+      "testConnection": "Probar conexión"
+    },
+    "test": {
+      "successful": "Conexión exitosa",
+      "failed": "Conexión fallida",
+      "failedMessage": "La prueba de conexión falló",
+      "version": "Versión: {{version}}"
+    },
+    "toast": {
+      "syncFailed": {
+        "title": "Error de sincronización",
+        "description": "No se pudo sincronizar el controlador. Inténtalo de nuevo."
+      },
+      "deleteFailed": {
+        "title": "Error al eliminar",
+        "description": "No se pudo eliminar el controlador. Inténtalo de nuevo."
+      }
+    },
+    "stats": {
+      "devices": "Dispositivos",
+      "clients": "Clientes",
+      "poePower": "Energía PoE",
+      "ofBudget": "de {{budget}}",
+      "firmware": "Firmware",
+      "upToDate": "actualizados"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "devices": "Dispositivos",
+      "firmware": "Firmware",
+      "settings": "Configuración"
+    },
+    "health": {
+      "title": "Estado del controlador",
+      "cpu": "CPU",
+      "memory": "Memoria",
+      "disk": "Disco",
+      "uptime": "Tiempo activo",
+      "unavailable": "Las métricas de estado no están disponibles para esta versión del controlador."
+    },
+    "breakdown": {
+      "title": "Desglose de dispositivos",
+      "total": "Total",
+      "online": "En línea",
+      "offline": "Fuera de línea",
+      "switches": "{{count}} switches",
+      "accessPoints": "{{count}} APs",
+      "gateways": "{{count}} gateways",
+      "clients": "{{count}} clientes"
+    },
+    "poe": {
+      "title": "Presupuesto de energía PoE",
+      "consumedBudget": "Consumido / Presupuesto",
+      "remainingOne": "{{watts}} restantes en 1 switch PoE",
+      "remainingOther": "{{watts}} restantes en {{count}} switches PoE"
+    },
+    "sync": {
+      "title": "Estado de sincronización",
+      "autoSync": "Sincronización automática",
+      "enabled": "Habilitada",
+      "disabled": "Deshabilitada",
+      "interval": "Intervalo",
+      "lastSync": "Última sincronización",
+      "duration": "Duración",
+      "errorHistory": "Historial de errores ({{count}})"
+    },
+    "devices": {
+      "title": "Dispositivos gestionados ({{count}})",
+      "description": "Todos los dispositivos descubiertos desde este controlador",
+      "loadError": "No se pudieron cargar los datos del dispositivo.",
+      "online": "En línea",
+      "offline": "Fuera de línea",
+      "columns": {
+        "device": "Dispositivo",
+        "type": "Tipo",
+        "model": "Modelo",
+        "ipAddress": "Dirección IP",
+        "cpu": "CPU",
+        "memory": "Memoria",
+        "uptime": "Tiempo activo",
+        "status": "Estado"
+      },
+      "empty": {
+        "title": "Aún no se han descubierto dispositivos",
+        "description": "Ejecuta una sincronización para descubrir los dispositivos gestionados por este controlador.",
+        "action": "Ejecutar descubrimiento"
+      }
+    },
+    "firmware": {
+      "title": "Estado del firmware",
+      "description": "Versión del firmware y estado de actualización de todos los dispositivos gestionados",
+      "upToDateCount": "{{count}} actualizados",
+      "needsUpgradeOne": "{{count}} necesita actualización",
+      "needsUpgradeOther": "{{count}} necesitan actualización",
+      "empty": "No hay datos de firmware disponibles. Ejecuta una sincronización para recopilar la información del firmware.",
+      "columns": {
+        "device": "Dispositivo",
+        "currentVersion": "Versión actual",
+        "latestVersion": "Última versión",
+        "status": "Estado"
+      },
+      "badge": {
+        "upgrade": "Actualizar",
+        "current": "Actual"
+      }
+    },
+    "connection": {
+      "title": "Detalles de conexión",
+      "host": "Host",
+      "port": "Puerto",
+      "ssl": "SSL/TLS",
+      "verifyCertificate": "Verificar certificado",
+      "connectionMode": "Modo de conexión"
+    },
+    "metadata": {
+      "title": "Metadatos",
+      "controllerId": "ID del controlador",
+      "type": "Tipo",
+      "active": "Activo",
+      "created": "Creado",
+      "updated": "Actualizado"
+    },
+    "siteMappings": {
+      "title": "Asignaciones de sitios",
+      "description": "Asigna los sitios del controlador a los sitios de FreeSDN"
+    },
+    "dangerZone": {
+      "title": "Zona de peligro",
+      "description": "Eliminar este controlador también eliminará todos los dispositivos asociados de FreeSDN.",
+      "confirm": "¿Eliminar el controlador \"{{name}}\"? Esto también eliminará los {{count}} dispositivos gestionados.",
+      "delete": "Eliminar controlador"
+    }
+  },
+  "ControllersPage": {
+    "header": {
+      "title": "Controladores",
+      "description": "Administra controladores SDN y gateways (Omada, UniFi, OPNsense, pfSense, MikroTik, OpenWrt). Para cámaras, PBX o hipervisores, usa sus páginas dedicadas."
+    },
+    "error": {
+      "loadFailed": "No se pudieron cargar los controladores"
+    },
+    "itemNameSingular": "controlador",
+    "itemNamePlural": "controladores",
+    "columns": {
+      "controller": "Controlador",
+      "type": "Tipo",
+      "status": "Estado",
+      "devices": "Dispositivos",
+      "version": "Versión",
+      "lastSync": "Última sincronización"
+    },
+    "status": {
+      "disabled": "Deshabilitado"
+    },
+    "statusLabels": {
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "error": "Error",
+      "syncing": "Sincronizando",
+      "unreachable": "Inaccesible"
+    },
+    "lastSync": {
+      "took": "tardó {{duration}}"
+    },
+    "actions": {
+      "label": "Acciones",
+      "syncNow": "Sincronizar ahora",
+      "syncAria": "Sincronizar {{name}}",
+      "menuAria": "Acciones para {{name}}",
+      "viewDetails": "Ver detalles",
+      "editSettings": "Editar configuración",
+      "testConnection": "Probar conexión",
+      "delete": "Eliminar",
+      "export": "Exportar",
+      "addController": "Agregar controlador"
+    },
+    "stats": {
+      "totalControllers": {
+        "title": "Total de controladores",
+        "description": "Controladores configurados"
+      },
+      "connected": {
+        "title": "Conectados",
+        "percentOnline": "{{percent}} % en línea",
+        "noControllers": "Sin controladores"
+      },
+      "disconnected": {
+        "title": "Desconectados",
+        "description": "Requiere atención"
+      },
+      "totalDevices": {
+        "title": "Total de dispositivos",
+        "description": "Dispositivos administrados"
+      }
+    },
+    "filters": {
+      "searchPlaceholder": "Buscar controladores por nombre, host o tipo…",
+      "allTypes": "Todos los tipos",
+      "allStatuses": "Todos los estados",
+      "clearFilters": "Limpiar filtros"
+    },
+    "bulkActions": {
+      "syncAll": "Sincronizar todo",
+      "delete": "Eliminar"
+    },
+    "toast": {
+      "syncStarted": {
+        "title": "Sincronización iniciada",
+        "description": "Se ha iniciado la sincronización del controlador."
+      },
+      "syncFailed": {
+        "title": "Error de sincronización",
+        "description": "No se pudo sincronizar el controlador."
+      },
+      "connectionSuccessful": {
+        "title": "Conexión exitosa",
+        "connected": "Conectado",
+        "latency": "Latencia: {{latency}}"
+      },
+      "connectionFailed": {
+        "title": "Error de conexión",
+        "description": "No se pudo conectar con el controlador."
+      },
+      "connectionTestFailed": {
+        "title": "Error en la prueba de conexión",
+        "description": "No se pudo conectar con el controlador."
+      },
+      "bulkSyncStarted": {
+        "title": "Sincronización masiva iniciada",
+        "description": "Sincronización iniciada para {{count}} controlador(es)."
+      },
+      "bulkSyncFailed": {
+        "title": "Error de sincronización masiva",
+        "description": "Algunos controladores no se pudieron sincronizar."
+      },
+      "bulkDelete": {
+        "title": "Eliminación masiva",
+        "description": "Por seguridad, elimina los controladores individualmente."
+      },
+      "controllerDeleted": {
+        "title": "Controlador eliminado",
+        "description": "El controlador se ha eliminado correctamente."
+      }
+    }
+  }
+}

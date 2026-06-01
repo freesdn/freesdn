@@ -1,0 +1,165 @@
+{
+  "SecurityAuditPage": {
+    "header": {
+      "title": "Security Audit",
+      "description": "Monitor security events and compliance"
+    },
+    "actions": {
+      "exportLog": "Export Log"
+    },
+    "summary": {
+      "totalEvents": "Total Events",
+      "failedLogins": "Failed Logins",
+      "suspiciousActivity": "Suspicious Activity",
+      "criticalEvents": "Critical Events"
+    },
+    "detail": {
+      "title": "Event Details",
+      "details": "Details"
+    },
+    "fields": {
+      "eventType": "Event Type",
+      "severity": "Severity",
+      "outcome": "Outcome",
+      "timestamp": "Timestamp",
+      "sourceIp": "Source IP",
+      "action": "Action",
+      "resourceType": "Resource Type",
+      "userId": "User ID"
+    },
+    "anomalies": {
+      "heading": "Security Anomalies Detected",
+      "detected": "Detected: {{time}}"
+    },
+    "toast": {
+      "successTitle": "Success",
+      "errorTitle": "Error",
+      "exportStarted": "Export started. You will be notified when ready.",
+      "exportFailed": "Failed to start export: {{error}}"
+    },
+    "errors": {
+      "loadEvents": "Failed to load security events",
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "filters": {
+      "allEventTypes": "All Event Types",
+      "allSeverities": "All Severities"
+    },
+    "eventTypes": {
+      "loginSuccess": "Login Success",
+      "loginFailure": "Login Failure",
+      "permissionDenied": "Permission Denied",
+      "apiAccess": "API Access",
+      "dataExport": "Data Export"
+    },
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "critical": "Critical"
+    },
+    "period": {
+      "lastHour": "Last Hour",
+      "last6Hours": "Last 6 Hours",
+      "last24Hours": "Last 24 Hours",
+      "last7Days": "Last 7 Days",
+      "last30Days": "Last 30 Days"
+    },
+    "empty": {
+      "noEvents": "No security events found for the selected filters"
+    },
+    "table": {
+      "eventType": "Event Type",
+      "severity": "Severity",
+      "outcome": "Outcome",
+      "sourceIp": "Source IP",
+      "action": "Action",
+      "time": "Time"
+    },
+    "pagination": {
+      "showing": "Showing {{from}} to {{to}} of {{total}} events",
+      "previous": "Previous",
+      "next": "Next"
+    }
+  },
+  "SecurityPage": {
+    "title": "Security",
+    "description": "Monitor security events and audit logs",
+    "tabs": {
+      "securityEvents": "Security Events",
+      "auditLogs": "Audit Logs"
+    },
+    "actions": {
+      "export": "Export"
+    },
+    "export": {
+      "successTitle": "Export complete",
+      "successDescription": "Your audit log export has been downloaded.",
+      "truncatedTitle": "Export truncated",
+      "truncatedDescription": "Exported the first {{limit}} of {{total}} matching rows. Narrow the date range to export the rest.",
+      "errorTitle": "Export failed",
+      "errorDescription": "Could not export audit logs."
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "stats": {
+      "totalEvents": "Total Events",
+      "critical": "Critical",
+      "highSeverity": "High Severity",
+      "unreviewed": "Unreviewed"
+    },
+    "severity": {
+      "all": "All Severity",
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "actionFilter": {
+      "all": "All Actions",
+      "create": "Create",
+      "update": "Update",
+      "delete": "Delete",
+      "login": "Login",
+      "logout": "Logout"
+    },
+    "events": {
+      "searchPlaceholder": "Search events...",
+      "severityPlaceholder": "Severity",
+      "emptyTitle": "No Security Events",
+      "emptyDescription": "No security events have been recorded yet.",
+      "unreviewed": "Unreviewed",
+      "reviewed": "Reviewed",
+      "pendingReview": "Pending Review",
+      "eventFrom": "Event from {{source}}",
+      "unknownSource": "unknown"
+    },
+    "audit": {
+      "searchPlaceholder": "Search audit logs...",
+      "actionPlaceholder": "Action",
+      "emptyTitle": "No Audit Logs",
+      "emptyDescription": "No audit logs have been recorded yet."
+    },
+    "fields": {
+      "riskScore": "Risk Score",
+      "severity": "Severity",
+      "status": "Status",
+      "user": "User",
+      "ipAddress": "IP Address",
+      "location": "Location",
+      "description": "Description",
+      "riskFactors": "Risk Factors",
+      "userAgent": "User Agent",
+      "additionalDetails": "Additional Details",
+      "resourceType": "Resource Type",
+      "actor": "Actor",
+      "resource": "Resource",
+      "error": "Error",
+      "changes": "Changes"
+    },
+    "common": {
+      "notAvailable": "N/A"
+    }
+  }
+}

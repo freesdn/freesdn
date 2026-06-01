@@ -1,0 +1,459 @@
+{
+  "AgentDetailPage": {
+    "loading": "加载中…",
+    "backToAgents": "返回代理列表",
+    "defaultDescription": "远程站点代理",
+    "relative": {
+      "never": "从未",
+      "secondsAgo": "{{n}} 秒前",
+      "minutesAgo": "{{n}} 分钟前",
+      "hoursAgo": "{{n}} 小时前",
+      "daysAgo": "{{n}} 天前"
+    },
+    "errors": {
+      "noAgentId": "URL 中没有代理 ID。",
+      "notFound": "未找到代理。"
+    },
+    "toast": {
+      "alertConfigSaved": "告警配置已保存",
+      "saveFailed": "保存失败"
+    },
+    "offlineAlert": {
+      "title": "已发送离线告警",
+      "body": "已于 {{when}} 通知。当此代理重新连接时，告警标志将重置，下一次离线切换将触发新的通知。"
+    },
+    "stats": {
+      "status": "状态",
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "schedules": "计划",
+      "pinnedCount": "已固定 {{n}} 个",
+      "runs24h": "运行（24 小时）",
+      "failedCount": "{{n}} 个失败",
+      "allSucceeded": "全部成功",
+      "discoveries": "发现",
+      "adoptedCount": "已采纳 {{n}} 个"
+    },
+    "tabs": {
+      "overview": "概览",
+      "schedules": "计划",
+      "runs": "运行",
+      "discoveries": "发现",
+      "topology": "拓扑",
+      "adHoc": "临时扫描",
+      "settings": "设置"
+    },
+    "details": {
+      "title": "代理详情",
+      "id": "ID",
+      "type": "类型",
+      "version": "版本",
+      "site": "站点",
+      "lastHeartbeat": "上次心跳",
+      "approved": "已批准",
+      "yes": "是",
+      "no": "否"
+    },
+    "alertsDialog": {
+      "trigger": "配置离线告警",
+      "title": "{{name}} 的离线告警",
+      "description": "当此代理的上次心跳早于下面的阈值时，后端将触发告警。每次离线切换仅发送一次告警（不会每个周期都重复发送）。",
+      "emailLabel": "邮件收件人（用逗号分隔）",
+      "slackLabel": "Slack 频道",
+      "thresholdLabel": "离线阈值（秒，最小 60，默认 180）",
+      "cancel": "取消",
+      "save": "保存"
+    },
+    "schedules": {
+      "empty": "没有针对此代理的计划。创建后，站点范围的计划也将显示在此处。",
+      "columns": {
+        "name": "名称",
+        "type": "类型",
+        "cron": "Cron",
+        "targets": "目标",
+        "lastFired": "上次触发",
+        "status": "状态"
+      },
+      "pinned": "已固定",
+      "siteWide": "站点范围",
+      "disabled": "已禁用"
+    },
+    "runs": {
+      "empty": "此代理尚无运行记录。",
+      "columns": {
+        "status": "状态",
+        "schedule": "计划",
+        "when": "时间",
+        "duration": "时长",
+        "devices": "设备",
+        "error": "错误"
+      }
+    },
+    "discoveries": {
+      "empty": "此代理尚未提供任何发现。",
+      "columns": {
+        "ip": "IP",
+        "mac": "MAC",
+        "vendor": "厂商",
+        "hostname": "主机名",
+        "lastSeen": "上次发现",
+        "status": "状态"
+      },
+      "adopted": "已采纳",
+      "new": "新增"
+    },
+    "topology": {
+      "empty": "此代理尚未捕获任何 LLDP/CDP 链路。代理的监听器需要原始套接字权限，并在同一广播域内有一台广播 LLDP 的交换机。",
+      "columns": {
+        "protocol": "协议",
+        "localInterface": "本地接口",
+        "neighborChassis": "邻居机箱",
+        "neighborPort": "邻居端口",
+        "system": "系统",
+        "vlan": "VLAN",
+        "lastSeen": "上次发现"
+      }
+    }
+  },
+  "AgentReleasesPage": {
+    "header": {
+      "title": "代理版本",
+      "description": "上传、提升和下线代理二进制文件。已连接的守护进程会在每个自动更新周期检查此列表，并在具备回滚保护的情况下自我升级。"
+    },
+    "card": {
+      "title": "版本"
+    },
+    "actions": {
+      "uploadRelease": "上传版本",
+      "cancel": "取消",
+      "uploading": "上传中…",
+      "uploadAndPublish": "上传并发布",
+      "uploadPublish": "上传并发布"
+    },
+    "dialog": {
+      "title": "上传代理二进制文件"
+    },
+    "form": {
+      "binaryFile": "二进制文件",
+      "version": "版本",
+      "platform": "平台",
+      "type": "类型",
+      "releaseNotes": "版本说明",
+      "releaseNotesPlaceholder": "此构建包含的内容…",
+      "prereleaseLabel": "标记为预发布（不会自动更新现有代理）",
+      "markPrerelease": "标记为预发行版（不会自动更新现有代理）",
+      "uploadingProgress": "上传中 {{percent}}%…"
+    },
+    "upload": {
+      "progress": "上传中 {{percent}}%…"
+    },
+    "states": {
+      "error": "无法加载版本。",
+      "loading": "加载中…",
+      "empty": "暂无版本。请在上方上传二进制文件以发布第一个版本。"
+    },
+    "table": {
+      "version": "版本",
+      "platform": "平台",
+      "type": "类型",
+      "size": "大小",
+      "sha256": "SHA-256",
+      "downloads": "下载次数",
+      "status": "状态",
+      "published": "发布时间"
+    },
+    "badges": {
+      "latest": "最新",
+      "prerelease": "预发布"
+    },
+    "rowActions": {
+      "download": "下载二进制文件",
+      "markLatest": "标记为最新",
+      "delete": "删除版本"
+    },
+    "confirmDelete": "删除版本 {{version}}（{{platform}}/{{agentType}}）？",
+    "toasts": {
+      "uploaded": {
+        "title": "版本已上传",
+        "description": "{{version}}（{{platform}}/{{agentType}}）现已设为最新"
+      },
+      "uploadFailed": {
+        "title": "上传失败"
+      },
+      "promoted": {
+        "title": "已标记为最新",
+        "description": "{{version}} 现已成为 {{platform}}/{{agentType}} 的最新版本"
+      },
+      "deleted": {
+        "title": "版本已删除"
+      }
+    },
+    "confirm": {
+      "delete": "删除发行版 {{version}}（{{platform}}/{{type}}）？"
+    }
+  },
+  "AgentsPage": {
+    "title": "远程代理",
+    "description": "管理用于分布式网络发现的远程站点代理。",
+    "loadError": "无法加载代理",
+    "searchPlaceholder": "按名称、站点或 IP 搜索代理…",
+    "itemName": "代理",
+    "itemNamePlural": "代理",
+    "never": "从不",
+    "pendingApproval": "待批准",
+    "partialLoadWarning": "部分数据加载失败，结果可能不完整。",
+    "columns": {
+      "agent": "代理",
+      "type": "类型",
+      "status": "状态",
+      "site": "站点",
+      "lastIp": "最近 IP",
+      "lastHeartbeat": "最近心跳"
+    },
+    "agentTypes": {
+      "site": "站点代理",
+      "scanner": "扫描器",
+      "collector": "采集器",
+      "gateway": "网关"
+    },
+    "statuses": {
+      "online": "在线",
+      "offline": "离线",
+      "connecting": "连接中",
+      "error": "错误",
+      "maintenance": "维护"
+    },
+    "filters": {
+      "allStatuses": "所有状态",
+      "allTypes": "所有类型",
+      "clear": "清除筛选"
+    },
+    "actions": {
+      "export": "导出",
+      "registerAgent": "注册代理",
+      "menuAria": "{{name}} 的操作",
+      "approveAgent": "批准代理",
+      "runScan": "运行扫描",
+      "disconnect": "断开连接",
+      "disconnectConfirm": "确定要移除此代理吗？",
+      "menuLabel": "{{name}} 的操作"
+    },
+    "stats": {
+      "total": {
+        "title": "代理总数",
+        "description": "已注册的代理"
+      },
+      "online": {
+        "title": "在线",
+        "description": "已连接且正常"
+      },
+      "offline": {
+        "title": "离线",
+        "description": "已断开连接"
+      },
+      "pendingApproval": {
+        "title": "待批准",
+        "description": "等待批准"
+      },
+      "totalAgents": {
+        "title": "代理总数",
+        "description": "已注册代理"
+      }
+    },
+    "fleet": {
+      "activeSchedules": {
+        "title": "活动计划",
+        "description": "共 {{count}} 个"
+      },
+      "runs24h": {
+        "title": "运行次数（24 小时）",
+        "failed": "{{count}} 个失败",
+        "allSucceeded": "全部成功"
+      },
+      "discoveredHosts": {
+        "title": "已发现的主机",
+        "description": "{{count}} 个未采纳"
+      },
+      "lastRun": {
+        "title": "上次运行",
+        "description": "最近一次执行",
+        "none": "尚无运行记录",
+        "mostRecent": "最近一次执行",
+        "noRuns": "尚无运行"
+      }
+    },
+    "toasts": {
+      "approveFailed": {
+        "title": "批准失败",
+        "description": "无法批准代理。"
+      },
+      "disconnectFailed": {
+        "title": "断开失败",
+        "description": "无法断开代理连接。"
+      }
+    },
+    "bulk": {
+      "approve": {
+        "label": "批准",
+        "title": "批量批准完成",
+        "result": "已批准 {{ok}} 个",
+        "resultWithFailures": "已批准 {{ok}} 个，{{fail}} 个失败",
+        "toastTitle": "批量批准完成"
+      },
+      "disable": {
+        "label": "禁用",
+        "title": "批量禁用完成",
+        "result": "已禁用 {{ok}}/{{total}} 个",
+        "toastTitle": "批量禁用完成"
+      },
+      "delete": {
+        "label": "删除",
+        "title": "批量删除完成",
+        "confirm": "删除 {{count}} 个代理？此操作为软删除注册记录；现有的发现和运行记录将被保留。",
+        "result": "已删除 {{ok}} 个",
+        "resultWithFailures": "已删除 {{ok}} 个，{{fail}} 个失败",
+        "toastTitle": "批量删除完成"
+      }
+    },
+    "register": {
+      "title": "注册新代理",
+      "description": "生成凭据，让远程站点代理连接到此 FreeSDN 实例。",
+      "submit": "注册代理",
+      "submitting": "正在注册...",
+      "copyAll": "全部复制",
+      "done": "完成",
+      "success": {
+        "title": "代理注册成功",
+        "description": "请妥善保存这些凭据。代理密钥不会再次显示。"
+      },
+      "fields": {
+        "agentId": "代理 ID",
+        "agentKey": "代理密钥",
+        "websocketUrl": "WebSocket URL",
+        "envVars": "环境变量",
+        "site": "站点",
+        "sitePlaceholder": "为此代理选择一个站点",
+        "name": "代理名称",
+        "namePlaceholder": "例如：分支机构代理",
+        "type": "代理类型",
+        "description": "描述（可选）",
+        "descriptionPlaceholder": "代理用途的简要描述",
+        "agentType": "代理类型",
+        "descriptionLabel": "描述（可选）"
+      },
+      "validation": {
+        "site": "请选择一个站点",
+        "name": "代理名称为必填项",
+        "siteRequired": "选择一个站点",
+        "nameRequired": "代理名称为必填项"
+      }
+    },
+    "pageHeader": {
+      "title": "远程代理",
+      "description": "管理用于分布式网络发现的远程站点代理。"
+    },
+    "errors": {
+      "loadFailed": "无法加载代理"
+    },
+    "partialFailure": "部分数据加载失败，结果可能不完整。",
+    "itemNameSingular": "代理",
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "connecting": "连接中",
+      "error": "错误",
+      "maintenance": "维护",
+      "pendingApproval": "待批准"
+    },
+    "toolbar": {
+      "searchPlaceholder": "按名称、站点或 IP 搜索代理…",
+      "allStatuses": "所有状态",
+      "allTypes": "所有类型",
+      "clearFilters": "清除筛选"
+    }
+  },
+  "DownloadsPage": {
+    "copy": {
+      "copied": "已复制到剪贴板",
+      "copy": "复制到剪贴板"
+    },
+    "platform": {
+      "yourOs": "你的操作系统",
+      "daemonAndDesktopAvailable": "守护进程代理和桌面应用均可用",
+      "daemonAvailable": "守护进程代理可用",
+      "desktopAvailable": "桌面应用可用",
+      "noReleases": "暂无可用版本",
+      "daemonAgent": "守护进程代理",
+      "desktopApp": "桌面应用",
+      "comingSoon": "即将推出",
+      "installInstructions": "安装说明"
+    },
+    "header": {
+      "title": "代理下载",
+      "description": "下载 FreeSDN 代理，用于远程站点的网络发现与管理"
+    },
+    "errorBanner": "无法加载代理下载元数据 · 显示后备安装说明。",
+    "infoBanner": {
+      "title": "提供两种代理类型",
+      "daemonDesc": "作为系统服务全天候运行的无界面服务。通过 WebSocket 连接，实现持续监控和远程触发的扫描。",
+      "desktopDesc": "用于按需网络扫描和设备发现的图形界面应用。"
+    },
+    "features": {
+      "protocols": {
+        "title": "14 种发现协议",
+        "desc": "ARP, ICMP, TCP, HTTP, SNMP, ONVIF, RTSP, mDNS, SSDP, SIP, NetBIOS, DNS, Banner, SADP"
+      },
+      "secure": {
+        "title": "默认安全",
+        "desc": "凭据存储在操作系统密钥环中，SHA-256 密钥验证，需要管理员批准"
+      },
+      "multiSite": {
+        "title": "多站点支持",
+        "desc": "在每个站点部署代理 · 单个 FreeSDN 服务器集中管理所有位置"
+      }
+    },
+    "quickStart": {
+      "title": "快速开始",
+      "description": "4 步连接一个代理",
+      "steps": {
+        "download": {
+          "title": "下载",
+          "desc": "从上方下载适用于你平台的代理"
+        },
+        "register": {
+          "title": "注册",
+          "desc": "运行 freesdn-agent register --server <URL>"
+        },
+        "approve": {
+          "title": "批准",
+          "desc": "进入 FreeSDN 的代理页面并批准新代理"
+        },
+        "connect": {
+          "title": "连接",
+          "desc": "运行 freesdn-agent daemon · 代理会自动连接"
+        }
+      },
+      "subtitle": "通过 4 个步骤连接代理"
+    },
+    "versionInfo": {
+      "latest": "最新代理版本：v{{version}}",
+      "server": "服务器版本：v{{version}}"
+    },
+    "error": {
+      "loadFailed": "无法加载代理下载元数据 · 显示备用安装说明。"
+    },
+    "yourOs": "您的操作系统",
+    "availability": {
+      "both": "守护进程代理和桌面应用均可用",
+      "daemon": "守护进程代理可用",
+      "desktop": "桌面应用可用",
+      "none": "暂无可用版本"
+    },
+    "buttons": {
+      "daemonAgent": "守护进程代理",
+      "desktopApp": "桌面应用",
+      "comingSoon": "即将推出"
+    },
+    "installInstructions": "安装说明"
+  }
+}

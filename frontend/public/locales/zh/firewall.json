@@ -1,0 +1,3797 @@
+{
+  "FirewallPage": {
+    "header": {
+      "title": "防火墙",
+      "subtitle": "网络安全 · 网关集成、规则、NAT、VPN 和 IDS/IPS"
+    },
+    "tabs": {
+      "dashboard": "仪表盘",
+      "gateways": "网关",
+      "rules": "规则",
+      "nat": "NAT",
+      "vpn": "VPN",
+      "ids": "IDS/IPS",
+      "logs": "日志",
+      "orchestration": "编排"
+    },
+    "actions": {
+      "addGateway": "添加网关",
+      "testConnection": "测试连接",
+      "saveChanges": "保存更改",
+      "refresh": "刷新",
+      "viewDetails": "查看详情",
+      "editGateway": "编辑网关",
+      "syncNow": "立即同步",
+      "delete": "删除",
+      "editRule": "编辑规则",
+      "viewLogs": "查看日志",
+      "deleteRule": "删除规则",
+      "viewTraffic": "查看流量",
+      "settings": "设置",
+      "acknowledge": "确认"
+    },
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    },
+    "action": {
+      "allow": "允许",
+      "pass": "通过",
+      "deny": "拒绝",
+      "block": "阻止",
+      "reject": "驳回",
+      "log": "记录"
+    },
+    "vpnStatus": {
+      "up": "已连接",
+      "down": "已断开",
+      "connecting": "连接中",
+      "error": "错误"
+    },
+    "severity": {
+      "critical": "严重",
+      "high": "高",
+      "medium": "中",
+      "low": "低",
+      "info": "信息"
+    },
+    "syncStatus": {
+      "success": "已同步",
+      "failed": "失败",
+      "syncing": "同步中",
+      "never": "从未",
+      "idle": "空闲"
+    },
+    "alertStatus": {
+      "acknowledged": "已确认",
+      "open": "未处理"
+    },
+    "addDialog": {
+      "title": "添加防火墙网关",
+      "description": "集成 OPNsense、pfSense、MikroTik 或 OpenWRT 防火墙，以便从 FreeSDN 进行管理。"
+    },
+    "editDialog": {
+      "title": "编辑网关 · {{name}}",
+      "description": "更新连接设置、凭据或同步配置。"
+    },
+    "fields": {
+      "name": "名称",
+      "namePlaceholder": "例如 总部办公室防火墙",
+      "firewallSoftware": "防火墙软件",
+      "selectFirewallType": "选择防火墙类型",
+      "hostIp": "主机 / IP",
+      "hostPlaceholder": "例如 192.168.1.1 或 fw.example.com",
+      "port": "端口",
+      "apiKey": "API 密钥",
+      "apiKeyPlaceholder": "来自 系统 → 用户 → API 密钥 的 API 密钥",
+      "apiKeyKeepPlaceholder": "留空以保留现有密钥",
+      "apiSecret": "API 密钥（Secret）",
+      "apiSecretPlaceholder": "API 密钥（Secret）",
+      "apiSecretKeepPlaceholder": "留空以保留现有密钥（Secret）",
+      "username": "用户名",
+      "usernamePlaceholder": "admin",
+      "password": "密码",
+      "passwordPlaceholder": "密码",
+      "keepExistingPlaceholder": "留空以保留现有内容",
+      "keepCurrentCredentials": "留空以保留当前凭据",
+      "descriptionOptional": "描述（可选）",
+      "descriptionPlaceholder": "简要描述",
+      "siteLocationOptional": "站点 / 位置（可选）",
+      "siteLocation": "站点 / 位置",
+      "assignToSite": "分配到站点...",
+      "noSite": "无站点",
+      "siteBindHint": "将此网关绑定到站点以进行跨设备引用",
+      "siteBindHintOmada": "绑定到站点以与 Omada 和其他控制器进行跨设备引用",
+      "cannotBeChanged": "（无法更改）",
+      "verifySsl": "验证 SSL 证书",
+      "syncConfiguration": "同步配置",
+      "enableAutoSync": "启用自动同步",
+      "syncInterval": "同步间隔（秒）"
+    },
+    "vendorFilter": {
+      "all": "所有厂商"
+    },
+    "stats": {
+      "gateways": "网关",
+      "online": "在线",
+      "offline": "离线",
+      "rules": "规则",
+      "vpnUp": "VPN 已连接",
+      "idsAlerts": "IDS 告警",
+      "firewallRules": "防火墙规则",
+      "natRules": "NAT 规则",
+      "vpnConnected": "VPN 已连接",
+      "totalGateways": "网关总数",
+      "syncOk": "同步正常",
+      "totalTunnels": "隧道总数",
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "errors": "错误",
+      "totalAlerts": "告警总数",
+      "critical": "严重",
+      "high": "高",
+      "medium": "中",
+      "unacknowledged": "未确认"
+    },
+    "dashboard": {
+      "gatewayIntegrations": "网关集成",
+      "emptyTitle": "未连接防火墙",
+      "emptyDescription": "添加 OPNsense、pfSense 或 MikroTik 网关以开始管理您的网络安全。",
+      "securityOverview": "安全概览",
+      "recentAlerts": "最近告警",
+      "recentTraffic": "最近流量"
+    },
+    "gateways": {
+      "title": "网关",
+      "searchPlaceholder": "搜索网关..."
+    },
+    "rules": {
+      "title": "防火墙规则",
+      "searchPlaceholder": "搜索规则..."
+    },
+    "nat": {
+      "title": "NAT 规则",
+      "searchPlaceholder": "搜索 NAT 规则..."
+    },
+    "vpn": {
+      "title": "VPN 隧道",
+      "description": "站点到站点和远程访问 VPN 连接",
+      "searchPlaceholder": "搜索 VPN 隧道..."
+    },
+    "ids": {
+      "title": "IDS/IPS 告警",
+      "description": "入侵检测和防御告警",
+      "searchPlaceholder": "搜索 IDS 告警..."
+    },
+    "logs": {
+      "title": "防火墙日志",
+      "searchPlaceholder": "按 IP、协议搜索日志..."
+    },
+    "gatewayColumns": {
+      "gateway": "网关",
+      "type": "类型",
+      "site": "站点",
+      "address": "地址",
+      "status": "状态",
+      "sync": "同步",
+      "lastSeen": "最后在线"
+    },
+    "ruleColumns": {
+      "rule": "规则",
+      "source": "源",
+      "destination": "目标",
+      "protocol": "协议",
+      "action": "操作",
+      "status": "状态",
+      "hits": "命中数"
+    },
+    "natColumns": {
+      "rule": "规则",
+      "type": "类型",
+      "original": "原始",
+      "translated": "转换后",
+      "protocol": "协议",
+      "interface": "接口",
+      "status": "状态"
+    },
+    "vpnColumns": {
+      "tunnel": "隧道",
+      "local": "本地",
+      "remote": "远程",
+      "status": "状态",
+      "traffic": "流量",
+      "connected": "已连接"
+    },
+    "alertColumns": {
+      "severity": "严重程度",
+      "time": "时间",
+      "alert": "告警",
+      "source": "源",
+      "destination": "目标",
+      "status": "状态"
+    },
+    "logColumns": {
+      "time": "时间",
+      "action": "操作",
+      "proto": "协议",
+      "source": "源",
+      "destination": "目标",
+      "bytes": "字节"
+    },
+    "itemNames": {
+      "gateways": "网关",
+      "firewallRules": "防火墙规则",
+      "natRules": "NAT 规则",
+      "vpnTunnels": "VPN 隧道",
+      "idsAlerts": "IDS 告警",
+      "alerts": "告警",
+      "logEntries": "日志条目"
+    },
+    "confirm": {
+      "deleteGateway": "删除网关 \"{{name}}\"？此操作无法撤销。",
+      "deleteRule": "删除规则 \"{{name}}\"？"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败。结果可能不完整。"
+    },
+    "toast": {
+      "errorTitle": "错误",
+      "operationFailed": "操作失败",
+      "connectionOk": "连接正常",
+      "connectionFailed": "连接失败",
+      "testFailed": "测试失败",
+      "connectionTestFailed": "连接测试失败",
+      "gatewayFallback": "网关"
+    }
+  },
+  "MikroTikFirewallTab": {
+    "ruleFallback": "规则",
+    "dragToReorder": "拖动以重新排序规则",
+    "no": "否",
+    "yes": "是",
+    "loading": "正在加载 RouterOS 防火墙…",
+    "aria": {
+      "editFilterRule": "编辑防火墙规则 {{label}}",
+      "deleteFilterRule": "删除防火墙规则 {{label}}",
+      "editNatRule": "编辑 NAT 规则 {{label}}",
+      "deleteNatRule": "删除 NAT 规则 {{label}}"
+    },
+    "toast": {
+      "filterCreateStaged": "已暂存过滤规则创建",
+      "filterCreateFailed": "{{ctx}}无法暂存过滤规则创建",
+      "filterUpdateStaged": "已暂存过滤规则更新",
+      "filterUpdateFailed": "{{ctx}}无法暂存过滤规则更新",
+      "filterDeleteStaged": "已暂存过滤规则删除",
+      "filterDeleteFailed": "{{ctx}}无法暂存过滤规则删除",
+      "reorderStaged": "已暂存过滤规则重新排序",
+      "reorderFailed": "{{ctx}}无法暂存重新排序, 已恢复为服务器顺序",
+      "natCreateStaged": "已暂存 NAT 规则创建",
+      "natCreateFailed": "{{ctx}}无法暂存 NAT 创建",
+      "natUpdateStaged": "已暂存 NAT 规则更新",
+      "natUpdateFailed": "{{ctx}}无法暂存 NAT 更新",
+      "natDeleteStaged": "已暂存 NAT 规则删除",
+      "natDeleteFailed": "{{ctx}}无法暂存 NAT 删除",
+      "cannotUpdate": "无法更新规则",
+      "missingRuleId": "规则没有 RouterOS id（缺少 .id）。",
+      "cannotDelete": "无法删除",
+      "missingRowId": "该行没有 RouterOS id（缺少 .id）。"
+    },
+    "kind": {
+      "filterRule": "过滤规则",
+      "natRule": "NAT 规则"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "discardReorder": "放弃重新排序",
+      "stageReorder": "暂存重新排序",
+      "addRule": "添加规则",
+      "addNatRule": "添加 NAT 规则",
+      "cancel": "取消",
+      "stageUpdate": "暂存更新",
+      "stageCreate": "暂存创建",
+      "stageDelete": "暂存删除"
+    },
+    "filter": {
+      "title": "过滤规则",
+      "description": "``/ip/firewall/filter`` 链 · 拖动手柄重新排序，然后暂存新顺序",
+      "loadError": "加载过滤规则失败",
+      "emptyTitle": "没有过滤规则",
+      "emptyDescription": "/ip/firewall/filter 链为空。"
+    },
+    "nat": {
+      "title": "NAT 规则",
+      "description": "``/ip/firewall/nat`` 链 · srcnat 和 dstnat",
+      "loadError": "加载 NAT 规则失败",
+      "emptyTitle": "没有 NAT 规则",
+      "emptyDescription": "/ip/firewall/nat 链为空。"
+    },
+    "columns": {
+      "chain": "链",
+      "action": "动作",
+      "proto": "协议",
+      "src": "源",
+      "dst": "目标",
+      "dstPort": "目标端口",
+      "inIface": "入接口",
+      "enabled": "已启用",
+      "comment": "备注",
+      "actions": "操作",
+      "toAddrs": "目标地址",
+      "toPorts": "目标端口"
+    },
+    "fields": {
+      "chain": "链",
+      "action": "动作",
+      "protocol": "协议",
+      "srcAddress": "源地址",
+      "dstAddress": "目标地址",
+      "dstPort": "目标端口",
+      "inIface": "入接口",
+      "toAddresses": "目标地址",
+      "toPorts": "目标端口",
+      "comment": "备注"
+    },
+    "filterDialog": {
+      "editTitle": "编辑过滤规则",
+      "addTitle": "添加过滤规则",
+      "description": "暂存对 RouterOS ``/ip/firewall/filter`` 的更改。"
+    },
+    "natDialog": {
+      "editTitle": "编辑 NAT 规则",
+      "addTitle": "添加 NAT 规则",
+      "description": "暂存对 RouterOS ``/ip/firewall/nat`` 的更改。"
+    },
+    "deleteDialog": {
+      "title": "暂存删除 · {{kind}}？",
+      "description": "确认前请查看下方的规则范围。此操作会暂存一次删除；更改将通过待处理更改面板应用。"
+    }
+  },
+  "GatewayDetailPage": {
+    "header": {
+      "subtitle": "{{vendor}}，位于 {{host}}:{{port}}"
+    },
+    "actions": {
+      "back": "返回",
+      "sync": "同步",
+      "test": "测试",
+      "reboot": "重启",
+      "cancel": "取消",
+      "rebootNow": "立即重启"
+    },
+    "notFound": {
+      "title": "未找到网关",
+      "back": "返回网关列表"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败。结果可能不完整。"
+    },
+    "stats": {
+      "status": "状态",
+      "online": "在线",
+      "offline": "离线",
+      "unknown": "未知",
+      "version": "版本",
+      "lastSync": "上次同步",
+      "never": "从未",
+      "capabilities": "功能",
+      "noneDetected": "未检测到"
+    },
+    "tabs": {
+      "overview": "概览",
+      "firewallRules": "防火墙规则",
+      "natPortFwd": "NAT / 端口转发",
+      "vpn": "VPN",
+      "interfaces": "接口",
+      "dhcp": "DHCP",
+      "dns": "DNS",
+      "aliases": "别名",
+      "routingArp": "路由 / ARP",
+      "idsIps": "IDS / IPS",
+      "trafficShaper": "流量整形",
+      "services": "服务",
+      "backups": "备份",
+      "system": "系统",
+      "monitoring": "监控",
+      "diagnostics": "诊断",
+      "logs": "日志",
+      "syncLog": "同步日志",
+      "ip": "IP",
+      "firewall": "防火墙",
+      "hotspot": "热点",
+      "queues": "队列",
+      "firmware": "固件",
+      "backup": "备份",
+      "topology": "拓扑",
+      "snmp": "SNMP"
+    },
+    "syncLogColumns": {
+      "started": "开始时间",
+      "status": "状态",
+      "duration": "时长",
+      "itemsSynced": "已同步项",
+      "failed": "失败",
+      "error": "错误"
+    },
+    "logColumns": {
+      "time": "时间",
+      "process": "进程",
+      "message": "消息"
+    },
+    "diagnostics": {
+      "ping": "Ping",
+      "traceroute": "Traceroute",
+      "dnsLookup": "DNS 查询"
+    },
+    "toasts": {
+      "connectionOk": "连接正常",
+      "connectionFailed": "连接失败",
+      "error": "错误",
+      "testFailed": "测试失败",
+      "syncTriggered": "已触发同步",
+      "syncTriggeredDesc": "已开始完整同步。",
+      "syncFailed": "同步失败",
+      "syncFailedDesc": "无法启动同步",
+      "operationFailed": "操作失败",
+      "requestFailed": "请求失败",
+      "serviceUpdated": "服务已更新",
+      "failed": "失败",
+      "serviceControlFailed": "服务控制失败",
+      "backupCreated": "已创建备份",
+      "backupFailed": "备份失败",
+      "rebootInitiated": "已启动重启",
+      "rebootInitiatedDesc": "网关正在重启 · 将短暂离线。",
+      "rebootFailed": "重启失败",
+      "diagnosticFailed": "{{label}} 失败"
+    },
+    "resources": {
+      "firewallRule": "防火墙规则",
+      "natRule": "NAT 规则",
+      "portForward": "端口转发",
+      "wireguardServer": "WireGuard 服务器",
+      "wireguardPeer": "WireGuard 对等节点",
+      "openvpnInstance": "OpenVPN 实例",
+      "staticMapping": "静态映射",
+      "dnsOverride": "DNS 覆盖",
+      "domainOverride": "域名覆盖",
+      "alias": "别名",
+      "staticRoute": "静态路由",
+      "shaperPipe": "整形管道",
+      "queue": "队列",
+      "rule": "规则",
+      "backup": "备份"
+    },
+    "success": {
+      "sessionKilled": "会话已终止",
+      "ipsecApplied": "已应用 IPsec 更改",
+      "tunnelConnected": "隧道已连接",
+      "tunnelDisconnected": "隧道已断开",
+      "arpFlushed": "ARP 表已清空",
+      "idsStarted": "IDS 已启动",
+      "idsStopped": "IDS 已停止",
+      "idsRestarted": "IDS 已重启",
+      "idsRulesUpdated": "IDS 规则已更新",
+      "alertLogCleared": "告警日志已清除",
+      "ruleToggled": "规则已切换",
+      "queueCreated": "已创建队列",
+      "ruleCreated": "已创建规则",
+      "backupReverted": "备份已还原",
+      "configDownloaded": "配置已下载",
+      "firmwareCheckComplete": "固件检查完成",
+      "gatewayHalted": "网关已停止"
+    },
+    "rebootDialog": {
+      "title": "重启网关？",
+      "intro": "这将重启",
+      "target": "（{{vendor}}，位于 {{host}}）。",
+      "warning": "网关将离线 1-3 分钟。所有活动的 VPN 隧道和会话都将中断。"
+    }
+  },
+  "GatewaySystemTab": {
+    "common": {
+      "yes": "是",
+      "no": "否",
+      "active": "活动",
+      "disabled": "已禁用",
+      "enabled": "已启用"
+    },
+    "actions": {
+      "checkUpdates": "检查更新",
+      "downloadConfig": "下载配置",
+      "halt": "停机",
+      "haltConfirm": "这将停止（关闭）网关。确定吗？"
+    },
+    "packages": {
+      "title": "已安装的软件包",
+      "empty": "未找到软件包"
+    },
+    "plugins": {
+      "title": "已安装的插件",
+      "empty": "未找到插件"
+    },
+    "cron": {
+      "title": "Cron 任务",
+      "columns": {
+        "description": "描述",
+        "schedule": "计划",
+        "command": "命令",
+        "enabled": "已启用"
+      }
+    },
+    "trust": {
+      "title": "证书管理",
+      "description": "信任存储：证书、CA 和 CRL",
+      "certificates": "证书",
+      "certificateAuthorities": "证书颁发机构",
+      "revocationLists": "吊销列表",
+      "empty": "信任存储中未找到证书或 CA。",
+      "columns": {
+        "name": "名称",
+        "dn": "DN",
+        "keyLength": "密钥长度",
+        "inUse": "使用中",
+        "ca": "CA",
+        "type": "类型"
+      }
+    },
+    "acme": {
+      "title": "ACME / Let's Encrypt",
+      "description": "自动证书管理（os-acme-client）",
+      "certificates": "证书",
+      "accounts": "账户",
+      "validations": "验证",
+      "actions": "操作",
+      "certificatesHeading": "ACME 证书",
+      "accountsHeading": "ACME 账户",
+      "empty": "未找到 ACME 配置。安装 os-acme-client 以管理 Let's Encrypt 证书。",
+      "columns": {
+        "name": "名称",
+        "domains": "域名",
+        "account": "账户",
+        "lastUpdate": "上次更新",
+        "status": "状态",
+        "email": "电子邮件",
+        "ca": "CA"
+      }
+    },
+    "syslog": {
+      "title": "Syslog 目标",
+      "description": "远程 syslog 转发目标",
+      "empty": "未配置 syslog 目标。",
+      "defaultDestination": "目标 {{n}}",
+      "columns": {
+        "description": "描述",
+        "transport": "传输",
+        "hostname": "主机名",
+        "port": "端口",
+        "level": "级别",
+        "status": "状态"
+      }
+    },
+    "ha": {
+      "title": "高可用性和配置同步",
+      "description": "CARP HA 状态和配置同步",
+      "empty": "HA/配置同步不可用。这可能需要 CARP 配置。"
+    },
+    "lifecycle": {
+      "title": "证书生命周期",
+      "description": "30 天内到期的证书",
+      "checking": "正在检查证书…",
+      "totalCertificates": "证书总数",
+      "valid": "有效",
+      "expiringSoon": "即将到期",
+      "expired": "已过期",
+      "allValid": "所有证书均有效",
+      "columns": {
+        "certificate": "证书",
+        "cn": "CN",
+        "status": "状态",
+        "daysRemaining": "剩余天数",
+        "expires": "到期"
+      }
+    }
+  },
+  "GatewayServicesTab": {
+    "haproxy": {
+      "title": "HAProxy · 负载均衡器",
+      "description": "前端、后端和真实服务器",
+      "frontends": "前端",
+      "backends": "后端",
+      "servers": "服务器",
+      "realServers": "真实服务器",
+      "empty": "未找到 HAProxy 配置。请安装并配置 os-haproxy 以使用负载均衡器。"
+    },
+    "captivePortal": {
+      "title": "强制门户",
+      "description": "访客 WiFi 区域和活动会话",
+      "zoneFallback": "区域 {{n}}"
+    },
+    "services": {
+      "title": "系统服务",
+      "description": "{{vendor}} 上运行的服务 · 点击以启动 / 停止 / 重启",
+      "running": "运行中",
+      "stopped": "已停止",
+      "empty": "无可用的服务数据"
+    },
+    "proxy": {
+      "title": "Web 代理 (Squid)",
+      "description": "HTTP/HTTPS 代理设置和状态",
+      "loading": "正在加载代理设置…",
+      "proxyStatus": "代理状态",
+      "service": "服务",
+      "sslBumping": "SSL 解密",
+      "cache": "缓存",
+      "cacheSize": "缓存大小"
+    },
+    "blacklists": {
+      "title": "代理黑名单",
+      "description": "远程 ACL / 黑名单源",
+      "loading": "正在加载黑名单…",
+      "empty": "未配置远程黑名单"
+    },
+    "columns": {
+      "name": "名称",
+      "bind": "绑定",
+      "mode": "模式",
+      "defaultBackend": "默认后端",
+      "ssl": "SSL",
+      "status": "状态",
+      "algorithm": "算法",
+      "healthCheck": "健康检查",
+      "persistence": "会话保持",
+      "address": "地址",
+      "port": "端口",
+      "weight": "权重",
+      "zoneId": "区域 ID",
+      "interfaces": "接口",
+      "authServers": "认证服务器",
+      "idleTimeout": "空闲超时",
+      "hardTimeout": "硬超时",
+      "concurrent": "并发",
+      "enabled": "已启用",
+      "filename": "文件名",
+      "url": "URL",
+      "description": "描述"
+    },
+    "actions": {
+      "start": "启动",
+      "stop": "停止",
+      "restart": "重启",
+      "cancel": "取消"
+    },
+    "confirm": {
+      "title": "{{action}} {{name}}？",
+      "description": "{{action}} {{name}}？已连接的客户端可能会断开连接。"
+    },
+    "common": {
+      "yes": "是",
+      "no": "否",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "none": "无",
+      "unknown": "未知",
+      "on": "开启",
+      "off": "关闭"
+    }
+  },
+  "MikroTikInterfacesTab": {
+    "loading": "正在加载 RouterOS 接口…",
+    "common": {
+      "yes": "是",
+      "no": "否",
+      "on": "开启",
+      "off": "关闭"
+    },
+    "columns": {
+      "name": "名称",
+      "mac": "MAC",
+      "mtu": "MTU",
+      "type": "类型",
+      "protocol": "协议",
+      "vlanFiltering": "VLAN 过滤",
+      "running": "运行中",
+      "enabled": "已启用",
+      "rxBytes": "RX 字节",
+      "txBytes": "TX 字节",
+      "comment": "备注",
+      "actions": "操作"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "addBridge": "添加网桥",
+      "cancel": "取消",
+      "stageCreate": "暂存创建",
+      "stageUpdate": "暂存更新",
+      "stageDelete": "暂存删除",
+      "stageEnable": "暂存启用",
+      "stageDisable": "暂存禁用",
+      "enable": "启用",
+      "disable": "禁用",
+      "editBridgeAria": "编辑网桥 {{name}}",
+      "deleteBridgeAria": "删除网桥 {{name}}"
+    },
+    "ethernet": {
+      "title": "以太网",
+      "description": "物理端口 · 只读计数器与链路状态",
+      "loadError": "加载以太网接口失败",
+      "emptyTitle": "无以太网接口",
+      "emptyDescription": "RouterOS 未返回 /interface/ethernet 行。"
+    },
+    "bridges": {
+      "title": "网桥",
+      "description": "L2 网桥接口 · CRUD 操作通过待处理更改暂存",
+      "loadError": "加载网桥失败",
+      "emptyTitle": "未配置网桥",
+      "emptyDescription": "添加网桥可将端口归入单个 L2 网段。"
+    },
+    "wireless": {
+      "title": "无线",
+      "description": "来自 /interface 的无线接口 · 只读，带启用/禁用开关",
+      "loadError": "加载接口失败",
+      "emptyTitle": "无无线接口",
+      "emptyDescription": "未找到无线类型的行。此 RouterOS 可能未安装无线软件包。"
+    },
+    "bridgeDialog": {
+      "addTitle": "添加网桥",
+      "editTitle": "编辑网桥",
+      "description": "暂存对 RouterOS /interface/bridge 的更改。通过待处理更改面板应用。",
+      "mtuLabel": "MTU（可选）"
+    },
+    "deleteDialog": {
+      "title": "删除网桥？",
+      "descriptionPrefix": "暂存删除网桥",
+      "descriptionSuffix": "。暂存的更改一旦应用即无法撤消。"
+    },
+    "toggleDialog": {
+      "disableTitle": "为无线接口暂存禁用？",
+      "enableTitle": "为无线接口暂存启用？",
+      "descriptionPrefix": "这将为接口暂存一项更改",
+      "descriptionSuffix": "。该更改通过待处理更改面板应用。"
+    },
+    "toasts": {
+      "bridgeCreateStaged": "网桥创建已暂存",
+      "bridgeUpdateStaged": "网桥更新已暂存",
+      "bridgeDeleteStaged": "网桥删除已暂存",
+      "toggleStaged": "接口切换已暂存",
+      "bridgeCreateFailed": "暂存网桥创建失败",
+      "bridgeUpdateFailed": "暂存网桥更新失败",
+      "bridgeDeleteFailed": "暂存网桥删除失败",
+      "toggleFailed": "暂存切换失败",
+      "cannotUpdateTitle": "无法更新网桥",
+      "cannotDeleteTitle": "无法删除网桥",
+      "missingIdDescription": "网桥没有 RouterOS id（缺少 .id）。"
+    }
+  },
+  "MikroTikQueuesTab": {
+    "loading": "正在加载 RouterOS 队列…",
+    "queueFallback": "队列",
+    "actions": {
+      "refresh": "刷新",
+      "addQueue": "添加队列",
+      "cancel": "取消",
+      "stageUpdate": "暂存更新",
+      "stageCreate": "暂存创建",
+      "stageDelete": "暂存删除",
+      "editAria": "编辑简单队列 {{name}}",
+      "deleteAria": "删除简单队列 {{name}}"
+    },
+    "simple": {
+      "title": "简单队列",
+      "description": "``/queue/simple`` 条目 · 按目标限速 · 完整 CRUD",
+      "loadError": "加载简单队列失败",
+      "emptyTitle": "无简单队列",
+      "emptyDescription": "此路由器上没有 /queue/simple 条目。"
+    },
+    "tree": {
+      "title": "队列树 (HTB)",
+      "description": "``/queue/tree`` 条目 · 目前为只读。分层编辑器计划推出，此处显示以便运维人员审查当前队列树。",
+      "loadError": "加载队列树失败",
+      "emptyTitle": "无队列树",
+      "emptyDescription": "此路由器上没有 /queue/tree 条目。"
+    },
+    "columns": {
+      "name": "名称",
+      "target": "目标",
+      "maxLimitUpDown": "最大限制（上行/下行）",
+      "priority": "优先级",
+      "parent": "父级",
+      "enabled": "已启用",
+      "comment": "备注",
+      "actions": "操作",
+      "packetMark": "数据包标记",
+      "queue": "队列",
+      "maxLimit": "最大限制",
+      "limitAt": "保证速率"
+    },
+    "enabled": {
+      "yes": "是",
+      "no": "否"
+    },
+    "dialog": {
+      "editTitle": "编辑简单队列",
+      "addTitle": "添加简单队列",
+      "description": "暂存对 RouterOS ``/queue/simple`` 的更改。"
+    },
+    "form": {
+      "name": "名称",
+      "namePlaceholder": "guest-cap",
+      "target": "目标",
+      "targetPlaceholder": "192.168.88.0/24 或 bridge-guest",
+      "maxLimitUp": "上行最大限制",
+      "maxLimitDown": "下行最大限制",
+      "priority": "优先级 (1-8)",
+      "parent": "父级",
+      "parentPlaceholder": "无",
+      "comment": "备注"
+    },
+    "delete": {
+      "title": "暂存删除？",
+      "descriptionPrefix": "此操作将暂存删除简单队列",
+      "descriptionSuffix": "。"
+    },
+    "toasts": {
+      "createStaged": "已暂存简单队列创建",
+      "createFailed": "暂存队列创建失败",
+      "updateStaged": "已暂存简单队列更新",
+      "updateFailed": "暂存队列更新失败",
+      "deleteStaged": "已暂存简单队列删除",
+      "deleteFailed": "暂存队列删除失败",
+      "cannotUpdateTitle": "无法更新队列",
+      "cannotDeleteTitle": "无法删除队列",
+      "missingIdDescription": "队列没有 RouterOS id（缺少 .id）。"
+    }
+  },
+  "MikroTikDnsTab": {
+    "loading": "正在加载 RouterOS DNS…",
+    "entryFallback": "条目",
+    "yes": "是",
+    "no": "否",
+    "actions": {
+      "refresh": "刷新",
+      "addEntry": "添加条目",
+      "cancel": "取消",
+      "stageCreate": "暂存创建",
+      "stageUpdate": "暂存更新",
+      "stageDelete": "暂存删除",
+      "editAria": "编辑 DNS 条目 {{name}}",
+      "deleteAria": "删除 DNS 条目 {{name}}"
+    },
+    "columns": {
+      "name": "名称",
+      "type": "类型",
+      "value": "值",
+      "data": "数据",
+      "ttl": "TTL",
+      "enabled": "已启用",
+      "static": "静态",
+      "comment": "备注",
+      "actions": "操作"
+    },
+    "static": {
+      "title": "静态 DNS 条目",
+      "description": "/ip/dns/static 记录 · 完整 CRUD",
+      "loadError": "加载静态 DNS 失败",
+      "emptyTitle": "没有静态 DNS 条目",
+      "emptyDescription": "此路由器上没有 /ip/dns/static 记录。"
+    },
+    "cache": {
+      "title": "DNS 缓存",
+      "description": "/ip/dns/cache 记录 · 只读 · 按需刷新",
+      "loadError": "加载 DNS 缓存失败",
+      "emptyTitle": "DNS 缓存为空",
+      "emptyDescription": "没有缓存条目, RouterOS 最近未解析任何内容。"
+    },
+    "dialog": {
+      "editTitle": "编辑静态 DNS 条目",
+      "addTitle": "添加静态 DNS 条目",
+      "description": "为 RouterOS /ip/dns/static 暂存一项更改。",
+      "nameLabel": "名称 (FQDN)",
+      "typeLabel": "类型",
+      "addressLabel": "IP 地址",
+      "cnameLabel": "目标主机名",
+      "textLabel": "文本",
+      "ttlLabel": "TTL（可选）",
+      "commentLabel": "备注"
+    },
+    "deleteDialog": {
+      "title": "暂存删除？",
+      "descriptionPrefix": "这将暂存删除 DNS 条目"
+    },
+    "toasts": {
+      "createStaged": "已暂存静态 DNS 创建",
+      "updateStaged": "已暂存静态 DNS 更新",
+      "deleteStaged": "已暂存静态 DNS 删除",
+      "createFailed": "暂存静态创建失败",
+      "updateFailed": "暂存静态更新失败",
+      "deleteFailed": "暂存静态删除失败",
+      "cannotUpdate": "无法更新条目",
+      "cannotDelete": "无法删除条目",
+      "missingId": "条目没有 RouterOS id（缺少 .id）。"
+    }
+  },
+  "GatewayDhcpTab": {
+    "leases": {
+      "title": "DHCP 租约",
+      "description": "活动的 DHCP 分配",
+      "searchPlaceholder": "搜索租约...",
+      "unknownStatus": "未知",
+      "columns": {
+        "ipAddress": "IP 地址",
+        "mac": "MAC",
+        "hostname": "主机名",
+        "interface": "接口",
+        "status": "状态",
+        "expires": "到期时间"
+      }
+    },
+    "static": {
+      "title": "静态映射",
+      "description": "保留的 DHCP 地址 (MAC → IP)",
+      "addMapping": "添加映射",
+      "searchPlaceholder": "搜索静态映射...",
+      "columns": {
+        "mac": "MAC",
+        "ip": "IP",
+        "hostname": "主机名",
+        "description": "描述",
+        "interface": "接口"
+      }
+    },
+    "keaSubnets": {
+      "title": "Kea · DHCPv4 子网",
+      "description": "Kea DHCP 服务器子网配置",
+      "empty": "未配置 Kea DHCPv4 子网。请使用 Kea DHCP 服务器 (os-kea) 进行子网管理。",
+      "columns": {
+        "subnet": "子网",
+        "description": "描述",
+        "pools": "地址池",
+        "interface": "接口",
+        "gateway": "网关",
+        "dnsServers": "DNS 服务器"
+      }
+    },
+    "keaLeases": {
+      "title": "Kea · 活动租约",
+      "description": "来自 Kea DHCP 服务器的活动 IPv4 租约",
+      "empty": "未找到活动的 Kea DHCP 租约。",
+      "columns": {
+        "ipAddress": "IP 地址",
+        "macAddress": "MAC 地址",
+        "hostname": "主机名",
+        "state": "状态",
+        "expires": "到期时间",
+        "subnetId": "子网 ID"
+      }
+    },
+    "relay": {
+      "title": "DHCP 中继",
+      "description": "DHCP 中继代理配置",
+      "loading": "正在加载 DHCP 中继…",
+      "status": "状态",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "relayServers": "中继服务器",
+      "interface": "接口",
+      "agentInfo": "代理信息 (选项 82)"
+    }
+  },
+  "GatewayNatTab": {
+    "columns": {
+      "type": "类型",
+      "protocol": "协议",
+      "source": "源",
+      "destination": "目标",
+      "target": "目标地址",
+      "description": "描述",
+      "interface": "接口",
+      "destPort": "目标端口",
+      "enabled": "已启用",
+      "externalIp": "外部 IP",
+      "internalIp": "内部 IP"
+    },
+    "actions": {
+      "sourceNat": "源 NAT",
+      "addForward": "添加转发"
+    },
+    "natRules": {
+      "title": "NAT 规则",
+      "description": "源和目标 NAT 规则"
+    },
+    "portForwards": {
+      "title": "端口转发",
+      "description": "DNAT / 端口转发规则"
+    },
+    "binat": {
+      "title": "1:1 NAT (Binat) 规则",
+      "description": "静态一对一网络地址转换",
+      "loading": "正在加载 1:1 NAT 规则…"
+    },
+    "values": {
+      "yes": "是",
+      "no": "否"
+    }
+  },
+  "UniFiDevicesTab": {
+    "title": "UniFi 设备",
+    "loading": "正在加载设备…",
+    "empty": "此控制器上没有已纳管的设备。请使用上方的“按 MAC 暂存”表单针对特定设备暂存操作。",
+    "subtitle": {
+      "sitePrefix": "站点：",
+      "body": "· 暂存重启 / 禁用 / PoE。重启和禁用为高危操作, 需要键入 APPLY 且具备 site_admin 权限。"
+    },
+    "stageByMac": {
+      "label": "按 MAC 暂存"
+    },
+    "fields": {
+      "port": "端口",
+      "poeMode": "PoE 模式"
+    },
+    "actions": {
+      "restart": "重启",
+      "disable": "禁用",
+      "enable": "启用",
+      "stagePoe": "暂存 PoE",
+      "cancel": "取消",
+      "stage": "暂存"
+    },
+    "status": {
+      "disabled": "已禁用"
+    },
+    "errors": {
+      "loadFailed": "加载设备失败：",
+      "unknown": "未知错误"
+    },
+    "toast": {
+      "staged": "已暂存设备 {{kind}} 操作",
+      "stageFailed": "暂存更改失败"
+    },
+    "operations": {
+      "restart": "重启",
+      "disable": "禁用",
+      "enable": "启用",
+      "poeSet": "PoE 设置"
+    },
+    "dialog": {
+      "title": "暂存{{operation}}？",
+      "bodyPrefix": "暂存",
+      "bodyAgainst": "针对",
+      "bodySuffix": "？",
+      "catastrophicPrefix": "这是一项",
+      "catastrophicWord": "高危",
+      "catastrophicMid": "更改, 应用时该面板将要求键入",
+      "catastrophicSuffix": "，且操作员必须具备 site_admin 权限。"
+    }
+  },
+  "GatewayOverviewTab": {
+    "stats": {
+      "cpuUsage": "CPU 使用率",
+      "memory": "内存",
+      "disk": "磁盘",
+      "uptime": "运行时间",
+      "version": "版本",
+      "wanIp": "WAN IP",
+      "wanIpDescription": "延迟: {{latency}}ms, 丢包: {{loss}}%",
+      "services": "服务",
+      "servicesRunning": "{{count}} 个运行中",
+      "servicesStopped": "{{count}} 个已停止",
+      "vpnTunnels": "VPN 隧道"
+    },
+    "gatewayInfo": {
+      "title": "网关信息",
+      "name": "名称",
+      "vendor": "厂商",
+      "host": "主机",
+      "sslVerify": "TLS 验证",
+      "hostname": "主机名",
+      "version": "版本",
+      "model": "型号",
+      "credentials": "凭据",
+      "configured": "已配置",
+      "missing": "缺失",
+      "created": "创建时间",
+      "updated": "更新时间"
+    },
+    "firmware": {
+      "title": "固件与同步",
+      "firmware": "固件",
+      "latestVersion": "最新版本",
+      "updateAvailable": "可更新",
+      "updateYes": "是 ({{version}})",
+      "autoSync": "自动同步",
+      "interval": "间隔",
+      "syncStatus": "同步状态",
+      "lastSync": "上次同步",
+      "never": "从未",
+      "lastError": "上次错误",
+      "lastSeen": "上次在线",
+      "capabilities": "功能"
+    },
+    "wanHealth": {
+      "title": "WAN 网关健康状况",
+      "gatewayFallback": "网关 {{index}}",
+      "unknown": "未知",
+      "ip": "IP:",
+      "monitor": "监控:",
+      "latency": "延迟:",
+      "loss": "丢包:",
+      "jitter": "抖动:",
+      "default": "默认"
+    },
+    "liveStatus": {
+      "title": "实时系统状态",
+      "description": "来自网关的实时数据"
+    },
+    "common": {
+      "yes": "是",
+      "no": "否",
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    }
+  },
+  "GatewayBackupsTab": {
+    "columns": {
+      "filename": "文件名",
+      "date": "日期",
+      "size": "大小"
+    },
+    "actions": {
+      "revert": "还原",
+      "createBackup": "创建备份",
+      "cancel": "取消"
+    },
+    "backups": {
+      "title": "配置备份",
+      "description": "网关配置快照"
+    },
+    "diff": {
+      "title": "配置差异",
+      "description": "比较运行中的配置与最近一次备份",
+      "generating": "正在生成差异…",
+      "changesDetected": "检测到更改",
+      "noChanges": "无更改"
+    },
+    "revertDialog": {
+      "title": "还原配置？",
+      "prefix": "将配置还原到备份",
+      "suffix": "？此操作将覆盖运行中的配置（规则、证书、用户、VPN）--具有破坏性且无法撤销。"
+    }
+  },
+  "GatewayAliasesTab": {
+    "title": "防火墙别名",
+    "description": "用于规则中的主机、网络或端口的命名分组",
+    "searchPlaceholder": "搜索别名...",
+    "columns": {
+      "name": "名称",
+      "type": "类型",
+      "content": "内容",
+      "description": "描述",
+      "enabled": "已启用"
+    },
+    "actions": {
+      "addAlias": "添加别名"
+    }
+  },
+  "GatewayResourceDialogs": {
+    "toast": {
+      "successTitle": "成功",
+      "errorTitle": "错误",
+      "operationFailed": "操作失败"
+    },
+    "actions": {
+      "cancel": "取消",
+      "create": "创建",
+      "update": "更新",
+      "delete": "删除",
+      "deleting": "正在删除…",
+      "saving": "正在保存…",
+      "creating": "正在创建…",
+      "pushing": "正在推送…",
+      "pushRule": "推送规则"
+    },
+    "options": {
+      "allow": "允许",
+      "block": "阻止",
+      "reject": "拒绝",
+      "any": "任意",
+      "server": "服务器",
+      "client": "客户端",
+      "yes": "是",
+      "no": "否",
+      "active": "已启用",
+      "alertOnly": "仅告警"
+    },
+    "fields": {
+      "action": "动作",
+      "protocol": "协议",
+      "source": "源",
+      "sourcePort": "源端口",
+      "destination": "目标",
+      "destinationPort": "目标端口",
+      "interface": "接口",
+      "description": "描述",
+      "hostname": "主机名",
+      "domain": "域",
+      "ipAddress": "IP 地址",
+      "dnsServer": "DNS 服务器",
+      "port": "端口",
+      "macAddress": "MAC 地址",
+      "extPort": "外部端口（目标）",
+      "targetIp": "目标 IP",
+      "targetPort": "目标端口",
+      "srcAddressOpt": "源地址（可选）",
+      "sourceNetwork": "源网络",
+      "destinationNetwork": "目标网络",
+      "natTarget": "NAT 目标（IP）",
+      "name": "名称",
+      "type": "类型",
+      "listenPort": "监听端口",
+      "tunnelAddresses": "隧道地址（以逗号分隔）",
+      "publicKey": "公钥",
+      "allowedIps": "允许的 IP（以逗号分隔）",
+      "endpointOptional": "端点（可选）",
+      "keepalive": "保活（秒）",
+      "role": "角色",
+      "tunnelNetwork": "隧道网络",
+      "localNetwork": "本地网络",
+      "gateway": "网关",
+      "bandwidth": "带宽",
+      "unit": "单位",
+      "mask": "掩码",
+      "idsEnabled": "IDS 已启用",
+      "ipsMode": "IPS 模式（丢弃数据包）",
+      "patternMatcher": "模式匹配器",
+      "interfacesCsv": "接口（以逗号分隔）"
+    },
+    "placeholders": {
+      "any": "任意",
+      "interfaceList": "wan, lan, opt1…",
+      "myserver": "myserver",
+      "interfaceAddress": "接口地址",
+      "base64PublicKey": "Base64 公钥",
+      "officeVpn": "办公室 VPN",
+      "uploadLimit": "上传限制",
+      "aliasEntry": "10.0.0.1 或 192.168.1.0/24"
+    },
+    "delete": {
+      "title": "删除 {{resource}}",
+      "successMsg": "已删除 {{resource}}",
+      "confirmBefore": "确定要删除 ",
+      "confirmAfter": " 吗？此操作将立即应用到网关且无法撤销。"
+    },
+    "rule": {
+      "title": "推送防火墙规则",
+      "description": "在网关上创建新的防火墙规则",
+      "successMsg": "防火墙规则已推送"
+    },
+    "dnsOverride": {
+      "titleNew": "新建 DNS 主机覆盖",
+      "titleEdit": "编辑 DNS 主机覆盖",
+      "description": "将主机名映射到 IP 地址",
+      "created": "DNS 覆盖已创建",
+      "updated": "DNS 覆盖已更新"
+    },
+    "dnsDomainOverride": {
+      "titleNew": "新建 DNS 域覆盖",
+      "titleEdit": "编辑 DNS 域覆盖",
+      "description": "将某个域的查询转发到指定服务器",
+      "created": "域覆盖已创建",
+      "updated": "域覆盖已更新"
+    },
+    "dhcpStatic": {
+      "titleNew": "新建 DHCP 静态映射",
+      "titleEdit": "编辑 DHCP 静态映射",
+      "description": "为指定 MAC 地址保留 IP",
+      "created": "静态映射已创建",
+      "updated": "静态映射已更新"
+    },
+    "portForward": {
+      "titleNew": "新建端口转发",
+      "titleEdit": "编辑端口转发",
+      "description": "将外部流量转发到内部主机",
+      "created": "端口转发已创建",
+      "updated": "端口转发已更新"
+    },
+    "sourceNat": {
+      "title": "新建源 NAT 规则",
+      "description": "对出站流量进行伪装或转换",
+      "created": "源 NAT 规则已创建"
+    },
+    "alias": {
+      "titleNew": "新建别名",
+      "titleEdit": "编辑别名",
+      "description": "主机、网络或端口的命名分组",
+      "created": "别名已创建",
+      "updated": "别名已更新",
+      "addEntry": "添加条目",
+      "contentLabel": "内容",
+      "contentDescription": "每行添加一个主机、网络或端口。",
+      "emptyTitle": "暂无条目",
+      "emptyDescription": "点击“添加条目”以创建第一项。",
+      "entryLabel": "条目 {{index}}",
+      "removeEntry": "移除条目 {{index}}"
+    },
+    "aliasTypes": {
+      "host": "主机",
+      "network": "网络",
+      "port": "端口",
+      "url": "URL 表",
+      "external": "外部"
+    },
+    "wireGuardServer": {
+      "title": "新建 WireGuard 服务器",
+      "description": "创建新的 WireGuard 隧道接口",
+      "created": "WireGuard 服务器已创建"
+    },
+    "wireGuardPeer": {
+      "title": "新建 WireGuard 对端",
+      "description": "向 WireGuard 服务器添加对端",
+      "created": "WireGuard 对端已创建"
+    },
+    "openVpn": {
+      "title": "新建 OpenVPN 实例",
+      "description": "创建 OpenVPN 服务器或客户端",
+      "created": "OpenVPN 实例已创建"
+    },
+    "staticRoute": {
+      "title": "新建静态路由",
+      "description": "添加手动配置的路由",
+      "created": "静态路由已创建"
+    },
+    "shaperPipe": {
+      "title": "新建整形管道",
+      "description": "带宽限制管道",
+      "created": "整形管道已创建"
+    },
+    "ids": {
+      "title": "编辑 IDS/IPS 设置",
+      "description": "更新入侵检测配置",
+      "updated": "IDS 设置已更新"
+    }
+  },
+  "MikroTikIpTab": {
+    "loading": "正在加载 RouterOS L3 配置…",
+    "actions": {
+      "refresh": "刷新",
+      "cancel": "取消",
+      "stageCreate": "暂存创建",
+      "stageUpdate": "暂存更新",
+      "stageDelete": "暂存删除"
+    },
+    "columns": {
+      "comment": "备注",
+      "actions": "操作"
+    },
+    "badges": {
+      "dynamic": "动态",
+      "static": "静态",
+      "yes": "是",
+      "no": "否"
+    },
+    "toasts": {
+      "addressCreateStaged": "已暂存地址创建",
+      "addressCreateFailed": "无法暂存地址创建",
+      "addressDeleteStaged": "已暂存地址删除",
+      "addressDeleteFailed": "无法暂存地址删除",
+      "routeCreateStaged": "已暂存路由创建",
+      "routeCreateFailed": "无法暂存路由创建",
+      "routeUpdateStaged": "已暂存路由更新",
+      "routeUpdateFailed": "无法暂存路由更新",
+      "routeDeleteStaged": "已暂存路由删除",
+      "routeDeleteFailed": "无法暂存路由删除",
+      "poolCreateStaged": "已暂存地址池创建",
+      "poolCreateFailed": "无法暂存地址池创建",
+      "poolUpdateStaged": "已暂存地址池更新",
+      "poolUpdateFailed": "无法暂存地址池更新",
+      "poolDeleteStaged": "已暂存地址池删除",
+      "poolDeleteFailed": "无法暂存地址池删除"
+    },
+    "errors": {
+      "cannotUpdateRoute": "无法更新路由",
+      "routeNoId": "路由没有 RouterOS id（缺少 .id）。",
+      "cannotUpdatePool": "无法更新地址池",
+      "poolNoId": "地址池没有 RouterOS id（缺少 .id）。",
+      "cannotDelete": "无法删除",
+      "rowNoId": "该行没有 RouterOS id（缺少 .id）。"
+    },
+    "deleteLabel": {
+      "address": "地址 {{value}}",
+      "route": "到 {{value}} 的路由",
+      "pool": "地址池 {{value}}"
+    },
+    "addresses": {
+      "title": "IP 地址",
+      "description": "/ip/address 条目 · 创建 + 删除（RouterOS 对该表没有稳定的 PATCH）",
+      "add": "添加地址",
+      "loadError": "无法加载 IP 地址",
+      "emptyTitle": "没有 IP 地址",
+      "emptyDescription": "此路由器上没有 /ip/address 条目。",
+      "fallbackLabel": "地址",
+      "deleteAria": "删除 IP 地址 {{label}}",
+      "columns": {
+        "address": "地址",
+        "network": "网络",
+        "interface": "接口",
+        "dynamic": "动态",
+        "disabled": "已禁用"
+      }
+    },
+    "routes": {
+      "title": "静态路由",
+      "description": "/ip/route 条目 · 完整 CRUD",
+      "add": "添加路由",
+      "loadError": "无法加载路由",
+      "emptyTitle": "没有路由",
+      "emptyDescription": "此路由器上没有 /ip/route 条目。",
+      "fallbackLabel": "路由",
+      "rowLabel": "{{dst}} 经由 {{gateway}}",
+      "editAria": "编辑路由 {{label}}",
+      "deleteAria": "删除路由 {{label}}",
+      "columns": {
+        "destination": "目标",
+        "gateway": "网关",
+        "distance": "距离",
+        "active": "活动",
+        "static": "静态"
+      }
+    },
+    "pools": {
+      "title": "IP 地址池",
+      "description": "/ip/pool 条目 · 由 DHCP 和 PPP 使用",
+      "add": "添加地址池",
+      "loadError": "无法加载 IP 地址池",
+      "emptyTitle": "没有 IP 地址池",
+      "emptyDescription": "创建一个地址池以支持 DHCP 服务器或 PPP 配置文件。",
+      "fallbackLabel": "地址池",
+      "editAria": "编辑 IP 地址池 {{label}}",
+      "deleteAria": "删除 IP 地址池 {{label}}",
+      "columns": {
+        "name": "名称",
+        "ranges": "范围",
+        "nextPool": "下一地址池"
+      }
+    },
+    "addressDialog": {
+      "title": "添加 IP 地址",
+      "description": "暂存对 RouterOS /ip/address 的更改。",
+      "addressLabel": "地址 (CIDR)",
+      "interfaceLabel": "接口",
+      "commentPlaceholder": "LAN 网关"
+    },
+    "routeDialog": {
+      "addTitle": "添加静态路由",
+      "editTitle": "编辑静态路由",
+      "description": "暂存对 RouterOS /ip/route 的更改。",
+      "destinationLabel": "目标 (CIDR)",
+      "gatewayLabel": "网关",
+      "distanceLabel": "距离",
+      "commentPlaceholder": "上游"
+    },
+    "poolDialog": {
+      "addTitle": "添加 IP 地址池",
+      "editTitle": "编辑 IP 地址池",
+      "description": "暂存对 RouterOS /ip/pool 的更改。",
+      "nameLabel": "名称",
+      "rangesLabel": "范围",
+      "commentPlaceholder": "LAN 客户端"
+    },
+    "deleteDialog": {
+      "title": "暂存删除？",
+      "descriptionBefore": "这将为",
+      "descriptionAfter": "请通过“待处理更改”面板应用。"
+    }
+  },
+  "MikroTikDhcpTab": {
+    "loading": "正在加载 RouterOS DHCP…",
+    "common": {
+      "yes": "是",
+      "no": "否"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "makeStatic": "设为静态",
+      "cancel": "取消",
+      "stageCreate": "暂存创建",
+      "stageUpdate": "暂存更新",
+      "stageDelete": "暂存删除",
+      "stageMapping": "暂存映射"
+    },
+    "toasts": {
+      "serverCreateStaged": "已暂存 DHCP 服务器创建",
+      "serverCreateFailed": "无法暂存服务器创建",
+      "serverUpdateStaged": "已暂存 DHCP 服务器更新",
+      "serverUpdateFailed": "无法暂存服务器更新",
+      "serverDeleteStaged": "已暂存 DHCP 服务器删除",
+      "serverDeleteFailed": "无法暂存服务器删除",
+      "staticCreateStaged": "已暂存静态租约创建",
+      "staticCreateFailed": "无法暂存静态租约创建",
+      "staticUpdateStaged": "已暂存静态租约更新",
+      "staticUpdateFailed": "无法暂存静态租约更新",
+      "staticDeleteStaged": "已暂存静态租约删除",
+      "staticDeleteFailed": "无法暂存静态租约删除",
+      "cannotUpdateServer": "无法更新服务器",
+      "serverMissingId": "服务器没有 RouterOS id（缺少 .id）。",
+      "cannotUpdateLease": "无法更新租约",
+      "leaseMissingId": "租约没有 RouterOS id（缺少 .id）。",
+      "cannotDelete": "无法删除",
+      "rowMissingId": "该行没有 RouterOS id（缺少 .id）。"
+    },
+    "deleteLabel": {
+      "server": "DHCP 服务器 {{name}}",
+      "static": "静态租约 {{address}}（{{mac}}）"
+    },
+    "servers": {
+      "title": "DHCP 服务器",
+      "description": "`/ip/dhcp-server` 实例 · 完整 CRUD",
+      "add": "添加服务器",
+      "loadError": "无法加载 DHCP 服务器",
+      "emptyTitle": "没有 DHCP 服务器",
+      "emptyDescription": "此路由器上没有 /ip/dhcp-server 条目。",
+      "fallbackLabel": "服务器",
+      "editAria": "编辑 DHCP 服务器 {{label}}",
+      "deleteAria": "删除 DHCP 服务器 {{label}}"
+    },
+    "serverColumns": {
+      "name": "名称",
+      "interface": "接口",
+      "pool": "地址池",
+      "leaseTime": "租约时间",
+      "authoritative": "权威",
+      "enabled": "已启用",
+      "comment": "备注",
+      "actions": "操作"
+    },
+    "leases": {
+      "title": "活动租约",
+      "description": "来自 RouterOS 的动态租约 · 只读，附带“设为静态”操作",
+      "loadError": "无法加载 DHCP 租约",
+      "emptyTitle": "没有活动租约",
+      "emptyDescription": "此路由器当前没有动态租约条目。"
+    },
+    "leaseColumns": {
+      "ip": "IP",
+      "mac": "MAC",
+      "hostname": "主机名",
+      "server": "服务器",
+      "status": "状态",
+      "expires": "到期",
+      "actions": "操作"
+    },
+    "static": {
+      "title": "静态映射",
+      "description": "dynamic=false 的 `/ip/dhcp-server/lease` 条目 · 完整 CRUD",
+      "add": "添加映射",
+      "emptyTitle": "没有静态映射",
+      "emptyDescription": "添加一个以将 MAC 绑定到 IP。",
+      "fallbackLabel": "映射",
+      "editAria": "编辑 DHCP 静态映射 {{label}}",
+      "deleteAria": "删除 DHCP 静态映射 {{label}}"
+    },
+    "staticColumns": {
+      "ip": "IP",
+      "mac": "MAC",
+      "server": "服务器",
+      "status": "状态",
+      "comment": "备注",
+      "actions": "操作"
+    },
+    "serverDialog": {
+      "editTitle": "编辑 DHCP 服务器",
+      "addTitle": "添加 DHCP 服务器",
+      "description": "暂存对 RouterOS `/ip/dhcp-server` 的更改。"
+    },
+    "serverForm": {
+      "name": "名称",
+      "interface": "接口",
+      "pool": "地址池",
+      "leaseTime": "租约时间",
+      "comment": "备注"
+    },
+    "staticDialog": {
+      "editTitle": "编辑静态映射",
+      "addTitle": "添加静态映射",
+      "description": "暂存对 RouterOS `/ip/dhcp-server/lease` 的更改（dynamic=false）。"
+    },
+    "staticForm": {
+      "address": "IP 地址",
+      "mac": "MAC 地址",
+      "server": "服务器（可选）",
+      "comment": "备注"
+    },
+    "deleteDialog": {
+      "title": "暂存删除？",
+      "descriptionPrefix": "这将暂存删除",
+      "descriptionSuffix": "。"
+    },
+    "makeStaticDialog": {
+      "title": "暂存静态映射？",
+      "descriptionPrefix": "这将暂存一个静态租约映射",
+      "descriptionSuffix": "到 RouterOS。请通过“待应用更改”面板应用。"
+    }
+  },
+  "MikroTikFirmwareTab": {
+    "loading": "正在加载 RouterOS 固件…",
+    "channels": {
+      "stable": "稳定版",
+      "longTerm": "长期稳定版",
+      "testing": "测试版",
+      "development": "开发版"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "checkForUpdates": "检查更新",
+      "download": "下载",
+      "cancelDownload": "取消下载",
+      "installReboot": "安装并重启",
+      "switchChannel": "切换通道",
+      "enable": "启用",
+      "disable": "禁用",
+      "uninstall": "卸载",
+      "cancel": "取消",
+      "stageInstall": "暂存安装"
+    },
+    "toasts": {
+      "checkStaged": "更新检查已暂存",
+      "checkFailed": "暂存更新检查失败",
+      "channelStaged": "通道切换已暂存",
+      "channelFailed": "暂存通道切换失败",
+      "downloadStaged": "固件下载已暂存",
+      "downloadFailed": "暂存下载失败",
+      "cancelStaged": "取消下载已暂存",
+      "cancelFailed": "暂存取消失败",
+      "installStaged": "固件安装已暂存",
+      "installStagedDescription": "应用待定更改后设备将重启。每 5 秒轮询一次状态。",
+      "installFailed": "暂存安装失败",
+      "enableStaged": "软件包启用已暂存",
+      "enableFailed": "暂存启用失败",
+      "disableStaged": "软件包禁用已暂存",
+      "disableFailed": "暂存禁用失败",
+      "uninstallStaged": "软件包卸载已暂存",
+      "uninstallFailed": "暂存卸载失败"
+    },
+    "currentState": {
+      "title": "当前状态",
+      "description": "/system/package/update · 已安装的 RouterOS 版本 + 上次检查。",
+      "loadError": "加载固件状态失败",
+      "empty": {
+        "title": "固件状态不可用",
+        "description": "/system/package/update 端点未响应, 此后端可能尚未配置该路由。"
+      },
+      "installedVersion": "已安装版本",
+      "currentChannel": "当前通道",
+      "lastChecked": "上次检查",
+      "status": "状态"
+    },
+    "availableUpdate": {
+      "title": "可用更新",
+      "description": "从已配置的通道检查、下载并安装 RouterOS 更新。",
+      "latestAvailable": "最新可用版本",
+      "updateAvailable": "有可用更新",
+      "lastError": "上次错误",
+      "installInFlight": "安装进行中"
+    },
+    "channel": {
+      "title": "更新通道",
+      "description": "切换软件包更新通道。RouterOS 将从所选通道获取下一次检查和下载。",
+      "label": "通道",
+      "placeholder": "选择一个通道"
+    },
+    "packages": {
+      "title": "已安装的软件包",
+      "description": "/system/package · 按软件包启用 / 禁用 / 卸载。禁用软件包将在下次重启时生效。",
+      "loadError": "加载已安装的软件包失败",
+      "empty": {
+        "title": "未报告任何软件包",
+        "description": "/system/package 列表为空, 后端路由可能缺失，或设备为最小化安装。"
+      },
+      "columns": {
+        "name": "名称",
+        "version": "版本",
+        "scheduled": "已计划",
+        "state": "状态",
+        "actions": "操作"
+      },
+      "state": {
+        "enabled": "已启用",
+        "disabled": "已禁用"
+      }
+    },
+    "installDialog": {
+      "title": "确认固件安装",
+      "descriptionBefore": "这将重启设备并断开所有会话。当前配置将保留（RouterOS 在升级时会保留 /system/script 和配置）。请输入",
+      "descriptionAfter": "以继续。",
+      "tokenLabel": "确认令牌",
+      "targetVersion": "目标版本：",
+      "from": "来自"
+    }
+  },
+  "AddGatewayPage": {
+    "header": {
+      "title": "添加网关",
+      "subtitle": "将防火墙或路由器连接到 FreeSDN",
+      "backToGateways": "返回网关列表"
+    },
+    "steps": {
+      "platform": "平台",
+      "credentials": "凭据",
+      "test": "测试",
+      "configure": "配置"
+    },
+    "actions": {
+      "back": "返回",
+      "next": "下一步",
+      "saving": "保存中...",
+      "addGateway": "添加网关"
+    },
+    "vendors": {
+      "auth": {
+        "apiKey": "API Key 认证",
+        "basic": "用户名/密码"
+      },
+      "opnsense": {
+        "description": "由 Deciso B.V. 开发的开源防火墙和路由平台",
+        "docs": "在 System → Access → Users → API keys 中创建 API key"
+      },
+      "pfsense": {
+        "description": "由 Netgate 提供的企业级防火墙（需要带 REST API 的 pfSense Plus）",
+        "docs": "在 System → REST API → Settings 中生成 API 凭据"
+      },
+      "mikrotik": {
+        "description": "基于 RouterOS 的网络平台（v7.1+ REST API）",
+        "docs": "在 IP → Services 中启用 www-ssl 服务。使用管理员凭据。"
+      },
+      "openwrt": {
+        "description": "带 LuCI RPC / ubus API 的开源 Linux 路由器固件",
+        "docs": "启用带 HTTPS 的 uhttpd。使用 root 或管理员凭据。"
+      }
+    },
+    "credentials": {
+      "connectionTitle": "{{vendor}} 连接",
+      "hostLabel": "主机 / IP 地址",
+      "hostPlaceholder": "192.168.1.1 或 firewall.local",
+      "hostError": "主机无效 · 请使用不含空格的主机名或 IP 地址",
+      "portLabel": "端口",
+      "portError": "端口必须介于 1 和 65535 之间",
+      "apiKeyLabel": "API Key",
+      "apiKeyPlaceholder": "输入 API key",
+      "apiSecretLabel": "API 密钥",
+      "apiSecretPlaceholder": "输入 API 密钥",
+      "usernameLabel": "用户名",
+      "passwordLabel": "密码",
+      "passwordPlaceholder": "输入密码",
+      "verifySsl": "验证 SSL 证书"
+    },
+    "test": {
+      "title": "测试连接",
+      "description": "验证 FreeSDN 是否可以通过 {{host}}:{{port}} 访问您的 {{vendor}}",
+      "prompt": "点击下方按钮以测试连接",
+      "testing": "测试中...",
+      "testButton": "测试连接",
+      "connecting": "正在连接到 {{host}}...",
+      "resultSuccess": "连接成功",
+      "resultFailed": "连接失败",
+      "failedFallback": "连接测试失败",
+      "retest": "重新测试",
+      "detectedCapabilities": "检测到的功能",
+      "details": {
+        "hostname": "主机名",
+        "version": "版本",
+        "model": "型号",
+        "latency": "延迟",
+        "latencyValue": "{{ms}} ms"
+      }
+    },
+    "configure": {
+      "title": "配置网关",
+      "description": "为此 {{vendor}} 集成设置名称和同步首选项",
+      "nameLabel": "网关名称",
+      "nameHelper": "用于在 FreeSDN 中识别此网关的友好名称",
+      "descriptionLabel": "描述（可选）",
+      "descriptionPlaceholder": "例如：主办公室边界防火墙",
+      "sync": {
+        "heading": "同步设置",
+        "enableLabel": "启用自动同步",
+        "enableHelper": "定期从此网关拉取状态和配置",
+        "intervalLabel": "同步间隔（秒）",
+        "intervalHelper": "最少 60 秒。推荐：300（5 分钟）"
+      },
+      "summary": {
+        "heading": "摘要",
+        "platform": "平台",
+        "host": "主机",
+        "detectedHostname": "检测到的主机名",
+        "version": "版本",
+        "autoSync": "自动同步",
+        "everyN": "每 {{n}} 秒",
+        "disabled": "已禁用"
+      }
+    },
+    "toast": {
+      "connectionSuccess": {
+        "title": "连接成功",
+        "description": "已连接到 {{host}}"
+      },
+      "gatewayAdded": {
+        "title": "网关已添加",
+        "description": "{{name}} 已成功连接。"
+      },
+      "error": {
+        "title": "错误",
+        "fallback": "创建网关失败"
+      }
+    }
+  },
+  "MikroTikSystemTab": {
+    "loading": "正在加载 RouterOS 系统信息…",
+    "liveState": "RouterOS 实时状态 · 每 30 秒刷新一次",
+    "error": {
+      "loadFailed": "无法加载 RouterOS 系统信息",
+      "noInfo": "未返回系统信息。"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "editName": "编辑名称",
+      "editNtp": "编辑 NTP",
+      "cancel": "取消",
+      "stageChange": "暂存更改"
+    },
+    "identity": {
+      "title": "标识",
+      "description": "路由器名称和硬件元数据",
+      "fields": {
+        "name": "名称",
+        "board": "主板",
+        "version": "RouterOS 版本",
+        "architecture": "架构",
+        "serial": "序列号",
+        "factoryFirmware": "出厂固件",
+        "currentFirmware": "当前固件",
+        "upgradeAvailable": "可用升级"
+      }
+    },
+    "time": {
+      "title": "时间与 NTP",
+      "description": "路由器时钟和时间同步配置",
+      "fields": {
+        "date": "日期",
+        "time": "时间",
+        "timezone": "时区",
+        "dst": "DST"
+      },
+      "dstUnknown": "未知",
+      "ntpNotice": "NTP 服务器通过暂存更改管道进行管理。当前值不会在此聚合读取中显示--编辑以覆盖主/从服务器，然后通过待处理更改面板应用。"
+    },
+    "resource": {
+      "title": "资源使用情况",
+      "description": "实时 CPU、内存和运行时间指标",
+      "cpuLoad": "CPU 负载",
+      "cpuDetail": "{{cpu}} · {{count}} 核 @ {{freq}} MHz",
+      "ramUsed": "已用 RAM",
+      "diskFree": "可用磁盘",
+      "uptime": "运行时间",
+      "ofTotal": "共 {{total}}",
+      "build": "构建：{{build}}"
+    },
+    "health": {
+      "title": "硬件运行状况",
+      "columns": {
+        "sensor": "传感器",
+        "value": "值",
+        "type": "类型"
+      }
+    },
+    "identityDialog": {
+      "title": "编辑路由器标识",
+      "description": "暂存对 RouterOS /system/identity 的更改。从待处理更改面板应用。",
+      "nameLabel": "名称"
+    },
+    "ntpDialog": {
+      "title": "编辑 NTP 服务器",
+      "description": "暂存对 RouterOS /system/ntp/client 的更改。从待处理更改面板应用。",
+      "primaryLabel": "主 NTP 服务器",
+      "secondaryLabel": "从 NTP 服务器（可选）"
+    },
+    "toasts": {
+      "identityStaged": {
+        "title": "标识更新已暂存",
+        "description": "通过待处理更改应用。"
+      },
+      "identityFailed": {
+        "title": "无法暂存标识更改"
+      },
+      "ntpStaged": {
+        "title": "NTP 更新已暂存",
+        "description": "通过待处理更改应用。"
+      },
+      "ntpFailed": {
+        "title": "无法暂存 NTP 更改"
+      }
+    }
+  },
+  "GatewayIdsTab": {
+    "common": {
+      "yes": "是",
+      "no": "否"
+    },
+    "status": {
+      "running": "运行中",
+      "stopped": "已停止"
+    },
+    "actions": {
+      "start": "启动",
+      "stop": "停止",
+      "restart": "重启",
+      "updateRules": "更新规则",
+      "edit": "编辑",
+      "clearAlerts": "清除告警",
+      "cancel": "取消"
+    },
+    "alertColumns": {
+      "time": "时间",
+      "severity": "严重程度",
+      "source": "源",
+      "destination": "目标",
+      "signature": "特征",
+      "action": "动作"
+    },
+    "settings": {
+      "title": "IDS/IPS 设置",
+      "empty": "暂无可用的 IDS 设置",
+      "fields": {
+        "enabled": "已启用",
+        "ipsMode": "IPS 模式",
+        "patternMatcher": "模式匹配器",
+        "interfaces": "接口"
+      },
+      "values": {
+        "activeDrop": "主动（丢弃）",
+        "alertOnly": "仅告警"
+      }
+    },
+    "alerts": {
+      "title": "IDS 告警 ({{count}})",
+      "description": "最近的入侵检测告警",
+      "searchPlaceholder": "搜索告警..."
+    },
+    "rulesets": {
+      "title": "IDS 规则集",
+      "description": "已安装的规则类别",
+      "columns": {
+        "name": "名称",
+        "description": "描述",
+        "enabled": "已启用"
+      }
+    },
+    "rules": {
+      "title": "IDS 规则 ({{count}})",
+      "description": "单条检测规则",
+      "searchPlaceholder": "搜索 IDS 规则...",
+      "toggle": "切换",
+      "columns": {
+        "sid": "SID",
+        "description": "描述",
+        "severity": "严重程度",
+        "enabled": "已启用",
+        "actions": "操作"
+      }
+    },
+    "crowdsec": {
+      "title": "CrowdSec IPS",
+      "description": "协作式入侵防御系统",
+      "loading": "正在加载 CrowdSec…",
+      "service": "服务",
+      "unknown": "未知",
+      "alerts": "告警",
+      "activeDecisions": "活动决策",
+      "columns": {
+        "ipRange": "IP/范围",
+        "reason": "原因",
+        "action": "动作",
+        "expires": "过期时间"
+      }
+    },
+    "dialogs": {
+      "clearAlerts": {
+        "title": "清除所有 IDS 告警？",
+        "description": "清除所有 IDS 告警？此操作不可撤销。"
+      },
+      "updateRules": {
+        "title": "更新 IDS 规则？",
+        "description": "下载并应用最新的 IDS 规则集？此操作可能需要数分钟，并会暂时增加 CPU 负载。"
+      }
+    }
+  },
+  "GatewayMonitoringTab": {
+    "common": {
+      "unknown": "未知",
+      "yes": "是",
+      "no": "否",
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    },
+    "stats": {
+      "temperature": "温度",
+      "diskUsage": "磁盘使用率",
+      "health": "健康状态",
+      "healthy": "健康",
+      "degraded": "降级",
+      "pfStates": "PF 状态"
+    },
+    "traffic": {
+      "title": "流量统计",
+      "address": "地址",
+      "rateIn": "入站速率",
+      "rateOut": "出站速率",
+      "cumulative": "累计",
+      "noData": "无流量数据"
+    },
+    "healthCheck": {
+      "title": "健康检查详情"
+    },
+    "gatewayHealth": {
+      "title": "网关健康状态",
+      "gatewayN": "网关 {{n}}",
+      "ip": "IP",
+      "monitor": "监控",
+      "latency": "延迟",
+      "loss": "丢包",
+      "stddev": "标准差"
+    },
+    "monit": {
+      "title": "Monit",
+      "description": "服务与系统健康监控",
+      "loading": "正在加载 Monit…",
+      "service": "服务",
+      "monitoredServices": "受监控的服务",
+      "tests": "测试",
+      "alertRules": "告警规则",
+      "table": {
+        "name": "名称",
+        "type": "类型",
+        "address": "地址",
+        "enabled": "已启用"
+      }
+    },
+    "telegraf": {
+      "title": "Telegraf",
+      "description": "指标采集代理",
+      "loading": "正在加载 Telegraf…",
+      "enabled": "已启用",
+      "service": "服务",
+      "graphiteServer": "Graphite 服务器",
+      "influxUrl": "InfluxDB URL",
+      "influxDatabase": "InfluxDB 数据库"
+    },
+    "netflow": {
+      "title": "NetFlow / sFlow",
+      "description": "网络流量数据采集与导出",
+      "loading": "正在加载 NetFlow…",
+      "capture": "捕获",
+      "service": "服务",
+      "interfaces": "接口",
+      "version": "NetFlow 版本",
+      "listenPort": "监听端口"
+    }
+  },
+  "MikroTikTopologyTab": {
+    "loading": "正在加载 RouterOS 拓扑…",
+    "actions": {
+      "refresh": "刷新"
+    },
+    "toast": {
+      "settingsStaged": "发现设置更新已暂存",
+      "settingsStageFailed": "暂存设置更新失败"
+    },
+    "graph": {
+      "title": "拓扑图",
+      "description": "通过 LLDP、CDP 和 MNDP 发现的邻居。设备报告了 {{count}} 个邻居。",
+      "loadError": "加载拓扑失败",
+      "legend": "图例：",
+      "empty": {
+        "title": "未发现邻居",
+        "description": "设备尚未发现任何 L2 邻居。在隔离网络（实验室 CHR）中或在 LLDP/CDP/MNDP 流量产生之前，这是正常现象。请确认已在正确的接口范围上启用发现功能。"
+      }
+    },
+    "settings": {
+      "title": "邻居发现设置",
+      "description": "运行哪些发现协议以及它们在哪些接口上监听。",
+      "edit": "编辑设置",
+      "loadError": "加载发现设置失败",
+      "protocolsEnabled": "已启用的协议",
+      "interfaceScope": "接口范围",
+      "empty": {
+        "title": "发现设置不可用",
+        "description": "/ip/neighbor/discovery-settings 端点未响应。"
+      }
+    },
+    "lldp": {
+      "title": "按接口 LLDP",
+      "description": "/interface/lldp/interface, 每个具有可见 LLDP 邻居的接口。",
+      "loadError": "加载 LLDP 接口失败",
+      "empty": {
+        "title": "无 LLDP 邻居",
+        "description": "没有接口报告 LLDP 邻居。如果您希望上游交换机进行通告，请在干道端口上启用 LLDP。"
+      },
+      "columns": {
+        "interface": "接口",
+        "systemName": "邻居系统名称",
+        "portId": "邻居端口 ID",
+        "mgmtAddress": "管理地址"
+      }
+    },
+    "dialog": {
+      "title": "编辑邻居发现设置",
+      "description": "暂存对 /ip/neighbor/discovery-settings 的更改。空白字段将保持现有值不变。",
+      "protocolLabel": "已启用的协议",
+      "protocolHelp": "以逗号分隔的列表。RouterOS 支持 lldp、cdp、mndp。",
+      "scopeLabel": "接口列表",
+      "scopeHelp": "使用 all 在所有位置监听，或使用已定义的接口列表名称。",
+      "badge": "拓扑图中的连线按源协议着色。",
+      "cancel": "取消",
+      "submit": "暂存更新"
+    }
+  },
+  "GatewayShaperTab": {
+    "columns": {
+      "description": "描述",
+      "bandwidth": "带宽",
+      "mask": "掩码",
+      "enabled": "已启用",
+      "pipe": "管道",
+      "weight": "权重",
+      "actions": "操作",
+      "interface": "接口",
+      "protocol": "协议",
+      "source": "源",
+      "destination": "目标",
+      "queue": "队列"
+    },
+    "values": {
+      "yes": "是",
+      "no": "否"
+    },
+    "pipes": {
+      "title": "整形管道",
+      "description": "带宽管道"
+    },
+    "queues": {
+      "title": "整形队列 ({{count}})",
+      "description": "加权公平队列"
+    },
+    "rules": {
+      "title": "整形规则 ({{count}})",
+      "description": "流量分类规则"
+    },
+    "actions": {
+      "addPipe": "添加管道",
+      "addQueue": "添加队列",
+      "addRule": "添加规则"
+    }
+  },
+  "UniFiNetworksTab": {
+    "title": "UniFi 网络",
+    "siteLabel": "站点：",
+    "description": "暂存 VLAN 创建，以及对单个网络的重命名和删除。子网和 DHCP 字段为可选项，留空可创建仅 VLAN（无 L3）的网络。",
+    "loading": "加载中…",
+    "loadError": "加载网络失败：",
+    "unknownError": "未知错误",
+    "unnamed": "（未命名）",
+    "dhcpOn": "DHCP 已开启",
+    "form": {
+      "createVlan": "创建 VLAN",
+      "vlanId": "VLAN ID (1-4094)",
+      "networkName": "网络名称",
+      "networkNamePlaceholder": "访客",
+      "subnet": "子网（可选）",
+      "enableDhcp": "启用 DHCP",
+      "dhcpStartPlaceholder": "DHCP 起始地址 (10.10.0.6)",
+      "dhcpStopPlaceholder": "DHCP 结束地址 (10.10.0.254)",
+      "updateNetwork": "更新网络",
+      "unchanged": "（不变）"
+    },
+    "actions": {
+      "stageVlanCreate": "暂存 VLAN 创建",
+      "stageUpdate": "暂存更新",
+      "stage": "暂存",
+      "cancel": "取消"
+    },
+    "dialog": {
+      "title": "暂存 VLAN 创建？",
+      "updateTitle": "暂存更新？",
+      "deleteTitle": "暂存删除？",
+      "stagePrefix": "暂存",
+      "forVlan": "用于 VLAN",
+      "subnetLabel": "子网：",
+      "against": "用于",
+      "suffix": "。该更改通过“待应用更改”面板应用。"
+    },
+    "toast": {
+      "staged": {
+        "title": "VLAN 创建已暂存",
+        "description": "VLAN {{vlanId}}（{{name}}）"
+      },
+      "updated": {
+        "title": "网络更新已暂存"
+      },
+      "deleted": {
+        "title": "网络删除已暂存"
+      },
+      "error": {
+        "title": "暂存 VLAN 创建失败"
+      }
+    }
+  },
+  "UniFiWlansTab": {
+    "title": "UniFi WLAN",
+    "siteLabel": "站点：",
+    "description": "· 暂存 PSK 轮换和启用/禁用。PSK 在输入框中被掩码，并在抽屉负载预览中被隐去。",
+    "stageByWlanId": "按 WLAN ID 暂存",
+    "wlanIdPlaceholder": "WLAN ID（Mongo ObjectID）",
+    "newPskLabel": "新 PSK（8-63 个字符）",
+    "loadFailed": "加载 WLAN 失败：",
+    "unknownError": "未知错误",
+    "loading": "加载中…",
+    "empty": "未配置 WLAN。请使用上方表单针对特定 WLAN ID 暂存操作。",
+    "status": {
+      "disabled": "已禁用",
+      "hidden": "已隐藏"
+    },
+    "actions": {
+      "stagePsk": "暂存 PSK",
+      "stageEnable": "暂存启用",
+      "stageDisable": "暂存禁用",
+      "enable": "启用",
+      "disable": "禁用",
+      "cancel": "取消",
+      "stage": "暂存"
+    },
+    "toast": {
+      "pskStaged": "已暂存 PSK 轮换",
+      "enableStaged": "已暂存 WLAN 启用",
+      "disableStaged": "已暂存 WLAN 禁用",
+      "stageFailed": "暂存更改失败"
+    },
+    "dialog": {
+      "rotatePskTitle": "轮换 PSK？",
+      "enableTitle": "启用 WLAN？",
+      "disableTitle": "禁用 WLAN？",
+      "stagePrefix": "暂存",
+      "against": "针对",
+      "pskNote": "新的 PSK 通过同一加密通道发送，并在抽屉负载中被掩码。"
+    }
+  },
+  "GatewayRulesTab": {
+    "title": "防火墙规则",
+    "liveRulesFrom": "来自 {{vendor}} 的实时规则",
+    "pushRule": "推送规则",
+    "searchPlaceholder": "搜索规则...",
+    "notSuffix": " (非)",
+    "columns": {
+      "action": "动作",
+      "direction": "方向",
+      "protocol": "协议",
+      "source": "源",
+      "destination": "目标",
+      "interface": "接口",
+      "gateway": "网关",
+      "description": "描述",
+      "enabled": "已启用",
+      "log": "日志"
+    }
+  },
+  "GatewayLogsTab": {
+    "title": "系统和防火墙日志",
+    "description": "网关的近期日志条目",
+    "tabs": {
+      "firewall": "防火墙",
+      "system": "系统"
+    },
+    "searchFirewall": "搜索防火墙日志...",
+    "searchSystem": "搜索系统日志..."
+  },
+  "OpenWrtTab": {
+    "common": {
+      "loading": "加载中…",
+      "disabled": "已禁用",
+      "cancel": "取消"
+    },
+    "tabs": {
+      "overview": "概览",
+      "interfaces": "接口",
+      "firewall": "防火墙",
+      "portForwards": "端口转发",
+      "dhcpLeases": "DHCP 租约",
+      "dhcpStatic": "DHCP 静态",
+      "arp": "ARP / 邻居"
+    },
+    "actions": {
+      "refresh": "刷新"
+    },
+    "authError": "无法连接 OpenWrt 设备。请检查凭据和连通性。",
+    "toasts": {
+      "staged": {
+        "title": "更改已暂存",
+        "description": "{{msg}}, 打开待处理更改以应用。"
+      },
+      "stageFailed": {
+        "title": "暂存失败",
+        "unknown": "未知错误"
+      }
+    },
+    "staged": {
+      "deleteRule": "删除防火墙规则",
+      "newRule": "新建防火墙规则",
+      "deletePortForward": "删除端口转发",
+      "newPortForward": "新建端口转发",
+      "deleteStaticHost": "删除静态主机",
+      "newStaticHost": "新建静态主机"
+    },
+    "overview": {
+      "system": "系统",
+      "hostname": "主机名",
+      "model": "型号",
+      "openwrtVersion": "OpenWrt 版本",
+      "kernel": "内核",
+      "uptime": "运行时间",
+      "load": "负载 (1/5/15)",
+      "memory": "内存",
+      "total": "总计",
+      "available": "可用",
+      "cached": "已缓存",
+      "buffered": "缓冲",
+      "used": "已用"
+    },
+    "interfaces": {
+      "title": "网络接口",
+      "count": "{{n}} 个接口",
+      "empty": "没有接口。",
+      "col": {
+        "interface": "接口",
+        "device": "设备",
+        "ipv4": "IPv4",
+        "gateway": "网关",
+        "state": "状态"
+      }
+    },
+    "firewall": {
+      "title": "防火墙规则",
+      "count": "{{n}} 条规则",
+      "newRule": "新建规则",
+      "empty": "没有防火墙规则。",
+      "confirmDelete": "暂存删除规则 '{{name}}'？",
+      "col": {
+        "name": "名称",
+        "srcDest": "源 → 目标",
+        "target": "目标",
+        "proto": "协议",
+        "status": "状态"
+      }
+    },
+    "portForwards": {
+      "title": "端口转发",
+      "count": "{{n}} 条转发",
+      "newForward": "新建转发",
+      "empty": "未配置端口转发。",
+      "confirmDelete": "暂存删除端口转发 '{{name}}'？",
+      "col": {
+        "name": "名称",
+        "external": "外部 (源:端口)",
+        "internal": "内部 (目标:端口)",
+        "proto": "协议",
+        "status": "状态"
+      }
+    },
+    "dhcp": {
+      "title": "DHCP 租约",
+      "count": "{{n}} 个租约",
+      "empty": "没有活动的 DHCP 租约。",
+      "col": {
+        "hostname": "主机名",
+        "ipAddress": "IP 地址",
+        "mac": "MAC",
+        "expires": "到期时间"
+      }
+    },
+    "arp": {
+      "title": "ARP / 邻居",
+      "count": "{{n}} 个条目",
+      "empty": "ARP 表为空。",
+      "col": {
+        "ipAddress": "IP 地址",
+        "macAddress": "MAC 地址",
+        "interface": "接口"
+      }
+    },
+    "dhcpStatic": {
+      "title": "DHCP 静态主机",
+      "count": "{{n}} 个保留",
+      "newReservation": "新建保留",
+      "emptyPrefix": "没有静态保留。点击",
+      "emptySuffix": "以添加一个。",
+      "confirmDelete": "暂存删除保留 '{{name}}'？",
+      "col": {
+        "hostname": "主机名",
+        "macAddress": "MAC 地址",
+        "ipAddress": "IP 地址"
+      }
+    },
+    "ruleDialog": {
+      "title": "新建防火墙规则",
+      "name": "名称",
+      "zoneSrc": "区域 (源)",
+      "target": "目标",
+      "protocol": "协议",
+      "destPort": "目标端口",
+      "submit": "暂存规则"
+    },
+    "pfDialog": {
+      "title": "新建端口转发",
+      "name": "名称",
+      "sourceZone": "源区域",
+      "protocol": "协议",
+      "externalPort": "外部端口",
+      "internalIp": "内部 IP",
+      "internalPort": "内部端口",
+      "submit": "暂存转发"
+    },
+    "hostDialog": {
+      "title": "新建 DHCP 保留",
+      "hostname": "主机名",
+      "macAddress": "MAC 地址",
+      "ipAddress": "IP 地址",
+      "submit": "暂存保留"
+    }
+  },
+  "MikroTikSnmpTab": {
+    "loading": "正在加载 RouterOS SNMP…",
+    "actions": {
+      "refresh": "刷新",
+      "editSettings": "编辑设置",
+      "addTrap": "添加 trap 目标",
+      "addV3User": "添加 SNMPv3 用户",
+      "edit": "编辑",
+      "delete": "删除",
+      "cancel": "取消",
+      "stageUpdate": "暂存更新",
+      "stageCreate": "暂存创建",
+      "stageDelete": "暂存删除"
+    },
+    "toasts": {
+      "settingsStaged": "SNMP 设置更新已暂存",
+      "settingsFailed": "暂存设置失败",
+      "trapStaged": "Trap 目标已暂存",
+      "trapFailed": "暂存 trap 失败",
+      "trapDeleteStaged": "Trap 删除已暂存",
+      "deleteFailed": "暂存删除失败",
+      "v3UserStaged": "SNMPv3 用户已暂存",
+      "v3UserFailed": "暂存 SNMPv3 用户失败",
+      "v3UserDeleteStaged": "SNMPv3 用户删除已暂存"
+    },
+    "server": {
+      "title": "SNMP 服务器",
+      "description": "/snmp 单例 · 启用守护进程并设置 trap-community / 联系人 / 位置元数据。",
+      "body": "使用对话框更新 SNMP 服务器的启用状态和基本元数据。/snmp/settings 读取属于现有的安全域--操作员可在应用前于待处理更改队列中核实暂存的更改。"
+    },
+    "traps": {
+      "title": "Trap 目标",
+      "description": "/snmp/trap 行 · 路由器发送 SNMP trap 的目标地址。",
+      "loadError": "加载 trap 目标失败",
+      "empty": {
+        "title": "未配置 trap 目标",
+        "description": "添加一个 trap 目标以将 SNMP 通知转发至管理端。"
+      },
+      "columns": {
+        "address": "地址",
+        "port": "端口",
+        "version": "版本",
+        "community": "Community",
+        "comment": "备注",
+        "actions": "操作"
+      }
+    },
+    "v3Users": {
+      "title": "SNMPv3 用户",
+      "description": "/snmp/community v3 行 · 每用户的认证与加密。密码为只写，绝不显示。",
+      "loadError": "加载 SNMPv3 用户失败",
+      "empty": {
+        "title": "未定义 SNMPv3 用户",
+        "description": "添加用户以启用经过认证和加密的 SNMP 查询。"
+      },
+      "columns": {
+        "name": "名称",
+        "authProtocol": "认证协议",
+        "encryptionProtocol": "加密协议",
+        "addresses": "地址"
+      }
+    },
+    "settingsDialog": {
+      "title": "编辑 SNMP 服务器设置",
+      "description": "暂存对 /snmp 单例的更改。",
+      "enable": "启用 SNMP 服务器",
+      "trapCommunity": "Trap community",
+      "contact": "联系人",
+      "location": "位置",
+      "locationPlaceholder": "机柜 3 / 2 层"
+    },
+    "trapDialog": {
+      "editTitle": "编辑 trap 目标",
+      "addTitle": "添加 trap 目标",
+      "description": "暂存对 /snmp/trap 的更改。",
+      "address": "地址",
+      "port": "端口",
+      "version": "版本",
+      "community": "Community",
+      "comment": "备注",
+      "commentPlaceholder": "主 NMS"
+    },
+    "trapDelete": {
+      "title": "删除 trap 目标",
+      "confirmPrefix": "移除发往",
+      "confirmSuffix": "的 trap？"
+    },
+    "v3Dialog": {
+      "editTitle": "编辑 SNMPv3 用户",
+      "addTitle": "添加 SNMPv3 用户",
+      "description": "密码为只写。编辑时，将密码字段留空以保留现有值；输入新值以轮换。",
+      "name": "名称",
+      "authProtocol": "认证协议",
+      "encryptionProtocol": "加密协议",
+      "authPassword": "认证密码",
+      "privacyPassword": "隐私密码",
+      "passwordKeepPlaceholder": "（留空以保留现有值）",
+      "passwordMinPlaceholder": "至少 8 个字符",
+      "allowedAddresses": "允许的地址",
+      "comment": "备注",
+      "commentPlaceholder": "prometheus snmp_exporter",
+      "securityNote": "密码绝不会从设备回读，也不会在提交之后存储于客户端。"
+    },
+    "v3Delete": {
+      "title": "删除 SNMPv3 用户",
+      "confirmPrefix": "移除 SNMPv3 用户",
+      "confirmSuffix": "？"
+    }
+  },
+  "MikroTikHotspotTab": {
+    "loading": "正在加载 RouterOS 热点…",
+    "common": {
+      "yes": "是",
+      "no": "否",
+      "default": "默认"
+    },
+    "fallback": {
+      "server": "服务器",
+      "profile": "配置文件"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "addServer": "添加服务器",
+      "addProfile": "添加配置文件",
+      "cancel": "取消",
+      "stageCreate": "暂存创建",
+      "stageUpdate": "暂存更新",
+      "stageDelete": "暂存删除"
+    },
+    "columns": {
+      "name": "名称",
+      "interface": "接口",
+      "pool": "地址池",
+      "profile": "配置文件",
+      "enabled": "已启用",
+      "comment": "备注",
+      "actions": "操作",
+      "rateLimit": "速率限制",
+      "sessionTimeout": "会话超时",
+      "idleTimeout": "空闲超时",
+      "sharedUsers": "共享用户",
+      "user": "用户",
+      "ip": "IP",
+      "mac": "MAC",
+      "uptime": "运行时间",
+      "server": "服务器"
+    },
+    "fields": {
+      "name": "名称",
+      "interface": "接口",
+      "addressPool": "地址池",
+      "profile": "配置文件",
+      "comment": "备注",
+      "rateLimit": "速率限制 (rx/tx)",
+      "sessionTimeout": "会话超时",
+      "idleTimeout": "空闲超时",
+      "sharedUsers": "共享用户"
+    },
+    "servers": {
+      "title": "热点服务器",
+      "description": "按接口绑定 · 完整 CRUD",
+      "loadError": "加载热点服务器失败",
+      "emptyTitle": "没有热点服务器",
+      "emptyDescription": "此路由器上没有 /ip/hotspot 条目。"
+    },
+    "profiles": {
+      "title": "用户配置文件",
+      "description": "速率 / 配额模板 · 完整 CRUD",
+      "loadError": "加载热点用户配置文件失败",
+      "emptyTitle": "没有用户配置文件",
+      "emptyDescription": "此路由器上没有 /ip/hotspot/user/profile 条目。"
+    },
+    "active": {
+      "title": "活动用户",
+      "description": "· 实时会话 · 每 15 秒刷新。断开连接功能计划推出（适配器接入待定）。",
+      "loadError": "加载活动会话失败",
+      "emptyTitle": "没有活动会话",
+      "emptyDescription": "当前没有客户端登录到热点。",
+      "disconnect": "断开连接",
+      "disconnectTooltip": "断开连接功能计划推出, 适配器接入待定"
+    },
+    "aria": {
+      "editServer": "编辑热点服务器 {{name}}",
+      "deleteServer": "删除热点服务器 {{name}}",
+      "editProfile": "编辑热点配置文件 {{name}}",
+      "deleteProfile": "删除热点配置文件 {{name}}"
+    },
+    "serverDialog": {
+      "addTitle": "添加热点服务器",
+      "editTitle": "编辑热点服务器",
+      "description": "暂存对 RouterOS ``/ip/hotspot`` 的更改。"
+    },
+    "profileDialog": {
+      "addTitle": "添加用户配置文件",
+      "editTitle": "编辑用户配置文件",
+      "description": "暂存对 RouterOS ``/ip/hotspot/user/profile`` 的更改。"
+    },
+    "deleteDialog": {
+      "title": "暂存删除？",
+      "intro": "这将暂存删除"
+    },
+    "deleteLabel": {
+      "server": "热点服务器 {{name}}",
+      "profile": "用户配置文件 {{name}}"
+    },
+    "errors": {
+      "cannotUpdateServerTitle": "无法更新服务器",
+      "serverNoId": "服务器没有 RouterOS id（缺少 .id）。",
+      "cannotUpdateProfileTitle": "无法更新配置文件",
+      "profileNoId": "配置文件没有 RouterOS id（缺少 .id）。",
+      "cannotDeleteTitle": "无法删除",
+      "rowNoId": "该行没有 RouterOS id（缺少 .id）。"
+    },
+    "toasts": {
+      "serverCreateStaged": "已暂存热点服务器创建",
+      "serverUpdateStaged": "已暂存热点服务器更新",
+      "serverDeleteStaged": "已暂存热点服务器删除",
+      "serverCreateFailed": "暂存服务器创建失败",
+      "serverUpdateFailed": "暂存服务器更新失败",
+      "serverDeleteFailed": "暂存服务器删除失败",
+      "profileCreateStaged": "已暂存用户配置文件创建",
+      "profileUpdateStaged": "已暂存用户配置文件更新",
+      "profileDeleteStaged": "已暂存用户配置文件删除",
+      "profileCreateFailed": "暂存配置文件创建失败",
+      "profileUpdateFailed": "暂存配置文件更新失败",
+      "profileDeleteFailed": "暂存配置文件删除失败"
+    }
+  },
+  "MikroTikBackupTab": {
+    "loading": "正在加载 RouterOS 备份…",
+    "common": {
+      "cancel": "取消"
+    },
+    "actions": {
+      "createBinary": "创建二进制备份",
+      "exportConfig": "导出配置 (.rsc)",
+      "uploadBackup": "上传备份",
+      "refresh": "刷新"
+    },
+    "savedBackups": {
+      "title": "已保存的备份",
+      "description": "`/file` 已筛选为 `.backup` 和 `.rsc`。还原需要输入确认，并会将设备重启进入已保存的配置。"
+    },
+    "errors": {
+      "loadBackups": "无法加载备份"
+    },
+    "empty": {
+      "title": "设备上没有备份",
+      "description": "创建二进制备份或导出当前运行配置以开始。"
+    },
+    "table": {
+      "filename": "文件名",
+      "type": "类型",
+      "size": "大小",
+      "created": "创建时间",
+      "actions": "操作",
+      "kindOther": "其他"
+    },
+    "rowActions": {
+      "download": "下载",
+      "restore": "还原",
+      "delete": "删除"
+    },
+    "toasts": {
+      "createSuccess": "二进制备份已加入队列",
+      "createError": "无法将备份加入队列",
+      "exportSuccess": "文本导出已加入队列",
+      "exportError": "无法将导出加入队列",
+      "uploadSuccess": "备份上传已加入队列",
+      "uploadError": "无法将上传加入队列",
+      "deleteSuccess": "备份删除已加入队列",
+      "deleteError": "无法将删除加入队列",
+      "restoreSuccess": "备份还原已加入队列",
+      "restoreSuccessDescription": "应用待处理更改后，设备将重启进入已还原的配置。",
+      "restoreError": "无法将还原加入队列",
+      "downloadSuccess": "已下载 {{name}}",
+      "downloadError": "下载失败"
+    },
+    "createDialog": {
+      "title": "创建二进制备份",
+      "description": "将一次 `/system/backup/save` 调用加入队列。生成的 `.backup` 文件保存在 RouterOS 存储中，包含完整的系统状态。",
+      "nameLabel": "文件名（不含扩展名）",
+      "namePlaceholder": "pre-upgrade",
+      "passwordLabel": "密码（可选 · 用于加密备份）",
+      "passwordPlaceholder": "（留空表示不加密）",
+      "submit": "加入创建队列"
+    },
+    "exportDialog": {
+      "title": "导出配置为 .rsc",
+      "description": "将一次 `/export` 调用加入队列。结果是一个可读的 RouterOS 脚本，保存为 `.rsc` 文件，可在重新导入前查看。",
+      "commentLabel": "备注",
+      "commentPlaceholder": "配置快照",
+      "encryptedLabel": "加密导出（密码和密钥以密文形式包含）",
+      "submit": "加入导出队列"
+    },
+    "uploadDialog": {
+      "title": "上传备份",
+      "description": "将备份文件上传到 RouterOS 存储。文件按 utf-8 文本解析--对于 `.backup` 二进制文件，请改用 SCP / Winbox 复制。",
+      "chooseFileLabel": "选择文件",
+      "nameLabel": "目标文件名",
+      "namePlaceholder": "restore.rsc",
+      "charsLoaded": "已加载 {{count}} 个字符",
+      "noFileSelected": "未选择文件。",
+      "submit": "加入上传队列"
+    },
+    "deleteDialog": {
+      "title": "删除备份",
+      "descriptionPrefix": "从 RouterOS 存储中删除",
+      "descriptionSuffix": "吗？此操作会将删除加入队列；请通过待处理更改队列应用。",
+      "submit": "加入删除队列"
+    },
+    "restoreDialog": {
+      "title": "确认还原",
+      "descriptionPrefix": "还原备份会将设备重启进入已保存的配置--当前所有状态都会丢失。请输入文件名",
+      "descriptionSuffix": "以继续。",
+      "confirmLabel": "输入文件名以确认",
+      "passwordLabel": "备份密码（如有）",
+      "passwordPlaceholder": "（无加密的备份请留空）",
+      "submit": "加入还原队列"
+    }
+  },
+  "GatewayVpnTab": {
+    "columns": {
+      "name": "名称",
+      "port": "端口",
+      "tunnelAddress": "隧道地址",
+      "enabled": "已启用",
+      "publicKey": "公钥",
+      "allowedIps": "允许的 IP",
+      "endpoint": "端点",
+      "keepalive": "保活",
+      "description": "描述",
+      "remote": "远端",
+      "ike": "IKE",
+      "protocol": "协议",
+      "status": "状态",
+      "peer": "对端",
+      "lastHandshake": "最近握手",
+      "transferRx": "接收流量",
+      "transferTx": "发送流量"
+    },
+    "actions": {
+      "server": "服务器",
+      "peer": "对端",
+      "instance": "实例",
+      "kill": "终止",
+      "connect": "连接",
+      "disconnect": "断开",
+      "applyChanges": "应用更改"
+    },
+    "status": {
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "active": "活动",
+      "disabled": "已禁用",
+      "enabled": "已启用",
+      "running": "运行中",
+      "stopped": "已停止"
+    },
+    "common": {
+      "yes": "是",
+      "no": "否"
+    },
+    "wireguard": {
+      "title": "WireGuard",
+      "description": "服务器与对端",
+      "servers": "服务器",
+      "peers": "对端",
+      "empty": "无 WireGuard 配置"
+    },
+    "handshakes": {
+      "title": "WireGuard 握手",
+      "description": "对端最近握手时间戳"
+    },
+    "openvpn": {
+      "title": "OpenVPN",
+      "summary": "{{instances}} 个实例，{{sessions}} 个活动会话",
+      "instanceFallback": "实例 {{index}}",
+      "tunnel": "隧道",
+      "protocol": "协议",
+      "port": "端口",
+      "local": "本地",
+      "activeSessions": "活动会话",
+      "connected": "已连接",
+      "empty": "未配置 OpenVPN 实例"
+    },
+    "ipsec": {
+      "title": "IPsec",
+      "description": "第 1 阶段和第 2 阶段隧道",
+      "phase1": "第 1 阶段",
+      "phase2": "第 2 阶段",
+      "empty": "未配置 IPsec 隧道"
+    },
+    "ipsecStatus": {
+      "title": "IPsec 实时状态",
+      "description": "来自网关的实时隧道状态"
+    },
+    "tailscale": {
+      "title": "Tailscale",
+      "description": "通过 Tailscale 的网状 VPN",
+      "enabled": "已启用",
+      "listenPort": "监听端口",
+      "acceptDns": "接受 DNS",
+      "exitNode": "出口节点",
+      "subnetRoutes": "子网路由",
+      "ssh": "SSH",
+      "snat": "SNAT",
+      "advertising": "正在通告",
+      "accepting": "正在接受",
+      "exitNodePeers": "出口节点对端"
+    },
+    "rawStatus": {
+      "title": "VPN 原始状态"
+    }
+  },
+  "GatewayListPage": {
+    "header": {
+      "title": "网关",
+      "subtitle": "管理防火墙和路由器集成"
+    },
+    "actions": {
+      "addGateway": "添加网关",
+      "viewDetails": "查看详情",
+      "testConnection": "测试连接",
+      "syncNow": "立即同步",
+      "delete": "删除"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败，结果可能不完整。"
+    },
+    "stats": {
+      "totalGateways": "网关总数",
+      "online": "在线",
+      "offlineCount": "{{count}} 个离线",
+      "allReachable": "所有网关均可访问",
+      "syncOk": "同步正常",
+      "failedCount": "{{count}} 个失败",
+      "platforms": "平台",
+      "noGateways": "暂无网关"
+    },
+    "table": {
+      "title": "防火墙网关",
+      "description": "已连接到 FreeSDN 的集成防火墙和路由器平台",
+      "searchPlaceholder": "搜索网关..."
+    },
+    "filter": {
+      "allPlatforms": "所有平台"
+    },
+    "columns": {
+      "gateway": "网关",
+      "platform": "平台",
+      "status": "状态",
+      "version": "版本",
+      "sync": "同步"
+    },
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "unknown": "未知"
+    },
+    "syncStatus": {
+      "idle": "空闲",
+      "syncing": "同步中",
+      "success": "已同步",
+      "failed": "失败",
+      "never": "从未"
+    },
+    "gatewayFallback": "网关",
+    "toasts": {
+      "error": "错误",
+      "deleteFailed": "删除网关失败",
+      "deleted": {
+        "title": "网关已删除",
+        "description": "网关集成已被移除。"
+      },
+      "syncStarted": {
+        "title": "同步已开始",
+        "description": "已触发网关同步。"
+      },
+      "syncFailed": {
+        "title": "同步失败",
+        "description": "无法启动同步"
+      },
+      "connectionOk": {
+        "title": "连接正常",
+        "description": "{{hostname}} · {{version}} ({{latency}}ms)"
+      },
+      "connectionFailed": {
+        "title": "连接失败"
+      },
+      "testFailed": {
+        "title": "测试失败",
+        "description": "连接测试失败"
+      }
+    },
+    "dialogs": {
+      "delete": {
+        "title": "删除网关",
+        "confirmPrefix": "确定要移除",
+        "confirmSuffix": " 吗？这将断开网关集成。实际的防火墙设备不会受到影响。",
+        "cancel": "取消",
+        "confirm": "删除"
+      }
+    }
+  },
+  "GatewayInterfacesTab": {
+    "interfaces": {
+      "title": "网络接口",
+      "description": "物理和虚拟接口"
+    },
+    "vlan": {
+      "title": "VLAN 设备",
+      "description": "802.1Q VLAN 配置"
+    },
+    "lagg": {
+      "title": "LAGG（链路聚合）",
+      "description": "绑定接口组"
+    },
+    "virtualIps": {
+      "title": "虚拟 IP（CARP / 别名）",
+      "description": "HA 和静态 IP 别名 · 已配置 {{count}} 个"
+    },
+    "ndp": {
+      "title": "IPv6 NDP 表",
+      "description": "邻居发现协议条目"
+    },
+    "bridges": {
+      "title": "网桥",
+      "description": "网桥接口配置",
+      "loading": "正在加载网桥…",
+      "empty": "未配置网桥"
+    },
+    "flushArpDialog": {
+      "title": "清空 ARP 表？",
+      "description": "清空 ARP 表？这将短暂中断 LAN 上的所有二层通信。"
+    },
+    "actions": {
+      "flushArp": "清空 ARP",
+      "cancel": "取消"
+    },
+    "status": {
+      "up": "已连接",
+      "down": "未连接"
+    },
+    "columns": {
+      "name": "名称",
+      "status": "状态",
+      "address": "地址",
+      "vlan": "VLAN",
+      "vlanTag": "VLAN 标签",
+      "parent": "父接口",
+      "device": "设备",
+      "type": "类型",
+      "mac": "MAC",
+      "mtu": "MTU",
+      "priority": "优先级",
+      "description": "描述",
+      "protocol": "协议",
+      "members": "成员",
+      "memberDetails": "成员详情",
+      "interface": "接口",
+      "mode": "模式",
+      "vhid": "VHID",
+      "ipv6Address": "IPv6 地址",
+      "expire": "过期时间",
+      "linkLocal": "链路本地",
+      "bridgeId": "网桥 ID"
+    }
+  },
+  "MikroTikVpnTab": {
+    "loading": "正在加载 RouterOS VPN…",
+    "common": {
+      "yes": "是",
+      "no": "否",
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "editSettings": "编辑设置",
+      "cancel": "取消",
+      "stageUpdate": "暂存更新"
+    },
+    "fields": {
+      "enabled": "已启用",
+      "defaultProfile": "默认配置文件",
+      "authentication": "身份验证",
+      "ipsec": "IPsec",
+      "maxMtu": "最大 MTU",
+      "keepalive": "保活"
+    },
+    "l2tp": {
+      "title": "L2TP 服务器",
+      "description": "``/interface/l2tp-server/server`` · 单例设置",
+      "loadError": "加载 L2TP 服务器失败",
+      "emptyTitle": "L2TP 服务器不可用",
+      "emptyDescription": "没有 /interface/l2tp-server/server 响应, 可能未安装 L2TP 服务器软件包。"
+    },
+    "pptp": {
+      "title": "PPTP 服务器",
+      "deprecated": "已弃用",
+      "description": "``/interface/pptp-server/server`` · 为旧版客户端保留 · 仅支持 MS-CHAPv2，建议使用 L2TP/IPsec 或 WireGuard。",
+      "loadError": "加载 PPTP 服务器失败",
+      "emptyTitle": "PPTP 服务器不可用",
+      "emptyDescription": "没有 /interface/pptp-server/server 响应, 可能未安装 PPTP 服务器软件包。"
+    },
+    "sstp": {
+      "title": "SSTP 服务器",
+      "description": "SSTP 需要 TLS 证书。证书配置和服务器行设置计划发布（目前安全选项卡负责证书存储）。",
+      "emptyTitle": "暂未提供 SSTP 设置",
+      "emptyDescription": "请使用系统 / 证书面板管理证书存储；专用的 SSTP 设置对话框计划在未来版本中发布。"
+    },
+    "dialog": {
+      "titleL2tp": "编辑 L2TP 服务器",
+      "titlePptp": "编辑 PPTP 服务器",
+      "descriptionL2tp": "暂存对 /interface/l2tp-server/server（单例）的更改。",
+      "descriptionPptp": "暂存对 /interface/pptp-server/server（单例）的更改。PPTP 已弃用；建议使用 L2TP/IPsec 或 WireGuard。",
+      "enableServer": "启用服务器",
+      "useIpsec": "使用 IPsec",
+      "ipsecSecretLabel": "IPsec 共享密钥",
+      "ipsecSecretPlaceholder": "（留空以保留当前值, 仅在轮换时设置）",
+      "ipsecSecretHelp": "当前密钥从不显示。仅在轮换密钥时输入新值。"
+    },
+    "toasts": {
+      "l2tpStaged": "已暂存 L2TP 服务器更新",
+      "l2tpStageFailed": "暂存 L2TP 更新失败",
+      "pptpStaged": "已暂存 PPTP 服务器更新",
+      "pptpStageFailed": "暂存 PPTP 更新失败"
+    }
+  },
+  "GatewayDnsTab": {
+    "common": {
+      "yes": "是",
+      "no": "否"
+    },
+    "overrideColumns": {
+      "host": "主机",
+      "domain": "域",
+      "type": "类型",
+      "serverIp": "服务器 / IP",
+      "fqdn": "FQDN",
+      "description": "描述",
+      "enabled": "已启用"
+    },
+    "domainColumns": {
+      "domain": "域",
+      "server": "服务器",
+      "port": "端口",
+      "description": "描述"
+    },
+    "resolverStatus": {
+      "title": "DNS 解析器状态",
+      "description": "来自网关的 Unbound DNS 解析器实时状态",
+      "unavailable": "Unbound 状态不可用"
+    },
+    "hostOverrides": {
+      "title": "主机覆盖",
+      "description": "自定义 DNS A/AAAA 记录",
+      "add": "添加覆盖",
+      "searchPlaceholder": "搜索主机覆盖..."
+    },
+    "domainOverrides": {
+      "title": "域覆盖",
+      "description": "按域转发 DNS",
+      "add": "添加域"
+    },
+    "dynamicDns": {
+      "title": "动态 DNS",
+      "description": "DynDNS 账户和更新状态 (os-dyndns)",
+      "columns": {
+        "description": "描述",
+        "service": "服务",
+        "hostname": "主机名",
+        "username": "用户名",
+        "interface": "接口",
+        "currentIp": "当前 IP",
+        "status": "状态"
+      },
+      "accountFallback": "账户 {{n}}",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "empty": "未配置动态 DNS 账户。请安装 os-dyndns 以管理动态 DNS。"
+    }
+  },
+  "UniFiClientsTab": {
+    "title": "UniFi 客户端",
+    "description": {
+      "sitePrefix": "站点：",
+      "rest": "· 暂存阻止 / 解除阻止 / 移除。更改将显示在待处理更改抽屉中，直到应用为止。"
+    },
+    "stageByMac": {
+      "label": "按 MAC 暂存"
+    },
+    "actions": {
+      "stageBlock": "暂存阻止",
+      "block": "阻止",
+      "stageUnblock": "暂存解除阻止",
+      "unblock": "解除阻止",
+      "stageReconnect": "暂存重新连接",
+      "reconnect": "重新连接",
+      "stageForget": "暂存移除",
+      "forget": "移除"
+    },
+    "ops": {
+      "block": "阻止",
+      "unblock": "解除阻止",
+      "reconnect": "重新连接",
+      "forget": "移除"
+    },
+    "error": {
+      "loadFailed": "加载客户端失败：",
+      "unknown": "未知错误"
+    },
+    "loading": "正在加载客户端…",
+    "empty": "控制器未报告已连接的客户端。请使用上方的“按 MAC 暂存”表单对特定客户端暂存操作。",
+    "blocked": "已阻止",
+    "dialog": {
+      "title": "暂存{{op}}？",
+      "descriptionPrefix": "暂存",
+      "descriptionAgainst": "针对",
+      "descriptionSuffix": "？该更改通过待处理更改抽屉应用。",
+      "cancel": "取消",
+      "confirm": "暂存{{op}}"
+    },
+    "toast": {
+      "staged": {
+        "title": "客户端{{op}}已暂存"
+      },
+      "stageFailed": {
+        "title": "暂存更改失败"
+      },
+      "macRequired": {
+        "title": "需要 MAC",
+        "description": "暂存前请输入客户端 MAC 地址。"
+      }
+    }
+  },
+  "UniFiFirewallTab": {
+    "title": "UniFi 防火墙",
+    "siteLabel": "站点：",
+    "description": "暂存基于区域的策略、区域、NAT、组以及经典规则的创建/删除。区域矩阵为只读。更改会显示在“待应用更改”面板中，直到被应用。",
+    "loading": "正在加载…",
+    "loadError": "加载防火墙配置失败：",
+    "unknownError": "未知错误",
+    "unnamed": "(未命名)",
+    "empty": "此资源没有条目。请使用上方表单暂存创建。",
+    "matrixEmpty": "控制器未报告区域矩阵。",
+    "status": {
+      "disabled": "已禁用"
+    },
+    "views": {
+      "policies": "策略",
+      "zones": "区域",
+      "zoneMatrix": "区域矩阵（只读）",
+      "nat": "NAT",
+      "groups": "组",
+      "rules": "规则（经典）"
+    },
+    "viewsSingular": {
+      "policies": "策略",
+      "zones": "区域",
+      "nat": "NAT 规则",
+      "groups": "组",
+      "rules": "规则"
+    },
+    "matrix": {
+      "allow": "允许",
+      "deny": "拒绝"
+    },
+    "fields": {
+      "view": "视图",
+      "name": "名称",
+      "namePlaceholder": "例如：允许 LAN 到 WAN"
+    },
+    "form": {
+      "create": "创建{{resource}}"
+    },
+    "actions": {
+      "stageCreate": "暂存创建",
+      "stage": "暂存",
+      "cancel": "取消"
+    },
+    "dialog": {
+      "createTitle": "暂存创建？",
+      "deleteTitle": "暂存删除？",
+      "stagePrefix": "暂存",
+      "against": "用于",
+      "suffix": "。该更改通过“待应用更改”面板应用。"
+    },
+    "toast": {
+      "created": {
+        "title": "已暂存防火墙创建"
+      },
+      "deleted": {
+        "title": "已暂存防火墙删除"
+      },
+      "stageFailed": {
+        "title": "暂存更改失败"
+      }
+    }
+  },
+  "UniFiTrafficTab": {
+    "title": "UniFi 流量",
+    "siteLabel": "站点：",
+    "description": "暂存流量规则、流量路由和 QoS 的创建/删除。更改会显示在“待应用更改”面板中，直到被应用。",
+    "loading": "正在加载…",
+    "loadError": "加载流量配置失败：",
+    "unknownError": "未知错误",
+    "empty": "此资源没有条目。请使用上方表单暂存创建。",
+    "status": {
+      "disabled": "已禁用"
+    },
+    "resources": {
+      "rules": "流量规则",
+      "routes": "流量路由",
+      "qos": "QoS 规则"
+    },
+    "resourcesSingular": {
+      "rules": "流量规则",
+      "routes": "流量路由",
+      "qos": "QoS 规则"
+    },
+    "fields": {
+      "resource": "资源",
+      "name": "名称",
+      "namePlaceholder": "例如：限制访客 VLAN"
+    },
+    "form": {
+      "create": "创建{{resource}}"
+    },
+    "actions": {
+      "stageCreate": "暂存创建",
+      "stage": "暂存",
+      "cancel": "取消"
+    },
+    "dialog": {
+      "createTitle": "暂存创建？",
+      "deleteTitle": "暂存删除？",
+      "stagePrefix": "暂存",
+      "against": "用于",
+      "suffix": "。该更改通过“待应用更改”面板应用。"
+    },
+    "toast": {
+      "created": {
+        "title": "已暂存流量创建"
+      },
+      "deleted": {
+        "title": "已暂存流量删除"
+      },
+      "stageFailed": {
+        "title": "暂存更改失败"
+      }
+    }
+  },
+  "UniFiDnsTab": {
+    "title": "UniFi DNS",
+    "siteLabel": "站点：",
+    "description": "暂存静态和动态 DNS 记录的创建/删除。更改会显示在“待应用更改”面板中，直到被应用。",
+    "loading": "正在加载…",
+    "loadError": "加载 DNS 记录失败：",
+    "unknownError": "未知错误",
+    "empty": "此类型没有记录。请使用上方表单暂存创建。",
+    "status": {
+      "disabled": "已禁用"
+    },
+    "kinds": {
+      "static": "静态 DNS",
+      "dynamic": "动态 DNS"
+    },
+    "fields": {
+      "recordKind": "类型",
+      "name": "名称 / 主机",
+      "namePlaceholder": "host.lan",
+      "value": "值 / 目标",
+      "valuePlaceholder": "10.0.1.50",
+      "recordType": "记录类型"
+    },
+    "form": {
+      "createStatic": "创建静态记录",
+      "createDynamic": "创建动态记录"
+    },
+    "actions": {
+      "stageCreate": "暂存创建",
+      "stage": "暂存",
+      "cancel": "取消"
+    },
+    "dialog": {
+      "createTitle": "暂存创建？",
+      "deleteTitle": "暂存删除？",
+      "stagePrefix": "暂存",
+      "against": "用于",
+      "suffix": "。该更改通过“待应用更改”面板应用。"
+    },
+    "toast": {
+      "created": {
+        "title": "已暂存 DNS 创建"
+      },
+      "deleted": {
+        "title": "已暂存 DNS 删除"
+      },
+      "stageFailed": {
+        "title": "暂存更改失败"
+      }
+    }
+  },
+  "UniFiRoutingTab": {
+    "title": "UniFi 路由",
+    "siteLabel": "站点：",
+    "description": "暂存静态路由的创建/删除。更改会显示在“待应用更改”面板中，直到被应用。",
+    "loading": "正在加载…",
+    "loadError": "加载路由失败：",
+    "unknownError": "未知错误",
+    "empty": "没有静态路由。请使用上方表单暂存创建。",
+    "status": {
+      "disabled": "已禁用"
+    },
+    "fields": {
+      "name": "名称",
+      "namePlaceholder": "to-branch",
+      "network": "目标网络",
+      "nexthop": "下一跳"
+    },
+    "form": {
+      "createRoute": "创建静态路由"
+    },
+    "actions": {
+      "stageCreate": "暂存创建",
+      "stage": "暂存",
+      "cancel": "取消"
+    },
+    "dialog": {
+      "createTitle": "暂存创建？",
+      "deleteTitle": "暂存删除？",
+      "stagePrefix": "暂存",
+      "against": "用于",
+      "suffix": "。该更改通过“待应用更改”面板应用。"
+    },
+    "toast": {
+      "created": {
+        "title": "已暂存路由创建"
+      },
+      "deleted": {
+        "title": "已暂存路由删除"
+      },
+      "stageFailed": {
+        "title": "暂存更改失败"
+      }
+    }
+  },
+  "UniFiVpnTab": {
+    "title": "UniFi VPN",
+    "siteLabel": "站点：",
+    "description": "暂存 VPN 网络的创建/删除。对端和密钥的详细信息在面板的负载预览中细化。",
+    "loading": "正在加载…",
+    "loadError": "加载 VPN 网络失败：",
+    "unknownError": "未知错误",
+    "empty": "没有 VPN 网络。请使用上方表单暂存创建。",
+    "status": {
+      "disabled": "已禁用"
+    },
+    "fields": {
+      "name": "名称",
+      "namePlaceholder": "site-to-site-hq",
+      "vpnType": "VPN 类型"
+    },
+    "form": {
+      "createVpn": "创建 VPN 网络"
+    },
+    "actions": {
+      "stageCreate": "暂存创建",
+      "stage": "暂存",
+      "cancel": "取消"
+    },
+    "dialog": {
+      "createTitle": "暂存创建？",
+      "deleteTitle": "暂存删除？",
+      "stagePrefix": "暂存",
+      "against": "用于",
+      "suffix": "。该更改通过“待应用更改”面板应用。"
+    },
+    "toast": {
+      "created": {
+        "title": "已暂存 VPN 创建"
+      },
+      "deleted": {
+        "title": "已暂存 VPN 删除"
+      },
+      "stageFailed": {
+        "title": "暂存更改失败"
+      }
+    }
+  },
+  "UniFiSwitchTab": {
+    "title": "UniFi 交换机端口",
+    "siteLabel": "站点：",
+    "description": "暂存每个端口的 PoE、配置文件、重命名和重启。所有操作都针对交换机 MAC + 端口暂存。",
+    "loading": "正在加载…",
+    "loadError": "加载交换机失败：",
+    "unknownError": "未知错误",
+    "empty": "没有已纳管的交换机。请使用上方表单针对交换机 MAC 暂存操作。",
+    "portLabel": "端口 {{port}}",
+    "portShort": "P{{port}}",
+    "portCount": "{{count}} 个端口",
+    "status": {
+      "disabled": "已禁用"
+    },
+    "fields": {
+      "mac": "交换机 MAC",
+      "port": "端口",
+      "poeMode": "PoE 模式",
+      "profileId": "端口配置文件 ID",
+      "profileIdPlaceholder": "Mongo ObjectID",
+      "portName": "端口名称",
+      "portNamePlaceholder": "上行链路"
+    },
+    "form": {
+      "stageByMac": "按交换机 MAC + 端口暂存"
+    },
+    "operations": {
+      "set_poe": "设置 PoE",
+      "port_profile": "设置端口配置文件",
+      "power_cycle": "重启端口",
+      "update_port": "更新端口"
+    },
+    "actions": {
+      "stagePoe": "暂存 PoE",
+      "stageProfile": "暂存配置文件",
+      "stageUpdate": "暂存更新",
+      "stagePowerCycle": "暂存重启",
+      "select": "选择",
+      "stage": "暂存",
+      "cancel": "取消"
+    },
+    "dialog": {
+      "title": "{{operation}}？",
+      "stagePrefix": "暂存",
+      "against": "针对",
+      "onPort": "在端口",
+      "suffix": "。该更改通过“待应用更改”面板应用。",
+      "powerCyclePrefix": "这会",
+      "powerCycleWord": "中断该端口的链路",
+      "powerCycleSuffix": "，并需要在面板中输入 APPLY。"
+    },
+    "toast": {
+      "staged": "已暂存交换机 {{kind}}",
+      "stageFailed": "暂存更改失败"
+    }
+  },
+  "UniFiPortProfilesTab": {
+    "title": "UniFi 端口配置文件",
+    "siteLabel": "站点：",
+    "description": "暂存端口配置文件的创建/删除。转发、VLAN 和 PoE 的详细信息在面板的负载预览中细化。",
+    "loading": "正在加载…",
+    "loadError": "加载端口配置文件失败：",
+    "unknownError": "未知错误",
+    "empty": "没有端口配置文件。请使用上方表单暂存创建。",
+    "fields": {
+      "name": "名称",
+      "namePlaceholder": "全部 / 原生"
+    },
+    "form": {
+      "createProfile": "创建端口配置文件"
+    },
+    "actions": {
+      "stageCreate": "暂存创建",
+      "stage": "暂存",
+      "cancel": "取消"
+    },
+    "dialog": {
+      "createTitle": "暂存创建？",
+      "deleteTitle": "暂存删除？",
+      "stagePrefix": "暂存",
+      "against": "用于",
+      "suffix": "。该更改通过“待应用更改”面板应用。"
+    },
+    "toast": {
+      "created": {
+        "title": "已暂存端口配置文件创建"
+      },
+      "deleted": {
+        "title": "已暂存端口配置文件删除"
+      },
+      "stageFailed": {
+        "title": "暂存更改失败"
+      }
+    }
+  },
+  "UniFiRadiosTab": {
+    "title": "UniFi 无线电",
+    "siteLabel": "站点：",
+    "description": "暂存 AP 上每个无线电的信道、发射功率和带宽。空白字段会从负载中省略。",
+    "loading": "正在加载…",
+    "loadError": "加载无线电失败：",
+    "unknownError": "未知错误",
+    "empty": "没有带无线电的 AP。请使用上方表单针对 AP MAC 暂存更新。",
+    "bands": {
+      "ng": "2.4 GHz (ng)",
+      "na": "5 GHz (na)",
+      "6e": "6 GHz (6e)"
+    },
+    "fields": {
+      "mac": "AP MAC",
+      "band": "频段",
+      "channel": "信道",
+      "channelPlaceholder": "auto / 36",
+      "width": "信道带宽 (MHz)",
+      "txPowerMode": "发射功率模式",
+      "txPower": "发射功率 (dBm)",
+      "txPowerPlaceholder": "例如 20",
+      "unset": "（未设置）"
+    },
+    "form": {
+      "stageUpdate": "暂存无线电更新"
+    },
+    "actions": {
+      "stageUpdate": "暂存更新",
+      "select": "选择",
+      "stage": "暂存",
+      "cancel": "取消"
+    },
+    "dialog": {
+      "title": "暂存无线电更新？",
+      "stagePrefix": "暂存",
+      "against": "针对",
+      "suffix": "。该更改通过“待应用更改”面板应用。"
+    },
+    "toast": {
+      "staged": {
+        "title": "已暂存无线电更新"
+      },
+      "stageFailed": {
+        "title": "暂存更改失败"
+      }
+    }
+  },
+  "UniFiWlanGroupsTab": {
+    "title": "UniFi WLAN 组",
+    "siteLabel": "站点：",
+    "description": "暂存 WLAN 组的创建/删除。SSID 成员在面板的负载预览中分配。",
+    "loading": "正在加载…",
+    "loadError": "加载 WLAN 组失败：",
+    "unknownError": "未知错误",
+    "empty": "没有 WLAN 组。请使用上方表单暂存创建。",
+    "wlanCount": "{{count}} 个 SSID",
+    "fields": {
+      "name": "名称",
+      "namePlaceholder": "默认"
+    },
+    "form": {
+      "createGroup": "创建 WLAN 组"
+    },
+    "actions": {
+      "stageCreate": "暂存创建",
+      "stage": "暂存",
+      "cancel": "取消"
+    },
+    "dialog": {
+      "createTitle": "暂存创建？",
+      "deleteTitle": "暂存删除？",
+      "stagePrefix": "暂存",
+      "against": "用于",
+      "suffix": "。该更改通过“待应用更改”面板应用。"
+    },
+    "toast": {
+      "created": {
+        "title": "已暂存 WLAN 组创建"
+      },
+      "deleted": {
+        "title": "已暂存 WLAN 组删除"
+      },
+      "stageFailed": {
+        "title": "暂存更改失败"
+      }
+    }
+  },
+  "GatewayRoutingTab": {
+    "staticRoutes": {
+      "title": "静态路由",
+      "description": "手动配置的路由",
+      "addRoute": "添加路由",
+      "columns": {
+        "network": "网络",
+        "gateway": "网关",
+        "description": "描述",
+        "active": "已启用"
+      }
+    },
+    "routingTable": {
+      "title": "路由表",
+      "description": "完整的内核路由表",
+      "searchPlaceholder": "搜索路由...",
+      "columns": {
+        "destination": "目标",
+        "gateway": "网关",
+        "interface": "接口",
+        "flags": "标志",
+        "type": "类型"
+      }
+    },
+    "arpTable": {
+      "title": "ARP 表",
+      "description": "IP 到 MAC 地址映射",
+      "searchPlaceholder": "搜索 ARP...",
+      "permanent": "静态",
+      "dynamic": "动态",
+      "columns": {
+        "ip": "IP 地址",
+        "mac": "MAC",
+        "hostname": "主机名",
+        "interface": "接口",
+        "manufacturer": "制造商",
+        "type": "类型"
+      }
+    }
+  },
+  "GatewayDiagnosticsTab": {
+    "diagnostics": {
+      "title": "网络诊断",
+      "description": "从网关运行 ping、traceroute 和 DNS 查询",
+      "hostPlaceholder": "输入主机名或 IP（例如 8.8.8.8、google.com）"
+    },
+    "actions": {
+      "ping": "Ping",
+      "traceroute": "Traceroute",
+      "dnsLookup": "DNS 查询"
+    },
+    "results": {
+      "ping": "Ping 结果",
+      "traceroute": "Traceroute 结果",
+      "dnsLookup": "DNS 查询结果"
+    },
+    "connections": {
+      "title": "活动连接（PF 状态）",
+      "description": "防火墙跟踪的当前网络连接",
+      "searchPlaceholder": "搜索连接...",
+      "columns": {
+        "protocol": "协议",
+        "source": "源",
+        "destination": "目标",
+        "state": "状态",
+        "direction": "方向",
+        "bytes": "字节"
+      }
+    }
+  },
+  "UniFiRadiusTab": {
+    "title": "RADIUS 用户",
+    "siteLabel": "站点：",
+    "description": "暂存内置 RADIUS 用户的创建/删除（WPA-Enterprise 与端口认证）。更改通过待应用更改抽屉生效。",
+    "form": { "create": "暂存新的 RADIUS 用户" },
+    "fields": {
+      "name": "用户名",
+      "namePlaceholder": "例如 alice",
+      "password": "密码",
+      "passwordPlaceholder": "RADIUS 密钥"
+    },
+    "actions": { "stageCreate": "暂存创建", "cancel": "取消", "stage": "暂存" },
+    "loadError": "无法加载 RADIUS 用户：",
+    "unknownError": "未知错误",
+    "loading": "正在加载 RADIUS 用户…",
+    "empty": "此控制器上没有 RADIUS 用户。使用上方表单暂存一个。",
+    "toast": {
+      "created": { "title": "已暂存 RADIUS 用户创建" },
+      "deleted": { "title": "已暂存 RADIUS 用户删除" },
+      "stageFailed": { "title": "暂存更改失败" }
+    },
+    "dialog": {
+      "createTitle": "暂存 RADIUS 用户？",
+      "deleteTitle": "暂存 RADIUS 用户删除？",
+      "stagePrefix": "暂存",
+      "against": "针对",
+      "suffix": "？该更改通过待应用更改抽屉生效。"
+    }
+  },
+  "UniFiHotspotTab": {
+    "title": "热点",
+    "siteLabel": "站点：",
+    "description": "暂存访客凭证与门户操作员。更改通过待应用更改抽屉生效。",
+    "kinds": { "voucher": "凭证", "operator": "操作员" },
+    "form": { "createVoucher": "生成访客凭证", "createOperator": "暂存门户操作员" },
+    "fields": {
+      "kind": "资源",
+      "count": "数量",
+      "expireMinutes": "有效期（分钟）",
+      "quota": "可用次数",
+      "note": "备注",
+      "notePlaceholder": "可选标签",
+      "name": "用户名",
+      "password": "密码"
+    },
+    "actions": {
+      "stageVoucher": "暂存凭证",
+      "stageOperator": "暂存操作员",
+      "cancel": "取消",
+      "stage": "暂存"
+    },
+    "loadError": "无法加载热点数据：",
+    "unknownError": "未知错误",
+    "loading": "正在加载…",
+    "empty": "暂无内容。使用上方表单暂存一个创建。",
+    "toast": {
+      "created": { "title": "已暂存热点创建" },
+      "deleted": { "title": "已暂存热点删除" },
+      "stageFailed": { "title": "暂存更改失败" }
+    },
+    "dialog": {
+      "createTitle": "暂存热点创建？",
+      "deleteTitle": "暂存热点删除？",
+      "createBody": "暂存此热点创建？该更改通过待应用更改抽屉生效。",
+      "deleteBody": "暂存删除 {{label}}？该更改通过待应用更改抽屉生效。"
+    }
+  },
+  "UniFiControllerPage": {
+    "subtitle": "UniFi 网络位于 {{host}}:{{port}} · 站点={{site}}",
+    "actions": {
+      "back": "返回"
+    },
+    "tabs": {
+      "clients": "客户端",
+      "devices": "设备",
+      "wlans": "WLAN",
+      "networks": "网络",
+      "firewall": "防火墙",
+      "traffic": "流量",
+      "dns": "DNS",
+      "routing": "路由",
+      "vpn": "VPN",
+      "switch": "交换机端口",
+      "portProfiles": "端口配置文件",
+      "radios": "无线电",
+      "wlanGroups": "WLAN 组",
+      "radius": "RADIUS",
+      "hotspot": "热点"
+    },
+    "errors": {
+      "missingId": "缺少控制器 id。",
+      "loadFailed": "加载控制器失败：",
+      "unknown": "未知错误",
+      "notUnifi": {
+        "before": "控制器",
+        "middle": "不是 UniFi 控制器（类型=",
+        "after": "）。"
+      }
+    }
+  },
+  "GatewaySyncTab": {
+    "title": "同步历史",
+    "description": "最近的同步事件",
+    "actions": {
+      "syncNow": "立即同步"
+    }
+  }
+}

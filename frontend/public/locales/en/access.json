@@ -1,0 +1,26 @@
+{
+  "AccessControlPage": {
+    "title": "Access Control",
+    "description": "Physical access control management",
+    "comingSoon": "Coming Soon",
+    "comingSoonDescription": "Physical access control integration is planned for a future release. Door controllers, cardholders, and event management will be available here.",
+    "features": {
+      "doorManagement": {
+        "title": "Door Management",
+        "desc": "Monitor and control doors, gates, and barriers in real time."
+      },
+      "cardholders": {
+        "title": "Cardholders & Credentials",
+        "desc": "Manage access cards, PINs, and biometric credentials."
+      },
+      "eventHistory": {
+        "title": "Event History",
+        "desc": "Full audit trail of access events with search and export."
+      },
+      "accessPolicies": {
+        "title": "Access Policies",
+        "desc": "Time-based schedules, anti-passback, and multi-factor rules."
+      }
+    }
+  }
+}

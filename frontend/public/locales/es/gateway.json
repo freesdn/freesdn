@@ -1,0 +1,975 @@
+{
+  "GatewayPage": {
+    "header": {
+      "title": "Orquestación",
+      "subtitle": "Distribución de VLAN, detección de desviaciones y gestión de recursos entre gateways"
+    },
+    "error": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "common": {
+      "on": "Activado",
+      "off": "Desactivado",
+      "up": "Activo",
+      "down": "Inactivo"
+    },
+    "time": {
+      "never": "Nunca",
+      "justNow": "Justo ahora",
+      "minutesAgo": "hace {{n}} min",
+      "hoursAgo": "hace {{n}} h",
+      "daysAgo": "hace {{n}} d"
+    },
+    "status": {
+      "pending": "Pendiente",
+      "executing": "Ejecutando",
+      "completed": "Completado",
+      "failed": "Fallido",
+      "rolledBack": "Revertido"
+    },
+    "toast": {
+      "error": "Error",
+      "importComplete": {
+        "title": "Importación completada",
+        "description": "VLAN importadas desde el dispositivo cerebro"
+      },
+      "importFailed": {
+        "title": "Error de importación",
+        "description": "No se pudo leer del cerebro"
+      },
+      "distributionComplete": {
+        "title": "Distribución completada",
+        "description": "VLAN enviadas a los dispositivos extremidad"
+      },
+      "distributionFailed": {
+        "title": "Error de distribución",
+        "description": "No se pudo enviar a las extremidades"
+      },
+      "createVlanFailed": "No se pudo crear la VLAN",
+      "deleteVlanFailed": "No se pudo eliminar la VLAN",
+      "triggerDistributionFailed": "No se pudo iniciar la distribución",
+      "resolveDriftFailed": "No se pudo resolver el evento de desviación",
+      "createTemplateFailed": "No se pudo crear la plantilla",
+      "deleteTemplateFailed": "No se pudo eliminar la plantilla",
+      "retractDistributionFailed": "No se pudo retirar la distribución",
+      "triggerDriftCheckFailed": "No se pudo iniciar la verificación de desviación",
+      "retryDistributionFailed": "No se pudo reintentar la distribución",
+      "rollbackDistributionFailed": "No se pudo revertir la distribución"
+    },
+    "tabs": {
+      "dashboard": "Panel",
+      "vlans": "VLAN",
+      "distribution": "Distribución",
+      "drift": "Desviación",
+      "templates": "Plantillas",
+      "fwRules": "Reglas FW",
+      "nat": "NAT",
+      "vpn": "VPN",
+      "interfaces": "Interfaces",
+      "dhcpLeases": "Concesiones DHCP",
+      "reconciliation": "Reconciliación"
+    },
+    "dashboard": {
+      "stats": {
+        "canonicalVlans": "VLAN canónicas",
+        "siteRoleMaps": "Mapas de roles del sitio",
+        "distributions": "Distribuciones",
+        "openDriftEvents": "Eventos de desviación abiertos"
+      },
+      "driftSummary": {
+        "title": "Resumen de desviaciones",
+        "description": "Desviación de configuración en todos los dispositivos gestionados"
+      },
+      "quickActions": {
+        "title": "Acciones rápidas",
+        "manageVlans": "Gestionar VLAN",
+        "importWizard": "Asistente de importación",
+        "vlanTemplates": "Plantillas de VLAN",
+        "driftEvents": "Eventos de desviación"
+      }
+    },
+    "driftSummary": {
+      "total": "Total",
+      "critical": "Crítico",
+      "warning": "Advertencia",
+      "info": "Información",
+      "pending": "Pendiente",
+      "resolved": "Resuelto"
+    },
+    "vlanColumns": {
+      "vlan": "VLAN",
+      "name": "Nombre",
+      "subnet": "Subred",
+      "gateway": "Gateway",
+      "purpose": "Propósito",
+      "dhcp": "DHCP",
+      "state": "Estado"
+    },
+    "vlanActions": {
+      "distribute": "Distribuir",
+      "retract": "Retirar",
+      "delete": "Eliminar",
+      "deleteConfirm": "¿Eliminar esta VLAN canónica? Esta acción no se puede deshacer."
+    },
+    "vlans": {
+      "searchPlaceholder": "Buscar VLAN...",
+      "createVlan": "Crear VLAN"
+    },
+    "distColumns": {
+      "resource": "Recurso",
+      "action": "Acción",
+      "status": "Estado",
+      "started": "Iniciado",
+      "completed": "Completado",
+      "error": "Error"
+    },
+    "distActions": {
+      "retry": "Reintentar",
+      "rollback": "Revertir"
+    },
+    "distribution": {
+      "stepDetails": "Detalles del paso · {{action}} {{resource}}"
+    },
+    "driftColumns": {
+      "severity": "Gravedad",
+      "type": "Tipo",
+      "resource": "Recurso",
+      "message": "Mensaje",
+      "resolution": "Resolución",
+      "detected": "Detectado"
+    },
+    "driftActions": {
+      "reapply": "Volver a aplicar canónica",
+      "accept": "Aceptar estado del dispositivo",
+      "ignore": "Ignorar"
+    },
+    "drift": {
+      "severityPlaceholder": "Gravedad",
+      "resolutionPlaceholder": "Resolución",
+      "allSeverity": "Toda la gravedad",
+      "allStatus": "Todos los estados",
+      "runDriftCheck": "Ejecutar verificación de desviación",
+      "selectSiteHint": "Seleccione un sitio en el filtro del encabezado para ejecutar una verificación de desviación."
+    },
+    "templateColumns": {
+      "name": "Nombre",
+      "vlanId": "ID de VLAN",
+      "subnetTemplate": "Plantilla de subred",
+      "purpose": "Propósito",
+      "dhcp": "DHCP"
+    },
+    "templateActions": {
+      "delete": "Eliminar",
+      "deleteConfirm": "¿Eliminar esta plantilla de VLAN? Esta acción no se puede deshacer."
+    },
+    "templates": {
+      "createTemplate": "Crear plantilla"
+    },
+    "fwRuleColumns": {
+      "index": "#",
+      "name": "Nombre",
+      "dir": "Dir",
+      "action": "Acción",
+      "proto": "Proto",
+      "enabled": "Habilitada",
+      "hits": "Coincidencias",
+      "synced": "Sincronizado"
+    },
+    "natColumns": {
+      "name": "Nombre",
+      "type": "Tipo",
+      "enabled": "Habilitada",
+      "synced": "Sincronizado"
+    },
+    "vpnColumns": {
+      "name": "Nombre",
+      "type": "Tipo",
+      "status": "Estado",
+      "synced": "Sincronizado"
+    },
+    "ifaceColumns": {
+      "name": "Nombre",
+      "type": "Tipo",
+      "ipv4": "IPv4",
+      "vlan": "VLAN",
+      "status": "Estado",
+      "mac": "MAC"
+    },
+    "dhcpColumns": {
+      "ipAddress": "Dirección IP",
+      "macAddress": "Dirección MAC",
+      "hostname": "Nombre de host",
+      "interface": "Interfaz",
+      "status": "Estado"
+    },
+    "reconciliation": {
+      "selectSiteTitle": "Seleccione un sitio para ver el estado de reconciliación",
+      "selectSiteDescription": "Use el filtro de sitio en el encabezado para seleccionar un sitio.",
+      "importFromBrain": "Importar del cerebro",
+      "distributeToLimbs": "Distribuir a las extremidades",
+      "refresh": "Actualizar",
+      "alignmentScore": "Puntuación de alineación",
+      "totalVlans": "Total de VLAN",
+      "aligned": "Alineadas",
+      "missing": "Faltantes",
+      "extra": "Adicionales"
+    },
+    "alignmentTable": {
+      "vlan": "VLAN",
+      "name": "Nombre",
+      "device": "Dispositivo",
+      "role": "Rol",
+      "status": "Estado"
+    },
+    "createVlanDialog": {
+      "title": "Crear VLAN canónica",
+      "description": "Defina una nueva VLAN para distribuir en su topología cerebro/extremidad.",
+      "submitLabel": "Crear VLAN",
+      "site": "Sitio",
+      "selectSite": "Seleccionar sitio",
+      "vlanId": "ID de VLAN",
+      "vlanIdPlaceholder": "p. ej. 30",
+      "name": "Nombre",
+      "namePlaceholder": "p. ej. WiFi de invitados",
+      "subnet": "Subred",
+      "subnetPlaceholder": "p. ej. 10.30.0.0/24",
+      "gatewayIp": "IP del gateway",
+      "gatewayIpPlaceholder": "p. ej. 10.30.0.1",
+      "purpose": "Propósito",
+      "enableDhcp": "Habilitar DHCP",
+      "dhcpRangeStart": "Inicio del rango DHCP",
+      "dhcpRangeStartPlaceholder": "p. ej. 10.30.0.100",
+      "dhcpRangeEnd": "Fin del rango DHCP",
+      "dhcpRangeEndPlaceholder": "p. ej. 10.30.0.254"
+    },
+    "createTemplateDialog": {
+      "title": "Crear plantilla de VLAN",
+      "description": "Las plantillas se pueden aplicar a cualquier sitio para crear rápidamente VLAN canónicas.",
+      "submitLabel": "Crear plantilla",
+      "name": "Nombre",
+      "namePlaceholder": "p. ej. VLAN de invitados estándar",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": "Descripción opcional",
+      "vlanId": "ID de VLAN",
+      "subnetTemplate": "Plantilla de subred",
+      "subnetTemplatePlaceholder": "p. ej. 10.{site}.30.0/24",
+      "purpose": "Propósito",
+      "enableDhcp": "Habilitar DHCP"
+    }
+  },
+  "ImportWizardPage": {
+    "header": {
+      "title": "Asistente de importación",
+      "subtitleSession": "Sesión {{id}}… · Paso {{step}}/6",
+      "subtitleDefault": "Importación de configuración de puerta de enlace existente"
+    },
+    "steps": {
+      "discover": {
+        "label": "Descubrir",
+        "description": "Descubrir dispositivos de puerta de enlace en el sitio"
+      },
+      "assignRoles": {
+        "label": "Asignar roles",
+        "description": "Designar dispositivos cerebro y extremidad"
+      },
+      "scan": {
+        "label": "Escanear",
+        "description": "Obtener VLAN, interfaces y grupos DHCP"
+      },
+      "reconcile": {
+        "label": "Conciliar",
+        "description": "Resolver conflictos y seleccionar recursos"
+      },
+      "apply": {
+        "label": "Aplicar",
+        "description": "Crear VLAN canónicas y distribuir"
+      },
+      "verify": {
+        "label": "Verificar",
+        "description": "Confirmar que la configuración coincide con la intención"
+      }
+    },
+    "actions": {
+      "cancel": "Cancelar",
+      "cancelImport": "Cancelar importación",
+      "backToGateway": "Volver a la puerta de enlace"
+    },
+    "siteSelection": {
+      "title": "Iniciar importación de configuración existente",
+      "description": "Importa configuraciones de puerta de enlace existentes. El asistente descubrirá dispositivos, te permitirá asignar roles cerebro/extremidad, escaneará VLAN y creará recursos canónicos.",
+      "selectSite": "Seleccionar sitio",
+      "sitePlaceholder": "Elige un sitio...",
+      "discovering": "Descubriendo...",
+      "startImport": "Iniciar importación",
+      "startError": "No se pudo iniciar la importación. Comprueba las conexiones de la puerta de enlace de este sitio."
+    },
+    "assignRoles": {
+      "noDevicesTitle": "No se descubrieron dispositivos",
+      "noDevicesDescription": "No se encontraron conexiones de puerta de enlace en este sitio. Agrega primero las conexiones de puerta de enlace.",
+      "title": "Asignar roles de dispositivo",
+      "descriptionBefore": "Designa un dispositivo como el",
+      "brain": "cerebro",
+      "descriptionMiddle": "(puerta de enlace L3 autoritativa) y el resto como",
+      "limbs": "extremidades",
+      "descriptionAfter": "(conmutadores L2 o dispositivos secundarios). La configuración del cerebro es canónica y se distribuirá a las extremidades.",
+      "online": "En línea",
+      "offline": "Sin conexión",
+      "roleBrain": "Cerebro",
+      "roleLimb": "Extremidad",
+      "brainRequired": "Debes asignar al menos un dispositivo como cerebro.",
+      "scanning": "Escaneando...",
+      "scanDevices": "Escanear dispositivos"
+    },
+    "scanning": {
+      "title": "Escaneando dispositivos",
+      "description": "Obteniendo VLAN, interfaces, grupos DHCP y registros DNS del dispositivo cerebro..."
+    },
+    "reconcile": {
+      "conflictsTitle": "Conflictos detectados ({{count}})",
+      "conflictsDescription": "Estos recursos tienen configuraciones en conflicto entre los dispositivos cerebro y extremidad.",
+      "conflictItem": "{{type}} · VLAN {{tag}}",
+      "discoveredVlansTitle": "VLAN descubiertas",
+      "discoveredVlansDescription": "Elige una acción para cada recurso descubierto. \"Importar\" crea una VLAN canónica y la distribuye a todas las extremidades.",
+      "noVlans": "No se descubrieron VLAN en el dispositivo cerebro.",
+      "vlanLabel": "VLAN {{tag}}",
+      "conflictBadge": "Conflicto",
+      "decisionImport": "Importar",
+      "decisionAdoptBrain": "Adoptar cerebro",
+      "decisionAdoptLimb": "Adoptar extremidad",
+      "decisionKeepBoth": "Mantener ambos",
+      "decisionIgnore": "Ignorar",
+      "applying": "Aplicando...",
+      "applyVerify": "Aplicar y verificar"
+    },
+    "applying": {
+      "title": "Aplicando configuración",
+      "description": "Creando VLAN canónicas y distribuyéndolas a los dispositivos extremidad..."
+    },
+    "complete": {
+      "verifiedTitle": "Importación verificada",
+      "verifiedDescription": "Todas las VLAN canónicas se distribuyeron y verificaron correctamente.",
+      "mismatchTitle": "Importación completada con discrepancias",
+      "mismatchDescription": "Algunas configuraciones no se pudieron verificar. Revisa las discrepancias a continuación.",
+      "mismatchesTitle": "Discrepancias ({{count}})",
+      "distributionRecordsTitle": "Registros de distribución",
+      "distributionQueued": "{{count}} distribución(es) en cola.",
+      "distributionViewDetails": "Ver detalles en la",
+      "distributionTab": "pestaña Distribución",
+      "viewCanonicalVlans": "Ver VLAN canónicas"
+    },
+    "failed": {
+      "cancelledTitle": "Importación cancelada",
+      "failedTitle": "Error de importación",
+      "cancelledDescription": "Esta sesión de importación fue cancelada. No se realizaron cambios.",
+      "failedDescription": "Ocurrió un error durante la importación. Inténtalo de nuevo.",
+      "retry": "Reintentar"
+    },
+    "cancelDialog": {
+      "title": "¿Cancelar importación?",
+      "description": "Esto cancelará la sesión de importación actual. No se guardarán los cambios que no se hayan aplicado. Esta acción no se puede deshacer.",
+      "continue": "Continuar importando",
+      "cancelling": "Cancelando..."
+    }
+  },
+  "GatewayBulkPage": {
+    "header": {
+      "title": "Operaciones masivas y plantillas",
+      "description": "Prepara operaciones masivas de dispositivos, SSID, clientes y plantillas de sitio. Nada se envía al controlador hasta que un operador lo aplique explícitamente con force=true."
+    },
+    "target": {
+      "title": "Destino",
+      "description": "Elige el controlador Omada y el sitio para las operaciones masivas."
+    },
+    "notReady": {
+      "title": "Selecciona un controlador y un sitio",
+      "description": "Las operaciones masivas se limitan por sitio. Selecciona ambos para cargar el estado en vivo."
+    },
+    "tabs": {
+      "templates": "Plantillas",
+      "pending": "Pendientes"
+    },
+    "templates": {
+      "title": "Plantillas de sitio disponibles en este controlador",
+      "description": "Las plantillas clonan ajustes (VLAN, ACL, SSID, etc.) en otro sitio. Las acciones de aplicar, exportar y eliminar quedan preparadas.",
+      "loadError": "No se pudieron cargar las plantillas"
+    },
+    "pending": {
+      "title": "Cambios masivos y de plantillas pendientes",
+      "description": "Preparados en nuestra base de datos. Aplícalos explícitamente desde la pantalla de Cambios pendientes.",
+      "empty": "No hay cambios masivos pendientes",
+      "loadError": "No se pudieron cargar los cambios masivos pendientes"
+    },
+    "templatesTable": {
+      "empty": "No hay plantillas",
+      "name": "Nombre",
+      "id": "ID",
+      "description": "Descripción"
+    },
+    "pendingTable": {
+      "feature": "Función",
+      "operation": "Operación",
+      "target": "Destino",
+      "created": "Creado",
+      "status": "Estado"
+    }
+  },
+  "GatewayDiagnosticsPage": {
+    "title": "Diagnóstico de la puerta de enlace",
+    "description": "Telemetría en vivo de una puerta de enlace: prueba de velocidad WAN, estadísticas de sesión y lista de sesiones activas. La prueba de velocidad es una medición, no un cambio de configuración: no se prepara para aplicar.",
+    "target": {
+      "title": "Destino",
+      "description": "El diagnóstico se dirige a una puerta de enlace específica por MAC.",
+      "gatewayMac": "MAC de la puerta de enlace",
+      "load": "Cargar",
+      "loadedFor": "Cargado para"
+    },
+    "empty": {
+      "pickTarget": {
+        "title": "Elige un controlador y un sitio",
+        "description": "El diagnóstico es por sitio. Selecciona ambos y luego introduce una MAC de puerta de enlace."
+      },
+      "enterMac": {
+        "title": "Introduce una MAC de puerta de enlace",
+        "description": "Indica la MAC de la puerta de enlace que quieres diagnosticar."
+      }
+    },
+    "tabs": {
+      "speed": "Prueba de velocidad",
+      "stats": "Estadísticas de sesión",
+      "active": "Sesiones activas"
+    },
+    "speedTest": {
+      "title": "Prueba de velocidad WAN",
+      "description": "Inicia una medición y consulta el último resultado. Solo medición, sin preparación de cambios.",
+      "running": "Ejecutando…",
+      "run": "Ejecutar prueba de velocidad",
+      "triggerError": "No se pudo iniciar la prueba de velocidad",
+      "loadError": "No se pudo cargar el resultado de la prueba de velocidad",
+      "empty": {
+        "title": "Aún no hay resultado de la prueba de velocidad",
+        "description": "Pulsa Ejecutar para iniciar una medición."
+      },
+      "download": "Descarga",
+      "upload": "Subida",
+      "latency": "Latencia"
+    },
+    "sessionStats": {
+      "title": "Estadísticas de sesión",
+      "loadError": "No se pudieron cargar las estadísticas de sesión"
+    },
+    "activeSessions": {
+      "title": "Sesiones activas",
+      "loadError": "No se pudieron cargar las sesiones activas",
+      "empty": "No hay sesiones activas",
+      "columns": {
+        "client": "Cliente",
+        "source": "Origen",
+        "destination": "Destino",
+        "proto": "Protocolo",
+        "bytes": "Bytes"
+      }
+    }
+  },
+  "GatewayFirewallPage": {
+    "header": {
+      "title": "Profundidad del firewall",
+      "description": "Inspeccione los bloques de configuración del firewall del lado del controlador (DMZ, UPnP, defensa contra ataques, ALG, IDS/IPS). Todas las ediciones se preparan: aplíquelas explícitamente mediante Cambios pendientes."
+    },
+    "target": {
+      "title": "Destino",
+      "description": "Las configuraciones del firewall tienen alcance por sitio."
+    },
+    "emptyPicker": {
+      "title": "Seleccione un controlador y un sitio",
+      "description": "Las configuraciones del firewall son por sitio. Seleccione ambos para cargar el estado en vivo."
+    },
+    "tabs": {
+      "configs": "Configuraciones",
+      "pending": "Pendientes"
+    },
+    "configCards": {
+      "dmz": "DMZ",
+      "upnp": "UPnP",
+      "attackDefense": "Defensa contra ataques",
+      "alg": "ALG",
+      "idsIps": "IDS / IPS",
+      "loadError": "No se pudo cargar la configuración de {{label}}"
+    },
+    "pending": {
+      "title": "Cambios de firewall pendientes",
+      "description": "Preparados en nuestra base de datos. Aplíquelos explícitamente mediante la pantalla Cambios pendientes.",
+      "empty": "No hay cambios de firewall pendientes",
+      "loadError": "No se pudieron cargar los cambios de firewall pendientes"
+    },
+    "table": {
+      "feature": "Función",
+      "operation": "Operación",
+      "target": "Destino",
+      "created": "Creado",
+      "status": "Estado"
+    }
+  },
+  "GatewayControllerSitePicker": {
+    "controller": {
+      "label": "Controlador",
+      "placeholder": "Elegir controlador",
+      "empty": "No hay controladores configurados para este sitio."
+    },
+    "site": {
+      "label": "Sitio",
+      "placeholder": "Elegir sitio",
+      "empty": "No hay sitios disponibles."
+    },
+    "unreachable": "Controlador inaccesible — verifica que esté en línea y accesible (host, puerto, credenciales) y vuelve a intentarlo."
+  },
+  "GatewayFirmwarePage": {
+    "header": {
+      "title": "Firmware de la puerta de enlace",
+      "description": "Consulta el estado del firmware en vivo de tu puerta de enlace Omada. Las acciones de actualización se preparan para revisión: nunca se envían al controlador en vivo hasta que las apliques explícitamente."
+    },
+    "target": {
+      "title": "Destino",
+      "description": "Elige el controlador Omada y el sitio que deseas inspeccionar."
+    },
+    "notReady": {
+      "title": "Selecciona un controlador y un sitio",
+      "description": "Los datos de firmware son por sitio. Selecciona ambos para cargar el estado en vivo."
+    },
+    "tabs": {
+      "available": "Disponibles",
+      "schedules": "Programaciones",
+      "history": "Historial",
+      "pending": "Pendientes"
+    },
+    "available": {
+      "title": "Imágenes de firmware disponibles para los dispositivos adoptados",
+      "loadError": "No se pudo cargar la lista de firmware"
+    },
+    "schedules": {
+      "title": "Programaciones de actualización automática",
+      "description": "Los cambios de programación se preparan. Aplícalos desde la pestaña Pendientes.",
+      "loadError": "No se pudieron cargar las programaciones"
+    },
+    "history": {
+      "title": "Intentos de actualización recientes",
+      "loadError": "No se pudo cargar el historial de actualizaciones"
+    },
+    "pending": {
+      "title": "Cambios de firmware pendientes",
+      "description": "Preparados en nuestra base de datos. Nunca afectan al controlador a menos que los apliques con force=true Y OMADA_READ_ONLY esté desactivado en el entorno.",
+      "emptyTitle": "Sin cambios pendientes",
+      "emptyDescription": "No hay nada esperando para aplicarse."
+    },
+    "common": {
+      "yes": "Sí",
+      "no": "No"
+    },
+    "firmwareTable": {
+      "emptyTitle": "No hay firmware disponible",
+      "model": "Modelo",
+      "version": "Versión",
+      "released": "Publicado",
+      "notes": "Notas"
+    },
+    "schedulesTable": {
+      "emptyTitle": "Sin programaciones",
+      "emptyDescription": "Las programaciones de actualización automática te permiten aplicar parches a una flota en una ventana recurrente.",
+      "name": "Nombre",
+      "models": "Modelos",
+      "when": "Cuándo",
+      "stableOnly": "Solo estables"
+    },
+    "historyTable": {
+      "emptyTitle": "Sin historial de actualizaciones",
+      "device": "Dispositivo",
+      "fromTo": "De → A",
+      "status": "Estado",
+      "when": "Cuándo"
+    },
+    "pendingTable": {
+      "feature": "Función",
+      "operation": "Operación",
+      "target": "Destino",
+      "created": "Creado",
+      "status": "Estado"
+    }
+  },
+  "GatewayHotspotPage": {
+    "header": {
+      "title": "Hotspot",
+      "description": "Inspecciona operadores de hotspot, gateway SMS y políticas de autenticación libre. Todos los cambios quedan en preparación: aplícalos explícitamente desde Cambios pendientes."
+    },
+    "target": {
+      "title": "Destino",
+      "description": "La configuración del hotspot es por sitio."
+    },
+    "picker": {
+      "title": "Selecciona un controlador y un sitio",
+      "description": "Los datos del hotspot son por sitio. Selecciona ambos para cargar el estado en vivo."
+    },
+    "tabs": {
+      "operators": "Operadores",
+      "sms": "Gateway SMS",
+      "freeAuth": "Autenticación libre",
+      "pending": "Pendientes"
+    },
+    "operators": {
+      "title": "Operadores de hotspot",
+      "description": "Cuentas de administración del portal cautivo (en vivo).",
+      "error": "No se pudieron cargar los operadores",
+      "empty": "No hay operadores de hotspot",
+      "columns": {
+        "username": "Usuario",
+        "role": "Rol",
+        "portal": "Portal",
+        "notes": "Notas"
+      }
+    },
+    "sms": {
+      "title": "Gateway SMS",
+      "description": "Configuración del proveedor usada por los portales de autenticación por SMS.",
+      "error": "No se pudo cargar el gateway SMS"
+    },
+    "freeAuth": {
+      "title": "Políticas de autenticación libre",
+      "description": "Reglas de lista de permitidos que omiten el portal cautivo.",
+      "error": "No se pudieron cargar las políticas de autenticación libre",
+      "empty": "No hay políticas de autenticación libre",
+      "columns": {
+        "name": "Nombre",
+        "status": "Estado",
+        "match": "Coincidencia",
+        "id": "ID"
+      }
+    },
+    "pending": {
+      "title": "Cambios de hotspot pendientes",
+      "description": "Preparados en nuestra base de datos. Aplícalos explícitamente desde la pantalla de Cambios pendientes.",
+      "empty": "No hay cambios de hotspot pendientes",
+      "columns": {
+        "feature": "Función",
+        "operation": "Operación",
+        "target": "Destino",
+        "created": "Creado",
+        "status": "Estado"
+      }
+    }
+  },
+  "GatewayInsightsPage": {
+    "header": {
+      "title": "Información del gateway",
+      "description": "Telemetría de solo lectura: principales consumidores, anomalías, sugerencias de IA y topología de malla."
+    },
+    "target": {
+      "title": "Destino",
+      "description": "La información se limita a cada sitio."
+    },
+    "empty": {
+      "pickTarget": {
+        "title": "Selecciona un controlador y un sitio",
+        "description": "La información es por sitio. Selecciona ambos para cargar la telemetría en vivo."
+      }
+    },
+    "tabs": {
+      "topTalkers": "Principales consumidores",
+      "anomalies": "Anomalías",
+      "aiSuggestions": "Sugerencias de IA",
+      "meshTopology": "Topología de malla"
+    },
+    "topTalkers": {
+      "title": "Principales consumidores",
+      "description": "Clientes con mayor volumen en el último día.",
+      "error": "No se pudieron cargar los principales consumidores",
+      "empty": "Sin datos de tráfico",
+      "columns": {
+        "identity": "Identidad",
+        "kind": "Tipo",
+        "rx": "RX",
+        "tx": "TX",
+        "total": "Total"
+      }
+    },
+    "anomalies": {
+      "title": "Anomalías",
+      "description": "Detectadas durante el último día.",
+      "error": "No se pudieron cargar las anomalías",
+      "empty": "Sin anomalías",
+      "columns": {
+        "when": "Cuándo",
+        "severity": "Gravedad",
+        "type": "Tipo",
+        "description": "Descripción"
+      }
+    },
+    "aiSuggestions": {
+      "title": "Sugerencias de IA",
+      "description": "Recomendaciones generadas por el controlador.",
+      "error": "No se pudieron cargar las sugerencias de IA",
+      "empty": "Sin sugerencias de IA"
+    },
+    "meshTopology": {
+      "title": "Topología de malla",
+      "description": "Árbol de retorno inalámbrico.",
+      "error": "No se pudo cargar la topología de malla"
+    }
+  },
+  "GatewayProfilesPage": {
+    "header": {
+      "title": "Perfiles y catálogo de objetos",
+      "description": "Objetos reutilizables referenciados por filtro de URL, control de aplicaciones, ancho de banda, portal cautivo, RADIUS, PPSK y 802.1X. Las lecturas son en vivo; las escrituras se preparan."
+    },
+    "target": {
+      "title": "Destino",
+      "description": "Los perfiles tienen alcance por sitio."
+    },
+    "notReady": {
+      "title": "Elige un controlador y un sitio",
+      "description": "Los perfiles son por sitio. Selecciona ambos para cargar el estado en vivo."
+    },
+    "tabs": {
+      "macGroups": "Grupos MAC",
+      "domainGroups": "Grupos de dominios",
+      "ouiProfiles": "Perfiles OUI",
+      "timeRanges": "Rangos de tiempo",
+      "rateLimits": "Límites de velocidad",
+      "ppsk": "PPSK",
+      "radius": "RADIUS",
+      "ldap": "LDAP",
+      "pending": "Pendientes"
+    },
+    "list": {
+      "itemCountOne": "{{count}} elemento en este sitio",
+      "itemCountOther": "{{count}} elementos en este sitio",
+      "loadError": "No se pudo cargar {{label}}",
+      "empty": "Sin {{label}}",
+      "columns": {
+        "name": "Nombre",
+        "id": "ID",
+        "type": "Tipo",
+        "description": "Descripción"
+      }
+    },
+    "pending": {
+      "title": "Cambios de perfil pendientes",
+      "description": "Preparados en nuestra base de datos. Aplícalos explícitamente desde la pantalla Cambios pendientes.",
+      "empty": "No hay cambios de perfil pendientes",
+      "loadError": "No se pudieron cargar los cambios de perfil pendientes",
+      "columns": {
+        "feature": "Función",
+        "operation": "Operación",
+        "target": "Destino",
+        "created": "Creado",
+        "status": "Estado"
+      }
+    }
+  },
+  "GatewayRoutingPage": {
+    "header": {
+      "title": "Enrutamiento avanzado",
+      "description": "Inspeccione VRRP, rutas estáticas IPv6, BGP, vecinos y la tabla de enrutamiento en vivo. Los cambios quedan preparados."
+    },
+    "target": {
+      "title": "Destino",
+      "description": "Los datos de enrutamiento son por sitio."
+    },
+    "empty": {
+      "title": "Seleccione un controlador y un sitio",
+      "description": "Los datos de enrutamiento son por sitio. Seleccione ambos para cargar el estado en vivo."
+    },
+    "readTabs": {
+      "vrrp": "VRRP",
+      "bgp": "BGP",
+      "bgpNeighbors": "Vecinos BGP",
+      "ipv6Static": "Estático IPv6",
+      "routingTable": "Tabla de enrutamiento"
+    },
+    "tabs": {
+      "pending": "Pendientes"
+    },
+    "pending": {
+      "title": "Cambios de enrutamiento pendientes",
+      "description": "Preparados en nuestra base de datos. Aplíquelos explícitamente desde la pantalla de Cambios pendientes.",
+      "empty": "No hay cambios de enrutamiento pendientes",
+      "loadError": "No se pudieron cargar los cambios de enrutamiento pendientes"
+    },
+    "loadError": "No se pudo cargar {{label}}",
+    "table": {
+      "feature": "Función",
+      "operation": "Operación",
+      "target": "Destino",
+      "created": "Creado",
+      "status": "Estado"
+    }
+  },
+  "GatewaySwitchAdvancedPage": {
+    "header": {
+      "title": "Conmutador avanzado",
+      "description": "Inspeccione sFlow, sesiones de duplicación y MSTP por conmutador. Todos los cambios se preparan; aplíquelos explícitamente mediante Cambios pendientes."
+    },
+    "target": {
+      "title": "Destino",
+      "description": "Las funciones avanzadas del conmutador se limitan a un conmutador específico por MAC.",
+      "switchMacLabel": "MAC del conmutador",
+      "load": "Cargar",
+      "loadedFor": "Cargado para"
+    },
+    "empty": {
+      "pickController": {
+        "title": "Seleccione un controlador y un sitio",
+        "description": "Los datos avanzados del conmutador son por sitio. Seleccione ambos y luego ingrese una MAC de conmutador."
+      },
+      "enterMac": {
+        "title": "Ingrese una MAC de conmutador",
+        "description": "Proporcione la MAC del conmutador que desea inspeccionar."
+      }
+    },
+    "tabs": {
+      "sflow": "sFlow",
+      "mirror": "Sesiones de duplicación",
+      "mstp": "MSTP",
+      "pending": "Pendientes"
+    },
+    "config": {
+      "title": "Configuración de {{label}}",
+      "loadError": "No se pudo cargar la configuración de {{label}}"
+    },
+    "mirror": {
+      "title": "Sesiones de duplicación",
+      "loadError": "No se pudieron cargar las sesiones de duplicación",
+      "empty": "Sin sesiones de duplicación",
+      "columns": {
+        "session": "Sesión",
+        "source": "Origen",
+        "destination": "Destino",
+        "direction": "Dirección",
+        "status": "Estado"
+      }
+    },
+    "pending": {
+      "title": "Cambios avanzados del conmutador pendientes",
+      "description": "Preparados en nuestra base de datos. Aplíquelos explícitamente mediante la pantalla Cambios pendientes.",
+      "empty": "Sin cambios avanzados del conmutador pendientes",
+      "loadError": "No se pudieron cargar los cambios avanzados del conmutador pendientes",
+      "columns": {
+        "feature": "Función",
+        "operation": "Operación",
+        "target": "Destino",
+        "created": "Creado",
+        "status": "Estado"
+      }
+    }
+  },
+  "GatewaySystemPage": {
+    "pageTitle": "Configuración del sistema del controlador",
+    "pageDescription": "Inspecciona la configuración de sistema y monitoreo a nivel de controlador. Las ediciones quedan en preparación: nunca se envían al controlador en vivo hasta que se apliquen explícitamente.",
+    "controllerCard": {
+      "title": "Controlador",
+      "description": "La configuración del controlador es global: elige uno para inspeccionar."
+    },
+    "emptyPickController": {
+      "title": "Elige un controlador",
+      "description": "Selecciona un controlador arriba para cargar su estado del sistema."
+    },
+    "picker": {
+      "label": "Controlador",
+      "placeholder": "Elegir controlador"
+    },
+    "configLabels": {
+      "smtp": "SMTP",
+      "notifications": "Notificaciones",
+      "sslCert": "Certificado SSL",
+      "global": "Global",
+      "maintenance": "Mantenimiento",
+      "cloudAccess": "Acceso a la nube"
+    },
+    "tabs": {
+      "backups": "Copias de seguridad",
+      "admins": "Administradores",
+      "pending": "Pendientes"
+    },
+    "configCard": {
+      "title": "Configuración de {{name}}",
+      "loadError": "No se pudo cargar la configuración"
+    },
+    "backupsCard": {
+      "title": "Copias de seguridad del controlador",
+      "description": "Listar + descargar. Restaurar / eliminar quedan en preparación.",
+      "loadError": "No se pudieron cargar las copias de seguridad"
+    },
+    "backupsTable": {
+      "empty": "Sin copias de seguridad",
+      "id": "ID",
+      "created": "Creada",
+      "size": "Tamaño",
+      "action": "Acción",
+      "download": "Descargar"
+    },
+    "adminsCard": {
+      "title": "Administradores del controlador"
+    },
+    "adminsTable": {
+      "empty": "Sin administradores",
+      "username": "Nombre de usuario",
+      "role": "Rol",
+      "email": "Correo electrónico"
+    },
+    "pendingCard": {
+      "title": "Cambios de sistema pendientes",
+      "description": "En preparación en nuestra base de datos. Aplícalos explícitamente desde la pantalla de cambios pendientes.",
+      "empty": "Sin cambios de sistema pendientes"
+    },
+    "pendingTable": {
+      "feature": "Función",
+      "operation": "Operación",
+      "target": "Destino",
+      "created": "Creado",
+      "status": "Estado"
+    }
+  },
+  "GatewayVPNPage": {
+    "pageTitle": "VPN de la puerta de enlace",
+    "pageDescription": "Configuración de VPN en vivo en la puerta de enlace administrada. Las lecturas se ejecutan en vivo; cada cambio se prepara para aplicarse de forma explícita.",
+    "target": "Destino",
+    "pickControllerAndSite": "Selecciona un controlador y un sitio",
+    "tabs": {
+      "pending": "Pendientes"
+    },
+    "protocolConfiguration": "Configuración de {{protocol}}",
+    "protocolConfigDescription": "Leído en vivo desde el controlador. La edición se canaliza a través de la cola de preparación.",
+    "nothingConfigured": "Nada configurado",
+    "nothingConfiguredDescription": "Aún no hay {{entryType}} de {{protocol}} en este sitio.",
+    "entryType": {
+      "users": "usuarios",
+      "entries": "entradas"
+    },
+    "enabledState": {
+      "on": "Activado",
+      "off": "Desactivado"
+    },
+    "activeConnections": "Conexiones activas",
+    "noActiveSessions": "No hay sesiones activas",
+    "pendingChanges": "Cambios de VPN pendientes",
+    "pendingChangesDescription": "Preparados en nuestra base de datos. La aplicación está restringida por OMADA_READ_ONLY + force=true.",
+    "noPendingChanges": "No hay cambios pendientes",
+    "configLoadError": "No se pudo cargar la configuración de {{protocol}}",
+    "statusLoadError": "No se pudieron cargar las conexiones activas de {{protocol}}",
+    "pendingLoadError": "No se pudieron cargar los cambios pendientes",
+    "columns": {
+      "nameId": "Nombre / ID",
+      "detail": "Detalle",
+      "enabled": "Habilitado",
+      "peer": "Par",
+      "state": "Estado",
+      "rxTx": "RX / TX",
+      "lastHandshake": "Último intercambio",
+      "feature": "Función",
+      "op": "Op",
+      "target": "Destino",
+      "created": "Creado",
+      "status": "Estado"
+    },
+    "summary": {
+      "ipsec": "{{local}} ↔ {{remote}} vía {{gateway}}"
+    }
+  }
+}

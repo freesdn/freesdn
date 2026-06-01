@@ -1,0 +1,1497 @@
+{
+  "AlertRulesPage": {
+    "header": {
+      "title": "Motor de reglas de alerta",
+      "description": "Configura reglas de alerta, gestiona alertas activas y define canales de notificación"
+    },
+    "actions": {
+      "alertsConsole": "Consola de alertas",
+      "evaluateNow": "Evaluar ahora",
+      "newRule": "Nueva regla",
+      "editRule": "Editar regla",
+      "cancel": "Cancelar",
+      "saving": "Guardando...",
+      "updateRule": "Actualizar regla",
+      "createRule": "Crear regla",
+      "acknowledge": "Confirmar",
+      "resolve": "Resolver",
+      "close": "Cerrar"
+    },
+    "errorBanner": {
+      "message": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "stats": {
+      "activeRules": "Reglas activas",
+      "firingAlerts": "Alertas activas",
+      "alerts24h": "Alertas (24 h)",
+      "criticalFiring": "Críticas activas"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar reglas, alertas, proveedores…",
+      "allStatuses": "Todos los estados",
+      "active": "Activa",
+      "disabled": "Deshabilitada",
+      "clearFilters": "Limpiar filtros"
+    },
+    "tabs": {
+      "rules": "Reglas ({{count}})",
+      "alerts": "Alertas ({{count}})",
+      "channels": "Canales de notificación ({{count}})"
+    },
+    "ruleColumns": {
+      "rule": "Regla",
+      "type": "Tipo",
+      "severity": "Gravedad",
+      "status": "Estado",
+      "channels": "Canales",
+      "scope": "Alcance",
+      "fired": "Disparada",
+      "lastEvaluated": "Última evaluación"
+    },
+    "alertColumns": {
+      "severity": "Gravedad",
+      "title": "Título",
+      "status": "Estado",
+      "count": "Recuento",
+      "notified": "Notificadas",
+      "fired": "Disparada"
+    },
+    "common": {
+      "none": "Ninguno",
+      "never": "Nunca"
+    },
+    "confirm": {
+      "deleteRule": "¿Eliminar la regla \"{{name}}\"?",
+      "deleteRules": "¿Eliminar {{count}} regla(s)?"
+    },
+    "emptyRules": {
+      "title": "No se encontraron reglas",
+      "description": "Crea tu primera regla de alerta para comenzar.",
+      "searchDescription": "Ninguna regla coincide con tu búsqueda."
+    },
+    "emptyAlerts": {
+      "title": "Todo en orden",
+      "description": "No se encontraron alertas basadas en reglas."
+    },
+    "itemNames": {
+      "rules": "reglas",
+      "rule": "regla",
+      "alerts": "alertas"
+    },
+    "bulkActions": {
+      "enable": "Habilitar",
+      "disable": "Deshabilitar",
+      "delete": "Eliminar"
+    },
+    "dialog": {
+      "createTitle": "Crear regla de alerta",
+      "editTitle": "Editar regla de alerta"
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "createFailed": "No se pudo crear la regla",
+      "updateFailed": "No se pudo actualizar la regla",
+      "deleteFailed": "No se pudo eliminar la regla",
+      "toggleFailed": "No se pudo cambiar el estado de la regla",
+      "acknowledgeFailed": "No se pudo confirmar la alerta",
+      "resolveFailed": "No se pudo resolver la alerta",
+      "evaluationFailed": "Falló la evaluación",
+      "verificationFailed": "Falló la verificación",
+      "providerVerifiedTitle": "Proveedor verificado",
+      "providerVerifiedDesc": "La comprobación de conectividad fue correcta."
+    },
+    "channels": {
+      "email": "Correo electrónico",
+      "slack": "Slack",
+      "sms": "SMS",
+      "webhook": "Webhook",
+      "teams": "Microsoft Teams",
+      "inApp": "En la app",
+      "inAppNotifications": "Notificaciones en la app"
+    },
+    "channelsTab": {
+      "notConfigured": "Sin configurar",
+      "activeCount": "{{enabled}}/{{count}} activos",
+      "noProvidersTitle": "Sin proveedores de notificación",
+      "noProvidersDescription": "Configura proveedores de notificación para habilitar alertas por correo electrónico, Slack, SMS, Webhook y más. Los proveedores se gestionan en la configuración del sistema.",
+      "configureProviders": "Configurar proveedores",
+      "providerCount": "{{count}} proveedor(es)",
+      "default": "Predeterminado",
+      "test": "Probar",
+      "availableTypesTitle": "Tipos de proveedor disponibles",
+      "availableTypesDescription": "Estos tipos de proveedor de notificación se pueden configurar en la configuración del sistema."
+    },
+    "ruleTypes": {
+      "threshold": "Umbral",
+      "pattern": "Patrón",
+      "anomaly": "Anomalía"
+    },
+    "severities": {
+      "info": "Información",
+      "low": "Baja",
+      "warning": "Advertencia",
+      "high": "Alta",
+      "critical": "Crítica",
+      "criticalOnly": "Solo crítica"
+    },
+    "scopes": {
+      "organization": "Organización",
+      "site": "Sitio",
+      "deviceGroup": "Grupo de dispositivos",
+      "device": "Dispositivo"
+    },
+    "operators": {
+      "greaterThan": "Mayor que",
+      "greaterOrEqual": "Mayor o igual",
+      "lessThan": "Menor que",
+      "lessOrEqual": "Menor o igual",
+      "equal": "Igual",
+      "notEqual": "Distinto"
+    },
+    "form": {
+      "dialogDescription": "Configura las condiciones de la regla, la gravedad y los canales de notificación.",
+      "basicInformation": "Información básica",
+      "ruleName": "Nombre de la regla *",
+      "ruleNamePlaceholder": "p. ej. Alerta de CPU alta",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Descripción opcional de lo que monitorea esta regla...",
+      "type": "Tipo",
+      "severity": "Gravedad",
+      "scope": "Alcance",
+      "conditions": "Condiciones",
+      "metric": "Métrica",
+      "metricThresholdPlaceholder": "p. ej. cpu_utilization, memory_percent, packet_loss",
+      "metricAnomalyPlaceholder": "p. ej. traffic_volume, error_rate",
+      "operator": "Operador",
+      "thresholdValue": "Valor de umbral",
+      "eventType": "Tipo de evento",
+      "eventTypePlaceholder": "p. ej. device.offline, link.down",
+      "minimumCount": "Recuento mínimo",
+      "timeWindow": "Ventana de tiempo (segundos)",
+      "anomalyDescription": "La detección de anomalías utiliza aprendizaje automático para identificar patrones de comportamiento inusuales. Configura la métrica a monitorear y el sistema detectará automáticamente los valores atípicos.",
+      "timingBehavior": "Tiempos y comportamiento",
+      "checkInterval": "Intervalo de comprobación (segundos)",
+      "checkIntervalHint": "Con qué frecuencia evaluar",
+      "forDuration": "Duración mínima (segundos)",
+      "forDurationHint": "Debe cumplirse durante este tiempo para dispararse",
+      "cooldown": "Tiempo de espera (segundos)",
+      "cooldownHint": "Espera entre reactivaciones",
+      "dedupeWindow": "Ventana de deduplicación (segundos)",
+      "dedupeWindowHint": "Agrupa las mismas alertas dentro de esta ventana",
+      "autoResolve": "Resolver automáticamente cuando se normalice la condición",
+      "notifyOnResolve": "Notificar al resolver",
+      "notificationChannels": "Canales de notificación",
+      "notificationChannelsHint": "Selecciona qué canales deben recibir notificaciones cuando se dispare esta regla. Configura los ajustes específicos de cada canal a continuación.",
+      "recipients": "Destinatarios (separados por comas)",
+      "minSeverityEmail": "Gravedad mínima para correo electrónico",
+      "slackChannel": "Canal de Slack",
+      "mention": "Mención",
+      "mentionPlaceholder": "@oncall, @channel · deja vacío para no mencionar",
+      "phoneNumbers": "Números de teléfono (separados por comas)",
+      "minSeveritySms": "Gravedad mínima para SMS",
+      "webhookUrl": "URL del webhook",
+      "httpMethod": "Método HTTP",
+      "secretHeader": "Encabezado secreto",
+      "secretHeaderPlaceholder": "Secreto de autenticación opcional",
+      "customHeaders": "Encabezados personalizados (JSON)",
+      "teamsWebhookUrl": "URL del webhook de Teams",
+      "inAppHint": "Las notificaciones en la app aparecerán en la insignia de la barra lateral y en el centro de notificaciones. No se requiere configuración adicional.",
+      "noProviderConfigured": "Ningún proveedor configurado",
+      "tags": "Etiquetas (separadas por comas)"
+    },
+    "detail": {
+      "status": "Estado",
+      "occurrences": "Ocurrencias",
+      "notificationsSent": "Notificaciones enviadas",
+      "lastNotified": "Última notificación",
+      "acknowledged": "Confirmada",
+      "resolved": "Resuelta",
+      "message": "Mensaje",
+      "tags": "Etiquetas",
+      "details": "Detalles"
+    }
+  },
+  "BulkOperationsPage": {
+    "title": "Operaciones masivas",
+    "description": "Envía configuración, reinicia o actualiza el firmware en muchos dispositivos con despliegue por etapas",
+    "searchPlaceholder": "Buscar operaciones masivas…",
+    "itemName": "operación",
+    "itemNamePlural": "operaciones",
+    "status": {
+      "pending": "Pendiente",
+      "running": "En ejecución",
+      "paused": "En pausa",
+      "completed": "Completada",
+      "failed": "Fallida",
+      "cancelled": "Cancelada",
+      "rollingBack": "Revirtiendo",
+      "rolledBack": "Revertida"
+    },
+    "errorState": {
+      "message": "Error al cargar las operaciones masivas"
+    },
+    "actions": {
+      "newOperation": "Nueva operación",
+      "details": "Detalles",
+      "cancel": "Cancelar",
+      "creating": "Creando...",
+      "createAndRun": "Crear y ejecutar"
+    },
+    "stats": {
+      "totalJobs": {
+        "title": "Total de trabajos",
+        "description": "Todas las operaciones"
+      },
+      "running": {
+        "title": "En ejecución",
+        "description": "En curso"
+      },
+      "completed": {
+        "title": "Completadas",
+        "description": "Correctas"
+      },
+      "failed": {
+        "title": "Fallidas",
+        "description": "Fallidas o revertidas"
+      }
+    },
+    "filters": {
+      "allStatuses": "Todos los estados",
+      "clear": "Borrar filtros"
+    },
+    "columns": {
+      "jobId": "ID de trabajo",
+      "operation": "Operación",
+      "status": "Estado",
+      "progress": "Progreso",
+      "stage": "Etapa",
+      "created": "Creada"
+    },
+    "table": {
+      "failedCount": "{{count}} fallidos",
+      "stage": "Etapa {{stage}}"
+    },
+    "bulkActions": {
+      "cancelRunning": "Cancelar en ejecución"
+    },
+    "createDialog": {
+      "title": "Nueva operación masiva",
+      "description": "Envía configuración, reinicia dispositivos o activa actualizaciones de firmware en un conjunto de dispositivos.",
+      "operationType": "Tipo de operación",
+      "targetScope": "Ámbito de destino",
+      "scopeId": "ID de ámbito",
+      "scopeIdPlaceholder": "UUID del sitio/grupo",
+      "deviceType": "Tipo de dispositivo (opcional)",
+      "tag": "Etiqueta",
+      "tagPlaceholder": "floor-3",
+      "deviceIds": "IDs de dispositivos",
+      "deviceIdsPlaceholder": "Pegue los UUID de dispositivos, uno por línea o separados por comas",
+      "deviceIdsHint": "Introduzca los UUID de dispositivos separados por saltos de línea o comas (hasta 500).",
+      "configPayload": "Carga de configuración (JSON)"
+    },
+    "operations": {
+      "pushConfig": "Enviar configuración",
+      "reboot": "Reiniciar",
+      "firmwareUpdate": "Actualizar firmware"
+    },
+    "scopes": {
+      "site": "Sitio",
+      "deviceGroup": "Grupo de dispositivos",
+      "tag": "Etiqueta",
+      "deviceList": "Lista de dispositivos"
+    },
+    "deviceTypes": {
+      "all": "Todos los tipos",
+      "accessPoint": "Punto de acceso",
+      "switch": "Switch",
+      "router": "Router"
+    },
+    "strategies": {
+      "immediate": "Inmediato",
+      "staged": "Por etapas"
+    },
+    "rollout": {
+      "title": "Estrategia de despliegue",
+      "failureThreshold": "Umbral de fallos (%)",
+      "autoRollback": "Reversión automática",
+      "stages": "Etapas (JSON)",
+      "stagesHint": "Cada etapa:"
+    },
+    "detailsDialog": {
+      "title": "Detalles de la operación",
+      "jobId": "ID de trabajo",
+      "status": "Estado",
+      "operation": "Operación",
+      "stage": "Etapa",
+      "progress": "Progreso",
+      "failed": "{{count}} fallidos",
+      "skipped": "{{count}} omitidos (sin acceso)",
+      "created": "Creada",
+      "started": "Iniciada",
+      "finished": "Finalizada",
+      "error": "Error"
+    },
+    "toasts": {
+      "unknownError": "Error desconocido",
+      "error": "Error",
+      "invalidJson": "JSON no válido",
+      "createFailed": "Error al crear la operación masiva",
+      "cancelFailed": "Error al cancelar la operación masiva",
+      "cancelRequested": "Cancelación solicitada",
+      "queued": {
+        "title": "Operación masiva en cola",
+        "description": "{{operation}} enviada ({{count}} dispositivos)"
+      },
+      "nothingToCancel": {
+        "title": "Nada que cancelar",
+        "description": "Las operaciones seleccionadas ya han finalizado."
+      },
+      "bulkCancel": {
+        "title": "Cancelación masiva completada",
+        "description": "{{ok}} canceladas",
+        "descriptionWithFailures": "{{ok}} canceladas, {{failed}} fallidas"
+      }
+    }
+  },
+  "ActiveAlertsPanel": {
+    "title": "Alertas activas",
+    "error": "No se pudieron cargar las alertas activas.",
+    "empty": "No hay alertas activas.",
+    "fallbackTitle": "Alerta",
+    "viewAll": "Ver todas las alertas",
+    "time": {
+      "justNow": "ahora mismo",
+      "minutesAgo": "hace {{minutes}} min",
+      "hoursAgo": "hace {{hours}} h",
+      "daysAgo": "hace {{days}} d"
+    }
+  },
+  "DeviceHealthDrawer": {
+    "title": "Detalle de salud del dispositivo",
+    "loading": "Cargando...",
+    "error": "No se pudieron cargar los datos de salud del dispositivo.",
+    "site": "Sitio",
+    "notAvailable": "N/D",
+    "componentScores": "Puntuaciones por componente",
+    "scores": {
+      "reachability": "Accesibilidad",
+      "latency": "Latencia",
+      "configDrift": "Desviación de configuración",
+      "errorRate": "Tasa de errores",
+      "utilization": "Utilización",
+      "firmware": "Firmware"
+    },
+    "scoreHistory": "Historial de puntuación",
+    "scoreLabel": "Puntuación",
+    "lastUpdated": "Última actualización"
+  },
+  "DeviceHealthTable": {
+    "title": "Estado de los dispositivos",
+    "common": {
+      "notAvailable": "N/D"
+    },
+    "allTypes": "Todos los tipos",
+    "statusOptions": {
+      "all": "Todos los estados",
+      "healthy": "Correcto",
+      "warning": "Advertencia",
+      "degraded": "Degradado",
+      "critical": "Crítico"
+    },
+    "errorLoading": "No se pudieron cargar los datos de estado de los dispositivos.",
+    "empty": "Ningún dispositivo coincide con los filtros actuales.",
+    "headers": {
+      "device": "Dispositivo",
+      "site": "Sitio",
+      "type": "Tipo",
+      "status": "Estado",
+      "updated": "Actualizado"
+    },
+    "columns": {
+      "health": "Estado",
+      "reachability": "Accesibilidad",
+      "latency": "Latencia",
+      "drift": "Desviación",
+      "errorRate": "Tasa de errores",
+      "utilization": "Utilización",
+      "firmware": "Firmware"
+    },
+    "pagination": {
+      "totalOne": "{{count}} dispositivo en total",
+      "totalOther": "{{count}} dispositivos en total",
+      "previous": "Anterior",
+      "pageOf": "Página {{page}} de {{total}}",
+      "next": "Siguiente"
+    }
+  },
+  "HealthStatusBadge": {
+    "status": {
+      "healthy": "Saludable",
+      "warning": "Advertencia",
+      "degraded": "Degradado",
+      "critical": "Crítico",
+      "unknown": "Desconocido"
+    }
+  },
+  "HealthTrendChart": {
+    "title": "Tendencia de estado",
+    "empty": "No hay datos de tendencia disponibles",
+    "healthScore": "Puntuación de estado"
+  },
+  "InfrastructureHealthPanel": {
+    "title": "Estado de la infraestructura",
+    "loadError": "No se pudo cargar el estado de la infraestructura.",
+    "systemStatus": "Sistema {{status}}",
+    "uptime": "Tiempo activo: {{hours}} h {{minutes}} min",
+    "latencyLabel": "Latencia:",
+    "latencyValue": "{{ms}} ms"
+  },
+  "ModuleHealthGrid": {
+    "title": "Estado de los módulos",
+    "error": "No se pudo cargar el estado de los módulos.",
+    "empty": "No hay datos de módulos disponibles.",
+    "deviceCount_one": "{{count}} dispositivo",
+    "deviceCount_other": "{{count}} dispositivos",
+    "counts": {
+      "healthy": "{{count}}s",
+      "warning": "{{count}}a",
+      "degraded": "{{count}}d",
+      "critical": "{{count}}c"
+    }
+  },
+  "ScoreBar": {
+    "notAvailable": "N/D"
+  },
+  "SiteRankingTable": {
+    "title": "Clasificación de sitios",
+    "error": "Error al cargar los datos de clasificación de sitios.",
+    "empty": "No hay datos de clasificación de sitios disponibles.",
+    "columns": {
+      "site": "Sitio",
+      "healthScore": "Puntuación de estado",
+      "uptimePercent": "Tiempo activo %",
+      "devices": "Dispositivos",
+      "trend": "Tendencia"
+    }
+  },
+  "SLAComplianceCard": {
+    "title": "Cumplimiento de SLA",
+    "error": "No se pudieron cargar los datos de SLA.",
+    "notAvailable": "N/D",
+    "overallCompliance": "Cumplimiento general",
+    "noPolicies": "No hay políticas de SLA definidas",
+    "activePolicies": "Políticas activas",
+    "activeBreaches": "Incumplimientos activos",
+    "viewDashboard": "Ver panel de SLA"
+  },
+  "TopIssuesPanel": {
+    "title": "Problemas principales",
+    "error": "No se pudieron cargar los problemas principales.",
+    "empty": "No se detectaron problemas de estado."
+  },
+  "WANHealthPanel": {
+    "title": "Estado de la WAN",
+    "error": "No se pudieron cargar los datos de estado de la WAN.",
+    "empty": "No se encontraron dispositivos WAN.",
+    "columns": {
+      "device": "Dispositivo",
+      "site": "Sitio",
+      "ip": "IP",
+      "health": "Estado",
+      "latency": "Latencia",
+      "reachability": "Accesibilidad"
+    }
+  },
+  "HealthDashboardPage": {
+    "title": "Estado de la red",
+    "description": {
+      "site": "Supervisión del estado del sitio · {{devices}} dispositivos",
+      "org": "Supervisión del estado de toda la organización · {{sites}} sitios, {{devices}} dispositivos"
+    },
+    "error": {
+      "loadFailed": "No se pudieron cargar los datos de estado. Inténtalo de nuevo."
+    },
+    "stats": {
+      "overallScore": "Puntuación general",
+      "healthyDevices": "Dispositivos en buen estado",
+      "warnings": "Advertencias",
+      "critical": "Crítico"
+    },
+    "status": {
+      "healthy": "En buen estado",
+      "warning": "Advertencia",
+      "degraded": "Degradado",
+      "critical": "Crítico"
+    },
+    "siteCard": {
+      "deviceCount": "{{count}} dispositivos",
+      "uptime": "{{percent}}% de tiempo activo"
+    },
+    "orgHealth": {
+      "heading": "Estado de la organización",
+      "summary": "Estado agregado de {{sites}} sitios y {{devices}} dispositivos. Las puntuaciones se calculan a partir de la accesibilidad, la latencia, la desviación de configuración, las tasas de error, la utilización y la actualidad del firmware."
+    },
+    "actions": {
+      "reconcileAll": "Reconciliar todo"
+    },
+    "toast": {
+      "reconcileDispatched": {
+        "title": "Reconciliación iniciada",
+        "description": "{{count}} dispositivos en cola para verificación de desviación."
+      },
+      "reconcileFailed": {
+        "title": "Error en la reconciliación"
+      },
+      "unknownError": "Error desconocido"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "devices": "Dispositivos",
+      "alerts": "Alertas y SLA",
+      "infrastructure": "Infraestructura",
+      "scores": "Información de puntuación"
+    },
+    "empty": {
+      "noData": "Aún no hay datos de estado disponibles."
+    },
+    "scoreInfo": {
+      "title": "Componentes de la puntuación de estado",
+      "description": "Cómo se calculan las puntuaciones de estado",
+      "weightsHeading": "Pesos de la puntuación",
+      "weights": {
+        "reachability": "Accesibilidad",
+        "configDrift": "Desviación de configuración",
+        "latency": "Latencia (vista previa)",
+        "errorRate": "Tasa de error (vista previa)",
+        "utilization": "Utilización (vista previa)",
+        "firmware": "Firmware (vista previa)"
+      },
+      "previewNote": "Los componentes marcados como vista previa están integrados en la fórmula de puntuación, pero sus valores por dispositivo aún no provienen de telemetría en vivo; recurren a valores predeterminados neutrales.",
+      "thresholdsHeading": "Umbrales",
+      "thresholds": {
+        "healthy": "90-100 · En buen estado",
+        "warning": "70-89 · Advertencia",
+        "degraded": "50-69 · Degradado",
+        "critical": "0-49 · Crítico"
+      }
+    }
+  },
+  "IncidentsPage": {
+    "header": {
+      "title": "Correlación de eventos e incidentes",
+      "description": "Eventos correlacionados agrupados en incidentes accionables"
+    },
+    "stats": {
+      "activeRules": {
+        "title": "Reglas activas",
+        "description": "Actualmente habilitadas"
+      },
+      "openIncidents": {
+        "title": "Incidentes abiertos",
+        "description": "Requieren atención"
+      },
+      "last24h": {
+        "title": "Últimas 24 h",
+        "description": "Incidentes recientes"
+      },
+      "totalRules": {
+        "title": "Total de reglas",
+        "description": "Reglas configuradas"
+      }
+    },
+    "tabs": {
+      "incidents": "Incidentes ({{count}})",
+      "rules": "Reglas de correlación ({{count}})"
+    },
+    "columns": {
+      "severity": "Gravedad",
+      "title": "Título",
+      "status": "Estado",
+      "events": "Eventos",
+      "devices": "Dispositivos",
+      "opened": "Abierto",
+      "name": "Nombre",
+      "scope": "Alcance",
+      "window": "Ventana",
+      "fires": "Disparos",
+      "patterns": "Patrones"
+    },
+    "rules": {
+      "patternsCount": "{{count}} patrones"
+    },
+    "search": {
+      "placeholder": "Buscar incidentes por título, gravedad o estado…"
+    },
+    "filters": {
+      "allStatuses": "Todos los estados",
+      "allSeverities": "Todas las gravedades",
+      "clear": "Borrar filtros"
+    },
+    "status": {
+      "open": "Abierto",
+      "investigating": "En investigación",
+      "mitigating": "Mitigando",
+      "resolved": "Resuelto",
+      "closed": "Cerrado"
+    },
+    "severity": {
+      "critical": "Crítica",
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Baja"
+    },
+    "scope": {
+      "site": "Sitio",
+      "deviceGroup": "Grupo de dispositivos",
+      "organization": "Organización"
+    },
+    "itemNames": {
+      "incidents": "incidentes",
+      "incident": "incidente",
+      "rules": "reglas"
+    },
+    "actions": {
+      "runCorrelation": "Ejecutar correlación",
+      "newRule": "Nueva regla",
+      "investigate": "Investigar",
+      "acknowledge": "Confirmar",
+      "assign": "Asignar",
+      "close": "Cerrar",
+      "startInvestigation": "Iniciar investigación",
+      "resolve": "Resolver"
+    },
+    "detail": {
+      "statusLabel": "Estado:",
+      "openedLabel": "Abierto:",
+      "eventsLabel": "Eventos:",
+      "devicesLabel": "Dispositivos:",
+      "rootCause": "Causa raíz",
+      "linkedEvents": "Eventos vinculados",
+      "loading": "Cargando…",
+      "unknownEventType": "desconocido",
+      "patternPrefix": "patrón: {{pattern}}"
+    },
+    "form": {
+      "name": "Nombre",
+      "scope": "Alcance",
+      "severity": "Gravedad",
+      "timeWindow": "Ventana de tiempo (segundos)",
+      "eventPatterns": "Patrones de eventos (JSON)"
+    },
+    "dialogs": {
+      "newRule": {
+        "title": "Nueva regla de correlación",
+        "submit": "Crear regla"
+      },
+      "trigger": {
+        "title": "Ejecutar correlación de eventos",
+        "description": "Escanee manualmente los eventos recientes y cree incidentes según las reglas de correlación activas.",
+        "dryRun": "Simulación",
+        "runNow": "Ejecutar ahora"
+      }
+    },
+    "validation": {
+      "nameRequired": "El nombre es obligatorio",
+      "patternsRequired": "Los patrones de eventos son obligatorios",
+      "invalidJson": "JSON no válido"
+    },
+    "errors": {
+      "unknown": "Error desconocido",
+      "updateIncident": "Error al actualizar el incidente",
+      "createRule": "Error al crear la regla de correlación",
+      "triggerCorrelation": "Error al activar la correlación",
+      "loadFailed": "No se pudieron cargar los datos de incidentes"
+    }
+  },
+  "LifecyclePage": {
+    "title": "Ciclo de vida del dispositivo",
+    "description": "Administre los estados de los dispositivos desde el descubrimiento hasta la baja",
+    "loadError": "Error al cargar los datos del ciclo de vida del dispositivo",
+    "stateMachine": "Máquina de estados",
+    "searchPlaceholder": "Buscar dispositivos por nombre o IP…",
+    "allStates": "Todos los estados",
+    "clearFilters": "Borrar filtros",
+    "unnamed": "Sin nombre",
+    "states": {
+      "discovered": "Descubierto",
+      "adopting": "Adoptando",
+      "provisioning": "Aprovisionando",
+      "managed": "Administrado",
+      "updating": "Actualizando",
+      "offline": "Sin conexión",
+      "error": "Error",
+      "decommissioned": "Dado de baja",
+      "ignored": "Ignorado"
+    },
+    "stats": {
+      "managed": {
+        "title": "Administrados",
+        "description": "Dispositivos en buen estado"
+      },
+      "discovered": {
+        "title": "Descubiertos",
+        "description": "A la espera de adopción"
+      },
+      "offline": {
+        "title": "Sin conexión",
+        "description": "Inaccesibles"
+      },
+      "error": {
+        "title": "Error",
+        "description": "Requieren atención"
+      }
+    },
+    "columns": {
+      "device": "Dispositivo",
+      "type": "Tipo",
+      "lifecycleState": "Estado del ciclo de vida",
+      "lastChanged": "Último cambio",
+      "error": "Error"
+    },
+    "historyColumns": {
+      "time": "Hora",
+      "transition": "Transición",
+      "trigger": "Desencadenante",
+      "details": "Detalles"
+    },
+    "actions": {
+      "history": "Historial",
+      "transition": "Transición",
+      "transitioning": "Realizando transición...",
+      "cancel": "Cancelar"
+    },
+    "bulkActions": {
+      "approve": "Aprobar",
+      "reject": "Rechazar",
+      "markStale": "Marcar como obsoleto"
+    },
+    "itemName": {
+      "devices": "dispositivos",
+      "device": "dispositivo",
+      "entries": "entradas"
+    },
+    "historyDialog": {
+      "title": "Historial del ciclo de vida · {{name}}",
+      "description": "Registro de auditoría completo de las transiciones de este dispositivo"
+    },
+    "transitionDialog": {
+      "title": "Cambiar el estado del dispositivo",
+      "currentState": "Estado actual",
+      "transitionTo": "Cambiar a",
+      "selectTarget": "Seleccione el estado de destino"
+    },
+    "toast": {
+      "transitionFailedTitle": "Error en la transición"
+    },
+    "errors": {
+      "unknown": "Error desconocido"
+    }
+  },
+  "NotificationProvidersPage": {
+    "common": {
+      "default": "Predeterminado",
+      "never": "nunca",
+      "cancel": "Cancelar",
+      "delete": "Eliminar",
+      "yes": "Sí",
+      "no": "No"
+    },
+    "tabs": {
+      "providers": {
+        "label": "Proveedores",
+        "desc": "Gestionar proveedores de entrega"
+      },
+      "testing": {
+        "label": "Consola de pruebas",
+        "desc": "Probar y depurar proveedores"
+      },
+      "health": {
+        "label": "Estado y diagnóstico",
+        "desc": "Resumen del estado de los proveedores"
+      }
+    },
+    "header": {
+      "title": "Proveedores de notificaciones",
+      "subtitle": "Configura, prueba y supervisa los canales de entrega de notificaciones · Gmail, SMTP, Mailgun, SendGrid, Brevo, SES, Postmark, Resend, Slack, Teams, SMS y Webhooks.",
+      "loadError": "No se pudieron cargar los proveedores de notificaciones. Inténtalo de nuevo."
+    },
+    "stats": {
+      "total": "Total de proveedores",
+      "enabled": "Habilitados",
+      "verified": "Verificados",
+      "errors": "Errores",
+      "needsAttention": "requiere atención"
+    },
+    "dashboard": {
+      "errCount": "{{count}} err",
+      "activeVerified": "{{enabled}}/{{total}} activos · {{verified}} verificados",
+      "defaultSet": "Predeterminado definido",
+      "noDefault": "Sin predeterminado"
+    },
+    "status": {
+      "verified": "Verificado",
+      "unverified": "Sin verificar"
+    },
+    "row": {
+      "editConfig": "Editar configuración",
+      "verifyConnection": "Verificar conexión",
+      "sendTest": "Enviar prueba",
+      "setDefault": "Establecer como predeterminado",
+      "deleteProvider": "Eliminar proveedor"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar proveedores…",
+      "channel": "Canal",
+      "allChannels": "Todos los canales",
+      "status": "Estado",
+      "allStatus": "Todos los estados",
+      "statusEnabled": "Habilitado",
+      "statusDisabled": "Deshabilitado",
+      "statusError": "Con errores",
+      "clearFilters": "Borrar filtros",
+      "countOf": "{{shown}} de {{total}}",
+      "refresh": "Actualizar",
+      "addProvider": "Agregar proveedor"
+    },
+    "empty": {
+      "title": "No se encontraron proveedores",
+      "filtered": "Ningún proveedor coincide con los filtros actuales. Prueba a ajustar la búsqueda o los criterios de filtro.",
+      "none": "Agrega tu primer proveedor de notificaciones para empezar a enviar alertas por correo, Slack, Teams, SMS o webhooks.",
+      "addFirst": "Agregar primer proveedor"
+    },
+    "table": {
+      "provider": "Proveedor",
+      "channel": "Canal",
+      "status": "Estado",
+      "lastVerified": "Última verificación",
+      "rateLimits": "Límites de tasa",
+      "created": "Creado",
+      "enabled": "Habilitado"
+    },
+    "bulk": {
+      "verify": "Verificar",
+      "disable": "Deshabilitar",
+      "delete": "Eliminar",
+      "confirmDelete": "¿Eliminar {{count}} proveedor(es)?"
+    },
+    "deleteDialog": {
+      "title": "Eliminar proveedor",
+      "confirm": "¿Eliminar permanentemente {{name}}?",
+      "warning": "Las notificaciones activas que usen este proveedor fallarán."
+    },
+    "toast": {
+      "unknownError": "Error desconocido",
+      "createFailed": "Error al crear el proveedor",
+      "updateFailed": "Error al actualizar el proveedor",
+      "deleteFailed": "Error al eliminar el proveedor",
+      "toggleFailed": "Error al cambiar el estado del proveedor",
+      "verifyFailed": "Error al verificar el proveedor",
+      "setDefaultFailed": "Error al establecer el predeterminado"
+    },
+    "form": {
+      "title": {
+        "edit": "Editar proveedor",
+        "selectType": "Seleccionar tipo de proveedor",
+        "configure": "Configurar proveedor"
+      },
+      "submit": {
+        "save": "Guardar cambios",
+        "create": "Crear proveedor"
+      },
+      "description": {
+        "edit": "Actualizar la configuración de {{name}}.",
+        "selectType": "Elige un tipo de proveedor de entrega para configurar.",
+        "configure": "Configura tu proveedor {{type}}."
+      },
+      "validation": {
+        "nameRequired": "El nombre para mostrar es obligatorio",
+        "typeRequired": "El tipo de proveedor es obligatorio",
+        "zeroOrGreater": "Debe ser 0 o mayor",
+        "fieldRequired": "{{field}} es obligatorio"
+      },
+      "changeType": "Cambiar tipo",
+      "displayName": "Nombre para mostrar",
+      "displayNamePlaceholder": "p. ej. Mailgun de producción",
+      "providerType": "Tipo de proveedor",
+      "configuration": "Configuración",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "behavior": "Comportamiento",
+      "default": "Predeterminado",
+      "ratePerHour": "Tasa / hora",
+      "ratePerDay": "Tasa / día",
+      "invalidJson": "JSON no válido: corrige la sintaxis antes de guardar (se conserva el último valor válido).",
+      "saving": "Guardando…"
+    },
+    "testing": {
+      "selectProviderFirst": "Selecciona primero un proveedor",
+      "testFailed": "La prueba falló",
+      "singleTitle": "Prueba de un proveedor",
+      "singleDesc": "Envía una notificación de prueba a través de un proveedor específico.",
+      "providerLabel": "Proveedor",
+      "selectProvider": "Seleccionar proveedor…",
+      "recipientLabel": "Destinatario",
+      "sendTest": "Enviar prueba",
+      "bulkTitle": "Prueba masiva de canal",
+      "bulkDesc": "Prueba todos los proveedores habilitados de un canal a la vez.",
+      "channelLabel": "Canal",
+      "selectChannel": "Seleccionar canal…",
+      "channelOption": "{{channel}} ({{count}} proveedores)",
+      "recipientAllPlaceholder": "Destinatario para todas las pruebas",
+      "testAll": "Probar todos los proveedores",
+      "testAllChannel": "Probar todos los proveedores de {{channel}}",
+      "resultsTitle": "Resultados de la prueba",
+      "resultsDesc": "Resultados de prueba en tiempo real para esta sesión.",
+      "clearLog": "Borrar registro",
+      "emptyResults": "Ejecuta una prueba para ver los resultados aquí.",
+      "toLabel": "Para:",
+      "showDebug": "Mostrar detalles de depuración",
+      "hideDebug": "Ocultar detalles de depuración"
+    },
+    "health": {
+      "verifyFailed": "La verificación falló",
+      "connectivityCheck": "Comprobación de conectividad",
+      "connectivityDesc": "Verifica que todos los proveedores habilitados puedan alcanzar sus puntos de conexión.",
+      "providersToCheck": "{{count}} proveedor(es) por comprobar.",
+      "verifyAll": "Verificar todos ({{count}})",
+      "channelReadiness": "Disponibilidad de canales",
+      "channelReadinessDesc": "Resumen de la capacidad de entrega por canal.",
+      "statusReady": "Listo",
+      "statusPartial": "Parcial",
+      "statusFailing": "Con fallas",
+      "statusNotConfigured": "Sin configurar",
+      "enabledVerified": "{{enabled}} habilitados · {{verified}} verificados",
+      "healthDetails": "Detalles del estado de los proveedores",
+      "providersCount": "{{count}} proveedores",
+      "noProviders": "No hay proveedores configurados.",
+      "on": "Activado",
+      "off": "Desactivado",
+      "verifiedLabel": "Verificado",
+      "lastVerifiedLabel": "Última verificación",
+      "rateLimitsLabel": "Límites de tasa",
+      "createdLabel": "Creado",
+      "updatedLabel": "Actualizado",
+      "neverCapitalized": "Nunca",
+      "hideConfig": "Ocultar configuración",
+      "viewConfig": "Ver configuración (enmascarada)"
+    }
+  },
+  "ReconciliationPage": {
+    "header": {
+      "title": "Reconciliación de configuración",
+      "description": "Inspeccione la configuración deseada frente a la activa, detecte desviaciones y active la reconciliación"
+    },
+    "searchPlaceholder": "Buscar dispositivos por nombre o IP…",
+    "unnamed": "Sin nombre",
+    "itemName": "dispositivo",
+    "itemNamePlural": "dispositivos",
+    "columns": {
+      "device": "Dispositivo",
+      "type": "Tipo"
+    },
+    "actions": {
+      "inspect": "Inspeccionar",
+      "reconcile": "Reconciliar",
+      "reconcileAll": "Reconciliar todo",
+      "clearFilters": "Borrar filtros",
+      "rerun": "Reejecutar",
+      "dismissDiff": "Descartar diferencia"
+    },
+    "status": {
+      "driftDetected": "Desviación detectada",
+      "compliant": "Conforme"
+    },
+    "driftDetails": "Detalles de la desviación",
+    "tabs": {
+      "threeState": "Vista de tres estados",
+      "resolved": "Configuración resuelta",
+      "overrides": "Anulaciones del dispositivo"
+    },
+    "threeState": {
+      "desired": "Configuración deseada",
+      "pushed": "Configuración aplicada",
+      "running": "Configuración activa",
+      "lastPushed": "Última aplicación: {{date}}",
+      "lastSynced": "| Última sincronización: {{date}}"
+    },
+    "resolved": {
+      "templateChain": "Cadena de plantillas:",
+      "empty": "No hay configuración resuelta disponible"
+    },
+    "inspector": {
+      "title": "Inspector de configuración",
+      "description": "Modelo de configuración de tres estados para el dispositivo {{id}}...",
+      "loading": "Cargando configuración...",
+      "push": "Aplicación: {{value}}",
+      "neverPushed": "Nunca aplicada",
+      "version": "Versión: {{value}}",
+      "autoRemediate": "Corrección automática"
+    },
+    "noConfig": {
+      "title": "No se encontró ninguna entrada de configuración para este dispositivo.",
+      "description": "Las entradas de configuración se crean cuando un dispositivo se aprovisiona por primera vez a través del sistema de plantillas."
+    },
+    "toast": {
+      "dismissedTitle": "Desviación descartada",
+      "dismissed": "{{count}} descartados"
+    },
+    "errors": {
+      "unknown": "Error desconocido",
+      "reconcileFailed": "Error en la reconciliación",
+      "updateSettingsFailed": "Error al actualizar la configuración del dispositivo",
+      "loadDevices": "No se pudieron cargar los dispositivos"
+    }
+  },
+  "SiteGroupsPage": {
+    "header": {
+      "title": "Grupos",
+      "description": "Organiza tu infraestructura con grupos de sitios y grupos de dispositivos para la jerarquía de plantillas"
+    },
+    "tabs": {
+      "siteGroups": "Grupos de sitios",
+      "deviceGroups": "Grupos de dispositivos"
+    },
+    "stats": {
+      "siteGroups": {
+        "title": "Grupos de sitios",
+        "description": "Grupos de sitios configurados"
+      },
+      "deviceGroups": {
+        "title": "Grupos de dispositivos",
+        "description": "Grupos de dispositivos configurados"
+      },
+      "rootGroups": {
+        "title": "Grupos raíz",
+        "description": "Nivel superior"
+      },
+      "activeDeviceGroups": {
+        "title": "Grupos de disp. activos",
+        "description": "Grupos de dispositivos activos"
+      }
+    },
+    "columns": {
+      "name": "Nombre",
+      "description": "Descripción",
+      "parent": "Padre",
+      "site": "Sitio",
+      "status": "Estado"
+    },
+    "values": {
+      "root": "Raíz",
+      "active": "Activo",
+      "inactive": "Inactivo"
+    },
+    "actions": {
+      "newSiteGroup": "Nuevo grupo de sitios",
+      "newDeviceGroup": "Nuevo grupo de dispositivos",
+      "clearFilters": "Borrar filtros",
+      "delete": "Eliminar",
+      "save": "Guardar",
+      "create": "Crear"
+    },
+    "search": {
+      "siteGroups": "Buscar grupos de sitios…",
+      "deviceGroups": "Buscar grupos de dispositivos…"
+    },
+    "itemName": {
+      "siteGroup": "grupo de sitios",
+      "siteGroups": "grupos de sitios",
+      "deviceGroup": "grupo de dispositivos",
+      "deviceGroups": "grupos de dispositivos"
+    },
+    "confirm": {
+      "deleteSiteGroup": "¿Eliminar el grupo de sitios \"{{name}}\"? Los sitios miembros se conservan; solo se elimina el grupo.",
+      "deleteDeviceGroup": "¿Eliminar el grupo de dispositivos \"{{name}}\"? Los dispositivos miembros se conservan; solo se elimina el grupo.",
+      "bulkDeleteSiteGroups": "¿Eliminar {{count}} grupo(s) de sitios?",
+      "bulkDeleteDeviceGroups": "¿Eliminar {{count}} grupo(s) de dispositivos?"
+    },
+    "dialogs": {
+      "siteGroup": {
+        "createTitle": "Crear grupo de sitios",
+        "editTitle": "Editar grupo de sitios",
+        "description": "Los grupos de sitios organizan los sitios para la herencia de plantillas."
+      },
+      "deviceGroup": {
+        "createTitle": "Crear grupo de dispositivos",
+        "editTitle": "Editar grupo de dispositivos",
+        "description": "Los grupos de dispositivos organizan los dispositivos dentro de un sitio para la asignación de plantillas."
+      }
+    },
+    "fields": {
+      "name": {
+        "label": "Nombre"
+      },
+      "description": {
+        "label": "Descripción"
+      },
+      "siteGroupName": {
+        "placeholder": "Oficinas regionales"
+      },
+      "siteGroupDescription": {
+        "placeholder": "Todas las ubicaciones de oficinas regionales"
+      },
+      "deviceGroupName": {
+        "placeholder": "Puntos de acceso planta 3"
+      },
+      "deviceGroupDescription": {
+        "placeholder": "Puntos de acceso en la planta 3"
+      },
+      "parentGroup": {
+        "label": "Grupo padre",
+        "none": "Ninguno (raíz)"
+      },
+      "siteId": {
+        "label": "ID de sitio",
+        "placeholder": "UUID del sitio"
+      },
+      "matchRules": {
+        "label": "Reglas de coincidencia (JSON)"
+      }
+    },
+    "validation": {
+      "nameRequired": "El nombre es obligatorio",
+      "siteIdRequired": "El ID de sitio es obligatorio",
+      "invalidJson": "JSON no válido"
+    },
+    "errors": {
+      "unknown": "Error desconocido",
+      "createSiteGroup": "Error al crear el grupo de sitios",
+      "updateSiteGroup": "Error al actualizar el grupo de sitios",
+      "deleteSiteGroup": "Error al eliminar el grupo de sitios",
+      "createDeviceGroup": "Error al crear el grupo de dispositivos",
+      "updateDeviceGroup": "Error al actualizar el grupo de dispositivos",
+      "deleteDeviceGroup": "Error al eliminar el grupo de dispositivos"
+    },
+    "error": {
+      "loadFailed": "Error al cargar los datos de los grupos"
+    }
+  },
+  "SLAPage": {
+    "header": {
+      "title": "Monitoreo de SLA",
+      "description": "Seguimiento del cumplimiento de acuerdos de nivel de servicio y gestión de incumplimientos"
+    },
+    "errorState": {
+      "message": "No se pudieron cargar los datos de SLA"
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "operationFailed": "La operación falló"
+    },
+    "stats": {
+      "notAvailable": "N/D",
+      "activePolicies": {
+        "title": "Políticas activas",
+        "description": "Aplicadas actualmente"
+      },
+      "activeBreaches": {
+        "title": "Incumplimientos activos",
+        "description": "Infracciones abiertas"
+      },
+      "avgCompliance": {
+        "title": "Cumplimiento promedio",
+        "description": "En todas las políticas"
+      },
+      "breaches24h": {
+        "title": "Incumplimientos (24 h)",
+        "description": "Últimas 24 horas"
+      }
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "policies": "Políticas ({{count}})",
+      "breaches": "Incumplimientos ({{count}})"
+    },
+    "overview": {
+      "worstPerforming": "SLA con peor rendimiento"
+    },
+    "actions": {
+      "evaluateNow": "Evaluar ahora",
+      "newPolicy": "Nueva política",
+      "acknowledge": "Reconocer",
+      "clearFilters": "Limpiar filtros",
+      "editThresholds": "Editar umbrales",
+      "delete": "Eliminar"
+    },
+    "columns": {
+      "name": "Nombre",
+      "status": "Estado",
+      "scope": "Alcance",
+      "target": "Objetivo",
+      "compliance": "Cumplimiento",
+      "lastEvaluated": "Última evaluación",
+      "never": "Nunca",
+      "severity": "Gravedad",
+      "metric": "Métrica",
+      "threshold": "Umbral",
+      "actual": "Real",
+      "deviation": "Desviación",
+      "started": "Iniciado"
+    },
+    "itemNames": {
+      "policies": "políticas",
+      "policy": "política",
+      "breaches": "incumplimientos",
+      "breach": "incumplimiento"
+    },
+    "policies": {
+      "searchPlaceholder": "Buscar políticas por nombre u objetivo…"
+    },
+    "breaches": {
+      "searchPlaceholder": "Buscar incumplimientos por métrica…",
+      "allStatuses": "Todos los estados",
+      "statusActive": "Activo",
+      "statusAcknowledged": "Reconocido",
+      "statusResolved": "Resuelto"
+    },
+    "detail": {
+      "scope": "Alcance:",
+      "target": "Objetivo:",
+      "evalWindow": "Ventana de evaluación:",
+      "consecutive": "Consecutivos:",
+      "minutes": "{{count}} min",
+      "thresholds": "Umbrales",
+      "lastEvaluated": "Última evaluación: {{date}}"
+    },
+    "dialog": {
+      "newPolicyTitle": "Nueva política de SLA",
+      "createPolicy": "Crear política"
+    },
+    "form": {
+      "nameRequired": "El nombre es obligatorio",
+      "name": "Nombre",
+      "namePlaceholder": "p. ej., SLA de disponibilidad de la oficina principal",
+      "scope": "Alcance",
+      "scopeOptions": {
+        "organization": "Organización",
+        "site": "Sitio",
+        "siteGroup": "Grupo de sitios",
+        "deviceGroup": "Grupo de dispositivos",
+        "ssid": "SSID"
+      },
+      "evalWindow": "Ventana de evaluación (min)",
+      "scopeId": "ID de alcance",
+      "scopeIdPlaceholder": "UUID",
+      "scopeName": "Nombre del alcance",
+      "scopeNamePlaceholder": "Nombre visible",
+      "healthScoreMin": "Puntuación de salud mín.",
+      "uptimePercentMin": "% de disponibilidad mín.",
+      "latencyMsMax": "Latencia ms máx.",
+      "optional": "opcional"
+    }
+  },
+  "ConfigTemplatesPage": {
+    "header": {
+      "title": "Plantillas de configuración",
+      "description": "Gestiona plantillas de configuración con herencia jerárquica (Organización → Grupo de sitios → Sitio → Grupo de dispositivos)",
+      "descriptionShort": "Gestiona plantillas de configuración con herencia jerárquica"
+    },
+    "actions": {
+      "newTemplate": "Nueva plantilla",
+      "clearFilters": "Borrar filtros"
+    },
+    "stats": {
+      "total": {
+        "title": "Total de plantillas",
+        "description": "Todas las plantillas"
+      },
+      "organization": {
+        "title": "Organización",
+        "description": "Toda la organización"
+      },
+      "siteGroup": {
+        "title": "Grupo de sitios",
+        "description": "Grupos de sitios"
+      },
+      "siteDevice": {
+        "title": "Sitio / Dispositivo",
+        "description": "Específicas"
+      }
+    },
+    "search": {
+      "placeholder": "Buscar plantillas por nombre o descripción…"
+    },
+    "filter": {
+      "scopePlaceholder": "Filtrar por alcance",
+      "allScopes": "Todos los alcances"
+    },
+    "scopes": {
+      "organization": "Organización",
+      "site_group": "Grupo de sitios",
+      "site": "Sitio",
+      "device_group": "Grupo de dispositivos"
+    },
+    "columns": {
+      "name": "Nombre de la plantilla",
+      "scope": "Alcance",
+      "deviceType": "Tipo de dispositivo",
+      "priority": "Prioridad",
+      "status": "Estado"
+    },
+    "deviceType": {
+      "all": "Todos"
+    },
+    "status": {
+      "active": "Activa",
+      "inactive": "Inactiva"
+    },
+    "bulk": {
+      "apply": "Aplicar",
+      "applyNotWired": "Aplicar plantillas al alcance (aún no implementado).",
+      "duplicate": "Duplicar",
+      "delete": "Eliminar",
+      "copyName": "{{name}} (copia)"
+    },
+    "confirm": {
+      "deleteOne": "¿Eliminar la plantilla \"{{name}}\"? Esta acción no se puede deshacer.",
+      "deleteMany": "¿Eliminar {{count}} plantilla(s)?"
+    },
+    "dialog": {
+      "createTitle": "Crear plantilla",
+      "editTitle": "Editar plantilla",
+      "description": "Las plantillas definen la configuración que se propaga por la jerarquía.",
+      "createSubmit": "Crear plantilla",
+      "saveChanges": "Guardar cambios"
+    },
+    "form": {
+      "name": "Nombre",
+      "namePlaceholder": "Puntos de acceso de la sucursal",
+      "priority": "Prioridad (menor = mayor)",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Configuración estándar para los puntos de acceso de la sucursal",
+      "scope": "Alcance",
+      "scopeId": "ID de alcance",
+      "scopeIdPlaceholder": "UUID (opcional para la organización)",
+      "deviceType": "Tipo de dispositivo",
+      "config": "Configuración (JSON)"
+    },
+    "deviceTypes": {
+      "all": "Todos los tipos",
+      "accessPoint": "Punto de acceso",
+      "switch": "Conmutador",
+      "router": "Router",
+      "gateway": "Puerta de enlace"
+    },
+    "view": {
+      "priority": "Prioridad: {{priority}}"
+    },
+    "validation": {
+      "nameRequired": "El nombre es obligatorio",
+      "invalidJson": "JSON no válido"
+    },
+    "errors": {
+      "unknown": "Error desconocido",
+      "createFailed": "No se pudo crear la plantilla",
+      "updateFailed": "No se pudo actualizar la plantilla",
+      "deleteFailed": "No se pudo eliminar la plantilla",
+      "duplicateFailed": "No se pudo duplicar la plantilla",
+      "loadFailed": "No se pudieron cargar las plantillas de configuración"
+    }
+  },
+  "TopologyPage": {
+    "header": {
+      "title": "Topología de red",
+      "description": "Gráfico de red interactivo con relaciones entre dispositivos y superposición de estado"
+    },
+    "error": {
+      "loadFailed": "No se pudieron cargar los datos de la topología. Inténtalo de nuevo."
+    },
+    "stats": {
+      "devices": "Dispositivos",
+      "links": "Enlaces",
+      "orphans": "Huérfanos",
+      "types": "Tipos"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar dispositivos...",
+      "health": "Estado",
+      "exportPng": "Exportar como PNG",
+      "fullscreen": "Pantalla completa",
+      "exitFullscreen": "Salir de pantalla completa",
+      "saveLayoutDisabledHint": "Selecciona un sitio para guardar el diseño"
+    },
+    "layoutAlgorithm": {
+      "auto": "Diseño automático",
+      "hierarchical": "Jerárquico",
+      "forceDirected": "Dirigido por fuerzas"
+    },
+    "actions": {
+      "saveLayout": "Guardar diseño",
+      "saving": "Guardando...",
+      "viewDevice": "Ver dispositivo",
+      "reboot": "Reiniciar",
+      "rebooting": "Reiniciando..."
+    },
+    "loading": "Cargando topología...",
+    "empty": {
+      "title": "Sin datos de topología",
+      "description": "Los dispositivos aparecerán aquí una vez que los controladores se sincronicen y se habilite la detección de enlaces."
+    },
+    "legend": {
+      "otherSpeed": "Otro"
+    },
+    "status": {
+      "online": "En línea",
+      "offline": "Fuera de línea",
+      "degraded": "Degradado",
+      "unknown": "Desconocido"
+    },
+    "node": {
+      "health": "Estado: {{value}}%",
+      "layer": "Capa: {{layer}}"
+    },
+    "detail": {
+      "sheetTitle": "Detalles del dispositivo",
+      "sheetDescription": "Información detallada sobre el dispositivo seleccionado",
+      "ipAddress": "Dirección IP",
+      "macAddress": "Dirección MAC",
+      "model": "Modelo",
+      "networkLayer": "Capa de red",
+      "site": "Sitio",
+      "healthScore": "Puntuación de estado",
+      "connectedDevices": "Dispositivos conectados ({{n}})",
+      "quickActions": "Acciones rápidas"
+    },
+    "confirm": {
+      "reboot": "¿Reiniciar {{label}}? El dispositivo estará inaccesible durante ~30-90 s."
+    },
+    "toast": {
+      "unknownError": "Error desconocido",
+      "rebootDispatched": {
+        "title": "Reinicio enviado",
+        "description": "{{label}} se reiniciará en breve."
+      },
+      "rebootFailed": {
+        "title": "Error al reiniciar"
+      },
+      "saveLayoutFailed": {
+        "title": "Error al guardar el diseño"
+      },
+      "autoLayoutFailed": {
+        "title": "Error en el diseño automático"
+      },
+      "noSiteSelected": {
+        "title": "Ningún sitio seleccionado",
+        "description": "Elige un sitio en el selector de sitios antes de guardar un diseño."
+      }
+    },
+    "deviceTypes": {
+      "switch": "Switch",
+      "access_point": "Punto de acceso",
+      "router": "Router",
+      "gateway": "Puerta de enlace",
+      "firewall": "Firewall",
+      "camera": "Cámara",
+      "nvr": "NVR",
+      "dvr": "DVR",
+      "access_control": "Control de acceso",
+      "intercom": "Intercomunicador",
+      "voip_phone": "Teléfono VoIP",
+      "pbx": "PBX",
+      "server": "Servidor",
+      "iot": "IoT",
+      "sensor": "Sensor",
+      "other": "Otro"
+    }
+  }
+}

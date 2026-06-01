@@ -1,0 +1,112 @@
+# =============================================================================
+# FreeSDN v2 Backend - Python/FastAPI Git Ignore
+# =============================================================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+.python-version
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# Linting
+.ruff_cache/
+.ruff/
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat.pid
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Temp files
+*.bak
+*.tmp
+*.temp
+
+# transient verification scripts (never commit)
+_bverify.py
+_out.txt
+_fulltb.txt
+_batch_verify.py
+_b*.txt
+_obscheck.py
+_obs_check.py
+_enumcheck.py
+_aclcheck.py
+_autcheck.py
+_slacheck.py
+_repcheck.py
+_c1check.py
+_c2check.py
+_c3check.py
+_c4check.py
+_smoke.py
+_d1check.py
+_d3check.py

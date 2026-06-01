@@ -1,0 +1,487 @@
+{
+  "SiteDetailPage": {
+    "common": {
+      "active": "活动",
+      "inactive": "未激活",
+      "error": "错误",
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "正在保存…",
+      "done": "完成",
+      "copied": "已复制",
+      "clickToCopy": "点击复制"
+    },
+    "actions": {
+      "sync": "同步",
+      "edit": "编辑",
+      "retry": "重试",
+      "backToSites": "返回站点",
+      "viewAllDevices": "查看所有设备",
+      "deleteSite": "删除站点",
+      "configureVpn": "配置 VPN",
+      "setupVpn": "设置 VPN",
+      "manageAgents": "管理代理",
+      "deployAgent": "部署代理",
+      "fullInventory": "完整清单",
+      "copy": "复制"
+    },
+    "header": {
+      "subnetCount": "{{count}} 个子网",
+      "subnetCount_other": "{{count}} 个子网"
+    },
+    "stats": {
+      "controllers": "控制器",
+      "devices": "设备",
+      "online": "在线",
+      "offline": "离线",
+      "health": "健康度",
+      "devicesOffline": "{{count}} 台设备离线",
+      "devicesOffline_other": "{{count}} 台设备离线"
+    },
+    "tabs": {
+      "overview": "概览",
+      "network": "网络",
+      "vpn": "VPN",
+      "agent": "代理",
+      "devices": "设备",
+      "settings": "设置"
+    },
+    "fields": {
+      "name": "名称",
+      "slug": "Slug",
+      "id": "ID",
+      "gatewayIp": "网关 IP",
+      "status": "状态",
+      "subnets": "子网",
+      "description": "描述",
+      "address": "地址",
+      "city": "城市",
+      "country": "国家/地区",
+      "timezone": "时区",
+      "timeFormat": "时间格式",
+      "dateFormat": "日期格式",
+      "created": "创建时间",
+      "updated": "更新时间"
+    },
+    "errors": {
+      "loadFailedTitle": "加载站点失败",
+      "loadFailedDesc": "未找到站点或网络错误"
+    },
+    "toasts": {
+      "siteUpdated": "站点已更新",
+      "updateFailed": "更新站点失败",
+      "deleteFailed": "删除站点失败"
+    },
+    "deviceTable": {
+      "device": "设备",
+      "status": "状态",
+      "ipAddress": "IP 地址",
+      "model": "型号",
+      "lastSeen": "最后在线"
+    },
+    "deviceTypes": {
+      "switch": "交换机",
+      "access_point": "接入点",
+      "router": "路由器",
+      "gateway": "网关",
+      "firewall": "防火墙",
+      "camera": "摄像头",
+      "nvr": "NVR",
+      "voip_phone": "VoIP 电话",
+      "pbx": "PBX",
+      "server": "服务器",
+      "hypervisor": "虚拟化平台",
+      "other": "其他"
+    },
+    "statuses": {
+      "online": "在线",
+      "offline": "离线",
+      "degraded": "降级",
+      "adopting": "纳管中",
+      "provisioning": "配置中",
+      "unknown": "未知"
+    },
+    "relative": {
+      "never": "从不",
+      "justNow": "刚刚",
+      "minutesAgo": "{{n}} 分钟前",
+      "hoursAgo": "{{n}} 小时前",
+      "daysAgo": "{{n}} 天前"
+    },
+    "overview": {
+      "siteInformation": "站点信息",
+      "locationAndTime": "位置与时间",
+      "vpnStatus": "VPN 状态",
+      "noVpnConfigured": "未配置 VPN",
+      "agentStatus": "代理状态",
+      "noAgentsDeployed": "未部署代理",
+      "deviceHealthSummary": "设备健康度概要",
+      "devicesOnlineRatio": "{{total}} 台设备中 {{online}} 台在线"
+    },
+    "devices": {
+      "titleAt": "{{name}} 的设备",
+      "itemName": "设备"
+    },
+    "deleteDialog": {
+      "title": "删除“{{name}}”？",
+      "description": "这将软删除该站点及所有关联的控制器和设备。",
+      "deleting": "正在删除…"
+    },
+    "network": {
+      "siteGateway": "站点网关",
+      "gatewayIpPlaceholder": "例如 192.168.1.1",
+      "notConfigured": "未配置",
+      "routeToSubnets": "路由至子网",
+      "noSubnets": "无子网",
+      "subnets": "子网",
+      "scanAllSubnets": "扫描所有子网",
+      "addSubnet": "添加子网",
+      "addSubnetDesc": "为此站点定义一个网络子网以进行发现和监控。",
+      "emptyTitle": "未配置子网",
+      "emptyDesc": "添加子网以启用网络扫描和设备发现",
+      "addFirstSubnet": "添加首个子网",
+      "confirmRemoveSubnet": "移除此子网？",
+      "invalidIpTitle": "IP 无效",
+      "invalidIpDesc": "请输入有效的 IP 地址，例如 192.168.1.1",
+      "scanStartedTitle": "扫描已开始",
+      "scanStartedDesc": "网络扫描任务已下发给代理",
+      "scanFailedTitle": "扫描失败",
+      "scanFailedDesc": "启动扫描失败",
+      "validation": {
+        "cidrRequired": "CIDR 为必填项",
+        "cidrInvalid": "请输入有效的 CIDR，例如 192.168.1.0/24",
+        "vlanRange": "VLAN ID 必须为 1-4094"
+      },
+      "errors": {
+        "noOnlineAgent": "此站点没有在线代理",
+        "noSubnetsToScan": "未配置可扫描的子网"
+      },
+      "form": {
+        "cidr": "CIDR *",
+        "namePlaceholder": "管理",
+        "vlanId": "VLAN ID",
+        "descriptionPlaceholder": "可选描述"
+      }
+    },
+    "vpn": {
+      "provider": "提供商",
+      "lastCheck": "上次检查",
+      "configurations": "VPN 配置",
+      "addVpnConfig": "添加 VPN 配置",
+      "primary": "主用",
+      "disabled": "已禁用",
+      "noEndpointConfigured": "未配置端点",
+      "viaBrain": "经由 Brain",
+      "setPrimary": "设为主用",
+      "confirmRemoveConfig": "移除此 VPN 配置？",
+      "addConfigTitle": "添加 VPN 配置",
+      "addConfigDesc": "为此站点添加一个额外的 VPN 连接",
+      "enabled": "已启用",
+      "autoConnect": "自动连接",
+      "createConfig": "创建配置",
+      "connection": "VPN 连接",
+      "connectionDesc": "配置 VPN 连接以访问此站点的本地网络",
+      "test": "测试",
+      "importOvpn": "导入 .ovpn",
+      "addVpn": "添加 VPN",
+      "setup": "设置",
+      "tailscaleHostname": "Tailscale 主机名",
+      "endpoint": "端点",
+      "healthCheckIp": "健康检查 IP",
+      "lastHealthCheck": "上次健康检查",
+      "advertisedSubnets": "已通告子网",
+      "noVpnTitle": "未配置 VPN",
+      "noVpnDesc": "设置 VPN 连接以访问此站点本地网络上的设备。FreeSDN 支持 Tailscale、WireGuard、OpenVPN、Netbird、ZeroTier 和 IPsec。",
+      "connectViaBrain": "经由 Brain 连接",
+      "manualSetup": "手动设置",
+      "vpnEnabled": "启用 VPN",
+      "saveVpnConfig": "保存 VPN 配置",
+      "loadFailedTitle": "加载 VPN 配置失败",
+      "loadFailedDesc": "请确认 VPN API 可访问，然后尝试刷新。",
+      "preflight": {
+        "checking": "正在检查 VPN 连接…",
+        "directAccess": "直接访问（无 VPN）",
+        "skipped": "已跳过",
+        "connected": "VPN 已连接",
+        "connectedWithLatency": "VPN 已连接（{{ms}}ms）",
+        "active": "活动",
+        "unreachable": "VPN 不可达 · 请检查 VPN 配置",
+        "unreachableBadge": "不可达"
+      },
+      "brain": {
+        "title": "经由 Brain（网关）连接",
+        "description": "你的防火墙/网关已配置 VPN 服务器。通过它连接即可访问所有站点子网。",
+        "syncSubnets": "同步子网",
+        "discoverVpn": "发现 VPN",
+        "serversOn": "{{name}} 上的 VPN 服务器",
+        "noServersFound": "未找到 VPN 服务器。请先在防火墙上配置 OpenVPN 或 WireGuard。",
+        "openvpnLabel": "OpenVPN：{{description}}",
+        "protocolPort": "{{protocol}} 端口 {{port}}",
+        "wireguardLabel": "WireGuard：{{name}}",
+        "port": "端口 {{port}}",
+        "ipsecLabel": "IPsec：{{description}}",
+        "import": "导入"
+      },
+      "form": {
+        "tailscaleNode": "Tailscale 节点名称",
+        "tailscaleHostname": "Tailscale 主机名 / IP",
+        "interface": "接口",
+        "configPath": "配置路径（FreeSDN 服务器上）",
+        "openvpnHint": "或使用上方的“导入 .ovpn”按钮直接粘贴配置内容。",
+        "peerId": "对等体 ID",
+        "group": "组",
+        "zerotierNetworkId": "ZeroTier 网络 ID",
+        "zerotierHint": "来自 ZeroTier Central 控制台的 16 位网络 ID",
+        "healthCheckIpPlaceholder": "用于健康检查 ping 的 IP（例如站点网关）",
+        "remoteSubnets": "远程子网（以逗号分隔）",
+        "localSubnets": "本地子网（以逗号分隔）"
+      },
+      "ovpnDialog": {
+        "title": "导入 OpenVPN 配置",
+        "description": "粘贴你的 .ovpn 文件内容。适用于任何 OpenVPN 服务器（OPNsense、pfSense、MikroTik 或独立部署）。",
+        "submit": "导入配置",
+        "hint": "支持内嵌证书（<ca>、<cert>、<key>）。出于安全考虑，脚本指令（up/down/plugin）会被拒绝。"
+      },
+      "methods": {
+        "title": "连接方式",
+        "description": "选择适合你基础设施的方式",
+        "brainTitle": "Brain（网关 VPN）",
+        "recommended": "推荐",
+        "brainDesc": "你的 OPNsense / pfSense / MikroTik 已配置 OpenVPN 或 WireGuard。FreeSDN 作为客户端连接 · 站点端无需额外软件。",
+        "tailscaleDesc": "零配置网状 VPN。可安装在任意设备上并启用子网路由。最简单的设置方式。",
+        "wireguardDesc": "轻量、快速的隧道。使用代理选项卡自动生成 WireGuard 配置，或手动配置。",
+        "openvpnDesc": "企业标准。从防火墙导出 .ovpn 并在上方导入。可通过 TCP/443 穿越企业防火墙。"
+      },
+      "validation": {
+        "pasteConfig": "请粘贴你的 OpenVPN 配置",
+        "configTooLarge": "配置过大"
+      },
+      "toasts": {
+        "saved": "VPN 配置已保存",
+        "saveFailed": "保存 VPN 配置失败",
+        "testPassed": "VPN 测试通过",
+        "latency": "延迟：{{ms}}ms",
+        "testFailed": "VPN 测试失败",
+        "siteNotReachable": "站点不可达",
+        "testError": "测试错误",
+        "connectivityFailed": "连接测试失败",
+        "discoveryFailed": "发现失败",
+        "couldNotReachBrain": "无法连接到 Brain",
+        "imported": "已导入！",
+        "importFailed": "导入失败",
+        "importConfigFailed": "导入配置失败",
+        "subnetsSynced": "子网已同步",
+        "syncFailed": "同步失败",
+        "syncSubnetsFailed": "同步子网失败",
+        "ovpnImported": "OpenVPN 配置已导入",
+        "ovpnEndpoint": "端点：{{endpoint}}:{{port}}",
+        "configAdded": "VPN 配置已添加",
+        "createConfigFailed": "创建 VPN 配置失败",
+        "configRemoved": "VPN 配置已移除",
+        "removeConfigFailed": "移除 VPN 配置失败",
+        "primaryUpdated": "主用 VPN 已更新",
+        "setPrimaryFailed": "设置主用配置失败"
+      }
+    },
+    "reachability": {
+      "title": "设备可达性",
+      "reachableCount": "{{reachable}}/{{total}} 可达",
+      "description": "检查此站点的哪些设备可通过 VPN 隧道访问。",
+      "check": "检查可达性",
+      "deviceName": "设备名称",
+      "type": "类型",
+      "ip": "IP",
+      "latency": "延迟",
+      "noDevices": "在此站点未找到可检查可达性的设备。",
+      "instruction": "点击“检查可达性”以测试与此站点每台设备的连通性。"
+    },
+    "agent": {
+      "siteAgents": "站点代理",
+      "siteAgentsDesc": "部署在此站点用于本地网络发现和管理的代理",
+      "registerAgent": "注册代理",
+      "emptyTitle": "未部署代理",
+      "emptyDesc": "在此站点部署 FreeSDN 代理以启用本地网络扫描、设备发现和远程管理。",
+      "deployFirstAgent": "部署首个代理",
+      "pendingApproval": "待审批",
+      "lastSeen": "最后在线：{{time}}",
+      "approve": "批准",
+      "agentName": "代理名称",
+      "register": "注册",
+      "registerDialog": {
+        "title": "注册新代理",
+        "description": "为站点“{{name}}”注册 FreeSDN 代理。代理将需要以下凭据进行连接。",
+        "generateWireguard": "生成 WireGuard VPN 配置（零接触）",
+        "wireguardHint": "生成 WireGuard 密钥对和配置，使代理可自动回连 FreeSDN。",
+        "serverPublicKey": "服务器公钥",
+        "serverPublicKeyPlaceholder": "FreeSDN 服务器的 WireGuard 公钥",
+        "serverEndpoint": "服务器端点",
+        "agentVpnAddress": "代理 VPN 地址"
+      },
+      "result": {
+        "saveCredentials": "请立即保存这些凭据 · API 密钥将不会再次显示。",
+        "agentId": "代理 ID",
+        "apiKey": "API 密钥（一次性）",
+        "websocketUrl": "WebSocket URL",
+        "wgPrivateKeyWarning": "此配置包含代理的 WireGuard 私钥。请立即复制并妥善保存 · 它不会再次显示。",
+        "wgAgentConfig": "WireGuard 代理配置",
+        "configCopied": "配置已复制",
+        "addToServerConf": "添加到服务器 wg0.conf",
+        "peerBlockCopied": "对等体配置块已复制"
+      },
+      "guide": {
+        "title": "代理部署指南",
+        "step1": "点击上方的“注册代理”以获取凭据",
+        "step2Before": "从以下位置下载 FreeSDN 代理：",
+        "step2Link": "下载页面",
+        "step3": "在站点的任意机器上安装代理（Linux、Windows、macOS）",
+        "step4": "使用凭据进行配置：",
+        "step5": "批准代理，然后从网络选项卡触发子网扫描"
+      },
+      "toasts": {
+        "registered": "代理已注册",
+        "registerFailed": "注册代理失败",
+        "approved": "代理已批准",
+        "approveFailed": "批准代理失败"
+      }
+    },
+    "settings": {
+      "title": "站点配置",
+      "siteIsActive": "站点处于活动状态",
+      "saveChanges": "保存更改",
+      "autoAdopt": {
+        "heading": "发现自动纳管",
+        "toggleLabel": "自动纳管高置信度发现项",
+        "toggleDesc": "对匹配已知厂商驱动（UniFi、MikroTik、Grandstream、Sangoma 等）的已发现主机跳过纳管步骤。未知主机仍需人工审核。默认关闭。",
+        "minConfidence": "最低厂商置信度（0.0-1.0）",
+        "minConfidenceHint": "默认 0.7。越高 = 误纳管越少，但更多合法设备会停留在“已发现”状态。"
+      }
+    }
+  },
+  "SitesPage": {
+    "header": {
+      "title": "站点",
+      "description": "管理组织内的物理和逻辑位置。"
+    },
+    "actions": {
+      "addSite": "添加站点",
+      "export": "导出",
+      "delete": "删除",
+      "cancel": "取消",
+      "viewDetails": "查看详情",
+      "editSite": "编辑站点",
+      "deleteSite": "删除站点",
+      "actionsFor": "{{name}} 的操作"
+    },
+    "stats": {
+      "total": {
+        "title": "站点总数",
+        "description": "已配置的位置"
+      },
+      "active": {
+        "title": "活动",
+        "percent": "{{percent}}% 活动",
+        "none": "无站点"
+      },
+      "devices": {
+        "title": "设备",
+        "description": "所有站点"
+      },
+      "online": {
+        "title": "在线",
+        "description": "当前可访问"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "按名称、城市或国家/地区搜索站点…",
+      "allOrganizations": "所有组织",
+      "allStatuses": "所有状态",
+      "clearFilters": "清除筛选"
+    },
+    "columns": {
+      "site": "站点",
+      "status": "状态",
+      "controllers": "控制器",
+      "devices": "设备",
+      "timezone": "时区",
+      "updated": "更新时间"
+    },
+    "status": {
+      "active": "活动",
+      "inactive": "未激活"
+    },
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{count}} 分钟前",
+      "hoursAgo": "{{count}} 小时前",
+      "daysAgo": "{{count}} 天前"
+    },
+    "fields": {
+      "name": "名称",
+      "slug": "Slug",
+      "description": "描述",
+      "city": "城市",
+      "country": "国家/地区",
+      "timezone": "时区",
+      "address": "地址"
+    },
+    "placeholders": {
+      "name": "总部",
+      "slug": "headquarters",
+      "description": "公司主要办公室…",
+      "city": "纽约",
+      "country": "美国",
+      "address": "主街 123 号"
+    },
+    "hints": {
+      "slug": "URL 安全标识符。仅限小写字母、数字和连字符。"
+    },
+    "validation": {
+      "nameRequired": "名称为必填项",
+      "slugRequired": "Slug 为必填项",
+      "slugFormat": "仅限小写字母、数字和连字符"
+    },
+    "dialogs": {
+      "create": {
+        "title": "创建站点",
+        "description": "添加新的物理或逻辑位置以组织你的基础设施。",
+        "submit": "创建站点"
+      },
+      "edit": {
+        "title": "编辑站点",
+        "description": "更新站点详情。",
+        "submit": "保存更改"
+      },
+      "delete": {
+        "title": "删除“{{name}}”？",
+        "description": "此操作将软删除该站点及其所有关联的控制器和设备。管理员可以撤销此操作。",
+        "deleting": "正在删除…",
+        "confirm": "删除站点"
+      }
+    },
+    "toasts": {
+      "createFailed": {
+        "title": "创建失败",
+        "description": "无法创建站点，请重试。"
+      },
+      "updateFailed": {
+        "title": "更新失败",
+        "description": "无法更新站点，请重试。"
+      },
+      "deleteFailed": {
+        "title": "删除失败",
+        "description": "无法删除站点，请重试。"
+      },
+      "export": {
+        "title": "导出",
+        "description": "批量导出：尚未实现。"
+      },
+      "bulkDelete": {
+        "title": "批量删除",
+        "description": "为安全起见，请逐个删除站点。"
+      }
+    },
+    "errors": {
+      "loadFailed": "加载站点失败"
+    }
+  }
+}

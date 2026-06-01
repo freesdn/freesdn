@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="FreeSDN - Unified Network Management Platform" />
+    <!-- Social share (used by the public demo at demo.freesdn.org) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FreeSDN" />
+    <meta property="og:title" content="FreeSDN Live Demo" />
+    <meta property="og:description" content="Explore the unified FreeSDN dashboard with realistic sample data, read-only, no signup, no backend." />
+    <meta property="og:url" content="https://demo.freesdn.org/" />
+    <meta property="og:image" content="https://demo.freesdn.org/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://demo.freesdn.org/og.png" />
+    <!-- PWA: installable app shell + push notifications (see public/sw.js) -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#1E63E8" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="FreeSDN" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <title>FreeSDN</title>
+    <!--
+      Prevent theme FOUC: apply dark/light class BEFORE CSS loads.
+      Reads the persisted zustand UI store from localStorage.
+    -->
+    <script src="/theme-init.js"></script>
+    <!-- Fonts are self-hosted via @fontsource (imported in index.css) -->
+    <!-- Pre-React loading skeleton styles (inlined so they render immediately) -->
+    <style>
+      #app-loader {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 1rem;
+        height: 100vh;
+        width: 100%;
+      }
+      /* Match the bg-background & text colors from CSS theme vars */
+      .light #app-loader,
+      :root:not(.dark) #app-loader {
+        background: hsl(220 14% 96%);
+        color: hsl(220 9% 46%);
+      }
+      .dark #app-loader {
+        background: hsl(222 47% 8%);
+        color: hsl(215 16% 57%);
+      }
+      @keyframes app-spin {
+        to { transform: rotate(360deg); }
+      }
+      #app-loader .spinner {
+        width: 2rem;
+        height: 2rem;
+        border: 2.5px solid currentColor;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: app-spin 0.75s linear infinite;
+        opacity: 0.7;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen bg-background font-sans antialiased">
+    <div id="root">
+      <!-- Pre-React loading indicator, replaced when React mounts -->
+      <div id="app-loader">
+        <div class="spinner"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

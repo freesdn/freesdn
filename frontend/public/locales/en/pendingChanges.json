@@ -1,0 +1,72 @@
+{
+  "PendingChangesPage": {
+    "header": {
+      "title": "Pending Changes",
+      "description": "Every staged write across VPN, firmware, profiles, firewall, and WiFi. Reads run live; writes wait here for explicit apply."
+    },
+    "filter": {
+      "title": "Filter",
+      "controller": "Controller",
+      "chooseController": "Choose controller",
+      "site": "Site",
+      "chooseSite": "Choose site",
+      "status": "Status"
+    },
+    "status": {
+      "pending": "Pending",
+      "applied": "Applied",
+      "discarded": "Discarded",
+      "failed": "Failed"
+    },
+    "empty": {
+      "pickControllerSite": "Pick a controller and site",
+      "inboxZero": "Inbox zero",
+      "noStatusChanges": "No {{status}} changes",
+      "noneWaiting": "No changes waiting to be applied."
+    },
+    "list": {
+      "countOne": "{{count}} change",
+      "countOther": "{{count}} changes",
+      "gateNote": "The Apply button is gated server-side; production deployments refuse it unless OMADA_READ_ONLY is off."
+    },
+    "table": {
+      "feature": "Feature",
+      "op": "Op",
+      "target": "Target",
+      "notes": "Notes",
+      "created": "Created",
+      "status": "Status",
+      "actions": "Actions",
+      "failureTooltip": "Failure: {{reason}}"
+    },
+    "actions": {
+      "discardTooltip": "Discard this change",
+      "applyTooltip": "Apply to live controller",
+      "apply": "Apply"
+    },
+    "confirmApply": {
+      "title": "Apply to live controller?",
+      "description": "This will push the change to the Omada controller. The server-side OMADA_READ_ONLY flag must also be off for the apply to succeed; otherwise the request is refused with a 403. There is no undo, verify the payload first.",
+      "cancel": "Cancel",
+      "apply": "Apply"
+    },
+    "toasts": {
+      "discarded": {
+        "title": "Change discarded"
+      },
+      "discardFailed": {
+        "title": "Discard failed"
+      },
+      "applied": {
+        "title": "Change applied",
+        "description": "Pushed to the live controller."
+      },
+      "applyRefused": {
+        "title": "Apply refused"
+      }
+    },
+    "errors": {
+      "loadFailed": "Failed to load pending changes"
+    }
+  }
+}

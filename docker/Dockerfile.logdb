@@ -1,0 +1,28 @@
+# FreeSDN - TimescaleDB Log Database
+# Debian Trixie base - matches all other FreeSDN containers
+# PostgreSQL 18 + TimescaleDB extension from official repo
+
+FROM postgres:18.4-trixie
+
+LABEL maintainer="FreeSDN Team"
+LABEL description="TimescaleDB on PostgreSQL 18 (Debian Trixie)"
+
+# Install TimescaleDB from the official packagecloud repo
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install --no-install-recommends -y \
+       gnupg curl ca-certificates lsb-release \
+    && echo "deb https://packagecloud.io/timescale/timescaledb/debian/ trixie main" \
+       > /etc/apt/sources.list.d/timescaledb.list \
+    && curl -fsSL https://packagecloud.io/timescale/timescaledb/gpgkey \
+       | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescaledb.gpg \
+    && apt-get update \
+    && apt-get install --no-install-recommends -y \
+       timescaledb-2-postgresql-18 \
+    && apt-get purge -y --auto-remove gnupg curl lsb-release \
+    && rm -rf /var/lib/apt/lists/*
+
+# Enable TimescaleDB in postgresql.conf via shared_preload_libraries
+RUN echo "shared_preload_libraries = 'timescaledb'" >> /usr/share/postgresql/postgresql.conf.sample
+
+# Run as non-root (matches base postgres image)
+USER postgres

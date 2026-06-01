@@ -1,0 +1,334 @@
+# =============================================================================
+# FreeSDN - Prometheus alert rules
+# =============================================================================
+# Drop this file into your Prometheus rule_files: directory and reload, or
+# mount it into a Prometheus running alongside the FreeSDN stack:
+#
+#   # prometheus.yml
+#   rule_files:
+#     - /etc/prometheus/freesdn-alerts.yml
+#
+# All metric names match the exposition at /metrics in the FreeSDN backend
+# (see backend/app/core/metrics.py). Alert handlers should be wired
+# to whichever channel you use (PagerDuty / Slack / email) via Alertmanager.
+#
+# Critical alerts carry a ``runbook_url`` annotation pointing at the
+# operator docs at https://docs.freesdn.org. If you re-host the project,
+# update those annotations accordingly.
+# =============================================================================
+
+groups:
+
+  # ──────────────────────────────────────────────────────────────────────
+  - name: freesdn.api
+    interval: 30s
+    rules:
+
+      - alert: FreeSDNApiDown
+        expr: up{job="freesdn-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "FreeSDN API has been unreachable for >2m"
+          description: |
+            Prometheus has not been able to scrape /metrics on the API
+            container for 2 minutes. The API is either crashed, OOM-killed,
+            or partitioned from the metrics scraper.
+          runbook_url: "https://docs.freesdn.org/reference/troubleshooting/"
+
+      - alert: FreeSDNApiHighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+          sum(rate(http_requests_total[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "FreeSDN API 5xx rate above 5% for 10 minutes"
+          description: |
+            More than 5% of requests have returned a 5xx status over the
+            last 5-minute window, sustained for 10 minutes. This usually
+            indicates a downstream dependency (Postgres, Redis, an
+            adapter target) is failing.
+          runbook_url: "https://docs.freesdn.org/reference/troubleshooting/"
+
+      - alert: FreeSDNApiHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 15m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "API p95 latency above 2 s for 15 minutes"
+          description: |
+            The 95th-percentile request latency has been above 2 seconds
+            for 15 minutes. Investigate slow Postgres queries, blocked
+            event loops, or contended adapter calls.
+
+  # ──────────────────────────────────────────────────────────────────────
+  - name: freesdn.celery
+    interval: 30s
+    rules:
+
+      - alert: FreeSDNCeleryQueueBacklog
+        expr: freesdn_celery_queue_depth > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: worker
+        annotations:
+          summary: "Celery queue {{ $labels.queue }} backlog above 1000"
+          description: |
+            The {{ $labels.queue }} Celery queue has had more than 1000
+            pending tasks for 10 minutes. Either the workers are too few,
+            the tasks themselves are too slow, or they're crash-looping.
+
+      - alert: FreeSDNCeleryTaskFailureSpike
+        expr: |
+          sum(rate(freesdn_celery_tasks_total{status="failure"}[5m]))
+            > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: worker
+        annotations:
+          summary: "Celery task failures > 0.5/s for 10 minutes"
+          description: |
+            Celery task failure rate is sustained above 0.5/s. Scope to
+            the failing task with: ``rate(freesdn_celery_tasks_total
+            {status="failure"}[5m])``.
+
+  # ──────────────────────────────────────────────────────────────────────
+  - name: freesdn.database
+    interval: 30s
+    rules:
+
+      - alert: FreeSDNPostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: postgres
+        annotations:
+          summary: "FreeSDN Postgres is down"
+          description: |
+            The primary FreeSDN Postgres instance is not responding to
+            ``pg_isready``. The API will fail-fast on every request.
+          runbook_url: "https://docs.freesdn.org/reference/troubleshooting/"
+
+      - alert: FreeSDNLogDBDown
+        expr: pg_up{instance=~".*logdb.*"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: logdb
+        annotations:
+          summary: "FreeSDN LogDB (TimescaleDB) is down"
+          description: |
+            LogDB powers metrics, health snapshots, and event history.
+            Other features keep working but time-series writes are
+            dropped until logdb is back.
+
+  # ──────────────────────────────────────────────────────────────────────
+  - name: freesdn.redis
+    interval: 30s
+    rules:
+
+      - alert: FreeSDNRedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: redis
+        annotations:
+          summary: "FreeSDN Redis is down"
+          description: |
+            Redis is the backing store for sessions, the rate limiter,
+            the token blacklist, the event bus, and Celery. With Redis
+            down most of the API surface degrades or fails.
+          runbook_url: "https://docs.freesdn.org/reference/troubleshooting/"
+
+  # ──────────────────────────────────────────────────────────────────────
+  - name: freesdn.security
+    interval: 30s
+    rules:
+
+      - alert: FreeSDNAuditWriteFailing
+        expr: rate(freesdn_audit_write_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: audit
+          compliance: "true"
+        annotations:
+          summary: "Audit log writes are failing"
+          description: |
+            Audit log rows are failing to persist for resource_type=
+            {{ $labels.resource_type }}. Any non-zero rate here means
+            the audit trail is incomplete - this is a compliance and
+            forensics issue, not just a reliability one. Investigate
+            Postgres health and the savepoint isolation in
+            ``services/audit.py:_store_entry`` immediately.
+
+      - alert: FreeSDNAuthLoginBruteForce
+        expr: |
+          sum(rate(freesdn_auth_events_total{event_type="login",status="failure"}[5m]))
+            > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: auth
+        annotations:
+          summary: "Login failure rate > 5/s for 10 minutes"
+          description: |
+            Sustained high login-failure rate suggests credential
+            stuffing or brute-force attack. The per-IP rate limiter
+            should be blocking these at 5/min - confirm the limiter is
+            up and consider broader IP-block rules at the edge.
+
+      - alert: FreeSDNRateLimitSpike
+        expr: |
+          sum(rate(freesdn_rate_limit_hits_total[5m])) > 50
+        for: 10m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "Rate-limit hits > 50/s for 10 minutes"
+          description: |
+            Lots of clients are getting 429s. Either there's a real
+            attack, a buggy client retrying without backoff, or your
+            rate-limit settings are too tight for current traffic.
+
+  # ──────────────────────────────────────────────────────────────────────
+  - name: freesdn.adapters
+    interval: 30s
+    rules:
+
+      - alert: FreeSDNAdapterErrorRate
+        expr: |
+          sum by (adapter) (rate(freesdn_adapter_errors_total[5m]))
+            > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: adapter
+        annotations:
+          summary: "Adapter {{ $labels.adapter }} error rate > 1/s"
+          description: |
+            The {{ $labels.adapter }} adapter is failing > 1 call per
+            second over a 10-minute window. Check adapter
+            configuration (controller URL, credentials), check the
+            target controller's own health, and if it's transient
+            consider raising ``adapter_request_duration`` timeouts.
+
+      - alert: FreeSDNAdapterLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (adapter, le) (rate(freesdn_adapter_request_duration_seconds_bucket[5m]))
+          ) > 5
+        for: 15m
+        labels:
+          severity: info
+          component: adapter
+        annotations:
+          summary: "Adapter {{ $labels.adapter }} p95 latency > 5s"
+          description: |
+            Slow vendor API calls. This is informational - most
+            controllers are slow under load - but sustained latency
+            here will surface as user-visible UI delays and queue
+            backlogs.
+
+  # ──────────────────────────────────────────────────────────────────────
+  - name: freesdn.plugins
+    interval: 30s
+    rules:
+
+      - alert: FreeSDNPluginOperationFailures
+        expr: |
+          sum(rate(freesdn_plugin_operations_total{status="failure"}[5m]))
+            > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: plugins
+        annotations:
+          summary: "Plugin operations failing"
+          description: |
+            Plugin install / enable / disable / uninstall operations are
+            failing at > 0.1/s. Often indicates a plugin manifest
+            mismatch, a sandbox violation, or a plugin's on_install
+            hook crashing. Check the operation label to scope.
+
+
+  # ──────────────────────────────────────────────────────────────────────
+  - name: freesdn.backups
+    interval: 60s
+    rules:
+
+      # The pg-backup container emits a textfile metric
+      # ``freesdn_pg_backup_last_success_timestamp`` on
+      # every successful cycle (see docker-compose.yml; tier env files
+      # .env.lite / .env.pro / .env.max select the deployment profile,
+      # full reference at https://docs.freesdn.org/deploy/deployment-tiers/). If that
+      # timestamp falls more than 26 hours behind ``time()`` the backup
+      # loop has stalled - pg_dump permission change, disk full, schema
+      # lock, container restart loop. 26h covers the 24h cycle plus a
+      # generous margin so a normal mid-cycle scrape doesn't false-page.
+      - alert: FreeSDNBackupStale
+        expr: |
+          time() - freesdn_pg_backup_last_success_timestamp > 26 * 3600
+        for: 15m
+        labels:
+          severity: critical
+          component: backup
+        annotations:
+          summary: "pg_dump backup is stale on {{ $labels.instance }}"
+          description: |
+            The pg-backup container has not completed a successful dump
+            in the last 26 hours. Backups feed disaster recovery - once
+            this stretches past 48h the RPO commitment in the
+            disaster-recovery procedure (docs.freesdn.org) is broken.
+
+            Investigate:
+              1. ``docker compose --env-file .env.pro logs pg-backup | tail -200``
+              2. Check the ``pg_backups`` volume for free space (df).
+              3. Confirm pg_dump can still authenticate with the
+                 current ``POSTGRES_PASSWORD``.
+              4. If the container exited, ``docker compose up -d pg-backup``
+                 and watch the logs through a full cycle.
+          runbook_url: "https://docs.freesdn.org/deploy/backups-and-restore/"
+
+      # The same emitter exposes ``freesdn_pg_backup_encryption_enabled``
+      # (0 = unencrypted, 1 = GPG-encrypted). A production deployment
+      # should never be 0 - encryption is the default but
+      # operator misconfiguration (missing recipient, unreadable key)
+      # falls back to unencrypted dumps. This alerts on that fallback.
+      - alert: FreeSDNBackupUnencrypted
+        expr: |
+          freesdn_pg_backup_encryption_enabled == 0
+        for: 30m
+        labels:
+          severity: warning
+          component: backup
+        annotations:
+          summary: "pg_dump backups are running UNENCRYPTED on {{ $labels.instance }}"
+          description: |
+            The pg-backup container is writing plaintext gzipped dumps
+            (no GPG encryption). This may be intentional for dev, but
+            in production it means a host or volume compromise =
+            full data exfil including the ciphertext of every
+            encrypted column.
+
+            To enable encryption set BACKUP_GPG_RECIPIENT and
+            BACKUP_GPG_PUBLIC_KEY_PATH in .env, drop the public key at
+            ./secrets/backup-public.asc, and restart the container.
+            See secrets/README.md.
+          runbook_url: "https://docs.freesdn.org/deploy/backups-and-restore/"

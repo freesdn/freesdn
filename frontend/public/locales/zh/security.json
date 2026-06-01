@@ -1,0 +1,165 @@
+{
+  "SecurityAuditPage": {
+    "header": {
+      "title": "安全审计",
+      "description": "监控安全事件与合规情况"
+    },
+    "actions": {
+      "exportLog": "导出日志"
+    },
+    "summary": {
+      "totalEvents": "事件总数",
+      "failedLogins": "登录失败次数",
+      "suspiciousActivity": "可疑活动",
+      "criticalEvents": "严重事件"
+    },
+    "detail": {
+      "title": "事件详情",
+      "details": "详情"
+    },
+    "fields": {
+      "eventType": "事件类型",
+      "severity": "严重程度",
+      "outcome": "结果",
+      "timestamp": "时间戳",
+      "sourceIp": "源 IP",
+      "action": "操作",
+      "resourceType": "资源类型",
+      "userId": "用户 ID"
+    },
+    "anomalies": {
+      "heading": "检测到安全异常",
+      "detected": "检测时间：{{time}}"
+    },
+    "toast": {
+      "successTitle": "成功",
+      "errorTitle": "错误",
+      "exportStarted": "导出已开始。准备就绪后将通知您。",
+      "exportFailed": "无法开始导出：{{error}}"
+    },
+    "errors": {
+      "loadEvents": "无法加载安全事件",
+      "partialLoad": "部分数据加载失败，结果可能不完整。"
+    },
+    "filters": {
+      "allEventTypes": "所有事件类型",
+      "allSeverities": "所有严重程度"
+    },
+    "eventTypes": {
+      "loginSuccess": "登录成功",
+      "loginFailure": "登录失败",
+      "permissionDenied": "权限被拒绝",
+      "apiAccess": "API 访问",
+      "dataExport": "数据导出"
+    },
+    "severity": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "critical": "严重"
+    },
+    "period": {
+      "lastHour": "最近一小时",
+      "last6Hours": "最近 6 小时",
+      "last24Hours": "最近 24 小时",
+      "last7Days": "最近 7 天",
+      "last30Days": "最近 30 天"
+    },
+    "empty": {
+      "noEvents": "未找到符合所选筛选条件的安全事件"
+    },
+    "table": {
+      "eventType": "事件类型",
+      "severity": "严重程度",
+      "outcome": "结果",
+      "sourceIp": "源 IP",
+      "action": "操作",
+      "time": "时间"
+    },
+    "pagination": {
+      "showing": "正在显示第 {{from}} 至 {{to}} 项，共 {{total}} 个事件",
+      "previous": "上一页",
+      "next": "下一页"
+    }
+  },
+  "SecurityPage": {
+    "title": "安全",
+    "description": "监控安全事件和审计日志",
+    "tabs": {
+      "securityEvents": "安全事件",
+      "auditLogs": "审计日志"
+    },
+    "actions": {
+      "export": "导出"
+    },
+    "export": {
+      "successTitle": "导出完成",
+      "successDescription": "审计日志导出已下载。",
+      "truncatedTitle": "导出已截断",
+      "truncatedDescription": "已导出 {{total}} 行匹配结果中的前 {{limit}} 行。请缩小日期范围以导出其余部分。",
+      "errorTitle": "导出失败",
+      "errorDescription": "无法导出审计日志。"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败，结果可能不完整。"
+    },
+    "stats": {
+      "totalEvents": "事件总数",
+      "critical": "严重",
+      "highSeverity": "高严重性",
+      "unreviewed": "未审查"
+    },
+    "severity": {
+      "all": "全部严重性",
+      "critical": "严重",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "actionFilter": {
+      "all": "全部操作",
+      "create": "创建",
+      "update": "更新",
+      "delete": "删除",
+      "login": "登录",
+      "logout": "登出"
+    },
+    "events": {
+      "searchPlaceholder": "搜索事件...",
+      "severityPlaceholder": "严重性",
+      "emptyTitle": "无安全事件",
+      "emptyDescription": "尚未记录任何安全事件。",
+      "unreviewed": "未审查",
+      "reviewed": "已审查",
+      "pendingReview": "待审查",
+      "eventFrom": "来自 {{source}} 的事件",
+      "unknownSource": "未知"
+    },
+    "audit": {
+      "searchPlaceholder": "搜索审计日志...",
+      "actionPlaceholder": "操作",
+      "emptyTitle": "无审计日志",
+      "emptyDescription": "尚未记录任何审计日志。"
+    },
+    "fields": {
+      "riskScore": "风险评分",
+      "severity": "严重性",
+      "status": "状态",
+      "user": "用户",
+      "ipAddress": "IP 地址",
+      "location": "位置",
+      "description": "描述",
+      "riskFactors": "风险因素",
+      "userAgent": "用户代理",
+      "additionalDetails": "其他详情",
+      "resourceType": "资源类型",
+      "actor": "操作者",
+      "resource": "资源",
+      "error": "错误",
+      "changes": "变更"
+    },
+    "common": {
+      "notAvailable": "不适用"
+    }
+  }
+}

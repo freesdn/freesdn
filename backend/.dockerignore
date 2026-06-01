@@ -1,0 +1,16 @@
+.venv
+__pycache__
+*.pyc
+.git
+.env
+.env.*
+*.egg-info
+dist
+build
+.pytest_cache
+.mypy_cache
+.ruff_cache
+celerybeat-schedule
+data/
+# Locked tmp dirs (sometimes left behind by previous processes)
+tmp*

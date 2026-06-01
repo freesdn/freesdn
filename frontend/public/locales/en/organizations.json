@@ -1,0 +1,99 @@
+{
+  "OrganizationDetailPage": {
+    "info": {
+      "title": "Organization Info",
+      "slug": "Slug",
+      "plan": "Plan",
+      "status": "Status",
+      "email": "Email",
+      "phone": "Phone",
+      "created": "Created"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "stats": {
+      "sites": "Sites",
+      "users": "Users",
+      "controllers": "Controllers",
+      "devices": "Devices",
+      "online": "Online",
+      "percentOnline": "{{pct}}% online"
+    },
+    "recentSites": {
+      "title": "Recent Sites",
+      "description": "Last updated sites in this organization",
+      "viewAll": "View All",
+      "empty": "No sites yet. Create your first site to get started."
+    },
+    "sitesTab": {
+      "emptyTitle": "No sites",
+      "emptyDescription": "This organization has no sites yet."
+    },
+    "usersTab": {
+      "title": "User Management",
+      "description": "View and manage users for this organization, assign site-level access, and configure roles.",
+      "action": "Go to Users"
+    },
+    "settingsTab": {
+      "title": "Organization Settings",
+      "description": "Configure billing, plan limits, SSO providers, and module enablement for this organization.",
+      "action": "Go to Settings"
+    },
+    "backToOrganizations": "Back to Organizations",
+    "error": {
+      "loadFailed": "Failed to load organization"
+    },
+    "header": {
+      "siteCount_one": "{{count}} site",
+      "siteCount_other": "{{count}} sites",
+      "userCount_one": "{{count}} user",
+      "userCount_other": "{{count}} users"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "sites": "Sites",
+      "users": "Users",
+      "settings": "Settings"
+    }
+  },
+  "OrganizationsPage": {
+    "columns": {
+      "organization": "Organization",
+      "status": "Status",
+      "plan": "Plan"
+    },
+    "placeholders": {
+      "selectPlan": "Select plan"
+    },
+    "filters": {
+      "allPlans": "All plans",
+      "allStatuses": "All statuses",
+      "clearFilters": "Clear filters"
+    },
+    "planOptions": {
+      "free": "Free",
+      "pro": "Pro",
+      "enterprise": "Enterprise"
+    },
+    "statusOptions": {
+      "active": "Active",
+      "trial": "Trial",
+      "suspended": "Suspended"
+    },
+    "actions": {
+      "actionsFor": "Actions for {{name}}",
+      "viewDetails": "View Details",
+      "export": "Export",
+      "delete": "Delete"
+    },
+    "itemNamePlural": "organizations",
+    "itemNameSingular": "organization",
+    "toasts": {
+      "bulkExportNotImplemented": "Bulk export: not yet implemented.",
+      "bulkDeleteTitle": "Bulk Delete",
+      "bulkDeleteDescription": "Please delete organizations individually for safety."
+    }
+  }
+}

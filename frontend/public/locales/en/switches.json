@@ -1,0 +1,671 @@
+{
+  "SwitchesPage": {
+    "actions": {
+      "back": "Back",
+      "refresh": "Refresh",
+      "refreshing": "Refreshing...",
+      "retry": "Retry",
+      "cancel": "Cancel",
+      "saveChanges": "Save Changes",
+      "update": "Update",
+      "create": "Create",
+      "delete": "Delete",
+      "manage": "Manage",
+      "export": "Export",
+      "addSwitch": "Add Switch"
+    },
+    "menu": {
+      "configureStp": "Configure STP",
+      "viewMacTable": "View MAC Table",
+      "portMirroring": "Port Mirroring"
+    },
+    "capabilities": {
+      "limitedTitle": "Limited Capabilities",
+      "portControlLabel": "Port Control:",
+      "poeControlLabel": "PoE Control:",
+      "portNotSupported": "Port management not supported for this device",
+      "poeNotSupported": "PoE management not supported for this device"
+    },
+    "summary": {
+      "ports": "Ports",
+      "portsDownDisabled": "{{down}} down, {{disabled}} disabled",
+      "poePower": "PoE Power",
+      "ofBudget": "of {{budget}}W budget",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "uptime": "Uptime"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "ports": "Ports",
+      "vlans": "VLANs",
+      "lags": "LAGs",
+      "profiles": "Profiles",
+      "network": "Network",
+      "config": "Config",
+      "configHistory": "Config History",
+      "logs": "Logs",
+      "clients": "Clients",
+      "diagnostics": "Diagnostics",
+      "advanced": "Advanced"
+    },
+    "clients": {
+      "loadFailedTitle": "Failed to load clients",
+      "loadFailedDesc": "Could not fetch connected clients from the controller. The controller may be unreachable."
+    },
+    "portDialog": {
+      "title": "Configure {{name}}",
+      "description": "Adjust port settings including VLAN, PoE, security, and more",
+      "tabs": {
+        "general": "General",
+        "vlan": "VLAN",
+        "poe": "PoE",
+        "security": "Security"
+      },
+      "portName": "Port Name",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "portEnabled": "Port Enabled",
+      "flowControl": "Flow Control",
+      "flowControlHint": "802.3x pause frames",
+      "mtuHint": "Frame size (1500 = standard, 9216 = jumbo)",
+      "vlanMode": "VLAN Mode",
+      "vlanModeAccess": "Access",
+      "vlanModeTrunk": "Trunk",
+      "vlanModeHybrid": "Hybrid",
+      "nativeVlan": "Native VLAN (PVID)",
+      "taggedVlans": "Tagged VLANs",
+      "taggedVlansPlaceholder": "e.g., 10, 20, 30",
+      "voiceVlan": "Voice VLAN",
+      "optional": "Optional",
+      "poeEnabled": "PoE Enabled",
+      "poeMode": "PoE Mode",
+      "poeModeAuto": "Auto Detect",
+      "poeModeManual": "Manual",
+      "poeModeFixed": "Fixed",
+      "powerLimit": "Power Limit (W)",
+      "priority": "Priority",
+      "priorityLow": "Low",
+      "priorityMedium": "Medium",
+      "priorityHigh": "High",
+      "priorityCritical": "Critical",
+      "priorityHint": "Higher priority ports receive power first when budget is constrained",
+      "portSecurity": "Port Security",
+      "portSecurityHint": "Limit MAC addresses on this port",
+      "macAddressLimit": "MAC Address Limit",
+      "rateLimiting": "Rate Limiting",
+      "rateLimitingHint": "Per-port bandwidth control",
+      "ingress": "Ingress (kbps)",
+      "egress": "Egress (kbps)",
+      "stormControl": "Storm Control",
+      "stormControlHint": "Prevent broadcast/multicast storms",
+      "broadcastThreshold": "Broadcast Threshold (pps)",
+      "multicastThreshold": "Multicast Threshold (pps)",
+      "unknownUnicastThreshold": "Unknown Unicast Threshold (pps)",
+      "portIsolation": "Port Isolation",
+      "portIsolationHint": "Prevent communication with other isolated ports"
+    },
+    "lagDialog": {
+      "editTitle": "Edit LAG",
+      "createTitle": "Create LAG",
+      "editDescription": "Update link aggregation group settings.",
+      "createDescription": "Bundle ports for increased bandwidth and redundancy.",
+      "name": "Name",
+      "namePlaceholder": "e.g. Server Uplink",
+      "mode": "Mode",
+      "modeStatic": "Static",
+      "lacpMode": "LACP Mode",
+      "lacpActive": "Active",
+      "lacpPassive": "Passive",
+      "memberPorts": "Member Ports",
+      "selected": "Selected: {{ports}}",
+      "none": "None"
+    },
+    "lagDelete": {
+      "title": "Delete LAG",
+      "description": "Are you sure you want to delete \"{{name}}\"? Member ports will return to individual operation."
+    },
+    "header": {
+      "title": "Switches & Ports",
+      "description": "Manage switch configurations, port settings, VLANs, and more"
+    },
+    "errorState": {
+      "message": "Could not fetch switch data. Check your connection and try again."
+    },
+    "stats": {
+      "totalSwitches": "Total Switches",
+      "onlineCount": "{{count}} online",
+      "activePorts": "Active Ports",
+      "portsUpTotal": "Ports up / total",
+      "poePower": "PoE Power",
+      "ofBudget": "of {{budget}}W budget",
+      "portProfiles": "Port Profiles",
+      "portsUsing": "{{count}} ports using"
+    },
+    "empty": {
+      "title": "No switches found",
+      "description": "No switches have been discovered or configured yet. Run a discovery scan or add a controller to populate this list."
+    },
+    "list": {
+      "portsUp": "{{up}}/{{total}} ports up",
+      "uptime": "Uptime",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "poe": "PoE",
+      "firmware": "Firmware",
+      "update": "Update",
+      "vlans": "VLANs",
+      "portStatus": "Port Status",
+      "portUp": "Port up",
+      "portDown": "Port down",
+      "portDisabled": "Port disabled"
+    },
+    "toast": {
+      "switchRefreshed": "Switch data refreshed",
+      "switchRefreshedDesc": "{{clients}} clients, {{entries}} MAC entries synced",
+      "switchRefreshFailed": "Failed to refresh switch data",
+      "ledUpdated": "LED setting updated",
+      "ledUpdateFailed": "Failed to update LED setting",
+      "poeCycleInitiated": "PoE power cycle initiated",
+      "poeCycleFailed": "Failed to cycle PoE port",
+      "portBounced": "Port bounced successfully",
+      "portBounceFailed": "Port bounce failed · port may be left disabled. Check port status.",
+      "portEnabled": "Port enabled successfully",
+      "portDisabled": "Port disabled successfully",
+      "portEnableFailed": "Failed to enable port",
+      "portDisableFailed": "Failed to disable port",
+      "poeEnabled": "PoE enabled successfully",
+      "poeDisabled": "PoE disabled successfully",
+      "poeEnableFailed": "Failed to enable PoE",
+      "poeDisableFailed": "Failed to disable PoE",
+      "lagCreated": "LAG created successfully",
+      "lagCreateFailed": "Failed to create LAG",
+      "lagUpdated": "LAG updated successfully",
+      "lagUpdateFailed": "Failed to update LAG",
+      "lagDeleted": "LAG deleted",
+      "lagDeleteFailed": "Failed to delete LAG",
+      "vlanAssignmentsUpdated": "VLAN assignments updated",
+      "vlanAssignmentsFailed": "Failed to update VLAN assignments",
+      "portConfigSaved": "Port configuration saved",
+      "portConfigSaveFailed": "Failed to save port configuration",
+      "profileApplied": "Profile applied to {{count}} port(s)"
+    },
+    "applyProfile": {
+      "title": "Apply Port Profile",
+      "description": "Apply a saved profile to {{count}} selected port(s).",
+      "profileLabel": "Profile",
+      "profilePlaceholder": "Select a profile",
+      "noProfiles": "No profiles available. Create one in the Profiles tab first.",
+      "apply": "Apply Profile"
+    }
+  },
+  "AdvancedTab": {
+    "common": {
+      "apply": "Apply",
+      "applying": "Applying..."
+    },
+    "oui": {
+      "title": "OUI-Based VLAN Assignment",
+      "description": "Automatically assign VLANs to ports based on connected device MAC OUI prefix",
+      "prefixLabel": "OUI Prefix",
+      "vlanLabel": "VLAN",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "e.g. IP Phones",
+      "addMapping": "Add Mapping",
+      "preview": "Preview",
+      "previewToast": "Preview: {{count}} ports would change",
+      "previewFailed": "OUI VLAN preview failed",
+      "appliedToast": "Applied VLAN changes to {{count}} ports",
+      "applyFailed": "OUI VLAN assignment failed"
+    },
+    "cli": {
+      "title": "CLI Configuration Profile",
+      "description": "Apply batch port configuration to multiple ports at once",
+      "profileNameLabel": "Profile Name",
+      "profileNamePlaceholder": "e.g. Security Hardening",
+      "portRangeLabel": "Port Range (comma-separated)",
+      "configLabel": "Configuration (JSON)",
+      "keysHint": "Keys: {{keys}}",
+      "applyProfile": "Apply Profile",
+      "appliedToast": "Profile applied: {{succeeded}}/{{total}} ports",
+      "invalidJson": "Invalid JSON config",
+      "applyFailed": "Profile apply failed"
+    }
+  },
+  "ConfigHistoryTab": {
+    "empty": {
+      "title": "No Config History",
+      "description": "No configuration versions have been recorded for this switch yet. Config snapshots are created when changes are detected or backups are triggered."
+    },
+    "card": {
+      "title": "Configuration History",
+      "versionsRecorded": "{{count}} versions recorded"
+    },
+    "table": {
+      "version": "Version",
+      "changeType": "Change Type",
+      "by": "By",
+      "firmware": "Firmware",
+      "date": "Date",
+      "actions": "Actions"
+    },
+    "actions": {
+      "diffWithPrev": "Diff with prev",
+      "close": "Close"
+    },
+    "diff": {
+      "title": "Config Diff: v{{a}} → v{{b}}",
+      "summary": "+{{added}} added, -{{removed}} removed",
+      "sections": " • Sections: {{sections}}",
+      "noChanges": "No changes between these versions."
+    }
+  },
+  "ConfigTab": {
+    "common": {
+      "status": "Status",
+      "direction": "Direction",
+      "on": "On",
+      "off": "Off",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "active": "Active",
+      "inactive": "Inactive",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "stp": {
+      "title": "STP / RSTP Configuration",
+      "description": "Spanning Tree Protocol settings",
+      "mode": "Mode",
+      "priority": "Priority",
+      "helloTime": "Hello Time",
+      "forwardDelay": "Forward Delay",
+      "maxAge": "Max Age",
+      "rootBridge": "Root Bridge",
+      "loading": "Loading STP configuration..."
+    },
+    "igmp": {
+      "title": "IGMP Snooping",
+      "description": "Multicast group management",
+      "enabled": "Enabled",
+      "version": "Version",
+      "fastLeave": "Fast Leave",
+      "querier": "Querier",
+      "queryInterval": "Query Interval",
+      "loading": "Loading IGMP configuration..."
+    },
+    "mirror": {
+      "title": "Port Mirroring",
+      "description": "Traffic mirroring sessions",
+      "destinationPort": "Destination Port",
+      "portValue": "Port {{port}}",
+      "sourcePorts": "Source Ports",
+      "loading": "Loading mirror configuration..."
+    },
+    "qos": {
+      "title": "QoS Configuration",
+      "description": "Quality of Service settings",
+      "mode": "Mode",
+      "trustMode": "Trust Mode",
+      "loading": "Loading QoS configuration..."
+    },
+    "dhcp": {
+      "title": "DHCP Snooping",
+      "description": "DHCP security filtering",
+      "verifyMac": "Verify MAC",
+      "trustedPorts": "Trusted Ports",
+      "loading": "Loading DHCP snooping config..."
+    },
+    "acl": {
+      "title": "ACL Rules",
+      "rulesConfigured": "{{count}} rules configured",
+      "any": "any",
+      "empty": "No ACL rules configured",
+      "columns": {
+        "name": "Name",
+        "action": "Action",
+        "protocol": "Protocol",
+        "source": "Source",
+        "destination": "Destination",
+        "direction": "Direction",
+        "status": "Status"
+      }
+    }
+  },
+  "DiagnosticsTab": {
+    "targetLabel": "Target IP / Hostname",
+    "cableTest": {
+      "title": "Cable Test",
+      "description": "Test cable quality on a port",
+      "portNumber": "Port Number",
+      "run": "Run Cable Test",
+      "running": "Testing...",
+      "toastComplete": "Cable test complete",
+      "toastFailed": "Cable test failed"
+    },
+    "ping": {
+      "title": "Ping",
+      "description": "Ping from this device",
+      "placeholder": "e.g. 8.8.8.8",
+      "run": "Run Ping",
+      "running": "Pinging...",
+      "toastComplete": "Ping test complete",
+      "toastFailed": "Ping test failed"
+    },
+    "traceroute": {
+      "title": "Traceroute",
+      "description": "Trace route from this device",
+      "placeholder": "e.g. 1.1.1.1",
+      "run": "Run Traceroute",
+      "running": "Tracing...",
+      "toastComplete": "Traceroute complete",
+      "toastFailed": "Traceroute failed"
+    },
+    "results": {
+      "title": "Diagnostic Results"
+    }
+  },
+  "LagsTab": {
+    "actions": {
+      "createLag": "Create LAG",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "empty": {
+      "title": "No Link Aggregation Groups",
+      "description": "Create LAGs to bundle ports for increased bandwidth and redundancy."
+    },
+    "card": {
+      "subtitle": "LAG {{lagId}} • {{mode}}"
+    },
+    "fields": {
+      "memberPorts": "Member Ports:",
+      "active": "Active:",
+      "speed": "Speed:",
+      "speedValue": "{{value}} Mbps",
+      "mode": "Mode:"
+    }
+  },
+  "LogsTab": {
+    "alerts": {
+      "title": "Active Alerts",
+      "count": "{{count}} alerts",
+      "noDescription": "No description",
+      "empty": "No active alerts"
+    },
+    "events": {
+      "title": "Event Log",
+      "count": "{{count}} recent events",
+      "empty": "No events recorded",
+      "columns": {
+        "time": "Time",
+        "level": "Level",
+        "category": "Category",
+        "message": "Message",
+        "device": "Device"
+      }
+    }
+  },
+  "NetworkTab": {
+    "lldp": {
+      "title": "LLDP Neighbors",
+      "discovered": "{{count}} discovered neighbors",
+      "portFallback": "Port {{index}}",
+      "empty": "No LLDP neighbors detected",
+      "columns": {
+        "port": "Port",
+        "neighborDevice": "Neighbor Device",
+        "neighborPort": "Neighbor Port",
+        "ip": "IP"
+      }
+    },
+    "routes": {
+      "title": "Static Routes",
+      "configured": "{{count}} routes configured",
+      "empty": "No static routes configured",
+      "status": {
+        "active": "Active",
+        "disabled": "Disabled"
+      },
+      "columns": {
+        "destination": "Destination",
+        "mask": "Mask",
+        "gateway": "Gateway",
+        "metric": "Metric",
+        "status": "Status"
+      }
+    },
+    "dhcp": {
+      "title": "DHCP Configuration",
+      "empty": "No DHCP configuration available"
+    },
+    "mac": {
+      "title": "MAC Address Table",
+      "entries": "{{count}} entries",
+      "empty": "No MAC table entries",
+      "columns": {
+        "macAddress": "MAC Address",
+        "vlan": "VLAN",
+        "port": "Port",
+        "type": "Type"
+      }
+    }
+  },
+  "OverviewTab": {
+    "portStatus": {
+      "title": "Port Status",
+      "description": "Active link distribution",
+      "up": "Up",
+      "down": "Down",
+      "disabled": "Disabled",
+      "linkSpeeds": "Link Speeds"
+    },
+    "poe": {
+      "title": "PoE Power Analysis",
+      "description": "Budget utilization & distribution",
+      "ofBudget": "of {{budget}}W budget ({{pct}}%)",
+      "delivering": "Delivering",
+      "idle": "Idle",
+      "off": "PoE Off",
+      "topConsumers": "Top Consumers"
+    },
+    "traffic": {
+      "title": "Traffic Summary",
+      "description": "Aggregate port throughput",
+      "totalTx": "Total TX",
+      "totalRx": "Total RX",
+      "topPorts": "Top Ports by Traffic",
+      "noData": "No port data available"
+    },
+    "device": {
+      "title": "Device Information",
+      "description": "Hardware & network details",
+      "model": "Model",
+      "vendor": "Vendor",
+      "serialNumber": "Serial Number",
+      "macAddress": "MAC Address",
+      "ipAddress": "IP Address",
+      "ipv6Address": "IPv6 Address",
+      "controllerIp": "Controller IP",
+      "firmware": "Firmware",
+      "hardwareVersion": "Hardware Version",
+      "totalPorts": "Total Ports",
+      "site": "Site",
+      "vlans": "VLANs",
+      "clients": "Clients",
+      "fanStatus": "Fan Status",
+      "status": "Status",
+      "temperature": "Temperature",
+      "updateAvailable": "Firmware update available",
+      "locatorLed": "Locator LED",
+      "ledActivating": "Activating...",
+      "flashLed": "Flash LED"
+    },
+    "lldp": {
+      "title": "Connected Devices (LLDP)",
+      "discovered_one": "{{count}} discovered neighbor",
+      "discovered_other": "{{count}} discovered neighbors",
+      "localPort": "Local Port",
+      "neighbor": "Neighbor",
+      "remotePort": "Remote Port",
+      "speed": "Speed",
+      "poe": "PoE"
+    }
+  },
+  "PortsTab": {
+    "toolbar": {
+      "searchPlaceholder": "Search ports...",
+      "applyProfile": "Apply Profile ({{count}})",
+      "clearSelection": "Clear Selection"
+    },
+    "portStatus": {
+      "title": "Port Status",
+      "description": "Click on a port to configure • Shift+click to multi-select"
+    },
+    "legend": {
+      "speed": {
+        "fastEthernet": "10/100 Mbps",
+        "gigabit": "1000 Mbps",
+        "multiGig": "2.5 Gbps",
+        "tenGig": "10 Gbps",
+        "disabled": "Disabled",
+        "disconnected": "Disconnected"
+      },
+      "icons": {
+        "poeDelivering": "PoE Delivering",
+        "lagMember": "LAG Member",
+        "sfp": "SFP",
+        "uplink": "Uplink"
+      }
+    },
+    "tooltip": {
+      "status": "Status",
+      "enabledIdle": "Enabled (idle)",
+      "off": "Off",
+      "module": "Module",
+      "vendor": "Vendor",
+      "wavelength": "Wavelength",
+      "temp": "Temp",
+      "power": "Power"
+    },
+    "table": {
+      "port": "Port",
+      "status": "Status",
+      "connection": "Connection",
+      "speed": "Speed",
+      "type": "Type",
+      "txSum": "TX Sum",
+      "rxSum": "RX Sum",
+      "actions": "Actions",
+      "trunk": "Trunk",
+      "access": "Access"
+    },
+    "poe": {
+      "enabled": "Enabled",
+      "off": "Off"
+    },
+    "traffic": {
+      "txBytes": "TX Bytes",
+      "txPackets": "TX Packets",
+      "txErrors": "TX Errors",
+      "rxBytes": "RX Bytes",
+      "rxPackets": "RX Packets",
+      "rxErrors": "RX Errors",
+      "utilization": "Utilization"
+    },
+    "actions": {
+      "configure": "Configure",
+      "bouncePort": "Bounce Port",
+      "poePowerCycle": "PoE Power Cycle",
+      "disable": "Disable",
+      "enable": "Enable",
+      "disablePoe": "Disable PoE",
+      "enablePoe": "Enable PoE",
+      "controlNotSupported": "Port control not supported"
+    }
+  },
+  "ProfilesTab": {
+    "actions": {
+      "createProfile": "Create Profile",
+      "edit": "Edit",
+      "duplicate": "Duplicate",
+      "delete": "Delete"
+    },
+    "empty": {
+      "title": "No Port Profiles",
+      "description": "Create port profiles to quickly configure multiple ports."
+    },
+    "fields": {
+      "profileType": "Profile Type:",
+      "portsUsing": "Ports using:"
+    }
+  },
+  "SwitchClientsTab": {
+    "stats": {
+      "totalClients": "Total Clients",
+      "wired": "Wired",
+      "wireless": "Wireless",
+      "totalTraffic": "Total Traffic",
+      "downloadUpload": "Download / Upload"
+    },
+    "columns": {
+      "client": "Client",
+      "ipAddress": "IP Address",
+      "macAddress": "MAC Address",
+      "connection": "Connection",
+      "vlan": "VLAN",
+      "signal": "Signal",
+      "activity": "Activity",
+      "traffic": "Traffic",
+      "uptime": "Uptime",
+      "lastSeen": "Last Seen"
+    },
+    "connectionType": {
+      "wired": "Wired",
+      "wireless": "Wireless"
+    },
+    "filters": {
+      "all": "All",
+      "wired": "Wired",
+      "wireless": "Wireless"
+    },
+    "unknownDevice": "Unknown Device",
+    "port": "Port {{port}}",
+    "dbm": "{{value}} dBm",
+    "searchPlaceholder": "Search clients by name, IP, MAC, SSID...",
+    "itemName": "clients",
+    "empty": {
+      "title": "No clients connected",
+      "description": "No clients are currently connected to this switch. Clients will appear here once devices connect."
+    }
+  },
+  "VlansTab": {
+    "view": {
+      "matrix": "Matrix View",
+      "list": "List View"
+    },
+    "matrix": {
+      "changes": "{{count}} changes",
+      "title": "VLAN-to-Port Assignment Matrix",
+      "toggleHint": "Click cells to toggle:",
+      "untagged": "Untagged (native)",
+      "tagged": "Tagged",
+      "emptyExcluded": "Empty = excluded",
+      "portColumn": "Port",
+      "portRow": "Port {{index}}"
+    },
+    "actions": {
+      "discard": "Discard",
+      "applyChanges": "Apply Changes",
+      "viewPorts": "View Ports"
+    },
+    "list": {
+      "title": "VLAN Configuration",
+      "description": "VLANs assigned to ports on this switch",
+      "portCounts": "{{untagged}} untagged, {{tagged}} tagged",
+      "dhcp": "DHCP",
+      "default": "Default",
+      "vlanName": "VLAN {{vid}}"
+    }
+  }
+}

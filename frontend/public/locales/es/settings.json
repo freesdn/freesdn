@@ -1,0 +1,980 @@
+{
+  "title": "Configuración",
+  "general": "General",
+  "appearance": "Apariencia",
+  "modules": "Módulos",
+  "security": "Seguridad",
+  "sso": "Inicio de sesión único",
+  "notifications": "Notificaciones",
+  "api": "API",
+  "backup": "Copia de seguridad",
+  "about": "Acerca de",
+  "theme": "Tema",
+  "language": "Idioma",
+  "timezone": "Zona horaria",
+  "darkMode": "Modo oscuro",
+  "lightMode": "Modo claro",
+  "systemTheme": "Tema del sistema",
+  "accentColor": "Color de acento",
+  "enableModule": "Habilitar módulo",
+  "disableModule": "Deshabilitar módulo",
+  "moduleEnabled": "Módulo habilitado",
+  "moduleDisabled": "Módulo deshabilitado",
+  "ssoProvider": "Proveedor de SSO",
+  "saml": "SAML",
+  "oidc": "OpenID Connect",
+  "ldap": "LDAP",
+  "clientId": "ID de cliente",
+  "clientSecret": "Secreto de cliente",
+  "issuerUrl": "URL del emisor",
+  "callbackUrl": "URL de devolución de llamada",
+  "saveChanges": "Guardar cambios",
+  "resetDefaults": "Restablecer valores predeterminados",
+  "version": "Versión",
+  "license": "Licencia",
+  "subtitle": "Gestiona la configuración y las preferencias de FreeSDN.",
+  "tabs": {
+    "general": "General",
+    "notifications": "Notificaciones",
+    "security": "Seguridad",
+    "modules": "Módulos",
+    "appearance": "Apariencia",
+    "system": "Sistema"
+  },
+  "messages": {
+    "loadFailed": "No se pudo cargar la configuración",
+    "saveFailed": "No se pudo guardar la configuración",
+    "saveFailedWithStatus": "No se pudo guardar la configuración ({{status}})",
+    "noOrganization": "No hay ninguna organización asociada al usuario actual"
+  },
+  "generalPage": {
+    "description": "Configura los ajustes básicos del sitio y las preferencias regionales.",
+    "siteInformation": {
+      "title": "Información del sitio",
+      "description": "Información básica sobre tu instancia de FreeSDN",
+      "nameLabel": "Nombre del sitio",
+      "namePlaceholder": "Mi panel de red",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": "Una breve descripción de esta instalación"
+    },
+    "regional": {
+      "title": "Configuración regional",
+      "description": "Configura la zona horaria y los formatos de fecha",
+      "timezone": "Zona horaria",
+      "dateFormat": "Formato de fecha",
+      "language": "Idioma"
+    }
+  },
+  "SettingsPage": {
+    "nav": {
+      "categories": {
+        "organization": "Organización",
+        "securityAccess": "Seguridad y acceso",
+        "integrations": "Integraciones",
+        "system": "Sistema"
+      },
+      "items": {
+        "general": "General",
+        "appearance": "Apariencia",
+        "security": "Seguridad",
+        "sso": "Proveedores de SSO",
+        "apiKeys": "Claves de API",
+        "oauth2Apps": "Aplicaciones OAuth2",
+        "ai": "Proveedores de IA",
+        "notifications": "Notificaciones",
+        "modules": "Módulos",
+        "system": "Información del sistema",
+        "about": "Acerca de"
+      }
+    },
+    "timezones": {
+      "utc": "UTC",
+      "easternUs": "Hora del Este (EE. UU.)",
+      "centralUs": "Hora Central (EE. UU.)",
+      "mountainUs": "Hora de la Montaña (EE. UU.)",
+      "pacificUs": "Hora del Pacífico (EE. UU.)",
+      "london": "Londres (GMT)",
+      "paris": "París (CET)",
+      "tokyo": "Tokio (JST)",
+      "shanghai": "Shanghái (CST)"
+    },
+    "regional": {
+      "selectTimezonePlaceholder": "Selecciona la zona horaria",
+      "selectFormatPlaceholder": "Selecciona el formato",
+      "selectLanguagePlaceholder": "Selecciona el idioma"
+    },
+    "security": {
+      "saveChanges": "Guardar cambios",
+      "session": {
+        "title": "Seguridad de la sesión",
+        "description": "Configura los ajustes de sesión y tiempo de espera",
+        "timeoutLabel": "Tiempo de espera de la sesión (minutos)",
+        "maxAttemptsLabel": "Intentos máximos de inicio de sesión"
+      },
+      "auth": {
+        "title": "Autenticación",
+        "description": "Políticas de contraseñas y autenticación multifactor",
+        "requireMfaLabel": "Requerir autenticación multifactor",
+        "requireMfaDescription": "Exigir MFA para todos los usuarios",
+        "minPasswordLabel": "Longitud mínima de la contraseña",
+        "requireSpecialLabel": "Requerir caracteres especiales",
+        "requireSpecialDescription": "Las contraseñas deben contener caracteres especiales"
+      },
+      "access": {
+        "title": "Control de acceso",
+        "description": "Restricciones de IP y seguridad de la API",
+        "ipWhitelistLabel": "Lista blanca de IP",
+        "ipWhitelistPlaceholder": "Una IP o CIDR por línea (déjalo vacío para permitir todas)",
+        "ipWhitelistHelp": "Restringe el acceso a direcciones IP específicas. Déjalo vacío para no aplicar restricciones."
+      }
+    },
+    "appearance": {
+      "theme": {
+        "title": "Tema",
+        "description": "Elige tu esquema de color preferido",
+        "light": {
+          "label": "Claro",
+          "desc": "Interfaz limpia y luminosa"
+        },
+        "dark": {
+          "label": "Oscuro",
+          "desc": "Menos fatiga visual"
+        },
+        "system": {
+          "label": "Sistema",
+          "desc": "Coincidir con la preferencia del sistema"
+        }
+      },
+      "accent": {
+        "title": "Color de acento",
+        "description": "Personaliza el color principal usado en botones, enlaces, selecciones y la barra lateral en toda la aplicación"
+      },
+      "preview": {
+        "title": "Vista previa en vivo",
+        "primaryButton": "Botón principal",
+        "outline": "Contorno",
+        "secondary": "Secundario",
+        "activeBadge": "Insignia activa",
+        "outlineBadge": "Insignia de contorno",
+        "primaryText": "Texto principal"
+      },
+      "display": {
+        "title": "Opciones de visualización",
+        "description": "Personaliza el movimiento y los efectos de la interfaz",
+        "animationsLabel": "Habilitar animaciones",
+        "animationsDescription": "Transiciones suaves y efectos de movimiento en toda la interfaz"
+      },
+      "autoSaveNote": "Los cambios se aplican y guardan automáticamente"
+    },
+    "system": {
+      "fetchError": "No se pudo obtener el estado de la infraestructura. Algunos valores son predeterminados estáticos.",
+      "status": {
+        "connected": "Conectado",
+        "unknown": "Desconocido"
+      },
+      "platform": {
+        "title": "Plataforma",
+        "version": "Versión",
+        "license": "Licencia",
+        "about": "Acerca de y marcas comerciales",
+        "aboutLink": "Ver"
+      },
+      "database": {
+        "title": "Base de datos",
+        "postgresVersion": "Versión de PostgreSQL",
+        "connectionPool": "Grupo de conexiones",
+        "connectionPoolValue": "20 + 30 de desbordamiento",
+        "schemas": "Esquemas",
+        "enabled": "Habilitado"
+      },
+      "cacheQueue": {
+        "title": "Caché y cola",
+        "celeryWorkers": "Procesos de Celery",
+        "workersActive": "{{workers}} activos",
+        "noWorkers": "Sin procesos",
+        "celeryBeat": "Celery Beat",
+        "running": "En ejecución"
+      },
+      "runtime": {
+        "title": "Tiempo de ejecución",
+        "uptime": "Tiempo activo",
+        "apiRoutes": "Rutas de la API",
+        "modulesLoaded": "Módulos cargados",
+        "adapters": "Adaptadores"
+      },
+      "maintenance": {
+        "title": "Mantenimiento",
+        "backupDatabase": "Copia de seguridad de la base de datos",
+        "clearCache": "Limpiar caché"
+      }
+    },
+    "content": {
+      "general": {
+        "title": "Configuración general"
+      },
+      "appearance": {
+        "title": "Configuración de apariencia",
+        "description": "Personaliza el aspecto de FreeSDN."
+      },
+      "security": {
+        "title": "Configuración de seguridad",
+        "description": "Configura la autenticación y el control de acceso."
+      },
+      "ai": {
+        "title": "Proveedores de IA",
+        "description": "Configura proveedores de LLM (OpenAI, Anthropic, Ollama) para el asistente de IA."
+      },
+      "notifications": {
+        "title": "Configuración de notificaciones",
+        "description": "Gestiona las preferencias de notificaciones, umbrales de severidad, horas de silencio, suscripciones por categoría, agrupación de resúmenes y proveedores de entrega."
+      },
+      "modules": {
+        "title": "Gestión de módulos",
+        "description": "Habilita, deshabilita y configura los módulos de FreeSDN. Los módulos agregan nuevas funciones como cámaras, VoIP, gestión de firewall y más."
+      }
+    }
+  },
+  "AISettingsPage": {
+    "header": {
+      "title": "Configuración de IA",
+      "subtitle": "Configura los proveedores de LLM para el asistente de IA"
+    },
+    "providers": {
+      "openai": {
+        "description": "Modelos de las series GPT-4o y GPT-4 mediante la API de OpenAI"
+      },
+      "anthropic": {
+        "description": "Modelos de la serie Claude 3 mediante la API de Anthropic"
+      },
+      "ollama": {
+        "description": "Modelos de código abierto alojados localmente mediante Ollama"
+      }
+    },
+    "status": {
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "keySet": "Clave configurada"
+    },
+    "fields": {
+      "apiKey": "Clave de API",
+      "apiKeyPlaceholder": "Ingresa la clave de API...",
+      "apiKeyHint": "Déjalo en blanco para conservar la clave existente",
+      "baseUrl": "URL base",
+      "defaultModel": "Modelo predeterminado",
+      "defaultModelPlaceholder": "Selecciona el modelo predeterminado..."
+    },
+    "test": {
+      "success": "Conexión exitosa",
+      "failed": "Error de conexión",
+      "requestFailed": "La solicitud falló"
+    },
+    "actions": {
+      "save": "Guardar",
+      "testConnection": "Probar conexión",
+      "configureApiKeyFirst": "Configura primero la clave de API",
+      "update": "Actualizar"
+    },
+    "errors": {
+      "saveFailed": "Error al guardar la configuración",
+      "governanceUpdateFailed": "Error al actualizar la configuración de gobernanza",
+      "governanceLoadFailed": "Error al cargar los datos de gobernanza",
+      "loadProvidersPrefix": "Error al cargar la configuración del proveedor de IA. Es posible que necesites el permiso",
+      "loadProvidersSuffix": "."
+    },
+    "policy": {
+      "disabled": {
+        "label": "Deshabilitado",
+        "description": "Sin acceso a LLM"
+      },
+      "localOnly": {
+        "label": "Solo local",
+        "description": "Solo Ollama · los datos permanecen en las instalaciones"
+      },
+      "cloudApproved": {
+        "label": "Nube aprobada",
+        "description": "OpenAI + Anthropic + Ollama"
+      }
+    },
+    "governance": {
+      "title": "Gobernanza de LLM",
+      "description": "Controla qué proveedores de LLM están permitidos y establece presupuestos de tokens",
+      "noProviderHint": "Configura al menos un proveedor de IA arriba antes de establecer la política de gobernanza.",
+      "orgPolicy": "Política de la organización",
+      "monthlyBudget": "Presupuesto mensual de tokens",
+      "tokenUsage": "Uso de tokens",
+      "usageSummary": "{{percent}}% usado · {{remaining}} tokens restantes"
+    },
+    "callLog": {
+      "title": "Llamadas recientes a LLM",
+      "description": "Registro de auditoría que preserva la privacidad · solo nombres de campos, sin contenido",
+      "columns": {
+        "time": "Hora",
+        "operation": "Operación",
+        "provider": "Proveedor",
+        "tokens": "Tokens",
+        "latency": "Latencia",
+        "status": "Estado"
+      }
+    },
+    "pagination": {
+      "showing": "Mostrando {{from}}-{{to}} de {{total}}",
+      "previous": "Anterior",
+      "next": "Siguiente"
+    },
+    "info": {
+      "title": "Acerca de los proveedores de IA",
+      "encryption": "Las claves de API se cifran en reposo mediante cifrado simétrico Fernet",
+      "ollamaLocal": "Ollama se conecta a un servidor de modelos que se ejecuta localmente · ningún dato sale de tu red",
+      "readAccess": "El asistente de IA solo tiene acceso de lectura a los datos de tu red, a menos que otorgues explícitamente herramientas de escritura"
+    }
+  },
+  "APIKeysTab": {
+    "header": {
+      "title": "Claves de API",
+      "description": "Gestiona las claves de API para el acceso programático a FreeSDN desde scripts e integraciones.",
+      "newKey": "Nueva clave de API"
+    },
+    "loadError": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos.",
+    "loading": "Cargando claves de API…",
+    "empty": {
+      "title": "Aún no hay claves de API",
+      "description": "Crea tu primera clave de API para habilitar el acceso programático. La clave completa solo se muestra una vez al crearla, así que asegúrate de copiarla.",
+      "action": "Crear clave de API"
+    },
+    "badge": {
+      "revoked": "Revocada",
+      "expired": "Caducada"
+    },
+    "scopeCount": {
+      "one": "{{count}} ámbito",
+      "other": "{{count}} ámbitos"
+    },
+    "lastUsed": "Último uso {{date}}",
+    "neverUsed": "Nunca usada",
+    "expiresOn": "Caduca {{date}}",
+    "expiredOn": "Caducó {{date}}",
+    "created": {
+      "title": "Clave de API creada",
+      "description": "Copia tu clave de API ahora.",
+      "notShownAgain": "No se volverá a mostrar.",
+      "storeSecurely": "Guarda esta clave de forma segura. Cualquier persona con esta clave puede acceder a la API con tus permisos.",
+      "keyLabel": "Tu nueva clave de API",
+      "copiedConfirm": "He copiado la clave"
+    },
+    "create": {
+      "title": "Crear clave de API",
+      "description": "Crea una nueva clave de API para el acceso programático a FreeSDN.",
+      "submit": "Crear clave",
+      "nameLabel": "Nombre *",
+      "namePlaceholder": "p. ej. Pipeline de CI/CD, Bot de monitoreo",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": "¿Para qué se usa esta clave?",
+      "scopesLabel": "Ámbitos",
+      "scopesDescription": "Déjalo vacío para heredar todos tus permisos. Selecciona ámbitos específicos para limitar el acceso.",
+      "expiresLabel": "Caduca en (días)",
+      "expiresPlaceholder": "Déjalo vacío para que no caduque"
+    },
+    "scopes": {
+      "deviceRead": "Dispositivo · Lectura",
+      "deviceWrite": "Dispositivo · Escritura",
+      "networkRead": "Red · Lectura",
+      "networkWrite": "Red · Escritura",
+      "camerasRead": "Cámaras · Lectura",
+      "camerasWrite": "Cámaras · Escritura",
+      "backupRead": "Copia de seguridad · Lectura",
+      "backupWrite": "Copia de seguridad · Escritura",
+      "automationRead": "Automatización · Lectura",
+      "automationWrite": "Automatización · Escritura"
+    },
+    "validation": {
+      "nameRequired": "El nombre es obligatorio",
+      "expiresRange": "Debe ser de 1 a 365 días, o vacío para que no caduque"
+    },
+    "revoke": {
+      "title": "Revocar clave de API",
+      "description": "Esta clave dejará de funcionar de inmediato. Cualquier integración que la use dejará de funcionar.",
+      "cancel": "Cancelar",
+      "confirm": "Revocar clave",
+      "revoking": "Revocando…"
+    }
+  },
+  "ModuleDetailPage": {
+    "section": {
+      "noneConfigured": "Ninguno configurado"
+    },
+    "backToModules": "Volver a módulos",
+    "notFound": {
+      "title": "Módulo no encontrado",
+      "description": "No se pudo encontrar el módulo \"{{moduleId}}\"."
+    },
+    "breadcrumb": {
+      "modules": "Módulos",
+      "settings": "Configuración"
+    },
+    "badges": {
+      "core": "Esencial",
+      "beta": "Beta",
+      "premium": "Premium",
+      "comingSoon": "Próximamente"
+    },
+    "byAuthor": "por {{author}}",
+    "status": {
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado"
+    },
+    "actions": {
+      "reload": "Recargar",
+      "reloadTooltip": "Actualizar los datos del módulo desde el servidor",
+      "disable": "Deshabilitar",
+      "enable": "Habilitar",
+      "dismiss": "Descartar",
+      "viewDocs": "Ver documentación",
+      "cancel": "Cancelar",
+      "disableModule": "Deshabilitar módulo",
+      "enableModule": "Habilitar módulo",
+      "comingSoonTooltip": "Este módulo es una vista previa y aún no se puede habilitar."
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos.",
+      "toggleFailed": "No se pudo actualizar el módulo: {{error}}"
+    },
+    "banners": {
+      "missingDeps": {
+        "title": "Dependencias faltantes",
+        "body": "Este módulo requiere:"
+      },
+      "requiredBy": {
+        "one": "Requerido por {{count}} módulo",
+        "other": "Requerido por {{count}} módulos"
+      },
+      "comingSoon": {
+        "title": "Próximamente",
+        "body": "Este módulo es una vista previa y todavía no está disponible para habilitar. Se incluye para que puedas revisar sus capacidades antes de su disponibilidad general."
+      }
+    },
+    "minVersion": "(≥ {{version}})",
+    "tabs": {
+      "overview": "Resumen",
+      "capabilities": "Capacidades",
+      "permissions": "Permisos",
+      "deviceTypes": "Tipos de dispositivo",
+      "navigation": "Navegación",
+      "dependencies": "Dependencias"
+    },
+    "sections": {
+      "moduleInfo": "Información del módulo",
+      "statusActivation": "Estado y activación",
+      "dashboardWidgets": "Widgets del panel",
+      "capabilities": "Capacidades",
+      "permissions": "Permisos",
+      "supportedDeviceTypes": "Tipos de dispositivo compatibles",
+      "navigationItems": "Elementos de navegación",
+      "requiredDependencies": "Dependencias requeridas",
+      "usedBy": "Usado por"
+    },
+    "fields": {
+      "moduleId": "ID del módulo",
+      "version": "Versión",
+      "category": "Categoría",
+      "author": "Autor",
+      "license": "Licencia",
+      "minCoreVersion": "Versión mínima del núcleo",
+      "documentation": "Documentación",
+      "state": "Estado",
+      "coreModule": "Módulo esencial",
+      "beta": "Beta",
+      "premium": "Premium",
+      "enabledAt": "Habilitado el",
+      "disabledAt": "Deshabilitado el"
+    },
+    "yes": "Sí",
+    "no": "No",
+    "widgets": {
+      "autoRefresh": "Actualización automática"
+    },
+    "empty": {
+      "capabilities": "Este módulo no declara ninguna capacidad.",
+      "permissions": "Este módulo no requiere ningún permiso.",
+      "deviceTypes": "Este módulo no apunta a tipos de dispositivo específicos.",
+      "navigationItems": "Este módulo no registra elementos de navegación.",
+      "dependencies": "Este módulo no tiene dependencias.",
+      "usedBy": "Ningún otro módulo habilitado depende de este módulo."
+    },
+    "nav": {
+      "order": "orden: {{order}}",
+      "parent": "padre: {{parent}}"
+    },
+    "dep": {
+      "minVersionMono": "≥ {{version}}",
+      "optional": "Opcional",
+      "installed": "Instalado",
+      "missing": "Faltante"
+    },
+    "dialog": {
+      "disableTitle": "¿Deshabilitar {{name}}?",
+      "enableTitle": "¿Habilitar {{name}}?",
+      "disableDescription": "Esto desactivará el módulo para tu organización. Los datos y la configuración del módulo se conservarán.",
+      "enableDescription": "Esto activará el módulo y registrará sus rutas, elementos de navegación y permisos.",
+      "dependentsWarningPrefix": "Los siguientes módulos habilitados dependen de",
+      "dependentsWarningSuffix": ":",
+      "missingDepsWarning": "Dependencias requeridas faltantes: {{deps}}"
+    }
+  },
+  "ModulesSettingsTab": {
+    "categories": {
+      "core": "Núcleo",
+      "network": "Red",
+      "surveillance": "Videovigilancia",
+      "security": "Seguridad",
+      "communication": "Comunicación",
+      "monitoring": "Monitoreo",
+      "system": "Sistema"
+    },
+    "row": {
+      "coreModule": "Módulo de núcleo",
+      "beta": "Beta",
+      "missingDeps": "Dependencias faltantes: {{deps}}",
+      "comingSoon": "Próximamente",
+      "comingSoonAria": "Próximamente — aún no disponible",
+      "comingSoonTooltip": "Este módulo es una vista previa y aún no se puede habilitar.",
+      "capsCount_one": "{{count}} capacidad",
+      "capsCount_other": "{{count}} capacidades"
+    },
+    "warnings": {
+      "dependents": "Los siguientes módulos habilitados dependen de {{module}}: {{dependents}}",
+      "missingRequired": "Faltan dependencias requeridas: {{deps}}"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos.",
+      "toggleFailed": "Error al actualizar el módulo: {{error}}"
+    },
+    "stats": {
+      "total": "Total de módulos",
+      "enabled": "Habilitados",
+      "ofTotal": "de {{total}}",
+      "core": "Núcleo",
+      "disabled": "Deshabilitados"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Filtrar módulos...",
+      "categoryPlaceholder": "Categoría",
+      "allCategories": "Todas las categorías",
+      "refresh": "Actualizar"
+    },
+    "actions": {
+      "dismiss": "Descartar",
+      "cancel": "Cancelar",
+      "disableModule": "Deshabilitar módulo",
+      "enableModule": "Habilitar módulo"
+    },
+    "columns": {
+      "module": "Módulo",
+      "category": "Categoría",
+      "version": "Versión",
+      "caps": "Capac.",
+      "usedBy": "Usado por",
+      "active": "Activo"
+    },
+    "empty": {
+      "title": "Ningún módulo coincide con el filtro actual",
+      "description": "Intenta ajustar tu búsqueda o el filtro de categoría"
+    },
+    "footer": {
+      "count": "{{shown}} de {{total}} módulos",
+      "filtered": "(filtrado)"
+    },
+    "dialog": {
+      "titleDisable": "Deshabilitar {{module}}",
+      "titleEnable": "Habilitar {{module}}",
+      "descriptionDisable": "Esto deshabilitará el módulo y ocultará sus páginas de la navegación. Los datos del módulo se conservarán.",
+      "descriptionEnable": "Esto habilitará el módulo y registrará sus rutas y elementos de navegación."
+    }
+  },
+  "NotificationsSettingsTab": {
+    "categories": {
+      "system": {
+        "label": "Sistema",
+        "desc": "Actualizaciones de la plataforma, mantenimiento"
+      },
+      "security": {
+        "label": "Seguridad",
+        "desc": "Alertas de inicio de sesión, cambios de acceso"
+      },
+      "device": {
+        "label": "Dispositivos",
+        "desc": "Cambios de estado en línea / fuera de línea"
+      },
+      "network": {
+        "label": "Red",
+        "desc": "Conectividad, rendimiento"
+      },
+      "alert": {
+        "label": "Alertas",
+        "desc": "Activaciones de reglas de alerta"
+      },
+      "user": {
+        "label": "Usuarios",
+        "desc": "Cambios de cuenta, invitaciones"
+      }
+    },
+    "channels": {
+      "email": "Correo",
+      "slack": "Slack",
+      "in_app": "En la app"
+    },
+    "general": {
+      "title": "Preferencias generales",
+      "description": "Controles maestros de notificaciones y ajustes por canal",
+      "enable": {
+        "label": "Habilitar notificaciones",
+        "description": "Interruptor maestro · cuando está desactivado, no se envían notificaciones por ningún canal"
+      },
+      "channelToggles": "Interruptores de canal",
+      "email": {
+        "label": "Notificaciones por correo",
+        "description": "Recibir notificaciones por correo electrónico"
+      },
+      "slack": {
+        "label": "Notificaciones de Slack",
+        "description": "Enviar notificaciones a canales de Slack"
+      },
+      "inApp": {
+        "label": "Notificaciones en la app",
+        "description": "Mostrar notificaciones en el centro de notificaciones de FreeSDN"
+      },
+      "emailOverride": {
+        "label": "Sobrescribir correo de notificación",
+        "description": "Enviar notificaciones por correo a una dirección distinta de la de tu cuenta",
+        "placeholder": "Déjalo vacío para usar el correo de la cuenta"
+      }
+    },
+    "severity": {
+      "title": "Umbrales de severidad",
+      "description": "Recibe notificaciones solo en estos niveles de severidad o superiores",
+      "minForChannel": "Severidad mínima para notificaciones de {{channel}}",
+      "example": {
+        "before": "Por ejemplo, configurar Correo en \"error\" significa que solo se enviarán por correo las notificaciones ",
+        "error": "error",
+        "middle": " y ",
+        "critical": "critical",
+        "after": "."
+      }
+    },
+    "quietHours": {
+      "title": "Horas de silencio",
+      "description": "Pausa las notificaciones durante horas específicas · las alertas críticas siguen llegando",
+      "active": "Activo",
+      "enable": {
+        "label": "Habilitar horas de silencio",
+        "description": "Silencia las notificaciones no críticas durante un intervalo de tiempo"
+      },
+      "startTime": "Hora de inicio",
+      "endTime": "Hora de fin",
+      "timezone": "Zona horaria",
+      "bypass": {
+        "label": "Categorías exentas",
+        "description": "Estas categorías siempre enviarán notificaciones, incluso durante las horas de silencio"
+      }
+    },
+    "subscriptions": {
+      "title": "Suscripciones por categoría",
+      "description": "Elige qué canales reciben notificaciones para cada categoría",
+      "categoryHeader": "Categoría"
+    },
+    "digest": {
+      "title": "Resumen y agrupación",
+      "description": "Agrupa las notificaciones no críticas en correos de resumen periódicos",
+      "enable": {
+        "label": "Habilitar resumen",
+        "description": "Agrupa las notificaciones no críticas en correos de resumen periódicos"
+      },
+      "frequency": "Frecuencia",
+      "frequencies": {
+        "realtime": "En tiempo real (sin resumen)",
+        "hourly": "Cada hora",
+        "daily": "Diario",
+        "weekly": "Semanal"
+      },
+      "deliveryTime": "Hora de entrega",
+      "deliveryTimeHint": "Según la zona horaria de tus horas de silencio"
+    },
+    "providers": {
+      "title": "Proveedores de entrega",
+      "description": "Gmail, SMTP, Mailgun, SendGrid, Brevo, SES, Postmark, Resend, Slack, Teams, SMS, Webhooks",
+      "configuredCount": "{{count}} configurados",
+      "verifiedCount": "{{count}} verificados",
+      "empty": {
+        "title": "No hay proveedores configurados",
+        "description": "Ve a la página dedicada de Proveedores para configurar tus integraciones de correo, Slack, Teams, SMS o webhook."
+      },
+      "errors": {
+        "one": "{{count}} proveedor tiene errores · consulta la página de Proveedores para más detalles.",
+        "other": "{{count}} proveedores tienen errores · consulta la página de Proveedores para más detalles."
+      },
+      "manage": {
+        "title": "Gestionar proveedores",
+        "description": "Configuración completa de proveedores, consola de pruebas, diagnósticos de estado y herramientas de depuración."
+      }
+    },
+    "loadError": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos.",
+    "save": {
+      "success": "Preferencias guardadas",
+      "error": "No se pudieron guardar las preferencias",
+      "idle": "Los cambios sin guardar son locales hasta que guardes",
+      "button": "Guardar preferencias"
+    }
+  },
+  "OAuth2AppsTab": {
+    "header": {
+      "title": "Aplicaciones OAuth2",
+      "description": "Registra aplicaciones de terceros para la integración con OAuth2 mediante el flujo de código de autorización con PKCE."
+    },
+    "actions": {
+      "registerApp": "Registrar aplicación",
+      "rotate": "Rotar",
+      "rotateTitle": "Rotar el secreto de cliente",
+      "cancel": "Cancelar",
+      "deleting": "Eliminando…",
+      "deleteApp": "Eliminar aplicación"
+    },
+    "status": {
+      "inactive": "Inactiva"
+    },
+    "loading": "Cargando aplicaciones…",
+    "errors": {
+      "loadFailed": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "empty": {
+      "title": "No hay aplicaciones OAuth2 registradas",
+      "description": "Registra tu primera aplicación para habilitar integraciones OAuth2 y conceder acceso programático mediante el flujo de código de autorización."
+    },
+    "fields": {
+      "clientId": "ID de cliente",
+      "clientSecret": "Secreto de cliente",
+      "clientIdLabel": "ID de cliente:",
+      "secretLabel": "Secreto:",
+      "applicationNameRequired": "Nombre de la aplicación *",
+      "description": "Descripción",
+      "homepageUrl": "URL de la página principal"
+    },
+    "placeholders": {
+      "applicationName": "p. ej. Mi aplicación de panel",
+      "description": "¿Qué hace esta aplicación?",
+      "redirectUri": "https://miapp.ejemplo.com/callback",
+      "homepageUrl": "https://miapp.ejemplo.com"
+    },
+    "redirectUris": {
+      "add": "Agregar URI de redirección",
+      "label": "URI de redirección *",
+      "description": "Agrega una URI por fila.",
+      "empty": "Sin URI de redirección",
+      "itemLabel": "URI de redirección {{index}}",
+      "removeAria": "Eliminar URI de redirección {{index}}"
+    },
+    "meta": {
+      "redirectUriCount": "{{count}} URI de redirección",
+      "redirectUriCountPlural": "{{count}} URI de redirección",
+      "registered": "Registrada el {{date}}",
+      "website": "Sitio web"
+    },
+    "secretDialog": {
+      "title": "Secreto de cliente",
+      "copyNow": "Copia el secreto de cliente ahora.",
+      "notShownAgain": "No se volverá a mostrar.",
+      "storeSecurely": "Guarda este secreto de forma segura. No se puede recuperar.",
+      "stored": "He guardado el secreto"
+    },
+    "registerDialog": {
+      "title": "Registrar aplicación OAuth2",
+      "description": "Registra una nueva aplicación para recibir un ID de cliente y un secreto para la integración con OAuth2."
+    },
+    "deleteDialog": {
+      "title": "Eliminar aplicación OAuth2",
+      "description": "Esta aplicación se desactivará y todos los tokens emitidos se revocarán de inmediato."
+    },
+    "validation": {
+      "nameRequired": "El nombre de la aplicación es obligatorio",
+      "uriRequired": "Se requiere una URI",
+      "atLeastOneUri": "Se requiere al menos una URI de redirección"
+    }
+  },
+  "PluginsPage": {
+    "header": {
+      "title": "Complementos",
+      "description": "Instala y administra complementos de terceros para ampliar FreeSDN"
+    },
+    "actions": {
+      "installPlugin": "Instalar complemento",
+      "install": "Instalar",
+      "cancel": "Cancelar",
+      "clearFilters": "Borrar filtros",
+      "enable": "Activar",
+      "disable": "Desactivar",
+      "update": "Actualizar",
+      "uninstall": "Desinstalar"
+    },
+    "install": {
+      "title": "Instalar complemento",
+      "description": "Sube un archivo ZIP del complemento o proporciona una URL de descarga.",
+      "trustWarningTitle": "Advertencia de confianza del complemento",
+      "trustWarningBody": "Los complementos se ejecutan con permisos completos del backend y tienen acceso a tu base de datos, credenciales y red. Instala únicamente complementos de fuentes en las que confíes. Revisa el código antes de instalarlo.",
+      "trustAcknowledge": "Entiendo que este complemento se ejecutará con permisos completos del backend y confío en su origen.",
+      "uploadZip": "Subir ZIP",
+      "fromUrl": "Desde URL",
+      "selectedFileAria": "Archivo seleccionado: {{name}}",
+      "selectFileAria": "Haz clic para seleccionar un archivo ZIP del complemento",
+      "selectFilePrompt": "Haz clic para seleccionar un archivo ZIP del complemento",
+      "urlPlaceholder": "https://example.com/plugin.zip"
+    },
+    "capabilities": {
+      "permissions_one": "{{count}} permiso",
+      "permissions_other": "{{count}} permisos",
+      "uiPages": "Páginas de UI",
+      "restApi": "REST API",
+      "configurable": "Configurable",
+      "dependencies_one": "{{count}} dependencia",
+      "dependencies_other": "{{count}} dependencias"
+    },
+    "row": {
+      "selectAria": "Seleccionar {{name}}",
+      "by": "Por",
+      "homepage": "Página principal"
+    },
+    "status": {
+      "installed": "instalado",
+      "disabled": "desactivado",
+      "error": "error"
+    },
+    "stats": {
+      "total": {
+        "title": "Total de complementos",
+        "description": "Instalados"
+      },
+      "enabled": {
+        "title": "Activados",
+        "description": "Activos actualmente"
+      },
+      "disabled": {
+        "title": "Desactivados",
+        "description": "Inactivos"
+      },
+      "errors": {
+        "title": "Errores",
+        "description": "Requieren atención"
+      }
+    },
+    "searchPlaceholder": "Buscar complementos por nombre o descripción…",
+    "empty": {
+      "title": "No hay complementos instalados",
+      "description": "Instala un archivo ZIP de complemento para ampliar la funcionalidad de FreeSDN."
+    },
+    "itemName": "complemento",
+    "confirmBulkUninstall": "¿Desinstalar {{count}} complemento(s)?",
+    "uninstallDialog": {
+      "title": "¿Desinstalar complemento?",
+      "description": "Esto ejecutará el gancho de desinstalación del complemento y eliminará todos sus archivos. La configuración del complemento puede permanecer en la base de datos."
+    },
+    "errors": {
+      "installFailed": "Error al instalar",
+      "toggleFailed": "Error al cambiar el estado",
+      "uninstallFailed": "Error al desinstalar",
+      "loadFailed": "Error al cargar los complementos"
+    }
+  },
+  "SSOSettingsPage": {
+    "header": {
+      "title": "SSO / Proveedores de identidad",
+      "subtitle": "Administra proveedores de identidad OIDC, SAML y LDAP para el inicio de sesión único."
+    },
+    "backToSecurity": "Volver a Configuración de seguridad",
+    "backToProviders": "Volver a proveedores",
+    "confirmDelete": "¿Estás seguro de que deseas eliminar este proveedor de SSO?",
+    "status": {
+      "active": "Activo",
+      "disabled": "Deshabilitado"
+    },
+    "columns": {
+      "provider": "Proveedor",
+      "protocol": "Protocolo",
+      "status": "Estado",
+      "actions": "Acciones"
+    },
+    "actions": {
+      "addProvider": "Agregar proveedor",
+      "refresh": "Actualizar",
+      "testConnection": "Probar conexión",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "cancel": "Cancelar",
+      "createProvider": "Crear proveedor",
+      "updateProvider": "Actualizar proveedor"
+    },
+    "empty": {
+      "title": "Aún no hay proveedores de SSO configurados",
+      "description": "Agrega un proveedor de identidad OIDC, SAML o LDAP para habilitar el inicio de sesión único para tus usuarios.",
+      "action": "Agrega tu primer proveedor"
+    },
+    "form": {
+      "addTitle": "Agregar proveedor de SSO",
+      "editTitle": "Editar proveedor"
+    },
+    "fields": {
+      "providerName": "Nombre del proveedor *",
+      "providerNamePlaceholder": "p. ej. Azure AD de la empresa",
+      "slug": "Identificador *",
+      "protocol": "Protocolo *",
+      "enabled": "Habilitado"
+    },
+    "placeholders": {
+      "unchanged": "(sin cambios)",
+      "autoDiscoveredFromIssuer": "(detectado automáticamente desde el emisor)",
+      "autoDiscovered": "(detectado automáticamente)"
+    },
+    "oidc": {
+      "legend": "Configuración de OIDC",
+      "clientId": "ID de cliente *",
+      "clientSecret": "Secreto de cliente",
+      "issuerUrl": "URL del emisor *",
+      "scopes": "Ámbitos",
+      "authorizationEndpoint": "Endpoint de autorización",
+      "tokenEndpoint": "Endpoint de token",
+      "userinfoEndpoint": "Endpoint de userinfo"
+    },
+    "saml": {
+      "legend": "Configuración de SAML",
+      "entityId": "ID de entidad del IdP *",
+      "ssoUrl": "URL de SSO *",
+      "sloUrl": "URL de SLO",
+      "certificate": "Certificado del IdP (PEM) *"
+    },
+    "ldap": {
+      "legend": "Configuración de LDAP",
+      "url": "URL de LDAP *",
+      "baseDn": "DN base *",
+      "bindDn": "DN de enlace *",
+      "bindPassword": "Contraseña de enlace",
+      "userFilter": "Filtro de usuarios",
+      "useSsl": "Usar SSL/TLS (ldaps)"
+    },
+    "provisioning": {
+      "legend": "Aprovisionamiento de usuarios",
+      "autoCreate": "Crear usuarios automáticamente en el primer inicio de sesión por SSO (aprovisionamiento JIT)",
+      "defaultRole": "Rol predeterminado"
+    },
+    "roles": {
+      "viewer": "Visualizador",
+      "operator": "Operador",
+      "admin": "Administrador"
+    },
+    "test": {
+      "ok": "Correcto",
+      "failed": "Falló",
+      "connectionFailed": "La prueba de conexión falló"
+    },
+    "errors": {
+      "loadFailed": "Error al cargar los proveedores de SSO",
+      "saveFailed": "Error al guardar el proveedor",
+      "deleteFailed": "Error al eliminar el proveedor"
+    }
+  }
+}

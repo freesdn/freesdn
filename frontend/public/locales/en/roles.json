@@ -1,0 +1,295 @@
+{
+  "RolesPage": {
+    "header": {
+      "title": "Roles & Permissions",
+      "description": "Manage roles and fine-grained permission grants for your organisation."
+    },
+    "errors": {
+      "loadFailed": "Failed to load roles"
+    },
+    "tabs": {
+      "roles": "Roles",
+      "matrix": "Permission Matrix"
+    },
+    "columns": {
+      "role": "Role",
+      "type": "Type",
+      "level": "Level",
+      "permissions": "Permissions",
+      "users": "Users"
+    },
+    "type": {
+      "system": "System",
+      "custom": "Custom",
+      "default": "Default"
+    },
+    "stats": {
+      "totalRoles": {
+        "title": "Total Roles",
+        "description": "All defined roles"
+      },
+      "systemRoles": {
+        "title": "System Roles",
+        "description": "Built-in hierarchy"
+      },
+      "customRoles": {
+        "title": "Custom Roles",
+        "description": "User-created"
+      },
+      "usersAssigned": {
+        "title": "Users Assigned",
+        "description": "Across all roles"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search roles by name, slug, or description…",
+      "allTypes": "All Types",
+      "clearFilters": "Clear filters"
+    },
+    "itemName": "role",
+    "itemNamePlural": "roles",
+    "actions": {
+      "export": "Export",
+      "createRole": "Create Role",
+      "updateRole": "Update Role",
+      "actions": "Actions",
+      "actionsForRole": "Actions for {{name}}",
+      "viewPermissions": "View Permissions",
+      "edit": "Edit",
+      "editRole": "Edit Role",
+      "delete": "Delete",
+      "deleting": "Deleting...",
+      "cancel": "Cancel",
+      "close": "Close",
+      "saving": "Saving..."
+    },
+    "toasts": {
+      "export": {
+        "title": "Export",
+        "description": "Bulk export: not yet implemented."
+      },
+      "bulkDelete": {
+        "title": "Bulk Delete",
+        "summary": "{{ok}} deleted, {{failed}} failed, {{skipped}} system roles skipped",
+        "nothingTitle": "Nothing to delete",
+        "nothingDescription": "System roles cannot be deleted."
+      }
+    },
+    "deleteDialog": {
+      "title": "Delete Role",
+      "confirm": "Are you sure you want to delete <strong>{{name}}</strong>? This action cannot be undone.",
+      "warningOne": "Warning: {{count}} user is currently assigned to this role.",
+      "warningMany": "Warning: {{count}} users are currently assigned to this role."
+    },
+    "matrix": {
+      "permissionHeader": "Permission"
+    },
+    "levels": {
+      "superAdmin": "Super Admin",
+      "admin": "Admin",
+      "orgAdmin": "Org Admin",
+      "siteAdmin": "Site Admin",
+      "operator": "Operator",
+      "viewer": "Viewer",
+      "guest": "Guest"
+    },
+    "categories": {
+      "usersAccess": "Users & Access",
+      "devices": "Devices",
+      "controllers": "Controllers",
+      "sites": "Sites",
+      "monitoringAlerts": "Monitoring & Alerts",
+      "securityAudit": "Security & Audit",
+      "settings": "Settings"
+    },
+    "roleDialog": {
+      "editTitle": "Edit Role",
+      "createTitle": "Create Role",
+      "editDescription": "Update role information and permissions",
+      "createDescription": "Define a new role with custom permissions",
+      "nameLabel": "Name *",
+      "namePlaceholder": "e.g., Network Admin",
+      "slugLabel": "Slug",
+      "slugPlaceholder": "auto-generated",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Describe what this role is for...",
+      "levelLabel": "Level (1-100)",
+      "levelHelp": "Higher level = more authority",
+      "optionsLabel": "Options",
+      "defaultRoleLabel": "Default role for new users",
+      "permissionsLabel": "Permissions",
+      "permissionsCount": "{{selected}} of {{total}}"
+    },
+    "viewDialog": {
+      "noDescription": "No description provided",
+      "usersLabel": "Users",
+      "permissionsLabel": "Permissions",
+      "levelLabel": "Level",
+      "permissionBreakdown": "Permission Breakdown",
+      "slug": "Slug",
+      "roleId": "Role ID"
+    },
+    "permissions": {
+      "user": {
+        "read": {
+          "label": "View Users",
+          "description": "View user list and details"
+        },
+        "create": {
+          "label": "Create Users",
+          "description": "Create new user accounts"
+        },
+        "update": {
+          "label": "Update Users",
+          "description": "Modify user information"
+        },
+        "delete": {
+          "label": "Delete Users",
+          "description": "Remove user accounts"
+        }
+      },
+      "role": {
+        "read": {
+          "label": "View Roles",
+          "description": "View role list and details"
+        },
+        "create": {
+          "label": "Create Roles",
+          "description": "Create new roles"
+        },
+        "update": {
+          "label": "Update Roles",
+          "description": "Modify role permissions"
+        },
+        "delete": {
+          "label": "Delete Roles",
+          "description": "Remove roles"
+        }
+      },
+      "device": {
+        "read": {
+          "label": "View Devices",
+          "description": "View device list and details"
+        },
+        "create": {
+          "label": "Create Devices",
+          "description": "Add new devices"
+        },
+        "update": {
+          "label": "Update Devices",
+          "description": "Modify device settings"
+        },
+        "delete": {
+          "label": "Delete Devices",
+          "description": "Remove devices"
+        },
+        "actions": {
+          "label": "Device Actions",
+          "description": "Perform actions like reboot, PoE cycle"
+        }
+      },
+      "controller": {
+        "read": {
+          "label": "View Controllers",
+          "description": "View controller list"
+        },
+        "create": {
+          "label": "Create Controllers",
+          "description": "Add new controllers"
+        },
+        "update": {
+          "label": "Update Controllers",
+          "description": "Modify controller settings"
+        },
+        "delete": {
+          "label": "Delete Controllers",
+          "description": "Remove controllers"
+        },
+        "sync": {
+          "label": "Sync Controllers",
+          "description": "Trigger controller sync"
+        }
+      },
+      "site": {
+        "read": {
+          "label": "View Sites",
+          "description": "View site list and details"
+        },
+        "create": {
+          "label": "Create Sites",
+          "description": "Create new sites"
+        },
+        "update": {
+          "label": "Update Sites",
+          "description": "Modify site settings"
+        },
+        "delete": {
+          "label": "Delete Sites",
+          "description": "Remove sites"
+        }
+      },
+      "alert": {
+        "read": {
+          "label": "View Alerts",
+          "description": "View alert list"
+        },
+        "create": {
+          "label": "Create Alerts",
+          "description": "Create alert rules"
+        },
+        "update": {
+          "label": "Update Alerts",
+          "description": "Modify alert rules"
+        },
+        "delete": {
+          "label": "Delete Alerts",
+          "description": "Remove alert rules"
+        },
+        "acknowledge": {
+          "label": "Acknowledge Alerts",
+          "description": "Acknowledge/dismiss alerts"
+        }
+      },
+      "audit": {
+        "read": {
+          "label": "View Audit Logs",
+          "description": "Access audit trail"
+        },
+        "export": {
+          "label": "Export Audit Logs",
+          "description": "Export audit data"
+        },
+        "security": {
+          "label": "View Security Events",
+          "description": "Access security events"
+        }
+      },
+      "security": {
+        "manage": {
+          "label": "Manage Security",
+          "description": "Manage security settings"
+        }
+      },
+      "setting": {
+        "read": {
+          "label": "View Settings",
+          "description": "View system settings"
+        },
+        "update": {
+          "label": "Update Settings",
+          "description": "Modify system settings"
+        }
+      },
+      "integration": {
+        "read": {
+          "label": "View Integrations",
+          "description": "View integration configs"
+        },
+        "manage": {
+          "label": "Manage Integrations",
+          "description": "Configure integrations"
+        }
+      }
+    }
+  }
+}

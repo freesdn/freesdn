@@ -1,0 +1,3797 @@
+{
+  "FirewallPage": {
+    "header": {
+      "title": "Firewall",
+      "subtitle": "Seguridad de red · integraciones de gateway, reglas, NAT, VPN e IDS/IPS"
+    },
+    "tabs": {
+      "dashboard": "Panel",
+      "gateways": "Gateways",
+      "rules": "Reglas",
+      "nat": "NAT",
+      "vpn": "VPN",
+      "ids": "IDS/IPS",
+      "logs": "Registros",
+      "orchestration": "Orquestación"
+    },
+    "actions": {
+      "addGateway": "Agregar gateway",
+      "testConnection": "Probar conexión",
+      "saveChanges": "Guardar cambios",
+      "refresh": "Actualizar",
+      "viewDetails": "Ver detalles",
+      "editGateway": "Editar gateway",
+      "syncNow": "Sincronizar ahora",
+      "delete": "Eliminar",
+      "editRule": "Editar regla",
+      "viewLogs": "Ver registros",
+      "deleteRule": "Eliminar regla",
+      "viewTraffic": "Ver tráfico",
+      "settings": "Configuración",
+      "acknowledge": "Reconocer"
+    },
+    "status": {
+      "online": "En línea",
+      "offline": "Desconectado",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado"
+    },
+    "action": {
+      "allow": "Permitir",
+      "pass": "Pasar",
+      "deny": "Denegar",
+      "block": "Bloquear",
+      "reject": "Rechazar",
+      "log": "Registrar"
+    },
+    "vpnStatus": {
+      "up": "Conectado",
+      "down": "Desconectado",
+      "connecting": "Conectando",
+      "error": "Error"
+    },
+    "severity": {
+      "critical": "Crítico",
+      "high": "Alto",
+      "medium": "Medio",
+      "low": "Bajo",
+      "info": "Información"
+    },
+    "syncStatus": {
+      "success": "Sincronizado",
+      "failed": "Fallido",
+      "syncing": "Sincronizando",
+      "never": "Nunca",
+      "idle": "Inactivo"
+    },
+    "alertStatus": {
+      "acknowledged": "Reconocido",
+      "open": "Abierto"
+    },
+    "addDialog": {
+      "title": "Agregar gateway de firewall",
+      "description": "Integra un firewall OPNsense, pfSense, MikroTik u OpenWRT para gestionarlo desde FreeSDN."
+    },
+    "editDialog": {
+      "title": "Editar gateway · {{name}}",
+      "description": "Actualiza la configuración de conexión, las credenciales o la configuración de sincronización."
+    },
+    "fields": {
+      "name": "Nombre",
+      "namePlaceholder": "p. ej. Firewall de la oficina principal",
+      "firewallSoftware": "Software de firewall",
+      "selectFirewallType": "Selecciona el tipo de firewall",
+      "hostIp": "Host / IP",
+      "hostPlaceholder": "p. ej. 192.168.1.1 o fw.example.com",
+      "port": "Puerto",
+      "apiKey": "Clave de API",
+      "apiKeyPlaceholder": "Clave de API de Sistema → Usuarios → Claves de API",
+      "apiKeyKeepPlaceholder": "Déjalo en blanco para conservar la clave existente",
+      "apiSecret": "Secreto de API",
+      "apiSecretPlaceholder": "Secreto de API",
+      "apiSecretKeepPlaceholder": "Déjalo en blanco para conservar el secreto existente",
+      "username": "Usuario",
+      "usernamePlaceholder": "admin",
+      "password": "Contraseña",
+      "passwordPlaceholder": "Contraseña",
+      "keepExistingPlaceholder": "Déjalo en blanco para conservar el actual",
+      "keepCurrentCredentials": "Déjalo vacío para conservar las credenciales actuales",
+      "descriptionOptional": "Descripción (opcional)",
+      "descriptionPlaceholder": "Descripción breve",
+      "siteLocationOptional": "Sitio / Ubicación (opcional)",
+      "siteLocation": "Sitio / Ubicación",
+      "assignToSite": "Asignar a un sitio...",
+      "noSite": "Sin sitio",
+      "siteBindHint": "Vincula este gateway a un sitio para la referencia entre dispositivos",
+      "siteBindHintOmada": "Vincula a un sitio para la referencia entre dispositivos con Omada y otros controladores",
+      "cannotBeChanged": "(no se puede cambiar)",
+      "verifySsl": "Verificar certificado SSL",
+      "syncConfiguration": "Configuración de sincronización",
+      "enableAutoSync": "Habilitar sincronización automática",
+      "syncInterval": "Intervalo de sincronización (segundos)"
+    },
+    "vendorFilter": {
+      "all": "Todos los proveedores"
+    },
+    "stats": {
+      "gateways": "Gateways",
+      "online": "En línea",
+      "offline": "Desconectados",
+      "rules": "Reglas",
+      "vpnUp": "VPN activas",
+      "idsAlerts": "Alertas de IDS",
+      "firewallRules": "Reglas de firewall",
+      "natRules": "Reglas NAT",
+      "vpnConnected": "VPN conectadas",
+      "totalGateways": "Total de gateways",
+      "syncOk": "Sincronización correcta",
+      "totalTunnels": "Total de túneles",
+      "connected": "Conectados",
+      "disconnected": "Desconectados",
+      "errors": "Errores",
+      "totalAlerts": "Total de alertas",
+      "critical": "Críticas",
+      "high": "Altas",
+      "medium": "Medias",
+      "unacknowledged": "Sin reconocer"
+    },
+    "dashboard": {
+      "gatewayIntegrations": "Integraciones de gateway",
+      "emptyTitle": "No hay firewalls conectados",
+      "emptyDescription": "Agrega un gateway OPNsense, pfSense o MikroTik para empezar a gestionar la seguridad de tu red.",
+      "securityOverview": "Resumen de seguridad",
+      "recentAlerts": "Alertas recientes",
+      "recentTraffic": "Tráfico reciente"
+    },
+    "gateways": {
+      "title": "Gateways",
+      "searchPlaceholder": "Buscar gateways..."
+    },
+    "rules": {
+      "title": "Reglas de firewall",
+      "searchPlaceholder": "Buscar reglas..."
+    },
+    "nat": {
+      "title": "Reglas NAT",
+      "searchPlaceholder": "Buscar reglas NAT..."
+    },
+    "vpn": {
+      "title": "Túneles VPN",
+      "description": "Conexiones VPN de sitio a sitio y de acceso remoto",
+      "searchPlaceholder": "Buscar túneles VPN..."
+    },
+    "ids": {
+      "title": "Alertas IDS/IPS",
+      "description": "Alertas de detección y prevención de intrusiones",
+      "searchPlaceholder": "Buscar alertas de IDS..."
+    },
+    "logs": {
+      "title": "Registros de firewall",
+      "searchPlaceholder": "Buscar registros por IP, protocolo..."
+    },
+    "gatewayColumns": {
+      "gateway": "Gateway",
+      "type": "Tipo",
+      "site": "Sitio",
+      "address": "Dirección",
+      "status": "Estado",
+      "sync": "Sincronización",
+      "lastSeen": "Visto por última vez"
+    },
+    "ruleColumns": {
+      "rule": "Regla",
+      "source": "Origen",
+      "destination": "Destino",
+      "protocol": "Protocolo",
+      "action": "Acción",
+      "status": "Estado",
+      "hits": "Coincidencias"
+    },
+    "natColumns": {
+      "rule": "Regla",
+      "type": "Tipo",
+      "original": "Original",
+      "translated": "Traducido",
+      "protocol": "Protocolo",
+      "interface": "Interfaz",
+      "status": "Estado"
+    },
+    "vpnColumns": {
+      "tunnel": "Túnel",
+      "local": "Local",
+      "remote": "Remoto",
+      "status": "Estado",
+      "traffic": "Tráfico",
+      "connected": "Conectado"
+    },
+    "alertColumns": {
+      "severity": "Gravedad",
+      "time": "Hora",
+      "alert": "Alerta",
+      "source": "Origen",
+      "destination": "Destino",
+      "status": "Estado"
+    },
+    "logColumns": {
+      "time": "Hora",
+      "action": "Acción",
+      "proto": "Proto",
+      "source": "Origen",
+      "destination": "Destino",
+      "bytes": "Bytes"
+    },
+    "itemNames": {
+      "gateways": "gateways",
+      "firewallRules": "reglas de firewall",
+      "natRules": "reglas NAT",
+      "vpnTunnels": "túneles VPN",
+      "idsAlerts": "alertas de IDS",
+      "alerts": "alertas",
+      "logEntries": "entradas de registro"
+    },
+    "confirm": {
+      "deleteGateway": "¿Eliminar el gateway \"{{name}}\"? Esta acción no se puede deshacer.",
+      "deleteRule": "¿Eliminar la regla \"{{name}}\"?"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "operationFailed": "La operación falló",
+      "connectionOk": "Conexión correcta",
+      "connectionFailed": "Conexión fallida",
+      "testFailed": "Prueba fallida",
+      "connectionTestFailed": "La prueba de conexión falló",
+      "gatewayFallback": "Gateway"
+    }
+  },
+  "MikroTikFirewallTab": {
+    "ruleFallback": "regla",
+    "dragToReorder": "Arrastrar para reordenar la regla",
+    "no": "No",
+    "yes": "Sí",
+    "loading": "Cargando el firewall de RouterOS…",
+    "aria": {
+      "editFilterRule": "Editar regla de firewall {{label}}",
+      "deleteFilterRule": "Eliminar regla de firewall {{label}}",
+      "editNatRule": "Editar regla NAT {{label}}",
+      "deleteNatRule": "Eliminar regla NAT {{label}}"
+    },
+    "toast": {
+      "filterCreateStaged": "Creación de regla de filtro preparada",
+      "filterCreateFailed": "{{ctx}}No se pudo preparar la creación del filtro",
+      "filterUpdateStaged": "Actualización de regla de filtro preparada",
+      "filterUpdateFailed": "{{ctx}}No se pudo preparar la actualización del filtro",
+      "filterDeleteStaged": "Eliminación de regla de filtro preparada",
+      "filterDeleteFailed": "{{ctx}}No se pudo preparar la eliminación del filtro",
+      "reorderStaged": "Reordenamiento de filtros preparado",
+      "reorderFailed": "{{ctx}}No se pudo preparar el reordenamiento, se restauró el orden del servidor",
+      "natCreateStaged": "Creación de regla NAT preparada",
+      "natCreateFailed": "{{ctx}}No se pudo preparar la creación NAT",
+      "natUpdateStaged": "Actualización de regla NAT preparada",
+      "natUpdateFailed": "{{ctx}}No se pudo preparar la actualización NAT",
+      "natDeleteStaged": "Eliminación de regla NAT preparada",
+      "natDeleteFailed": "{{ctx}}No se pudo preparar la eliminación NAT",
+      "cannotUpdate": "No se puede actualizar la regla",
+      "missingRuleId": "La regla no tiene id de RouterOS (.id ausente).",
+      "cannotDelete": "No se puede eliminar",
+      "missingRowId": "La fila no tiene id de RouterOS (.id ausente)."
+    },
+    "kind": {
+      "filterRule": "regla de filtro",
+      "natRule": "regla NAT"
+    },
+    "actions": {
+      "refresh": "Actualizar",
+      "discardReorder": "Descartar reordenamiento",
+      "stageReorder": "Preparar reordenamiento",
+      "addRule": "Agregar regla",
+      "addNatRule": "Agregar regla NAT",
+      "cancel": "Cancelar",
+      "stageUpdate": "Preparar actualización",
+      "stageCreate": "Preparar creación",
+      "stageDelete": "Preparar eliminación"
+    },
+    "filter": {
+      "title": "Reglas de filtro",
+      "description": "Cadenas ``/ip/firewall/filter`` · arrastre el control para reordenar y luego prepare el nuevo orden",
+      "loadError": "No se pudieron cargar las reglas de filtro",
+      "emptyTitle": "Sin reglas de filtro",
+      "emptyDescription": "La cadena /ip/firewall/filter está vacía."
+    },
+    "nat": {
+      "title": "Reglas NAT",
+      "description": "Cadenas ``/ip/firewall/nat`` · srcnat y dstnat",
+      "loadError": "No se pudieron cargar las reglas NAT",
+      "emptyTitle": "Sin reglas NAT",
+      "emptyDescription": "Las cadenas /ip/firewall/nat están vacías."
+    },
+    "columns": {
+      "chain": "Cadena",
+      "action": "Acción",
+      "proto": "Proto",
+      "src": "Origen",
+      "dst": "Destino",
+      "dstPort": "Puerto destino",
+      "inIface": "Interfaz entrada",
+      "enabled": "Habilitada",
+      "comment": "Comentario",
+      "actions": "Acciones",
+      "toAddrs": "A direcciones",
+      "toPorts": "A puertos"
+    },
+    "fields": {
+      "chain": "Cadena",
+      "action": "Acción",
+      "protocol": "Protocolo",
+      "srcAddress": "Dirección de origen",
+      "dstAddress": "Dirección de destino",
+      "dstPort": "Puerto destino",
+      "inIface": "Interfaz entrada",
+      "toAddresses": "A direcciones",
+      "toPorts": "A puertos",
+      "comment": "Comentario"
+    },
+    "filterDialog": {
+      "editTitle": "Editar regla de filtro",
+      "addTitle": "Agregar regla de filtro",
+      "description": "Prepare un cambio en RouterOS ``/ip/firewall/filter``."
+    },
+    "natDialog": {
+      "editTitle": "Editar regla NAT",
+      "addTitle": "Agregar regla NAT",
+      "description": "Prepare un cambio en RouterOS ``/ip/firewall/nat``."
+    },
+    "deleteDialog": {
+      "title": "Preparar eliminación · {{kind}}?",
+      "description": "Revise el alcance de la regla a continuación antes de confirmar. Esto prepara una eliminación; el cambio se aplica mediante el panel de Cambios pendientes."
+    }
+  },
+  "GatewayDetailPage": {
+    "header": {
+      "subtitle": "{{vendor}} en {{host}}:{{port}}"
+    },
+    "actions": {
+      "back": "Atrás",
+      "sync": "Sincronizar",
+      "test": "Probar",
+      "reboot": "Reiniciar",
+      "cancel": "Cancelar",
+      "rebootNow": "Reiniciar ahora"
+    },
+    "notFound": {
+      "title": "Puerta de enlace no encontrada",
+      "back": "Volver a las puertas de enlace"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "stats": {
+      "status": "Estado",
+      "online": "En línea",
+      "offline": "Desconectado",
+      "unknown": "Desconocido",
+      "version": "Versión",
+      "lastSync": "Última sincronización",
+      "never": "Nunca",
+      "capabilities": "Capacidades",
+      "noneDetected": "Ninguna detectada"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "firewallRules": "Reglas de firewall",
+      "natPortFwd": "NAT / Reenvío de puertos",
+      "vpn": "VPN",
+      "interfaces": "Interfaces",
+      "dhcp": "DHCP",
+      "dns": "DNS",
+      "aliases": "Alias",
+      "routingArp": "Enrutamiento / ARP",
+      "idsIps": "IDS / IPS",
+      "trafficShaper": "Modelado de tráfico",
+      "services": "Servicios",
+      "backups": "Copias de seguridad",
+      "system": "Sistema",
+      "monitoring": "Supervisión",
+      "diagnostics": "Diagnóstico",
+      "logs": "Registros",
+      "syncLog": "Registro de sincronización",
+      "ip": "IP",
+      "firewall": "Firewall",
+      "hotspot": "Hotspot",
+      "queues": "Colas",
+      "firmware": "Firmware",
+      "backup": "Copia de seguridad",
+      "topology": "Topología",
+      "snmp": "SNMP"
+    },
+    "syncLogColumns": {
+      "started": "Iniciado",
+      "status": "Estado",
+      "duration": "Duración",
+      "itemsSynced": "Elementos sincronizados",
+      "failed": "Fallidos",
+      "error": "Error"
+    },
+    "logColumns": {
+      "time": "Hora",
+      "process": "Proceso",
+      "message": "Mensaje"
+    },
+    "diagnostics": {
+      "ping": "Ping",
+      "traceroute": "Traceroute",
+      "dnsLookup": "Búsqueda DNS"
+    },
+    "toasts": {
+      "connectionOk": "Conexión correcta",
+      "connectionFailed": "Conexión fallida",
+      "error": "Error",
+      "testFailed": "La prueba falló",
+      "syncTriggered": "Sincronización iniciada",
+      "syncTriggeredDesc": "Se ha iniciado la sincronización completa.",
+      "syncFailed": "La sincronización falló",
+      "syncFailedDesc": "No se pudo iniciar la sincronización",
+      "operationFailed": "La operación falló",
+      "requestFailed": "La solicitud falló",
+      "serviceUpdated": "Servicio actualizado",
+      "failed": "Fallido",
+      "serviceControlFailed": "Error al controlar el servicio",
+      "backupCreated": "Copia de seguridad creada",
+      "backupFailed": "La copia de seguridad falló",
+      "rebootInitiated": "Reinicio iniciado",
+      "rebootInitiatedDesc": "La puerta de enlace se está reiniciando · estará desconectada brevemente.",
+      "rebootFailed": "El reinicio falló",
+      "diagnosticFailed": "{{label}} falló"
+    },
+    "resources": {
+      "firewallRule": "Regla de firewall",
+      "natRule": "Regla NAT",
+      "portForward": "Reenvío de puertos",
+      "wireguardServer": "Servidor WireGuard",
+      "wireguardPeer": "Par WireGuard",
+      "openvpnInstance": "Instancia de OpenVPN",
+      "staticMapping": "Asignación estática",
+      "dnsOverride": "Anulación DNS",
+      "domainOverride": "Anulación de dominio",
+      "alias": "Alias",
+      "staticRoute": "Ruta estática",
+      "shaperPipe": "Tubería de modelado",
+      "queue": "Cola",
+      "rule": "Regla",
+      "backup": "Copia de seguridad"
+    },
+    "success": {
+      "sessionKilled": "Sesión finalizada",
+      "ipsecApplied": "Cambios de IPsec aplicados",
+      "tunnelConnected": "Túnel conectado",
+      "tunnelDisconnected": "Túnel desconectado",
+      "arpFlushed": "Tabla ARP vaciada",
+      "idsStarted": "IDS iniciado",
+      "idsStopped": "IDS detenido",
+      "idsRestarted": "IDS reiniciado",
+      "idsRulesUpdated": "Reglas de IDS actualizadas",
+      "alertLogCleared": "Registro de alertas borrado",
+      "ruleToggled": "Regla alternada",
+      "queueCreated": "Cola creada",
+      "ruleCreated": "Regla creada",
+      "backupReverted": "Copia de seguridad restaurada",
+      "configDownloaded": "Configuración descargada",
+      "firmwareCheckComplete": "Comprobación de firmware completada",
+      "gatewayHalted": "Puerta de enlace detenida"
+    },
+    "rebootDialog": {
+      "title": "¿Reiniciar la puerta de enlace?",
+      "intro": "Esto reiniciará",
+      "target": "({{vendor}} en {{host}}).",
+      "warning": "La puerta de enlace estará desconectada de 1 a 3 minutos. Todos los túneles VPN y sesiones activas se interrumpirán."
+    }
+  },
+  "GatewaySystemTab": {
+    "common": {
+      "yes": "Sí",
+      "no": "No",
+      "active": "Activo",
+      "disabled": "Deshabilitado",
+      "enabled": "Habilitado"
+    },
+    "actions": {
+      "checkUpdates": "Buscar actualizaciones",
+      "downloadConfig": "Descargar configuración",
+      "halt": "Detener",
+      "haltConfirm": "Esto DETENDRÁ (apagará) la puerta de enlace. ¿Está seguro?"
+    },
+    "packages": {
+      "title": "Paquetes instalados",
+      "empty": "No se encontraron paquetes"
+    },
+    "plugins": {
+      "title": "Complementos instalados",
+      "empty": "No se encontraron complementos"
+    },
+    "cron": {
+      "title": "Tareas cron",
+      "columns": {
+        "description": "Descripción",
+        "schedule": "Programación",
+        "command": "Comando",
+        "enabled": "Habilitado"
+      }
+    },
+    "trust": {
+      "title": "Gestión de certificados",
+      "description": "Almacén de confianza: certificados, CA y CRL",
+      "certificates": "Certificados",
+      "certificateAuthorities": "Autoridades de certificación",
+      "revocationLists": "Listas de revocación",
+      "empty": "No se encontraron certificados ni CA en el almacén de confianza.",
+      "columns": {
+        "name": "Nombre",
+        "dn": "DN",
+        "keyLength": "Longitud de clave",
+        "inUse": "En uso",
+        "ca": "CA",
+        "type": "Tipo"
+      }
+    },
+    "acme": {
+      "title": "ACME / Let's Encrypt",
+      "description": "Gestión automatizada de certificados (os-acme-client)",
+      "certificates": "Certificados",
+      "accounts": "Cuentas",
+      "validations": "Validaciones",
+      "actions": "Acciones",
+      "certificatesHeading": "Certificados ACME",
+      "accountsHeading": "Cuentas ACME",
+      "empty": "No se encontró configuración ACME. Instale os-acme-client para gestionar certificados de Let's Encrypt.",
+      "columns": {
+        "name": "Nombre",
+        "domains": "Dominio(s)",
+        "account": "Cuenta",
+        "lastUpdate": "Última actualización",
+        "status": "Estado",
+        "email": "Correo electrónico",
+        "ca": "CA"
+      }
+    },
+    "syslog": {
+      "title": "Destinos de syslog",
+      "description": "Objetivos de reenvío de syslog remoto",
+      "empty": "No hay destinos de syslog configurados.",
+      "defaultDestination": "Destino {{n}}",
+      "columns": {
+        "description": "Descripción",
+        "transport": "Transporte",
+        "hostname": "Nombre de host",
+        "port": "Puerto",
+        "level": "Nivel",
+        "status": "Estado"
+      }
+    },
+    "ha": {
+      "title": "Alta disponibilidad y sincronización de configuración",
+      "description": "Estado de HA con CARP y sincronización de configuración",
+      "empty": "HA/sincronización de configuración no disponible. Esto puede requerir configuración de CARP."
+    },
+    "lifecycle": {
+      "title": "Ciclo de vida del certificado",
+      "description": "Certificados que caducan en un plazo de 30 días",
+      "checking": "Comprobando certificados…",
+      "totalCertificates": "Total de certificados",
+      "valid": "Válidos",
+      "expiringSoon": "Por caducar",
+      "expired": "Caducados",
+      "allValid": "Todos los certificados son válidos",
+      "columns": {
+        "certificate": "Certificado",
+        "cn": "CN",
+        "status": "Estado",
+        "daysRemaining": "Días restantes",
+        "expires": "Caduca"
+      }
+    }
+  },
+  "GatewayServicesTab": {
+    "haproxy": {
+      "title": "HAProxy · Balanceador de carga",
+      "description": "Frontends, backends y servidores reales",
+      "frontends": "Frontends",
+      "backends": "Backends",
+      "servers": "Servidores",
+      "realServers": "Servidores reales",
+      "empty": "No se encontró configuración de HAProxy. Instala y configura os-haproxy para usar el balanceador de carga."
+    },
+    "captivePortal": {
+      "title": "Portal cautivo",
+      "description": "Zonas WiFi para invitados y sesiones activas",
+      "zoneFallback": "Zona {{n}}"
+    },
+    "services": {
+      "title": "Servicios del sistema",
+      "description": "Servicios en ejecución en {{vendor}} · haz clic para iniciar / detener / reiniciar",
+      "running": "En ejecución",
+      "stopped": "Detenido",
+      "empty": "No hay datos de servicios disponibles"
+    },
+    "proxy": {
+      "title": "Proxy web (Squid)",
+      "description": "Configuración y estado del proxy HTTP/HTTPS",
+      "loading": "Cargando configuración del proxy…",
+      "proxyStatus": "Estado del proxy",
+      "service": "Servicio",
+      "sslBumping": "Inspección SSL",
+      "cache": "Caché",
+      "cacheSize": "Tamaño de caché"
+    },
+    "blacklists": {
+      "title": "Listas negras del proxy",
+      "description": "Fuentes de ACL / listas negras remotas",
+      "loading": "Cargando listas negras…",
+      "empty": "No hay listas negras remotas configuradas"
+    },
+    "columns": {
+      "name": "Nombre",
+      "bind": "Enlace",
+      "mode": "Modo",
+      "defaultBackend": "Backend predeterminado",
+      "ssl": "SSL",
+      "status": "Estado",
+      "algorithm": "Algoritmo",
+      "healthCheck": "Comprobación de estado",
+      "persistence": "Persistencia",
+      "address": "Dirección",
+      "port": "Puerto",
+      "weight": "Peso",
+      "zoneId": "ID de zona",
+      "interfaces": "Interfaces",
+      "authServers": "Servidores de autenticación",
+      "idleTimeout": "Tiempo de inactividad",
+      "hardTimeout": "Tiempo máximo",
+      "concurrent": "Concurrente",
+      "enabled": "Habilitado",
+      "filename": "Nombre de archivo",
+      "url": "URL",
+      "description": "Descripción"
+    },
+    "actions": {
+      "start": "Iniciar",
+      "stop": "Detener",
+      "restart": "Reiniciar",
+      "cancel": "Cancelar"
+    },
+    "confirm": {
+      "title": "¿{{action}} {{name}}?",
+      "description": "¿{{action}} {{name}}? Los clientes conectados pueden desconectarse."
+    },
+    "common": {
+      "yes": "Sí",
+      "no": "No",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "none": "Ninguno",
+      "unknown": "Desconocido",
+      "on": "Activado",
+      "off": "Desactivado"
+    }
+  },
+  "MikroTikInterfacesTab": {
+    "loading": "Cargando interfaces de RouterOS…",
+    "common": {
+      "yes": "Sí",
+      "no": "No",
+      "on": "Activado",
+      "off": "Desactivado"
+    },
+    "columns": {
+      "name": "Nombre",
+      "mac": "MAC",
+      "mtu": "MTU",
+      "type": "Tipo",
+      "protocol": "Protocolo",
+      "vlanFiltering": "Filtrado de VLAN",
+      "running": "En ejecución",
+      "enabled": "Habilitado",
+      "rxBytes": "Bytes RX",
+      "txBytes": "Bytes TX",
+      "comment": "Comentario",
+      "actions": "Acciones"
+    },
+    "actions": {
+      "refresh": "Actualizar",
+      "addBridge": "Agregar puente",
+      "cancel": "Cancelar",
+      "stageCreate": "Preparar creación",
+      "stageUpdate": "Preparar actualización",
+      "stageDelete": "Preparar eliminación",
+      "stageEnable": "Preparar habilitación",
+      "stageDisable": "Preparar deshabilitación",
+      "enable": "Habilitar",
+      "disable": "Deshabilitar",
+      "editBridgeAria": "Editar puente {{name}}",
+      "deleteBridgeAria": "Eliminar puente {{name}}"
+    },
+    "ethernet": {
+      "title": "Ethernet",
+      "description": "Puertos físicos · contadores de solo lectura y estado del enlace",
+      "loadError": "No se pudieron cargar las interfaces ethernet",
+      "emptyTitle": "Sin interfaces ethernet",
+      "emptyDescription": "RouterOS no devolvió filas de /interface/ethernet."
+    },
+    "bridges": {
+      "title": "Puentes",
+      "description": "Interfaces de puente L2 · las operaciones CRUD se preparan mediante Cambios pendientes",
+      "loadError": "No se pudieron cargar los puentes",
+      "emptyTitle": "No hay puentes configurados",
+      "emptyDescription": "Agregue un puente para agrupar puertos en un único segmento L2."
+    },
+    "wireless": {
+      "title": "Inalámbrico",
+      "description": "Interfaces inalámbricas de /interface · solo lectura con conmutador de habilitar/deshabilitar",
+      "loadError": "No se pudieron cargar las interfaces",
+      "emptyTitle": "Sin interfaces inalámbricas",
+      "emptyDescription": "No se encontraron filas de tipo inalámbrico. Es posible que el paquete inalámbrico no esté instalado en este RouterOS."
+    },
+    "bridgeDialog": {
+      "addTitle": "Agregar puente",
+      "editTitle": "Editar puente",
+      "description": "Prepara un cambio en /interface/bridge de RouterOS. Aplíquelo mediante el panel de Cambios pendientes.",
+      "mtuLabel": "MTU (opcional)"
+    },
+    "deleteDialog": {
+      "title": "¿Eliminar puente?",
+      "descriptionPrefix": "Preparar la eliminación del puente",
+      "descriptionSuffix": ". Esto no se puede deshacer una vez aplicado el cambio preparado."
+    },
+    "toggleDialog": {
+      "disableTitle": "¿Preparar deshabilitación de la interfaz inalámbrica?",
+      "enableTitle": "¿Preparar habilitación de la interfaz inalámbrica?",
+      "descriptionPrefix": "Esto prepara un cambio para la interfaz",
+      "descriptionSuffix": ". El cambio se aplica mediante el panel de Cambios pendientes."
+    },
+    "toasts": {
+      "bridgeCreateStaged": "Creación de puente preparada",
+      "bridgeUpdateStaged": "Actualización de puente preparada",
+      "bridgeDeleteStaged": "Eliminación de puente preparada",
+      "toggleStaged": "Conmutación de interfaz preparada",
+      "bridgeCreateFailed": "No se pudo preparar la creación del puente",
+      "bridgeUpdateFailed": "No se pudo preparar la actualización del puente",
+      "bridgeDeleteFailed": "No se pudo preparar la eliminación del puente",
+      "toggleFailed": "No se pudo preparar la conmutación",
+      "cannotUpdateTitle": "No se puede actualizar el puente",
+      "cannotDeleteTitle": "No se puede eliminar el puente",
+      "missingIdDescription": "El puente no tiene id de RouterOS (.id ausente)."
+    }
+  },
+  "MikroTikQueuesTab": {
+    "loading": "Cargando colas de RouterOS…",
+    "queueFallback": "cola",
+    "actions": {
+      "refresh": "Actualizar",
+      "addQueue": "Agregar cola",
+      "cancel": "Cancelar",
+      "stageUpdate": "Preparar actualización",
+      "stageCreate": "Preparar creación",
+      "stageDelete": "Preparar eliminación",
+      "editAria": "Editar cola simple {{name}}",
+      "deleteAria": "Eliminar cola simple {{name}}"
+    },
+    "simple": {
+      "title": "Colas simples",
+      "description": "Filas de ``/queue/simple`` · límites de tasa por destino · CRUD completo",
+      "loadError": "No se pudieron cargar las colas simples",
+      "emptyTitle": "Sin colas simples",
+      "emptyDescription": "No hay filas /queue/simple en este router."
+    },
+    "tree": {
+      "title": "Árbol de colas (HTB)",
+      "description": "Filas de ``/queue/tree`` · solo lectura por ahora. Un editor jerárquico está previsto; se muestra aquí para que los operadores puedan revisar el árbol activo.",
+      "loadError": "No se pudo cargar el árbol de colas",
+      "emptyTitle": "Sin árbol de colas",
+      "emptyDescription": "No hay filas /queue/tree en este router."
+    },
+    "columns": {
+      "name": "Nombre",
+      "target": "Destino",
+      "maxLimitUpDown": "Límite máximo (subida/bajada)",
+      "priority": "Prioridad",
+      "parent": "Padre",
+      "enabled": "Habilitado",
+      "comment": "Comentario",
+      "actions": "Acciones",
+      "packetMark": "Marca de paquete",
+      "queue": "Cola",
+      "maxLimit": "Límite máximo",
+      "limitAt": "Límite garantizado"
+    },
+    "enabled": {
+      "yes": "Sí",
+      "no": "No"
+    },
+    "dialog": {
+      "editTitle": "Editar cola simple",
+      "addTitle": "Agregar cola simple",
+      "description": "Prepara un cambio en RouterOS ``/queue/simple``."
+    },
+    "form": {
+      "name": "Nombre",
+      "namePlaceholder": "guest-cap",
+      "target": "Destino",
+      "targetPlaceholder": "192.168.88.0/24 o bridge-guest",
+      "maxLimitUp": "Límite máximo de subida",
+      "maxLimitDown": "Límite máximo de bajada",
+      "priority": "Prioridad (1-8)",
+      "parent": "Padre",
+      "parentPlaceholder": "ninguno",
+      "comment": "Comentario"
+    },
+    "delete": {
+      "title": "¿Preparar eliminación?",
+      "descriptionPrefix": "Esto prepara la eliminación de la cola simple",
+      "descriptionSuffix": "."
+    },
+    "toasts": {
+      "createStaged": "Creación de cola simple preparada",
+      "createFailed": "No se pudo preparar la creación de la cola",
+      "updateStaged": "Actualización de cola simple preparada",
+      "updateFailed": "No se pudo preparar la actualización de la cola",
+      "deleteStaged": "Eliminación de cola simple preparada",
+      "deleteFailed": "No se pudo preparar la eliminación de la cola",
+      "cannotUpdateTitle": "No se puede actualizar la cola",
+      "cannotDeleteTitle": "No se puede eliminar la cola",
+      "missingIdDescription": "La cola no tiene id de RouterOS (.id ausente)."
+    }
+  },
+  "MikroTikDnsTab": {
+    "loading": "Cargando DNS de RouterOS…",
+    "entryFallback": "entrada",
+    "yes": "Sí",
+    "no": "No",
+    "actions": {
+      "refresh": "Actualizar",
+      "addEntry": "Agregar entrada",
+      "cancel": "Cancelar",
+      "stageCreate": "Preparar creación",
+      "stageUpdate": "Preparar actualización",
+      "stageDelete": "Preparar eliminación",
+      "editAria": "Editar entrada DNS {{name}}",
+      "deleteAria": "Eliminar entrada DNS {{name}}"
+    },
+    "columns": {
+      "name": "Nombre",
+      "type": "Tipo",
+      "value": "Valor",
+      "data": "Datos",
+      "ttl": "TTL",
+      "enabled": "Habilitado",
+      "static": "Estático",
+      "comment": "Comentario",
+      "actions": "Acciones"
+    },
+    "static": {
+      "title": "Entradas DNS estáticas",
+      "description": "Filas /ip/dns/static · CRUD completo",
+      "loadError": "No se pudieron cargar las entradas DNS estáticas",
+      "emptyTitle": "Sin entradas DNS estáticas",
+      "emptyDescription": "No hay filas /ip/dns/static en este router."
+    },
+    "cache": {
+      "title": "Caché DNS",
+      "description": "Filas /ip/dns/cache · solo lectura · actualizar a demanda",
+      "loadError": "No se pudo cargar la caché DNS",
+      "emptyTitle": "La caché DNS está vacía",
+      "emptyDescription": "Sin entradas en caché: RouterOS no ha resuelto nada recientemente."
+    },
+    "dialog": {
+      "editTitle": "Editar entrada DNS estática",
+      "addTitle": "Agregar entrada DNS estática",
+      "description": "Prepara un cambio en /ip/dns/static de RouterOS.",
+      "nameLabel": "Nombre (FQDN)",
+      "typeLabel": "Tipo",
+      "addressLabel": "Dirección IP",
+      "cnameLabel": "Nombre de host de destino",
+      "textLabel": "Texto",
+      "ttlLabel": "TTL (opcional)",
+      "commentLabel": "Comentario"
+    },
+    "deleteDialog": {
+      "title": "¿Preparar eliminación?",
+      "descriptionPrefix": "Esto prepara la eliminación de la entrada DNS"
+    },
+    "toasts": {
+      "createStaged": "Creación de DNS estático preparada",
+      "updateStaged": "Actualización de DNS estático preparada",
+      "deleteStaged": "Eliminación de DNS estático preparada",
+      "createFailed": "No se pudo preparar la creación estática",
+      "updateFailed": "No se pudo preparar la actualización estática",
+      "deleteFailed": "No se pudo preparar la eliminación estática",
+      "cannotUpdate": "No se puede actualizar la entrada",
+      "cannotDelete": "No se puede eliminar la entrada",
+      "missingId": "La entrada no tiene id de RouterOS (.id ausente)."
+    }
+  },
+  "GatewayDhcpTab": {
+    "leases": {
+      "title": "Concesiones DHCP",
+      "description": "Asignaciones DHCP activas",
+      "searchPlaceholder": "Buscar concesiones...",
+      "unknownStatus": "desconocido",
+      "columns": {
+        "ipAddress": "Dirección IP",
+        "mac": "MAC",
+        "hostname": "Nombre de host",
+        "interface": "Interfaz",
+        "status": "Estado",
+        "expires": "Vence"
+      }
+    },
+    "static": {
+      "title": "Asignaciones estáticas",
+      "description": "Direcciones DHCP reservadas (MAC → IP)",
+      "addMapping": "Agregar asignación",
+      "searchPlaceholder": "Buscar asignaciones estáticas...",
+      "columns": {
+        "mac": "MAC",
+        "ip": "IP",
+        "hostname": "Nombre de host",
+        "description": "Descripción",
+        "interface": "Interfaz"
+      }
+    },
+    "keaSubnets": {
+      "title": "Kea · Subredes DHCPv4",
+      "description": "Configuraciones de subred del servidor DHCP Kea",
+      "empty": "No hay subredes DHCPv4 de Kea configuradas. Use el servidor DHCP Kea (os-kea) para administrar subredes.",
+      "columns": {
+        "subnet": "Subred",
+        "description": "Descripción",
+        "pools": "Grupos",
+        "interface": "Interfaz",
+        "gateway": "Puerta de enlace",
+        "dnsServers": "Servidores DNS"
+      }
+    },
+    "keaLeases": {
+      "title": "Kea · Concesiones activas",
+      "description": "Concesiones IPv4 activas del servidor DHCP Kea",
+      "empty": "No se encontraron concesiones DHCP de Kea activas.",
+      "columns": {
+        "ipAddress": "Dirección IP",
+        "macAddress": "Dirección MAC",
+        "hostname": "Nombre de host",
+        "state": "Estado",
+        "expires": "Vence",
+        "subnetId": "ID de subred"
+      }
+    },
+    "relay": {
+      "title": "Retransmisión DHCP",
+      "description": "Configuración del agente de retransmisión DHCP",
+      "loading": "Cargando retransmisión DHCP…",
+      "status": "Estado",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "relayServers": "Servidores de retransmisión",
+      "interface": "Interfaz",
+      "agentInfo": "Información del agente (Opción 82)"
+    }
+  },
+  "GatewayNatTab": {
+    "columns": {
+      "type": "Tipo",
+      "protocol": "Proto",
+      "source": "Origen",
+      "destination": "Destino",
+      "target": "Destino traducido",
+      "description": "Descripción",
+      "interface": "Interfaz",
+      "destPort": "Puerto de destino",
+      "enabled": "Habilitado",
+      "externalIp": "IP externa",
+      "internalIp": "IP interna"
+    },
+    "actions": {
+      "sourceNat": "NAT de origen",
+      "addForward": "Agregar reenvío"
+    },
+    "natRules": {
+      "title": "Reglas NAT",
+      "description": "Reglas NAT de origen y destino"
+    },
+    "portForwards": {
+      "title": "Reenvío de puertos",
+      "description": "Reglas de DNAT / reenvío de puertos"
+    },
+    "binat": {
+      "title": "Reglas NAT 1:1 (Binat)",
+      "description": "Traducciones de direcciones de red estáticas uno a uno",
+      "loading": "Cargando reglas NAT 1:1…"
+    },
+    "values": {
+      "yes": "Sí",
+      "no": "No"
+    }
+  },
+  "UniFiDevicesTab": {
+    "title": "Dispositivos UniFi",
+    "loading": "Cargando dispositivos…",
+    "empty": "No hay dispositivos adoptados en este controlador. Usa el formulario \"Preparar por MAC\" de arriba para preparar acciones sobre un dispositivo específico.",
+    "subtitle": {
+      "sitePrefix": "Sitio:",
+      "body": "· Prepara reinicio / desactivación / PoE. Reinicio y desactivación son catastróficos: se requiere APPLY escrito + site_admin."
+    },
+    "stageByMac": {
+      "label": "Preparar por MAC"
+    },
+    "fields": {
+      "port": "Puerto",
+      "poeMode": "Modo PoE"
+    },
+    "actions": {
+      "restart": "Reiniciar",
+      "disable": "Desactivar",
+      "enable": "Activar",
+      "stagePoe": "Preparar PoE",
+      "cancel": "Cancelar",
+      "stage": "Preparar"
+    },
+    "status": {
+      "disabled": "desactivado"
+    },
+    "errors": {
+      "loadFailed": "Error al cargar los dispositivos:",
+      "unknown": "Error desconocido"
+    },
+    "toast": {
+      "staged": "Acción {{kind}} preparada para el dispositivo",
+      "stageFailed": "Error al preparar el cambio"
+    },
+    "operations": {
+      "restart": "reinicio",
+      "disable": "desactivación",
+      "enable": "activación",
+      "poeSet": "ajuste de PoE"
+    },
+    "dialog": {
+      "title": "¿Preparar {{operation}}?",
+      "bodyPrefix": "Preparar",
+      "bodyAgainst": "sobre",
+      "bodySuffix": "?",
+      "catastrophicPrefix": "Este es un cambio",
+      "catastrophicWord": "catastrófico",
+      "catastrophicMid": ": el panel requerirá escribir",
+      "catastrophicSuffix": "al momento de aplicar y el operador debe tener el rol site_admin."
+    }
+  },
+  "GatewayOverviewTab": {
+    "stats": {
+      "cpuUsage": "Uso de CPU",
+      "memory": "Memoria",
+      "disk": "Disco",
+      "uptime": "Tiempo activo",
+      "version": "Versión",
+      "wanIp": "IP de WAN",
+      "wanIpDescription": "Latencia: {{latency}}ms, Pérdida: {{loss}}%",
+      "services": "Servicios",
+      "servicesRunning": "{{count}} en ejecución",
+      "servicesStopped": "{{count}} detenidos",
+      "vpnTunnels": "Túneles VPN"
+    },
+    "gatewayInfo": {
+      "title": "Información de la puerta de enlace",
+      "name": "Nombre",
+      "vendor": "Proveedor",
+      "host": "Host",
+      "sslVerify": "Verificación de TLS",
+      "hostname": "Nombre de host",
+      "version": "Versión",
+      "model": "Modelo",
+      "credentials": "Credenciales",
+      "configured": "Configuradas",
+      "missing": "Faltantes",
+      "created": "Creada",
+      "updated": "Actualizada"
+    },
+    "firmware": {
+      "title": "Firmware y sincronización",
+      "firmware": "Firmware",
+      "latestVersion": "Última versión",
+      "updateAvailable": "Actualización disponible",
+      "updateYes": "Sí ({{version}})",
+      "autoSync": "Sincronización automática",
+      "interval": "Intervalo",
+      "syncStatus": "Estado de sincronización",
+      "lastSync": "Última sincronización",
+      "never": "Nunca",
+      "lastError": "Último error",
+      "lastSeen": "Visto por última vez",
+      "capabilities": "Capacidades"
+    },
+    "wanHealth": {
+      "title": "Estado de la puerta de enlace WAN",
+      "gatewayFallback": "GW {{index}}",
+      "unknown": "Desconocido",
+      "ip": "IP:",
+      "monitor": "Monitor:",
+      "latency": "Latencia:",
+      "loss": "Pérdida:",
+      "jitter": "Fluctuación:",
+      "default": "Predeterminada"
+    },
+    "liveStatus": {
+      "title": "Estado del sistema en vivo",
+      "description": "Datos en tiempo real de la puerta de enlace"
+    },
+    "common": {
+      "yes": "Sí",
+      "no": "No",
+      "enabled": "Habilitada",
+      "disabled": "Deshabilitada"
+    }
+  },
+  "GatewayBackupsTab": {
+    "columns": {
+      "filename": "Nombre de archivo",
+      "date": "Fecha",
+      "size": "Tamaño"
+    },
+    "actions": {
+      "revert": "Revertir",
+      "createBackup": "Crear copia de seguridad",
+      "cancel": "Cancelar"
+    },
+    "backups": {
+      "title": "Copias de seguridad de configuración",
+      "description": "Instantáneas de la configuración del gateway"
+    },
+    "diff": {
+      "title": "Diferencias de configuración",
+      "description": "Comparar la configuración en ejecución con la última copia de seguridad",
+      "generating": "Generando diferencias…",
+      "changesDetected": "Cambios detectados",
+      "noChanges": "Sin cambios"
+    },
+    "revertDialog": {
+      "title": "¿Revertir configuración?",
+      "prefix": "¿Revertir la configuración a la copia de seguridad",
+      "suffix": "? Esto sobrescribe la configuración en ejecución (reglas, certificados, usuarios, VPN): es destructivo y no se puede deshacer."
+    }
+  },
+  "GatewayAliasesTab": {
+    "title": "Alias de firewall",
+    "description": "Grupos con nombre de hosts, redes o puertos usados en las reglas",
+    "searchPlaceholder": "Buscar alias...",
+    "columns": {
+      "name": "Nombre",
+      "type": "Tipo",
+      "content": "Contenido",
+      "description": "Descripción",
+      "enabled": "Habilitado"
+    },
+    "actions": {
+      "addAlias": "Agregar alias"
+    }
+  },
+  "GatewayResourceDialogs": {
+    "toast": {
+      "successTitle": "Éxito",
+      "errorTitle": "Error",
+      "operationFailed": "La operación falló"
+    },
+    "actions": {
+      "cancel": "Cancelar",
+      "create": "Crear",
+      "update": "Actualizar",
+      "delete": "Eliminar",
+      "deleting": "Eliminando…",
+      "saving": "Guardando…",
+      "creating": "Creando…",
+      "pushing": "Enviando…",
+      "pushRule": "Enviar regla"
+    },
+    "options": {
+      "allow": "Permitir",
+      "block": "Bloquear",
+      "reject": "Rechazar",
+      "any": "Cualquiera",
+      "server": "Servidor",
+      "client": "Cliente",
+      "yes": "Sí",
+      "no": "No",
+      "active": "Activo",
+      "alertOnly": "Solo alerta"
+    },
+    "fields": {
+      "action": "Acción",
+      "protocol": "Protocolo",
+      "source": "Origen",
+      "sourcePort": "Puerto de origen",
+      "destination": "Destino",
+      "destinationPort": "Puerto de destino",
+      "interface": "Interfaz",
+      "description": "Descripción",
+      "hostname": "Nombre de host",
+      "domain": "Dominio",
+      "ipAddress": "Dirección IP",
+      "dnsServer": "Servidor DNS",
+      "port": "Puerto",
+      "macAddress": "Dirección MAC",
+      "extPort": "Puerto ext. (dst)",
+      "targetIp": "IP de destino",
+      "targetPort": "Puerto de destino",
+      "srcAddressOpt": "Dirección de origen (opc.)",
+      "sourceNetwork": "Red de origen",
+      "destinationNetwork": "Red de destino",
+      "natTarget": "Destino NAT (IP)",
+      "name": "Nombre",
+      "type": "Tipo",
+      "listenPort": "Puerto de escucha",
+      "tunnelAddresses": "Direcciones del túnel (separadas por comas)",
+      "publicKey": "Clave pública",
+      "allowedIps": "IP permitidas (separadas por comas)",
+      "endpointOptional": "Endpoint (opcional)",
+      "keepalive": "Keep-alive (s)",
+      "role": "Rol",
+      "tunnelNetwork": "Red del túnel",
+      "localNetwork": "Red local",
+      "gateway": "Puerta de enlace",
+      "bandwidth": "Ancho de banda",
+      "unit": "Unidad",
+      "mask": "Máscara",
+      "idsEnabled": "IDS habilitado",
+      "ipsMode": "Modo IPS (descartar paquetes)",
+      "patternMatcher": "Comparador de patrones",
+      "interfacesCsv": "Interfaces (separadas por comas)"
+    },
+    "placeholders": {
+      "any": "cualquiera",
+      "interfaceList": "wan, lan, opt1…",
+      "myserver": "miservidor",
+      "interfaceAddress": "dirección de la interfaz",
+      "base64PublicKey": "Clave pública Base64",
+      "officeVpn": "VPN de oficina",
+      "uploadLimit": "Límite de subida",
+      "aliasEntry": "10.0.0.1 o 192.168.1.0/24"
+    },
+    "delete": {
+      "title": "Eliminar {{resource}}",
+      "successMsg": "{{resource}} eliminado",
+      "confirmBefore": "¿Seguro que deseas eliminar ",
+      "confirmAfter": "? Esto se aplicará de inmediato a la puerta de enlace y no se puede deshacer."
+    },
+    "rule": {
+      "title": "Enviar regla de firewall",
+      "description": "Crear una nueva regla de firewall en la puerta de enlace",
+      "successMsg": "Regla de firewall enviada"
+    },
+    "dnsOverride": {
+      "titleNew": "Nueva sustitución de host DNS",
+      "titleEdit": "Editar sustitución de host DNS",
+      "description": "Asignar un nombre de host a una dirección IP",
+      "created": "Sustitución de DNS creada",
+      "updated": "Sustitución de DNS actualizada"
+    },
+    "dnsDomainOverride": {
+      "titleNew": "Nueva sustitución de dominio DNS",
+      "titleEdit": "Editar sustitución de dominio DNS",
+      "description": "Reenviar consultas de un dominio a un servidor específico",
+      "created": "Sustitución de dominio creada",
+      "updated": "Sustitución de dominio actualizada"
+    },
+    "dhcpStatic": {
+      "titleNew": "Nueva asignación estática DHCP",
+      "titleEdit": "Editar asignación estática DHCP",
+      "description": "Reservar una IP para una dirección MAC específica",
+      "created": "Asignación estática creada",
+      "updated": "Asignación estática actualizada"
+    },
+    "portForward": {
+      "titleNew": "Nueva redirección de puerto",
+      "titleEdit": "Editar redirección de puerto",
+      "description": "Reenviar tráfico externo a un host interno",
+      "created": "Redirección de puerto creada",
+      "updated": "Redirección de puerto actualizada"
+    },
+    "sourceNat": {
+      "title": "Nueva regla NAT de origen",
+      "description": "Enmascarar o traducir el tráfico saliente",
+      "created": "Regla NAT de origen creada"
+    },
+    "alias": {
+      "titleNew": "Nuevo alias",
+      "titleEdit": "Editar alias",
+      "description": "Grupo con nombre de hosts, redes o puertos",
+      "created": "Alias creado",
+      "updated": "Alias actualizado",
+      "addEntry": "Agregar entrada",
+      "contentLabel": "Contenido",
+      "contentDescription": "Agrega un host, red o puerto por fila.",
+      "emptyTitle": "Aún no hay entradas",
+      "emptyDescription": "Haz clic en Agregar entrada para crear el primer elemento.",
+      "entryLabel": "Entrada {{index}}",
+      "removeEntry": "Quitar entrada {{index}}"
+    },
+    "aliasTypes": {
+      "host": "Host(s)",
+      "network": "Red(es)",
+      "port": "Puerto(s)",
+      "url": "Tabla de URL",
+      "external": "Externo"
+    },
+    "wireGuardServer": {
+      "title": "Nuevo servidor WireGuard",
+      "description": "Crear una nueva interfaz de túnel WireGuard",
+      "created": "Servidor WireGuard creado"
+    },
+    "wireGuardPeer": {
+      "title": "Nuevo par WireGuard",
+      "description": "Agregar un par a un servidor WireGuard",
+      "created": "Par WireGuard creado"
+    },
+    "openVpn": {
+      "title": "Nueva instancia de OpenVPN",
+      "description": "Crear un servidor o cliente OpenVPN",
+      "created": "Instancia de OpenVPN creada"
+    },
+    "staticRoute": {
+      "title": "Nueva ruta estática",
+      "description": "Agregar una ruta configurada manualmente",
+      "created": "Ruta estática creada"
+    },
+    "shaperPipe": {
+      "title": "Nueva tubería de modelado",
+      "description": "Tubería limitadora de ancho de banda",
+      "created": "Tubería de modelado creada"
+    },
+    "ids": {
+      "title": "Editar configuración IDS/IPS",
+      "description": "Actualizar la configuración de detección de intrusiones",
+      "updated": "Configuración de IDS actualizada"
+    }
+  },
+  "MikroTikIpTab": {
+    "loading": "Cargando configuración L3 de RouterOS…",
+    "actions": {
+      "refresh": "Actualizar",
+      "cancel": "Cancelar",
+      "stageCreate": "Preparar creación",
+      "stageUpdate": "Preparar actualización",
+      "stageDelete": "Preparar eliminación"
+    },
+    "columns": {
+      "comment": "Comentario",
+      "actions": "Acciones"
+    },
+    "badges": {
+      "dynamic": "Dinámica",
+      "static": "Estática",
+      "yes": "Sí",
+      "no": "No"
+    },
+    "toasts": {
+      "addressCreateStaged": "Creación de dirección preparada",
+      "addressCreateFailed": "No se pudo preparar la creación de la dirección",
+      "addressDeleteStaged": "Eliminación de dirección preparada",
+      "addressDeleteFailed": "No se pudo preparar la eliminación de la dirección",
+      "routeCreateStaged": "Creación de ruta preparada",
+      "routeCreateFailed": "No se pudo preparar la creación de la ruta",
+      "routeUpdateStaged": "Actualización de ruta preparada",
+      "routeUpdateFailed": "No se pudo preparar la actualización de la ruta",
+      "routeDeleteStaged": "Eliminación de ruta preparada",
+      "routeDeleteFailed": "No se pudo preparar la eliminación de la ruta",
+      "poolCreateStaged": "Creación de pool preparada",
+      "poolCreateFailed": "No se pudo preparar la creación del pool",
+      "poolUpdateStaged": "Actualización de pool preparada",
+      "poolUpdateFailed": "No se pudo preparar la actualización del pool",
+      "poolDeleteStaged": "Eliminación de pool preparada",
+      "poolDeleteFailed": "No se pudo preparar la eliminación del pool"
+    },
+    "errors": {
+      "cannotUpdateRoute": "No se puede actualizar la ruta",
+      "routeNoId": "La ruta no tiene id de RouterOS (.id ausente).",
+      "cannotUpdatePool": "No se puede actualizar el pool",
+      "poolNoId": "El pool no tiene id de RouterOS (.id ausente).",
+      "cannotDelete": "No se puede eliminar",
+      "rowNoId": "La fila no tiene id de RouterOS (.id ausente)."
+    },
+    "deleteLabel": {
+      "address": "dirección {{value}}",
+      "route": "ruta a {{value}}",
+      "pool": "pool {{value}}"
+    },
+    "addresses": {
+      "title": "Direcciones IP",
+      "description": "Filas /ip/address · crear + eliminar (RouterOS no tiene un PATCH estable para esta tabla)",
+      "add": "Agregar dirección",
+      "loadError": "No se pudieron cargar las direcciones IP",
+      "emptyTitle": "Sin direcciones IP",
+      "emptyDescription": "No hay filas /ip/address en este router.",
+      "fallbackLabel": "dirección",
+      "deleteAria": "Eliminar dirección IP {{label}}",
+      "columns": {
+        "address": "Dirección",
+        "network": "Red",
+        "interface": "Interfaz",
+        "dynamic": "Dinámica",
+        "disabled": "Deshabilitada"
+      }
+    },
+    "routes": {
+      "title": "Rutas estáticas",
+      "description": "Filas /ip/route · CRUD completo",
+      "add": "Agregar ruta",
+      "loadError": "No se pudieron cargar las rutas",
+      "emptyTitle": "Sin rutas",
+      "emptyDescription": "No hay filas /ip/route en este router.",
+      "fallbackLabel": "ruta",
+      "rowLabel": "{{dst}} vía {{gateway}}",
+      "editAria": "Editar ruta {{label}}",
+      "deleteAria": "Eliminar ruta {{label}}",
+      "columns": {
+        "destination": "Destino",
+        "gateway": "Puerta de enlace",
+        "distance": "Distancia",
+        "active": "Activa",
+        "static": "Estática"
+      }
+    },
+    "pools": {
+      "title": "Pools de IP",
+      "description": "Filas /ip/pool · usadas por DHCP y PPP",
+      "add": "Agregar pool",
+      "loadError": "No se pudieron cargar los pools de IP",
+      "emptyTitle": "Sin pools de IP",
+      "emptyDescription": "Cree un pool para respaldar un servidor DHCP o un perfil PPP.",
+      "fallbackLabel": "pool",
+      "editAria": "Editar pool de IP {{label}}",
+      "deleteAria": "Eliminar pool de IP {{label}}",
+      "columns": {
+        "name": "Nombre",
+        "ranges": "Rangos",
+        "nextPool": "Pool siguiente"
+      }
+    },
+    "addressDialog": {
+      "title": "Agregar dirección IP",
+      "description": "Prepara un cambio en /ip/address de RouterOS.",
+      "addressLabel": "Dirección (CIDR)",
+      "interfaceLabel": "Interfaz",
+      "commentPlaceholder": "Puerta de enlace LAN"
+    },
+    "routeDialog": {
+      "addTitle": "Agregar ruta estática",
+      "editTitle": "Editar ruta estática",
+      "description": "Prepara un cambio en /ip/route de RouterOS.",
+      "destinationLabel": "Destino (CIDR)",
+      "gatewayLabel": "Puerta de enlace",
+      "distanceLabel": "Distancia",
+      "commentPlaceholder": "Ascendente"
+    },
+    "poolDialog": {
+      "addTitle": "Agregar pool de IP",
+      "editTitle": "Editar pool de IP",
+      "description": "Prepara un cambio en /ip/pool de RouterOS.",
+      "nameLabel": "Nombre",
+      "rangesLabel": "Rangos",
+      "commentPlaceholder": "Clientes LAN"
+    },
+    "deleteDialog": {
+      "title": "¿Preparar eliminación?",
+      "descriptionBefore": "Esto prepara una eliminación para",
+      "descriptionAfter": "Aplique desde el panel de Cambios pendientes."
+    }
+  },
+  "MikroTikDhcpTab": {
+    "loading": "Cargando DHCP de RouterOS…",
+    "common": {
+      "yes": "Sí",
+      "no": "No"
+    },
+    "actions": {
+      "refresh": "Actualizar",
+      "makeStatic": "Hacer estático",
+      "cancel": "Cancelar",
+      "stageCreate": "Preparar creación",
+      "stageUpdate": "Preparar actualización",
+      "stageDelete": "Preparar eliminación",
+      "stageMapping": "Preparar asignación"
+    },
+    "toasts": {
+      "serverCreateStaged": "Creación de servidor DHCP preparada",
+      "serverCreateFailed": "No se pudo preparar la creación del servidor",
+      "serverUpdateStaged": "Actualización de servidor DHCP preparada",
+      "serverUpdateFailed": "No se pudo preparar la actualización del servidor",
+      "serverDeleteStaged": "Eliminación de servidor DHCP preparada",
+      "serverDeleteFailed": "No se pudo preparar la eliminación del servidor",
+      "staticCreateStaged": "Creación de concesión estática preparada",
+      "staticCreateFailed": "No se pudo preparar la creación de la concesión estática",
+      "staticUpdateStaged": "Actualización de concesión estática preparada",
+      "staticUpdateFailed": "No se pudo preparar la actualización de la concesión estática",
+      "staticDeleteStaged": "Eliminación de concesión estática preparada",
+      "staticDeleteFailed": "No se pudo preparar la eliminación de la concesión estática",
+      "cannotUpdateServer": "No se puede actualizar el servidor",
+      "serverMissingId": "El servidor no tiene id de RouterOS (.id ausente).",
+      "cannotUpdateLease": "No se puede actualizar la concesión",
+      "leaseMissingId": "La concesión no tiene id de RouterOS (.id ausente).",
+      "cannotDelete": "No se puede eliminar",
+      "rowMissingId": "La fila no tiene id de RouterOS (.id ausente)."
+    },
+    "deleteLabel": {
+      "server": "servidor DHCP {{name}}",
+      "static": "concesión estática {{address}} ({{mac}})"
+    },
+    "servers": {
+      "title": "Servidores DHCP",
+      "description": "Instancias `/ip/dhcp-server` · CRUD completo",
+      "add": "Agregar servidor",
+      "loadError": "No se pudieron cargar los servidores DHCP",
+      "emptyTitle": "Sin servidores DHCP",
+      "emptyDescription": "No hay filas /ip/dhcp-server en este router.",
+      "fallbackLabel": "servidor",
+      "editAria": "Editar servidor DHCP {{label}}",
+      "deleteAria": "Eliminar servidor DHCP {{label}}"
+    },
+    "serverColumns": {
+      "name": "Nombre",
+      "interface": "Interfaz",
+      "pool": "Grupo",
+      "leaseTime": "Tiempo de concesión",
+      "authoritative": "Autoritativo",
+      "enabled": "Habilitado",
+      "comment": "Comentario",
+      "actions": "Acciones"
+    },
+    "leases": {
+      "title": "Concesiones activas",
+      "description": "Concesiones dinámicas de RouterOS · solo lectura con acción \"Hacer estático\"",
+      "loadError": "No se pudieron cargar las concesiones DHCP",
+      "emptyTitle": "Sin concesiones activas",
+      "emptyDescription": "No hay filas de concesiones dinámicas en este router en este momento."
+    },
+    "leaseColumns": {
+      "ip": "IP",
+      "mac": "MAC",
+      "hostname": "Nombre de host",
+      "server": "Servidor",
+      "status": "Estado",
+      "expires": "Expira",
+      "actions": "Acciones"
+    },
+    "static": {
+      "title": "Asignaciones estáticas",
+      "description": "Filas `/ip/dhcp-server/lease` con dynamic=false · CRUD completo",
+      "add": "Agregar asignación",
+      "emptyTitle": "Sin asignaciones estáticas",
+      "emptyDescription": "Agrega una para vincular una MAC a una IP.",
+      "fallbackLabel": "asignación",
+      "editAria": "Editar asignación estática DHCP {{label}}",
+      "deleteAria": "Eliminar asignación estática DHCP {{label}}"
+    },
+    "staticColumns": {
+      "ip": "IP",
+      "mac": "MAC",
+      "server": "Servidor",
+      "status": "Estado",
+      "comment": "Comentario",
+      "actions": "Acciones"
+    },
+    "serverDialog": {
+      "editTitle": "Editar servidor DHCP",
+      "addTitle": "Agregar servidor DHCP",
+      "description": "Prepara un cambio en `/ip/dhcp-server` de RouterOS."
+    },
+    "serverForm": {
+      "name": "Nombre",
+      "interface": "Interfaz",
+      "pool": "Grupo de direcciones",
+      "leaseTime": "Tiempo de concesión",
+      "comment": "Comentario"
+    },
+    "staticDialog": {
+      "editTitle": "Editar asignación estática",
+      "addTitle": "Agregar asignación estática",
+      "description": "Prepara un cambio en `/ip/dhcp-server/lease` de RouterOS (dynamic=false)."
+    },
+    "staticForm": {
+      "address": "Dirección IP",
+      "mac": "Dirección MAC",
+      "server": "Servidor (opcional)",
+      "comment": "Comentario"
+    },
+    "deleteDialog": {
+      "title": "¿Preparar eliminación?",
+      "descriptionPrefix": "Esto prepara la eliminación de",
+      "descriptionSuffix": "."
+    },
+    "makeStaticDialog": {
+      "title": "¿Preparar asignación estática?",
+      "descriptionPrefix": "Esto prepara una asignación de concesión estática",
+      "descriptionSuffix": "en RouterOS. Aplícala desde el panel de Cambios pendientes."
+    }
+  },
+  "MikroTikFirmwareTab": {
+    "loading": "Cargando firmware de RouterOS…",
+    "channels": {
+      "stable": "Estable",
+      "longTerm": "Estable a largo plazo",
+      "testing": "Pruebas",
+      "development": "Desarrollo"
+    },
+    "actions": {
+      "refresh": "Actualizar",
+      "checkForUpdates": "Buscar actualizaciones",
+      "download": "Descargar",
+      "cancelDownload": "Cancelar descarga",
+      "installReboot": "Instalar + reiniciar",
+      "switchChannel": "Cambiar canal",
+      "enable": "Habilitar",
+      "disable": "Deshabilitar",
+      "uninstall": "Desinstalar",
+      "cancel": "Cancelar",
+      "stageInstall": "Preparar instalación"
+    },
+    "toasts": {
+      "checkStaged": "Comprobación de actualización preparada",
+      "checkFailed": "No se pudo preparar la comprobación de actualización",
+      "channelStaged": "Cambio de canal preparado",
+      "channelFailed": "No se pudo preparar el cambio de canal",
+      "downloadStaged": "Descarga de firmware preparada",
+      "downloadFailed": "No se pudo preparar la descarga",
+      "cancelStaged": "Cancelación de descarga preparada",
+      "cancelFailed": "No se pudo preparar la cancelación",
+      "installStaged": "Instalación de firmware preparada",
+      "installStagedDescription": "Tras aplicar el cambio pendiente, el dispositivo se reiniciará. Consultando el estado cada 5 s.",
+      "installFailed": "No se pudo preparar la instalación",
+      "enableStaged": "Habilitación del paquete preparada",
+      "enableFailed": "No se pudo preparar la habilitación",
+      "disableStaged": "Deshabilitación del paquete preparada",
+      "disableFailed": "No se pudo preparar la deshabilitación",
+      "uninstallStaged": "Desinstalación del paquete preparada",
+      "uninstallFailed": "No se pudo preparar la desinstalación"
+    },
+    "currentState": {
+      "title": "Estado actual",
+      "description": "/system/package/update · versión de RouterOS instalada + última comprobación.",
+      "loadError": "No se pudo cargar el estado del firmware",
+      "empty": {
+        "title": "Estado del firmware no disponible",
+        "description": "El endpoint /system/package/update no respondió, es posible que la ruta aún no esté configurada en este backend."
+      },
+      "installedVersion": "Versión instalada",
+      "currentChannel": "Canal actual",
+      "lastChecked": "Última comprobación",
+      "status": "Estado"
+    },
+    "availableUpdate": {
+      "title": "Actualización disponible",
+      "description": "Comprueba, descarga e instala actualizaciones de RouterOS desde el canal configurado.",
+      "latestAvailable": "Última disponible",
+      "updateAvailable": "Actualización disponible",
+      "lastError": "Último error",
+      "installInFlight": "Instalación en curso"
+    },
+    "channel": {
+      "title": "Canal de actualización",
+      "description": "Cambia el canal de actualización de paquetes. RouterOS obtendrá la próxima comprobación + descarga desde el canal seleccionado.",
+      "label": "Canal",
+      "placeholder": "Elige un canal"
+    },
+    "packages": {
+      "title": "Paquetes instalados",
+      "description": "/system/package · habilitar / deshabilitar / desinstalar por paquete. Deshabilitar un paquete surte efecto en el próximo reinicio.",
+      "loadError": "No se pudieron cargar los paquetes instalados",
+      "empty": {
+        "title": "No se reportaron paquetes",
+        "description": "La lista /system/package estaba vacía, puede que falte la ruta del backend o que el dispositivo tenga una instalación mínima."
+      },
+      "columns": {
+        "name": "Nombre",
+        "version": "Versión",
+        "scheduled": "Programado",
+        "state": "Estado",
+        "actions": "Acciones"
+      },
+      "state": {
+        "enabled": "Habilitado",
+        "disabled": "Deshabilitado"
+      }
+    },
+    "installDialog": {
+      "title": "Confirmar instalación de firmware",
+      "descriptionBefore": "Esto reiniciará el dispositivo y desconectará todas las sesiones. La configuración actual se conservará (RouterOS preserva /system/script y la configuración al actualizar). Escribe",
+      "descriptionAfter": "para continuar.",
+      "tokenLabel": "Token de confirmación",
+      "targetVersion": "Versión de destino:",
+      "from": "desde"
+    }
+  },
+  "AddGatewayPage": {
+    "header": {
+      "title": "Agregar gateway",
+      "subtitle": "Conecta un firewall o router a FreeSDN",
+      "backToGateways": "Volver a gateways"
+    },
+    "steps": {
+      "platform": "Plataforma",
+      "credentials": "Credenciales",
+      "test": "Probar",
+      "configure": "Configurar"
+    },
+    "actions": {
+      "back": "Atrás",
+      "next": "Siguiente",
+      "saving": "Guardando...",
+      "addGateway": "Agregar gateway"
+    },
+    "vendors": {
+      "auth": {
+        "apiKey": "Autenticación con API Key",
+        "basic": "Usuario/Contraseña"
+      },
+      "opnsense": {
+        "description": "Plataforma de firewall y enrutamiento de código abierto de Deciso B.V.",
+        "docs": "Crea una API key en System → Access → Users → API keys"
+      },
+      "pfsense": {
+        "description": "Firewall de nivel empresarial de Netgate (requiere pfSense Plus con API REST)",
+        "docs": "Genera credenciales de API en System → REST API → Settings"
+      },
+      "mikrotik": {
+        "description": "Plataforma de red basada en RouterOS (API REST v7.1+)",
+        "docs": "Habilita el servicio www-ssl en IP → Services. Usa credenciales de administrador."
+      },
+      "openwrt": {
+        "description": "Firmware de router Linux de código abierto con API LuCI RPC / ubus",
+        "docs": "Habilita uhttpd con HTTPS. Usa credenciales de root o administrador."
+      }
+    },
+    "credentials": {
+      "connectionTitle": "Conexión con {{vendor}}",
+      "hostLabel": "Host / Dirección IP",
+      "hostPlaceholder": "192.168.1.1 o firewall.local",
+      "hostError": "Host no válido · usa un nombre de host o una dirección IP sin espacios",
+      "portLabel": "Puerto",
+      "portError": "El puerto debe estar entre 1 y 65535",
+      "apiKeyLabel": "API Key",
+      "apiKeyPlaceholder": "Ingresa la API key",
+      "apiSecretLabel": "Secreto de API",
+      "apiSecretPlaceholder": "Ingresa el secreto de API",
+      "usernameLabel": "Usuario",
+      "passwordLabel": "Contraseña",
+      "passwordPlaceholder": "Ingresa la contraseña",
+      "verifySsl": "Verificar certificado SSL"
+    },
+    "test": {
+      "title": "Probar conexión",
+      "description": "Verifica que FreeSDN pueda alcanzar tu {{vendor}} en {{host}}:{{port}}",
+      "prompt": "Haz clic en el botón de abajo para probar la conexión",
+      "testing": "Probando...",
+      "testButton": "Probar conexión",
+      "connecting": "Conectando a {{host}}...",
+      "resultSuccess": "Conexión exitosa",
+      "resultFailed": "Conexión fallida",
+      "failedFallback": "La prueba de conexión falló",
+      "retest": "Volver a probar",
+      "detectedCapabilities": "Capacidades detectadas",
+      "details": {
+        "hostname": "Nombre de host",
+        "version": "Versión",
+        "model": "Modelo",
+        "latency": "Latencia",
+        "latencyValue": "{{ms}} ms"
+      }
+    },
+    "configure": {
+      "title": "Configurar gateway",
+      "description": "Define un nombre y las preferencias de sincronización para esta integración de {{vendor}}",
+      "nameLabel": "Nombre del gateway",
+      "nameHelper": "Un nombre descriptivo para identificar este gateway en FreeSDN",
+      "descriptionLabel": "Descripción (opcional)",
+      "descriptionPlaceholder": "p. ej. Firewall perimetral de la oficina principal",
+      "sync": {
+        "heading": "Configuración de sincronización",
+        "enableLabel": "Habilitar sincronización automática",
+        "enableHelper": "Obtiene periódicamente el estado y la configuración de este gateway",
+        "intervalLabel": "Intervalo de sincronización (segundos)",
+        "intervalHelper": "Mínimo 60 segundos. Recomendado: 300 (5 minutos)"
+      },
+      "summary": {
+        "heading": "Resumen",
+        "platform": "Plataforma",
+        "host": "Host",
+        "detectedHostname": "Nombre de host detectado",
+        "version": "Versión",
+        "autoSync": "Sincronización automática",
+        "everyN": "Cada {{n}} s",
+        "disabled": "Desactivada"
+      }
+    },
+    "toast": {
+      "connectionSuccess": {
+        "title": "Conexión exitosa",
+        "description": "Conectado a {{host}}"
+      },
+      "gatewayAdded": {
+        "title": "Gateway agregado",
+        "description": "{{name}} se ha conectado correctamente."
+      },
+      "error": {
+        "title": "Error",
+        "fallback": "No se pudo crear el gateway"
+      }
+    }
+  },
+  "MikroTikSystemTab": {
+    "loading": "Cargando información del sistema RouterOS…",
+    "liveState": "Estado en vivo de RouterOS · se actualiza cada 30 s",
+    "error": {
+      "loadFailed": "No se pudo cargar la información del sistema RouterOS",
+      "noInfo": "No se devolvió información del sistema."
+    },
+    "actions": {
+      "refresh": "Actualizar",
+      "editName": "Editar nombre",
+      "editNtp": "Editar NTP",
+      "cancel": "Cancelar",
+      "stageChange": "Preparar cambio"
+    },
+    "identity": {
+      "title": "Identidad",
+      "description": "Nombre del router y metadatos del hardware",
+      "fields": {
+        "name": "Nombre",
+        "board": "Placa",
+        "version": "Versión de RouterOS",
+        "architecture": "Arquitectura",
+        "serial": "Número de serie",
+        "factoryFirmware": "Firmware de fábrica",
+        "currentFirmware": "Firmware actual",
+        "upgradeAvailable": "Actualización disponible"
+      }
+    },
+    "time": {
+      "title": "Hora y NTP",
+      "description": "Reloj del router y configuración de sincronización de hora",
+      "fields": {
+        "date": "Fecha",
+        "time": "Hora",
+        "timezone": "Zona horaria",
+        "dst": "DST"
+      },
+      "dstUnknown": "desconocido",
+      "ntpNotice": "Los servidores NTP se gestionan a través de la canalización de cambios preparados. Los valores actuales no se muestran en esta lectura agregada: edite para sobrescribir los servidores primario / secundario y aplique desde el panel de Cambios pendientes."
+    },
+    "resource": {
+      "title": "Uso de recursos",
+      "description": "Métricas en vivo de CPU, memoria y tiempo de actividad",
+      "cpuLoad": "Carga de CPU",
+      "cpuDetail": "{{cpu}} · {{count}} núcleos @ {{freq}} MHz",
+      "ramUsed": "RAM usada",
+      "diskFree": "Disco libre",
+      "uptime": "Tiempo de actividad",
+      "ofTotal": "de {{total}} en total",
+      "build": "compilación: {{build}}"
+    },
+    "health": {
+      "title": "Estado del hardware",
+      "columns": {
+        "sensor": "Sensor",
+        "value": "Valor",
+        "type": "Tipo"
+      }
+    },
+    "identityDialog": {
+      "title": "Editar identidad del router",
+      "description": "Prepara un cambio en RouterOS /system/identity. Aplícalo desde el panel de Cambios pendientes.",
+      "nameLabel": "Nombre"
+    },
+    "ntpDialog": {
+      "title": "Editar servidores NTP",
+      "description": "Prepara un cambio en RouterOS /system/ntp/client. Aplícalo desde el panel de Cambios pendientes.",
+      "primaryLabel": "Servidor NTP primario",
+      "secondaryLabel": "Servidor NTP secundario (opcional)"
+    },
+    "toasts": {
+      "identityStaged": {
+        "title": "Cambio de identidad preparado",
+        "description": "Aplica desde Cambios pendientes."
+      },
+      "identityFailed": {
+        "title": "No se pudo preparar el cambio de identidad"
+      },
+      "ntpStaged": {
+        "title": "Cambio de NTP preparado",
+        "description": "Aplica desde Cambios pendientes."
+      },
+      "ntpFailed": {
+        "title": "No se pudo preparar el cambio de NTP"
+      }
+    }
+  },
+  "GatewayIdsTab": {
+    "common": {
+      "yes": "Sí",
+      "no": "No"
+    },
+    "status": {
+      "running": "En ejecución",
+      "stopped": "Detenido"
+    },
+    "actions": {
+      "start": "Iniciar",
+      "stop": "Detener",
+      "restart": "Reiniciar",
+      "updateRules": "Actualizar reglas",
+      "edit": "Editar",
+      "clearAlerts": "Borrar alertas",
+      "cancel": "Cancelar"
+    },
+    "alertColumns": {
+      "time": "Hora",
+      "severity": "Gravedad",
+      "source": "Origen",
+      "destination": "Destino",
+      "signature": "Firma",
+      "action": "Acción"
+    },
+    "settings": {
+      "title": "Configuración de IDS/IPS",
+      "empty": "No hay configuración de IDS disponible",
+      "fields": {
+        "enabled": "Habilitado",
+        "ipsMode": "Modo IPS",
+        "patternMatcher": "Comparador de patrones",
+        "interfaces": "Interfaces"
+      },
+      "values": {
+        "activeDrop": "Activo (descartar)",
+        "alertOnly": "Solo alertas"
+      }
+    },
+    "alerts": {
+      "title": "Alertas de IDS ({{count}})",
+      "description": "Alertas recientes de detección de intrusiones",
+      "searchPlaceholder": "Buscar alertas..."
+    },
+    "rulesets": {
+      "title": "Conjuntos de reglas de IDS",
+      "description": "Categorías de reglas instaladas",
+      "columns": {
+        "name": "Nombre",
+        "description": "Descripción",
+        "enabled": "Habilitado"
+      }
+    },
+    "rules": {
+      "title": "Reglas de IDS ({{count}})",
+      "description": "Reglas de detección individuales",
+      "searchPlaceholder": "Buscar reglas de IDS...",
+      "toggle": "Alternar",
+      "columns": {
+        "sid": "SID",
+        "description": "Descripción",
+        "severity": "Gravedad",
+        "enabled": "Habilitado",
+        "actions": "Acciones"
+      }
+    },
+    "crowdsec": {
+      "title": "CrowdSec IPS",
+      "description": "Sistema colaborativo de prevención de intrusiones",
+      "loading": "Cargando CrowdSec…",
+      "service": "Servicio",
+      "unknown": "Desconocido",
+      "alerts": "Alertas",
+      "activeDecisions": "Decisiones activas",
+      "columns": {
+        "ipRange": "IP/Rango",
+        "reason": "Motivo",
+        "action": "Acción",
+        "expires": "Caduca"
+      }
+    },
+    "dialogs": {
+      "clearAlerts": {
+        "title": "¿Borrar todas las alertas de IDS?",
+        "description": "¿Borrar todas las alertas de IDS? Esta acción es irreversible."
+      },
+      "updateRules": {
+        "title": "¿Actualizar las reglas de IDS?",
+        "description": "¿Descargar y aplicar el conjunto de reglas de IDS más reciente? Esto puede tardar varios minutos y aumentar temporalmente la carga de CPU."
+      }
+    }
+  },
+  "GatewayMonitoringTab": {
+    "common": {
+      "unknown": "Desconocido",
+      "yes": "Sí",
+      "no": "No",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado"
+    },
+    "stats": {
+      "temperature": "Temperatura",
+      "diskUsage": "Uso de disco",
+      "health": "Estado",
+      "healthy": "Correcto",
+      "degraded": "Degradado",
+      "pfStates": "Estados PF"
+    },
+    "traffic": {
+      "title": "Estadísticas de tráfico",
+      "address": "Dirección",
+      "rateIn": "Tasa de entrada",
+      "rateOut": "Tasa de salida",
+      "cumulative": "Acumulado",
+      "noData": "Sin datos de tráfico"
+    },
+    "healthCheck": {
+      "title": "Detalles de la comprobación de estado"
+    },
+    "gatewayHealth": {
+      "title": "Estado de la puerta de enlace",
+      "gatewayN": "Puerta de enlace {{n}}",
+      "ip": "IP",
+      "monitor": "Monitor",
+      "latency": "Latencia",
+      "loss": "Pérdida",
+      "stddev": "Desv. estándar"
+    },
+    "monit": {
+      "title": "Monit",
+      "description": "Supervisión del estado de servicios y del sistema",
+      "loading": "Cargando Monit…",
+      "service": "Servicio",
+      "monitoredServices": "Servicios supervisados",
+      "tests": "Pruebas",
+      "alertRules": "Reglas de alerta",
+      "table": {
+        "name": "Nombre",
+        "type": "Tipo",
+        "address": "Dirección",
+        "enabled": "Habilitado"
+      }
+    },
+    "telegraf": {
+      "title": "Telegraf",
+      "description": "Agente de recopilación de métricas",
+      "loading": "Cargando Telegraf…",
+      "enabled": "Habilitado",
+      "service": "Servicio",
+      "graphiteServer": "Servidor Graphite",
+      "influxUrl": "URL de InfluxDB",
+      "influxDatabase": "Base de datos InfluxDB"
+    },
+    "netflow": {
+      "title": "NetFlow / sFlow",
+      "description": "Recopilación y exportación de datos de flujo de red",
+      "loading": "Cargando NetFlow…",
+      "capture": "Captura",
+      "service": "Servicio",
+      "interfaces": "Interfaces",
+      "version": "Versión de NetFlow",
+      "listenPort": "Puerto de escucha"
+    }
+  },
+  "MikroTikTopologyTab": {
+    "loading": "Cargando topología de RouterOS…",
+    "actions": {
+      "refresh": "Actualizar"
+    },
+    "toast": {
+      "settingsStaged": "Actualización de ajustes de detección preparada",
+      "settingsStageFailed": "Error al preparar la actualización de ajustes"
+    },
+    "graph": {
+      "title": "Gráfico de topología",
+      "description": "Vecinos detectados por LLDP, CDP y MNDP. El dispositivo informó {{count}} vecino(s).",
+      "loadError": "Error al cargar la topología",
+      "legend": "Leyenda:",
+      "empty": {
+        "title": "No se detectaron vecinos",
+        "description": "El dispositivo aún no ha visto ningún vecino L2. Esto es normal en redes aisladas (CHR de laboratorio) o antes de que circule tráfico LLDP/CDP/MNDP. Verifique que la detección esté habilitada en el ámbito de interfaz correcto."
+      }
+    },
+    "settings": {
+      "title": "Ajustes de detección de vecinos",
+      "description": "Qué protocolos de detección se ejecutan y en qué interfaces escuchan.",
+      "edit": "Editar ajustes",
+      "loadError": "Error al cargar los ajustes de detección",
+      "protocolsEnabled": "Protocolos habilitados",
+      "interfaceScope": "Ámbito de interfaz",
+      "empty": {
+        "title": "Ajustes de detección no disponibles",
+        "description": "El endpoint /ip/neighbor/discovery-settings no respondió."
+      }
+    },
+    "lldp": {
+      "title": "LLDP por interfaz",
+      "description": "/interface/lldp/interface, cada interfaz con un vecino LLDP visible.",
+      "loadError": "Error al cargar las interfaces LLDP",
+      "empty": {
+        "title": "Sin vecinos LLDP",
+        "description": "Ninguna interfaz informó un vecino LLDP. Habilite LLDP en el puerto troncal si espera que los switches ascendentes lo anuncien."
+      },
+      "columns": {
+        "interface": "Interfaz",
+        "systemName": "Nombre de sistema del vecino",
+        "portId": "ID de puerto del vecino",
+        "mgmtAddress": "Dirección de gestión"
+      }
+    },
+    "dialog": {
+      "title": "Editar ajustes de detección de vecinos",
+      "description": "Prepara un cambio en /ip/neighbor/discovery-settings. Los campos vacíos dejan el valor existente sin cambios.",
+      "protocolLabel": "Protocolos habilitados",
+      "protocolHelp": "Lista separada por comas. RouterOS admite lldp, cdp, mndp.",
+      "scopeLabel": "Lista de interfaces",
+      "scopeHelp": "Use all para escuchar en todas partes, o el nombre de una lista de interfaces definida.",
+      "badge": "Los bordes del gráfico de topología se colorean según el protocolo de origen.",
+      "cancel": "Cancelar",
+      "submit": "Preparar actualización"
+    }
+  },
+  "GatewayShaperTab": {
+    "columns": {
+      "description": "Descripción",
+      "bandwidth": "Ancho de banda",
+      "mask": "Máscara",
+      "enabled": "Habilitado",
+      "pipe": "Tubería",
+      "weight": "Peso",
+      "actions": "Acciones",
+      "interface": "Interfaz",
+      "protocol": "Protocolo",
+      "source": "Origen",
+      "destination": "Destino",
+      "queue": "Cola"
+    },
+    "values": {
+      "yes": "Sí",
+      "no": "No"
+    },
+    "pipes": {
+      "title": "Tuberías de modelado",
+      "description": "Tuberías de ancho de banda"
+    },
+    "queues": {
+      "title": "Colas de modelado ({{count}})",
+      "description": "Encolado equitativo ponderado"
+    },
+    "rules": {
+      "title": "Reglas de modelado ({{count}})",
+      "description": "Reglas de clasificación de tráfico"
+    },
+    "actions": {
+      "addPipe": "Agregar tubería",
+      "addQueue": "Agregar cola",
+      "addRule": "Agregar regla"
+    }
+  },
+  "UniFiNetworksTab": {
+    "title": "Redes UniFi",
+    "siteLabel": "Sitio:",
+    "description": "Preparar creación de VLAN, además de renombrar y eliminar redes individuales. Los campos de subred y DHCP son opcionales: déjalos vacíos para una red solo de VLAN (sin L3).",
+    "loading": "Cargando…",
+    "loadError": "No se pudieron cargar las redes:",
+    "unknownError": "Error desconocido",
+    "unnamed": "(sin nombre)",
+    "dhcpOn": "DHCP activado",
+    "form": {
+      "createVlan": "Crear VLAN",
+      "vlanId": "ID de VLAN (1-4094)",
+      "networkName": "Nombre de la red",
+      "networkNamePlaceholder": "Invitados",
+      "subnet": "Subred (opcional)",
+      "enableDhcp": "Habilitar DHCP",
+      "dhcpStartPlaceholder": "Inicio de DHCP (10.10.0.6)",
+      "dhcpStopPlaceholder": "Fin de DHCP (10.10.0.254)",
+      "updateNetwork": "Actualizar red",
+      "unchanged": "(sin cambios)"
+    },
+    "actions": {
+      "stageVlanCreate": "Preparar creación de VLAN",
+      "stageUpdate": "Preparar actualización",
+      "stage": "Preparar",
+      "cancel": "Cancelar"
+    },
+    "dialog": {
+      "title": "¿Preparar creación de VLAN?",
+      "updateTitle": "¿Preparar actualización?",
+      "deleteTitle": "¿Preparar eliminación?",
+      "stagePrefix": "Preparar",
+      "forVlan": "para la VLAN",
+      "subnetLabel": "Subred:",
+      "against": "para",
+      "suffix": ". El cambio se aplica mediante el panel de Cambios Pendientes."
+    },
+    "toast": {
+      "staged": {
+        "title": "Creación de VLAN preparada",
+        "description": "VLAN {{vlanId}} ({{name}})"
+      },
+      "updated": {
+        "title": "Actualización de red preparada"
+      },
+      "deleted": {
+        "title": "Eliminación de red preparada"
+      },
+      "error": {
+        "title": "No se pudo preparar la creación de VLAN"
+      }
+    }
+  },
+  "UniFiWlansTab": {
+    "title": "WLANs UniFi",
+    "siteLabel": "Sitio:",
+    "description": "· Prepara la rotación de PSK y la activación/desactivación. El PSK se enmascara en el campo y se oculta en la vista previa del panel.",
+    "stageByWlanId": "Preparar por ID de WLAN",
+    "wlanIdPlaceholder": "ID de WLAN (Mongo ObjectID)",
+    "newPskLabel": "Nuevo PSK (8-63 caracteres)",
+    "loadFailed": "No se pudieron cargar las WLANs:",
+    "unknownError": "Error desconocido",
+    "loading": "Cargando…",
+    "empty": "No hay WLANs configuradas. Prepara acciones sobre un ID de WLAN específico con el formulario de arriba.",
+    "status": {
+      "disabled": "deshabilitada",
+      "hidden": "oculta"
+    },
+    "actions": {
+      "stagePsk": "Preparar PSK",
+      "stageEnable": "Preparar activación",
+      "stageDisable": "Preparar desactivación",
+      "enable": "Activar",
+      "disable": "Desactivar",
+      "cancel": "Cancelar",
+      "stage": "Preparar"
+    },
+    "toast": {
+      "pskStaged": "Rotación de PSK preparada",
+      "enableStaged": "Activación de WLAN preparada",
+      "disableStaged": "Desactivación de WLAN preparada",
+      "stageFailed": "No se pudo preparar el cambio"
+    },
+    "dialog": {
+      "rotatePskTitle": "¿Rotar PSK?",
+      "enableTitle": "¿Activar WLAN?",
+      "disableTitle": "¿Desactivar WLAN?",
+      "stagePrefix": "Preparar",
+      "against": "sobre",
+      "pskNote": "El nuevo PSK se envía por el mismo canal cifrado y se enmascara en la vista previa del panel."
+    }
+  },
+  "GatewayRulesTab": {
+    "title": "Reglas de firewall",
+    "liveRulesFrom": "Reglas en vivo de {{vendor}}",
+    "pushRule": "Enviar regla",
+    "searchPlaceholder": "Buscar reglas...",
+    "notSuffix": " (no)",
+    "columns": {
+      "action": "Acción",
+      "direction": "Dir",
+      "protocol": "Proto",
+      "source": "Origen",
+      "destination": "Destino",
+      "interface": "Interfaz",
+      "gateway": "Puerta de enlace",
+      "description": "Descripción",
+      "enabled": "Habilitado",
+      "log": "Registro"
+    }
+  },
+  "GatewayLogsTab": {
+    "title": "Registros del sistema y firewall",
+    "description": "Entradas de registro recientes del gateway",
+    "tabs": {
+      "firewall": "Firewall",
+      "system": "Sistema"
+    },
+    "searchFirewall": "Buscar registros del firewall...",
+    "searchSystem": "Buscar registros del sistema..."
+  },
+  "OpenWrtTab": {
+    "common": {
+      "loading": "Cargando…",
+      "disabled": "deshabilitado",
+      "cancel": "Cancelar"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "interfaces": "Interfaces",
+      "firewall": "Firewall",
+      "portForwards": "Reenvío de puertos",
+      "dhcpLeases": "Concesiones DHCP",
+      "dhcpStatic": "DHCP estático",
+      "arp": "ARP / Vecinos"
+    },
+    "actions": {
+      "refresh": "Actualizar"
+    },
+    "authError": "No se puede acceder al dispositivo OpenWrt. Verifica las credenciales y la conectividad.",
+    "toasts": {
+      "staged": {
+        "title": "Cambio preparado",
+        "description": "{{msg}}: abre Cambios pendientes para aplicar."
+      },
+      "stageFailed": {
+        "title": "Error al preparar",
+        "unknown": "error desconocido"
+      }
+    },
+    "staged": {
+      "deleteRule": "Eliminar regla de firewall",
+      "newRule": "Nueva regla de firewall",
+      "deletePortForward": "Eliminar reenvío de puertos",
+      "newPortForward": "Nuevo reenvío de puertos",
+      "deleteStaticHost": "Eliminar host estático",
+      "newStaticHost": "Nuevo host estático"
+    },
+    "overview": {
+      "system": "Sistema",
+      "hostname": "Nombre de host",
+      "model": "Modelo",
+      "openwrtVersion": "Versión de OpenWrt",
+      "kernel": "Kernel",
+      "uptime": "Tiempo activo",
+      "load": "Carga (1/5/15)",
+      "memory": "Memoria",
+      "total": "Total",
+      "available": "Disponible",
+      "cached": "En caché",
+      "buffered": "En búfer",
+      "used": "Usada"
+    },
+    "interfaces": {
+      "title": "Interfaces de red",
+      "count": "{{n}} interfaces",
+      "empty": "No hay interfaces.",
+      "col": {
+        "interface": "Interfaz",
+        "device": "Dispositivo",
+        "ipv4": "IPv4",
+        "gateway": "Puerta de enlace",
+        "state": "Estado"
+      }
+    },
+    "firewall": {
+      "title": "Reglas de firewall",
+      "count": "{{n}} reglas",
+      "newRule": "Nueva regla",
+      "empty": "No hay reglas de firewall.",
+      "confirmDelete": "¿Preparar la eliminación de la regla '{{name}}'?",
+      "col": {
+        "name": "Nombre",
+        "srcDest": "Origen → Destino",
+        "target": "Destino",
+        "proto": "Protocolo",
+        "status": "Estado"
+      }
+    },
+    "portForwards": {
+      "title": "Reenvío de puertos",
+      "count": "{{n}} reenvíos",
+      "newForward": "Nuevo reenvío",
+      "empty": "No hay reenvíos de puertos configurados.",
+      "confirmDelete": "¿Preparar la eliminación del reenvío de puertos '{{name}}'?",
+      "col": {
+        "name": "Nombre",
+        "external": "Externo (origen:puerto)",
+        "internal": "Interno (destino:puerto)",
+        "proto": "Protocolo",
+        "status": "Estado"
+      }
+    },
+    "dhcp": {
+      "title": "Concesiones DHCP",
+      "count": "{{n}} concesiones",
+      "empty": "No hay concesiones DHCP activas.",
+      "col": {
+        "hostname": "Nombre de host",
+        "ipAddress": "Dirección IP",
+        "mac": "MAC",
+        "expires": "Expira"
+      }
+    },
+    "arp": {
+      "title": "ARP / Vecinos",
+      "count": "{{n}} entradas",
+      "empty": "La tabla ARP está vacía.",
+      "col": {
+        "ipAddress": "Dirección IP",
+        "macAddress": "Dirección MAC",
+        "interface": "Interfaz"
+      }
+    },
+    "dhcpStatic": {
+      "title": "Hosts estáticos DHCP",
+      "count": "{{n}} reservas",
+      "newReservation": "Nueva reserva",
+      "emptyPrefix": "No hay reservas estáticas. Haz clic en",
+      "emptySuffix": "para agregar una.",
+      "confirmDelete": "¿Preparar la eliminación de la reserva '{{name}}'?",
+      "col": {
+        "hostname": "Nombre de host",
+        "macAddress": "Dirección MAC",
+        "ipAddress": "Dirección IP"
+      }
+    },
+    "ruleDialog": {
+      "title": "Nueva regla de firewall",
+      "name": "Nombre",
+      "zoneSrc": "Zona (origen)",
+      "target": "Destino",
+      "protocol": "Protocolo",
+      "destPort": "Puerto de destino",
+      "submit": "Preparar regla"
+    },
+    "pfDialog": {
+      "title": "Nuevo reenvío de puertos",
+      "name": "Nombre",
+      "sourceZone": "Zona de origen",
+      "protocol": "Protocolo",
+      "externalPort": "Puerto externo",
+      "internalIp": "IP interna",
+      "internalPort": "Puerto interno",
+      "submit": "Preparar reenvío"
+    },
+    "hostDialog": {
+      "title": "Nueva reserva DHCP",
+      "hostname": "Nombre de host",
+      "macAddress": "Dirección MAC",
+      "ipAddress": "Dirección IP",
+      "submit": "Preparar reserva"
+    }
+  },
+  "MikroTikSnmpTab": {
+    "loading": "Cargando SNMP de RouterOS…",
+    "actions": {
+      "refresh": "Actualizar",
+      "editSettings": "Editar configuración",
+      "addTrap": "Agregar destino de trap",
+      "addV3User": "Agregar usuario SNMPv3",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "cancel": "Cancelar",
+      "stageUpdate": "Preparar actualización",
+      "stageCreate": "Preparar creación",
+      "stageDelete": "Preparar eliminación"
+    },
+    "toasts": {
+      "settingsStaged": "Actualización de configuración SNMP preparada",
+      "settingsFailed": "No se pudo preparar la configuración",
+      "trapStaged": "Destino de trap preparado",
+      "trapFailed": "No se pudo preparar el trap",
+      "trapDeleteStaged": "Eliminación de trap preparada",
+      "deleteFailed": "No se pudo preparar la eliminación",
+      "v3UserStaged": "Usuario SNMPv3 preparado",
+      "v3UserFailed": "No se pudo preparar el usuario SNMPv3",
+      "v3UserDeleteStaged": "Eliminación de usuario SNMPv3 preparada"
+    },
+    "server": {
+      "title": "Servidor SNMP",
+      "description": "Instancia única /snmp · habilita el daemon y define los metadatos de trap-community / contacto / ubicación.",
+      "body": "Usa el cuadro de diálogo para actualizar el estado de habilitación del servidor SNMP y los metadatos básicos. La lectura de /snmp/settings forma parte del dominio de seguridad existente: los operadores pueden verificar el cambio preparado en la cola de cambios pendientes antes de aplicarlo."
+    },
+    "traps": {
+      "title": "Destinos de trap",
+      "description": "Filas /snmp/trap · destinos a los que el router envía traps SNMP.",
+      "loadError": "No se pudieron cargar los destinos de trap",
+      "empty": {
+        "title": "No hay destinos de trap configurados",
+        "description": "Agrega un destino de trap para reenviar notificaciones SNMP a un gestor."
+      },
+      "columns": {
+        "address": "Dirección",
+        "port": "Puerto",
+        "version": "Versión",
+        "community": "Comunidad",
+        "comment": "Comentario",
+        "actions": "Acciones"
+      }
+    },
+    "v3Users": {
+      "title": "Usuarios SNMPv3",
+      "description": "Filas v3 de /snmp/community · autenticación + cifrado por usuario. Las contraseñas son de solo escritura y nunca se muestran.",
+      "loadError": "No se pudieron cargar los usuarios SNMPv3",
+      "empty": {
+        "title": "No hay usuarios SNMPv3 definidos",
+        "description": "Agrega un usuario para habilitar consultas SNMP autenticadas y cifradas."
+      },
+      "columns": {
+        "name": "Nombre",
+        "authProtocol": "Protocolo de autenticación",
+        "encryptionProtocol": "Protocolo de cifrado",
+        "addresses": "Direcciones"
+      }
+    },
+    "settingsDialog": {
+      "title": "Editar configuración del servidor SNMP",
+      "description": "Prepara un cambio en la instancia única /snmp.",
+      "enable": "Habilitar servidor SNMP",
+      "trapCommunity": "Comunidad de trap",
+      "contact": "Contacto",
+      "location": "Ubicación",
+      "locationPlaceholder": "rack-3 / piso 2"
+    },
+    "trapDialog": {
+      "editTitle": "Editar destino de trap",
+      "addTitle": "Agregar destino de trap",
+      "description": "Prepara un cambio en /snmp/trap.",
+      "address": "Dirección",
+      "port": "Puerto",
+      "version": "Versión",
+      "community": "Comunidad",
+      "comment": "Comentario",
+      "commentPlaceholder": "NMS principal"
+    },
+    "trapDelete": {
+      "title": "Eliminar destino de trap",
+      "confirmPrefix": "¿Eliminar el trap hacia",
+      "confirmSuffix": "?"
+    },
+    "v3Dialog": {
+      "editTitle": "Editar usuario SNMPv3",
+      "addTitle": "Agregar usuario SNMPv3",
+      "description": "Las contraseñas son de solo escritura. Al editar, deja los campos de contraseña vacíos para conservar los valores existentes; escribe un nuevo valor para rotarla.",
+      "name": "Nombre",
+      "authProtocol": "Protocolo de autenticación",
+      "encryptionProtocol": "Protocolo de cifrado",
+      "authPassword": "Contraseña de autenticación",
+      "privacyPassword": "Contraseña de privacidad",
+      "passwordKeepPlaceholder": "(deja vacío para conservar la actual)",
+      "passwordMinPlaceholder": "mín. 8 caracteres",
+      "allowedAddresses": "Direcciones permitidas",
+      "comment": "Comentario",
+      "commentPlaceholder": "prometheus snmp_exporter",
+      "securityNote": "Las contraseñas nunca se vuelven a leer del dispositivo ni se almacenan en el cliente más allá del envío."
+    },
+    "v3Delete": {
+      "title": "Eliminar usuario SNMPv3",
+      "confirmPrefix": "¿Eliminar el usuario SNMPv3",
+      "confirmSuffix": "?"
+    }
+  },
+  "MikroTikHotspotTab": {
+    "loading": "Cargando hotspot de RouterOS…",
+    "common": {
+      "yes": "Sí",
+      "no": "No",
+      "default": "predeterminado"
+    },
+    "fallback": {
+      "server": "servidor",
+      "profile": "perfil"
+    },
+    "actions": {
+      "refresh": "Actualizar",
+      "addServer": "Agregar servidor",
+      "addProfile": "Agregar perfil",
+      "cancel": "Cancelar",
+      "stageCreate": "Preparar creación",
+      "stageUpdate": "Preparar actualización",
+      "stageDelete": "Preparar eliminación"
+    },
+    "columns": {
+      "name": "Nombre",
+      "interface": "Interfaz",
+      "pool": "Grupo",
+      "profile": "Perfil",
+      "enabled": "Habilitado",
+      "comment": "Comentario",
+      "actions": "Acciones",
+      "rateLimit": "Límite de tasa",
+      "sessionTimeout": "Tiempo de sesión",
+      "idleTimeout": "Tiempo de inactividad",
+      "sharedUsers": "Usuarios compartidos",
+      "user": "Usuario",
+      "ip": "IP",
+      "mac": "MAC",
+      "uptime": "Tiempo activo",
+      "server": "Servidor"
+    },
+    "fields": {
+      "name": "Nombre",
+      "interface": "Interfaz",
+      "addressPool": "Grupo de direcciones",
+      "profile": "Perfil",
+      "comment": "Comentario",
+      "rateLimit": "Límite de tasa (rx/tx)",
+      "sessionTimeout": "Tiempo de sesión",
+      "idleTimeout": "Tiempo de inactividad",
+      "sharedUsers": "Usuarios compartidos"
+    },
+    "servers": {
+      "title": "Servidores de hotspot",
+      "description": "enlaces por interfaz · CRUD completo",
+      "loadError": "Error al cargar los servidores de hotspot",
+      "emptyTitle": "Sin servidores de hotspot",
+      "emptyDescription": "No hay filas /ip/hotspot en este router."
+    },
+    "profiles": {
+      "title": "Perfiles de usuario",
+      "description": "plantillas de tasa / cuota · CRUD completo",
+      "loadError": "Error al cargar los perfiles de usuario del hotspot",
+      "emptyTitle": "Sin perfiles de usuario",
+      "emptyDescription": "No hay filas /ip/hotspot/user/profile en este router."
+    },
+    "active": {
+      "title": "Usuarios activos",
+      "description": "· sesiones en vivo · actualización cada 15s. La desconexión está prevista (cableado del adaptador pendiente).",
+      "loadError": "Error al cargar las sesiones activas",
+      "emptyTitle": "Sin sesiones activas",
+      "emptyDescription": "Ningún cliente ha iniciado sesión en el hotspot actualmente.",
+      "disconnect": "Desconectar",
+      "disconnectTooltip": "La desconexión está prevista, cableado del adaptador pendiente"
+    },
+    "aria": {
+      "editServer": "Editar servidor de hotspot {{name}}",
+      "deleteServer": "Eliminar servidor de hotspot {{name}}",
+      "editProfile": "Editar perfil de hotspot {{name}}",
+      "deleteProfile": "Eliminar perfil de hotspot {{name}}"
+    },
+    "serverDialog": {
+      "addTitle": "Agregar servidor de hotspot",
+      "editTitle": "Editar servidor de hotspot",
+      "description": "Preparar un cambio en RouterOS ``/ip/hotspot``."
+    },
+    "profileDialog": {
+      "addTitle": "Agregar perfil de usuario",
+      "editTitle": "Editar perfil de usuario",
+      "description": "Preparar un cambio en RouterOS ``/ip/hotspot/user/profile``."
+    },
+    "deleteDialog": {
+      "title": "¿Preparar eliminación?",
+      "intro": "Esto prepara una eliminación de"
+    },
+    "deleteLabel": {
+      "server": "servidor de hotspot {{name}}",
+      "profile": "perfil de usuario {{name}}"
+    },
+    "errors": {
+      "cannotUpdateServerTitle": "No se puede actualizar el servidor",
+      "serverNoId": "El servidor no tiene id de RouterOS (.id ausente).",
+      "cannotUpdateProfileTitle": "No se puede actualizar el perfil",
+      "profileNoId": "El perfil no tiene id de RouterOS (.id ausente).",
+      "cannotDeleteTitle": "No se puede eliminar",
+      "rowNoId": "La fila no tiene id de RouterOS (.id ausente)."
+    },
+    "toasts": {
+      "serverCreateStaged": "Creación de servidor de hotspot preparada",
+      "serverUpdateStaged": "Actualización de servidor de hotspot preparada",
+      "serverDeleteStaged": "Eliminación de servidor de hotspot preparada",
+      "serverCreateFailed": "Error al preparar la creación del servidor",
+      "serverUpdateFailed": "Error al preparar la actualización del servidor",
+      "serverDeleteFailed": "Error al preparar la eliminación del servidor",
+      "profileCreateStaged": "Creación de perfil de usuario preparada",
+      "profileUpdateStaged": "Actualización de perfil de usuario preparada",
+      "profileDeleteStaged": "Eliminación de perfil de usuario preparada",
+      "profileCreateFailed": "Error al preparar la creación del perfil",
+      "profileUpdateFailed": "Error al preparar la actualización del perfil",
+      "profileDeleteFailed": "Error al preparar la eliminación del perfil"
+    }
+  },
+  "MikroTikBackupTab": {
+    "loading": "Cargando copias de seguridad de RouterOS…",
+    "common": {
+      "cancel": "Cancelar"
+    },
+    "actions": {
+      "createBinary": "Crear copia binaria",
+      "exportConfig": "Exportar configuración (.rsc)",
+      "uploadBackup": "Subir copia de seguridad",
+      "refresh": "Actualizar"
+    },
+    "savedBackups": {
+      "title": "Copias de seguridad guardadas",
+      "description": "`/file` filtrado a `.backup` y `.rsc`. La restauración requiere confirmación escrita y reinicia el dispositivo con la configuración guardada."
+    },
+    "errors": {
+      "loadBackups": "No se pudieron cargar las copias de seguridad"
+    },
+    "empty": {
+      "title": "No hay copias de seguridad en el dispositivo",
+      "description": "Crea una copia binaria o exporta la configuración en ejecución para comenzar."
+    },
+    "table": {
+      "filename": "Nombre de archivo",
+      "type": "Tipo",
+      "size": "Tamaño",
+      "created": "Creado",
+      "actions": "Acciones",
+      "kindOther": "otro"
+    },
+    "rowActions": {
+      "download": "Descargar",
+      "restore": "Restaurar",
+      "delete": "Eliminar"
+    },
+    "toasts": {
+      "createSuccess": "Copia binaria en cola",
+      "createError": "No se pudo poner en cola la copia de seguridad",
+      "exportSuccess": "Exportación de texto en cola",
+      "exportError": "No se pudo poner en cola la exportación",
+      "uploadSuccess": "Subida de copia de seguridad en cola",
+      "uploadError": "No se pudo poner en cola la subida",
+      "deleteSuccess": "Eliminación de copia de seguridad en cola",
+      "deleteError": "No se pudo poner en cola la eliminación",
+      "restoreSuccess": "Restauración de copia de seguridad en cola",
+      "restoreSuccessDescription": "Tras aplicar el cambio pendiente, el dispositivo se reiniciará con la configuración restaurada.",
+      "restoreError": "No se pudo poner en cola la restauración",
+      "downloadSuccess": "{{name}} descargado",
+      "downloadError": "Error en la descarga"
+    },
+    "createDialog": {
+      "title": "Crear copia binaria",
+      "description": "Pone en cola una llamada `/system/backup/save`. El archivo `.backup` resultante se almacena en RouterOS y contiene el estado completo del sistema.",
+      "nameLabel": "Nombre de archivo (sin extensión)",
+      "namePlaceholder": "pre-actualizacion",
+      "passwordLabel": "Contraseña (opcional · cifra la copia de seguridad)",
+      "passwordPlaceholder": "(dejar vacío para no cifrar)",
+      "submit": "Poner crear en cola"
+    },
+    "exportDialog": {
+      "title": "Exportar configuración como .rsc",
+      "description": "Pone en cola una llamada `/export`. El resultado es un script de RouterOS legible guardado en un archivo `.rsc` que puedes revisar antes de reimportar.",
+      "commentLabel": "Comentario",
+      "commentPlaceholder": "instantánea de configuración",
+      "encryptedLabel": "Exportación cifrada (contraseñas y claves incluidas como texto cifrado)",
+      "submit": "Poner exportación en cola"
+    },
+    "uploadDialog": {
+      "title": "Subir copia de seguridad",
+      "description": "Sube un archivo de copia de seguridad al almacenamiento de RouterOS. El archivo se procesa como texto utf-8; para binarios `.backup`, cópialos mediante SCP / Winbox.",
+      "chooseFileLabel": "Elegir archivo",
+      "nameLabel": "Nombre de archivo de destino",
+      "namePlaceholder": "restore.rsc",
+      "charsLoaded": "{{count}} caracteres cargados",
+      "noFileSelected": "Ningún archivo seleccionado.",
+      "submit": "Poner subida en cola"
+    },
+    "deleteDialog": {
+      "title": "Eliminar copia de seguridad",
+      "descriptionPrefix": "¿Eliminar",
+      "descriptionSuffix": "del almacenamiento de RouterOS? Esto pone en cola una eliminación; aplícala desde la cola de cambios pendientes.",
+      "submit": "Poner eliminación en cola"
+    },
+    "restoreDialog": {
+      "title": "Confirmar restauración",
+      "descriptionPrefix": "Restaurar una copia de seguridad REINICIA el dispositivo con la configuración guardada, se pierde todo el estado actual. Escribe el nombre de archivo",
+      "descriptionSuffix": "para continuar.",
+      "confirmLabel": "Escribe el nombre de archivo para confirmar",
+      "passwordLabel": "Contraseña de la copia de seguridad (si la hay)",
+      "passwordPlaceholder": "(dejar vacío para copias sin cifrar)",
+      "submit": "Poner restauración en cola"
+    }
+  },
+  "GatewayVpnTab": {
+    "columns": {
+      "name": "Nombre",
+      "port": "Puerto",
+      "tunnelAddress": "Dirección del túnel",
+      "enabled": "Habilitado",
+      "publicKey": "Clave pública",
+      "allowedIps": "IP permitidas",
+      "endpoint": "Endpoint",
+      "keepalive": "Keepalive",
+      "description": "Descripción",
+      "remote": "Remoto",
+      "ike": "IKE",
+      "protocol": "Protocolo",
+      "status": "Estado",
+      "peer": "Par",
+      "lastHandshake": "Último handshake",
+      "transferRx": "Transferencia RX",
+      "transferTx": "Transferencia TX"
+    },
+    "actions": {
+      "server": "Servidor",
+      "peer": "Par",
+      "instance": "Instancia",
+      "kill": "Finalizar",
+      "connect": "Conectar",
+      "disconnect": "Desconectar",
+      "applyChanges": "Aplicar cambios"
+    },
+    "status": {
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "active": "Activo",
+      "disabled": "Deshabilitado",
+      "enabled": "Habilitado",
+      "running": "En ejecución",
+      "stopped": "Detenido"
+    },
+    "common": {
+      "yes": "Sí",
+      "no": "No"
+    },
+    "wireguard": {
+      "title": "WireGuard",
+      "description": "Servidores y pares",
+      "servers": "Servidores",
+      "peers": "Pares",
+      "empty": "Sin configuración de WireGuard"
+    },
+    "handshakes": {
+      "title": "Handshakes de WireGuard",
+      "description": "Marcas de tiempo del último handshake de cada par"
+    },
+    "openvpn": {
+      "title": "OpenVPN",
+      "summary": "{{instances}} instancias, {{sessions}} sesiones activas",
+      "instanceFallback": "Instancia {{index}}",
+      "tunnel": "Túnel",
+      "protocol": "Protocolo",
+      "port": "Puerto",
+      "local": "Local",
+      "activeSessions": "Sesiones activas",
+      "connected": "Conectado",
+      "empty": "No hay instancias de OpenVPN configuradas"
+    },
+    "ipsec": {
+      "title": "IPsec",
+      "description": "Túneles de Fase 1 y Fase 2",
+      "phase1": "Fase 1",
+      "phase2": "Fase 2",
+      "empty": "No hay túneles IPsec configurados"
+    },
+    "ipsecStatus": {
+      "title": "Estado en vivo de IPsec",
+      "description": "Estado de túneles en tiempo real desde el gateway"
+    },
+    "tailscale": {
+      "title": "Tailscale",
+      "description": "VPN en malla mediante Tailscale",
+      "enabled": "Habilitado",
+      "listenPort": "Puerto de escucha",
+      "acceptDns": "Aceptar DNS",
+      "exitNode": "Nodo de salida",
+      "subnetRoutes": "Rutas de subred",
+      "ssh": "SSH",
+      "snat": "SNAT",
+      "advertising": "Anunciando",
+      "accepting": "Aceptando",
+      "exitNodePeers": "Pares de nodo de salida"
+    },
+    "rawStatus": {
+      "title": "Estado sin procesar de VPN"
+    }
+  },
+  "GatewayListPage": {
+    "header": {
+      "title": "Puertas de enlace",
+      "subtitle": "Administra las integraciones de firewall y router"
+    },
+    "actions": {
+      "addGateway": "Agregar puerta de enlace",
+      "viewDetails": "Ver detalles",
+      "testConnection": "Probar conexión",
+      "syncNow": "Sincronizar ahora",
+      "delete": "Eliminar"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "stats": {
+      "totalGateways": "Total de puertas de enlace",
+      "online": "En línea",
+      "offlineCount": "{{count}} sin conexión",
+      "allReachable": "Todas las puertas de enlace accesibles",
+      "syncOk": "Sincronización correcta",
+      "failedCount": "{{count}} con error",
+      "platforms": "Plataformas",
+      "noGateways": "Aún no hay puertas de enlace"
+    },
+    "table": {
+      "title": "Puertas de enlace de firewall",
+      "description": "Plataformas de firewall y router integradas conectadas a FreeSDN",
+      "searchPlaceholder": "Buscar puertas de enlace..."
+    },
+    "filter": {
+      "allPlatforms": "Todas las plataformas"
+    },
+    "columns": {
+      "gateway": "Puerta de enlace",
+      "platform": "Plataforma",
+      "status": "Estado",
+      "version": "Versión",
+      "sync": "Sincronización"
+    },
+    "status": {
+      "online": "En línea",
+      "offline": "Sin conexión",
+      "unknown": "Desconocido"
+    },
+    "syncStatus": {
+      "idle": "Inactiva",
+      "syncing": "Sincronizando",
+      "success": "Sincronizada",
+      "failed": "Con error",
+      "never": "Nunca"
+    },
+    "gatewayFallback": "Puerta de enlace",
+    "toasts": {
+      "error": "Error",
+      "deleteFailed": "No se pudo eliminar la puerta de enlace",
+      "deleted": {
+        "title": "Puerta de enlace eliminada",
+        "description": "La integración de la puerta de enlace se ha eliminado."
+      },
+      "syncStarted": {
+        "title": "Sincronización iniciada",
+        "description": "Se ha activado la sincronización de la puerta de enlace."
+      },
+      "syncFailed": {
+        "title": "Error de sincronización",
+        "description": "No se pudo iniciar la sincronización"
+      },
+      "connectionOk": {
+        "title": "Conexión correcta",
+        "description": "{{hostname}} · {{version}} ({{latency}}ms)"
+      },
+      "connectionFailed": {
+        "title": "Error de conexión"
+      },
+      "testFailed": {
+        "title": "Error en la prueba",
+        "description": "La prueba de conexión falló"
+      }
+    },
+    "dialogs": {
+      "delete": {
+        "title": "Eliminar puerta de enlace",
+        "confirmPrefix": "¿Seguro que deseas eliminar",
+        "confirmSuffix": "? Esto desconectará la integración de la puerta de enlace. El dispositivo de firewall real no se verá afectado.",
+        "cancel": "Cancelar",
+        "confirm": "Eliminar"
+      }
+    }
+  },
+  "GatewayInterfacesTab": {
+    "interfaces": {
+      "title": "Interfaces de red",
+      "description": "Interfaces físicas y virtuales"
+    },
+    "vlan": {
+      "title": "Dispositivos VLAN",
+      "description": "Configuraciones de VLAN 802.1Q"
+    },
+    "lagg": {
+      "title": "LAGG (Agregación de enlaces)",
+      "description": "Grupos de interfaces agrupadas"
+    },
+    "virtualIps": {
+      "title": "IP virtuales (CARP / Alias)",
+      "description": "Alias de IP de HA y estáticas · {{count}} configuradas"
+    },
+    "ndp": {
+      "title": "Tabla NDP de IPv6",
+      "description": "Entradas del protocolo de descubrimiento de vecinos"
+    },
+    "bridges": {
+      "title": "Puentes de red",
+      "description": "Configuraciones de interfaces de puente",
+      "loading": "Cargando puentes…",
+      "empty": "No hay puentes configurados"
+    },
+    "flushArpDialog": {
+      "title": "¿Vaciar tabla ARP?",
+      "description": "¿Vaciar tabla ARP? Esto interrumpirá brevemente todas las conversaciones de capa 2 en la LAN."
+    },
+    "actions": {
+      "flushArp": "Vaciar ARP",
+      "cancel": "Cancelar"
+    },
+    "status": {
+      "up": "Activa",
+      "down": "Inactiva"
+    },
+    "columns": {
+      "name": "Nombre",
+      "status": "Estado",
+      "address": "Dirección",
+      "vlan": "VLAN",
+      "vlanTag": "Etiqueta VLAN",
+      "parent": "Padre",
+      "device": "Dispositivo",
+      "type": "Tipo",
+      "mac": "MAC",
+      "mtu": "MTU",
+      "priority": "Prioridad",
+      "description": "Descripción",
+      "protocol": "Protocolo",
+      "members": "Miembros",
+      "memberDetails": "Detalles de miembros",
+      "interface": "Interfaz",
+      "mode": "Modo",
+      "vhid": "VHID",
+      "ipv6Address": "Dirección IPv6",
+      "expire": "Caducidad",
+      "linkLocal": "Enlace local",
+      "bridgeId": "ID de puente"
+    }
+  },
+  "MikroTikVpnTab": {
+    "loading": "Cargando VPN de RouterOS…",
+    "common": {
+      "yes": "Sí",
+      "no": "No",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado"
+    },
+    "actions": {
+      "refresh": "Actualizar",
+      "editSettings": "Editar configuración",
+      "cancel": "Cancelar",
+      "stageUpdate": "Preparar actualización"
+    },
+    "fields": {
+      "enabled": "Habilitado",
+      "defaultProfile": "Perfil predeterminado",
+      "authentication": "Autenticación",
+      "ipsec": "IPsec",
+      "maxMtu": "MTU máx.",
+      "keepalive": "Keepalive"
+    },
+    "l2tp": {
+      "title": "Servidor L2TP",
+      "description": "``/interface/l2tp-server/server`` · configuración única",
+      "loadError": "No se pudo cargar el servidor L2TP",
+      "emptyTitle": "Servidor L2TP no disponible",
+      "emptyDescription": "Sin respuesta de /interface/l2tp-server/server: es posible que el paquete del servidor L2TP no esté instalado."
+    },
+    "pptp": {
+      "title": "Servidor PPTP",
+      "deprecated": "Obsoleto",
+      "description": "``/interface/pptp-server/server`` · conservado para clientes heredados · solo MS-CHAPv2; se recomienda L2TP/IPsec o WireGuard.",
+      "loadError": "No se pudo cargar el servidor PPTP",
+      "emptyTitle": "Servidor PPTP no disponible",
+      "emptyDescription": "Sin respuesta de /interface/pptp-server/server: es posible que el paquete del servidor PPTP no esté instalado."
+    },
+    "sstp": {
+      "title": "Servidor SSTP",
+      "description": "SSTP requiere un certificado TLS. El aprovisionamiento de certificados y la configuración de la fila del servidor están previstos (la pestaña de seguridad cubre hoy el almacén de certificados).",
+      "emptyTitle": "La configuración de SSTP aún no se muestra",
+      "emptyDescription": "Use el panel de Sistema / certificados para gestionar el almacén de certificados; un cuadro de diálogo de configuración específico de SSTP está previsto para una versión futura."
+    },
+    "dialog": {
+      "titleL2tp": "Editar servidor L2TP",
+      "titlePptp": "Editar servidor PPTP",
+      "descriptionL2tp": "Preparar un cambio en /interface/l2tp-server/server (único).",
+      "descriptionPptp": "Preparar un cambio en /interface/pptp-server/server (único). PPTP está obsoleto; se recomienda L2TP/IPsec o WireGuard.",
+      "enableServer": "Habilitar servidor",
+      "useIpsec": "Usar IPsec",
+      "ipsecSecretLabel": "Secreto compartido de IPsec",
+      "ipsecSecretPlaceholder": "(deje en blanco para conservar el actual; defínalo solo para rotarlo)",
+      "ipsecSecretHelp": "El secreto actual nunca se muestra. Escriba un valor nuevo solo cuando lo rote."
+    },
+    "toasts": {
+      "l2tpStaged": "Actualización del servidor L2TP preparada",
+      "l2tpStageFailed": "No se pudo preparar la actualización de L2TP",
+      "pptpStaged": "Actualización del servidor PPTP preparada",
+      "pptpStageFailed": "No se pudo preparar la actualización de PPTP"
+    }
+  },
+  "GatewayDnsTab": {
+    "common": {
+      "yes": "Sí",
+      "no": "No"
+    },
+    "overrideColumns": {
+      "host": "Host",
+      "domain": "Dominio",
+      "type": "Tipo",
+      "serverIp": "Servidor / IP",
+      "fqdn": "FQDN",
+      "description": "Descripción",
+      "enabled": "Habilitado"
+    },
+    "domainColumns": {
+      "domain": "Dominio",
+      "server": "Servidor",
+      "port": "Puerto",
+      "description": "Descripción"
+    },
+    "resolverStatus": {
+      "title": "Estado del solucionador DNS",
+      "description": "Estado en vivo del solucionador DNS Unbound desde la puerta de enlace",
+      "unavailable": "Estado de Unbound no disponible"
+    },
+    "hostOverrides": {
+      "title": "Anulaciones de host",
+      "description": "Registros DNS A/AAAA personalizados",
+      "add": "Agregar anulación",
+      "searchPlaceholder": "Buscar anulaciones de host..."
+    },
+    "domainOverrides": {
+      "title": "Anulaciones de dominio",
+      "description": "Reenvío DNS por dominio",
+      "add": "Agregar dominio"
+    },
+    "dynamicDns": {
+      "title": "DNS dinámico",
+      "description": "Cuentas DynDNS y estado de actualización (os-dyndns)",
+      "columns": {
+        "description": "Descripción",
+        "service": "Servicio",
+        "hostname": "Nombre de host",
+        "username": "Usuario",
+        "interface": "Interfaz",
+        "currentIp": "IP actual",
+        "status": "Estado"
+      },
+      "accountFallback": "Cuenta {{n}}",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "empty": "No hay cuentas de DNS dinámico configuradas. Instala os-dyndns para administrar el DNS dinámico."
+    }
+  },
+  "UniFiClientsTab": {
+    "title": "Clientes UniFi",
+    "description": {
+      "sitePrefix": "Sitio:",
+      "rest": "· Preparar bloquear / desbloquear / olvidar. Los cambios aparecen en el panel de Cambios pendientes hasta aplicarse."
+    },
+    "stageByMac": {
+      "label": "Preparar por MAC"
+    },
+    "actions": {
+      "stageBlock": "Preparar bloqueo",
+      "block": "Bloquear",
+      "stageUnblock": "Preparar desbloqueo",
+      "unblock": "Desbloquear",
+      "stageReconnect": "Preparar reconexión",
+      "reconnect": "Reconectar",
+      "stageForget": "Preparar olvido",
+      "forget": "Olvidar"
+    },
+    "ops": {
+      "block": "bloqueo",
+      "unblock": "desbloqueo",
+      "reconnect": "reconexión",
+      "forget": "olvido"
+    },
+    "error": {
+      "loadFailed": "No se pudieron cargar los clientes:",
+      "unknown": "Error desconocido"
+    },
+    "loading": "Cargando clientes…",
+    "empty": "El controlador no reportó clientes conectados. Use el formulario \"Preparar por MAC\" de arriba para preparar acciones contra un cliente específico.",
+    "blocked": "bloqueado",
+    "dialog": {
+      "title": "¿Preparar {{op}}?",
+      "descriptionPrefix": "Preparar",
+      "descriptionAgainst": "contra",
+      "descriptionSuffix": "? El cambio se aplica mediante el panel de Cambios pendientes.",
+      "cancel": "Cancelar",
+      "confirm": "Preparar {{op}}"
+    },
+    "toast": {
+      "staged": {
+        "title": "Cliente {{op}} preparado"
+      },
+      "stageFailed": {
+        "title": "No se pudo preparar el cambio"
+      },
+      "macRequired": {
+        "title": "MAC requerida",
+        "description": "Ingrese una dirección MAC de cliente antes de preparar."
+      }
+    }
+  },
+  "UniFiFirewallTab": {
+    "title": "Cortafuegos UniFi",
+    "siteLabel": "Sitio:",
+    "description": "Prepara la creación/eliminación de políticas basadas en zonas, zonas, NAT, grupos y reglas clásicas. La matriz de zonas es de solo lectura. Los cambios aparecen en el panel de Cambios Pendientes hasta que se aplican.",
+    "loading": "Cargando…",
+    "loadError": "No se pudo cargar la configuración del cortafuegos:",
+    "unknownError": "Error desconocido",
+    "unnamed": "(sin nombre)",
+    "empty": "No hay entradas para este recurso. Prepare una creación con el formulario de arriba.",
+    "matrixEmpty": "El controlador no reportó ninguna matriz de zonas.",
+    "status": {
+      "disabled": "deshabilitado"
+    },
+    "views": {
+      "policies": "Políticas",
+      "zones": "Zonas",
+      "zoneMatrix": "Matriz de zonas (solo lectura)",
+      "nat": "NAT",
+      "groups": "Grupos",
+      "rules": "Reglas (clásicas)"
+    },
+    "viewsSingular": {
+      "policies": "política",
+      "zones": "zona",
+      "nat": "regla NAT",
+      "groups": "grupo",
+      "rules": "regla"
+    },
+    "matrix": {
+      "allow": "permitir",
+      "deny": "denegar"
+    },
+    "fields": {
+      "view": "Vista",
+      "name": "Nombre",
+      "namePlaceholder": "p. ej. Permitir LAN a WAN"
+    },
+    "form": {
+      "create": "Crear {{resource}}"
+    },
+    "actions": {
+      "stageCreate": "Preparar creación",
+      "stage": "Preparar",
+      "cancel": "Cancelar"
+    },
+    "dialog": {
+      "createTitle": "¿Preparar creación?",
+      "deleteTitle": "¿Preparar eliminación?",
+      "stagePrefix": "Preparar",
+      "against": "para",
+      "suffix": ". El cambio se aplica mediante el panel de Cambios Pendientes."
+    },
+    "toast": {
+      "created": {
+        "title": "Creación de cortafuegos preparada"
+      },
+      "deleted": {
+        "title": "Eliminación de cortafuegos preparada"
+      },
+      "stageFailed": {
+        "title": "No se pudo preparar el cambio"
+      }
+    }
+  },
+  "UniFiTrafficTab": {
+    "title": "Tráfico UniFi",
+    "siteLabel": "Sitio:",
+    "description": "Prepara la creación/eliminación de reglas de tráfico, rutas de tráfico y QoS. Los cambios aparecen en el panel de Cambios Pendientes hasta que se aplican.",
+    "loading": "Cargando…",
+    "loadError": "No se pudo cargar la configuración de tráfico:",
+    "unknownError": "Error desconocido",
+    "empty": "No hay entradas para este recurso. Prepare una creación con el formulario de arriba.",
+    "status": {
+      "disabled": "deshabilitado"
+    },
+    "resources": {
+      "rules": "Reglas de tráfico",
+      "routes": "Rutas de tráfico",
+      "qos": "Reglas QoS"
+    },
+    "resourcesSingular": {
+      "rules": "regla de tráfico",
+      "routes": "ruta de tráfico",
+      "qos": "regla QoS"
+    },
+    "fields": {
+      "resource": "Recurso",
+      "name": "Nombre",
+      "namePlaceholder": "p. ej. Limitar VLAN de invitados"
+    },
+    "form": {
+      "create": "Crear {{resource}}"
+    },
+    "actions": {
+      "stageCreate": "Preparar creación",
+      "stage": "Preparar",
+      "cancel": "Cancelar"
+    },
+    "dialog": {
+      "createTitle": "¿Preparar creación?",
+      "deleteTitle": "¿Preparar eliminación?",
+      "stagePrefix": "Preparar",
+      "against": "para",
+      "suffix": ". El cambio se aplica mediante el panel de Cambios Pendientes."
+    },
+    "toast": {
+      "created": {
+        "title": "Creación de tráfico preparada"
+      },
+      "deleted": {
+        "title": "Eliminación de tráfico preparada"
+      },
+      "stageFailed": {
+        "title": "No se pudo preparar el cambio"
+      }
+    }
+  },
+  "UniFiDnsTab": {
+    "title": "DNS UniFi",
+    "siteLabel": "Sitio:",
+    "description": "Prepara la creación/eliminación de registros DNS estáticos y dinámicos. Los cambios aparecen en el panel de Cambios Pendientes hasta que se aplican.",
+    "loading": "Cargando…",
+    "loadError": "No se pudieron cargar los registros DNS:",
+    "unknownError": "Error desconocido",
+    "empty": "No hay registros de este tipo. Prepare una creación con el formulario de arriba.",
+    "status": {
+      "disabled": "deshabilitado"
+    },
+    "kinds": {
+      "static": "DNS estático",
+      "dynamic": "DNS dinámico"
+    },
+    "fields": {
+      "recordKind": "Tipo",
+      "name": "Nombre / host",
+      "namePlaceholder": "host.lan",
+      "value": "Valor / destino",
+      "valuePlaceholder": "10.0.1.50",
+      "recordType": "Tipo de registro"
+    },
+    "form": {
+      "createStatic": "Crear registro estático",
+      "createDynamic": "Crear registro dinámico"
+    },
+    "actions": {
+      "stageCreate": "Preparar creación",
+      "stage": "Preparar",
+      "cancel": "Cancelar"
+    },
+    "dialog": {
+      "createTitle": "¿Preparar creación?",
+      "deleteTitle": "¿Preparar eliminación?",
+      "stagePrefix": "Preparar",
+      "against": "para",
+      "suffix": ". El cambio se aplica mediante el panel de Cambios Pendientes."
+    },
+    "toast": {
+      "created": {
+        "title": "Creación de DNS preparada"
+      },
+      "deleted": {
+        "title": "Eliminación de DNS preparada"
+      },
+      "stageFailed": {
+        "title": "No se pudo preparar el cambio"
+      }
+    }
+  },
+  "UniFiRoutingTab": {
+    "title": "Enrutamiento UniFi",
+    "siteLabel": "Sitio:",
+    "description": "Prepara la creación/eliminación de rutas estáticas. El cambio aparece en el panel de Cambios Pendientes hasta que se aplica.",
+    "loading": "Cargando…",
+    "loadError": "No se pudieron cargar las rutas:",
+    "unknownError": "Error desconocido",
+    "empty": "No hay rutas estáticas. Prepare una creación con el formulario de arriba.",
+    "status": {
+      "disabled": "deshabilitada"
+    },
+    "fields": {
+      "name": "Nombre",
+      "namePlaceholder": "a-sucursal",
+      "network": "Red de destino",
+      "nexthop": "Siguiente salto"
+    },
+    "form": {
+      "createRoute": "Crear ruta estática"
+    },
+    "actions": {
+      "stageCreate": "Preparar creación",
+      "stage": "Preparar",
+      "cancel": "Cancelar"
+    },
+    "dialog": {
+      "createTitle": "¿Preparar creación?",
+      "deleteTitle": "¿Preparar eliminación?",
+      "stagePrefix": "Preparar",
+      "against": "para",
+      "suffix": ". El cambio se aplica mediante el panel de Cambios Pendientes."
+    },
+    "toast": {
+      "created": {
+        "title": "Creación de ruta preparada"
+      },
+      "deleted": {
+        "title": "Eliminación de ruta preparada"
+      },
+      "stageFailed": {
+        "title": "No se pudo preparar el cambio"
+      }
+    }
+  },
+  "UniFiVpnTab": {
+    "title": "VPN UniFi",
+    "siteLabel": "Sitio:",
+    "description": "Prepara la creación/eliminación de redes VPN. Los detalles de pares y claves se ajustan en la vista previa del panel.",
+    "loading": "Cargando…",
+    "loadError": "No se pudieron cargar las redes VPN:",
+    "unknownError": "Error desconocido",
+    "empty": "No hay redes VPN. Prepare una creación con el formulario de arriba.",
+    "status": {
+      "disabled": "deshabilitada"
+    },
+    "fields": {
+      "name": "Nombre",
+      "namePlaceholder": "sitio-a-sitio-central",
+      "vpnType": "Tipo de VPN"
+    },
+    "form": {
+      "createVpn": "Crear red VPN"
+    },
+    "actions": {
+      "stageCreate": "Preparar creación",
+      "stage": "Preparar",
+      "cancel": "Cancelar"
+    },
+    "dialog": {
+      "createTitle": "¿Preparar creación?",
+      "deleteTitle": "¿Preparar eliminación?",
+      "stagePrefix": "Preparar",
+      "against": "para",
+      "suffix": ". El cambio se aplica mediante el panel de Cambios Pendientes."
+    },
+    "toast": {
+      "created": {
+        "title": "Creación de VPN preparada"
+      },
+      "deleted": {
+        "title": "Eliminación de VPN preparada"
+      },
+      "stageFailed": {
+        "title": "No se pudo preparar el cambio"
+      }
+    }
+  },
+  "UniFiSwitchTab": {
+    "title": "Puertos de switch UniFi",
+    "siteLabel": "Sitio:",
+    "description": "Prepara PoE, perfil, renombrado y reinicio por puerto. Todas las acciones se preparan contra una MAC de switch + puerto.",
+    "loading": "Cargando…",
+    "loadError": "No se pudieron cargar los switches:",
+    "unknownError": "Error desconocido",
+    "empty": "No hay switches adoptados. Prepare acciones contra una MAC de switch con el formulario de arriba.",
+    "portLabel": "puerto {{port}}",
+    "portShort": "P{{port}}",
+    "portCount": "{{count}} puertos",
+    "status": {
+      "disabled": "deshabilitado"
+    },
+    "fields": {
+      "mac": "MAC del switch",
+      "port": "Puerto",
+      "poeMode": "Modo PoE",
+      "profileId": "ID de perfil de puerto",
+      "profileIdPlaceholder": "ObjectID de Mongo",
+      "portName": "Nombre del puerto",
+      "portNamePlaceholder": "Enlace ascendente"
+    },
+    "form": {
+      "stageByMac": "Preparar por MAC de switch + puerto"
+    },
+    "operations": {
+      "set_poe": "Establecer PoE",
+      "port_profile": "Establecer perfil de puerto",
+      "power_cycle": "Reiniciar puerto",
+      "update_port": "Actualizar puerto"
+    },
+    "actions": {
+      "stagePoe": "Preparar PoE",
+      "stageProfile": "Preparar perfil",
+      "stageUpdate": "Preparar actualización",
+      "stagePowerCycle": "Preparar reinicio",
+      "select": "Seleccionar",
+      "stage": "Preparar",
+      "cancel": "Cancelar"
+    },
+    "dialog": {
+      "title": "¿{{operation}}?",
+      "stagePrefix": "Preparar",
+      "against": "contra",
+      "onPort": "en el puerto",
+      "suffix": ". El cambio se aplica mediante el panel de Cambios Pendientes.",
+      "powerCyclePrefix": "Esto",
+      "powerCycleWord": "interrumpe el enlace",
+      "powerCycleSuffix": "en ese puerto y requiere escribir APPLY en el panel."
+    },
+    "toast": {
+      "staged": "Switch {{kind}} preparado",
+      "stageFailed": "No se pudo preparar el cambio"
+    }
+  },
+  "UniFiPortProfilesTab": {
+    "title": "Perfiles de puerto UniFi",
+    "siteLabel": "Sitio:",
+    "description": "Prepara la creación/eliminación de perfiles de puerto. El reenvío, la VLAN y el PoE se ajustan en la vista previa del panel.",
+    "loading": "Cargando…",
+    "loadError": "No se pudieron cargar los perfiles de puerto:",
+    "unknownError": "Error desconocido",
+    "empty": "No hay perfiles de puerto. Prepare una creación con el formulario de arriba.",
+    "fields": {
+      "name": "Nombre",
+      "namePlaceholder": "Todos / Nativo"
+    },
+    "form": {
+      "createProfile": "Crear perfil de puerto"
+    },
+    "actions": {
+      "stageCreate": "Preparar creación",
+      "stage": "Preparar",
+      "cancel": "Cancelar"
+    },
+    "dialog": {
+      "createTitle": "¿Preparar creación?",
+      "deleteTitle": "¿Preparar eliminación?",
+      "stagePrefix": "Preparar",
+      "against": "para",
+      "suffix": ". El cambio se aplica mediante el panel de Cambios Pendientes."
+    },
+    "toast": {
+      "created": {
+        "title": "Creación de perfil de puerto preparada"
+      },
+      "deleted": {
+        "title": "Eliminación de perfil de puerto preparada"
+      },
+      "stageFailed": {
+        "title": "No se pudo preparar el cambio"
+      }
+    }
+  },
+  "UniFiRadiosTab": {
+    "title": "Radios UniFi",
+    "siteLabel": "Sitio:",
+    "description": "Prepara canal, potencia TX y ancho por radio en los AP. Los campos vacíos se omiten de la carga.",
+    "loading": "Cargando…",
+    "loadError": "No se pudieron cargar las radios:",
+    "unknownError": "Error desconocido",
+    "empty": "No hay AP con radios. Prepare una actualización contra una MAC de AP con el formulario de arriba.",
+    "bands": {
+      "ng": "2,4 GHz (ng)",
+      "na": "5 GHz (na)",
+      "6e": "6 GHz (6e)"
+    },
+    "fields": {
+      "mac": "MAC del AP",
+      "band": "Banda",
+      "channel": "Canal",
+      "channelPlaceholder": "auto / 36",
+      "width": "Ancho de canal (MHz)",
+      "txPowerMode": "Modo de potencia TX",
+      "txPower": "Potencia TX (dBm)",
+      "txPowerPlaceholder": "p. ej. 20",
+      "unset": "(sin definir)"
+    },
+    "form": {
+      "stageUpdate": "Preparar actualización de radio"
+    },
+    "actions": {
+      "stageUpdate": "Preparar actualización",
+      "select": "Seleccionar",
+      "stage": "Preparar",
+      "cancel": "Cancelar"
+    },
+    "dialog": {
+      "title": "¿Preparar actualización de radio?",
+      "stagePrefix": "Preparar",
+      "against": "contra",
+      "suffix": ". El cambio se aplica mediante el panel de Cambios Pendientes."
+    },
+    "toast": {
+      "staged": {
+        "title": "Actualización de radio preparada"
+      },
+      "stageFailed": {
+        "title": "No se pudo preparar el cambio"
+      }
+    }
+  },
+  "UniFiWlanGroupsTab": {
+    "title": "Grupos de WLAN UniFi",
+    "siteLabel": "Sitio:",
+    "description": "Prepara la creación/eliminación de grupos de WLAN. La pertenencia de SSID se asigna en la vista previa del panel.",
+    "loading": "Cargando…",
+    "loadError": "No se pudieron cargar los grupos de WLAN:",
+    "unknownError": "Error desconocido",
+    "empty": "No hay grupos de WLAN. Prepare una creación con el formulario de arriba.",
+    "wlanCount": "{{count}} SSIDs",
+    "fields": {
+      "name": "Nombre",
+      "namePlaceholder": "Predeterminado"
+    },
+    "form": {
+      "createGroup": "Crear grupo de WLAN"
+    },
+    "actions": {
+      "stageCreate": "Preparar creación",
+      "stage": "Preparar",
+      "cancel": "Cancelar"
+    },
+    "dialog": {
+      "createTitle": "¿Preparar creación?",
+      "deleteTitle": "¿Preparar eliminación?",
+      "stagePrefix": "Preparar",
+      "against": "para",
+      "suffix": ". El cambio se aplica mediante el panel de Cambios Pendientes."
+    },
+    "toast": {
+      "created": {
+        "title": "Creación de grupo de WLAN preparada"
+      },
+      "deleted": {
+        "title": "Eliminación de grupo de WLAN preparada"
+      },
+      "stageFailed": {
+        "title": "No se pudo preparar el cambio"
+      }
+    }
+  },
+  "GatewayRoutingTab": {
+    "staticRoutes": {
+      "title": "Rutas estáticas",
+      "description": "Rutas configuradas manualmente",
+      "addRoute": "Agregar ruta",
+      "columns": {
+        "network": "Red",
+        "gateway": "Puerta de enlace",
+        "description": "Descripción",
+        "active": "Activa"
+      }
+    },
+    "routingTable": {
+      "title": "Tabla de enrutamiento",
+      "description": "Tabla de enrutamiento completa del kernel",
+      "searchPlaceholder": "Buscar rutas...",
+      "columns": {
+        "destination": "Destino",
+        "gateway": "Puerta de enlace",
+        "interface": "Interfaz",
+        "flags": "Indicadores",
+        "type": "Tipo"
+      }
+    },
+    "arpTable": {
+      "title": "Tabla ARP",
+      "description": "Asignaciones de direcciones IP a MAC",
+      "searchPlaceholder": "Buscar ARP...",
+      "permanent": "Permanente",
+      "dynamic": "Dinámica",
+      "columns": {
+        "ip": "Dirección IP",
+        "mac": "MAC",
+        "hostname": "Nombre de host",
+        "interface": "Interfaz",
+        "manufacturer": "Fabricante",
+        "type": "Tipo"
+      }
+    }
+  },
+  "GatewayDiagnosticsTab": {
+    "diagnostics": {
+      "title": "Diagnósticos de red",
+      "description": "Ejecuta ping, traceroute y consultas DNS desde la puerta de enlace",
+      "hostPlaceholder": "Ingresa nombre de host o IP (p. ej. 8.8.8.8, google.com)"
+    },
+    "actions": {
+      "ping": "Ping",
+      "traceroute": "Traceroute",
+      "dnsLookup": "Consulta DNS"
+    },
+    "results": {
+      "ping": "Resultado de ping",
+      "traceroute": "Resultado de traceroute",
+      "dnsLookup": "Resultado de consulta DNS"
+    },
+    "connections": {
+      "title": "Conexiones activas (estados PF)",
+      "description": "Conexiones de red actuales rastreadas por el firewall",
+      "searchPlaceholder": "Buscar conexiones...",
+      "columns": {
+        "protocol": "Protocolo",
+        "source": "Origen",
+        "destination": "Destino",
+        "state": "Estado",
+        "direction": "Dirección",
+        "bytes": "Bytes"
+      }
+    }
+  },
+  "UniFiRadiusTab": {
+    "title": "Usuarios RADIUS",
+    "siteLabel": "Sitio:",
+    "description": "Prepara la creación/eliminación de usuarios RADIUS integrados (WPA-Enterprise + autenticación de puertos). Los cambios se aplican desde el panel de Cambios pendientes.",
+    "form": { "create": "Preparar un nuevo usuario RADIUS" },
+    "fields": {
+      "name": "Usuario",
+      "namePlaceholder": "p. ej. alice",
+      "password": "Contraseña",
+      "passwordPlaceholder": "secreto RADIUS"
+    },
+    "actions": { "stageCreate": "Preparar creación", "cancel": "Cancelar", "stage": "Preparar" },
+    "loadError": "No se pudieron cargar los usuarios RADIUS:",
+    "unknownError": "Error desconocido",
+    "loading": "Cargando usuarios RADIUS…",
+    "empty": "No hay usuarios RADIUS en este controlador. Usa el formulario de arriba para preparar uno.",
+    "toast": {
+      "created": { "title": "Creación de usuario RADIUS preparada" },
+      "deleted": { "title": "Eliminación de usuario RADIUS preparada" },
+      "stageFailed": { "title": "No se pudo preparar el cambio" }
+    },
+    "dialog": {
+      "createTitle": "¿Preparar usuario RADIUS?",
+      "deleteTitle": "¿Preparar eliminación de usuario RADIUS?",
+      "stagePrefix": "Preparar",
+      "against": "para",
+      "suffix": "? El cambio se aplica desde el panel de Cambios pendientes."
+    }
+  },
+  "UniFiHotspotTab": {
+    "title": "Hotspot",
+    "siteLabel": "Sitio:",
+    "description": "Prepara vales de invitado y operadores del portal. Los cambios se aplican desde el panel de Cambios pendientes.",
+    "kinds": { "voucher": "Vales", "operator": "Operadores" },
+    "form": { "createVoucher": "Generar vales de invitado", "createOperator": "Preparar un operador del portal" },
+    "fields": {
+      "kind": "Recurso",
+      "count": "Cantidad",
+      "expireMinutes": "Caduca (min)",
+      "quota": "Usos",
+      "note": "Nota",
+      "notePlaceholder": "etiqueta opcional",
+      "name": "Usuario",
+      "password": "Contraseña"
+    },
+    "actions": {
+      "stageVoucher": "Preparar vales",
+      "stageOperator": "Preparar operador",
+      "cancel": "Cancelar",
+      "stage": "Preparar"
+    },
+    "loadError": "No se pudieron cargar los datos del hotspot:",
+    "unknownError": "Error desconocido",
+    "loading": "Cargando…",
+    "empty": "Aún no hay nada. Usa el formulario de arriba para preparar una creación.",
+    "toast": {
+      "created": { "title": "Creación de hotspot preparada" },
+      "deleted": { "title": "Eliminación de hotspot preparada" },
+      "stageFailed": { "title": "No se pudo preparar el cambio" }
+    },
+    "dialog": {
+      "createTitle": "¿Preparar creación de hotspot?",
+      "deleteTitle": "¿Preparar eliminación de hotspot?",
+      "createBody": "¿Preparar esta creación de hotspot? El cambio se aplica desde el panel de Cambios pendientes.",
+      "deleteBody": "¿Preparar la eliminación de {{label}}? El cambio se aplica desde el panel de Cambios pendientes."
+    }
+  },
+  "UniFiControllerPage": {
+    "subtitle": "Red UniFi en {{host}}:{{port}} · sitio={{site}}",
+    "actions": {
+      "back": "Atrás"
+    },
+    "tabs": {
+      "clients": "Clientes",
+      "devices": "Dispositivos",
+      "wlans": "WLANs",
+      "networks": "Redes",
+      "firewall": "Cortafuegos",
+      "traffic": "Tráfico",
+      "dns": "DNS",
+      "routing": "Enrutamiento",
+      "vpn": "VPN",
+      "switch": "Puertos de switch",
+      "portProfiles": "Perfiles de puerto",
+      "radios": "Radios",
+      "wlanGroups": "Grupos de WLAN",
+      "radius": "RADIUS",
+      "hotspot": "Hotspot"
+    },
+    "errors": {
+      "missingId": "Falta el id del controlador.",
+      "loadFailed": "No se pudo cargar el controlador:",
+      "unknown": "Error desconocido",
+      "notUnifi": {
+        "before": "El controlador",
+        "middle": "no es un controlador UniFi (tipo=",
+        "after": ")."
+      }
+    }
+  },
+  "GatewaySyncTab": {
+    "title": "Historial de sincronización",
+    "description": "Eventos de sincronización recientes",
+    "actions": {
+      "syncNow": "Sincronizar ahora"
+    }
+  }
+}

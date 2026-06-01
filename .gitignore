@@ -1,0 +1,408 @@
+# =============================================================================
+# FreeSDN v2 Git Ignore
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Python / Backend
+# -----------------------------------------------------------------------------
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+!frontend/src/lib/
+!frontend/src/lib/**
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+.env/
+backend/venv/
+backend/.venv/
+.python-version
+
+# pip
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+pytest_cache/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# Linting
+.ruff_cache/
+.ruff/
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat.pid
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# -----------------------------------------------------------------------------
+# Node.js / Frontend
+# -----------------------------------------------------------------------------
+
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+
+# Build outputs
+frontend/dist/
+frontend/build/
+backend/dist/
+.next/
+out/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+jspm_packages/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Optional npm cache
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Vite
+*.local
+.vite/
+
+# Parcel
+.parcel-cache/
+
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+yarn.lock
+.pnp.*
+
+# pnpm
+pnpm-lock.yaml
+
+# Turbo
+.turbo
+
+# Vercel
+.vercel
+
+# Storybook
+storybook-static/
+
+# -----------------------------------------------------------------------------
+# IDE / Editor
+# -----------------------------------------------------------------------------
+
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# VS Code - ignore everything except recommended extensions
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# -----------------------------------------------------------------------------
+# Environment & Secrets (CRITICAL - NEVER COMMIT)
+# -----------------------------------------------------------------------------
+
+.env
+.env.*
+!.env.example
+!.env.sample
+# Committed tier presets (knobs only, placeholder secrets). The real
+# .env.lite / .env.pro / .env.max / .env.dev (with secrets) stay ignored.
+!.env.*.example
+*.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# API Keys & Tokens (patterns)
+**/api_key*
+**/apikey*
+**/*.secret
+**/*_secret.*
+**/secret.json
+**/secret.yaml
+**/secret.yml
+!**/*.example
+!**/secret.example
+
+# Allow source code files that match the above patterns
+!backend/app/models/api_keys.py
+!backend/app/api/v1/endpoints/api_keys.py
+!frontend/src/pages/settings/APIKeysTab.tsx
+
+# Private Keys & Certificates
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.cer
+id_rsa*
+id_ed25519*
+*.ppk
+
+# Secrets directories (anchored to v2 root only).
+#
+# ``secrets/`` is kept in version control as a mount point for the
+# pg-backup container's GPG public key - only README.md / .gitkeep /
+# .gitignore inside it are tracked; everything else (including
+# operator-supplied public/private keys) is ignored by the inner
+# ``secrets/.gitignore``.
+secrets/*
+!secrets/README.md
+!secrets/.gitkeep
+!secrets/.gitignore
+/private/
+/credentials/
+/.secrets/
+
+# -----------------------------------------------------------------------------
+# Database & Data
+# -----------------------------------------------------------------------------
+
+*.db
+*.sqlite
+*.sqlite3
+data/
+backend/data/
+
+# PostgreSQL
+*.sql.gz
+*.dump
+*.backup
+pg_dump*
+
+# Redis
+dump.rdb
+*.rdb
+
+# MongoDB
+*.bson
+
+# -----------------------------------------------------------------------------
+# Logs
+# -----------------------------------------------------------------------------
+
+/logs/
+*.log
+server.log
+backend/server.log
+access.log
+error.log
+
+# -----------------------------------------------------------------------------
+# OS Generated
+# -----------------------------------------------------------------------------
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# -----------------------------------------------------------------------------
+# Docker
+# -----------------------------------------------------------------------------
+
+docker-compose.override.yml
+docker-compose.local.yml
+# Generated compose artifact — may embed concrete local secrets. Never commit it.
+composed.yml
+.docker/
+
+# SSL certificates and Let's Encrypt state (generated, never commit)
+docker/ssl/*
+!docker/ssl/.gitkeep
+docker/certbot/
+
+# -----------------------------------------------------------------------------
+# Testing
+# -----------------------------------------------------------------------------
+
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+playwright/.cache/
+
+# -----------------------------------------------------------------------------
+# Build Artifacts
+# -----------------------------------------------------------------------------
+
+*.tar.gz
+*.zip
+*.rar
+
+# Compiled binaries
+*.exe
+*.dll
+*.dylib
+
+# -----------------------------------------------------------------------------
+# Temporary Files
+# -----------------------------------------------------------------------------
+
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+
+# -----------------------------------------------------------------------------
+# Documentation Build
+# -----------------------------------------------------------------------------
+
+docs/_build/
+site/
+
+# -----------------------------------------------------------------------------
+# Misc
+# -----------------------------------------------------------------------------
+
+# Uploaded files
+uploads/
+static/uploads/
+
+# Local scripts
+scripts/local/
+*.local.sh
+*.local.ps1
+
+# Security audit results (generated)
+scripts/.security-audit-results.json
+
+# -----------------------------------------------------------------------------
+# Project-Specific: Dev/Probe/Tool Files (NEVER COMMIT)
+# -----------------------------------------------------------------------------
+
+# Local-only dev tools & scratch scripts (never committed)
+backend/tools/
+backend/.tmp_omada_ref/
+backend/probe_apis.py
+backend/login.json
+backend/reset_pw.py
+backend/verify_db.sh
+
+# Local-only test/probe scripts (not part of the test suite)
+backend/test_bulk_connect.sh
+backend/test_e2e.sh
+backend/test_gs_probe.py
+backend/test_persist.py
+
+# Celery runtime directories
+backend/celerybeat/
+celerybeat/
+
+# Windows virtual environment
+.venv-win/
+backend/.venv-win/
+
+# Dev seed data
+seed_incidents.sql
+
+# Duplicate / generated config files (authoritative versions are .ts)
+frontend/vite.config.js
+frontend/vite.config.d.ts
+frontend/tailwind.config.js
+

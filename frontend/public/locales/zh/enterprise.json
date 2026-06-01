@@ -1,0 +1,1497 @@
+{
+  "AlertRulesPage": {
+    "header": {
+      "title": "告警规则引擎",
+      "description": "配置告警规则、管理触发的告警并设置通知渠道"
+    },
+    "actions": {
+      "alertsConsole": "告警控制台",
+      "evaluateNow": "立即评估",
+      "newRule": "新建规则",
+      "editRule": "编辑规则",
+      "cancel": "取消",
+      "saving": "正在保存...",
+      "updateRule": "更新规则",
+      "createRule": "创建规则",
+      "acknowledge": "确认",
+      "resolve": "解决",
+      "close": "关闭"
+    },
+    "errorBanner": {
+      "message": "部分数据加载失败，结果可能不完整。"
+    },
+    "stats": {
+      "activeRules": "启用的规则",
+      "firingAlerts": "触发的告警",
+      "alerts24h": "告警（24 小时）",
+      "criticalFiring": "严重告警触发"
+    },
+    "toolbar": {
+      "searchPlaceholder": "搜索规则、告警、提供商…",
+      "allStatuses": "所有状态",
+      "active": "启用",
+      "disabled": "已禁用",
+      "clearFilters": "清除筛选"
+    },
+    "tabs": {
+      "rules": "规则（{{count}}）",
+      "alerts": "告警（{{count}}）",
+      "channels": "通知渠道（{{count}}）"
+    },
+    "ruleColumns": {
+      "rule": "规则",
+      "type": "类型",
+      "severity": "严重程度",
+      "status": "状态",
+      "channels": "渠道",
+      "scope": "范围",
+      "fired": "已触发",
+      "lastEvaluated": "上次评估"
+    },
+    "alertColumns": {
+      "severity": "严重程度",
+      "title": "标题",
+      "status": "状态",
+      "count": "次数",
+      "notified": "已通知",
+      "fired": "已触发"
+    },
+    "common": {
+      "none": "无",
+      "never": "从不"
+    },
+    "confirm": {
+      "deleteRule": "删除规则“{{name}}”？",
+      "deleteRules": "删除 {{count}} 条规则？"
+    },
+    "emptyRules": {
+      "title": "未找到规则",
+      "description": "创建第一条告警规则以开始使用。",
+      "searchDescription": "没有规则匹配你的搜索。"
+    },
+    "emptyAlerts": {
+      "title": "一切正常",
+      "description": "未找到基于规则的告警。"
+    },
+    "itemNames": {
+      "rules": "规则",
+      "rule": "规则",
+      "alerts": "告警"
+    },
+    "bulkActions": {
+      "enable": "启用",
+      "disable": "禁用",
+      "delete": "删除"
+    },
+    "dialog": {
+      "createTitle": "创建告警规则",
+      "editTitle": "编辑告警规则"
+    },
+    "toast": {
+      "errorTitle": "错误",
+      "createFailed": "创建规则失败",
+      "updateFailed": "更新规则失败",
+      "deleteFailed": "删除规则失败",
+      "toggleFailed": "切换规则状态失败",
+      "acknowledgeFailed": "确认告警失败",
+      "resolveFailed": "解决告警失败",
+      "evaluationFailed": "评估失败",
+      "verificationFailed": "验证失败",
+      "providerVerifiedTitle": "提供商已验证",
+      "providerVerifiedDesc": "连接检查通过。"
+    },
+    "channels": {
+      "email": "电子邮件",
+      "slack": "Slack",
+      "sms": "SMS",
+      "webhook": "Webhook",
+      "teams": "Microsoft Teams",
+      "inApp": "应用内",
+      "inAppNotifications": "应用内通知"
+    },
+    "channelsTab": {
+      "notConfigured": "未配置",
+      "activeCount": "{{enabled}}/{{count}} 已启用",
+      "noProvidersTitle": "没有通知提供商",
+      "noProvidersDescription": "配置通知提供商以通过电子邮件、Slack、SMS、Webhook 等启用告警通知。提供商在系统设置中管理。",
+      "configureProviders": "配置提供商",
+      "providerCount": "{{count}} 个提供商",
+      "default": "默认",
+      "test": "测试",
+      "availableTypesTitle": "可用的提供商类型",
+      "availableTypesDescription": "这些通知提供商类型可在系统设置中进行配置。"
+    },
+    "ruleTypes": {
+      "threshold": "阈值",
+      "pattern": "模式",
+      "anomaly": "异常"
+    },
+    "severities": {
+      "info": "信息",
+      "low": "低",
+      "warning": "警告",
+      "high": "高",
+      "critical": "严重",
+      "criticalOnly": "仅严重"
+    },
+    "scopes": {
+      "organization": "组织",
+      "site": "站点",
+      "deviceGroup": "设备组",
+      "device": "设备"
+    },
+    "operators": {
+      "greaterThan": "大于",
+      "greaterOrEqual": "大于或等于",
+      "lessThan": "小于",
+      "lessOrEqual": "小于或等于",
+      "equal": "等于",
+      "notEqual": "不等于"
+    },
+    "form": {
+      "dialogDescription": "配置规则条件、严重程度和通知渠道。",
+      "basicInformation": "基本信息",
+      "ruleName": "规则名称 *",
+      "ruleNamePlaceholder": "例如 CPU 过高告警",
+      "description": "描述",
+      "descriptionPlaceholder": "可选的规则监控内容描述...",
+      "type": "类型",
+      "severity": "严重程度",
+      "scope": "范围",
+      "conditions": "条件",
+      "metric": "指标",
+      "metricThresholdPlaceholder": "例如 cpu_utilization、memory_percent、packet_loss",
+      "metricAnomalyPlaceholder": "例如 traffic_volume、error_rate",
+      "operator": "运算符",
+      "thresholdValue": "阈值",
+      "eventType": "事件类型",
+      "eventTypePlaceholder": "例如 device.offline、link.down",
+      "minimumCount": "最小次数",
+      "timeWindow": "时间窗口（秒）",
+      "anomalyDescription": "异常检测使用机器学习来识别异常行为模式。配置要监控的指标，系统将自动检测离群值。",
+      "timingBehavior": "时间与行为",
+      "checkInterval": "检查间隔（秒）",
+      "checkIntervalHint": "评估频率",
+      "forDuration": "持续时长（秒）",
+      "forDurationHint": "必须持续满足此时长才会触发",
+      "cooldown": "冷却时间（秒）",
+      "cooldownHint": "再次触发之间的等待时间",
+      "dedupeWindow": "去重窗口（秒）",
+      "dedupeWindowHint": "在此窗口内将相同的告警分组",
+      "autoResolve": "条件恢复时自动解决",
+      "notifyOnResolve": "解决时发送通知",
+      "notificationChannels": "通知渠道",
+      "notificationChannelsHint": "选择此规则触发时应通知的渠道。在下方配置各渠道的具体设置。",
+      "recipients": "收件人（用逗号分隔）",
+      "minSeverityEmail": "电子邮件的最低严重程度",
+      "slackChannel": "Slack 频道",
+      "mention": "提及",
+      "mentionPlaceholder": "@oncall、@channel · 留空表示不提及",
+      "phoneNumbers": "电话号码（用逗号分隔）",
+      "minSeveritySms": "SMS 的最低严重程度",
+      "webhookUrl": "Webhook URL",
+      "httpMethod": "HTTP 方法",
+      "secretHeader": "密钥请求头",
+      "secretHeaderPlaceholder": "可选的认证密钥",
+      "customHeaders": "自定义请求头（JSON）",
+      "teamsWebhookUrl": "Teams Webhook URL",
+      "inAppHint": "应用内通知将显示在侧边栏徽标和通知中心。无需额外配置。",
+      "noProviderConfigured": "未配置提供商",
+      "tags": "标签（用逗号分隔）"
+    },
+    "detail": {
+      "status": "状态",
+      "occurrences": "发生次数",
+      "notificationsSent": "已发送通知",
+      "lastNotified": "上次通知",
+      "acknowledged": "已确认",
+      "resolved": "已解决",
+      "message": "消息",
+      "tags": "标签",
+      "details": "详情"
+    }
+  },
+  "BulkOperationsPage": {
+    "title": "批量操作",
+    "description": "通过分阶段发布在多台设备上推送配置、重启或更新固件",
+    "searchPlaceholder": "搜索批量操作…",
+    "itemName": "操作",
+    "itemNamePlural": "操作",
+    "status": {
+      "pending": "待处理",
+      "running": "运行中",
+      "paused": "已暂停",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消",
+      "rollingBack": "回滚中",
+      "rolledBack": "已回滚"
+    },
+    "errorState": {
+      "message": "加载批量操作失败"
+    },
+    "actions": {
+      "newOperation": "新建操作",
+      "details": "详情",
+      "cancel": "取消",
+      "creating": "创建中...",
+      "createAndRun": "创建并运行"
+    },
+    "stats": {
+      "totalJobs": {
+        "title": "任务总数",
+        "description": "所有操作"
+      },
+      "running": {
+        "title": "运行中",
+        "description": "进行中"
+      },
+      "completed": {
+        "title": "已完成",
+        "description": "成功"
+      },
+      "failed": {
+        "title": "失败",
+        "description": "失败或已回滚"
+      }
+    },
+    "filters": {
+      "allStatuses": "所有状态",
+      "clear": "清除筛选"
+    },
+    "columns": {
+      "jobId": "任务 ID",
+      "operation": "操作",
+      "status": "状态",
+      "progress": "进度",
+      "stage": "阶段",
+      "created": "创建时间"
+    },
+    "table": {
+      "failedCount": "{{count}} 个失败",
+      "stage": "阶段 {{stage}}"
+    },
+    "bulkActions": {
+      "cancelRunning": "取消运行中"
+    },
+    "createDialog": {
+      "title": "新建批量操作",
+      "description": "在一组设备上推送配置、重启设备或触发固件更新。",
+      "operationType": "操作类型",
+      "targetScope": "目标范围",
+      "scopeId": "范围 ID",
+      "scopeIdPlaceholder": "站点/组的 UUID",
+      "deviceType": "设备类型（可选）",
+      "tag": "标签",
+      "tagPlaceholder": "floor-3",
+      "deviceIds": "设备 ID",
+      "deviceIdsPlaceholder": "粘贴设备 UUID，每行一个或用逗号分隔",
+      "deviceIdsHint": "输入设备 UUID，使用换行或逗号分隔（最多 500 个）。",
+      "configPayload": "配置负载（JSON）"
+    },
+    "operations": {
+      "pushConfig": "推送配置",
+      "reboot": "重启",
+      "firmwareUpdate": "固件更新"
+    },
+    "scopes": {
+      "site": "站点",
+      "deviceGroup": "设备组",
+      "tag": "标签",
+      "deviceList": "设备列表"
+    },
+    "deviceTypes": {
+      "all": "所有类型",
+      "accessPoint": "接入点",
+      "switch": "交换机",
+      "router": "路由器"
+    },
+    "strategies": {
+      "immediate": "立即",
+      "staged": "分阶段"
+    },
+    "rollout": {
+      "title": "发布策略",
+      "failureThreshold": "失败阈值 (%)",
+      "autoRollback": "自动回滚",
+      "stages": "阶段（JSON）",
+      "stagesHint": "每个阶段："
+    },
+    "detailsDialog": {
+      "title": "操作详情",
+      "jobId": "任务 ID",
+      "status": "状态",
+      "operation": "操作",
+      "stage": "阶段",
+      "progress": "进度",
+      "failed": "{{count}} 个失败",
+      "skipped": "{{count}} 个已跳过（无访问权限）",
+      "created": "创建时间",
+      "started": "开始时间",
+      "finished": "完成时间",
+      "error": "错误"
+    },
+    "toasts": {
+      "unknownError": "未知错误",
+      "error": "错误",
+      "invalidJson": "JSON 无效",
+      "createFailed": "创建批量操作失败",
+      "cancelFailed": "取消批量操作失败",
+      "cancelRequested": "已请求取消",
+      "queued": {
+        "title": "批量操作已加入队列",
+        "description": "已下发 {{operation}}（{{count}} 台设备）"
+      },
+      "nothingToCancel": {
+        "title": "无可取消项",
+        "description": "所选操作已完成。"
+      },
+      "bulkCancel": {
+        "title": "批量取消完成",
+        "description": "已取消 {{ok}} 个",
+        "descriptionWithFailures": "已取消 {{ok}} 个，{{failed}} 个失败"
+      }
+    }
+  },
+  "ActiveAlertsPanel": {
+    "title": "活动告警",
+    "error": "加载活动告警失败。",
+    "empty": "暂无触发的告警。",
+    "fallbackTitle": "告警",
+    "viewAll": "查看所有告警",
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{minutes}} 分钟前",
+      "hoursAgo": "{{hours}} 小时前",
+      "daysAgo": "{{days}} 天前"
+    }
+  },
+  "DeviceHealthDrawer": {
+    "title": "设备健康详情",
+    "loading": "加载中...",
+    "error": "无法加载设备健康数据。",
+    "site": "站点",
+    "notAvailable": "不适用",
+    "componentScores": "组件评分",
+    "scores": {
+      "reachability": "可达性",
+      "latency": "延迟",
+      "configDrift": "配置漂移",
+      "errorRate": "错误率",
+      "utilization": "利用率",
+      "firmware": "固件"
+    },
+    "scoreHistory": "评分历史",
+    "scoreLabel": "评分",
+    "lastUpdated": "最后更新"
+  },
+  "DeviceHealthTable": {
+    "title": "设备健康状况",
+    "common": {
+      "notAvailable": "不适用"
+    },
+    "allTypes": "所有类型",
+    "statusOptions": {
+      "all": "所有状态",
+      "healthy": "健康",
+      "warning": "警告",
+      "degraded": "降级",
+      "critical": "严重"
+    },
+    "errorLoading": "无法加载设备健康数据。",
+    "empty": "没有设备符合当前筛选条件。",
+    "headers": {
+      "device": "设备",
+      "site": "站点",
+      "type": "类型",
+      "status": "状态",
+      "updated": "更新时间"
+    },
+    "columns": {
+      "health": "健康",
+      "reachability": "可达性",
+      "latency": "延迟",
+      "drift": "偏移",
+      "errorRate": "错误率",
+      "utilization": "利用率",
+      "firmware": "固件"
+    },
+    "pagination": {
+      "totalOne": "共 {{count}} 台设备",
+      "totalOther": "共 {{count}} 台设备",
+      "previous": "上一页",
+      "pageOf": "第 {{page}} 页，共 {{total}} 页",
+      "next": "下一页"
+    }
+  },
+  "HealthStatusBadge": {
+    "status": {
+      "healthy": "健康",
+      "warning": "警告",
+      "degraded": "降级",
+      "critical": "严重",
+      "unknown": "未知"
+    }
+  },
+  "HealthTrendChart": {
+    "title": "健康趋势",
+    "empty": "无可用趋势数据",
+    "healthScore": "健康评分"
+  },
+  "InfrastructureHealthPanel": {
+    "title": "基础设施健康状况",
+    "loadError": "无法加载基础设施健康状况。",
+    "systemStatus": "系统 {{status}}",
+    "uptime": "运行时间：{{hours}} 小时 {{minutes}} 分钟",
+    "latencyLabel": "延迟：",
+    "latencyValue": "{{ms}} 毫秒"
+  },
+  "ModuleHealthGrid": {
+    "title": "模块健康状况",
+    "error": "无法加载模块健康状况。",
+    "empty": "暂无模块数据。",
+    "deviceCount_one": "{{count}} 台设备",
+    "deviceCount_other": "{{count}} 台设备",
+    "counts": {
+      "healthy": "{{count}} 正常",
+      "warning": "{{count}} 警告",
+      "degraded": "{{count}} 降级",
+      "critical": "{{count}} 严重"
+    }
+  },
+  "ScoreBar": {
+    "notAvailable": "不适用"
+  },
+  "SiteRankingTable": {
+    "title": "站点排名",
+    "error": "加载站点排名数据失败。",
+    "empty": "暂无站点排名数据。",
+    "columns": {
+      "site": "站点",
+      "healthScore": "健康评分",
+      "uptimePercent": "正常运行时间 %",
+      "devices": "设备",
+      "trend": "趋势"
+    }
+  },
+  "SLAComplianceCard": {
+    "title": "SLA 合规性",
+    "error": "无法加载 SLA 数据。",
+    "notAvailable": "不适用",
+    "overallCompliance": "总体合规性",
+    "noPolicies": "未定义 SLA 策略",
+    "activePolicies": "活动策略",
+    "activeBreaches": "活动违规",
+    "viewDashboard": "查看 SLA 仪表板"
+  },
+  "TopIssuesPanel": {
+    "title": "主要问题",
+    "error": "加载主要问题失败。",
+    "empty": "未检测到健康问题。"
+  },
+  "WANHealthPanel": {
+    "title": "WAN 健康状态",
+    "error": "无法加载 WAN 健康数据。",
+    "empty": "未找到 WAN 设备。",
+    "columns": {
+      "device": "设备",
+      "site": "站点",
+      "ip": "IP",
+      "health": "健康度",
+      "latency": "延迟",
+      "reachability": "可达性"
+    }
+  },
+  "HealthDashboardPage": {
+    "title": "网络健康状况",
+    "description": {
+      "site": "站点健康监控 · {{devices}} 台设备",
+      "org": "全组织健康监控 · {{sites}} 个站点，{{devices}} 台设备"
+    },
+    "error": {
+      "loadFailed": "加载健康数据失败。请重试。"
+    },
+    "stats": {
+      "overallScore": "总体评分",
+      "healthyDevices": "健康设备",
+      "warnings": "警告",
+      "critical": "严重"
+    },
+    "status": {
+      "healthy": "健康",
+      "warning": "警告",
+      "degraded": "降级",
+      "critical": "严重"
+    },
+    "siteCard": {
+      "deviceCount": "{{count}} 台设备",
+      "uptime": "{{percent}}% 正常运行时间"
+    },
+    "orgHealth": {
+      "heading": "组织健康状况",
+      "summary": "{{sites}} 个站点和 {{devices}} 台设备的综合健康状况。评分根据可达性、延迟、配置漂移、错误率、利用率和固件更新情况计算得出。"
+    },
+    "actions": {
+      "reconcileAll": "全部协调"
+    },
+    "toast": {
+      "reconcileDispatched": {
+        "title": "已发起协调",
+        "description": "已将 {{count}} 台设备加入漂移检查队列。"
+      },
+      "reconcileFailed": {
+        "title": "协调失败"
+      },
+      "unknownError": "未知错误"
+    },
+    "tabs": {
+      "overview": "概览",
+      "devices": "设备",
+      "alerts": "告警与 SLA",
+      "infrastructure": "基础设施",
+      "scores": "评分说明"
+    },
+    "empty": {
+      "noData": "暂无健康数据。"
+    },
+    "scoreInfo": {
+      "title": "健康评分构成",
+      "description": "了解健康评分的计算方式",
+      "weightsHeading": "评分权重",
+      "weights": {
+        "reachability": "可达性",
+        "configDrift": "配置漂移",
+        "latency": "延迟（预览）",
+        "errorRate": "错误率（预览）",
+        "utilization": "利用率（预览）",
+        "firmware": "固件（预览）"
+      },
+      "previewNote": "标记为预览的组件已接入评分公式，但其各设备数值尚未来自实时遥测；它们会回退到中性默认值。",
+      "thresholdsHeading": "阈值",
+      "thresholds": {
+        "healthy": "90-100 · 健康",
+        "warning": "70-89 · 警告",
+        "degraded": "50-69 · 降级",
+        "critical": "0-49 · 严重"
+      }
+    }
+  },
+  "IncidentsPage": {
+    "header": {
+      "title": "事件关联与事故",
+      "description": "将关联事件归并为可处理的事故"
+    },
+    "stats": {
+      "activeRules": {
+        "title": "活动规则",
+        "description": "当前已启用"
+      },
+      "openIncidents": {
+        "title": "未处理事故",
+        "description": "需要关注"
+      },
+      "last24h": {
+        "title": "最近 24 小时",
+        "description": "近期事故"
+      },
+      "totalRules": {
+        "title": "规则总数",
+        "description": "已配置规则"
+      }
+    },
+    "tabs": {
+      "incidents": "事故 ({{count}})",
+      "rules": "关联规则 ({{count}})"
+    },
+    "columns": {
+      "severity": "严重程度",
+      "title": "标题",
+      "status": "状态",
+      "events": "事件",
+      "devices": "设备",
+      "opened": "开启时间",
+      "name": "名称",
+      "scope": "范围",
+      "window": "时间窗口",
+      "fires": "触发次数",
+      "patterns": "模式"
+    },
+    "rules": {
+      "patternsCount": "{{count}} 个模式"
+    },
+    "search": {
+      "placeholder": "按标题、严重程度或状态搜索事故…"
+    },
+    "filters": {
+      "allStatuses": "所有状态",
+      "allSeverities": "所有严重程度",
+      "clear": "清除筛选"
+    },
+    "status": {
+      "open": "未处理",
+      "investigating": "调查中",
+      "mitigating": "缓解中",
+      "resolved": "已解决",
+      "closed": "已关闭"
+    },
+    "severity": {
+      "critical": "严重",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "scope": {
+      "site": "站点",
+      "deviceGroup": "设备组",
+      "organization": "组织"
+    },
+    "itemNames": {
+      "incidents": "事故",
+      "incident": "事故",
+      "rules": "规则"
+    },
+    "actions": {
+      "runCorrelation": "运行关联",
+      "newRule": "新建规则",
+      "investigate": "调查",
+      "acknowledge": "确认",
+      "assign": "分配",
+      "close": "关闭",
+      "startInvestigation": "开始调查",
+      "resolve": "解决"
+    },
+    "detail": {
+      "statusLabel": "状态：",
+      "openedLabel": "开启时间：",
+      "eventsLabel": "事件：",
+      "devicesLabel": "设备：",
+      "rootCause": "根本原因",
+      "linkedEvents": "关联事件",
+      "loading": "加载中…",
+      "unknownEventType": "未知",
+      "patternPrefix": "模式：{{pattern}}"
+    },
+    "form": {
+      "name": "名称",
+      "scope": "范围",
+      "severity": "严重程度",
+      "timeWindow": "时间窗口（秒）",
+      "eventPatterns": "事件模式 (JSON)"
+    },
+    "dialogs": {
+      "newRule": {
+        "title": "新建关联规则",
+        "submit": "创建规则"
+      },
+      "trigger": {
+        "title": "运行事件关联",
+        "description": "手动扫描近期事件，并根据活动关联规则创建事故。",
+        "dryRun": "试运行",
+        "runNow": "立即运行"
+      }
+    },
+    "validation": {
+      "nameRequired": "名称为必填项",
+      "patternsRequired": "事件模式为必填项",
+      "invalidJson": "JSON 无效"
+    },
+    "errors": {
+      "unknown": "未知错误",
+      "updateIncident": "更新事故失败",
+      "createRule": "创建关联规则失败",
+      "triggerCorrelation": "触发关联失败",
+      "loadFailed": "加载事故数据失败"
+    }
+  },
+  "LifecyclePage": {
+    "title": "设备生命周期",
+    "description": "管理从发现到下线的设备状态",
+    "loadError": "加载设备生命周期数据失败",
+    "stateMachine": "状态机",
+    "searchPlaceholder": "按名称或 IP 搜索设备…",
+    "allStates": "所有状态",
+    "clearFilters": "清除筛选",
+    "unnamed": "未命名",
+    "states": {
+      "discovered": "已发现",
+      "adopting": "采纳中",
+      "provisioning": "配置中",
+      "managed": "已纳管",
+      "updating": "更新中",
+      "offline": "离线",
+      "error": "错误",
+      "decommissioned": "已下线",
+      "ignored": "已忽略"
+    },
+    "stats": {
+      "managed": {
+        "title": "已纳管",
+        "description": "正常设备"
+      },
+      "discovered": {
+        "title": "已发现",
+        "description": "等待采纳"
+      },
+      "offline": {
+        "title": "离线",
+        "description": "无法访问"
+      },
+      "error": {
+        "title": "错误",
+        "description": "需要处理"
+      }
+    },
+    "columns": {
+      "device": "设备",
+      "type": "类型",
+      "lifecycleState": "生命周期状态",
+      "lastChanged": "最后更改",
+      "error": "错误"
+    },
+    "historyColumns": {
+      "time": "时间",
+      "transition": "状态转换",
+      "trigger": "触发方式",
+      "details": "详情"
+    },
+    "actions": {
+      "history": "历史记录",
+      "transition": "转换",
+      "transitioning": "转换中...",
+      "cancel": "取消"
+    },
+    "bulkActions": {
+      "approve": "批准",
+      "reject": "拒绝",
+      "markStale": "标记为过期"
+    },
+    "itemName": {
+      "devices": "台设备",
+      "device": "台设备",
+      "entries": "条记录"
+    },
+    "historyDialog": {
+      "title": "生命周期历史 · {{name}}",
+      "description": "此设备的完整状态转换审计记录"
+    },
+    "transitionDialog": {
+      "title": "转换设备状态",
+      "currentState": "当前状态",
+      "transitionTo": "转换为",
+      "selectTarget": "选择目标状态"
+    },
+    "toast": {
+      "transitionFailedTitle": "转换失败"
+    },
+    "errors": {
+      "unknown": "未知错误"
+    }
+  },
+  "NotificationProvidersPage": {
+    "common": {
+      "default": "默认",
+      "never": "从不",
+      "cancel": "取消",
+      "delete": "删除",
+      "yes": "是",
+      "no": "否"
+    },
+    "tabs": {
+      "providers": {
+        "label": "提供商",
+        "desc": "管理投递提供商"
+      },
+      "testing": {
+        "label": "测试控制台",
+        "desc": "测试与调试提供商"
+      },
+      "health": {
+        "label": "运行状况与诊断",
+        "desc": "提供商运行状况概览"
+      }
+    },
+    "header": {
+      "title": "通知提供商",
+      "subtitle": "配置、测试并监控通知投递渠道 · Gmail、SMTP、Mailgun、SendGrid、Brevo、SES、Postmark、Resend、Slack、Teams、SMS 和 Webhooks。",
+      "loadError": "无法加载通知提供商，请重试。"
+    },
+    "stats": {
+      "total": "提供商总数",
+      "enabled": "已启用",
+      "verified": "已验证",
+      "errors": "错误",
+      "needsAttention": "需要处理"
+    },
+    "dashboard": {
+      "errCount": "{{count}} 个错误",
+      "activeVerified": "{{enabled}}/{{total}} 个活动 · {{verified}} 个已验证",
+      "defaultSet": "已设默认",
+      "noDefault": "无默认"
+    },
+    "status": {
+      "verified": "已验证",
+      "unverified": "未验证"
+    },
+    "row": {
+      "editConfig": "编辑配置",
+      "verifyConnection": "验证连接",
+      "sendTest": "发送测试",
+      "setDefault": "设为默认",
+      "deleteProvider": "删除提供商"
+    },
+    "toolbar": {
+      "searchPlaceholder": "搜索提供商…",
+      "channel": "渠道",
+      "allChannels": "所有渠道",
+      "status": "状态",
+      "allStatus": "所有状态",
+      "statusEnabled": "已启用",
+      "statusDisabled": "已禁用",
+      "statusError": "存在错误",
+      "clearFilters": "清除筛选",
+      "countOf": "{{shown}} / {{total}}",
+      "refresh": "刷新",
+      "addProvider": "添加提供商"
+    },
+    "empty": {
+      "title": "未找到提供商",
+      "filtered": "没有提供商符合当前筛选条件。请尝试调整搜索或筛选条件。",
+      "none": "添加你的第一个通知提供商，即可通过电子邮件、Slack、Teams、SMS 或 webhook 发送告警。",
+      "addFirst": "添加首个提供商"
+    },
+    "table": {
+      "provider": "提供商",
+      "channel": "渠道",
+      "status": "状态",
+      "lastVerified": "上次验证",
+      "rateLimits": "速率限制",
+      "created": "创建时间",
+      "enabled": "已启用"
+    },
+    "bulk": {
+      "verify": "验证",
+      "disable": "禁用",
+      "delete": "删除",
+      "confirmDelete": "删除 {{count}} 个提供商？"
+    },
+    "deleteDialog": {
+      "title": "删除提供商",
+      "confirm": "永久删除 {{name}}？",
+      "warning": "使用此提供商的活动通知将会失败。"
+    },
+    "toast": {
+      "unknownError": "未知错误",
+      "createFailed": "创建提供商失败",
+      "updateFailed": "更新提供商失败",
+      "deleteFailed": "删除提供商失败",
+      "toggleFailed": "切换提供商状态失败",
+      "verifyFailed": "提供商验证失败",
+      "setDefaultFailed": "设置默认失败"
+    },
+    "form": {
+      "title": {
+        "edit": "编辑提供商",
+        "selectType": "选择提供商类型",
+        "configure": "配置提供商"
+      },
+      "submit": {
+        "save": "保存更改",
+        "create": "创建提供商"
+      },
+      "description": {
+        "edit": "更新 {{name}} 的配置。",
+        "selectType": "选择要配置的投递提供商类型。",
+        "configure": "设置你的 {{type}} 提供商。"
+      },
+      "validation": {
+        "nameRequired": "显示名称为必填项",
+        "typeRequired": "提供商类型为必填项",
+        "zeroOrGreater": "必须为 0 或更大",
+        "fieldRequired": "{{field}} 为必填项"
+      },
+      "changeType": "更改类型",
+      "displayName": "显示名称",
+      "displayNamePlaceholder": "例如：生产环境 Mailgun",
+      "providerType": "提供商类型",
+      "configuration": "配置",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "behavior": "行为",
+      "default": "默认",
+      "ratePerHour": "速率 / 小时",
+      "ratePerDay": "速率 / 天",
+      "invalidJson": "JSON 无效--保存前请修正语法（将保留上一个有效值）。",
+      "saving": "正在保存…"
+    },
+    "testing": {
+      "selectProviderFirst": "请先选择提供商",
+      "testFailed": "测试失败",
+      "singleTitle": "单个提供商测试",
+      "singleDesc": "通过指定提供商发送测试通知。",
+      "providerLabel": "提供商",
+      "selectProvider": "选择提供商…",
+      "recipientLabel": "收件人",
+      "sendTest": "发送测试",
+      "bulkTitle": "渠道批量测试",
+      "bulkDesc": "一次性测试某个渠道中所有已启用的提供商。",
+      "channelLabel": "渠道",
+      "selectChannel": "选择渠道…",
+      "channelOption": "{{channel}}（{{count}} 个提供商）",
+      "recipientAllPlaceholder": "所有测试的收件人",
+      "testAll": "测试所有提供商",
+      "testAllChannel": "测试所有 {{channel}} 提供商",
+      "resultsTitle": "测试结果",
+      "resultsDesc": "本次会话的实时测试结果。",
+      "clearLog": "清除日志",
+      "emptyResults": "运行测试以在此查看结果。",
+      "toLabel": "收件人：",
+      "showDebug": "显示调试详情",
+      "hideDebug": "隐藏调试详情"
+    },
+    "health": {
+      "verifyFailed": "验证失败",
+      "connectivityCheck": "连通性检查",
+      "connectivityDesc": "验证所有已启用的提供商均可访问其端点。",
+      "providersToCheck": "待检查 {{count}} 个提供商。",
+      "verifyAll": "验证全部（{{count}}）",
+      "channelReadiness": "渠道就绪情况",
+      "channelReadinessDesc": "各渠道投递能力概览。",
+      "statusReady": "就绪",
+      "statusPartial": "部分就绪",
+      "statusFailing": "故障",
+      "statusNotConfigured": "未配置",
+      "enabledVerified": "{{enabled}} 个已启用 · {{verified}} 个已验证",
+      "healthDetails": "提供商运行状况详情",
+      "providersCount": "{{count}} 个提供商",
+      "noProviders": "尚未配置任何提供商。",
+      "on": "开启",
+      "off": "关闭",
+      "verifiedLabel": "已验证",
+      "lastVerifiedLabel": "上次验证",
+      "rateLimitsLabel": "速率限制",
+      "createdLabel": "创建时间",
+      "updatedLabel": "更新时间",
+      "neverCapitalized": "从不",
+      "hideConfig": "隐藏配置",
+      "viewConfig": "查看配置（已脱敏）"
+    }
+  },
+  "ReconciliationPage": {
+    "header": {
+      "title": "配置协调",
+      "description": "检查期望配置与运行配置、检测偏差并触发协调"
+    },
+    "searchPlaceholder": "按名称或 IP 搜索设备…",
+    "unnamed": "未命名",
+    "itemName": "设备",
+    "itemNamePlural": "设备",
+    "columns": {
+      "device": "设备",
+      "type": "类型"
+    },
+    "actions": {
+      "inspect": "检查",
+      "reconcile": "协调",
+      "reconcileAll": "全部协调",
+      "clearFilters": "清除筛选",
+      "rerun": "重新运行",
+      "dismissDiff": "忽略差异"
+    },
+    "status": {
+      "driftDetected": "检测到偏差",
+      "compliant": "合规"
+    },
+    "driftDetails": "偏差详情",
+    "tabs": {
+      "threeState": "三态视图",
+      "resolved": "解析后配置",
+      "overrides": "设备覆盖"
+    },
+    "threeState": {
+      "desired": "期望配置",
+      "pushed": "已推送配置",
+      "running": "运行配置",
+      "lastPushed": "上次推送：{{date}}",
+      "lastSynced": "| 上次同步：{{date}}"
+    },
+    "resolved": {
+      "templateChain": "模板链：",
+      "empty": "没有可用的解析后配置"
+    },
+    "inspector": {
+      "title": "配置检查器",
+      "description": "设备 {{id}} 的三态配置模型...",
+      "loading": "正在加载配置...",
+      "push": "推送：{{value}}",
+      "neverPushed": "从未推送",
+      "version": "版本：{{value}}",
+      "autoRemediate": "自动修复"
+    },
+    "noConfig": {
+      "title": "未找到此设备的配置条目。",
+      "description": "当设备首次通过模板系统进行配置时，会创建配置条目。"
+    },
+    "toast": {
+      "dismissedTitle": "已忽略偏差",
+      "dismissed": "已忽略 {{count}} 个"
+    },
+    "errors": {
+      "unknown": "未知错误",
+      "reconcileFailed": "协调失败",
+      "updateSettingsFailed": "更新设备配置设置失败",
+      "loadDevices": "加载设备失败"
+    }
+  },
+  "SiteGroupsPage": {
+    "header": {
+      "title": "分组",
+      "description": "通过站点分组和设备分组组织基础设施，构建模板层级"
+    },
+    "tabs": {
+      "siteGroups": "站点分组",
+      "deviceGroups": "设备分组"
+    },
+    "stats": {
+      "siteGroups": {
+        "title": "站点分组",
+        "description": "已配置的站点分组"
+      },
+      "deviceGroups": {
+        "title": "设备分组",
+        "description": "已配置的设备分组"
+      },
+      "rootGroups": {
+        "title": "根分组",
+        "description": "顶层"
+      },
+      "activeDeviceGroups": {
+        "title": "活动设备分组",
+        "description": "活动的设备分组"
+      }
+    },
+    "columns": {
+      "name": "名称",
+      "description": "描述",
+      "parent": "上级",
+      "site": "站点",
+      "status": "状态"
+    },
+    "values": {
+      "root": "根",
+      "active": "活动",
+      "inactive": "未激活"
+    },
+    "actions": {
+      "newSiteGroup": "新建站点分组",
+      "newDeviceGroup": "新建设备分组",
+      "clearFilters": "清除筛选",
+      "delete": "删除",
+      "save": "保存",
+      "create": "创建"
+    },
+    "search": {
+      "siteGroups": "搜索站点分组…",
+      "deviceGroups": "搜索设备分组…"
+    },
+    "itemName": {
+      "siteGroup": "站点分组",
+      "siteGroups": "站点分组",
+      "deviceGroup": "设备分组",
+      "deviceGroups": "设备分组"
+    },
+    "confirm": {
+      "deleteSiteGroup": "删除站点分组“{{name}}”？成员站点将保留，仅删除该分组。",
+      "deleteDeviceGroup": "删除设备分组“{{name}}”？成员设备将保留，仅删除该分组。",
+      "bulkDeleteSiteGroups": "删除 {{count}} 个站点分组？",
+      "bulkDeleteDeviceGroups": "删除 {{count}} 个设备分组？"
+    },
+    "dialogs": {
+      "siteGroup": {
+        "createTitle": "创建站点分组",
+        "editTitle": "编辑站点分组",
+        "description": "站点分组用于组织站点以实现模板继承。"
+      },
+      "deviceGroup": {
+        "createTitle": "创建设备分组",
+        "editTitle": "编辑设备分组",
+        "description": "设备分组用于在站点内组织设备以进行模板定位。"
+      }
+    },
+    "fields": {
+      "name": {
+        "label": "名称"
+      },
+      "description": {
+        "label": "描述"
+      },
+      "siteGroupName": {
+        "placeholder": "分支机构"
+      },
+      "siteGroupDescription": {
+        "placeholder": "所有分支机构位置"
+      },
+      "deviceGroupName": {
+        "placeholder": "3 楼接入点"
+      },
+      "deviceGroupDescription": {
+        "placeholder": "3 楼的接入点"
+      },
+      "parentGroup": {
+        "label": "上级分组",
+        "none": "无（根）"
+      },
+      "siteId": {
+        "label": "站点 ID",
+        "placeholder": "站点的 UUID"
+      },
+      "matchRules": {
+        "label": "匹配规则（JSON）"
+      }
+    },
+    "validation": {
+      "nameRequired": "名称为必填项",
+      "siteIdRequired": "站点 ID 为必填项",
+      "invalidJson": "JSON 无效"
+    },
+    "errors": {
+      "unknown": "未知错误",
+      "createSiteGroup": "创建站点分组失败",
+      "updateSiteGroup": "更新站点分组失败",
+      "deleteSiteGroup": "删除站点分组失败",
+      "createDeviceGroup": "创建设备分组失败",
+      "updateDeviceGroup": "更新设备分组失败",
+      "deleteDeviceGroup": "删除设备分组失败"
+    },
+    "error": {
+      "loadFailed": "加载分组数据失败"
+    }
+  },
+  "SLAPage": {
+    "header": {
+      "title": "SLA 监控",
+      "description": "服务级别协议合规性跟踪与违规管理"
+    },
+    "errorState": {
+      "message": "无法加载 SLA 数据"
+    },
+    "toast": {
+      "errorTitle": "错误",
+      "operationFailed": "操作失败"
+    },
+    "stats": {
+      "notAvailable": "不适用",
+      "activePolicies": {
+        "title": "活动策略",
+        "description": "当前已实施"
+      },
+      "activeBreaches": {
+        "title": "活动违规",
+        "description": "未解决的违规"
+      },
+      "avgCompliance": {
+        "title": "平均合规率",
+        "description": "所有策略"
+      },
+      "breaches24h": {
+        "title": "违规（24 小时）",
+        "description": "过去 24 小时"
+      }
+    },
+    "tabs": {
+      "overview": "概览",
+      "policies": "策略（{{count}}）",
+      "breaches": "违规（{{count}}）"
+    },
+    "overview": {
+      "worstPerforming": "表现最差的 SLA"
+    },
+    "actions": {
+      "evaluateNow": "立即评估",
+      "newPolicy": "新建策略",
+      "acknowledge": "确认",
+      "clearFilters": "清除筛选",
+      "editThresholds": "编辑阈值",
+      "delete": "删除"
+    },
+    "columns": {
+      "name": "名称",
+      "status": "状态",
+      "scope": "范围",
+      "target": "目标",
+      "compliance": "合规率",
+      "lastEvaluated": "上次评估",
+      "never": "从未",
+      "severity": "严重程度",
+      "metric": "指标",
+      "threshold": "阈值",
+      "actual": "实际值",
+      "deviation": "偏差",
+      "started": "开始时间"
+    },
+    "itemNames": {
+      "policies": "策略",
+      "policy": "策略",
+      "breaches": "违规",
+      "breach": "违规"
+    },
+    "policies": {
+      "searchPlaceholder": "按名称或目标搜索策略…"
+    },
+    "breaches": {
+      "searchPlaceholder": "按指标搜索违规…",
+      "allStatuses": "所有状态",
+      "statusActive": "活动",
+      "statusAcknowledged": "已确认",
+      "statusResolved": "已解决"
+    },
+    "detail": {
+      "scope": "范围：",
+      "target": "目标：",
+      "evalWindow": "评估窗口：",
+      "consecutive": "连续次数：",
+      "minutes": "{{count}} 分钟",
+      "thresholds": "阈值",
+      "lastEvaluated": "上次评估：{{date}}"
+    },
+    "dialog": {
+      "newPolicyTitle": "新建 SLA 策略",
+      "createPolicy": "创建策略"
+    },
+    "form": {
+      "nameRequired": "名称为必填项",
+      "name": "名称",
+      "namePlaceholder": "例如：总部正常运行时间 SLA",
+      "scope": "范围",
+      "scopeOptions": {
+        "organization": "组织",
+        "site": "站点",
+        "siteGroup": "站点组",
+        "deviceGroup": "设备组",
+        "ssid": "SSID"
+      },
+      "evalWindow": "评估窗口（分钟）",
+      "scopeId": "范围 ID",
+      "scopeIdPlaceholder": "UUID",
+      "scopeName": "范围名称",
+      "scopeNamePlaceholder": "显示名称",
+      "healthScoreMin": "最低健康评分",
+      "uptimePercentMin": "最低正常运行率 %",
+      "latencyMsMax": "最大延迟（毫秒）",
+      "optional": "可选"
+    }
+  },
+  "ConfigTemplatesPage": {
+    "header": {
+      "title": "配置模板",
+      "description": "通过分层继承管理配置模板（组织 → 站点组 → 站点 → 设备组）",
+      "descriptionShort": "通过分层继承管理配置模板"
+    },
+    "actions": {
+      "newTemplate": "新建模板",
+      "clearFilters": "清除筛选"
+    },
+    "stats": {
+      "total": {
+        "title": "模板总数",
+        "description": "全部模板"
+      },
+      "organization": {
+        "title": "组织",
+        "description": "组织范围"
+      },
+      "siteGroup": {
+        "title": "站点组",
+        "description": "站点组"
+      },
+      "siteDevice": {
+        "title": "站点 / 设备",
+        "description": "定向"
+      }
+    },
+    "search": {
+      "placeholder": "按名称或描述搜索模板…"
+    },
+    "filter": {
+      "scopePlaceholder": "筛选范围",
+      "allScopes": "所有范围"
+    },
+    "scopes": {
+      "organization": "组织",
+      "site_group": "站点组",
+      "site": "站点",
+      "device_group": "设备组"
+    },
+    "columns": {
+      "name": "模板名称",
+      "scope": "范围",
+      "deviceType": "设备类型",
+      "priority": "优先级",
+      "status": "状态"
+    },
+    "deviceType": {
+      "all": "全部"
+    },
+    "status": {
+      "active": "启用",
+      "inactive": "停用"
+    },
+    "bulk": {
+      "apply": "应用",
+      "applyNotWired": "将模板应用到范围（尚未接入）。",
+      "duplicate": "复制",
+      "delete": "删除",
+      "copyName": "{{name}}（副本）"
+    },
+    "confirm": {
+      "deleteOne": "删除模板“{{name}}”？此操作无法撤销。",
+      "deleteMany": "删除 {{count}} 个模板？"
+    },
+    "dialog": {
+      "createTitle": "创建模板",
+      "editTitle": "编辑模板",
+      "description": "模板定义沿层级向下级联的配置。",
+      "createSubmit": "创建模板",
+      "saveChanges": "保存更改"
+    },
+    "form": {
+      "name": "名称",
+      "namePlaceholder": "分支机构 AP",
+      "priority": "优先级（越小越高）",
+      "description": "描述",
+      "descriptionPlaceholder": "分支机构接入点的标准配置",
+      "scope": "范围",
+      "scopeId": "范围 ID",
+      "scopeIdPlaceholder": "UUID（组织范围可选）",
+      "deviceType": "设备类型",
+      "config": "配置 (JSON)"
+    },
+    "deviceTypes": {
+      "all": "所有类型",
+      "accessPoint": "接入点",
+      "switch": "交换机",
+      "router": "路由器",
+      "gateway": "网关"
+    },
+    "view": {
+      "priority": "优先级：{{priority}}"
+    },
+    "validation": {
+      "nameRequired": "名称为必填项",
+      "invalidJson": "无效的 JSON"
+    },
+    "errors": {
+      "unknown": "未知错误",
+      "createFailed": "创建模板失败",
+      "updateFailed": "更新模板失败",
+      "deleteFailed": "删除模板失败",
+      "duplicateFailed": "复制模板失败",
+      "loadFailed": "加载配置模板失败"
+    }
+  },
+  "TopologyPage": {
+    "header": {
+      "title": "网络拓扑",
+      "description": "交互式网络图，展示设备关系和健康状态叠加"
+    },
+    "error": {
+      "loadFailed": "无法加载拓扑数据。请重试。"
+    },
+    "stats": {
+      "devices": "设备",
+      "links": "链路",
+      "orphans": "孤立节点",
+      "types": "类型"
+    },
+    "toolbar": {
+      "searchPlaceholder": "搜索设备...",
+      "health": "健康状态",
+      "exportPng": "导出为 PNG",
+      "fullscreen": "全屏",
+      "exitFullscreen": "退出全屏",
+      "saveLayoutDisabledHint": "选择站点以保存布局"
+    },
+    "layoutAlgorithm": {
+      "auto": "自动布局",
+      "hierarchical": "分层布局",
+      "forceDirected": "力导向布局"
+    },
+    "actions": {
+      "saveLayout": "保存布局",
+      "saving": "保存中...",
+      "viewDevice": "查看设备",
+      "reboot": "重启",
+      "rebooting": "重启中..."
+    },
+    "loading": "正在加载拓扑...",
+    "empty": {
+      "title": "暂无拓扑数据",
+      "description": "控制器同步并启用链路发现后，设备将显示在此处。"
+    },
+    "legend": {
+      "otherSpeed": "其他"
+    },
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "degraded": "降级",
+      "unknown": "未知"
+    },
+    "node": {
+      "health": "健康状态：{{value}}%",
+      "layer": "层级：{{layer}}"
+    },
+    "detail": {
+      "sheetTitle": "设备详情",
+      "sheetDescription": "所选设备的详细信息",
+      "ipAddress": "IP 地址",
+      "macAddress": "MAC 地址",
+      "model": "型号",
+      "networkLayer": "网络层级",
+      "site": "站点",
+      "healthScore": "健康评分",
+      "connectedDevices": "已连接设备（{{n}}）",
+      "quickActions": "快捷操作"
+    },
+    "confirm": {
+      "reboot": "重启 {{label}}？设备将在约 30-90 秒内无法访问。"
+    },
+    "toast": {
+      "unknownError": "未知错误",
+      "rebootDispatched": {
+        "title": "已发送重启指令",
+        "description": "{{label}} 即将重启。"
+      },
+      "rebootFailed": {
+        "title": "重启失败"
+      },
+      "saveLayoutFailed": {
+        "title": "保存布局失败"
+      },
+      "autoLayoutFailed": {
+        "title": "自动布局失败"
+      },
+      "noSiteSelected": {
+        "title": "未选择站点",
+        "description": "保存布局前，请在站点选择器中选择一个站点。"
+      }
+    },
+    "deviceTypes": {
+      "switch": "交换机",
+      "access_point": "接入点",
+      "router": "路由器",
+      "gateway": "网关",
+      "firewall": "防火墙",
+      "camera": "摄像头",
+      "nvr": "NVR",
+      "dvr": "DVR",
+      "access_control": "门禁",
+      "intercom": "对讲机",
+      "voip_phone": "VoIP 电话",
+      "pbx": "PBX",
+      "server": "服务器",
+      "iot": "IoT",
+      "sensor": "传感器",
+      "other": "其他"
+    }
+  }
+}

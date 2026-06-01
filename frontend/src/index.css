@@ -1,0 +1,711 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* Copyright (C) 2024-2026 FreeSDN */
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* Self-hosted fonts (no Google CDN dependency) */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+
+.demo-mode body {
+  padding-bottom: 2.5rem;
+}
+
+/* Source detection (replaces content[] in tailwind.config.ts) */
+@source './**/*.{js,ts,jsx,tsx}';
+@source '../index.html';
+
+/* Dark mode variant (replaces darkMode: ['class']) */
+@custom-variant dark (&:is(.dark *));
+
+/* Container utility (replaces tailwind.config.ts container settings) */
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+  @media (width >= 1400px) {
+    max-width: 1400px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Theme tokens, replaces tailwind.config.ts theme.extend
+   Uses `inline` because values reference CSS variables that
+   change between :root (light) and .dark (dark) at runtime.
+   ══════════════════════════════════════════════════════════════ */
+@theme inline {
+  /* Colors, shadcn/ui semantic tokens */
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+
+  --color-info: hsl(var(--info));
+  --color-info-foreground: hsl(var(--info-foreground));
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  /* Sidebar */
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-hover: hsl(var(--sidebar-hover));
+
+  /* Chart colors */
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  /* Network status (static) */
+  --color-network-online: hsl(142, 76%, 36%);
+  --color-network-offline: hsl(0, 84%, 60%);
+  --color-network-warning: hsl(45, 93%, 47%);
+  --color-network-syncing: hsl(217, 91%, 60%);
+}
+
+@theme {
+  /* Border radius */
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  /* Font families (self-hosted via @fontsource-variable) */
+  --font-sans: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Custom animations */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+}
+
+/*
+  Tailwind CSS v4 changed the default border color to `currentcolor`.
+  This compatibility layer preserves v3 behavior.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border, currentcolor);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Custom utility classes
+   ══════════════════════════════════════════════════════════════ */
+
+/* Glassmorphism utility classes - Theme aware */
+@utility glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+}
+
+@utility glass-card {
+  @apply bg-card border border-border rounded-lg;
+  box-shadow:
+    0 1px 3px 0 rgba(0, 0, 0, 0.1),
+    0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease-out;
+
+  .dark & {
+    background: hsl(var(--card));
+    border-color: hsl(var(--border));
+    box-shadow:
+      0 1px 3px 0 rgba(0, 0, 0, 0.3),
+      0 1px 2px -1px rgba(0, 0, 0, 0.2);
+  }
+
+  &:hover {
+    @apply border-primary/20;
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  }
+
+  .dark &:hover {
+    border-color: hsl(var(--primary) / 0.3);
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.4),
+      0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  }
+}
+
+@utility glass-sidebar {
+  @apply bg-sidebar border-r;
+  border-color: hsl(var(--sidebar-border));
+
+  .dark & {
+    background: hsl(var(--sidebar));
+    border-color: hsl(var(--sidebar-border));
+  }
+}
+
+@utility glass-input {
+  @apply bg-background border border-border rounded-md;
+  transition: all 0.15s ease-out;
+
+  &:focus {
+    @apply border-primary;
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15);
+  }
+}
+
+@utility status-pulse {
+  animation: statusPulse 2s ease-in-out infinite;
+}
+
+@utility shimmer {
+  animation: shimmer 1.5s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted-foreground) / 0.1) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+}
+
+@utility dialog-overlay {
+  will-change: opacity;
+  backdrop-filter: blur(4px);
+  animation: dialog-overlay-fade-in 100ms ease-out;
+
+  &[data-state='closed'] {
+    animation: dialog-overlay-fade-out 80ms ease-in;
+  }
+}
+
+@utility dialog-content {
+  will-change: opacity;
+  animation: dialog-overlay-fade-in 120ms ease-out;
+
+  &[data-state='closed'] {
+    animation: dialog-overlay-fade-out 80ms ease-in;
+  }
+}
+
+@utility gradient-text {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--primary)) 0%,
+    hsl(217 91% 60%) 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@utility update-flash {
+  animation: updateFlash 0.3s ease-out;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Enterprise Theme System - Light & Dark
+   Inspired by Microsoft Fluent, Google Material, Tabler.io
+   Professional dark blue color scheme for enterprise applications
+   ══════════════════════════════════════════════════════════════ */
+
+/* Light Theme (Default) */
+:root,
+.light {
+  --background: 220 14% 96%;
+  --foreground: 222 47% 11%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+
+  /* Enterprise Blue - Microsoft/Google style */
+  --primary: 217 91% 45%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 220 14% 92%;
+  --secondary-foreground: 220 9% 36%;
+
+  --muted: 220 14% 92%;
+  --muted-foreground: 220 9% 46%;
+
+  --accent: 220 14% 92%;
+  --accent-foreground: 222 47% 11%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  --success: 142 71% 45%;
+  --success-foreground: 0 0% 100%;
+
+  --warning: 38 92% 50%;
+  --warning-foreground: 0 0% 100%;
+
+  --info: 217 91% 55%;
+  --info-foreground: 0 0% 100%;
+
+  --border: 220 13% 86%;
+  --input: 220 13% 91%;
+  --ring: 217 91% 45%;
+
+  --radius: 0.5rem;
+
+  /* Sidebar specific - Light */
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 47% 11%;
+  --sidebar-accent: 217 91% 45%;
+  --sidebar-border: 220 13% 91%;
+  --sidebar-hover: 220 14% 96%;
+
+  /* Glass effect colors - Light */
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-hover: rgba(255, 255, 255, 0.9);
+
+  /* Chart colors */
+  --chart-1: 217 91% 45%;
+  --chart-2: 142 71% 45%;
+  --chart-3: 38 92% 50%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 75% 55%;
+}
+
+/* Dark Theme */
+.dark {
+  --background: 222 47% 8%;
+  --foreground: 210 20% 98%;
+
+  --card: 220 30% 12%;
+  --card-foreground: 210 20% 98%;
+
+  --popover: 220 30% 10%;
+  --popover-foreground: 210 20% 98%;
+
+  /* Enterprise Blue - Slightly brighter for dark mode visibility */
+  --primary: 217 91% 55%;
+  --primary-foreground: 222 47% 8%;
+
+  --secondary: 217 20% 22%;
+  --secondary-foreground: 210 20% 98%;
+
+  --muted: 217 20% 22%;
+  /* Bumped from 57% → 72% lightness for WCAG AA compliance on bg-card/bg-muted.
+     Old contrast: 4.1:1 (FAILS AA on bg-card 12% L). New: ~5.0:1 (PASSES AA).
+
+     RULE for opacity-suffixed `text-muted-foreground/N` icons (covered by
+     WCAG 1.4.11 Non-text Contrast, needs ≥3:1 only when icon is "needed
+     to understand the content"):
+
+       Paired with adjacent text label (e.g. EmptyState icon above "No data"
+         message, ActivityFeed empty state, NavTile chevron next to label):
+           → decorative, NO contrast requirement. Use /30 or /50 freely.
+
+       Stand-alone state icon (only signal of state, no adjacent text):
+           → bump to /70 minimum. Examples already fixed:
+             - CameraPreviewWidget Video/VideoOff (only state signal in tile body)
+
+     When in doubt, /70 is a safe value that's still visually muted but
+     passes ≥3:1 against bg-card in dark mode. */
+  --muted-foreground: 215 16% 72%;
+
+  --accent: 217 20% 25%;
+  --accent-foreground: 210 20% 98%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 98%;
+
+  --success: 142 71% 45%;
+  --success-foreground: 0 0% 98%;
+
+  --warning: 38 92% 50%;
+  --warning-foreground: 222 47% 8%;
+
+  --info: 217 91% 60%;
+  --info-foreground: 0 0% 98%;
+
+  --border: 217 20% 20%;
+  --input: 217 20% 18%;
+  --ring: 217 91% 55%;
+
+  /* Sidebar specific - Dark */
+  --sidebar: 222 47% 10%;
+  --sidebar-foreground: 210 20% 98%;
+  --sidebar-accent: 217 91% 55%;
+  --sidebar-border: 217 20% 18%;
+  --sidebar-hover: 217 20% 16%;
+
+  /* Glass effect colors - Dark */
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-hover: rgba(255, 255, 255, 0.08);
+
+  /* Chart colors */
+  --chart-1: 217 91% 55%;
+  --chart-2: 142 71% 45%;
+  --chart-3: 38 92% 50%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 75% 55%;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Base layer
+   ══════════════════════════════════════════════════════════════ */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  /*
+    Tailwind CSS v4 removed cursor: pointer from interactive elements.
+    Restore expected behavior for all clickable elements app-wide.
+  */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href],
+  select:not(:disabled),
+  summary,
+  label[for],
+  [type="button"]:not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  /* Custom scrollbar - Light theme */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  /* Custom scrollbar - Dark theme */
+  .dark ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted));
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+
+  /* Hide scrollbar utility (used by overflow-scroll TabsList) */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Keyframes for custom utilities & animations
+   ══════════════════════════════════════════════════════════════ */
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes dialog-overlay-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialog-overlay-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+
+@keyframes updateFlash {
+  0% { background-color: rgba(234, 179, 8, 0.3); }
+  100% { background-color: transparent; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Third-party component styles
+   ══════════════════════════════════════════════════════════════ */
+
+/* React Grid Layout Styles */
+.react-grid-layout {
+  position: relative;
+  transition: height 200ms ease;
+}
+
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+}
+
+.react-grid-item.cssTransforms {
+  transition-property: transform, width, height;
+}
+
+.react-grid-item.resizing {
+  z-index: 1;
+  will-change: width, height;
+}
+
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 3;
+  will-change: transform;
+}
+
+.react-grid-item.dropping {
+  visibility: hidden;
+}
+
+.react-grid-item > .react-resizable-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(255, 255, 255, 0.3);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.react-resizable-handle-se {
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+}
+
+/* Monospace for network data */
+.font-mono-network {
+  font-family: "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
+  font-feature-settings: "tnum";
+}
+
+/* React Flow custom styles */
+.react-flow__node {
+  cursor: pointer;
+}
+
+.react-flow__controls {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.react-flow__controls-button {
+  background: hsl(var(--card)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+  transition: all 0.15s ease;
+}
+
+.react-flow__controls-button:hover {
+  background: hsl(var(--accent)) !important;
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor !important;
+}
+
+.react-flow__minimap {
+  background: hsl(var(--card)) !important;
+}
+
+.react-flow__edge-path {
+  stroke-linecap: round;
+}
+
+/* Animated connection line */
+.react-flow__edge.animated path {
+  stroke-dasharray: 5;
+  animation: flowDash 0.5s linear infinite;
+}
+
+@keyframes flowDash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* Card glow effect on hover */
+.card-glow {
+  position: relative;
+}
+
+.card-glow::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(
+    135deg,
+    transparent 0%,
+    hsl(var(--primary) / 0.1) 50%,
+    transparent 100%
+  );
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.card-glow:hover::before {
+  opacity: 1;
+}
+
+/* Subtle backdrop noise texture */
+.backdrop-noise {
+  position: relative;
+}
+
+.backdrop-noise::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.02;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* Smooth page transitions */
+.page-transition-enter {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.page-transition-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+
+.page-transition-exit {
+  opacity: 1;
+}
+
+.page-transition-exit-active {
+  opacity: 0;
+  transition: opacity 150ms ease-in;
+}
+
+/* Focus visible ring */
+.focus-ring {
+  @apply focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+}
+
+/* Selection styling */
+::selection {
+  background: hsl(var(--primary) / 0.3);
+  color: hsl(var(--foreground));
+}
+
+/* Animate slide-in for panels */
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutToRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* Tooltip styling */
+[data-radix-popper-content-wrapper] {
+  z-index: 50 !important;
+}
+
+/* ── Disable animations globally ─────────────────────────── */
+.no-animations *,
+.no-animations *::before,
+.no-animations *::after {
+  animation-duration: 0s !important;
+  transition-duration: 0s !important;
+}

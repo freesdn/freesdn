@@ -1,0 +1,81 @@
+{
+  "DriversPage": {
+    "title": "Drivers",
+    "description": "Browse the catalog of supported device drivers.",
+    "itemName": "driver",
+    "itemNamePlural": "drivers",
+    "errors": {
+      "loadFailed": "Failed to load drivers"
+    },
+    "columns": {
+      "driver": "Driver",
+      "version": "Version",
+      "deviceTypes": "Device Types",
+      "capabilities": "Capabilities"
+    },
+    "actions": {
+      "export": "Export",
+      "viewDetails": "View Details",
+      "actionsFor": "Actions for {{name}}"
+    },
+    "stats": {
+      "totalDrivers": {
+        "title": "Total Drivers",
+        "description": "Available drivers"
+      },
+      "vendors": {
+        "title": "Vendors",
+        "description": "Supported manufacturers"
+      },
+      "deviceTypes": {
+        "title": "Device Types",
+        "description": "Supported categories"
+      },
+      "capabilities": {
+        "title": "Capabilities",
+        "description": "Total features"
+      }
+    },
+    "filters": {
+      "searchPlaceholder": "Search drivers by name, vendor, or device type…",
+      "allVendors": "All vendors",
+      "allDeviceTypes": "All device types",
+      "clearFilters": "Clear filters"
+    },
+    "deviceTypes": {
+      "switches": "Switches",
+      "routers": "Routers",
+      "accessPoints": "Access Points",
+      "cameras": "Cameras",
+      "nvrs": "NVRs"
+    },
+    "toasts": {
+      "export": {
+        "title": "Export",
+        "description": "Bulk export: not yet implemented."
+      }
+    },
+    "dialog": {
+      "versionLabel": "Version {{version}}"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "capabilities": "Capabilities",
+      "configuration": "Configuration"
+    },
+    "overview": {
+      "driverId": "Driver ID",
+      "version": "Version",
+      "vendor": "Vendor",
+      "supportedDeviceTypes": "Supported Device Types",
+      "descriptionHeading": "Description",
+      "viewDocumentation": "View Documentation"
+    },
+    "capabilities": {
+      "empty": "No specific capabilities documented for this driver."
+    },
+    "config": {
+      "empty": "No configuration schema available for this driver."
+    }
+  }
+}

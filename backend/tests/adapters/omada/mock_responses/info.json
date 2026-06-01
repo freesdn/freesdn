@@ -1,0 +1,11 @@
+{
+    "errorCode": 0,
+    "msg": "Success.",
+    "result": {
+        "omadacId": "CTRL-ABC123",
+        "controllerVer": "5.14.26.1",
+        "type": 0,
+        "siteName": "Default",
+        "apiVer": 2
+    }
+}

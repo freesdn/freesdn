@@ -1,0 +1,47 @@
+# =============================================================================
+# FreeSDN VPN sidecar overlay  (OPT-IN — privileged)
+# =============================================================================
+# By default FreeSDN runs CAPLESS: no privileged VPN container, the `api` is a
+# normal bridge service. This overlay re-enables the privileged `vpn` sidecar
+# (root + NET_ADMIN + /dev/net/tun) and rejoins the api to its network namespace
+# so the api can route into remote-site overlay tunnels — the status-quo topology,
+# now opt-in. See docs.freesdn.org for why this is the exception, not
+# the default.
+#
+# Usage (the profile starts the `vpn` service; the overlay rewires the api+edge):
+#   COMPOSE_PROFILES=vpn \
+#   docker compose --env-file .env.<tier> -f docker-compose.yml -f docker-compose.vpn.yml up -d
+#
+# `install.sh --vpn` wires both for you.
+#
+# NOTE: the nginx escape-hatch edge (profile: nginx) hardcodes api:8000 and does
+# NOT read API_UPSTREAM, so the nginx edge + VPN sidecar combo needs the api on
+# the bridge or a manual nginx.conf change — use the default Caddy edge with VPN.
+
+services:
+  api:
+    # The base `api` has no `networks:` key (it joins the default network), so
+    # adding network_mode here renders legally (networks + network_mode would not).
+    network_mode: "service:vpn"
+    depends_on:
+      # merges with the base postgres/logdb/redis deps
+      vpn:
+        condition: service_healthy
+    environment:
+      VPN_MODE: sidecar
+      # legacy flags the current code path still reads; resolved_vpn_mode also
+      # reconciles these. Kept until vpn_integration reads VPN_MODE directly.
+      FREESDN_OPENVPN_SIDECAR: "true"
+      FREESDN_WIREGUARD_SIDECAR: "true"
+    volumes:
+      # the api↔sidecar control channel (appended to the base api volumes)
+      - tailscale_run:/var/run/tailscale
+      - openvpn_config:/etc/openvpn
+      - vpn_run:/run/openvpn-client
+      - wireguard_config:/etc/wireguard
+      - wireguard_run:/run/wireguard
+
+  edge:
+    environment:
+      # the api now lives in the vpn sidecar's netns → reach it as vpn:8000
+      API_UPSTREAM: vpn:8000

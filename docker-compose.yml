@@ -1,0 +1,963 @@
+# =============================================================================
+# FreeSDN - base stack (production-oriented, env-driven, profile-based)
+# =============================================================================
+# ONE base file drives every deployment tier. Select a tier with an env file;
+# turn features on with profiles (set via COMPOSE_PROFILES in that env file):
+#
+#   Lite  (homelab):     docker compose --env-file .env.lite up -d
+#   Pro   (SMB):         docker compose --env-file .env.pro  up -d
+#   Max   (enterprise):  docker compose --env-file .env.max -f docker-compose.yml -f docker-compose.ha.yml up -d
+#   Dev   (developer):   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Profiles (opt-in services):
+#   caddy      → Caddy edge (default edge; in every tier's COMPOSE_PROFILES)
+#   nginx      → nginx edge escape hatch (use INSTEAD of caddy)
+#   io-worker  → dedicated I/O Celery worker (pro/max)
+#   monitoring → Flower dashboard (pro/max)
+#   cameras    → go2rtc camera restream sidecar (any tier that uses cameras)
+#   pooling    → PgBouncer connection poolers (pro-optional/max)
+#   dr         → off-site encrypted-backup sync (pro-optional/max)
+#
+# Core services (always on): postgres, logdb, redis, api, worker, scheduler,
+# pg-backup. The data tier is INTERNAL ONLY - only the edge publishes host
+# ports. (The dev overlay exposes DB/Redis/API ports for debugging.)
+
+# ── Reusable fragments (YAML anchors) - kill per-service duplication ─────────
+x-backend-build: &backend-build
+  context: ./backend
+  dockerfile: Dockerfile
+  target: ${BACKEND_TARGET:-production}
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-freesdn}:${POSTGRES_PASSWORD}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${POSTGRES_DB:-freesdn}
+  LOGDB_URL: postgresql+asyncpg://${LOGDB_USER:-freesdn}:${LOGDB_PASSWORD}@${LOGDB_HOST:-logdb}:${LOGDB_PORT:-5432}/${LOGDB_DB:-freesdn_logs}
+  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+  REDIS_HOST: redis
+  REDIS_PASSWORD: ${REDIS_PASSWORD}
+  CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+  CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@redis:6379/2
+  GO2RTC_URL: ${GO2RTC_URL:-http://go2rtc:1984}
+  SECRET_KEY: ${SECRET_KEY}
+  ENCRYPTION_SALT: ${ENCRYPTION_SALT}
+  # Production validates POSTGRES_PASSWORD as a standalone setting (not just in
+  # DATABASE_URL); pass it (and LOGDB_PASSWORD) explicitly to every service.
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  LOGDB_PASSWORD: ${LOGDB_PASSWORD}
+  ENVIRONMENT: ${ENVIRONMENT:-production}
+  LOG_LEVEL: ${LOG_LEVEL:-WARNING}
+  # Adapter write safety — one switch, two states. Default read-WRITE (false):
+  # FreeSDN manages your gear out of the box, like pfSense/OPNsense/Omada/UniFi.
+  # For a monitor-only deployment, set ADAPTER_READ_ONLY=true in .env (writes are
+  # refused; an opt-in safety mode). Destructive ops (delete/destroy/factory-
+  # reset) require an explicit per-action confirmation regardless of this flag.
+  ADAPTER_READ_ONLY: ${ADAPTER_READ_ONLY:-false}
+  # Persistent on-disk paths for the agent release-signing key store + binaries
+  # and Proxmox ISO/template uploads. Point at /data subdirs (backed by named
+  # volumes on api/worker) instead of the image default /var/lib/freesdn/* which
+  # is on the read-only rootfs and unwritable by the non-root appuser.
+  FREESDN_AGENT_RELEASE_DIR: ${FREESDN_AGENT_RELEASE_DIR:-/data/agent-releases}
+  PROXMOX_UPLOAD_DIR: ${PROXMOX_UPLOAD_DIR:-/data/proxmox-uploads}
+  # Metrics gate: set METRICS_AUTH_TOKEN to enable authenticated
+  # /metrics scraping in prod/staging; unset → the endpoint is not served.
+  ENABLE_METRICS: ${ENABLE_METRICS:-true}
+  METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:-}
+  # Marketplace catalog signing gate: pin the publisher key to require a
+  # signed catalog; or MARKETPLACE_ALLOW_UNSIGNED=1 for a trusted private registry.
+  MARKETPLACE_REGISTRY_URL: ${MARKETPLACE_REGISTRY_URL:-https://registry.freesdn.org/plugins.json}
+  MARKETPLACE_PUBLISHER_PUBLIC_KEY: ${MARKETPLACE_PUBLISHER_PUBLIC_KEY:-}
+  MARKETPLACE_ALLOW_UNSIGNED: ${MARKETPLACE_ALLOW_UNSIGNED:-}
+  # NetBird daemon address. In the sidecar topology the daemon runs in the `vpn`
+  # container and the api/worker drive it via the `netbird` CLI over the SHARED
+  # network namespace — so a tcp address (not the default unix socket, which the
+  # app containers can't see) lets the CLI reach the daemon. The sidecar LISTENS
+  # here, the app CLIs CONNECT here. Loopback inside the shared netns ⇒ private.
+  NETBIRD_DAEMON_ADDR: ${NETBIRD_DAEMON_ADDR:-tcp://127.0.0.1:41731}
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  # ── PostgreSQL - primary relational DB (internal only) ─────────────────────
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-18.4-trixie}
+    restart: unless-stopped
+    stop_grace_period: 60s
+    init: true
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-freesdn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-freesdn}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      - ./docker/postgres/custom.conf:/etc/postgresql/conf.d/custom.conf:ro
+    shm_size: ${POSTGRES_SHM_SIZE:-256m}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-freesdn} -d $${POSTGRES_DB:-freesdn}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: ${POSTGRES_MEM_LIMIT:-2G}
+          cpus: '${POSTGRES_CPU_LIMIT:-2.0}'
+        reservations:
+          memory: ${POSTGRES_MEM_RESERVATION:-256M}
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── TimescaleDB - time-series / observability DB (internal only) ───────────
+  logdb:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.logdb
+    image: ${LOGDB_IMAGE:-freesdn-logdb:local}
+    restart: unless-stopped
+    stop_grace_period: 60s
+    init: true
+    environment:
+      POSTGRES_USER: ${LOGDB_USER:-freesdn}
+      POSTGRES_PASSWORD: ${LOGDB_PASSWORD}
+      POSTGRES_DB: ${LOGDB_DB:-freesdn_logs}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
+    volumes:
+      - logdb_data:/var/lib/postgresql
+      - ./docker/postgres/logdb-custom.conf:/etc/postgresql/conf.d/custom.conf:ro
+    shm_size: ${LOGDB_SHM_SIZE:-256m}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-freesdn} -d $${POSTGRES_DB:-freesdn_logs}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: ${LOGDB_MEM_LIMIT:-2G}
+          cpus: '${LOGDB_CPU_LIMIT:-2.0}'
+        reservations:
+          memory: ${LOGDB_MEM_RESERVATION:-256M}
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── Valkey - broker + result backend + cache/pubsub (internal only) ────────
+  # Valkey is the BSD-licensed, Linux-Foundation-governed fork of Redis 7.2 and
+  # is a drop-in (same RESP protocol, same Sentinel, same redis-py clients). The
+  # service is still keyed `redis` so REDIS_HOST/redis:// URLs are unchanged.
+  redis:
+    image: valkey/valkey:${VALKEY_VERSION:-8.1.8-trixie}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    init: true
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    # maxmemory-policy volatile-lru is deliberate for this SHARED cache+broker
+    # instance: it only evicts keys that carry a TTL (cache entries, rate-limit,
+    # blacklist, the worker heartbeat) - never the TTL-less Celery task messages,
+    # so under memory pressure regenerable data is shed first and queued tasks are
+    # preserved (full → producers get a hard OOM error, not silent task loss). The
+    # one cost is the heartbeat key can be evicted under pressure, which surfaces
+    # as celery=degraded on the (non-gating) public health page. The max/HA tier
+    # splits broker onto its own noeviction instance; see
+    # https://docs.freesdn.org/deploy/deployment-tiers/.
+    command: >-
+      valkey-server
+      /usr/local/etc/valkey/valkey-custom.conf
+      --appendonly yes
+      --maxmemory-policy volatile-lru
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --rename-command FLUSHDB ""
+      --rename-command FLUSHALL ""
+      --rename-command DEBUG ""
+    volumes:
+      - redis_data:/data
+      - ./docker/redis/redis-custom.conf:/usr/local/etc/valkey/valkey-custom.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -a $$REDIS_PASSWORD ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_MEM_LIMIT:-768M}
+          cpus: '${REDIS_CPU_LIMIT:-1.0}'
+        reservations:
+          memory: ${REDIS_MEM_RESERVATION:-128M}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── VPN overlay sidecar - the single PRIVILEGED overlay node ───────────────
+  # Runs tailscaled (kernel TUN) + the NetBird daemon + the OpenVPN supervisor so
+  # the hardened, non-root, read-only api/worker do NOT have to. Those services
+  # join THIS container's network namespace (network_mode: "service:vpn") to
+  # route to remote sites through the tunnels, and drive the daemons over shared
+  # socket/config volumes. Reuses the backend image (which ships the VPN
+  # binaries) with a VPN-only entrypoint. This is the ONE place that holds
+  # NET_ADMIN + /dev/net/tun, keeping the elevated network privilege isolated.
+  vpn:
+    # OPT-IN privileged VPN sidecar (root + NET_ADMIN + /dev/net/tun). NOT started
+    # by default — the controller is capless out of the box (matches Omada/UniFi).
+    # Enable with: COMPOSE_PROFILES=vpn  AND  -f docker-compose.vpn.yml (which
+    # rejoins the api to this sidecar's netns). See docs.freesdn.org.
+    profiles: [vpn]
+    build: *backend-build
+    image: ${BACKEND_IMAGE:-freesdn-backend:local}
+    entrypoint: ["/app/vpn-sidecar-entrypoint.sh"]
+    user: "0:0"
+    restart: unless-stopped
+    # NET_ADMIN (tun/wg/routes) on top of Docker's DEFAULT root capability set,
+    # which is already a limited subset (no SYS_ADMIN/SYS_PTRACE/SYS_MODULE/…).
+    # NOTE: do NOT cap_drop:[ALL] here — the sidecar (root) legitimately needs
+    # CAP_DAC_OVERRIDE + CAP_CHOWN to read/chown the 0600 configs the non-root api
+    # writes to the shared volumes; dropping them breaks config materialization +
+    # status publishing. Blast-radius reduction for the api→root config channel is
+    # instead handled by re-validating every config against the dangerous-directive
+    # blocklist right before exec (see _ovpn_cfg_safe/_wg_cfg_safe below).
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    sysctls:
+      net.ipv4.ip_forward: "1"
+    environment:
+      <<: *backend-env
+    volumes:
+      - tailscale_state:/var/lib/tailscale
+      - tailscale_run:/var/run/tailscale
+      - netbird_state:/var/lib/netbird
+      - netbird_config:/etc/netbird
+      - openvpn_config:/etc/openvpn
+      - vpn_run:/run/openvpn-client
+      - wireguard_config:/etc/wireguard
+      - wireguard_run:/run/wireguard
+    healthcheck:
+      # Probe that tailscaled actually RESPONDS, not just that its socket file
+      # exists — a crashed/hung daemon leaves the socket on disk, so `test -S`
+      # would report healthy while the overlay is silently dead. `status --json`
+      # returns BackendState in any login state (incl. NeedsLogin) and fails only
+      # if the daemon isn't answering.
+      test: ["CMD-SHELL", "tailscale --socket=/var/run/tailscale/tailscaled.sock status --json 2>/dev/null | grep -q '\"BackendState\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    logging: *default-logging
+    networks: [default]
+
+  # ── API - FastAPI under gunicorn (internal; reached via the edge) ──────────
+  api:
+    build: *backend-build
+    image: ${BACKEND_IMAGE:-freesdn-backend:local}
+    restart: unless-stopped
+    stop_grace_period: ${API_STOP_GRACE_PERIOD:-40s}
+    environment:
+      <<: *backend-env
+      # VPN is OFF by default (capless, no privileged sidecar). To enable the
+      # privileged VPN sidecar, layer `-f docker-compose.vpn.yml` + set
+      # COMPOSE_PROFILES=vpn — that overlay sets FREESDN_VPN_MODE=sidecar and
+      # rejoins the api to the vpn netns. See docs.freesdn.org.
+      VPN_MODE: ${VPN_MODE:-off}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://localhost}
+      STRICT_STARTUP: ${STRICT_STARTUP:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["https://localhost"]}
+      # SIZING (battle-tested): each gunicorn worker holds ~300-375MB of this app.
+      # API_MEM_LIMIT must scale WITH this - rule of thumb API_MEM_LIMIT >=
+      # WEB_CONCURRENCY*0.375G + 0.25G headroom. Default 2 workers fits the 1G
+      # default; raising WEB_CONCURRENCY without raising API_MEM_LIMIT (below)
+      # causes worker OOM-kill + churn under load.
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      GUNICORN_MAX_REQUESTS: ${GUNICORN_MAX_REQUESTS:-1000}
+      GUNICORN_MAX_REQUESTS_JITTER: ${GUNICORN_MAX_REQUESTS_JITTER:-50}
+      GUNICORN_GRACEFUL_TIMEOUT: ${GUNICORN_GRACEFUL_TIMEOUT:-30}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
+      GUNICORN_KEEP_ALIVE: ${GUNICORN_KEEP_ALIVE:-5}
+      # Trust X-Forwarded-* only from the compose network (where the edge runs).
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-172.28.0.0/16}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-30}
+      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
+    volumes:
+      # NOTE: the VPN control volumes (tailscale_run / openvpn_config / vpn_run /
+      # wireguard_config / wireguard_run) are added back by docker-compose.vpn.yml
+      # only when the privileged VPN sidecar is enabled. Default api is capless.
+      - fabric_artifacts:/data/fabric_artifacts
+      - evidence_data:/data/evidence
+      - agent_releases:/data/agent-releases
+      - proxmox_uploads:/data/proxmox-uploads
+    depends_on:
+      postgres: {condition: service_healthy}
+      logdb: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          memory: ${API_MEM_LIMIT:-1G}
+          cpus: '${API_CPU_LIMIT:-2.0}'
+        reservations:
+          memory: ${API_MEM_RESERVATION:-256M}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    # api has NO networks/network_mode key -> it joins the project default network
+    # (freesdn-network) and is reachable as `api:8000`. The optional VPN overlay
+    # (docker-compose.vpn.yml) re-adds `network_mode: service:vpn` to route the api
+    # through the privileged sidecar's overlay tunnels when VPN is enabled.
+
+  # ── Celery worker - quick/priority lane (lite: ALL queues via WORKER_QUEUES) ─
+  worker:
+    build: *backend-build
+    image: ${BACKEND_IMAGE:-freesdn-backend:local}
+    restart: unless-stopped
+    stop_grace_period: ${WORKER_STOP_GRACE_PERIOD:-60s}
+    environment:
+      <<: *backend-env
+    # Share the release-signing key store + upload dirs with the api so a task
+    # that touches them never hits the read-only rootfs (the env anchor points
+    # every backend service at these paths).
+    volumes:
+      - agent_releases:/data/agent-releases
+      - proxmox_uploads:/data/proxmox-uploads
+    depends_on:
+      postgres: {condition: service_healthy}
+      logdb: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      api: {condition: service_healthy}
+    entrypoint: []
+    command: >-
+      celery -A app.core.celery_app worker
+      --loglevel=${CELERY_LOGLEVEL:-warning}
+      --pool=${CELERY_POOL:-prefork}
+      --concurrency=${CELERY_CONCURRENCY:-4}
+      --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-1000}
+      --pidfile=/tmp/celery_worker.pid
+      -Q ${WORKER_QUEUES:-default,priority}
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/celery_worker.pid && kill -0 $$(cat /tmp/celery_worker.pid)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          memory: ${WORKER_MEM_LIMIT:-1G}
+          cpus: '${WORKER_CPU_LIMIT:-2.0}'
+        reservations:
+          memory: ${WORKER_MEM_RESERVATION:-256M}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── Celery I/O worker - slow adapter/scan/metrics lane (pro/max) ───────────
+  worker-io:
+    profiles: [io-worker]
+    build: *backend-build
+    image: ${BACKEND_IMAGE:-freesdn-backend:local}
+    restart: unless-stopped
+    stop_grace_period: ${WORKER_STOP_GRACE_PERIOD:-60s}
+    environment:
+      <<: *backend-env
+    volumes:
+      - agent_releases:/data/agent-releases
+      - proxmox_uploads:/data/proxmox-uploads
+    depends_on:
+      postgres: {condition: service_healthy}
+      logdb: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      api: {condition: service_healthy}
+    entrypoint: []
+    command: >-
+      celery -A app.core.celery_app worker
+      --loglevel=${CELERY_LOGLEVEL:-warning}
+      --pool=${CELERY_IO_POOL:-prefork}
+      --concurrency=${CELERY_IO_CONCURRENCY:-2}
+      --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-1000}
+      --pidfile=/tmp/celery_worker_io.pid
+      -Q ${WORKER_IO_QUEUES:-discovery,sync,metrics}
+      -n worker-io@%h
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/celery_worker_io.pid && kill -0 $$(cat /tmp/celery_worker_io.pid)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          memory: ${WORKER_IO_MEM_LIMIT:-1G}
+          cpus: '${WORKER_IO_CPU_LIMIT:-2.0}'
+        reservations:
+          memory: ${WORKER_IO_MEM_RESERVATION:-256M}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── Celery beat - periodic task scheduler (single instance) ────────────────
+  scheduler:
+    build: *backend-build
+    image: ${BACKEND_IMAGE:-freesdn-backend:local}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      <<: *backend-env
+    depends_on:
+      redis: {condition: service_healthy}
+      logdb: {condition: service_healthy}
+      worker: {condition: service_healthy}
+    # Persist the beat schedule (last-run timestamps) across restarts. On tmpfs
+    # it was lost on every restart, so PersistentScheduler re-evaluated from
+    # scratch and could re-fire all periodic tasks at once (a thundering herd).
+    volumes:
+      - celerybeat_data:/app/celerybeat
+    entrypoint: []
+    command: ["celery", "-A", "app.core.celery_app", "beat", "--loglevel=warning", "--scheduler", "celery.beat:PersistentScheduler", "--schedule=/app/celerybeat/celerybeat-schedule"]
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /app/celerybeat/celerybeat-schedule"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: ${SCHEDULER_MEM_LIMIT:-512M}
+          cpus: '${SCHEDULER_CPU_LIMIT:-0.5}'
+        reservations:
+          memory: ${SCHEDULER_MEM_RESERVATION:-128M}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── Collector - dedicated SNMP-trap / Syslog / NetFlow UDP listener ────────
+  # The receivers also run inside the API process (module on_start), but that
+  # path cannot reliably accept EXTERNAL UDP: multi-worker gunicorn lets only one
+  # worker bind a port, and the capless / read-only / non-root API container
+  # cannot bind privileged 514/162 at all. This single dedicated process binds
+  # them deterministically. It stays non-root; a namespaced sysctl lets the
+  # appuser bind low ports without granting any capability or running as root.
+  # Opt in with the `collector` profile (it publishes the UDP ports below):
+  #   docker compose --env-file .env.pro --profile collector up -d
+  collector:
+    profiles: [collector]
+    build: *backend-build
+    image: ${BACKEND_IMAGE:-freesdn-backend:local}
+    restart: unless-stopped
+    stop_grace_period: 10s
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      logdb: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    entrypoint: []
+    command: ["python", "-m", "app.modules.collector.run"]
+    # Publish the receivers to the host. COLLECTOR_*_PORT is the single source of
+    # truth for the listen port — the runner binds it and it is published on BOTH
+    # sides, so the host-published and container-bound ports can never diverge
+    # (default 514/162/2055; set e.g. COLLECTOR_SYSLOG_PORT=5514 to move one).
+    ports:
+      - "${COLLECTOR_SYSLOG_PORT:-514}:${COLLECTOR_SYSLOG_PORT:-514}/udp"
+      - "${COLLECTOR_SNMP_PORT:-162}:${COLLECTOR_SNMP_PORT:-162}/udp"
+      - "${COLLECTOR_NETFLOW_PORT:-2055}:${COLLECTOR_NETFLOW_PORT:-2055}/udp"
+    # Namespaced (per-netns) — lets the non-root appuser bind 514/162 without
+    # CAP_NET_BIND_SERVICE or root. Safe; affects only this container's netns.
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,time,sys; f=os.getenv('COLLECTOR_HEARTBEAT_FILE','/tmp/collector.alive'); sys.exit(0 if os.path.exists(f) and time.time()-os.path.getmtime(f)<120 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: ${COLLECTOR_MEM_LIMIT:-512M}
+          cpus: '${COLLECTOR_CPU_LIMIT:-0.5}'
+        reservations:
+          memory: ${COLLECTOR_MEM_RESERVATION:-128M}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── Flower - Celery monitoring dashboard (pro/max; internal) ───────────────
+  flower:
+    profiles: [monitoring]
+    build: *backend-build
+    image: ${BACKEND_IMAGE:-freesdn-backend:local}
+    restart: unless-stopped
+    stop_grace_period: 15s
+    environment:
+      <<: *backend-env
+      FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH:-}
+      FLOWER_PORT: 5555
+    depends_on:
+      redis: {condition: service_healthy}
+      worker: {condition: service_healthy}
+    entrypoint: []
+    command: ["celery", "-A", "app.core.celery_app", "flower", "--port=5555"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(5); s.connect(('127.0.0.1',5555)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: ${FLOWER_MEM_LIMIT:-512M}
+          cpus: '${FLOWER_CPU_LIMIT:-0.5}'
+        reservations:
+          memory: ${FLOWER_MEM_RESERVATION:-128M}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── go2rtc - camera RTSP→MSE/WebRTC restream (feature: cameras) ────────────
+  go2rtc:
+    profiles: [cameras]
+    image: alexxit/go2rtc:${GO2RTC_VERSION:-1.9.14}
+    restart: unless-stopped
+    init: true
+    volumes:
+      - go2rtc_config:/config
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:1984/api/streams >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: ${GO2RTC_MEM_LIMIT:-1G}
+          cpus: '${GO2RTC_CPU_LIMIT:-2.0}'
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── Edge: Caddy (DEFAULT, always on) - TLS + SPA + /api proxy (HTTP/WS/streams)
+  # To use the nginx escape hatch instead: enable the `nginx` profile AND keep
+  # this from starting with `--scale edge=0`. The dev overlay disables it (dev
+  # serves the SPA via the Vite HMR server).
+  edge:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: caddy
+    image: ${EDGE_IMAGE:-freesdn-edge:local}
+    restart: unless-stopped
+    init: true
+    environment:
+      # :80 → HTTP (behind LB / local). A hostname → auto-HTTPS (Let's Encrypt).
+      # localhost/127.0.0.1 → HTTPS via Caddy's internal CA. See ./frontend/Caddyfile.
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:-:80}
+      # Default: api is a normal bridge service reachable as api:8000. The VPN
+      # overlay flips this to vpn:8000 (api shares the sidecar's netns there).
+      API_UPSTREAM: ${API_UPSTREAM:-api:8000}
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-admin@example.com}
+    volumes:
+      - caddy_data:/data      # certs + ACME state - MUST persist (LE rate limits)
+      - caddy_config:/config
+    ports:
+      - "${EDGE_HTTP_PORT:-8080}:80"
+      - "${EDGE_HTTPS_PORT:-8443}:443"
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: ${EDGE_MEM_LIMIT:-512M}
+          cpus: '${EDGE_CPU_LIMIT:-1.0}'
+        reservations:
+          memory: ${EDGE_MEM_RESERVATION:-64M}
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── Edge: nginx escape hatch (opt-in; use INSTEAD of caddy) ────────────────
+  # Enable with COMPOSE_PROFILES=nginx (and DROP caddy). Intended for shops that
+  # standardize on nginx or terminate TLS upstream (SSL_MODE=off behind an LB).
+  edge-nginx:
+    profiles: [nginx]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    image: ${EDGE_NGINX_IMAGE:-freesdn-edge-nginx:local}
+    restart: unless-stopped
+    init: true
+    environment:
+      SSL_MODE: ${SSL_MODE:-off}
+    volumes:
+      - ./docker/ssl:/etc/nginx/ssl:ro
+      - ./docker/certbot/www:/var/www/certbot:ro
+    ports:
+      - "${EDGE_HTTP_PORT:-8080}:8080"
+      - "${EDGE_HTTPS_PORT:-8443}:8443"
+    depends_on:
+      api: {condition: service_healthy}
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:uid=999,gid=999
+      - /var/run:uid=999,gid=999
+      - /tmp:uid=999,gid=999
+      - /etc/nginx/conf.d:uid=999,gid=999
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── PgBouncer - connection poolers (feature: pooling; pro-opt/max) ─────────
+  pgbouncer:
+    profiles: [pooling]
+    image: edoburu/pgbouncer:${PGBOUNCER_VERSION:-v1.25.2-p0}
+    restart: unless-stopped
+    stop_grace_period: 15s
+    init: true
+    environment:
+      PGBOUNCER_USER: ${POSTGRES_USER:-freesdn}
+      PGBOUNCER_PASSWORD: ${POSTGRES_PASSWORD}
+      PGBOUNCER_CONFIG: /etc/pgbouncer/pgbouncer.ini
+    volumes:
+      - ./docker/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./docker/pgbouncer/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U ${POSTGRES_USER:-freesdn}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /etc/pgbouncer:uid=999,gid=999
+      - /var/run/pgbouncer:uid=999,gid=999
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  pgbouncer-logdb:
+    profiles: [pooling]
+    image: edoburu/pgbouncer:${PGBOUNCER_VERSION:-v1.25.2-p0}
+    restart: unless-stopped
+    stop_grace_period: 15s
+    init: true
+    environment:
+      PGBOUNCER_USER: ${LOGDB_USER:-freesdn}
+      PGBOUNCER_PASSWORD: ${LOGDB_PASSWORD}
+      PGBOUNCER_CONFIG: /etc/pgbouncer/pgbouncer-logdb.ini
+    volumes:
+      - ./docker/pgbouncer/pgbouncer-logdb.ini:/etc/pgbouncer/pgbouncer-logdb.ini:ro
+      - ./docker/pgbouncer/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    depends_on:
+      logdb: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U ${LOGDB_USER:-freesdn}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /etc/pgbouncer:uid=999,gid=999
+      - /var/run/pgbouncer:uid=999,gid=999
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── pg-backup - encrypted pg_dump of both DBs (core; fail-closed in prod) ──
+  pg-backup:
+    image: postgres:${POSTGRES_VERSION:-18.4-trixie}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    init: true
+    environment:
+      # HOME on the writable tmpfs (read_only rootfs → /root is not writable).
+      HOME: /tmp
+      PGUSER: ${POSTGRES_USER:-freesdn}
+      PG_PASSWORD: ${POSTGRES_PASSWORD}
+      LOGDB_USER: ${LOGDB_USER:-freesdn}
+      LOGDB_PASS: ${LOGDB_PASSWORD}
+      LOGDB_DB: ${LOGDB_DB:-freesdn_logs}
+      POSTGRES_DB: ${POSTGRES_DB:-freesdn}
+      BACKUP_GPG_RECIPIENT: ${BACKUP_GPG_RECIPIENT:-}
+      # Fail-closed by default. Set to 1 ONLY for dev/homelab to allow
+      # unencrypted dumps when no GPG recipient is configured.
+      BACKUP_ALLOW_PLAINTEXT: ${BACKUP_ALLOW_PLAINTEXT:-0}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+    volumes:
+      - pg_backups:/backups
+      - ${BACKUP_GPG_PUBLIC_KEY_PATH:-./secrets/.gitkeep}:/etc/freesdn/gpg/backup-public.asc:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      logdb: {condition: service_healthy}
+    entrypoint: >-
+      /bin/bash -c '
+      set -e;
+      printf "postgres:*:*:%s:%s\n" "$$PGUSER" "$$PG_PASSWORD" > ~/.pgpass;
+      printf "logdb:*:*:%s:%s\n" "$$LOGDB_USER" "$$LOGDB_PASS" >> ~/.pgpass;
+      chmod 600 ~/.pgpass;
+      unset PG_PASSWORD LOGDB_PASS;
+      export GNUPGHOME=/tmp/gnupg;
+      mkdir -p $$GNUPGHOME; chmod 700 $$GNUPGHOME;
+      GPG_KEY=/etc/freesdn/gpg/backup-public.asc;
+      GPG_ENABLED=0;
+      if [ -n "$$BACKUP_GPG_RECIPIENT" ] && [ -s "$$GPG_KEY" ] && gpg --batch --import "$$GPG_KEY" >/tmp/gpg-import.log 2>&1; then
+        GPG_ENABLED=1;
+        echo "GPG backup encryption ENABLED - recipient: $$BACKUP_GPG_RECIPIENT";
+      elif [ -n "$$BACKUP_GPG_RECIPIENT" ]; then
+        echo "WARNING: GPG requested but key import FAILED; see /tmp/gpg-import.log. Backups would be UNENCRYPTED.";
+      else
+        echo "GPG not configured (set BACKUP_GPG_RECIPIENT + BACKUP_GPG_PUBLIC_KEY_PATH to enable).";
+      fi;
+      if [ "$$GPG_ENABLED" != "1" ] && [ "$${BACKUP_ALLOW_PLAINTEXT:-0}" != "1" ]; then
+        echo "Backups DISABLED: no encryption configured and BACKUP_ALLOW_PLAINTEXT is not set. Refusing to write plaintext dumps (secure by default).";
+        echo "  Enable: set BACKUP_GPG_RECIPIENT + a valid BACKUP_GPG_PUBLIC_KEY_PATH, or set BACKUP_ALLOW_PLAINTEXT=1 (not recommended), then re-up.";
+        mkdir -p /backups/.metrics;
+        printf "freesdn_pg_backup_enabled 0\nfreesdn_pg_backup_encryption_enabled 0\n" > /backups/.metrics/pg_backup.prom;
+        echo "Idling - container stays up but writes no backups until reconfigured (no crash-loop).";
+        while true; do sleep 3600; done;
+      fi;
+      echo "FreeSDN DB Backup service started (interval $${BACKUP_INTERVAL_SECONDS}s, retention $${BACKUP_RETENTION_DAYS}d)";
+      while true; do
+        STAMP=$$(date +%Y%m%d_%H%M%S);
+        if [ "$$GPG_ENABLED" = "1" ]; then
+          pg_dump -h postgres -U $$PGUSER -d $${POSTGRES_DB:-freesdn} --no-owner --no-privileges | gzip | gpg --batch --yes --trust-model always --encrypt --recipient "$$BACKUP_GPG_RECIPIENT" --output /backups/freesdn_$$STAMP.sql.gz.gpg;
+          pg_dump -h logdb -U $$LOGDB_USER -d $$LOGDB_DB --no-owner --no-privileges | gzip | gpg --batch --yes --trust-model always --encrypt --recipient "$$BACKUP_GPG_RECIPIENT" --output /backups/logdb_$$STAMP.sql.gz.gpg;
+        else
+          pg_dump -h postgres -U $$PGUSER -d $${POSTGRES_DB:-freesdn} --no-owner --no-privileges | gzip > /backups/freesdn_$$STAMP.sql.gz;
+          pg_dump -h logdb -U $$LOGDB_USER -d $$LOGDB_DB --no-owner --no-privileges | gzip > /backups/logdb_$$STAMP.sql.gz;
+        fi;
+        find /backups \( -name "*.sql.gz" -o -name "*.sql.gz.gpg" \) -mtime +$${BACKUP_RETENTION_DAYS:-7} -delete;
+        mkdir -p /backups/.metrics;
+        echo "freesdn_pg_backup_last_success_timestamp $$(date +%s)" > /backups/.metrics/pg_backup.prom;
+        echo "freesdn_pg_backup_encryption_enabled $$GPG_ENABLED" >> /backups/.metrics/pg_backup.prom;
+        echo "[$$STAMP] Backup complete. Next run in $${BACKUP_INTERVAL_SECONDS}s.";
+        sleep $${BACKUP_INTERVAL_SECONDS:-86400};
+      done'
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "ls /backups/freesdn_*.sql.gz.gpg 2>/dev/null | head -1 | grep -q . || ls /backups/freesdn_*.sql.gz 2>/dev/null | head -1 | grep -q . || test $(( $(date +%s) - $(stat -c %Y /backups/ 2>/dev/null || echo 0) )) -lt 90000"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    networks: [default]
+
+  # ── pg-backup-offsite - rclone copy to remote storage (feature: dr) ────────
+  pg-backup-offsite:
+    profiles: [dr]
+    image: rclone/rclone:${RCLONE_VERSION:-1.74.3}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    init: true
+    environment:
+      BACKUP_OFFSITE_REMOTE: ${BACKUP_OFFSITE_REMOTE:-}
+      BACKUP_OFFSITE_PATH: ${BACKUP_OFFSITE_PATH:-freesdn-backups}
+      BACKUP_OFFSITE_INTERVAL_HOURS: ${BACKUP_OFFSITE_INTERVAL_HOURS:-24}
+      BACKUP_OFFSITE_RETENTION_DAYS: ${BACKUP_OFFSITE_RETENTION_DAYS:-30}
+    volumes:
+      - pg_backups:/backups:ro
+      - ${BACKUP_OFFSITE_CONFIG_PATH:-./secrets/rclone.conf}:/config/rclone/rclone.conf:ro
+    depends_on:
+      pg-backup: {condition: service_started}
+    entrypoint: >-
+      /bin/sh -c '
+      set -e;
+      if [ -z "$$BACKUP_OFFSITE_REMOTE" ]; then echo "ERROR: BACKUP_OFFSITE_REMOTE not set; refusing to start."; exit 1; fi;
+      if ! rclone --config /config/rclone/rclone.conf listremotes 2>/dev/null | grep -qFx "$${BACKUP_OFFSITE_REMOTE}:"; then echo "ERROR: remote $${BACKUP_OFFSITE_REMOTE} not found in rclone.conf."; exit 1; fi;
+      DEST="$${BACKUP_OFFSITE_REMOTE}:$${BACKUP_OFFSITE_PATH}";
+      INTERVAL_SECONDS=$$(( BACKUP_OFFSITE_INTERVAL_HOURS * 3600 ));
+      echo "FreeSDN off-site backup sync → $$DEST every $${BACKUP_OFFSITE_INTERVAL_HOURS}h, retention $${BACKUP_OFFSITE_RETENTION_DAYS}d";
+      while true; do
+        STAMP=$$(date +%Y%m%d_%H%M%S);
+        if rclone --config /config/rclone/rclone.conf copy /backups "$$DEST" --immutable --include "freesdn_*.sql.gz*" --include "logdb_*.sql.gz*" --transfers 2 --checkers 4 --retries 3 --low-level-retries 10 --stats=0 --log-level=NOTICE; then
+          echo "[$$STAMP] Off-site copy OK";
+          rclone --config /config/rclone/rclone.conf delete "$$DEST" --min-age "$${BACKUP_OFFSITE_RETENTION_DAYS}d" --include "freesdn_*.sql.gz*" --include "logdb_*.sql.gz*" --log-level=NOTICE || echo "[$$STAMP] WARNING: retention sweep failed (non-fatal)";
+        else
+          echo "[$$STAMP] ERROR: off-site copy failed - retrying next cycle";
+        fi;
+        sleep $$INTERVAL_SECONDS;
+      done'
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/rclone/.config/rclone
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  # ── Observability stack (feature: metrics) - Prometheus + exporters ─────────
+  # Enable with `metrics` in COMPOSE_PROFILES. Scrapes the API /metrics + Valkey
+  # + Postgres/LogDB exporters and loads observability/prometheus/alerts.yml. Add an
+  # Alertmanager + your channel to route the alerts.
+  prometheus:
+    profiles: [metrics]
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.12.0}
+    restart: unless-stopped
+    user: "65534:65534"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alerts.yml:/etc/prometheus/freesdn-alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/healthy >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: ${PROMETHEUS_MEM_LIMIT:-1G}
+          cpus: '${PROMETHEUS_CPU_LIMIT:-1.0}'
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  redis-exporter:
+    profiles: [metrics]
+    image: oliver006/redis_exporter:${REDIS_EXPORTER_VERSION:-v1.86.0}
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  postgres-exporter:
+    profiles: [metrics]
+    image: prometheuscommunity/postgres-exporter:${PG_EXPORTER_VERSION:-v0.19.1}
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-freesdn}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-freesdn}?sslmode=disable"
+    # PostgreSQL 17/18 split checkpoint counters out of pg_stat_bgwriter into
+    # pg_stat_checkpointer; the pinned exporter's built-in stat_bgwriter collector
+    # queries the removed column and errors every scrape on PG18. Disable just
+    # that collector (the rest stay) until PG_EXPORTER_VERSION is bumped to a
+    # PG18-aware release.
+    command: ["--no-collector.stat_bgwriter"]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+  logdb-exporter:
+    profiles: [metrics]
+    image: prometheuscommunity/postgres-exporter:${PG_EXPORTER_VERSION:-v0.19.1}
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${LOGDB_USER:-freesdn}:${LOGDB_PASSWORD}@logdb:5432/${LOGDB_DB:-freesdn_logs}?sslmode=disable"
+    # See postgres-exporter: PG18 removed pg_stat_bgwriter.checkpoints_* - skip
+    # the collector that errors every scrape.
+    command: ["--no-collector.stat_bgwriter"]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
+networks:
+  # The project default network. Making it the *default* lets the `api` service
+  # join it with NO `networks:` key — which is what allows the optional VPN overlay
+  # (docker-compose.vpn.yml) to add `network_mode: service:vpn` to api without the
+  # illegal networks+network_mode combination. All other services attach explicitly
+  # via `networks: [default]`. Left project-scoped (compose names it
+  # <project>_default) so multiple FreeSDN stacks on one host don't collide on a
+  # shared network name.
+  default:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: ${NETWORK_SUBNET:-172.28.0.0/16}
+
+volumes:
+  postgres_data:
+  logdb_data:
+  redis_data:
+  celerybeat_data:
+  evidence_data:
+  fabric_artifacts:
+  agent_releases:
+  proxmox_uploads:
+  tailscale_state:
+  tailscale_run:      # tailscaled control socket, shared vpn <-> api/worker
+  netbird_state:      # netbird daemon state
+  netbird_config:     # netbird config
+  openvpn_config:     # .ovpn client configs the api writes, the sidecar runs
+  vpn_run:            # openvpn pidfiles + desired/status markers (shared)
+  wireguard_config:   # wg-quick INI configs the api writes, the sidecar brings up
+  wireguard_run:      # wireguard desired/status markers (shared vpn <-> api)
+  pg_backups:
+  go2rtc_config:
+  caddy_data:
+  caddy_config:
+  prometheus_data:

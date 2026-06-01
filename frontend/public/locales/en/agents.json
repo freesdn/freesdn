@@ -1,0 +1,459 @@
+{
+  "AgentDetailPage": {
+    "loading": "Loading…",
+    "backToAgents": "Back to agents",
+    "defaultDescription": "Remote site agent",
+    "relative": {
+      "never": "never",
+      "secondsAgo": "{{n}}s ago",
+      "minutesAgo": "{{n}}m ago",
+      "hoursAgo": "{{n}}h ago",
+      "daysAgo": "{{n}}d ago"
+    },
+    "errors": {
+      "noAgentId": "No agent id in URL.",
+      "notFound": "Agent not found."
+    },
+    "toast": {
+      "alertConfigSaved": "Alert config saved",
+      "saveFailed": "Save failed"
+    },
+    "offlineAlert": {
+      "title": "Offline alert dispatched",
+      "body": "Notified at {{when}}. When this agent reconnects, the alert flag will reset and the next offline transition will fire a fresh notification."
+    },
+    "stats": {
+      "status": "Status",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "schedules": "Schedules",
+      "pinnedCount": "{{n}} pinned",
+      "runs24h": "Runs (24h)",
+      "failedCount": "{{n}} failed",
+      "allSucceeded": "All succeeded",
+      "discoveries": "Discoveries",
+      "adoptedCount": "{{n}} adopted"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "schedules": "Schedules",
+      "runs": "Runs",
+      "discoveries": "Discoveries",
+      "topology": "Topology",
+      "adHoc": "Ad-hoc scans",
+      "settings": "Settings"
+    },
+    "details": {
+      "title": "Agent details",
+      "id": "ID",
+      "type": "Type",
+      "version": "Version",
+      "site": "Site",
+      "lastHeartbeat": "Last heartbeat",
+      "approved": "Approved",
+      "yes": "yes",
+      "no": "no"
+    },
+    "alertsDialog": {
+      "trigger": "Configure offline alerts",
+      "title": "Offline alerts for {{name}}",
+      "description": "Backend fires an alert when this agent's last heartbeat is older than the threshold below. One alert per offline transition (won't spam every tick).",
+      "emailLabel": "Email recipients (comma-separated)",
+      "slackLabel": "Slack channel",
+      "thresholdLabel": "Offline threshold (seconds, min 60, default 180)",
+      "cancel": "Cancel",
+      "save": "Save"
+    },
+    "schedules": {
+      "empty": "No schedules target this agent. Site-wide schedules will appear here too once they're created.",
+      "columns": {
+        "name": "Name",
+        "type": "Type",
+        "cron": "Cron",
+        "targets": "Targets",
+        "lastFired": "Last fired",
+        "status": "Status"
+      },
+      "pinned": "pinned",
+      "siteWide": "site-wide",
+      "disabled": "disabled"
+    },
+    "runs": {
+      "empty": "No runs recorded for this agent yet.",
+      "columns": {
+        "status": "Status",
+        "schedule": "Schedule",
+        "when": "When",
+        "duration": "Duration",
+        "devices": "Devices",
+        "error": "Error"
+      }
+    },
+    "discoveries": {
+      "empty": "This agent hasn't contributed any discoveries.",
+      "columns": {
+        "ip": "IP",
+        "mac": "MAC",
+        "vendor": "Vendor",
+        "hostname": "Hostname",
+        "lastSeen": "Last seen",
+        "status": "Status"
+      },
+      "adopted": "adopted",
+      "new": "new"
+    },
+    "topology": {
+      "empty": "No LLDP/CDP edges captured by this agent yet. The agent's listener needs raw-socket privileges + an LLDP-broadcasting switch on the same broadcast domain.",
+      "columns": {
+        "protocol": "Protocol",
+        "localInterface": "Local interface",
+        "neighborChassis": "Neighbor chassis",
+        "neighborPort": "Neighbor port",
+        "system": "System",
+        "vlan": "VLAN",
+        "lastSeen": "Last seen"
+      }
+    }
+  },
+  "AgentReleasesPage": {
+    "header": {
+      "title": "Agent Releases",
+      "description": "Upload, promote, and retire agent binaries. Connected daemons check this list every auto-update interval and self-upgrade with rollback protection."
+    },
+    "card": {
+      "title": "Releases"
+    },
+    "actions": {
+      "uploadRelease": "Upload release",
+      "cancel": "Cancel",
+      "uploading": "Uploading…",
+      "uploadAndPublish": "Upload + publish",
+      "uploadPublish": "Upload + publish"
+    },
+    "dialog": {
+      "title": "Upload agent binary"
+    },
+    "form": {
+      "binaryFile": "Binary file",
+      "version": "Version",
+      "platform": "Platform",
+      "type": "Type",
+      "releaseNotes": "Release notes",
+      "releaseNotesPlaceholder": "What's in this build…",
+      "prereleaseLabel": "Mark as pre-release (won't auto-update existing agents)",
+      "markPrerelease": "Mark as pre-release (won't auto-update existing agents)",
+      "uploadingProgress": "Uploading {{percent}}%…"
+    },
+    "upload": {
+      "progress": "Uploading {{percent}}%…"
+    },
+    "states": {
+      "error": "Could not load releases.",
+      "loading": "Loading…",
+      "empty": "No releases yet. Upload a binary above to publish the first one."
+    },
+    "table": {
+      "version": "Version",
+      "platform": "Platform",
+      "type": "Type",
+      "size": "Size",
+      "sha256": "SHA-256",
+      "downloads": "Downloads",
+      "status": "Status",
+      "published": "Published"
+    },
+    "badges": {
+      "latest": "latest",
+      "prerelease": "prerelease"
+    },
+    "rowActions": {
+      "download": "Download binary",
+      "markLatest": "Mark as latest",
+      "delete": "Delete release"
+    },
+    "confirmDelete": "Delete release {{version}} ({{platform}}/{{agentType}})?",
+    "toasts": {
+      "uploaded": {
+        "title": "Release uploaded",
+        "description": "{{version}} ({{platform}}/{{agentType}}) is now latest"
+      },
+      "uploadFailed": {
+        "title": "Upload failed"
+      },
+      "promoted": {
+        "title": "Marked as latest",
+        "description": "{{version}} is now latest for {{platform}}/{{agentType}}"
+      },
+      "deleted": {
+        "title": "Release deleted"
+      }
+    },
+    "confirm": {
+      "delete": "Delete release {{version}} ({{platform}}/{{type}})?"
+    }
+  },
+  "AgentsPage": {
+    "title": "Remote Agents",
+    "description": "Manage remote site agents for distributed network discovery.",
+    "loadError": "Failed to load agents",
+    "searchPlaceholder": "Search agents by name, site, or IP…",
+    "itemName": "agent",
+    "itemNamePlural": "agents",
+    "never": "Never",
+    "pendingApproval": "Pending Approval",
+    "partialLoadWarning": "Some data failed to load. Results may be incomplete.",
+    "columns": {
+      "agent": "Agent",
+      "type": "Type",
+      "status": "Status",
+      "site": "Site",
+      "lastIp": "Last IP",
+      "lastHeartbeat": "Last Heartbeat"
+    },
+    "agentTypes": {
+      "site": "Site Agent",
+      "scanner": "Scanner",
+      "collector": "Collector",
+      "gateway": "Gateway"
+    },
+    "statuses": {
+      "online": "Online",
+      "offline": "Offline",
+      "connecting": "Connecting",
+      "error": "Error",
+      "maintenance": "Maintenance"
+    },
+    "filters": {
+      "allStatuses": "All statuses",
+      "allTypes": "All types",
+      "clear": "Clear filters"
+    },
+    "actions": {
+      "export": "Export",
+      "registerAgent": "Register Agent",
+      "menuAria": "Actions for {{name}}",
+      "approveAgent": "Approve Agent",
+      "runScan": "Run Scan",
+      "disconnect": "Disconnect",
+      "disconnectConfirm": "Are you sure you want to remove this agent?",
+      "menuLabel": "Actions for {{name}}"
+    },
+    "stats": {
+      "total": {
+        "title": "Total Agents",
+        "description": "Registered agents"
+      },
+      "online": {
+        "title": "Online",
+        "description": "Connected and healthy"
+      },
+      "offline": {
+        "title": "Offline",
+        "description": "Disconnected"
+      },
+      "pendingApproval": {
+        "title": "Pending Approval",
+        "description": "Awaiting approval"
+      },
+      "totalAgents": {
+        "title": "Total Agents",
+        "description": "Registered agents"
+      }
+    },
+    "fleet": {
+      "activeSchedules": {
+        "title": "Active Schedules",
+        "description": "{{count}} total"
+      },
+      "runs24h": {
+        "title": "Runs (24h)",
+        "failed": "{{count}} failed",
+        "allSucceeded": "All succeeded"
+      },
+      "discoveredHosts": {
+        "title": "Discovered Hosts",
+        "description": "{{count}} unadopted"
+      },
+      "lastRun": {
+        "title": "Last Run",
+        "description": "Most recent execution",
+        "none": "No runs yet",
+        "mostRecent": "Most recent execution",
+        "noRuns": "No runs yet"
+      }
+    },
+    "toasts": {
+      "approveFailed": {
+        "title": "Approve failed",
+        "description": "Failed to approve agent."
+      },
+      "disconnectFailed": {
+        "title": "Disconnect failed",
+        "description": "Failed to disconnect agent."
+      }
+    },
+    "bulk": {
+      "approve": {
+        "label": "Approve",
+        "title": "Bulk approve done",
+        "result": "{{ok}} approved",
+        "resultWithFailures": "{{ok}} approved, {{fail}} failed",
+        "toastTitle": "Bulk approve done"
+      },
+      "disable": {
+        "label": "Disable",
+        "title": "Bulk disable done",
+        "result": "{{ok}}/{{total}} disabled",
+        "toastTitle": "Bulk disable done"
+      },
+      "delete": {
+        "label": "Delete",
+        "title": "Bulk delete done",
+        "confirm": "Delete {{count}} agent(s)? This soft-deletes the registration; existing discoveries and runs are preserved.",
+        "result": "{{ok}} deleted",
+        "resultWithFailures": "{{ok}} deleted, {{fail}} failed",
+        "toastTitle": "Bulk delete done"
+      }
+    },
+    "register": {
+      "title": "Register New Agent",
+      "description": "Generate credentials for a remote site agent to connect to this FreeSDN instance.",
+      "submit": "Register Agent",
+      "submitting": "Registering...",
+      "copyAll": "Copy All",
+      "done": "Done",
+      "success": {
+        "title": "Agent Registered Successfully",
+        "description": "Save these credentials securely. The agent key will not be shown again."
+      },
+      "fields": {
+        "agentId": "Agent ID",
+        "agentKey": "Agent Key",
+        "websocketUrl": "WebSocket URL",
+        "envVars": "Environment Variables",
+        "site": "Site",
+        "sitePlaceholder": "Select a site for this agent",
+        "name": "Agent Name",
+        "namePlaceholder": "e.g., Branch Office Agent",
+        "type": "Agent Type",
+        "description": "Description (Optional)",
+        "descriptionPlaceholder": "Brief description of agent purpose",
+        "agentType": "Agent Type",
+        "descriptionLabel": "Description (Optional)"
+      },
+      "validation": {
+        "site": "Select a site",
+        "name": "Agent name is required",
+        "siteRequired": "Select a site",
+        "nameRequired": "Agent name is required"
+      }
+    },
+    "pageHeader": {
+      "title": "Remote Agents",
+      "description": "Manage remote site agents for distributed network discovery."
+    },
+    "errors": {
+      "loadFailed": "Failed to load agents"
+    },
+    "partialFailure": "Some data failed to load. Results may be incomplete.",
+    "itemNameSingular": "agent",
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "connecting": "Connecting",
+      "error": "Error",
+      "maintenance": "Maintenance",
+      "pendingApproval": "Pending Approval"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search agents by name, site, or IP…",
+      "allStatuses": "All statuses",
+      "allTypes": "All types",
+      "clearFilters": "Clear filters"
+    }
+  },
+  "DownloadsPage": {
+    "copy": {
+      "copied": "Copied to clipboard",
+      "copy": "Copy to clipboard"
+    },
+    "platform": {
+      "yourOs": "Your OS",
+      "daemonAndDesktopAvailable": "Daemon Agent & Desktop App available",
+      "daemonAvailable": "Daemon Agent available",
+      "desktopAvailable": "Desktop App available",
+      "noReleases": "No releases available yet",
+      "daemonAgent": "Daemon Agent",
+      "desktopApp": "Desktop App",
+      "comingSoon": "Coming Soon",
+      "installInstructions": "Install Instructions"
+    },
+    "header": {
+      "title": "Agent Downloads",
+      "description": "Download the FreeSDN Agent for network discovery and management at remote sites"
+    },
+    "errorBanner": "Failed to load agent download metadata · showing fallback install instructions.",
+    "infoBanner": {
+      "title": "Two agent types available",
+      "daemonDesc": "Headless service that runs 24/7 as a system service. Connects via WebSocket for persistent monitoring and remote-triggered scans.",
+      "desktopDesc": "Interactive GUI application for on-demand network scanning and device discovery."
+    },
+    "features": {
+      "protocols": {
+        "title": "14 Discovery Protocols",
+        "desc": "ARP, ICMP, TCP, HTTP, SNMP, ONVIF, RTSP, mDNS, SSDP, SIP, NetBIOS, DNS, Banner, SADP"
+      },
+      "secure": {
+        "title": "Secure by Default",
+        "desc": "Credentials stored in OS keyring, SHA-256 key verification, admin approval required"
+      },
+      "multiSite": {
+        "title": "Multi-Site Support",
+        "desc": "Deploy agents at each site · one FreeSDN server manages all locations centrally"
+      }
+    },
+    "quickStart": {
+      "title": "Quick Start",
+      "description": "Get an agent connected in 4 steps",
+      "steps": {
+        "download": {
+          "title": "Download",
+          "desc": "Download the agent for your platform above"
+        },
+        "register": {
+          "title": "Register",
+          "desc": "Run freesdn-agent register --server <URL>"
+        },
+        "approve": {
+          "title": "Approve",
+          "desc": "Go to Agents page in FreeSDN and approve the new agent"
+        },
+        "connect": {
+          "title": "Connect",
+          "desc": "Run freesdn-agent daemon · agent connects automatically"
+        }
+      },
+      "subtitle": "Get an agent connected in 4 steps"
+    },
+    "versionInfo": {
+      "latest": "Latest agent version: v{{version}}",
+      "server": "Server version: v{{version}}"
+    },
+    "error": {
+      "loadFailed": "Failed to load agent download metadata · showing fallback install instructions."
+    },
+    "yourOs": "Your OS",
+    "availability": {
+      "both": "Daemon Agent & Desktop App available",
+      "daemon": "Daemon Agent available",
+      "desktop": "Desktop App available",
+      "none": "No releases available yet"
+    },
+    "buttons": {
+      "daemonAgent": "Daemon Agent",
+      "desktopApp": "Desktop App",
+      "comingSoon": "Coming Soon"
+    },
+    "installInstructions": "Install Instructions"
+  }
+}

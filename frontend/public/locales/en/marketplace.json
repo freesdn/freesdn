@@ -1,0 +1,81 @@
+{
+  "MarketplacePage": {
+    "header": {
+      "title": "Plugin Marketplace",
+      "subtitle": "Discover and install community plugins to extend FreeSDN"
+    },
+    "actions": {
+      "syncRegistry": "Sync Registry"
+    },
+    "filters": {
+      "searchPlaceholder": "Search plugins..."
+    },
+    "categories": {
+      "all": "All Categories",
+      "monitoring": "Monitoring",
+      "security": "Security",
+      "automation": "Automation",
+      "integration": "Integration",
+      "analytics": "Analytics",
+      "device": "Device",
+      "reporting": "Reporting"
+    },
+    "sort": {
+      "downloads": "Most Downloaded",
+      "rating": "Highest Rated",
+      "newest": "Newest",
+      "name": "Name A-Z"
+    },
+    "errors": {
+      "loadFailed": "Failed to load marketplace plugins",
+      "installFailed": "Installation failed"
+    },
+    "results": {
+      "countOne": "{{count}} plugin",
+      "countOther": "{{count}} plugins"
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "pageOf": "Page {{page}} of {{total}}"
+    },
+    "empty": {
+      "title": "No plugins found",
+      "description": "Try adjusting your search or category filter"
+    },
+    "card": {
+      "verifiedTooltip": "Verified plugin",
+      "byAuthor": "by {{author}}",
+      "installed": "Installed",
+      "install": "Install"
+    }
+  },
+  "PluginDetailPage": {
+    "loading": "Loading plugin...",
+    "notFound": "Plugin not found",
+    "backToMarketplace": "Back to Marketplace",
+    "verified": "Verified",
+    "by": "by",
+    "ratingSummary": "{{rating}} ({{count}} reviews)",
+    "installedWithVersion": "Installed ({{version}})",
+    "install": "Install",
+    "installDialog": {
+      "title": "Install third-party plugin?",
+      "warning": "This installs third-party code that runs with full backend privileges. Continue?",
+      "pluginLabel": "Plugin:",
+      "notVerified": "This plugin is NOT verified by FreeSDN.",
+      "cancel": "Cancel",
+      "confirm": "Install plugin"
+    },
+    "installFailed": "Installation failed",
+    "screenshots": "Screenshots",
+    "screenshotAlt": "Screenshot {{index}}",
+    "versionHistory": "Version History",
+    "noChangelog": "No changelog available",
+    "reviews": "Reviews",
+    "writeReview": "Write a Review",
+    "reviewPlaceholder": "Share your experience with this plugin...",
+    "submitReview": "Submit Review",
+    "submitReviewFailed": "Failed to submit review"
+  }
+}

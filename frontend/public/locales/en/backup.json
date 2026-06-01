@@ -1,0 +1,539 @@
+{
+  "BackupsPage": {
+    "header": {
+      "title": "Configuration Backup",
+      "description": "Portable configuration snapshots, sites, controllers, devices, users, automation rules"
+    },
+    "actions": {
+      "newBackup": "New Backup",
+      "createBackup": "Create Backup",
+      "storageLocations": "Storage Locations",
+      "download": "Download",
+      "restore": "Restore",
+      "viewDetails": "View Details",
+      "delete": "Delete",
+      "deleteBackup": "Delete Backup",
+      "createSchedule": "Create Schedule",
+      "pauseSchedule": "Pause Schedule",
+      "resumeSchedule": "Resume Schedule",
+      "editSchedule": "Edit Schedule",
+      "runNow": "Run Now",
+      "deleteSchedule": "Delete Schedule",
+      "updateSchedule": "Update Schedule",
+      "cancel": "Cancel",
+      "close": "Close",
+      "previewChanges": "Preview Changes",
+      "restoreNow": "Restore Now",
+      "selectItem": "Select {{name}}"
+    },
+    "common": {
+      "encrypted": "Encrypted"
+    },
+    "scopeBanner": {
+      "title": "This is a configuration snapshot, not a full-system backup",
+      "part1Before": "The",
+      "part1After": "archives here export sites, controllers, devices, users, and automation rules, designed for migrating config between instances or keeping a portable settings template. For disaster recovery (audit log + hash chain, encrypted credentials, agent registry, plugin install state, per-module VoIP/Camera/Hypervisor data) use the",
+      "part2": "container output and follow"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "quickActions": {
+      "title": "Quick Actions",
+      "subtitle": "Export or import your configuration instantly",
+      "exporting": "Exporting...",
+      "exportConfig": "Export Config",
+      "reading": "Reading...",
+      "importConfig": "Import Config"
+    },
+    "stats": {
+      "totalBackups": "Total Backups",
+      "completed": "Completed",
+      "failed": "Failed",
+      "storageUsed": "Storage Used",
+      "activeSchedules": "{{count}} active schedules"
+    },
+    "storageCta": {
+      "noneTitle": "No Storage Locations Configured",
+      "noneDescription": "Set up where your backups are stored · local disk, NFS, S3, or other destinations.",
+      "configure": "Configure Storage",
+      "countOne": "{{count}} Storage Location",
+      "countMany": "{{count}} Storage Locations",
+      "configuredForBackups": "configured for backups",
+      "manage": "Manage Locations"
+    },
+    "timeline": {
+      "title": "Backup Timeline",
+      "lastN": "Last {{count}} backups",
+      "oldest": "Oldest",
+      "mostRecent": "Most Recent"
+    },
+    "tabs": {
+      "backups": "Backups",
+      "schedules": "Schedules",
+      "history": "History"
+    },
+    "filters": {
+      "searchPlaceholder": "Search backups...",
+      "statusPlaceholder": "Filter by status",
+      "allStatus": "All Status"
+    },
+    "status": {
+      "pending": "Pending",
+      "inProgress": "In Progress",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "empty": {
+      "noBackups": {
+        "title": "No backups yet",
+        "description": "Create your first backup to protect your device configurations. Backups can be triggered manually or run on a schedule."
+      },
+      "noSchedules": {
+        "title": "No schedules yet",
+        "description": "Set up automatic backups so your configurations are captured on a recurring cadence · daily, weekly, or custom cron."
+      },
+      "noHistory": {
+        "title": "No backup history",
+        "description": "Completed backups will appear here as a chronological timeline once any backup job finishes."
+      }
+    },
+    "rollbackBadge": {
+      "label": "Pre-restore snapshot",
+      "tooltip": "Auto-captured before a restore. Restore this snapshot to undo that restore."
+    },
+    "schedules": {
+      "heading": "Automatic Backup Schedules",
+      "subheading": "Configure automated backups with retention policies",
+      "active": "Active",
+      "paused": "Paused",
+      "keepBackups": "Keep {{count}} backups",
+      "retainDays": "Retain {{count}} days",
+      "lastRun": "Last run",
+      "nextRun": "Next run",
+      "manualRunName": "{{name}} - Manual Run",
+      "manualRunDescription": "Manual run of schedule: {{name}}"
+    },
+    "history": {
+      "heading": "Backup History",
+      "subheading": "Complete timeline of all backup operations",
+      "scheduled": "Scheduled"
+    },
+    "include": {
+      "title": "Include in Backup",
+      "devices": "Devices",
+      "vlans": "VLANs",
+      "ssids": "SSIDs",
+      "users": "Users",
+      "automation": "Automation"
+    },
+    "createDialog": {
+      "title": "Create New Backup",
+      "description": "Create a backup of your configuration",
+      "nameLabel": "Backup Name",
+      "namePlaceholder": "e.g., Pre-upgrade backup",
+      "backupTypeLabel": "Backup Type",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "siteLabel": "Site (Optional)",
+      "allSites": "All Sites",
+      "storageLabel": "Storage Location",
+      "manageStorageLink": "Manage storage locations",
+      "retentionLabel": "Retention (Days)",
+      "encryptionLabel": "Encryption",
+      "encryptionHelp": "Encrypt backup data",
+      "fullBackupLabel": "Full backup (includes all secrets)",
+      "fullBackupHelp": "Include every credential, VPN key, and user login. Sealed with a passphrase you set, and portable to another instance. Off = a secret-free config snapshot (.fsdn).",
+      "fullBackupWarnLabel": "This file contains all your passwords.",
+      "fullBackupWarnText": "Anyone with this .fsdnvault file and the passphrase can take over your whole deployment — store it like a password vault. The regular config backup (.fsdn) is the one that's safe to share.",
+      "passphraseLabel": "Backup passphrase",
+      "passphrasePlaceholder": "At least 12 characters — you'll need it to restore"
+    },
+    "backupTypeOptions": {
+      "full": "Full Backup",
+      "deviceConfig": "Device Config Only",
+      "siteConfig": "Site Config Only"
+    },
+    "backupTypeLabels": {
+      "full": "Full backup",
+      "deviceConfig": "Device config",
+      "siteConfig": "Site config",
+      "rollbackSlot": "Pre-restore snapshot"
+    },
+    "storageOptions": {
+      "local": "Local Storage",
+      "s3": "Amazon S3 / S3-Compatible",
+      "s3Short": "Amazon S3",
+      "sftp": "SFTP Server",
+      "ftp": "FTP/FTPS Server",
+      "googleDrive": "Google Drive",
+      "dropbox": "Dropbox",
+      "webdav": "WebDAV (Nextcloud/ownCloud)",
+      "configuredLocations": "Configured Locations",
+      "default": "Default"
+    },
+    "storageTypeLabels": {
+      "local": "Local disk",
+      "s3": "Amazon S3",
+      "sftp": "SFTP",
+      "ftp": "FTP/FTPS",
+      "nfs": "NFS",
+      "googleDrive": "Google Drive",
+      "dropbox": "Dropbox",
+      "webdav": "WebDAV"
+    },
+    "deleteDialog": {
+      "title": "Delete Backup",
+      "description": "Are you sure you want to delete this backup? This action cannot be undone."
+    },
+    "restoreDialog": {
+      "title": "Restore from Backup",
+      "description": "Restore configuration from \"{{name}}\"",
+      "created": "Created",
+      "size": "Size",
+      "type": "Type",
+      "security": "Security",
+      "modulesTitle": "Modules to restore",
+      "allModules": "All modules",
+      "selectedCount": "{{selected}} of {{total}} selected",
+      "readingManifest": "Reading backup manifest…",
+      "manifestError": "Could not read the backup manifest. The legacy \"What to Restore\" toggles below still apply.",
+      "restoreModuleAria": "Restore {{module}} module",
+      "schemaBadge": "schema {{version}}",
+      "itemCount": "{{count}} items",
+      "noRestorableModules": "No restorable modules in this backup on this instance, check schema compatibility / installed modules.",
+      "whatToRestore": "What to Restore",
+      "options": "Options",
+      "overwriteTitle": "Overwrite Existing",
+      "overwriteHelp": "Replace existing configurations with backup data",
+      "warningLabel": "Warning:",
+      "warningText": "Restoring will modify your current configuration. Consider running a dry run first to preview changes.",
+      "credentialNoteLabel": "Secrets are not included.",
+      "credentialNoteText": "A configuration snapshot excludes controller, device, camera, and PBX passwords, VPN keys, and other secrets — re-enter them after restore for any restored controllers or devices. For full disaster recovery including secrets, use the pg-backup container output.",
+      "passphraseLabel": "Backup passphrase (required for a Full backup)",
+      "passphrasePlaceholder": "The passphrase this .fsdnvault was created with",
+      "confirmTypePrefix": "Type",
+      "confirmTypeOr": "or",
+      "confirmTypeSuffix": "to confirm",
+      "confirmPlaceholder": "Type to confirm destructive restore"
+    },
+    "dryRun": {
+      "header": "Dry run preview · nothing applied yet",
+      "createCount": "+{{count}} create",
+      "updateCount": "~{{count}} update",
+      "skipCount": "{{count}} skip",
+      "errorCount": "{{count}} error",
+      "skippedSuffix": "{{count}} skipped",
+      "noChanges": "no changes"
+    },
+    "scheduleDialog": {
+      "editTitle": "Edit Backup Schedule",
+      "createTitle": "Create Backup Schedule",
+      "description": "Configure automatic backups with retention policies",
+      "nameLabel": "Schedule Name",
+      "namePlaceholder": "e.g., Daily Config Backup",
+      "descriptionLabel": "Description (Optional)",
+      "descriptionPlaceholder": "Optional description for this schedule",
+      "scheduleLabel": "Schedule",
+      "hideHelp": "Hide Help",
+      "showHelp": "Show Help",
+      "cronFormatLabel": "Cron Format:",
+      "cronFormatValue": "minute hour day-of-month month day-of-week",
+      "cronExampleLabel": "Example:",
+      "cronExampleValue": "= Every day at 2:00 AM",
+      "quickPresets": "Quick Presets",
+      "selectPreset": "Select a preset...",
+      "cronExpressionLabel": "Cron Expression",
+      "timezone": "Timezone",
+      "retentionPolicy": "Retention Policy",
+      "maxBackupsLabel": "Maximum Backups",
+      "maxBackupsHelp": "Keep the last {{count}} backups (oldest will be deleted)",
+      "retentionDaysLabel": "Retention Days",
+      "retentionDaysHelp": "Delete backups older than {{count}} days",
+      "encryptFilesHelp": "Encrypt backup files"
+    },
+    "cronPresets": {
+      "everyHour": {
+        "label": "Every hour",
+        "description": "Runs at the start of every hour"
+      },
+      "daily2am": {
+        "label": "Daily at 2 AM",
+        "description": "Runs daily at 2:00 AM"
+      },
+      "dailyMidnight": {
+        "label": "Daily at midnight",
+        "description": "Runs daily at midnight"
+      },
+      "weeklySunday": {
+        "label": "Weekly (Sunday)",
+        "description": "Runs every Sunday at 2:00 AM"
+      },
+      "weeklyMonday": {
+        "label": "Weekly (Monday)",
+        "description": "Runs every Monday at 2:00 AM"
+      },
+      "monthly1st": {
+        "label": "Monthly (1st)",
+        "description": "Runs on the 1st of each month"
+      },
+      "every6h": {
+        "label": "Every 6 hours",
+        "description": "Runs every 6 hours"
+      },
+      "every12h": {
+        "label": "Every 12 hours",
+        "description": "Runs twice daily"
+      }
+    },
+    "timezones": {
+      "easternUs": "Eastern Time (US)",
+      "centralUs": "Central Time (US)",
+      "mountainUs": "Mountain Time (US)",
+      "pacificUs": "Pacific Time (US)",
+      "londonUk": "London (UK)",
+      "parisEu": "Paris (EU)",
+      "tokyoJapan": "Tokyo (Japan)",
+      "sydneyAustralia": "Sydney (Australia)"
+    },
+    "deleteScheduleDialog": {
+      "title": "Delete Schedule",
+      "description": "Are you sure you want to delete this backup schedule? Existing backups created by this schedule will not be affected."
+    },
+    "detailDialog": {
+      "title": "Backup Details",
+      "status": "Status",
+      "storage": "Storage",
+      "yes": "Yes",
+      "expires": "Expires",
+      "includedInBackup": "Included in Backup"
+    },
+    "importDialog": {
+      "title": "Import Configuration",
+      "description": "Review the configuration file before importing",
+      "contains": "This import contains:",
+      "sites": "Sites",
+      "controllers": "Controllers",
+      "metadataCreated": "Created:",
+      "metadataBy": "By:",
+      "metadataVersion": "Version:",
+      "unknown": "Unknown",
+      "warning": "Importing will add or update configurations. Existing items with matching IDs may be overwritten.",
+      "importing": "Importing...",
+      "importNow": "Import Now"
+    },
+    "bulk": {
+      "itemName": "backup",
+      "deleteConfirm": "Delete {{count}} backup(s)?"
+    },
+    "validation": {
+      "nameRequired": "Backup name is required"
+    },
+    "time": {
+      "never": "Never",
+      "justNow": "Just now",
+      "minutesAgo": "{{n}}m ago",
+      "hoursAgo": "{{n}}h ago",
+      "daysAgo": "{{n}}d ago"
+    },
+    "cron": {
+      "invalid": "Invalid cron",
+      "runWord": "run",
+      "nextDayAt": "Next {{day}} at {{time}}",
+      "dayOfMonthAt": "{{ordinal}} at {{time}}",
+      "everyNHours": "Every {{n}} hours",
+      "dailyAt": "Daily at {{time}}",
+      "days": {
+        "sunday": "Sunday",
+        "monday": "Monday",
+        "tuesday": "Tuesday",
+        "wednesday": "Wednesday",
+        "thursday": "Thursday",
+        "friday": "Friday",
+        "saturday": "Saturday"
+      }
+    },
+    "toasts": {
+      "error": "Error",
+      "backupStarted": {
+        "title": "Backup Started",
+        "message": "Backup job has been queued"
+      },
+      "createBackupFailed": "Failed to create backup",
+      "backupDeleted": {
+        "title": "Backup Deleted",
+        "message": "Backup has been deleted successfully"
+      },
+      "deleteBackupFailed": "Failed to delete backup",
+      "scheduleUpdated": {
+        "title": "Schedule Updated",
+        "message": "Backup schedule has been updated"
+      },
+      "scheduleToggled": {
+        "message": "Backup schedule has been toggled"
+      },
+      "toggleScheduleFailed": "Failed to toggle schedule",
+      "dryRunComplete": {
+        "title": "Dry run complete",
+        "message": "Review the previewed changes below, then confirm to restore."
+      },
+      "restoreStarted": {
+        "title": "Restore Started",
+        "message": "Restore job has been started"
+      },
+      "restoreFailed": "Failed to start restore",
+      "scheduleCreated": {
+        "title": "Schedule Created",
+        "message": "Backup schedule has been created successfully"
+      },
+      "createScheduleFailed": "Failed to create schedule",
+      "updateScheduleFailed": "Failed to update schedule",
+      "scheduleDeleted": {
+        "title": "Schedule Deleted",
+        "message": "Backup schedule has been deleted"
+      },
+      "deleteScheduleFailed": "Failed to delete schedule",
+      "downloadFailed": {
+        "title": "Download Failed"
+      },
+      "downloadBackupFailed": "Failed to download backup",
+      "exportComplete": {
+        "title": "Export Complete",
+        "message": "Configuration backup downloaded successfully"
+      },
+      "exportFailed": {
+        "title": "Export Failed"
+      },
+      "exportConfigFailed": "Failed to export configuration",
+      "importFailed": {
+        "title": "Import Failed"
+      },
+      "readImportFailed": "Failed to read import file",
+      "importComplete": {
+        "title": "Import Complete",
+        "message": "Configuration imported successfully"
+      },
+      "importConfigFailed": "Failed to import configuration"
+    }
+  },
+  "StorageLocationsPage": {
+    "header": {
+      "title": "Storage Locations",
+      "subtitle": "Configure where backups are stored · local disk, cloud, or remote servers.",
+      "backToBackups": "Back to Backups"
+    },
+    "actions": {
+      "add": "Add Storage Location",
+      "testConnection": "Test Connection",
+      "edit": "Edit",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "close": "Close"
+    },
+    "filters": {
+      "searchPlaceholder": "Search storage locations...",
+      "allTypes": "All types",
+      "refresh": "Refresh"
+    },
+    "badges": {
+      "default": "Default"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "connected": "Connected",
+      "failed": "Failed",
+      "testing": "Testing..."
+    },
+    "footer": {
+      "lastTested": "Last tested {{date}}",
+      "neverTested": "Never tested",
+      "created": "Created {{date}}"
+    },
+    "empty": {
+      "title": "No storage locations configured",
+      "description": "Add a storage location to start saving backups to local disk, S3 buckets, SFTP servers, Google Drive, Dropbox, and more.",
+      "action": "Add Your First Storage Location"
+    },
+    "supportedBackends": {
+      "heading": "Supported Storage Backends"
+    },
+    "deleteDialog": {
+      "title": "Delete Storage Location",
+      "confirmPrefix": "Are you sure you want to delete",
+      "confirmSuffix": "? Existing backups stored in this location will not be removed, but you won't be able to access them through FreeSDN."
+    },
+    "testResult": {
+      "titlePassed": "Connection Test Passed",
+      "titleFailed": "Connection Test Failed",
+      "status": "Status",
+      "success": "Success",
+      "failed": "Failed",
+      "message": "Message",
+      "latency": "Latency",
+      "latencyValue": "{{ms}} ms",
+      "details": "Details"
+    },
+    "formDialog": {
+      "createTitle": "Add Storage Location",
+      "editTitle": "Edit Storage Location",
+      "createDescription": "Configure a new destination for your backups.",
+      "editDescription": "Update settings. Leave credential fields empty to keep existing values.",
+      "editDescriptionNamed": "Update settings for {{name}}. Leave credential fields empty to keep existing values.",
+      "submitCreate": "Create",
+      "submitSave": "Save Changes"
+    },
+    "form": {
+      "name": "Name",
+      "namePlaceholder": "e.g. Production S3 Bucket",
+      "description": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "storageType": "Storage Type",
+      "storageTypePlaceholder": "Select storage type...",
+      "loadingTypes": "Loading storage types...",
+      "loadTypesFailed": "Failed to load storage types",
+      "noTypesAvailable": "No storage types available",
+      "cannotBeChanged": "(cannot be changed)",
+      "connectionSettings": "Connection Settings",
+      "updateConnectionSettings": "Update Connection Settings",
+      "leaveEmptyHint": "Leave fields empty to keep existing values",
+      "showSecrets": "Show secrets",
+      "hideSecrets": "Hide secrets",
+      "setAsDefault": "Set as default",
+      "setAsDefaultHint": "Use this location for new backups by default"
+    },
+    "dynamicField": {
+      "leaveEmptyPlaceholder": "Leave empty to keep existing",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "validation": {
+      "nameRequired": "Name is required",
+      "storageTypeRequired": "Storage type is required",
+      "fieldRequired": "{{field}} is required"
+    },
+    "notifications": {
+      "error": "Error",
+      "created": {
+        "title": "Storage location created",
+        "message": "The storage location has been created successfully."
+      },
+      "createFailed": "Failed to create storage location.",
+      "updated": {
+        "title": "Storage location updated",
+        "message": "Changes saved."
+      },
+      "updateFailed": "Failed to update storage location.",
+      "deleted": {
+        "title": "Storage location deleted",
+        "message": "The storage location has been deleted."
+      },
+      "deleteFailed": "Failed to delete storage location.",
+      "testFailed": {
+        "title": "Test failed",
+        "message": "Connection test failed."
+      }
+    }
+  }
+}

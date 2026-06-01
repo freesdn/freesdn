@@ -1,0 +1,385 @@
+{
+  "title": "设备",
+  "addDevice": "添加设备",
+  "noDevices": "未找到设备",
+  "status": {
+    "online": "在线",
+    "offline": "离线",
+    "unknown": "未知",
+    "warning": "警告",
+    "error": "错误",
+    "provisioning": "配置中",
+    "upgrading": "升级中",
+    "rebooting": "重启中"
+  },
+  "types": {
+    "switch": "交换机",
+    "router": "路由器",
+    "accessPoint": "无线接入点",
+    "firewall": "防火墙",
+    "camera": "摄像头",
+    "controller": "控制器",
+    "server": "服务器",
+    "gateway": "网关",
+    "phone": "VoIP 电话",
+    "unknown": "未知"
+  },
+  "actions": {
+    "backup": "备份配置",
+    "restore": "恢复配置",
+    "upgrade": "升级固件",
+    "reboot": "重启",
+    "rebootConfirm": "确定要重启此设备吗？",
+    "provision": "配置",
+    "locate": "定位",
+    "locateDescription": "闪烁设备 LED 指示灯以帮助定位",
+    "upgradeConfirm": "升级到版本 {{version}}？",
+    "adopt": "纳管",
+    "forget": "移除",
+    "forgetConfirm": "确定要移除此设备吗？"
+  },
+  "deviceCount": "{{count}} 个设备",
+  "deviceCount_other": "{{count}} 个设备",
+  "DevicesPage": {
+    "title": "设备清单",
+    "description": "实时基础设施概览 · 网络中共 {{n}} 台设备",
+    "descriptionShort": "实时基础设施概览",
+    "noData": "无数据",
+    "unknownVendor": "未知",
+    "itemName": "设备",
+    "itemNamePlural": "设备",
+    "error": {
+      "message": "无法连接到设备清单。请检查 API 服务器是否正在运行。"
+    },
+    "tabs": {
+      "dashboard": "仪表板",
+      "devices": "设备"
+    },
+    "actions": {
+      "exportCsv": "导出 CSV",
+      "actionsFor": "{{name}} 的操作",
+      "viewDetails": "查看详情",
+      "reboot": "重启",
+      "exportConfig": "导出配置"
+    },
+    "badges": {
+      "unmanaged": "未纳管"
+    },
+    "columns": {
+      "device": "设备",
+      "type": "类型",
+      "vendor": "厂商",
+      "modelFirmware": "型号 / 固件",
+      "uptime": "运行时间",
+      "cpu": "CPU",
+      "memory": "内存",
+      "ports": "端口",
+      "lastSeen": "最后在线"
+    },
+    "lastSeen": {
+      "never": "从未",
+      "justNow": "刚刚",
+      "minutesAgo": "{{n}} 分钟前",
+      "hoursAgo": "{{n}} 小时前",
+      "daysAgo": "{{n}} 天前"
+    },
+    "statusOptions": {
+      "online": "在线",
+      "offline": "离线",
+      "degraded": "降级",
+      "adopting": "纳管中",
+      "provisioning": "配置中",
+      "adoptionFailed": "纳管失败",
+      "unknown": "未知"
+    },
+    "stats": {
+      "total": {
+        "title": "设备总数"
+      },
+      "online": {
+        "title": "在线",
+        "availability": "{{percent}}% 可用率",
+        "noDevices": "无设备"
+      },
+      "offline": {
+        "title": "离线",
+        "degraded": "{{n}} 台降级",
+        "needsAttention": "需要关注"
+      },
+      "pending": {
+        "title": "待处理",
+        "awaitingAdoption": "等待纳管"
+      },
+      "managedUnmanaged": "{{managed}} 台已纳管 · {{unmanaged}} 台未纳管"
+    },
+    "cards": {
+      "healthOverview": "健康概览",
+      "byType": "按类型",
+      "byVendor": "按厂商"
+    },
+    "metrics": {
+      "online": "在线",
+      "offline": "离线",
+      "degraded": "降级",
+      "pending": "待处理",
+      "avgCpu": "平均 CPU",
+      "avgMemory": "平均内存"
+    },
+    "filters": {
+      "searchPlaceholder": "按名称、IP、MAC、型号或厂商搜索…",
+      "byTypeAria": "按设备类型筛选",
+      "byStatusAria": "按状态筛选",
+      "byVendorAria": "按厂商筛选",
+      "byManagementAria": "按纳管状态筛选",
+      "allTypes": "所有类型",
+      "allStatuses": "所有状态",
+      "allVendors": "所有厂商",
+      "all": "全部",
+      "managed": "已纳管",
+      "unmanaged": "未纳管",
+      "clear": "清除",
+      "countAll": "{{n}} 台设备",
+      "countFiltered": "显示 {{total}} 台中的 {{shown}} 台"
+    },
+    "toasts": {
+      "noRebootEligible": {
+        "title": "没有可重启的设备",
+        "description": "重启仅适用于在线设备。"
+      },
+      "rebootInitiated": {
+        "title": "已发起重启",
+        "description": "正在重启 {{n}} 台设备。"
+      },
+      "exportQueued": {
+        "title": "导出已加入队列",
+        "description": "正在导出 {{n}} 条设备记录。"
+      },
+      "bulkDelete": {
+        "title": "批量删除",
+        "description": "为安全起见，请逐个删除设备。"
+      }
+    },
+    "bulkActions": {
+      "reboot": "重启",
+      "export": "导出",
+      "delete": "删除"
+    }
+  },
+  "DeviceDetailPage": {
+    "deviceTypes": {
+      "switch": "交换机",
+      "access_point": "接入点",
+      "router": "路由器",
+      "gateway": "网关",
+      "firewall": "防火墙",
+      "camera": "摄像头",
+      "nvr": "NVR",
+      "dvr": "DVR",
+      "access_control": "门禁",
+      "intercom": "对讲机",
+      "voip_phone": "VoIP 电话",
+      "pbx": "PBX",
+      "server": "服务器",
+      "iot": "IoT",
+      "sensor": "传感器",
+      "other": "其他"
+    },
+    "statuses": {
+      "online": "在线",
+      "offline": "离线",
+      "degraded": "降级",
+      "adopting": "纳管中",
+      "provisioning": "配置中",
+      "adoption_failed": "纳管失败",
+      "unknown": "未知"
+    },
+    "detailRow": {
+      "clickToCopy": "点击复制"
+    },
+    "uptime": {
+      "dhm": "{{d}} 天 {{h}} 小时 {{m}} 分钟",
+      "hm": "{{h}} 小时 {{m}} 分钟",
+      "m": "{{m}} 分钟"
+    },
+    "relative": {
+      "never": "从不",
+      "justNow": "刚刚",
+      "minutesAgo": "{{n}} 分钟前",
+      "hoursAgo": "{{n}} 小时前",
+      "daysAgo": "{{n}} 天前"
+    },
+    "manage": {
+      "nvr": "管理 NVR",
+      "camera": "管理摄像头",
+      "switch": "管理交换机",
+      "accessPoint": "管理 AP",
+      "phone": "管理电话",
+      "pbx": "管理 PBX",
+      "firewall": "管理防火墙",
+      "gateway": "管理网关",
+      "default": "管理"
+    },
+    "common": {
+      "yes": "是",
+      "no": "否"
+    },
+    "error": {
+      "title": "加载设备失败",
+      "notFound": "未找到设备或网络错误",
+      "backToInventory": "返回库存",
+      "retry": "重试"
+    },
+    "toast": {
+      "credentialUpdated": "凭据已更新",
+      "updateFailed": "更新失败"
+    },
+    "badge": {
+      "unmanaged": "未纳管"
+    },
+    "actions": {
+      "sync": "同步",
+      "reboot": "重启"
+    },
+    "menu": {
+      "editDevice": "编辑设备",
+      "changeCredential": "更换凭据",
+      "assignCredential": "分配凭据",
+      "reprobe": "重新探测（立即同步）",
+      "backupConfig": "备份配置",
+      "upgradeFirmware": "升级固件",
+      "removeDevice": "移除设备"
+    },
+    "banner": {
+      "adoptionInProgress": {
+        "title": "纳管进行中",
+        "withController": "正在等待控制器验证此设备。下次控制器同步确认后，该设备将上线。",
+        "noController": "此设备尚无控制器，也没有任何活动来源。请分配凭据（以便适配器可以连接到它），或让代理在下次扫描时重新发现它。"
+      },
+      "agentDiscovery": {
+        "title": "通过代理发现进行跟踪",
+        "description": "没有控制器管理此设备--其在线状态由站点代理在网络中重新观察来驱动。如果代理 30 分钟未再发现它，将显示为离线。分配凭据可启用适配器级管理（配置备份、重启等）。"
+      }
+    },
+    "stats": {
+      "uptime": "运行时间",
+      "sinceLastReboot": "自上次重启起",
+      "activePorts": "活动端口",
+      "connectedClients": "已连接客户端",
+      "activeConnections": "活动连接"
+    },
+    "tabs": {
+      "overview": "概览",
+      "network": "网络",
+      "ports": "端口（{{count}}）",
+      "system": "系统"
+    },
+    "identity": {
+      "title": "设备标识",
+      "name": "名称",
+      "type": "类型",
+      "manufacturer": "制造商",
+      "model": "型号",
+      "serialNumber": "序列号",
+      "macAddress": "MAC 地址",
+      "firmware": "固件"
+    },
+    "location": {
+      "title": "位置与管理",
+      "status": "状态",
+      "managed": "已纳管",
+      "active": "活动",
+      "location": "位置",
+      "floor": "楼层",
+      "room": "房间",
+      "lastSeen": "最后在线",
+      "notes": "备注"
+    },
+    "networkConfig": {
+      "title": "网络配置",
+      "ipAddress": "IP 地址",
+      "macAddress": "MAC 地址",
+      "connectionType": "连接类型",
+      "vlanId": "VLAN ID",
+      "controllerId": "控制器 ID",
+      "siteId": "站点 ID",
+      "externalId": "外部 ID"
+    },
+    "portSummary": {
+      "title": "端口摘要",
+      "utilization": "端口利用率",
+      "total": "总计",
+      "active": "活动",
+      "unused": "未使用",
+      "noData": "无可用端口数据"
+    },
+    "portManagement": {
+      "title": "端口管理",
+      "description": "{{total}} 个端口中有 {{active}} 个活动（利用率 {{pct}}%）",
+      "portTooltip": "端口 {{n}} · {{state}}",
+      "active": "活动",
+      "inactive": "未活动"
+    },
+    "systemHealth": {
+      "title": "系统健康",
+      "cpu": "CPU",
+      "memory": "内存",
+      "uptime": "运行时间",
+      "connectedClients": "已连接客户端"
+    },
+    "metadata": {
+      "title": "元数据与时间戳",
+      "deviceId": "设备 ID",
+      "created": "创建时间",
+      "lastUpdated": "最后更新",
+      "lastSeen": "最后在线",
+      "connectionType": "连接类型",
+      "vlan": "VLAN",
+      "capabilities": "功能",
+      "metadataHeading": "元数据"
+    },
+    "credDialog": {
+      "titleChange": "更换凭据",
+      "titleAssign": "分配凭据",
+      "description": "附加已存储的凭据，使适配器能够对 {{name}} 进行身份验证。在独立设备上执行配置备份、重启及其他受管操作时需要此项。",
+      "selectPlaceholder": "选择凭据…",
+      "noCredentials": "未找到凭据。请先在凭据页面创建一个。",
+      "cancel": "取消",
+      "save": "保存"
+    }
+  },
+  "device": "设备",
+  "devices": "设备",
+  "adoptDevice": "纳管设备",
+  "discoverDevices": "发现设备",
+  "properties": {
+    "name": "名称",
+    "ipAddress": "IP 地址",
+    "macAddress": "MAC 地址",
+    "model": "型号",
+    "manufacturer": "制造商",
+    "firmware": "固件",
+    "uptime": "运行时间",
+    "lastSeen": "最近在线",
+    "site": "站点",
+    "location": "位置",
+    "serialNumber": "序列号",
+    "temperature": "温度",
+    "cpuUsage": "CPU 使用率",
+    "memoryUsage": "内存使用率"
+  },
+  "tabs": {
+    "overview": "概览",
+    "ports": "端口",
+    "clients": "客户端",
+    "configuration": "配置",
+    "logs": "日志",
+    "statistics": "统计"
+  },
+  "filters": {
+    "allDevices": "所有设备",
+    "onlineOnly": "仅在线",
+    "offlineOnly": "仅离线",
+    "byType": "按类型",
+    "bySite": "按站点"
+  }
+}

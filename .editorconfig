@@ -1,0 +1,27 @@
+# EditorConfig — https://editorconfig.org
+# Keeps indentation/encoding/line-endings consistent across editors so
+# drive-by changes match what CI (ruff / eslint) expects.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+# Python — 4 spaces (ruff)
+[*.py]
+indent_size = 4
+
+# TypeScript / JavaScript / JSON / CSS / YAML / Markdown — 2 spaces
+[*.{ts,tsx,js,jsx,mjs,cjs,json,css,scss,yml,yaml}]
+indent_size = 2
+
+[*.md]
+indent_size = 2
+trim_trailing_whitespace = false  # trailing two spaces = hard line break
+
+# Makefiles require real tabs
+[Makefile]
+indent_style = tab

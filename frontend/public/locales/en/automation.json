@@ -1,0 +1,127 @@
+{
+  "AutomationPage": {
+    "header": {
+      "title": "Automation",
+      "description": "Manage automation rules and workflows",
+      "createRule": "Create Rule"
+    },
+    "tabs": {
+      "rules": "Rules ({{n}})",
+      "history": "Execution History"
+    },
+    "filters": {
+      "allTriggers": "All Triggers",
+      "allStatus": "All Status",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "refresh": "Refresh"
+    },
+    "triggerTypes": {
+      "event": "Event",
+      "schedule": "Schedule",
+      "threshold": "Threshold",
+      "manual": "Manual",
+      "webhook": "Webhook"
+    },
+    "actionTypes": {
+      "deviceReboot": "Reboot Device",
+      "devicePoeCycle": "PoE Cycle",
+      "deviceLocate": "Locate Device",
+      "deviceConfig": "Apply Config",
+      "networkBlockClient": "Block Client",
+      "networkUnblockClient": "Unblock Client",
+      "networkQuarantine": "Quarantine",
+      "alertCreate": "Create Alert",
+      "alertResolve": "Resolve Alert",
+      "notifyEmail": "Send Email",
+      "notifyWebhook": "Send Webhook",
+      "notifySlack": "Notify Slack",
+      "notifyInApp": "In-App Notification",
+      "scriptRun": "Run Script",
+      "apiCall": "API Call"
+    },
+    "status": {
+      "active": "active",
+      "paused": "paused",
+      "error": "error",
+      "disabled": "disabled"
+    },
+    "ruleCard": {
+      "noDescription": "No description",
+      "actionsCount": "{{n}} actions",
+      "executionsCount": "{{n}} executions",
+      "lastTriggered": "Last: {{date}}",
+      "priority": "Priority: {{value}}",
+      "cooldown": "• Cooldown: {{value}}s",
+      "actions": {
+        "edit": "Edit",
+        "runNow": "Run Now",
+        "delete": "Delete"
+      }
+    },
+    "executionRow": {
+      "success": "success",
+      "failed": "failed",
+      "actionsCount": "{{n}} actions"
+    },
+    "historyTable": {
+      "rule": "Rule",
+      "status": "Status",
+      "actions": "Actions",
+      "duration": "Duration",
+      "time": "Time",
+      "error": "Error"
+    },
+    "empty": {
+      "rules": {
+        "title": "No automation rules",
+        "description": "Get started by creating your first automation rule. Rules trigger actions automatically when events match your conditions.",
+        "action": "Create Rule"
+      },
+      "history": {
+        "title": "No execution history yet",
+        "description": "Once your automation rules fire, their execution records will appear here."
+      }
+    },
+    "createModal": {
+      "title": "Create Automation Rule",
+      "submitLabel": "Create Rule",
+      "fields": {
+        "name": {
+          "label": "Rule Name *",
+          "placeholder": "e.g. Reboot offline APs"
+        },
+        "description": {
+          "label": "Description",
+          "placeholder": "Optional description of what this rule does"
+        },
+        "triggerType": {
+          "label": "Trigger Type *"
+        },
+        "action": {
+          "label": "Action *"
+        },
+        "priority": {
+          "label": "Priority"
+        },
+        "cooldown": {
+          "label": "Cooldown (seconds)"
+        }
+      }
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "successTitle": "Success",
+      "updateFailed": "Failed to update rule: {{error}}",
+      "deleteFailed": "Failed to delete rule: {{error}}",
+      "triggerFailed": "Failed to trigger rule: {{error}}",
+      "triggered": "Rule triggered successfully"
+    },
+    "confirm": {
+      "delete": "Are you sure you want to delete this rule?"
+    },
+    "errors": {
+      "loadFailed": "Failed to load automation data"
+    }
+  }
+}

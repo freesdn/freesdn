@@ -1,0 +1,50 @@
+{
+  "AIAssistantPage": {
+    "title": "AI Assistant",
+    "toolCall": {
+      "calledTools": "Called {{count}} tool",
+      "calledToolsPlural": "Called {{count}} tools",
+      "result": "result"
+    },
+    "message": {
+      "usingTools": "Using tools..."
+    },
+    "conversation": {
+      "untitled": "New conversation",
+      "empty": "No conversations yet",
+      "loadError": "Failed to load conversation",
+      "retry": "Retry"
+    },
+    "provider": {
+      "label": "Provider",
+      "ollamaLocal": "Ollama (Local)"
+    },
+    "header": {
+      "tokens": "{{value}} tokens"
+    },
+    "hero": {
+      "title": "FreeSDN AI Assistant",
+      "description": "Ask me about your network devices, VLANs, alerts, and more. I can run diagnostics and help you troubleshoot issues."
+    },
+    "suggestions": {
+      "offlineDevices": "List all offline devices",
+      "activeAlerts": "Show active alerts",
+      "vlansOnSite": "What VLANs are configured on site-1?",
+      "switchHealth": "Check health of switch-core-01"
+    },
+    "status": {
+      "thinking": "Thinking...",
+      "sendFailed": "Failed to send message"
+    },
+    "input": {
+      "placeholder": "Ask about your network...",
+      "hint": "Press Enter to send · Shift+Enter for new line"
+    },
+    "deleteDialog": {
+      "title": "Delete conversation?",
+      "description": "This will permanently delete the conversation and all its messages.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    }
+  }
+}

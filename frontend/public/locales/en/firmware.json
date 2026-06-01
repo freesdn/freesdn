@@ -1,0 +1,229 @@
+{
+  "FirmwarePage": {
+    "header": {
+      "title": "Firmware Management",
+      "description": "Manage and deploy firmware updates across your devices"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "common": {
+      "never": "Never",
+      "notAvailable": "N/A",
+      "unknown": "Unknown"
+    },
+    "stats": {
+      "totalDevices": "Total Devices",
+      "managedDevices": "managed devices",
+      "upToDate": "Up to Date",
+      "updatesAvailable": "Updates Available",
+      "devicesNeedUpdating": "devices need updating",
+      "criticalUpdates": "Critical Updates",
+      "securityUpdatesPending": "security updates pending"
+    },
+    "banner": {
+      "upgradeInProgress": "Firmware Upgrade in Progress",
+      "devicesCompleted": "{{completed}} of {{total}} devices completed"
+    },
+    "tabs": {
+      "devices": "Devices",
+      "repository": "Repository",
+      "jobs": "Jobs",
+      "schedules": "Schedules"
+    },
+    "filters": {
+      "searchPlaceholder": "Search devices...",
+      "vendor": "Vendor",
+      "allVendors": "All Vendors",
+      "type": "Type",
+      "updatesOnly": "Updates available only"
+    },
+    "deviceTypes": {
+      "all": "All Types",
+      "accessPoint": "Access Points",
+      "switch": "Switches",
+      "router": "Routers",
+      "gateway": "Gateways",
+      "firewall": "Firewalls",
+      "camera": "Cameras",
+      "nvr": "NVRs",
+      "dvr": "DVRs",
+      "accessControl": "Access Control",
+      "intercom": "Intercoms",
+      "voipPhone": "VoIP Phones",
+      "iot": "IoT Devices",
+      "sensor": "Sensors"
+    },
+    "viewMode": {
+      "table": "Table",
+      "byVersion": "By Version"
+    },
+    "bulk": {
+      "selected": "{{count}} selected",
+      "deselectAll": "Deselect All"
+    },
+    "actions": {
+      "uploadFirmware": "Upload Firmware",
+      "viewDetails": "View Details",
+      "hideDetails": "Hide Details",
+      "checkForUpdates": "Check for Updates",
+      "upgrade": "Upgrade",
+      "upgradeCount": "Upgrade ({{count}})",
+      "upgradeNow": "Upgrade Now",
+      "versionHistory": "Version History",
+      "cancel": "Cancel",
+      "retryFailed": "Retry Failed",
+      "edit": "Edit",
+      "runNow": "Run Now",
+      "delete": "Delete",
+      "close": "Close"
+    },
+    "table": {
+      "device": "Device",
+      "type": "Type",
+      "currentVersion": "Current Version",
+      "latestVersion": "Latest Version",
+      "status": "Status",
+      "lastChecked": "Last Checked",
+      "actions": "Actions"
+    },
+    "status": {
+      "upToDate": "Up to date",
+      "critical": "Critical",
+      "updateAvailable": "Update available"
+    },
+    "grouped": {
+      "deviceCount": "{{count}} devices",
+      "criticalUpdateNeeded": "Critical update needed",
+      "updateTo": "Update to {{version}}",
+      "latest": "latest",
+      "upgradeAll": "Upgrade All ({{count}})"
+    },
+    "repository": {
+      "loading": "Loading firmware repository...",
+      "emptyTitle": "No Firmware in Repository",
+      "emptyDescription": "Upload firmware files to get started.",
+      "security": "Security",
+      "latest": "Latest",
+      "recommended": "Recommended",
+      "cached": "Cached",
+      "released": "Released:",
+      "size": "Size:",
+      "installed": "Installed:",
+      "installedCount": "{{upToDate}} / {{total}} devices",
+      "releaseNotes": "Release Notes"
+    },
+    "jobs": {
+      "status": "Status",
+      "version": "Version",
+      "devices": "Devices",
+      "progress": "Progress",
+      "started": "Started",
+      "initiatedBy": "Initiated By",
+      "failedCount": "({{count}} failed)",
+      "empty": "No upgrade jobs yet"
+    },
+    "rollout": {
+      "title": "Staged Rollout Progress",
+      "completed": "Completed ({{count}})",
+      "inProgress": "In Progress ({{count}})",
+      "failed": "Failed ({{count}})",
+      "pending": "Pending",
+      "perDeviceHint": "Per-device details available when the job is running or completed. Click on the job to refresh.",
+      "startedAt": "Started: {{time}}",
+      "completedAt": "Completed: {{time}}",
+      "backupBeforeUpgrade": "Backup before upgrade",
+      "autoRollbackEnabled": "Auto-rollback enabled"
+    },
+    "schedules": {
+      "create": "Create Schedule",
+      "loading": "Loading schedules...",
+      "emptyTitle": "No Schedules",
+      "emptyDescription": "Create a schedule to automate firmware updates.",
+      "target": "Target:",
+      "allTypes": "All types",
+      "schedule": "Schedule:",
+      "frequencyAt": "{{frequency}} at {{time}}",
+      "totalRuns": "Total Runs:",
+      "lastRun": "Last Run:",
+      "nextRun": "Next run: {{time}}"
+    },
+    "upgradeDialog": {
+      "title": "Upgrade Firmware",
+      "description": "Configure firmware upgrade for {{count}} device(s)",
+      "targetFirmware": "Target Firmware",
+      "selectFirmwarePlaceholder": "Select firmware version",
+      "criticalSuffix": "(Critical)",
+      "scheduleOptional": "Schedule (optional)",
+      "leaveEmptyHint": "Leave empty to start immediately",
+      "backupBefore": "Backup before upgrade",
+      "backupBeforeHint": "Create config backup before updating",
+      "rollbackOnFailure": "Rollback on failure",
+      "rollbackOnFailureHint": "Restore previous version if upgrade fails",
+      "scheduleUpgrade": "Schedule Upgrade",
+      "startUpgrade": "Start Upgrade"
+    },
+    "releaseNotesDialog": {
+      "released": "Released {{date}}",
+      "noNotes": "No release notes available."
+    },
+    "uploadDialog": {
+      "title": "Upload Firmware",
+      "description": "Upload a firmware image and provide its metadata",
+      "file": "Firmware File",
+      "vendor": "Vendor",
+      "vendorPlaceholder": "e.g., Hikvision",
+      "model": "Model",
+      "modelPlaceholder": "e.g., DS-2CD2143G0",
+      "version": "Version",
+      "versionPlaceholder": "e.g., 5.7.3",
+      "releaseType": "Release Type",
+      "releaseTypes": {
+        "stable": "Stable",
+        "beta": "Beta",
+        "rc": "Release Candidate"
+      }
+    },
+    "scheduleDialog": {
+      "title": "Create Upgrade Schedule",
+      "description": "Set up automatic firmware updates",
+      "name": "Schedule Name",
+      "namePlaceholder": "e.g., Weekly AP Updates",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "scheduleType": "Schedule Type",
+      "frequency": {
+        "weekly": "Weekly",
+        "monthly": "Monthly",
+        "onRelease": "On New Release"
+      },
+      "dayOfWeek": "Day of Week",
+      "time": "Time",
+      "autoLatest": "Auto-update to latest",
+      "autoLatestHint": "Automatically use the latest stable version"
+    },
+    "days": {
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday",
+      "sunday": "Sunday"
+    },
+    "batch": {
+      "title": "Firmware Upgrade",
+      "description": "Upgrading selected devices to the target firmware version",
+      "jobCreated": "Job created",
+      "failedToStart": "Failed to start",
+      "cancelled": "Cancelled"
+    },
+    "toasts": {
+      "operationFailed": "Operation failed",
+      "validationError": "Validation Error",
+      "selectFirmware": "Please select a firmware version",
+      "upgradeFailed": "Upgrade failed",
+      "unknownError": "Unknown error"
+    }
+  }
+}

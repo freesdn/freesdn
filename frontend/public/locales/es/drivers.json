@@ -1,0 +1,81 @@
+{
+  "DriversPage": {
+    "title": "Controladores",
+    "description": "Explore el catálogo de controladores de dispositivos compatibles.",
+    "itemName": "controlador",
+    "itemNamePlural": "controladores",
+    "errors": {
+      "loadFailed": "No se pudieron cargar los controladores"
+    },
+    "columns": {
+      "driver": "Controlador",
+      "version": "Versión",
+      "deviceTypes": "Tipos de dispositivo",
+      "capabilities": "Funciones"
+    },
+    "actions": {
+      "export": "Exportar",
+      "viewDetails": "Ver detalles",
+      "actionsFor": "Acciones para {{name}}"
+    },
+    "stats": {
+      "totalDrivers": {
+        "title": "Total de controladores",
+        "description": "Controladores disponibles"
+      },
+      "vendors": {
+        "title": "Fabricantes",
+        "description": "Fabricantes compatibles"
+      },
+      "deviceTypes": {
+        "title": "Tipos de dispositivo",
+        "description": "Categorías compatibles"
+      },
+      "capabilities": {
+        "title": "Funciones",
+        "description": "Total de funciones"
+      }
+    },
+    "filters": {
+      "searchPlaceholder": "Buscar controladores por nombre, fabricante o tipo de dispositivo…",
+      "allVendors": "Todos los fabricantes",
+      "allDeviceTypes": "Todos los tipos de dispositivo",
+      "clearFilters": "Borrar filtros"
+    },
+    "deviceTypes": {
+      "switches": "Conmutadores",
+      "routers": "Enrutadores",
+      "accessPoints": "Puntos de acceso",
+      "cameras": "Cámaras",
+      "nvrs": "NVR"
+    },
+    "toasts": {
+      "export": {
+        "title": "Exportar",
+        "description": "Exportación masiva: aún no implementada."
+      }
+    },
+    "dialog": {
+      "versionLabel": "Versión {{version}}"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "capabilities": "Funciones",
+      "configuration": "Configuración"
+    },
+    "overview": {
+      "driverId": "ID del controlador",
+      "version": "Versión",
+      "vendor": "Fabricante",
+      "supportedDeviceTypes": "Tipos de dispositivo compatibles",
+      "descriptionHeading": "Descripción",
+      "viewDocumentation": "Ver documentación"
+    },
+    "capabilities": {
+      "empty": "No hay funciones específicas documentadas para este controlador."
+    },
+    "config": {
+      "empty": "No hay esquema de configuración disponible para este controlador."
+    }
+  }
+}

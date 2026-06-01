@@ -1,0 +1,50 @@
+{
+  "AIAssistantPage": {
+    "title": "AI 助手",
+    "toolCall": {
+      "calledTools": "已调用 {{count}} 个工具",
+      "calledToolsPlural": "已调用 {{count}} 个工具",
+      "result": "结果"
+    },
+    "message": {
+      "usingTools": "正在使用工具..."
+    },
+    "conversation": {
+      "untitled": "新对话",
+      "empty": "暂无对话",
+      "loadError": "加载对话失败",
+      "retry": "重试"
+    },
+    "provider": {
+      "label": "提供商",
+      "ollamaLocal": "Ollama（本地）"
+    },
+    "header": {
+      "tokens": "{{value}} 个 token"
+    },
+    "hero": {
+      "title": "FreeSDN AI 助手",
+      "description": "向我询问有关网络设备、VLAN、告警等的问题。我可以运行诊断并帮助你排查故障。"
+    },
+    "suggestions": {
+      "offlineDevices": "列出所有离线设备",
+      "activeAlerts": "显示活动告警",
+      "vlansOnSite": "site-1 上配置了哪些 VLAN？",
+      "switchHealth": "检查 switch-core-01 的健康状况"
+    },
+    "status": {
+      "thinking": "思考中...",
+      "sendFailed": "消息发送失败"
+    },
+    "input": {
+      "placeholder": "询问有关你的网络的问题...",
+      "hint": "按 Enter 发送 · Shift+Enter 换行"
+    },
+    "deleteDialog": {
+      "title": "删除对话？",
+      "description": "这将永久删除该对话及其所有消息。",
+      "cancel": "取消",
+      "confirm": "删除"
+    }
+  }
+}

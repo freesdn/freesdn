@@ -1,0 +1,72 @@
+{
+  "PendingChangesPage": {
+    "header": {
+      "title": "待处理更改",
+      "description": "VPN、固件、配置文件、防火墙和 WiFi 上所有已暂存的写入操作。读取实时运行；写入操作在此等待显式应用。"
+    },
+    "filter": {
+      "title": "筛选",
+      "controller": "控制器",
+      "chooseController": "选择控制器",
+      "site": "站点",
+      "chooseSite": "选择站点",
+      "status": "状态"
+    },
+    "status": {
+      "pending": "待处理",
+      "applied": "已应用",
+      "discarded": "已丢弃",
+      "failed": "失败"
+    },
+    "empty": {
+      "pickControllerSite": "请选择控制器和站点",
+      "inboxZero": "收件箱已清空",
+      "noStatusChanges": "没有{{status}}状态的更改",
+      "noneWaiting": "没有等待应用的更改。"
+    },
+    "list": {
+      "countOne": "{{count}} 项更改",
+      "countOther": "{{count}} 项更改",
+      "gateNote": "应用按钮在服务器端受限；除非关闭 OMADA_READ_ONLY，否则生产环境会拒绝该操作。"
+    },
+    "table": {
+      "feature": "功能",
+      "op": "操作",
+      "target": "目标",
+      "notes": "备注",
+      "created": "创建时间",
+      "status": "状态",
+      "actions": "操作",
+      "failureTooltip": "失败：{{reason}}"
+    },
+    "actions": {
+      "discardTooltip": "丢弃此更改",
+      "applyTooltip": "应用到实时控制器",
+      "apply": "应用"
+    },
+    "confirmApply": {
+      "title": "应用到实时控制器？",
+      "description": "这会将更改推送到 Omada 控制器。服务器端的 OMADA_READ_ONLY 标志也必须关闭，应用才能成功；否则请求会被拒绝并返回 403。此操作无法撤销, 请先核对载荷。",
+      "cancel": "取消",
+      "apply": "应用"
+    },
+    "toasts": {
+      "discarded": {
+        "title": "更改已丢弃"
+      },
+      "discardFailed": {
+        "title": "丢弃失败"
+      },
+      "applied": {
+        "title": "更改已应用",
+        "description": "已推送到实时控制器。"
+      },
+      "applyRefused": {
+        "title": "应用被拒绝"
+      }
+    },
+    "errors": {
+      "loadFailed": "加载待处理更改失败"
+    }
+  }
+}

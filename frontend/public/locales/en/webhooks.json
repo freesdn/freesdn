@@ -1,0 +1,129 @@
+{
+  "WebhooksPage": {
+    "validation": {
+      "nameRequired": "Name is required",
+      "urlRequired": "URL is required",
+      "urlInvalid": "Must be a valid URL"
+    },
+    "create": {
+      "title": "Create Webhook",
+      "submit": "Create Webhook"
+    },
+    "fields": {
+      "name": {
+        "label": "Name",
+        "placeholder": "My Webhook"
+      },
+      "url": {
+        "label": "URL"
+      },
+      "secret": {
+        "label": "Secret (optional)",
+        "placeholder": "HMAC signing secret"
+      },
+      "eventTypes": {
+        "label": "Event Types",
+        "add": "Add",
+        "description": "Leave empty to receive all events"
+      },
+      "enabled": "Enabled",
+      "verifySsl": "Verify SSL"
+    },
+    "deliveries": {
+      "title": "Delivery History",
+      "empty": "No deliveries yet",
+      "attempt": "Attempt {{n}}",
+      "response": "Response: {{code}}"
+    },
+    "toast": {
+      "error": "Error",
+      "success": "Success",
+      "unknownError": "Unknown error",
+      "createFailed": "Failed to create webhook: {{detail}}",
+      "updateFailed": "Failed to update webhook: {{detail}}",
+      "deleteFailed": "Failed to delete webhook: {{detail}}",
+      "testDelivered": "Test webhook delivered! Response: {{status}}, Time: {{time}}ms",
+      "testFailed": "Test webhook {{status}}: {{error}}",
+      "testRequestFailed": "Failed to test webhook: {{detail}}"
+    },
+    "columns": {
+      "webhook": "Webhook",
+      "status": "Status",
+      "events": "Events",
+      "successful": "Successful",
+      "failures": "Failures",
+      "lastTriggered": "Last Triggered",
+      "active": "Active"
+    },
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "events": {
+      "all": "All events",
+      "typeOne": "{{count}} type",
+      "typeOther": "{{count}} types"
+    },
+    "never": "Never",
+    "actions": {
+      "menuLabel": "Actions for {{name}}",
+      "test": "Test Webhook",
+      "viewDeliveries": "View Deliveries",
+      "deleteConfirm": "Are you sure you want to delete this webhook?",
+      "delete": "Delete"
+    },
+    "header": {
+      "title": "Webhooks",
+      "description": "Manage outbound webhook subscriptions for FreeSDN events.",
+      "export": "Export",
+      "addWebhook": "Add Webhook"
+    },
+    "errorState": {
+      "message": "Failed to load webhooks"
+    },
+    "stats": {
+      "total": {
+        "title": "Total Webhooks",
+        "description": "Configured endpoints"
+      },
+      "enabled": {
+        "title": "Enabled",
+        "active": "{{percent}}% active",
+        "none": "No webhooks"
+      },
+      "failing": {
+        "title": "Failing",
+        "description": "Have recent failures"
+      },
+      "deliveries": {
+        "title": "Deliveries",
+        "description": "Lifetime successful"
+      }
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search webhooks by name or URL…",
+      "allStatuses": "All statuses",
+      "failing": "Failing",
+      "clearFilters": "Clear filters"
+    },
+    "itemName": "webhook",
+    "itemNamePlural": "webhooks",
+    "bulk": {
+      "test": {
+        "label": "Test",
+        "title": "Bulk Test",
+        "description": "Bulk test: not yet implemented."
+      },
+      "disable": {
+        "label": "Disable",
+        "title": "Bulk Disable",
+        "description": "Bulk disable: not yet implemented."
+      },
+      "delete": {
+        "label": "Delete",
+        "title": "Bulk Delete",
+        "description": "Please delete webhooks individually for safety."
+      }
+    }
+  }
+}

@@ -1,0 +1,229 @@
+{
+  "FirmwarePage": {
+    "header": {
+      "title": "Gestión de firmware",
+      "description": "Administra e implementa actualizaciones de firmware en tus dispositivos"
+    },
+    "errors": {
+      "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
+    },
+    "common": {
+      "never": "Nunca",
+      "notAvailable": "N/D",
+      "unknown": "Desconocida"
+    },
+    "stats": {
+      "totalDevices": "Total de dispositivos",
+      "managedDevices": "dispositivos gestionados",
+      "upToDate": "Actualizados",
+      "updatesAvailable": "Actualizaciones disponibles",
+      "devicesNeedUpdating": "dispositivos requieren actualizacion",
+      "criticalUpdates": "Actualizaciones criticas",
+      "securityUpdatesPending": "actualizaciones de seguridad pendientes"
+    },
+    "banner": {
+      "upgradeInProgress": "Actualizacion de firmware en curso",
+      "devicesCompleted": "{{completed}} de {{total}} dispositivos completados"
+    },
+    "tabs": {
+      "devices": "Dispositivos",
+      "repository": "Repositorio",
+      "jobs": "Trabajos",
+      "schedules": "Programaciones"
+    },
+    "filters": {
+      "searchPlaceholder": "Buscar dispositivos...",
+      "vendor": "Fabricante",
+      "allVendors": "Todos los fabricantes",
+      "type": "Tipo",
+      "updatesOnly": "Solo con actualizaciones disponibles"
+    },
+    "deviceTypes": {
+      "all": "Todos los tipos",
+      "accessPoint": "Puntos de acceso",
+      "switch": "Switches",
+      "router": "Routers",
+      "gateway": "Gateways",
+      "firewall": "Firewalls",
+      "camera": "Camaras",
+      "nvr": "NVR",
+      "dvr": "DVR",
+      "accessControl": "Control de acceso",
+      "intercom": "Intercomunicadores",
+      "voipPhone": "Telefonos VoIP",
+      "iot": "Dispositivos IoT",
+      "sensor": "Sensores"
+    },
+    "viewMode": {
+      "table": "Tabla",
+      "byVersion": "Por version"
+    },
+    "bulk": {
+      "selected": "{{count}} seleccionados",
+      "deselectAll": "Deseleccionar todo"
+    },
+    "actions": {
+      "uploadFirmware": "Subir firmware",
+      "viewDetails": "Ver detalles",
+      "hideDetails": "Ocultar detalles",
+      "checkForUpdates": "Buscar actualizaciones",
+      "upgrade": "Actualizar",
+      "upgradeCount": "Actualizar ({{count}})",
+      "upgradeNow": "Actualizar ahora",
+      "versionHistory": "Historial de versiones",
+      "cancel": "Cancelar",
+      "retryFailed": "Reintentar fallidos",
+      "edit": "Editar",
+      "runNow": "Ejecutar ahora",
+      "delete": "Eliminar",
+      "close": "Cerrar"
+    },
+    "table": {
+      "device": "Dispositivo",
+      "type": "Tipo",
+      "currentVersion": "Version actual",
+      "latestVersion": "Ultima version",
+      "status": "Estado",
+      "lastChecked": "Ultima comprobacion",
+      "actions": "Acciones"
+    },
+    "status": {
+      "upToDate": "Actualizado",
+      "critical": "Critica",
+      "updateAvailable": "Actualizacion disponible"
+    },
+    "grouped": {
+      "deviceCount": "{{count}} dispositivos",
+      "criticalUpdateNeeded": "Se requiere actualizacion critica",
+      "updateTo": "Actualizar a {{version}}",
+      "latest": "la mas reciente",
+      "upgradeAll": "Actualizar todos ({{count}})"
+    },
+    "repository": {
+      "loading": "Cargando repositorio de firmware...",
+      "emptyTitle": "Sin firmware en el repositorio",
+      "emptyDescription": "Sube archivos de firmware para empezar.",
+      "security": "Seguridad",
+      "latest": "Mas reciente",
+      "recommended": "Recomendada",
+      "cached": "En cache",
+      "released": "Publicada:",
+      "size": "Tamano:",
+      "installed": "Instalada:",
+      "installedCount": "{{upToDate}} / {{total}} dispositivos",
+      "releaseNotes": "Notas de la version"
+    },
+    "jobs": {
+      "status": "Estado",
+      "version": "Version",
+      "devices": "Dispositivos",
+      "progress": "Progreso",
+      "started": "Iniciado",
+      "initiatedBy": "Iniciado por",
+      "failedCount": "({{count}} fallidos)",
+      "empty": "Aun no hay trabajos de actualizacion"
+    },
+    "rollout": {
+      "title": "Progreso del despliegue por fases",
+      "completed": "Completados ({{count}})",
+      "inProgress": "En curso ({{count}})",
+      "failed": "Fallidos ({{count}})",
+      "pending": "Pendientes",
+      "perDeviceHint": "Los detalles por dispositivo estan disponibles cuando el trabajo esta en curso o completado. Haz clic en el trabajo para actualizar.",
+      "startedAt": "Iniciado: {{time}}",
+      "completedAt": "Completado: {{time}}",
+      "backupBeforeUpgrade": "Copia de seguridad antes de actualizar",
+      "autoRollbackEnabled": "Reversion automatica habilitada"
+    },
+    "schedules": {
+      "create": "Crear programacion",
+      "loading": "Cargando programaciones...",
+      "emptyTitle": "Sin programaciones",
+      "emptyDescription": "Crea una programacion para automatizar las actualizaciones de firmware.",
+      "target": "Objetivo:",
+      "allTypes": "Todos los tipos",
+      "schedule": "Programacion:",
+      "frequencyAt": "{{frequency}} a las {{time}}",
+      "totalRuns": "Ejecuciones totales:",
+      "lastRun": "Ultima ejecucion:",
+      "nextRun": "Proxima ejecucion: {{time}}"
+    },
+    "upgradeDialog": {
+      "title": "Actualizar firmware",
+      "description": "Configura la actualizacion de firmware para {{count}} dispositivo(s)",
+      "targetFirmware": "Firmware objetivo",
+      "selectFirmwarePlaceholder": "Selecciona una version de firmware",
+      "criticalSuffix": "(Critica)",
+      "scheduleOptional": "Programacion (opcional)",
+      "leaveEmptyHint": "Dejar vacio para iniciar de inmediato",
+      "backupBefore": "Copia de seguridad antes de actualizar",
+      "backupBeforeHint": "Crear una copia de seguridad de la configuración antes de actualizar",
+      "rollbackOnFailure": "Revertir si falla",
+      "rollbackOnFailureHint": "Restaurar la version anterior si falla la actualizacion",
+      "scheduleUpgrade": "Programar actualizacion",
+      "startUpgrade": "Iniciar actualizacion"
+    },
+    "releaseNotesDialog": {
+      "released": "Publicada {{date}}",
+      "noNotes": "No hay notas de la version disponibles."
+    },
+    "uploadDialog": {
+      "title": "Subir firmware",
+      "description": "Suba una imagen de firmware y proporcione sus metadatos",
+      "file": "Archivo de firmware",
+      "vendor": "Fabricante",
+      "vendorPlaceholder": "p. ej., Hikvision",
+      "model": "Modelo",
+      "modelPlaceholder": "p. ej., DS-2CD2143G0",
+      "version": "Version",
+      "versionPlaceholder": "p. ej., 5.7.3",
+      "releaseType": "Tipo de version",
+      "releaseTypes": {
+        "stable": "Estable",
+        "beta": "Beta",
+        "rc": "Candidata a version"
+      }
+    },
+    "scheduleDialog": {
+      "title": "Crear programacion de actualizacion",
+      "description": "Configura actualizaciones automaticas de firmware",
+      "name": "Nombre de la programacion",
+      "namePlaceholder": "p. ej., Actualizaciones semanales de AP",
+      "descriptionLabel": "Descripcion",
+      "descriptionPlaceholder": "Descripcion opcional",
+      "scheduleType": "Tipo de programacion",
+      "frequency": {
+        "weekly": "Semanal",
+        "monthly": "Mensual",
+        "onRelease": "Al publicarse"
+      },
+      "dayOfWeek": "Dia de la semana",
+      "time": "Hora",
+      "autoLatest": "Actualizar automaticamente a la mas reciente",
+      "autoLatestHint": "Usar automaticamente la ultima version estable"
+    },
+    "days": {
+      "monday": "Lunes",
+      "tuesday": "Martes",
+      "wednesday": "Miercoles",
+      "thursday": "Jueves",
+      "friday": "Viernes",
+      "saturday": "Sabado",
+      "sunday": "Domingo"
+    },
+    "batch": {
+      "title": "Actualizacion de firmware",
+      "description": "Actualizando los dispositivos seleccionados a la version de firmware objetivo",
+      "jobCreated": "Trabajo creado",
+      "failedToStart": "No se pudo iniciar",
+      "cancelled": "Cancelado"
+    },
+    "toasts": {
+      "operationFailed": "La operacion fallo",
+      "validationError": "Error de validacion",
+      "selectFirmware": "Selecciona una version de firmware",
+      "upgradeFailed": "La actualizacion fallo",
+      "unknownError": "Error desconocido"
+    }
+  }
+}

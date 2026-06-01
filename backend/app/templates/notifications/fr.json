@@ -1,0 +1,37 @@
+{
+  "device_offline": {
+    "title": "Appareil hors ligne : {{ device_name }}",
+    "body": "L'appareil {{ device_name }} ({{ device_ip }}) est passé hors ligne.",
+    "body_html": "<p>L'appareil <strong>{{ device_name }}</strong> ({{ device_ip }}) est passé hors ligne.</p>"
+  },
+  "device_online": {
+    "title": "Appareil en ligne : {{ device_name }}",
+    "body": "L'appareil {{ device_name }} ({{ device_ip }}) est de nouveau en ligne.",
+    "body_html": "<p>L'appareil <strong>{{ device_name }}</strong> ({{ device_ip }}) est de nouveau en ligne.</p>"
+  },
+  "alert_triggered": {
+    "title": "Alerte : {{ alert_name }}",
+    "body": "{{ alert_message }}",
+    "body_html": "<p><strong>{{ alert_name }}</strong></p><p>{{ alert_message }}</p>"
+  },
+  "backup_complete": {
+    "title": "Sauvegarde terminée",
+    "body": "Sauvegarde terminée avec succès. {{ device_count }} appareils sauvegardés.",
+    "body_html": "<p>Sauvegarde terminée avec succès.</p><p><strong>{{ device_count }}</strong> appareils sauvegardés.</p>"
+  },
+  "firmware_upgrade": {
+    "title": "Mise à jour du firmware : {{ device_name }}",
+    "body": "Mise à jour du firmware vers {{ version }} sur {{ device_name }} {{ status }}.",
+    "body_html": "<p>Mise à jour du firmware vers <strong>{{ version }}</strong> sur <strong>{{ device_name }}</strong> {{ status }}.</p>"
+  },
+  "security_alert": {
+    "title": "Alerte de sécurité : {{ alert_type }}",
+    "body": "{{ description }}. Source : {{ source_ip }}.",
+    "body_html": "<p><strong>Alerte de sécurité :</strong> {{ alert_type }}</p><p>{{ description }}</p><p>Source : {{ source_ip }}</p>"
+  },
+  "test_notification": {
+    "title": "Notification de test FreeSDN",
+    "body": "Ceci est une notification de test de FreeSDN.",
+    "body_html": "<p>Ceci est une <strong>notification de test</strong> de FreeSDN.</p>"
+  }
+}

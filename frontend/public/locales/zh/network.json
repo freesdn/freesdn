@@ -1,0 +1,506 @@
+{
+  "title": "网络",
+  "vlans": "VLAN",
+  "wifi": "WiFi 网络",
+  "switchPorts": "交换机端口",
+  "clients": "网络客户端",
+  "topology": "拓扑",
+  "ssids": "SSID",
+  "portProfiles": "端口配置文件",
+  "vlanId": "VLAN ID",
+  "vlanName": "VLAN 名称",
+  "subnet": "子网",
+  "gateway": "网关",
+  "dhcpEnabled": "已启用 DHCP",
+  "ssidName": "SSID 名称",
+  "security": "安全",
+  "band": "频段",
+  "channel": "信道",
+  "enabled": "已启用",
+  "disabled": "已禁用",
+  "portNumber": "端口",
+  "portName": "端口名称",
+  "speed": "速率",
+  "duplex": "双工",
+  "poeStatus": "PoE 状态",
+  "linkStatus": "链路状态",
+  "connected": "已连接",
+  "disconnected": "已断开",
+  "clientName": "客户端名称",
+  "macAddress": "MAC 地址",
+  "ipAddress": "IP 地址",
+  "connectionType": "连接类型",
+  "wired": "有线",
+  "wireless": "无线",
+  "signalStrength": "信号强度",
+  "uptime": "运行时间",
+  "WifiNetworksPage": {
+    "page": {
+      "title": "WiFi 网络",
+      "description": "管理所有控制器上的无线网络 (SSID)",
+      "descriptionShort": "管理无线网络和 SSID",
+      "loadError": "加载 WiFi 网络失败"
+    },
+    "stats": {
+      "totalNetworks": "网络总数",
+      "configuredSsids": "已配置的 SSID",
+      "active": "活动",
+      "percentEnabled": "{{percent}}% 已启用",
+      "noNetworks": "无网络",
+      "guest": "访客",
+      "guestSsids": "访客 SSID",
+      "hidden": "隐藏",
+      "nonBroadcasting": "不广播"
+    },
+    "filters": {
+      "searchPlaceholder": "按 SSID、VLAN 或安全方式搜索网络…",
+      "allStatuses": "所有状态",
+      "guestOnly": "仅访客",
+      "allBands": "所有频段",
+      "dualBand": "双频",
+      "clearFilters": "清除筛选"
+    },
+    "columns": {
+      "network": "网络",
+      "status": "状态",
+      "security": "安全",
+      "band": "频段",
+      "features": "功能"
+    },
+    "status": {
+      "active": "活动",
+      "disabled": "已禁用"
+    },
+    "toggle": {
+      "on": "开",
+      "off": "关"
+    },
+    "pills": {
+      "isolated": "隔离",
+      "steering": "频段引导",
+      "limited": "已限速"
+    },
+    "itemName": "网络",
+    "itemNamePlural": "网络",
+    "actions": {
+      "addNetwork": "添加网络",
+      "export": "导出",
+      "viewDetails": "查看详情",
+      "enable": "启用",
+      "disable": "禁用",
+      "edit": "编辑",
+      "delete": "删除",
+      "cancel": "取消",
+      "saving": "保存中…",
+      "creating": "创建中…",
+      "saveChanges": "保存更改",
+      "createNetwork": "创建网络",
+      "deleting": "删除中…",
+      "deleteNetwork": "删除网络"
+    },
+    "security": {
+      "modes": {
+        "open": "开放（无安全）",
+        "wpa2Personal": "WPA2 Personal",
+        "wpa3Personal": "WPA3 Personal",
+        "wpa2Enterprise": "WPA2 Enterprise",
+        "wpa3Enterprise": "WPA3 Enterprise",
+        "wpaWpa2Mixed": "WPA/WPA2 混合",
+        "wpa2Wpa3Mixed": "WPA2/WPA3 混合",
+        "wpa2Wpa3Transition": "WPA2/WPA3 过渡",
+        "wpaWpa2MixedLegacy": "WPA/WPA2 混合（旧版）"
+      }
+    },
+    "features": {
+      "clientIsolation": "客户端隔离",
+      "bandSteering": "频段引导",
+      "fastRoaming": "快速漫游 (802.11r)",
+      "hiddenSsid": "隐藏 SSID",
+      "guestNetwork": "访客网络",
+      "rateLimiting": "速率限制",
+      "macFiltering": "MAC 过滤",
+      "captivePortal": "强制门户",
+      "schedule": "计划"
+    },
+    "detail": {
+      "wlanGroup": "WLAN 组：{{name}}",
+      "wifiNetwork": "WiFi 网络",
+      "idLabel": "ID：{{id}}",
+      "cards": {
+        "security": "安全",
+        "band": "频段",
+        "vlan": "VLAN",
+        "type": "类型"
+      },
+      "vlanValue": "VLAN {{id}}",
+      "defaultVlan": "默认",
+      "typeGuest": "访客",
+      "typePrivate": "专用",
+      "featuresTitle": "功能与设置",
+      "featuresDescription": "此 SSID 的当前功能配置",
+      "rateLimitingTitle": "速率限制",
+      "download": "下载",
+      "upload": "上传",
+      "mbps": "{{value}} Mbps",
+      "unlimited": "无限制"
+    },
+    "form": {
+      "createTitle": "创建 WiFi 网络",
+      "editTitle": "编辑 WiFi 网络",
+      "createDescription": "添加新的 WiFi 网络/SSID。它将自动在控制器上创建。",
+      "editDescription": "修改 WiFi 网络设置。更改将推送到控制器。",
+      "tabs": {
+        "basic": "基本",
+        "security": "安全",
+        "advanced": "高级",
+        "qos": "QoS"
+      },
+      "fields": {
+        "ssid": "SSID（网络名称）",
+        "band": "频段",
+        "vlanId": "VLAN ID",
+        "enabled": "已启用",
+        "securityMode": "安全模式",
+        "preSharedKey": "预共享密钥",
+        "hiddenNetwork": "隐藏网络"
+      },
+      "placeholders": {
+        "ssid": "MyNetwork",
+        "defaultVlan": "默认 VLAN",
+        "unchanged": "（未更改）",
+        "minChars": "至少 8 个字符",
+        "unlimited": "无限制"
+      },
+      "bandOptions": {
+        "both": "双频 (2.4 和 5 GHz)",
+        "band24": "仅 2.4 GHz",
+        "band5": "仅 5 GHz",
+        "all": "所有频段"
+      },
+      "help": {
+        "wpaPassword": "WPA 密码必须为 8-63 个 ASCII 字符。",
+        "hiddenNetwork": "不在信标中广播 SSID"
+      },
+      "advanced": {
+        "clientIsolation": {
+          "label": "客户端隔离",
+          "desc": "阻止无线客户端之间的流量"
+        },
+        "bandSteering": {
+          "label": "频段引导",
+          "desc": "引导支持 5 GHz 的客户端连接到 5 GHz"
+        },
+        "fastRoaming": {
+          "label": "快速漫游 (802.11r)",
+          "desc": "启用快速 BSS 切换以实现无缝 AP 漫游"
+        }
+      },
+      "qos": {
+        "enableRateLimiting": "启用速率限制",
+        "capBandwidth": "限制每个客户端的带宽",
+        "downloadLimit": "下载限制 (Mbps)",
+        "uploadLimit": "上传限制 (Mbps)"
+      }
+    },
+    "deleteDialog": {
+      "title": "删除 WiFi 网络？",
+      "description": "确定要删除“{{ssid}}”吗？这将断开当前使用此网络的所有客户端，并将其从控制器中移除。"
+    },
+    "toast": {
+      "bulkDeleteTitle": "批量删除",
+      "bulkDeleteDescription": "为安全起见，请逐个删除网络。"
+    }
+  },
+  "NetworkClientsPage": {
+    "header": {
+      "title": "网络客户端",
+      "description": "查看和管理所有控制器上的已连接设备",
+      "descriptionShort": "查看和管理已连接设备"
+    },
+    "error": {
+      "loadFailed": "无法加载客户端"
+    },
+    "stats": {
+      "totalClients": "客户端总数",
+      "onlineCount": "{{value}} 在线",
+      "online": "在线",
+      "connectedPercent": "{{percent}}% 已连接",
+      "noClients": "无客户端",
+      "wireless": "无线",
+      "wifiClients": "WiFi 客户端",
+      "wired": "有线",
+      "ethernetClients": "以太网客户端"
+    },
+    "toolbar": {
+      "searchPlaceholder": "按名称、MAC、IP 或厂商搜索客户端…",
+      "clearFilters": "清除筛选"
+    },
+    "filters": {
+      "allConnections": "所有连接",
+      "allStatuses": "所有状态"
+    },
+    "connection": {
+      "wireless": "无线",
+      "wired": "有线"
+    },
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "blocked": "已屏蔽"
+    },
+    "columns": {
+      "client": "客户端",
+      "status": "状态",
+      "connection": "连接",
+      "ipAddress": "IP 地址",
+      "macAddress": "MAC 地址",
+      "signal": "信号",
+      "traffic": "流量",
+      "lastSeen": "最后在线"
+    },
+    "fields": {
+      "status": "状态",
+      "connection": "连接",
+      "ipAddress": "IP 地址",
+      "macAddress": "MAC 地址",
+      "ssid": "SSID",
+      "signal": "信号",
+      "hostname": "主机名",
+      "vendor": "厂商",
+      "unknown": "未知",
+      "unknownVendor": "未知厂商",
+      "firstSeen": "首次发现",
+      "lastSeen": "最后在线"
+    },
+    "sheet": {
+      "description": "客户端详情与统计",
+      "connectionInfo": "连接信息",
+      "deviceInfo": "设备信息",
+      "trafficStatistics": "流量统计"
+    },
+    "traffic": {
+      "downloaded": "下载",
+      "uploaded": "上传"
+    },
+    "timeAgo": {
+      "never": "从不",
+      "justNow": "刚刚",
+      "minutes": "{{value}} 分钟前",
+      "hours": "{{value}} 小时前",
+      "days": "{{value}} 天前"
+    },
+    "actions": {
+      "export": "导出",
+      "viewDetails": "查看详情",
+      "block": "屏蔽",
+      "unblock": "取消屏蔽",
+      "delete": "删除",
+      "cancel": "取消"
+    },
+    "itemName": {
+      "singular": "客户端",
+      "plural": "客户端"
+    },
+    "toast": {
+      "clientUpdated": "客户端已更新",
+      "actionFailed": "操作失败",
+      "bulkDelete": {
+        "title": "批量删除",
+        "description": "为安全起见，请逐个删除客户端。"
+      }
+    },
+    "dialog": {
+      "unblockTitle": "取消屏蔽客户端？",
+      "blockTitle": "屏蔽客户端？",
+      "unblockDescription": "允许“{{name}}”重新连接到网络。",
+      "blockDescription": "禁止“{{name}}”访问网络。该客户端将立即断开连接。",
+      "processing": "处理中…"
+    }
+  },
+  "NetworkDashboardPage": {
+    "header": {
+      "title": "网络概览",
+      "subtitle": "监控和管理您的网络基础设施"
+    },
+    "errors": {
+      "partialLoad": "部分数据加载失败。结果可能不完整。"
+    },
+    "stats": {
+      "totalDevices": "设备总数",
+      "onlineCount": "{{count}} 台在线",
+      "networkClients": "网络客户端",
+      "activeCount": "{{count}} 个活跃",
+      "vlans": "VLAN",
+      "networkSegments": "网络分段",
+      "wifiNetworks": "WiFi 网络",
+      "ssidsConfigured": "已配置 SSID"
+    },
+    "quickAccess": {
+      "heading": "快速访问",
+      "vlans": {
+        "title": "VLAN",
+        "description": "管理网络分段"
+      },
+      "wifi": {
+        "title": "WiFi 网络",
+        "description": "配置无线 SSID"
+      },
+      "clients": {
+        "title": "客户端",
+        "description": "查看已连接的设备"
+      },
+      "ports": {
+        "title": "交换机端口",
+        "description": "管理端口配置"
+      }
+    },
+    "deviceTypes": {
+      "switch": "交换机",
+      "accessPoint": "接入点",
+      "gateway": "网关",
+      "router": "路由器",
+      "other": "其他"
+    },
+    "deviceBreakdown": {
+      "title": "设备类型",
+      "description": "按设备类别细分",
+      "empty": "未找到设备"
+    },
+    "clientBreakdown": {
+      "title": "客户端连接",
+      "description": "有线与无线细分",
+      "wireless": "无线",
+      "wired": "有线",
+      "percentWireless": "{{percent}}% 无线",
+      "percentWired": "{{percent}}% 有线",
+      "blockedClients": "被阻止的客户端"
+    },
+    "health": {
+      "title": "网络健康状况",
+      "description": "整体基础设施状态",
+      "excellent": "优秀",
+      "good": "良好",
+      "fair": "一般",
+      "critical": "严重",
+      "online": "在线",
+      "offline": "离线"
+    },
+    "topology": {
+      "title": "网络拓扑",
+      "description": "您的网络基础设施可视化图",
+      "viewFullMap": "查看完整地图",
+      "devicesCount": "{{count}} 台设备",
+      "connectedVia": "通过以下方式连接",
+      "linksCount": "{{count}} 条链路",
+      "noData": "暂无拓扑数据",
+      "openViewer": "打开交互式拓扑查看器"
+    }
+  },
+  "VlansPage": {
+    "dhcp": {
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    },
+    "header": {
+      "title": "VLAN",
+      "description": "管理虚拟局域网和网络分段"
+    },
+    "tabs": {
+      "vlans": "VLAN",
+      "alignment": "对齐"
+    },
+    "actions": {
+      "addVlan": "添加 VLAN",
+      "export": "导出",
+      "edit": "编辑",
+      "delete": "删除"
+    },
+    "columns": {
+      "vlanId": "VLAN ID",
+      "name": "名称",
+      "gateway": "网关",
+      "subnet": "子网",
+      "dhcp": "DHCP",
+      "dhcpRange": "DHCP 范围"
+    },
+    "stats": {
+      "totalVlans": "VLAN 总数",
+      "rangeValue": "范围 {{range}}",
+      "dhcpEnabled": "已启用 DHCP",
+      "percentOfVlans": "占 VLAN 的 {{percent}}%",
+      "noVlans": "无 VLAN",
+      "withGateway": "含网关",
+      "routedVlans": "已路由 VLAN",
+      "vlanRange": "VLAN 范围",
+      "lowestHighestId": "最低, 最高 ID"
+    },
+    "toolbar": {
+      "searchPlaceholder": "按 ID、名称或网关搜索 VLAN…",
+      "allDhcp": "所有 DHCP",
+      "dhcpEnabled": "已启用 DHCP",
+      "dhcpDisabled": "已禁用 DHCP",
+      "clearFilters": "清除筛选"
+    },
+    "itemName": "VLAN",
+    "itemNamePlural": "VLAN",
+    "form": {
+      "editTitle": "编辑 VLAN",
+      "createTitle": "创建 VLAN",
+      "editDescription": "在下方修改 VLAN 设置。",
+      "createDescription": "向网络配置中添加新的 VLAN。",
+      "vlanId": "VLAN ID",
+      "name": "名称",
+      "namePlaceholder": "例如：管理",
+      "description": "描述",
+      "descriptionPlaceholder": "可选描述",
+      "gateway": "网关",
+      "gatewayPlaceholder": "例如：192.168.1.1",
+      "subnetMask": "子网掩码",
+      "subnetMaskPlaceholder": "例如：255.255.255.0",
+      "dhcpServer": "DHCP 服务器",
+      "dhcpServerHelp": "启用 DHCP 以自动分配 IP",
+      "dhcpStart": "DHCP 起始",
+      "dhcpStartPlaceholder": "例如：192.168.1.100",
+      "dhcpEnd": "DHCP 结束",
+      "dhcpEndPlaceholder": "例如：192.168.1.200",
+      "cancel": "取消",
+      "saving": "保存中...",
+      "creating": "创建中...",
+      "saveChanges": "保存更改",
+      "createSubmit": "创建 VLAN"
+    },
+    "alignment": {
+      "scoreTitle": "VLAN 对齐评分",
+      "scoreSummary": "{{controllers}} 个控制器上共 {{vlans}} 个 VLAN",
+      "matrixTitle": "VLAN x 控制器矩阵",
+      "matrixDescription": "显示哪些 VLAN 存在于哪些控制器上",
+      "syncAll": "全部同步",
+      "syncAllConfirm": "在所有控制器上同步所有未对齐的 VLAN？这将从源控制器复制缺失的 VLAN。",
+      "columnVlan": "VLAN",
+      "columnName": "名称",
+      "columnStatus": "状态",
+      "present": "存在",
+      "different": "不同",
+      "noSubnet": "无子网",
+      "missing": "缺失",
+      "copy": "复制"
+    },
+    "deleteDialog": {
+      "title": "删除 VLAN？",
+      "description": "确定要删除 VLAN {{vlanId}}（{{name}}）吗？此操作无法撤销，可能会影响使用该 VLAN 的设备。",
+      "deleting": "删除中..."
+    },
+    "errors": {
+      "loadFailed": "无法加载 VLAN"
+    },
+    "toast": {
+      "errorTitle": "错误",
+      "successTitle": "成功",
+      "operationFailed": "操作失败",
+      "distributeSuccess": "VLAN 分发成功。",
+      "distributeFailed": "VLAN 分发失败：{{error}}",
+      "bulkDeleteTitle": "批量删除",
+      "bulkDeleteMessage": "为安全起见，请逐个删除 VLAN。"
+    }
+  }
+}

@@ -1,0 +1,975 @@
+{
+  "GatewayPage": {
+    "header": {
+      "title": "Orchestration",
+      "subtitle": "VLAN distribution, drift detection, and cross-gateway resource management"
+    },
+    "error": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "common": {
+      "on": "On",
+      "off": "Off",
+      "up": "Up",
+      "down": "Down"
+    },
+    "time": {
+      "never": "Never",
+      "justNow": "Just now",
+      "minutesAgo": "{{n}}m ago",
+      "hoursAgo": "{{n}}h ago",
+      "daysAgo": "{{n}}d ago"
+    },
+    "status": {
+      "pending": "Pending",
+      "executing": "Executing",
+      "completed": "Completed",
+      "failed": "Failed",
+      "rolledBack": "Rolled Back"
+    },
+    "toast": {
+      "error": "Error",
+      "importComplete": {
+        "title": "Import complete",
+        "description": "VLANs imported from brain device"
+      },
+      "importFailed": {
+        "title": "Import failed",
+        "description": "Could not read from brain"
+      },
+      "distributionComplete": {
+        "title": "Distribution complete",
+        "description": "VLANs pushed to limb devices"
+      },
+      "distributionFailed": {
+        "title": "Distribution failed",
+        "description": "Could not push to limbs"
+      },
+      "createVlanFailed": "Failed to create VLAN",
+      "deleteVlanFailed": "Failed to delete VLAN",
+      "triggerDistributionFailed": "Failed to trigger distribution",
+      "resolveDriftFailed": "Failed to resolve drift event",
+      "createTemplateFailed": "Failed to create template",
+      "deleteTemplateFailed": "Failed to delete template",
+      "retractDistributionFailed": "Failed to retract distribution",
+      "triggerDriftCheckFailed": "Failed to trigger drift check",
+      "retryDistributionFailed": "Failed to retry distribution",
+      "rollbackDistributionFailed": "Failed to rollback distribution"
+    },
+    "tabs": {
+      "dashboard": "Dashboard",
+      "vlans": "VLANs",
+      "distribution": "Distribution",
+      "drift": "Drift",
+      "templates": "Templates",
+      "fwRules": "FW Rules",
+      "nat": "NAT",
+      "vpn": "VPN",
+      "interfaces": "Interfaces",
+      "dhcpLeases": "DHCP Leases",
+      "reconciliation": "Reconciliation"
+    },
+    "dashboard": {
+      "stats": {
+        "canonicalVlans": "Canonical VLANs",
+        "siteRoleMaps": "Site Role Maps",
+        "distributions": "Distributions",
+        "openDriftEvents": "Open Drift Events"
+      },
+      "driftSummary": {
+        "title": "Drift Summary",
+        "description": "Configuration drift across all managed devices"
+      },
+      "quickActions": {
+        "title": "Quick Actions",
+        "manageVlans": "Manage VLANs",
+        "importWizard": "Import Wizard",
+        "vlanTemplates": "VLAN Templates",
+        "driftEvents": "Drift Events"
+      }
+    },
+    "driftSummary": {
+      "total": "Total",
+      "critical": "Critical",
+      "warning": "Warning",
+      "info": "Info",
+      "pending": "Pending",
+      "resolved": "Resolved"
+    },
+    "vlanColumns": {
+      "vlan": "VLAN",
+      "name": "Name",
+      "subnet": "Subnet",
+      "gateway": "Gateway",
+      "purpose": "Purpose",
+      "dhcp": "DHCP",
+      "state": "State"
+    },
+    "vlanActions": {
+      "distribute": "Distribute",
+      "retract": "Retract",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this canonical VLAN? This action cannot be undone."
+    },
+    "vlans": {
+      "searchPlaceholder": "Search VLANs...",
+      "createVlan": "Create VLAN"
+    },
+    "distColumns": {
+      "resource": "Resource",
+      "action": "Action",
+      "status": "Status",
+      "started": "Started",
+      "completed": "Completed",
+      "error": "Error"
+    },
+    "distActions": {
+      "retry": "Retry",
+      "rollback": "Rollback"
+    },
+    "distribution": {
+      "stepDetails": "Step Details · {{action}} {{resource}}"
+    },
+    "driftColumns": {
+      "severity": "Severity",
+      "type": "Type",
+      "resource": "Resource",
+      "message": "Message",
+      "resolution": "Resolution",
+      "detected": "Detected"
+    },
+    "driftActions": {
+      "reapply": "Re-apply canonical",
+      "accept": "Accept device state",
+      "ignore": "Ignore"
+    },
+    "drift": {
+      "severityPlaceholder": "Severity",
+      "resolutionPlaceholder": "Resolution",
+      "allSeverity": "All Severity",
+      "allStatus": "All Status",
+      "runDriftCheck": "Run Drift Check",
+      "selectSiteHint": "Select a site from the header filter to run a drift check."
+    },
+    "templateColumns": {
+      "name": "Name",
+      "vlanId": "VLAN ID",
+      "subnetTemplate": "Subnet Template",
+      "purpose": "Purpose",
+      "dhcp": "DHCP"
+    },
+    "templateActions": {
+      "delete": "Delete",
+      "deleteConfirm": "Delete this VLAN template? This action cannot be undone."
+    },
+    "templates": {
+      "createTemplate": "Create Template"
+    },
+    "fwRuleColumns": {
+      "index": "#",
+      "name": "Name",
+      "dir": "Dir",
+      "action": "Action",
+      "proto": "Proto",
+      "enabled": "Enabled",
+      "hits": "Hits",
+      "synced": "Synced"
+    },
+    "natColumns": {
+      "name": "Name",
+      "type": "Type",
+      "enabled": "Enabled",
+      "synced": "Synced"
+    },
+    "vpnColumns": {
+      "name": "Name",
+      "type": "Type",
+      "status": "Status",
+      "synced": "Synced"
+    },
+    "ifaceColumns": {
+      "name": "Name",
+      "type": "Type",
+      "ipv4": "IPv4",
+      "vlan": "VLAN",
+      "status": "Status",
+      "mac": "MAC"
+    },
+    "dhcpColumns": {
+      "ipAddress": "IP Address",
+      "macAddress": "MAC Address",
+      "hostname": "Hostname",
+      "interface": "Interface",
+      "status": "Status"
+    },
+    "reconciliation": {
+      "selectSiteTitle": "Select a site to view reconciliation status",
+      "selectSiteDescription": "Use the site filter in the header to select a site.",
+      "importFromBrain": "Import from Brain",
+      "distributeToLimbs": "Distribute to Limbs",
+      "refresh": "Refresh",
+      "alignmentScore": "Alignment Score",
+      "totalVlans": "Total VLANs",
+      "aligned": "Aligned",
+      "missing": "Missing",
+      "extra": "Extra"
+    },
+    "alignmentTable": {
+      "vlan": "VLAN",
+      "name": "Name",
+      "device": "Device",
+      "role": "Role",
+      "status": "Status"
+    },
+    "createVlanDialog": {
+      "title": "Create Canonical VLAN",
+      "description": "Define a new VLAN to distribute across your brain/limb topology.",
+      "submitLabel": "Create VLAN",
+      "site": "Site",
+      "selectSite": "Select site",
+      "vlanId": "VLAN ID",
+      "vlanIdPlaceholder": "e.g. 30",
+      "name": "Name",
+      "namePlaceholder": "e.g. Guest WiFi",
+      "subnet": "Subnet",
+      "subnetPlaceholder": "e.g. 10.30.0.0/24",
+      "gatewayIp": "Gateway IP",
+      "gatewayIpPlaceholder": "e.g. 10.30.0.1",
+      "purpose": "Purpose",
+      "enableDhcp": "Enable DHCP",
+      "dhcpRangeStart": "DHCP Range Start",
+      "dhcpRangeStartPlaceholder": "e.g. 10.30.0.100",
+      "dhcpRangeEnd": "DHCP Range End",
+      "dhcpRangeEndPlaceholder": "e.g. 10.30.0.254"
+    },
+    "createTemplateDialog": {
+      "title": "Create VLAN Template",
+      "description": "Templates can be applied to any site to quickly create canonical VLANs.",
+      "submitLabel": "Create Template",
+      "name": "Name",
+      "namePlaceholder": "e.g. Standard Guest VLAN",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "vlanId": "VLAN ID",
+      "subnetTemplate": "Subnet Template",
+      "subnetTemplatePlaceholder": "e.g. 10.{site}.30.0/24",
+      "purpose": "Purpose",
+      "enableDhcp": "Enable DHCP"
+    }
+  },
+  "ImportWizardPage": {
+    "header": {
+      "title": "Import Wizard",
+      "subtitleSession": "Session {{id}}… · Step {{step}}/6",
+      "subtitleDefault": "Brownfield gateway configuration import"
+    },
+    "steps": {
+      "discover": {
+        "label": "Discover",
+        "description": "Discover gateway devices at the site"
+      },
+      "assignRoles": {
+        "label": "Assign Roles",
+        "description": "Designate brain and limb devices"
+      },
+      "scan": {
+        "label": "Scan",
+        "description": "Pull VLANs, interfaces, DHCP pools"
+      },
+      "reconcile": {
+        "label": "Reconcile",
+        "description": "Resolve conflicts and select resources"
+      },
+      "apply": {
+        "label": "Apply",
+        "description": "Create canonical VLANs and distribute"
+      },
+      "verify": {
+        "label": "Verify",
+        "description": "Confirm configuration matches intent"
+      }
+    },
+    "actions": {
+      "cancel": "Cancel",
+      "cancelImport": "Cancel Import",
+      "backToGateway": "Back to Gateway"
+    },
+    "siteSelection": {
+      "title": "Start Brownfield Import",
+      "description": "Import existing gateway configurations. The wizard will discover devices, let you assign brain/limb roles, scan for VLANs, and create canonical resources.",
+      "selectSite": "Select Site",
+      "sitePlaceholder": "Choose a site...",
+      "discovering": "Discovering...",
+      "startImport": "Start Import",
+      "startError": "Failed to start import. Please check gateway connections for this site."
+    },
+    "assignRoles": {
+      "noDevicesTitle": "No Devices Discovered",
+      "noDevicesDescription": "No gateway connections found at this site. Add gateway connections first.",
+      "title": "Assign Device Roles",
+      "descriptionBefore": "Designate one device as the",
+      "brain": "brain",
+      "descriptionMiddle": "(authoritative L3 gateway) and the rest as",
+      "limbs": "limbs",
+      "descriptionAfter": "(L2 switches or secondary devices). The brain's configuration is canonical and will be distributed to limbs.",
+      "online": "Online",
+      "offline": "Offline",
+      "roleBrain": "Brain",
+      "roleLimb": "Limb",
+      "brainRequired": "You must assign at least one device as the brain.",
+      "scanning": "Scanning...",
+      "scanDevices": "Scan Devices"
+    },
+    "scanning": {
+      "title": "Scanning Devices",
+      "description": "Pulling VLANs, interfaces, DHCP pools, and DNS records from the brain device..."
+    },
+    "reconcile": {
+      "conflictsTitle": "Conflicts Detected ({{count}})",
+      "conflictsDescription": "These resources have conflicting configurations between brain and limb devices.",
+      "conflictItem": "{{type}} · VLAN {{tag}}",
+      "discoveredVlansTitle": "Discovered VLANs",
+      "discoveredVlansDescription": "Choose an action for each discovered resource. \"Import\" creates a canonical VLAN and distributes it to all limbs.",
+      "noVlans": "No VLANs discovered on the brain device.",
+      "vlanLabel": "VLAN {{tag}}",
+      "conflictBadge": "Conflict",
+      "decisionImport": "Import",
+      "decisionAdoptBrain": "Adopt Brain",
+      "decisionAdoptLimb": "Adopt Limb",
+      "decisionKeepBoth": "Keep Both",
+      "decisionIgnore": "Ignore",
+      "applying": "Applying...",
+      "applyVerify": "Apply & Verify"
+    },
+    "applying": {
+      "title": "Applying Configuration",
+      "description": "Creating canonical VLANs and distributing to limb devices..."
+    },
+    "complete": {
+      "verifiedTitle": "Import Verified",
+      "verifiedDescription": "All canonical VLANs have been successfully distributed and verified.",
+      "mismatchTitle": "Import Complete with Mismatches",
+      "mismatchDescription": "Some configurations could not be verified. Review the mismatches below.",
+      "mismatchesTitle": "Mismatches ({{count}})",
+      "distributionRecordsTitle": "Distribution Records",
+      "distributionQueued": "{{count}} distribution(s) queued.",
+      "distributionViewDetails": "View details on the",
+      "distributionTab": "Distribution tab",
+      "viewCanonicalVlans": "View Canonical VLANs"
+    },
+    "failed": {
+      "cancelledTitle": "Import Cancelled",
+      "failedTitle": "Import Failed",
+      "cancelledDescription": "This import session was cancelled. No changes were made.",
+      "failedDescription": "An error occurred during the import. Please try again.",
+      "retry": "Retry"
+    },
+    "cancelDialog": {
+      "title": "Cancel Import?",
+      "description": "This will cancel the current import session. No changes that haven't been applied will be saved. This action cannot be undone.",
+      "continue": "Continue Importing",
+      "cancelling": "Cancelling..."
+    }
+  },
+  "GatewayBulkPage": {
+    "header": {
+      "title": "Bulk Operations & Templates",
+      "description": "Stage bulk device, SSID, client and site-template operations. Nothing pushes to the controller until an operator explicitly applies with force=true."
+    },
+    "target": {
+      "title": "Target",
+      "description": "Choose the Omada controller + site for bulk operations."
+    },
+    "notReady": {
+      "title": "Pick a controller and site",
+      "description": "Bulk ops are scoped per-site. Select both to load live state."
+    },
+    "tabs": {
+      "templates": "Templates",
+      "pending": "Pending"
+    },
+    "templates": {
+      "title": "Site templates available on this controller",
+      "description": "Templates clone settings (VLANs, ACLs, SSIDs, etc.) onto another site. Apply / export / delete actions are staged.",
+      "loadError": "Could not load templates"
+    },
+    "pending": {
+      "title": "Pending bulk + template changes",
+      "description": "Staged in our database. Apply explicitly via the Pending Changes screen.",
+      "empty": "No pending bulk changes",
+      "loadError": "Could not load pending bulk changes"
+    },
+    "templatesTable": {
+      "empty": "No templates",
+      "name": "Name",
+      "id": "ID",
+      "description": "Description"
+    },
+    "pendingTable": {
+      "feature": "Feature",
+      "operation": "Operation",
+      "target": "Target",
+      "created": "Created",
+      "status": "Status"
+    }
+  },
+  "GatewayDiagnosticsPage": {
+    "title": "Gateway Diagnostics",
+    "description": "Live telemetry for a gateway: WAN speed-test, session stats, active session list. The speed-test trigger is a measurement, not a config change, it does not stage.",
+    "target": {
+      "title": "Target",
+      "description": "Diagnostics target a specific gateway by MAC.",
+      "gatewayMac": "Gateway MAC",
+      "load": "Load",
+      "loadedFor": "Loaded for"
+    },
+    "empty": {
+      "pickTarget": {
+        "title": "Pick a controller and site",
+        "description": "Diagnostics are per-site. Select both, then enter a gateway MAC."
+      },
+      "enterMac": {
+        "title": "Enter a gateway MAC",
+        "description": "Provide the MAC of the gateway you want to diagnose."
+      }
+    },
+    "tabs": {
+      "speed": "Speed Test",
+      "stats": "Session Stats",
+      "active": "Active Sessions"
+    },
+    "speedTest": {
+      "title": "WAN speed test",
+      "description": "Trigger a measurement and view the latest result. Measurement only, no staging.",
+      "running": "Running…",
+      "run": "Run speed test",
+      "triggerError": "Speed-test trigger failed",
+      "loadError": "Could not load speed-test result",
+      "empty": {
+        "title": "No speed-test result yet",
+        "description": "Press Run to start a measurement."
+      },
+      "download": "Download",
+      "upload": "Upload",
+      "latency": "Latency"
+    },
+    "sessionStats": {
+      "title": "Session stats",
+      "loadError": "Could not load session stats"
+    },
+    "activeSessions": {
+      "title": "Active sessions",
+      "loadError": "Could not load active sessions",
+      "empty": "No active sessions",
+      "columns": {
+        "client": "Client",
+        "source": "Source",
+        "destination": "Destination",
+        "proto": "Proto",
+        "bytes": "Bytes"
+      }
+    }
+  },
+  "GatewayFirewallPage": {
+    "header": {
+      "title": "Firewall Depth",
+      "description": "Inspect controller-side firewall config blobs (DMZ, UPnP, attack defense, ALG, IDS/IPS). All edits are staged, apply explicitly via Pending Changes."
+    },
+    "target": {
+      "title": "Target",
+      "description": "Firewall configs are scoped per-site."
+    },
+    "emptyPicker": {
+      "title": "Pick a controller and site",
+      "description": "Firewall configs are per-site. Select both to load live state."
+    },
+    "tabs": {
+      "configs": "Configs",
+      "pending": "Pending"
+    },
+    "configCards": {
+      "dmz": "DMZ",
+      "upnp": "UPnP",
+      "attackDefense": "Attack Defense",
+      "alg": "ALG",
+      "idsIps": "IDS / IPS",
+      "loadError": "Could not load {{label}} config"
+    },
+    "pending": {
+      "title": "Pending firewall changes",
+      "description": "Staged in our database. Apply explicitly via the Pending Changes screen.",
+      "empty": "No pending firewall changes",
+      "loadError": "Could not load pending firewall changes"
+    },
+    "table": {
+      "feature": "Feature",
+      "operation": "Operation",
+      "target": "Target",
+      "created": "Created",
+      "status": "Status"
+    }
+  },
+  "GatewayControllerSitePicker": {
+    "controller": {
+      "label": "Controller",
+      "placeholder": "Choose controller",
+      "empty": "No controllers configured for this site."
+    },
+    "site": {
+      "label": "Site",
+      "placeholder": "Choose site",
+      "empty": "No sites available."
+    },
+    "unreachable": "Controller unreachable — verify it's online and reachable (host, port, credentials), then retry."
+  },
+  "GatewayFirmwarePage": {
+    "header": {
+      "title": "Gateway Firmware",
+      "description": "Read live firmware state from your Omada gateway. Upgrade actions are staged for review, they never push to the live controller until you explicitly apply."
+    },
+    "target": {
+      "title": "Target",
+      "description": "Choose the Omada controller + site to inspect."
+    },
+    "notReady": {
+      "title": "Pick a controller and site",
+      "description": "Firmware data is per-site. Select both to load live state."
+    },
+    "tabs": {
+      "available": "Available",
+      "schedules": "Schedules",
+      "history": "History",
+      "pending": "Pending"
+    },
+    "available": {
+      "title": "Firmware images available for adopted devices",
+      "loadError": "Could not load firmware list"
+    },
+    "schedules": {
+      "title": "Auto-upgrade schedules",
+      "description": "Schedule changes are staged. Apply from the Pending tab.",
+      "loadError": "Could not load schedules"
+    },
+    "history": {
+      "title": "Recent upgrade attempts",
+      "loadError": "Could not load upgrade history"
+    },
+    "pending": {
+      "title": "Pending firmware changes",
+      "description": "Staged in our database. They never touch the controller unless you apply with force=true AND OMADA_READ_ONLY is off in the environment.",
+      "emptyTitle": "No pending changes",
+      "emptyDescription": "Nothing waiting to be applied."
+    },
+    "common": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "firmwareTable": {
+      "emptyTitle": "No firmware available",
+      "model": "Model",
+      "version": "Version",
+      "released": "Released",
+      "notes": "Notes"
+    },
+    "schedulesTable": {
+      "emptyTitle": "No schedules",
+      "emptyDescription": "Auto-upgrade schedules let you patch a fleet on a recurring window.",
+      "name": "Name",
+      "models": "Models",
+      "when": "When",
+      "stableOnly": "Stable only"
+    },
+    "historyTable": {
+      "emptyTitle": "No upgrade history",
+      "device": "Device",
+      "fromTo": "From → To",
+      "status": "Status",
+      "when": "When"
+    },
+    "pendingTable": {
+      "feature": "Feature",
+      "operation": "Operation",
+      "target": "Target",
+      "created": "Created",
+      "status": "Status"
+    }
+  },
+  "GatewayHotspotPage": {
+    "header": {
+      "title": "Hotspot",
+      "description": "Inspect hotspot operators, SMS gateway and free-auth policies. All edits are staged, apply explicitly via Pending Changes."
+    },
+    "target": {
+      "title": "Target",
+      "description": "Hotspot config is per-site."
+    },
+    "picker": {
+      "title": "Pick a controller and site",
+      "description": "Hotspot data is per-site. Select both to load live state."
+    },
+    "tabs": {
+      "operators": "Operators",
+      "sms": "SMS Gateway",
+      "freeAuth": "Free Auth",
+      "pending": "Pending"
+    },
+    "operators": {
+      "title": "Hotspot operators",
+      "description": "Captive-portal admin accounts (live).",
+      "error": "Could not load operators",
+      "empty": "No hotspot operators",
+      "columns": {
+        "username": "Username",
+        "role": "Role",
+        "portal": "Portal",
+        "notes": "Notes"
+      }
+    },
+    "sms": {
+      "title": "SMS gateway",
+      "description": "Provider config used by SMS-auth portals.",
+      "error": "Could not load SMS gateway"
+    },
+    "freeAuth": {
+      "title": "Free-auth policies",
+      "description": "Allow-list rules that bypass captive portal.",
+      "error": "Could not load free-auth policies",
+      "empty": "No free-auth policies",
+      "columns": {
+        "name": "Name",
+        "status": "Status",
+        "match": "Match",
+        "id": "ID"
+      }
+    },
+    "pending": {
+      "title": "Pending hotspot changes",
+      "description": "Staged in our database. Apply explicitly via the Pending Changes screen.",
+      "empty": "No pending hotspot changes",
+      "columns": {
+        "feature": "Feature",
+        "operation": "Operation",
+        "target": "Target",
+        "created": "Created",
+        "status": "Status"
+      }
+    }
+  },
+  "GatewayInsightsPage": {
+    "header": {
+      "title": "Gateway Insights",
+      "description": "Read-only telemetry: top-talkers, anomalies, AI suggestions and mesh topology."
+    },
+    "target": {
+      "title": "Target",
+      "description": "Insights are scoped per-site."
+    },
+    "empty": {
+      "pickTarget": {
+        "title": "Pick a controller and site",
+        "description": "Insights are per-site. Select both to load live telemetry."
+      }
+    },
+    "tabs": {
+      "topTalkers": "Top Talkers",
+      "anomalies": "Anomalies",
+      "aiSuggestions": "AI Suggestions",
+      "meshTopology": "Mesh Topology"
+    },
+    "topTalkers": {
+      "title": "Top talkers",
+      "description": "Highest-volume clients in the last day.",
+      "error": "Could not load top talkers",
+      "empty": "No traffic data",
+      "columns": {
+        "identity": "Identity",
+        "kind": "Kind",
+        "rx": "RX",
+        "tx": "TX",
+        "total": "Total"
+      }
+    },
+    "anomalies": {
+      "title": "Anomalies",
+      "description": "Detected over the last day.",
+      "error": "Could not load anomalies",
+      "empty": "No anomalies",
+      "columns": {
+        "when": "When",
+        "severity": "Severity",
+        "type": "Type",
+        "description": "Description"
+      }
+    },
+    "aiSuggestions": {
+      "title": "AI suggestions",
+      "description": "Controller-generated recommendations.",
+      "error": "Could not load AI suggestions",
+      "empty": "No AI suggestions"
+    },
+    "meshTopology": {
+      "title": "Mesh topology",
+      "description": "Wireless backhaul tree.",
+      "error": "Could not load mesh topology"
+    }
+  },
+  "GatewayProfilesPage": {
+    "header": {
+      "title": "Profiles & Object Catalog",
+      "description": "Reusable objects referenced by URL filter, app control, bandwidth, captive portal, RADIUS, PPSK and 802.1X. Reads are live; writes are staged."
+    },
+    "target": {
+      "title": "Target",
+      "description": "Profiles are scoped per-site."
+    },
+    "notReady": {
+      "title": "Pick a controller and site",
+      "description": "Profiles are per-site. Select both to load live state."
+    },
+    "tabs": {
+      "macGroups": "MAC Groups",
+      "domainGroups": "Domain Groups",
+      "ouiProfiles": "OUI Profiles",
+      "timeRanges": "Time Ranges",
+      "rateLimits": "Rate Limits",
+      "ppsk": "PPSK",
+      "radius": "RADIUS",
+      "ldap": "LDAP",
+      "pending": "Pending"
+    },
+    "list": {
+      "itemCountOne": "{{count}} item on this site",
+      "itemCountOther": "{{count}} items on this site",
+      "loadError": "Could not load {{label}}",
+      "empty": "No {{label}}",
+      "columns": {
+        "name": "Name",
+        "id": "ID",
+        "type": "Type",
+        "description": "Description"
+      }
+    },
+    "pending": {
+      "title": "Pending profile changes",
+      "description": "Staged in our database. Apply explicitly via the Pending Changes screen.",
+      "empty": "No pending profile changes",
+      "loadError": "Could not load pending profile changes",
+      "columns": {
+        "feature": "Feature",
+        "operation": "Operation",
+        "target": "Target",
+        "created": "Created",
+        "status": "Status"
+      }
+    }
+  },
+  "GatewayRoutingPage": {
+    "header": {
+      "title": "Advanced Routing",
+      "description": "Inspect VRRP, IPv6 static routes, BGP, neighbors and the live routing table. Edits are staged."
+    },
+    "target": {
+      "title": "Target",
+      "description": "Routing data is per-site."
+    },
+    "empty": {
+      "title": "Pick a controller and site",
+      "description": "Routing data is per-site. Select both to load live state."
+    },
+    "readTabs": {
+      "vrrp": "VRRP",
+      "bgp": "BGP",
+      "bgpNeighbors": "BGP Neighbors",
+      "ipv6Static": "IPv6 Static",
+      "routingTable": "Routing Table"
+    },
+    "tabs": {
+      "pending": "Pending"
+    },
+    "pending": {
+      "title": "Pending routing changes",
+      "description": "Staged in our database. Apply explicitly via the Pending Changes screen.",
+      "empty": "No pending routing changes",
+      "loadError": "Could not load pending routing changes"
+    },
+    "loadError": "Could not load {{label}}",
+    "table": {
+      "feature": "Feature",
+      "operation": "Operation",
+      "target": "Target",
+      "created": "Created",
+      "status": "Status"
+    }
+  },
+  "GatewaySwitchAdvancedPage": {
+    "header": {
+      "title": "Switch Advanced",
+      "description": "Inspect per-switch sFlow, mirror sessions and MSTP. All edits are staged, apply explicitly via Pending Changes."
+    },
+    "target": {
+      "title": "Target",
+      "description": "Switch-advanced features are scoped to a specific switch by MAC.",
+      "switchMacLabel": "Switch MAC",
+      "load": "Load",
+      "loadedFor": "Loaded for"
+    },
+    "empty": {
+      "pickController": {
+        "title": "Pick a controller and site",
+        "description": "Switch advanced data is per-site. Select both, then enter a switch MAC."
+      },
+      "enterMac": {
+        "title": "Enter a switch MAC",
+        "description": "Provide the MAC of the switch you want to inspect."
+      }
+    },
+    "tabs": {
+      "sflow": "sFlow",
+      "mirror": "Mirror Sessions",
+      "mstp": "MSTP",
+      "pending": "Pending"
+    },
+    "config": {
+      "title": "{{label}} configuration",
+      "loadError": "Could not load {{label}} config"
+    },
+    "mirror": {
+      "title": "Mirror sessions",
+      "loadError": "Could not load mirror sessions",
+      "empty": "No mirror sessions",
+      "columns": {
+        "session": "Session",
+        "source": "Source",
+        "destination": "Destination",
+        "direction": "Direction",
+        "status": "Status"
+      }
+    },
+    "pending": {
+      "title": "Pending switch-advanced changes",
+      "description": "Staged in our database. Apply explicitly via the Pending Changes screen.",
+      "empty": "No pending switch-advanced changes",
+      "loadError": "Could not load pending switch-advanced changes",
+      "columns": {
+        "feature": "Feature",
+        "operation": "Operation",
+        "target": "Target",
+        "created": "Created",
+        "status": "Status"
+      }
+    }
+  },
+  "GatewaySystemPage": {
+    "pageTitle": "Controller System Settings",
+    "pageDescription": "Inspect controller-level system + monitoring config. Edits are staged, they never push to the live controller until explicitly applied.",
+    "controllerCard": {
+      "title": "Controller",
+      "description": "Controller settings are global, pick one to inspect."
+    },
+    "emptyPickController": {
+      "title": "Pick a controller",
+      "description": "Select a controller above to load its system state."
+    },
+    "picker": {
+      "label": "Controller",
+      "placeholder": "Choose controller"
+    },
+    "configLabels": {
+      "smtp": "SMTP",
+      "notifications": "Notifications",
+      "sslCert": "SSL Cert",
+      "global": "Global",
+      "maintenance": "Maintenance",
+      "cloudAccess": "Cloud Access"
+    },
+    "tabs": {
+      "backups": "Backups",
+      "admins": "Admins",
+      "pending": "Pending"
+    },
+    "configCard": {
+      "title": "{{name}} configuration",
+      "loadError": "Could not load config"
+    },
+    "backupsCard": {
+      "title": "Controller backups",
+      "description": "List + download. Restore / delete are staged.",
+      "loadError": "Could not load backups"
+    },
+    "backupsTable": {
+      "empty": "No backups",
+      "id": "ID",
+      "created": "Created",
+      "size": "Size",
+      "action": "Action",
+      "download": "Download"
+    },
+    "adminsCard": {
+      "title": "Controller admins"
+    },
+    "adminsTable": {
+      "empty": "No admins",
+      "username": "Username",
+      "role": "Role",
+      "email": "Email"
+    },
+    "pendingCard": {
+      "title": "Pending system changes",
+      "description": "Staged in our database. Apply explicitly via the Pending Changes screen.",
+      "empty": "No pending system changes"
+    },
+    "pendingTable": {
+      "feature": "Feature",
+      "operation": "Operation",
+      "target": "Target",
+      "created": "Created",
+      "status": "Status"
+    }
+  },
+  "GatewayVPNPage": {
+    "pageTitle": "Gateway VPN",
+    "pageDescription": "Live VPN configuration on the managed gateway. Reads run live; every change is staged for explicit apply.",
+    "target": "Target",
+    "pickControllerAndSite": "Pick a controller and site",
+    "tabs": {
+      "pending": "Pending"
+    },
+    "protocolConfiguration": "{{protocol}} configuration",
+    "protocolConfigDescription": "Read live from the controller. Editing wires through the staging queue.",
+    "nothingConfigured": "Nothing configured",
+    "nothingConfiguredDescription": "No {{protocol}} {{entryType}} yet on this site.",
+    "entryType": {
+      "users": "users",
+      "entries": "entries"
+    },
+    "enabledState": {
+      "on": "On",
+      "off": "Off"
+    },
+    "activeConnections": "Active connections",
+    "noActiveSessions": "No active sessions",
+    "pendingChanges": "Pending VPN changes",
+    "pendingChangesDescription": "Staged in our database. Apply gated by OMADA_READ_ONLY + force=true.",
+    "noPendingChanges": "No pending changes",
+    "configLoadError": "Could not load {{protocol}} configuration",
+    "statusLoadError": "Could not load {{protocol}} active connections",
+    "pendingLoadError": "Could not load pending changes",
+    "columns": {
+      "nameId": "Name / ID",
+      "detail": "Detail",
+      "enabled": "Enabled",
+      "peer": "Peer",
+      "state": "State",
+      "rxTx": "RX / TX",
+      "lastHandshake": "Last handshake",
+      "feature": "Feature",
+      "op": "Op",
+      "target": "Target",
+      "created": "Created",
+      "status": "Status"
+    },
+    "summary": {
+      "ipsec": "{{local}} ↔ {{remote}} via {{gateway}}"
+    }
+  }
+}

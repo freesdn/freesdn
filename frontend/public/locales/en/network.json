@@ -1,0 +1,506 @@
+{
+  "title": "Network",
+  "vlans": "VLANs",
+  "wifi": "WiFi Networks",
+  "switchPorts": "Switch Ports",
+  "clients": "Network Clients",
+  "topology": "Topology",
+  "ssids": "SSIDs",
+  "portProfiles": "Port Profiles",
+  "vlanId": "VLAN ID",
+  "vlanName": "VLAN Name",
+  "subnet": "Subnet",
+  "gateway": "Gateway",
+  "dhcpEnabled": "DHCP Enabled",
+  "ssidName": "SSID Name",
+  "security": "Security",
+  "band": "Band",
+  "channel": "Channel",
+  "enabled": "Enabled",
+  "disabled": "Disabled",
+  "portNumber": "Port",
+  "portName": "Port Name",
+  "speed": "Speed",
+  "duplex": "Duplex",
+  "poeStatus": "PoE Status",
+  "linkStatus": "Link Status",
+  "connected": "Connected",
+  "disconnected": "Disconnected",
+  "clientName": "Client Name",
+  "macAddress": "MAC Address",
+  "ipAddress": "IP Address",
+  "connectionType": "Connection Type",
+  "wired": "Wired",
+  "wireless": "Wireless",
+  "signalStrength": "Signal Strength",
+  "uptime": "Uptime",
+  "WifiNetworksPage": {
+    "page": {
+      "title": "WiFi Networks",
+      "description": "Manage wireless networks (SSIDs) across all controllers",
+      "descriptionShort": "Manage wireless networks and SSIDs",
+      "loadError": "Failed to load WiFi networks"
+    },
+    "stats": {
+      "totalNetworks": "Total Networks",
+      "configuredSsids": "Configured SSIDs",
+      "active": "Active",
+      "percentEnabled": "{{percent}}% enabled",
+      "noNetworks": "No networks",
+      "guest": "Guest",
+      "guestSsids": "Guest SSIDs",
+      "hidden": "Hidden",
+      "nonBroadcasting": "Non-broadcasting"
+    },
+    "filters": {
+      "searchPlaceholder": "Search networks by SSID, VLAN, or security…",
+      "allStatuses": "All statuses",
+      "guestOnly": "Guest only",
+      "allBands": "All bands",
+      "dualBand": "Dual band",
+      "clearFilters": "Clear filters"
+    },
+    "columns": {
+      "network": "Network",
+      "status": "Status",
+      "security": "Security",
+      "band": "Band",
+      "features": "Features"
+    },
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled"
+    },
+    "toggle": {
+      "on": "On",
+      "off": "Off"
+    },
+    "pills": {
+      "isolated": "Isolated",
+      "steering": "Steering",
+      "limited": "Limited"
+    },
+    "itemName": "network",
+    "itemNamePlural": "networks",
+    "actions": {
+      "addNetwork": "Add Network",
+      "export": "Export",
+      "viewDetails": "View Details",
+      "enable": "Enable",
+      "disable": "Disable",
+      "edit": "Edit",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "creating": "Creating…",
+      "saveChanges": "Save Changes",
+      "createNetwork": "Create Network",
+      "deleting": "Deleting…",
+      "deleteNetwork": "Delete Network"
+    },
+    "security": {
+      "modes": {
+        "open": "Open (No Security)",
+        "wpa2Personal": "WPA2 Personal",
+        "wpa3Personal": "WPA3 Personal",
+        "wpa2Enterprise": "WPA2 Enterprise",
+        "wpa3Enterprise": "WPA3 Enterprise",
+        "wpaWpa2Mixed": "WPA/WPA2 Mixed",
+        "wpa2Wpa3Mixed": "WPA2/WPA3 Mixed",
+        "wpa2Wpa3Transition": "WPA2/WPA3 Transition",
+        "wpaWpa2MixedLegacy": "WPA/WPA2 Mixed (Legacy)"
+      }
+    },
+    "features": {
+      "clientIsolation": "Client Isolation",
+      "bandSteering": "Band Steering",
+      "fastRoaming": "Fast Roaming (802.11r)",
+      "hiddenSsid": "Hidden SSID",
+      "guestNetwork": "Guest Network",
+      "rateLimiting": "Rate Limiting",
+      "macFiltering": "MAC Filtering",
+      "captivePortal": "Captive Portal",
+      "schedule": "Schedule"
+    },
+    "detail": {
+      "wlanGroup": "WLAN Group: {{name}}",
+      "wifiNetwork": "WiFi Network",
+      "idLabel": "ID: {{id}}",
+      "cards": {
+        "security": "Security",
+        "band": "Band",
+        "vlan": "VLAN",
+        "type": "Type"
+      },
+      "vlanValue": "VLAN {{id}}",
+      "defaultVlan": "Default",
+      "typeGuest": "Guest",
+      "typePrivate": "Private",
+      "featuresTitle": "Features & Settings",
+      "featuresDescription": "Current feature configuration for this SSID",
+      "rateLimitingTitle": "Rate Limiting",
+      "download": "Download",
+      "upload": "Upload",
+      "mbps": "{{value}} Mbps",
+      "unlimited": "Unlimited"
+    },
+    "form": {
+      "createTitle": "Create WiFi Network",
+      "editTitle": "Edit WiFi Network",
+      "createDescription": "Add a new WiFi network/SSID. It will be created on the controller automatically.",
+      "editDescription": "Modify the WiFi network settings. Changes will be pushed to the controller.",
+      "tabs": {
+        "basic": "Basic",
+        "security": "Security",
+        "advanced": "Advanced",
+        "qos": "QoS"
+      },
+      "fields": {
+        "ssid": "SSID (Network Name)",
+        "band": "Band",
+        "vlanId": "VLAN ID",
+        "enabled": "Enabled",
+        "securityMode": "Security Mode",
+        "preSharedKey": "Pre-Shared Key",
+        "hiddenNetwork": "Hidden Network"
+      },
+      "placeholders": {
+        "ssid": "MyNetwork",
+        "defaultVlan": "Default VLAN",
+        "unchanged": "(unchanged)",
+        "minChars": "Minimum 8 characters",
+        "unlimited": "Unlimited"
+      },
+      "bandOptions": {
+        "both": "Both (2.4 & 5 GHz)",
+        "band24": "2.4 GHz Only",
+        "band5": "5 GHz Only",
+        "all": "All Bands"
+      },
+      "help": {
+        "wpaPassword": "WPA passwords must be 8-63 ASCII characters.",
+        "hiddenNetwork": "Do not broadcast SSID in beacons"
+      },
+      "advanced": {
+        "clientIsolation": {
+          "label": "Client Isolation",
+          "desc": "Block wireless client-to-client traffic"
+        },
+        "bandSteering": {
+          "label": "Band Steering",
+          "desc": "Prefer 5 GHz capable clients to connect on 5 GHz"
+        },
+        "fastRoaming": {
+          "label": "Fast Roaming (802.11r)",
+          "desc": "Enable fast BSS transition for seamless AP handoff"
+        }
+      },
+      "qos": {
+        "enableRateLimiting": "Enable Rate Limiting",
+        "capBandwidth": "Cap per-client bandwidth",
+        "downloadLimit": "Download Limit (Mbps)",
+        "uploadLimit": "Upload Limit (Mbps)"
+      }
+    },
+    "deleteDialog": {
+      "title": "Delete WiFi Network?",
+      "description": "Are you sure you want to delete \"{{ssid}}\"? This will disconnect all clients currently using this network and remove it from the controller."
+    },
+    "toast": {
+      "bulkDeleteTitle": "Bulk Delete",
+      "bulkDeleteDescription": "Please delete networks individually for safety."
+    }
+  },
+  "NetworkClientsPage": {
+    "header": {
+      "title": "Network Clients",
+      "description": "View and manage connected devices across all controllers",
+      "descriptionShort": "View and manage connected devices"
+    },
+    "error": {
+      "loadFailed": "Failed to load clients"
+    },
+    "stats": {
+      "totalClients": "Total Clients",
+      "onlineCount": "{{value}} online",
+      "online": "Online",
+      "connectedPercent": "{{percent}}% connected",
+      "noClients": "No clients",
+      "wireless": "Wireless",
+      "wifiClients": "WiFi clients",
+      "wired": "Wired",
+      "ethernetClients": "Ethernet clients"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search clients by name, MAC, IP, or vendor…",
+      "clearFilters": "Clear filters"
+    },
+    "filters": {
+      "allConnections": "All connections",
+      "allStatuses": "All statuses"
+    },
+    "connection": {
+      "wireless": "Wireless",
+      "wired": "Wired"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "blocked": "Blocked"
+    },
+    "columns": {
+      "client": "Client",
+      "status": "Status",
+      "connection": "Connection",
+      "ipAddress": "IP Address",
+      "macAddress": "MAC Address",
+      "signal": "Signal",
+      "traffic": "Traffic",
+      "lastSeen": "Last Seen"
+    },
+    "fields": {
+      "status": "Status",
+      "connection": "Connection",
+      "ipAddress": "IP Address",
+      "macAddress": "MAC Address",
+      "ssid": "SSID",
+      "signal": "Signal",
+      "hostname": "Hostname",
+      "vendor": "Vendor",
+      "unknown": "Unknown",
+      "unknownVendor": "Unknown vendor",
+      "firstSeen": "First Seen",
+      "lastSeen": "Last Seen"
+    },
+    "sheet": {
+      "description": "Client details and statistics",
+      "connectionInfo": "Connection Info",
+      "deviceInfo": "Device Info",
+      "trafficStatistics": "Traffic Statistics"
+    },
+    "traffic": {
+      "downloaded": "Downloaded",
+      "uploaded": "Uploaded"
+    },
+    "timeAgo": {
+      "never": "Never",
+      "justNow": "Just now",
+      "minutes": "{{value}}m ago",
+      "hours": "{{value}}h ago",
+      "days": "{{value}}d ago"
+    },
+    "actions": {
+      "export": "Export",
+      "viewDetails": "View Details",
+      "block": "Block",
+      "unblock": "Unblock",
+      "delete": "Delete",
+      "cancel": "Cancel"
+    },
+    "itemName": {
+      "singular": "client",
+      "plural": "clients"
+    },
+    "toast": {
+      "clientUpdated": "Client updated",
+      "actionFailed": "Action failed",
+      "bulkDelete": {
+        "title": "Bulk Delete",
+        "description": "Please remove clients individually for safety."
+      }
+    },
+    "dialog": {
+      "unblockTitle": "Unblock Client?",
+      "blockTitle": "Block Client?",
+      "unblockDescription": "Allow \"{{name}}\" to reconnect to the network.",
+      "blockDescription": "Block \"{{name}}\" from accessing the network. The client will be disconnected immediately.",
+      "processing": "Processing…"
+    }
+  },
+  "NetworkDashboardPage": {
+    "header": {
+      "title": "Network Overview",
+      "subtitle": "Monitor and manage your network infrastructure"
+    },
+    "errors": {
+      "partialLoad": "Some data failed to load. Results may be incomplete."
+    },
+    "stats": {
+      "totalDevices": "Total Devices",
+      "onlineCount": "{{count}} online",
+      "networkClients": "Network Clients",
+      "activeCount": "{{count}} active",
+      "vlans": "VLANs",
+      "networkSegments": "Network segments",
+      "wifiNetworks": "WiFi Networks",
+      "ssidsConfigured": "SSIDs configured"
+    },
+    "quickAccess": {
+      "heading": "Quick Access",
+      "vlans": {
+        "title": "VLANs",
+        "description": "Manage network segmentation"
+      },
+      "wifi": {
+        "title": "WiFi Networks",
+        "description": "Configure wireless SSIDs"
+      },
+      "clients": {
+        "title": "Clients",
+        "description": "View connected devices"
+      },
+      "ports": {
+        "title": "Switch Ports",
+        "description": "Manage port configurations"
+      }
+    },
+    "deviceTypes": {
+      "switch": "Switches",
+      "accessPoint": "Access Points",
+      "gateway": "Gateways",
+      "router": "Routers",
+      "other": "Other"
+    },
+    "deviceBreakdown": {
+      "title": "Device Types",
+      "description": "Breakdown by device category",
+      "empty": "No devices found"
+    },
+    "clientBreakdown": {
+      "title": "Client Connections",
+      "description": "Wired vs wireless breakdown",
+      "wireless": "Wireless",
+      "wired": "Wired",
+      "percentWireless": "{{percent}}% wireless",
+      "percentWired": "{{percent}}% wired",
+      "blockedClients": "Blocked clients"
+    },
+    "health": {
+      "title": "Network Health",
+      "description": "Overall infrastructure status",
+      "excellent": "Excellent",
+      "good": "Good",
+      "fair": "Fair",
+      "critical": "Critical",
+      "online": "Online",
+      "offline": "Offline"
+    },
+    "topology": {
+      "title": "Network Topology",
+      "description": "Visual map of your network infrastructure",
+      "viewFullMap": "View Full Map",
+      "devicesCount": "{{count}} devices",
+      "connectedVia": "connected via",
+      "linksCount": "{{count}} links",
+      "noData": "No topology data available",
+      "openViewer": "Open interactive topology viewer"
+    }
+  },
+  "VlansPage": {
+    "dhcp": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "header": {
+      "title": "VLANs",
+      "description": "Manage virtual LANs and network segmentation"
+    },
+    "tabs": {
+      "vlans": "VLANs",
+      "alignment": "Alignment"
+    },
+    "actions": {
+      "addVlan": "Add VLAN",
+      "export": "Export",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "columns": {
+      "vlanId": "VLAN ID",
+      "name": "Name",
+      "gateway": "Gateway",
+      "subnet": "Subnet",
+      "dhcp": "DHCP",
+      "dhcpRange": "DHCP Range"
+    },
+    "stats": {
+      "totalVlans": "Total VLANs",
+      "rangeValue": "Range {{range}}",
+      "dhcpEnabled": "DHCP Enabled",
+      "percentOfVlans": "{{percent}}% of VLANs",
+      "noVlans": "No VLANs",
+      "withGateway": "With Gateway",
+      "routedVlans": "Routed VLANs",
+      "vlanRange": "VLAN Range",
+      "lowestHighestId": "Lowest, Highest ID"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search VLANs by ID, name, or gateway…",
+      "allDhcp": "All DHCP",
+      "dhcpEnabled": "DHCP Enabled",
+      "dhcpDisabled": "DHCP Disabled",
+      "clearFilters": "Clear filters"
+    },
+    "itemName": "VLAN",
+    "itemNamePlural": "VLANs",
+    "form": {
+      "editTitle": "Edit VLAN",
+      "createTitle": "Create VLAN",
+      "editDescription": "Modify the VLAN settings below.",
+      "createDescription": "Add a new VLAN to your network configuration.",
+      "vlanId": "VLAN ID",
+      "name": "Name",
+      "namePlaceholder": "e.g., Management",
+      "description": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "gateway": "Gateway",
+      "gatewayPlaceholder": "e.g., 192.168.1.1",
+      "subnetMask": "Subnet Mask",
+      "subnetMaskPlaceholder": "e.g., 255.255.255.0",
+      "dhcpServer": "DHCP Server",
+      "dhcpServerHelp": "Enable DHCP for automatic IP assignment",
+      "dhcpStart": "DHCP Start",
+      "dhcpStartPlaceholder": "e.g., 192.168.1.100",
+      "dhcpEnd": "DHCP End",
+      "dhcpEndPlaceholder": "e.g., 192.168.1.200",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "creating": "Creating...",
+      "saveChanges": "Save Changes",
+      "createSubmit": "Create VLAN"
+    },
+    "alignment": {
+      "scoreTitle": "VLAN Alignment Score",
+      "scoreSummary": "{{vlans}} VLANs across {{controllers}} controllers",
+      "matrixTitle": "VLAN x Controller Matrix",
+      "matrixDescription": "Shows which VLANs are present on which controllers",
+      "syncAll": "Sync All",
+      "syncAllConfirm": "Sync all misaligned VLANs across all controllers? This will copy missing VLANs from a source controller.",
+      "columnVlan": "VLAN",
+      "columnName": "Name",
+      "columnStatus": "Status",
+      "present": "Present",
+      "different": "Different",
+      "noSubnet": "no subnet",
+      "missing": "Missing",
+      "copy": "Copy"
+    },
+    "deleteDialog": {
+      "title": "Delete VLAN?",
+      "description": "Are you sure you want to delete VLAN {{vlanId}} ({{name}})? This action cannot be undone and may affect devices using this VLAN.",
+      "deleting": "Deleting..."
+    },
+    "errors": {
+      "loadFailed": "Failed to load VLANs"
+    },
+    "toast": {
+      "errorTitle": "Error",
+      "successTitle": "Success",
+      "operationFailed": "Operation failed",
+      "distributeSuccess": "VLAN distributed successfully.",
+      "distributeFailed": "Failed to distribute VLAN: {{error}}",
+      "bulkDeleteTitle": "Bulk Delete",
+      "bulkDeleteMessage": "Please delete VLANs individually for safety."
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "AccessControlPage": {
+    "title": "Control de acceso",
+    "description": "Gestión de control de acceso físico",
+    "comingSoon": "Próximamente",
+    "comingSoonDescription": "La integración de control de acceso físico está prevista para una versión futura. Aquí estarán disponibles los controladores de puertas, los titulares de tarjetas y la gestión de eventos.",
+    "features": {
+      "doorManagement": {
+        "title": "Gestión de puertas",
+        "desc": "Supervisa y controla puertas, portones y barreras en tiempo real."
+      },
+      "cardholders": {
+        "title": "Titulares y credenciales",
+        "desc": "Administra tarjetas de acceso, PIN y credenciales biométricas."
+      },
+      "eventHistory": {
+        "title": "Historial de eventos",
+        "desc": "Registro de auditoría completo de los eventos de acceso con búsqueda y exportación."
+      },
+      "accessPolicies": {
+        "title": "Políticas de acceso",
+        "desc": "Horarios programados, antirretorno y reglas multifactor."
+      }
+    }
+  }
+}

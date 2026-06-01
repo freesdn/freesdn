@@ -1,0 +1,62 @@
+# FreeSDN - build-context ignore for the ./docker context
+# =========================================================
+# `docker-compose.yml` builds the `logdb` image with `context: ./docker`
+# (Dockerfile.logdb). The whole ./docker tree is therefore sent to the Docker
+# daemon as build context. In production an operator populates ./docker/ssl
+# with real TLS material (privkey.pem, fullchain.pem) and may drop env files or
+# DB dumps here; none of that belongs in a build context. This denylist keeps
+# secrets, certificates, env files, database state, archives, and caches out -
+# defense in depth, even though the current Dockerfile COPYs nothing from it.
+
+# --- TLS / cryptographic material ---
+ssl/
+certbot/
+**/*.pem
+**/*.key
+**/*.crt
+**/*.cer
+**/*.csr
+**/*.der
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.keystore
+**/*.gpg
+**/*.asc
+
+# --- Secrets / environment ---
+.env
+.env.*
+**/*.env
+**/secrets/
+**/*.secret
+**/*secret*.yml
+**/*secret*.yaml
+
+# --- Database state / dumps / backups / archives ---
+**/*.sql
+**/*.dump
+**/*.bak
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/pgdata/
+**/data/
+**/*.tar
+**/*.tar.gz
+**/*.tgz
+**/*.zip
+**/*.gz
+
+# --- Caches / VCS / OS cruft / logs ---
+**/__pycache__/
+**/.git/
+**/.gitignore
+**/.DS_Store
+**/Thumbs.db
+**/*.log
+**/.cache/
+
+# --- Keep the intended build inputs (config the images may reference) ---
+!Dockerfile.logdb
+!**/*.conf
