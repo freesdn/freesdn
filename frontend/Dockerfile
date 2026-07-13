@@ -5,7 +5,7 @@
 # ============================================
 # Stage 1: Base Node image (Trixie)
 # ============================================
-FROM node:26.4.0-trixie-slim AS base
+FROM node:26.5.0-trixie-slim AS base
 RUN npm install -g npm@11.17.0
 WORKDIR /app
 
