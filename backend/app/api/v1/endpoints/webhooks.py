@@ -423,11 +423,12 @@ async def replay_dead_letter(
 
     await session.commit()
 
-    # Enqueue immediate retry (no countdown — replay is user-initiated)
+    # Enqueue immediate retry (no countdown — replay is user-initiated).
+    # No queue= : an explicit queue kwarg overrides the task's routing, so naming
+    # one here would strand the replay in an unconsumed queue. Routes to "default".
     retry_webhook_delivery.apply_async(
         args=[str(new_delivery.id)],
         countdown=0,
-        queue="webhooks",
     )
 
     return {
@@ -498,10 +499,10 @@ async def replay_all_dead_letters(
         dlq.replayed_at = datetime.now(UTC)
         dlq.replayed_by = user.id
 
+        # No queue= : see the note on the single-replay path above.
         retry_webhook_delivery.apply_async(
             args=[str(new_delivery.id)],
             countdown=queued * 2,  # stagger replays by 2 s each to avoid thundering herd
-            queue="webhooks",
         )
         queued += 1
 

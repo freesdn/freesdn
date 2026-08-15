@@ -7,6 +7,27 @@ vague "we may consider it in the future" hedging.
 
 ---
 
+## How changes reach this repo
+
+This repository is a published snapshot, not the development trunk. FreeSDN is
+built and tested upstream; each release is flattened out of that tree, scrubbed,
+and landed here as a single release commit tagged `v<version>`. Development
+history is not replayed, and `main` here is publish-only.
+
+The mechanics matter less than the consequence: **a commit made directly on this
+repo does not survive the next release.** The release tooling seeds its index
+from the published `main`, lays the freshly flattened tree over it, and stages
+everything with `git add -A`, so any file the flatten does not produce is staged
+as a deletion and any edit the flatten does not carry is staged back to the
+upstream content. Merging a pull request here, a Dependabot bump included, looks
+like an update and is undone by the next release commit.
+
+That is why fixes are made upstream. If you have found a bug, a stale
+dependency, or a doc error, open an issue: the change lands upstream, ships in
+the next release, and then it sticks.
+
+---
+
 ## Why no external code contributions?
 
 The short answer: FreeSDN is developed in-house by the team that runs it
@@ -187,9 +208,12 @@ To be unambiguous:
   fuel-the-build subscriptions listed above
 - Solicitations to change the governance model
 
-We handle dependency updates on a regular cadence. Dependabot
-is configured for automated alerts. If you spot a CVE, open an issue (or
-use the security inbox for sensitive ones) rather than submitting a PR.
+We handle dependency updates on a regular cadence. Dependabot is configured
+here and opens bump PRs, but those PRs are not merged on this repo: as described
+under "How changes reach this repo," a merge here is reverted by the next
+release, so the bump is applied upstream instead and arrives with the release.
+If you spot a CVE, open an issue (or use the security inbox for sensitive ones)
+rather than submitting a PR.
 
 ---
 

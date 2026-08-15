@@ -1376,11 +1376,14 @@ class AccessControlService:
 # =============================================================================
 
 # NOTE (H4): Defined here (rather than a dedicated tasks.py) because
-# tasks.py is outside the allowed file scope for this fix. The task is
-# wired into the celery worker via the module's ``get_tasks()`` method
-# in ``module.py``, which also returns a reference to ``celery_app``'s
-# task registry. The decorator runs at import time and registers the
-# task in celery_app.
+# tasks.py is outside the allowed file scope for this fix.
+#
+# CORRECTION: an earlier version of this comment claimed the task was "wired
+# into the celery worker via the module's get_tasks() method in module.py".
+# That is not true — nothing in the codebase calls get_tasks(). The decorator
+# registers the task at IMPORT time, so a worker only knows about it if this
+# module is imported; that is why "app.modules.access_control.service" is listed
+# explicitly in celery_app's include=. Do not remove that entry.
 import asyncio  # noqa: E402
 
 from app.core.celery_app import celery_app  # noqa: E402

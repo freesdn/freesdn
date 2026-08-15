@@ -20,7 +20,16 @@ ENV PYTHONUNBUFFERED=1 \
     PYSETUP_PATH="/opt/pysetup" \
     VENV_PATH="/opt/pysetup/.venv"
 
-ENV PATH="$POETRY_HOME/bin:$VENV_PATH/bin:$PATH"
+# The APP venv must precede Poetry's own venv on PATH. The development stage
+# copies $POETRY_HOME in (production does not), and every venv ships a `python`
+# — so with Poetry first, a bare `python` resolves to Poetry's interpreter,
+# which has none of the app's dependencies. That silently broke
+# `python scripts/migrate.py` (docker-entrypoint.sh:8) and scripts/ci-gate.sh
+# in the development image, while production stayed fine because
+# $POETRY_HOME/bin simply does not exist there.
+# `poetry` is still resolved from $POETRY_HOME/bin (the app venv has no poetry
+# executable), so ordering it second costs nothing.
+ENV PATH="$VENV_PATH/bin:$POETRY_HOME/bin:$PATH"
 
 # ============================================
 # Stage 2: Builder - Install dependencies

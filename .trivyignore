@@ -3,31 +3,20 @@
 # Reviewed every release; remove entries the moment the upstream gate clears.
 
 # ---------------------------------------------------------------------------
-# starlette 1.x advisories — UPSTREAM-GATED (cannot remediate yet).
+# starlette 1.x advisories — RESOLVED 2026-08-15, suppressions REMOVED.
 #
-# The fixed starlette releases (1.1.0 / 1.3.1) require fastapi >= 0.137, which
-# introduced the internal `_IncludedRouter` route type. That type subclasses
-# Starlette's BaseRoute but carries no `.path` attribute. prometheus-fastapi-
-# instrumentator (through its latest, 8.0.0) resolves every request's route
-# name by iterating `app.routes` and reading `route.path`, so it raises
-# AttributeError on every request once `_IncludedRouter` is present — breaking
-# the /metrics middleware app-wide. FreeSDN is therefore held on fastapi 0.136.x
-# / starlette 0.52.1 until the instrumentator handles the new route type.
-# See backend/pyproject.toml for the matching version pins and rationale.
+# These entries (CVE-2026-48818, CVE-2026-54283) were held because the fixed
+# starlette required fastapi >= 0.137, whose internal `_IncludedRouter` route
+# type broke prometheus-fastapi-instrumentator. That revisit trigger has since
+# fired and nobody deleted the entries: the project now ships fastapi 0.138.2,
+# starlette 1.3.1 and instrumentator 8.0.2 (see backend/poetry.lock).
 #
-# Applicability of the two flagged HIGH advisories to FreeSDN's deployment:
-#   CVE-2026-48818 — SSRF / NTLM credential theft via UNC paths in StaticFiles
-#       on Windows. FreeSDN ships and runs as Linux containers; there are no
-#       Windows UNC paths in the deployment surface. Not exploitable here.
-#   CVE-2026-54283 — request.form() size limits ignored for
-#       application/x-www-form-urlencoded (DoS). FreeSDN's API is JSON-first and
-#       sits behind a reverse proxy that enforces request body-size limits.
+# Verified 2026-08-15: `pip-audit` against the current lock with NO --ignore-vuln
+# flags reports "No known vulnerabilities found". Keeping the suppressions would
+# have silently blinded the gate to any FUTURE advisory carrying these IDs.
 #
-# Revisit trigger: prometheus-fastapi-instrumentator ships `_IncludedRouter`
-# support (or we migrate metrics off it) -> bump fastapi/starlette and delete
-# these two lines.
-CVE-2026-48818
-CVE-2026-54283
+# Lesson worth keeping: a time-bounded suppression only works if someone checks
+# the trigger. Re-run pip-audit with no ignores before adding another one.
 
 # ---------------------------------------------------------------------------
 # caddy edge binary — Go stdlib advisory, UPSTREAM-GATED (cannot remediate yet).

@@ -10,6 +10,7 @@ import { Label } from '../ui/label';
 import { Card, CardContent } from '../ui/card';
 import { Network, Eye, EyeOff, Loader2, AlertCircle, Shield } from 'lucide-react';
 import { isDemoMode } from '@/demo/mode';
+import SSOLoginButtons from './SSOLoginButtons';
 
 export function LoginPage() {
   const { t } = useTranslation('common');
@@ -23,6 +24,10 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [mfaCode, setMfaCode] = useState('');
   const [checkingSetup, setCheckingSetup] = useState(true);
+  // SSO failures are reported by SSOLoginButtons rather than the auth store,
+  // so they need their own slot. SSOLoginButtons renders nothing when no
+  // provider is configured (or in demo mode), so this stays invisible then.
+  const [ssoError, setSsoError] = useState<string | null>(null);
   
   // Get redirect path from location state
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -298,6 +303,17 @@ export function LoginPage() {
                 </Link>
               </div>
             </form>
+
+            {ssoError && (
+              <div className="mt-4 flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <span>{ssoError}</span>
+              </div>
+            )}
+
+            {/* Single-sign-on providers. Renders nothing unless an admin has
+                configured an OIDC/SAML/LDAP provider in Settings. */}
+            <SSOLoginButtons onError={setSsoError} />
           </CardContent>
         </Card>
         

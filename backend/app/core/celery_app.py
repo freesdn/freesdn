@@ -98,6 +98,17 @@ celery_app = Celery(
         # Notification retry queue — re-drives transient SMTP/Slack/5xx
         # failures with exponential backoff before flipping rows to DLQ.
         "app.tasks.notification_retry",
+        # Webhook delivery retry — exponential backoff before WebhookDeadLetter.
+        # Every dispatch site imports this lazily inside a function (so only the
+        # API process ever imports the module); without this entry no worker
+        # registers the task and failed deliveries strand in RETRYING forever.
+        "app.tasks.webhooks",
+        # access_control.relock_door_after — restores the DB row to "locked" once
+        # an unlock window elapses. Dispatched via apply_async() from
+        # AccessControlService.unlock_door. The module's get_tasks() hook was
+        # meant to wire this into workers but nothing ever calls get_tasks(), so
+        # the import must be explicit here.
+        "app.modules.access_control.service",
         # TrueNAS storage health monitor — polls appliances + emits
         # storage.* Fabric events on state transitions.
         "app.tasks.storage",

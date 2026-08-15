@@ -29,7 +29,7 @@ docker volume rm freesdn_redis_data 2>/dev/null || true
 
 # Pull latest images
 echo -e "\n[3/5] Pulling latest images..."
-docker pull postgres:18.4-trixie
+docker pull postgres:18.6-trixie
 docker pull valkey/valkey:8.1.3-bookworm
 
 # Start fresh containers

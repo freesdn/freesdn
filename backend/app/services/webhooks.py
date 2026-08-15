@@ -444,10 +444,13 @@ class PersistentWebhookService:
                 await session.flush()  # write before enqueue so delivery exists
                 from app.tasks.webhooks import retry_webhook_delivery
 
+                # No queue= here: an explicit queue kwarg on apply_async overrides
+                # both the task's own routing and task_routes, so naming one would
+                # re-strand these retries in an unconsumed queue. Let it route to
+                # "default", which every deployment tier consumes.
                 retry_webhook_delivery.apply_async(
                     args=[str(delivery.id)],
                     countdown=60,  # first retry after 60 s
-                    queue="webhooks",
                 )
             except Exception as enqueue_err:
                 logger.warning(

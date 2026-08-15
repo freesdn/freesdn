@@ -21,7 +21,7 @@
 set -uo pipefail
 
 NET=sfdrill-net
-PG_IMG="${POSTGRES_IMAGE:-postgres:18.4-trixie}"
+PG_IMG="${POSTGRES_IMAGE:-postgres:18.6-trixie}"
 APP_IMG="${BACKEND_IMAGE:-freesdn-backend:dev}"
 PW=drillpw
 # Fixed, reproducible key material (drill-only — never a real secret).

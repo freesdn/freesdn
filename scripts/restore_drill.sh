@@ -17,7 +17,7 @@ set -euo pipefail
 
 NET=rdrill-net
 TS_IMG="${LOGDB_IMAGE:-freesdn-logdb:local}"
-CLIENT_IMG="${POSTGRES_IMAGE:-postgres:18.4-trixie}"   # has psql + pg_dump + gpg
+CLIENT_IMG="${POSTGRES_IMAGE:-postgres:18.6-trixie}"   # has psql + pg_dump + gpg
 PW=drillpw
 GREEN=$'\033[92m'; RED=$'\033[91m'; CYAN=$'\033[96m'; RST=$'\033[0m'
 ok(){ echo "${GREEN}[PASS]${RST} $*"; }

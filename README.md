@@ -123,7 +123,7 @@ These essentials are kept in-repo so they are available offline and during an ou
 
 **Restore.** Bring the stack down, restore the PostgreSQL dump into a fresh data volume, then `docker compose up`. Config snapshots re-import through the Backup module. The step-by-step restore runbook is on [docs.freesdn.org](https://docs.freesdn.org).
 
-**Upgrade.** Take a backup first. Then `git pull` (or check out the new tag) and re-run `./install.sh` (equivalently `docker compose pull && docker compose up -d --build`). Database migrations run automatically when the API starts. Read the release notes before upgrading across feature releases.
+**Upgrade.** Take a backup first. Then `git pull` (or check out the new tag) and re-run `./install.sh` (equivalently `docker compose build --pull && docker compose up -d`). FreeSDN does not publish pre-built application images to a public registry yet, so the images are always built from source on your host; `docker compose pull` will fail on the FreeSDN services. Database migrations run automatically when the API starts. Read the release notes before upgrading across feature releases.
 
 ---
 
@@ -168,7 +168,7 @@ There are two ways to help move FreeSDN forward:
 
 ### Donate hardware
 
-The depth of each adapter tracks the hardware the team can test against. The Omada adapter is deep because the team runs Omada in production. The UniFi adapter is Beta because the team has not had UniFi hardware on the bench.
+The depth of each adapter tracks the hardware the team can test against. The Omada adapter is deep because the team runs Omada in production. The pfSense adapter is Beta because the team has not had a pfSense box on the bench.
 
 **The fastest path to getting your vendor supported or promoted is donating hardware.**
 

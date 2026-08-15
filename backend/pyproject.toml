@@ -1,9 +1,9 @@
 [tool.poetry]
 name = "freesdn-backend"
-version = "26.06.1"
+version = "26.08.1"
 description = "FreeSDN - Unified Network Management Platform"
 license = "AGPL-3.0-only"
-authors = ["FreeSDN Team"]
+authors = ["PyPV - Python Platform Ventures <contact@freesdn.org>"]
 readme = "README.md"
 packages = [{include = "app"}]
 

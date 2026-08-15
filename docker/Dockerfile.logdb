@@ -2,7 +2,7 @@
 # Debian Trixie base - matches all other FreeSDN containers
 # PostgreSQL 18 + TimescaleDB extension from official repo
 
-FROM postgres:18.4-trixie
+FROM postgres:18.6-trixie
 
 LABEL maintainer="FreeSDN Team"
 LABEL description="TimescaleDB on PostgreSQL 18 (Debian Trixie)"

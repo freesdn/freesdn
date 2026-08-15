@@ -82,7 +82,7 @@ x-logging: &default-logging
 services:
   # ── PostgreSQL - primary relational DB (internal only) ─────────────────────
   postgres:
-    image: postgres:${POSTGRES_VERSION:-18.4-trixie}
+    image: postgres:${POSTGRES_VERSION:-18.6-trixie}
     restart: unless-stopped
     stop_grace_period: 60s
     init: true
@@ -722,7 +722,7 @@ services:
 
   # ── pg-backup - encrypted pg_dump of both DBs (core; fail-closed in prod) ──
   pg-backup:
-    image: postgres:${POSTGRES_VERSION:-18.4-trixie}
+    image: postgres:${POSTGRES_VERSION:-18.6-trixie}
     restart: unless-stopped
     stop_grace_period: 30s
     init: true

@@ -42,7 +42,10 @@ _RETRY_DELAYS = [60, 120, 240]
     max_retries=3,
     soft_time_limit=60,
     time_limit=90,
-    queue="webhooks",
+    # Routes to "default", which every deployment tier consumes (see
+    # WORKER_QUEUES in .env.{lite,pro,max}.example). Do NOT name a queue here
+    # unless it is also declared in celery_app.task_queues AND consumed by a
+    # worker in every tier — an unconsumed queue strands deliveries silently.
     ignore_result=True,
 )
 @async_task

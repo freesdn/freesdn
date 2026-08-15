@@ -1,0 +1,52 @@
+FreeSDN - Authors and Attribution
+=================================
+
+FreeSDN is a PyPV project.
+
+    PyPV - Python Platform Ventures
+    https://pypv.com
+
+PyPV is the sole author, copyright holder and maintainer of FreeSDN. All code in
+this repository was written by PyPV unless a file header states otherwise.
+
+Copyright (C) 2024-2026 PyPV - Python Platform Ventures
+Licensed under the GNU Affero General Public License v3.0 only (AGPL-3.0-only).
+See LICENSE for the full text.
+
+
+Related PyPV projects
+---------------------
+
+    freesdn/freesdn-agent    edge agent           MIT
+    freesdn/freesdn-sdk      plugin SDK           MIT
+    freesdn/plugins          official plugins     MIT
+
+    Website   https://freesdn.org
+    Docs      https://docs.freesdn.org
+    Demo      https://demo.freesdn.org
+
+
+Contributing
+------------
+
+Contributions are welcome. FreeSDN currently has no external contributors, so
+this file lists PyPV alone; that is a statement of fact about the project's
+history, not a closed door. See CONTRIBUTING.md before opening a pull request,
+and note in particular how changes reach this repository: it is published from a
+private monorepo by a one-way flatten, so a pull request merged here directly
+would be reverted by the next release.
+
+Contributors who land changes will be credited here.
+
+
+Third-party components
+----------------------
+
+FreeSDN bundles third-party dependencies under their own licenses. See
+backend/THIRD_PARTY_LICENSES.md and frontend/THIRD_PARTY_LICENSES.md for the
+full attribution of every bundled package.
+
+Vendor names, product names, logos and brands referenced in this project are the
+property of their respective owners. FreeSDN is an independent project and is not
+affiliated with, sponsored by, or endorsed by any vendor it integrates with. See
+TRADEMARKS.md.

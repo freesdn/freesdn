@@ -28,10 +28,10 @@ installation at risk.
    CVE/GHSA is coordinated through the same advisory.
    Direct link: `https://github.com/freesdn/freesdn/security/advisories/new`
 
-2. **Email** -- send to `security@freesdn.org`. For end-to-end
-   encryption, prefer the GitHub Private Vulnerability Reporting path
-   above (it is encrypted between you and the maintainers), or ask for
-   our PGP key in your first message.
+2. **Email** -- send to `security@freesdn.org`. No project PGP key is
+   published, so for an encrypted channel prefer the GitHub Private
+   Vulnerability Reporting path above (it is encrypted between you and
+   the maintainers).
 
 **Please include:**
 - Affected version (from `GET /api/v1/health` or `docker inspect`)
@@ -76,10 +76,20 @@ and covered by invariant tests.
 ### Staged writes -- the dual gate
 
 Every write to a managed device passes a two-condition gate:
-`ADAPTER_READ_ONLY` (a per-adapter flag, on by default -- read-only by default)
-and an explicit `force` parameter in the request. Both must clear for a
-destructive write to proceed. This prevents a misconfigured or
-partially-provisioned adapter from silently clobbering live device config.
+`ADAPTER_READ_ONLY` (one platform-wide flag, not per-adapter) and an explicit
+`force` parameter in the request. Both must clear before a write reaches a
+device.
+
+The shipped Docker Compose stack sets `ADAPTER_READ_ONLY=false`, so FreeSDN
+manages your gear out of the box. Set `ADAPTER_READ_ONLY=true` in `.env` for a
+monitor-only deployment, in which writes are staged to the local database and
+never pushed. If you run the application outside the shipped Compose file, which
+always supplies this variable, its own fallback is fail-safe `true`.
+
+Gate 2 is therefore the one that protects an operator on a default install: a
+staged change only reaches a device when it is explicitly applied, and
+destructive operations (delete, destroy, factory reset) require a separate
+per-action confirmation regardless of either flag.
 
 ### Secret handling
 
@@ -104,11 +114,22 @@ credentials.
 
 - Argon2id password hashing (64 MB memory cost, current OWASP recommendation)
 - PBKDF2 key derivation with 260,000 iterations for encryption keys
-- JWT tokens with configurable RS256/HS256; JTI-based revocation via Valkey
+- JWT access and refresh tokens signed with HS256 (HMAC-SHA256) from
+  `SECRET_KEY`; JTI-based revocation via Valkey. There is no asymmetric
+  (RS256) signing path: FreeSDN signs and verifies its own tokens with
+  the same symmetric key.
 - MFA: TOTP (pyotp) with backup codes; MFA re-enrolment requires the
   existing credential
-- Rate limiting: 300 req/min general, 5 req/min on auth endpoints,
-  memory-bounded to 10K clients
+- Rate limiting is Valkey-backed (a sliding window shared across workers),
+  not in-process. Defaults are 600 requests/minute per principal with a
+  120 requests/second burst ceiling (`RATE_LIMIT_RPM` / `RATE_LIMIT_BURST`),
+  keyed by the signature-verified JWT subject when a valid access cookie is
+  present and by client IP otherwise.
+- Auth endpoints are limited separately and more strictly: 5 attempts per
+  minute per IP, plus 20 failed attempts per 5 minutes per submitted
+  username. When Valkey is unreachable, `/api/v1/auth/*` fails closed with
+  503 rather than skipping the credential-stuffing guards; other routes
+  fail open so a Valkey blip does not take the product down.
 
 ### HTTP security headers
 
@@ -146,12 +167,31 @@ Only install plugins from sources you trust. Review the plugin code and
 manifest before installation. Plugin installation is restricted to
 `super_admin` users.
 
-### Signed releases
+### Release integrity
 
-The FreeSDN agent binary and official plugin releases are signed. Signature
-verification instructions and the signing public key (with its fingerprint)
-are included in each GitHub Release; the agent pins that fingerprint on first
-use and refuses a later key swap.
+Two different things are often conflated here, so both are stated plainly.
+
+**GitHub Release downloads are checksummed, not signed.** Each
+`freesdn-agent` release publishes a `.sha256` sidecar next to every binary
+and a combined `SHA256SUMS.txt` covering all of the release assets, plus an
+SPDX SBOM of the build's Python dependency tree.
+Verify with `sha256sum -c SHA256SUMS.txt`. There are no detached signatures,
+no cosign bundles, and no PGP signatures on those artifacts, and plugin
+packages are not signed either. A checksum served from the same host as the
+binary proves integrity in transit, not provenance.
+
+**The in-app agent auto-update feed is genuinely signed.** When your backend
+serves an agent release to its own agents, it signs the release binary's
+SHA-256 digest with an ECDSA P-256 key
+(`backend/app/services/release_signing.py`) and exposes the matching public
+key at `GET /api/v1/agents/releases/public-key`. The agent verifies that
+signature before staging an update and, by default
+(`auto_update_require_signature`), refuses to install an unsigned release.
+It also pins the public key: an install-time fingerprint
+(`release_public_key_sha256`) if you set one, otherwise a persisted
+trust-on-first-use fingerprint, so a later key swap by a compromised server
+is rejected. The keypair is generated per deployment on your own backend,
+so there is no project-wide fingerprint for us to publish.
 
 ### Security testing and review
 

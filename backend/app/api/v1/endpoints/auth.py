@@ -118,8 +118,9 @@ def _dummy_verify(plain_password: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════
 # Auth-specific rate limiting (Redis-backed, per-IP)
 # ═══════════════════════════════════════════════════════════════════════
-# The global RateLimitMiddleware allows 300 req/min, but login/reset
-# endpoints need a much stricter limit to prevent credential stuffing.
+# The global RateLimitMiddleware allows RATE_LIMIT_RPM req/min (default 600,
+# see app/core/config.py), but login/reset endpoints need a much stricter limit
+# to prevent credential stuffing.
 # Uses Redis INCR+EXPIRE so the limit works across multiple workers.
 
 _AUTH_RATE_LIMIT = 5  # max attempts per 60-second window per IP
