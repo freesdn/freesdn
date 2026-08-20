@@ -34,22 +34,27 @@ export const credentialsApi = {
 };
 
 export const securityAuditApi = {
+  // Only these reach the backend. `user_id`, `start_time`/`end_time` and
+  // `site_id` were advertised here but /security/events accepts none of
+  // them -- it takes start_date/end_date, and security events carry no
+  // site column at all -- so they were silently dropped on every request.
   listEvents: (params?: {
     event_type?: string;
     severity?: string;
-    user_id?: string;
-    start_time?: string;
-    end_time?: string;
+    category?: string;
+    search?: string;
+    reviewed?: boolean;
+    start_date?: string;
+    end_date?: string;
     page?: number;
     page_size?: number;
-    site_id?: string;
   }) =>
     api.get<{ items: SecurityEvent[]; total: number }>('/security/events', { params }),
 
-  getSummary: (params?: { period?: string; site_id?: string }) =>
+  getSummary: (params?: { period?: string }) =>
     api.get('/security/summary', { params }),
 
-  getAnomalies: (params?: { period?: string; site_id?: string }) =>
+  getAnomalies: (params?: { period?: string }) =>
     api.get('/security/anomalies', { params }),
 
   getUserActivity: (userId: string, period?: string) =>

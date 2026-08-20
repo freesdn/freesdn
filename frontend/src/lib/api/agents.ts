@@ -5,7 +5,6 @@ import type {
   AgentSummary, AgentDetail, AgentListResponse, AgentStats,
   AgentHeartbeat, AgentTask, AgentHealth,
   AgentRegisterRequest, AgentRegisterResponse,
-  AgentCommandRequest, AgentCommandResponse, RemoteScanRequest,
   AgentReleaseLatest, DownloadsPageResponse, AgentReleaseSummary, AgentUpdateCheckResponse,
 } from './types';
 
@@ -74,17 +73,6 @@ export const agentsApi = {
   getHealth: (agentId: string) =>
     api.get<AgentHealth>(`/agents/${agentId}/health`),
 
-  sendCommand: (agentId: string, data: AgentCommandRequest) =>
-    api.post<AgentCommandResponse>(`/agents/${agentId}/command`, data),
-
-  startRemoteScan: (siteId: string, data: RemoteScanRequest) =>
-    api.post<{ scan_id: string; status: string; message: string }>(`/agents/site/${siteId}/scan`, data),
-
-  getRemoteScanProgress: (siteId: string, scanId: string) =>
-    api.get(`/agents/site/${siteId}/scan/${scanId}`),
-
-  fingerprintRemote: (siteId: string, ipAddress: string) =>
-    api.post(`/agents/site/${siteId}/fingerprint`, null, { params: { ip_address: ipAddress } }),
 
   // Interactive scan (operator-triggered, WS push). The agent is sent
   // a scan_network command immediately; the returned task_id is then

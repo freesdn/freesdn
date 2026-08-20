@@ -146,13 +146,35 @@ const FREEPBX_DOMAINS = [
   'inbound-routes',
 ] as const;
 
+// Proxmox per-domain stage endpoints (``gateway-proxmox-<domain>``). The
+// hypervisor module's catastrophic guard refuses backup restore, backup
+// prune and storage-volume delete on the direct path and tells the operator
+// to "stage it via the staged adapter endpoints" -- but proxmox was not a
+// GatewayVendor, so nothing could LIST a staged Proxmox change and there was
+// no way to review or apply one. The advice pointed at a door with no handle.
+const PROXMOX_DOMAINS = [
+  'backup',
+  'storage',
+  'vm',
+  'container',
+  'snapshot',
+  'cluster',
+  'ha',
+  'replication',
+  'sdn',
+  'ceph',
+  'firewall',
+  'node',
+] as const;
+
 export type GatewayVendor =
   | 'mikrotik'
   | 'pfsense'
   | 'opnsense'
   | 'openwrt'
   | 'unifi'
-  | 'freepbx';
+  | 'freepbx'
+  | 'proxmox';
 
 function domainsForVendor(vendor: GatewayVendor): readonly string[] {
   switch (vendor) {
@@ -168,6 +190,8 @@ function domainsForVendor(vendor: GatewayVendor): readonly string[] {
       return UNIFI_DOMAINS;
     case 'freepbx':
       return FREEPBX_DOMAINS;
+    case 'proxmox':
+      return PROXMOX_DOMAINS;
   }
 }
 
@@ -185,6 +209,8 @@ function vendorPrefix(vendor: GatewayVendor): string {
       return 'gateway-unifi';
     case 'freepbx':
       return 'gateway-freepbx';
+    case 'proxmox':
+      return 'gateway-proxmox';
   }
 }
 

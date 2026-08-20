@@ -39,7 +39,7 @@ services:
   # Replicates the base `redis` master. On a master failure Sentinel promotes
   # this node; the app (master_for) re-resolves and follows it.
   redis-replica:
-    image: valkey/valkey:${VALKEY_VERSION:-8.1.8-trixie}
+    image: valkey/valkey:${VALKEY_VERSION:-8.1.9-trixie}
     container_name: freesdn-redis-replica
     restart: unless-stopped
     init: true
@@ -102,7 +102,7 @@ services:
   # names rather than ephemeral IPs. requirepass lets the app's Sentinel client
   # AUTH to the sentinels.
   redis-sentinel-1: &sentinel
-    image: valkey/valkey:${VALKEY_VERSION:-8.1.8-trixie}
+    image: valkey/valkey:${VALKEY_VERSION:-8.1.9-trixie}
     container_name: freesdn-redis-sentinel-1
     restart: unless-stopped
     init: true

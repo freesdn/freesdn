@@ -89,3 +89,43 @@ async def _evaluate_all_orgs() -> dict[str, Any]:
 def evaluate_all_sla(self) -> dict[str, Any]:
     """Celery task: fan-out SLA evaluation for all orgs."""
     return asyncio.run(_evaluate_all_orgs())
+
+
+async def _generate_scheduled_reports() -> dict[str, Any]:
+    """Generate every SLA report whose schedule has come due.
+
+    ``SLAReportService.generate_scheduled`` has existed, complete, since it was
+    written -- and had NO CALLER. Its own docstring says "Called by a periodic
+    task (e.g. Celery beat, APScheduler)" and no such task was ever added, so
+    SLA report schedules produced nothing: an operator configured a monthly
+    customer report, the schedule listed as enabled, and no report was ever
+    generated or emailed.
+
+    ``generate_scheduled`` already scans every due schedule across orgs and
+    scopes each report to its own schedule's organization, so this is one call,
+    not a per-org fan-out.
+    """
+    from app.services.sla_reports import SLAReportGenerator
+
+    try:
+        async with AsyncSessionLocal() as session:
+            reports = await SLAReportGenerator(session).generate_scheduled()
+            await session.commit()
+            generated = len(reports)
+    except Exception:
+        logger.exception("SLA scheduled-report generation failed")
+        return {"generated": 0, "error": True}
+
+    logger.info("SLA scheduled reports: %d generated", generated)
+    return {"generated": generated}
+
+
+@celery_app.task(
+    name="app.tasks.sla.generate_scheduled_reports",
+    bind=True,
+    soft_time_limit=300,
+    time_limit=360,
+)
+def generate_scheduled_reports(self) -> dict[str, Any]:
+    """Celery task: generate any SLA reports whose schedule is due."""
+    return asyncio.run(_generate_scheduled_reports())

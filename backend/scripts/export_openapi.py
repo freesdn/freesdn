@@ -14,11 +14,21 @@ The frontend's ``npm run gen:api`` reads that file and produces
 ``frontend/src/lib/api/generated/openapi.d.ts`` with typed paths +
 schemas. The hand-written API clients can then ``import type`` from
 the generated file instead of redeclaring shapes that drift.
+
+NOTE ON MODULE ROUTES: importing ``app.main`` does NOT give you the whole
+API. The 10 loadable modules (voip, cameras, firewall, hypervisor, ...)
+mount their routers from ``ModuleLoader`` inside the lifespan, which never
+runs on a bare import -- and ``register_routes()`` walks the loader's
+REGISTRY, so discovery alone registers nothing. Exporting without loading
+them silently dropped ~500 paths: every module endpoint was missing from the
+generated contract, so drift in the majority of the API went unchecked. We
+therefore run the loader here explicitly. It needs no database.
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -45,10 +55,21 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    # Importing the app loads the full router stack; it's the cost of
-    # using FastAPI's built-in OpenAPI generator. The exported spec is
-    # exactly what /api/v1/openapi.json returns at runtime.
+    from app.core.config import settings
     from app.main import app
+    from app.modules.loader import ModuleLoader
+
+    # Mount the module routers the lifespan would mount, so the exported
+    # spec matches what /api/v1/openapi.json returns at runtime rather
+    # than just the statically-included core routes.
+    async def _mount_modules() -> None:
+        loader = ModuleLoader()
+        loader.discover_modules()
+        await loader.load_all_modules()
+        loader.register_routes(app, prefix=settings.API_V1_PREFIX)
+
+    asyncio.run(_mount_modules())
+    app.openapi_schema = None  # drop anything cached before the modules mounted
 
     spec = app.openapi()
     args.output.parent.mkdir(parents=True, exist_ok=True)

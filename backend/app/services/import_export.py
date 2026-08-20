@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 
     from app.models.import_export import ExportJob, ImportJob
 
+from app.models.devices import normalize_device_type
+
 logger = logging.getLogger(__name__)
 
 # Directory for temporary import/export files
@@ -932,7 +934,7 @@ class DataImportExportService:
                 new_controller_id = controller_id_map.get(str(old_ctrl)) if old_ctrl else None
                 device = Device(
                     name=dev_data["name"],
-                    device_type=dev_data.get("device_type", "unknown"),
+                    device_type=normalize_device_type(dev_data.get("device_type")),
                     mac_address=dev_data.get("mac_address"),
                     ip_address=dev_data.get("ip_address"),
                     model=dev_data.get("model"),
@@ -982,7 +984,7 @@ class DataImportExportService:
                 name = item.get("name") or item.get("hostname") or item.get("mac", "unknown")
                 device = Device(
                     name=name,
-                    device_type=item.get("type", "unknown"),
+                    device_type=normalize_device_type(item.get("type")),
                     mac_address=item.get("mac"),
                     ip_address=item.get("ip"),
                     model=item.get("model"),
@@ -1027,7 +1029,7 @@ class DataImportExportService:
                 name = item.get("name") or item.get("serial", "unknown")
                 device = Device(
                     name=name,
-                    device_type=item.get("productType", item.get("model", "unknown")),
+                    device_type=normalize_device_type(item.get("productType") or item.get("model")),
                     mac_address=item.get("mac"),
                     ip_address=item.get("lanIp") or item.get("wan1Ip"),
                     model=item.get("model"),
@@ -1075,7 +1077,7 @@ class DataImportExportService:
                 name = row.get("name") or row.get("hostname") or row.get("device_name", "unknown")
                 device = Device(
                     name=name,
-                    device_type=row.get("type", row.get("device_type", "unknown")),
+                    device_type=normalize_device_type(row.get("type") or row.get("device_type")),
                     mac_address=row.get("mac") or row.get("mac_address"),
                     ip_address=row.get("ip") or row.get("ip_address"),
                     model=row.get("model"),

@@ -2,7 +2,7 @@
 // Copyright (C) 2024-2026 FreeSDN
 import { api } from './client';
 import type {
-  SystemInfo, HealthCheck, FrontendVersions,
+  SystemInfo, HealthCheck,
   Backup, BackupCreate, BackupListResponse, BackupSchedule, BackupScheduleCreate,
   RestoreRequest, RestoreJob, BackupStats, ExportOptions, ImportResult,
   BackupManifestPreview,
@@ -10,7 +10,7 @@ import type {
   StorageLocation, StorageLocationCreate, StorageLocationUpdate,
   StorageLocationTestResult, SupportedStorageTypes,
   ConfigVersion, ConfigDiff,
-  NotificationProvider, NotificationTemplate, NotificationPreference,
+  NotificationProvider, NotificationPreference,
   InAppNotification, ProviderType, TestProviderResult,
   ModuleManifestResponse, ModuleStateResponse, OrgModuleResponse,
   ModuleNavigationResponse, ModuleWidgetsResponse,
@@ -29,9 +29,6 @@ export const systemApi = {
 
   getHealth: () =>
     api.get<HealthCheck>('/health'),
-
-  getFrontendVersions: () =>
-    api.get<FrontendVersions>('/system/frontend-versions'),
 
   // GET current adapter read-only mode → { read_only: boolean }
   getAdapterReadOnly: () =>
@@ -244,28 +241,6 @@ export const notificationApi = {
       params: { test_email: testEmail },
     }),
 
-  getTemplates: (channel?: string, enabledOnly?: boolean) =>
-    api.get<NotificationTemplate[]>('/notifications/templates', {
-      params: { channel, enabled_only: enabledOnly },
-    }),
-
-  getTemplate: (templateId: string) =>
-    api.get<NotificationTemplate>(`/notifications/templates/${templateId}`),
-
-  createTemplate: (data: Partial<NotificationTemplate>) =>
-    api.post<NotificationTemplate>('/notifications/templates', data),
-
-  updateTemplate: (templateId: string, data: Partial<NotificationTemplate>) =>
-    api.put<NotificationTemplate>(`/notifications/templates/${templateId}`, data),
-
-  deleteTemplate: (templateId: string) =>
-    api.delete(`/notifications/templates/${templateId}`),
-
-  previewTemplate: (templateId: string, variables: Record<string, unknown>) =>
-    api.post<{
-      subject?: string; body_html?: string; body_text?: string;
-      slack_blocks?: Record<string, unknown>[];
-    }>(`/notifications/templates/${templateId}/preview`, { variables }),
 
   getPreferences: () =>
     api.get<NotificationPreference>('/notifications/preferences'),
@@ -317,9 +292,14 @@ export const notificationApi = {
       '/notifications/in-app/unread-count'
     ),
 
+  // The backend field is `ids`, not `notification_ids`
+  // (notifications.py: `ids: list[UUID] = Field(..., min_length=1, max_length=200)`).
+  // It is REQUIRED, so the wrong key meant a 422 every time -- which made the
+  // whole notification bell inert: marking one read, dismissing one, and
+  // "Clear all" all funnel through this single call.
   markNotifications: (notificationIds: string[], action: 'read' | 'dismiss') =>
     api.post<{ marked: number }>('/notifications/in-app/mark', {
-      notification_ids: notificationIds,
+      ids: notificationIds,
       action,
     }),
 
@@ -332,15 +312,6 @@ export const notificationApi = {
     variables?: Record<string, unknown>; subject?: string; body?: string; body_html?: string;
   }) => api.post('/notifications/send', data),
 
-  getRules: (eventType?: string, enabledOnly?: boolean) =>
-    api.get('/notifications/rules', {
-      params: { event_type: eventType, enabled_only: enabledOnly },
-    }),
-
-  getEventTypes: () =>
-    api.get<{ events: Array<{ type: string; description: string; category: string }> }>(
-      '/notifications/rules/events'
-    ),
 };
 
 export const modulesApi = {

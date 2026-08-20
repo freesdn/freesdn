@@ -2836,10 +2836,28 @@ export default function BackupsPage() {
               <div className="space-y-3">
                 <Label className="text-base">{t('BackupsPage.include.title')}</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {/*
+                    "Include VLANs" and "Include SSIDs" were REMOVED here.
+
+                    A backup contains sites, controllers, credentials,
+                    automation rules, devices and users -- that is the whole of
+                    BackupService's restore_map. It has never contained VLANs
+                    or SSIDs. The two flags were threaded through three layers
+                    and recorded in the archive's own metadata, and read by
+                    nothing: there is no `if include_vlans:` anywhere.
+
+                    So the toggles asked an operator to make a choice that
+                    changed nothing, and the archive then claimed to describe
+                    its own contents using their answer. On a disaster restore
+                    that is the worst possible place to be reassured: someone
+                    would reasonably believe their VLANs were in the file.
+
+                    Reinstating them means actually collecting and restoring
+                    those rows (with the controller-sync ordering that implies),
+                    not re-adding the switches.
+                  */}
                   {[
                     { key: 'include_devices', labelKey: 'devices', icon: Server },
-                    { key: 'include_vlans', labelKey: 'vlans', icon: Database },
-                    { key: 'include_ssids', labelKey: 'ssids', icon: Cloud },
                     { key: 'include_users', labelKey: 'users', icon: Shield },
                     { key: 'include_automation', labelKey: 'automation', icon: Settings2 },
                   ].map(({ key, labelKey, icon: Icon }) => (

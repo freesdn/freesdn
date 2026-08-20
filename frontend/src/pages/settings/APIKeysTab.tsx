@@ -9,6 +9,7 @@
 
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useToast } from '@/hooks/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import type { TFunction } from 'i18next';
@@ -294,6 +295,7 @@ function CreateKeyDialog({
 
 export function APIKeysTab() {
   const { t } = useTranslation('settings');
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [createdKey, setCreatedKey] = useState<APIKeyCreated | null>(null);
@@ -311,8 +313,19 @@ export function APIKeysTab() {
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
       setRevokingId(null);
     },
-    onError: () => {
-      // Error is shown via the dialog remaining open
+    // This was the only mutation in the codebase whose onError suppressed the
+    // failure, with the comment "Error is shown via the dialog remaining
+    // open". A dialog that stays open is indistinguishable from a slow
+    // request or a misclick -- and this is a REVOCATION. Silence here means
+    // the operator walks away believing a credential is dead while it is
+    // still authenticating.
+    onError: (err: any) => {
+      toast({
+        title: t('APIKeysTab.toast.revokeFailed.title'),
+        description:
+          err?.response?.data?.detail || t('APIKeysTab.toast.revokeFailed.description'),
+        variant: 'destructive',
+      });
     },
   });
 

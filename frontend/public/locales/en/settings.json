@@ -423,6 +423,12 @@
       "cancel": "Cancel",
       "confirm": "Revoke Key",
       "revoking": "Revoking…"
+    },
+    "toast": {
+      "revokeFailed": {
+        "title": "Could not revoke the key",
+        "description": "The key is still active. Try again."
+      }
     }
   },
   "ModuleDetailPage": {

@@ -31,6 +31,7 @@ from app.adapters.exceptions import (
     AdapterTimeoutError,
 )
 from app.adapters.registry import adapter_registry
+from app.core.adapter_result import raise_for_adapter_result
 from app.core.crypto import decrypt_dict, encrypt_dict
 from app.modules.firewall.models import (
     GatewayConnection,
@@ -1859,10 +1860,14 @@ class GatewayService:
         self,
         gw_id: UUID,
         org_id: UUID,
-        params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            # Only allow known safe params to prevent kwarg injection
+            # Takes no caller-supplied params by design: the adapter call is
+            # fixed, so there is no kwarg-injection surface. It used to accept
+            # a `params` dict under a comment claiming it filtered them to
+            # "known safe" keys -- it never filtered anything, because it
+            # never passed anything. Safe, but the comment described a guard
+            # that did not exist, which is worse than having no comment.
             result = await adapter.get_ids_rules()
             data = result.data if result.success else {}
             return {
@@ -2063,6 +2068,15 @@ class GatewayService:
             vendor_rule = self._translate_rule_to_vendor(gw.vendor, rule)
             result = await adapter.create_firewall_rule(vendor_rule)
 
+            # Raise on a refused write, exactly as _write_result does for every
+            # other gateway write. These two methods were the only ones that
+            # bypassed that chokepoint, returning HTTP 200 with success:false --
+            # the precise shape _write_result was introduced to eliminate (see
+            # its docstring). The response body is built by hand here rather
+            # than delegating because GatewayRulePushResponse needs
+            # vendor_rule_id / applied, which _write_result does not produce.
+            raise_for_adapter_result(result)
+
             return {
                 "success": result.success,
                 "message": result.message or ("Rule pushed" if result.success else "Push failed"),
@@ -2079,6 +2093,9 @@ class GatewayService:
         """Delete a rule on the gateway by its vendor-native ID."""
         async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
             result = await adapter.delete_firewall_rule(vendor_rule_id)
+            # Same chokepoint parity as push_firewall_rule above: a rule the
+            # device refused to delete must not come back as HTTP 200.
+            raise_for_adapter_result(result)
             return {
                 "success": result.success,
                 "message": result.message
@@ -2251,6 +2268,13 @@ class GatewayService:
             return {
                 "status": "success",
                 "duration_ms": elapsed,
+                # `full` is accepted by the API (GatewaySyncRequest.full_sync)
+                # and cannot be honoured yet -- full rule-sync into the local
+                # models is a Tier B feature. Say so in the response instead
+                # of letting a caller who asked for a full sync believe they
+                # got one.
+                "full_sync_requested": full,
+                "full_sync_performed": False,
                 "hostname": gw.detected_hostname,
                 "version": gw.detected_version,
             }

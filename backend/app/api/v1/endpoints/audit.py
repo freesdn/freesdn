@@ -572,7 +572,6 @@ async def get_security_summary(
     current_user: Annotated[User, Depends(get_current_active_user)],
     start_date: datetime | None = None,
     end_date: datetime | None = None,
-    site_id: UUID | None = Query(None),
 ) -> Any:
     """Get security summary."""
     # scope-aware admin gate (see get_audit_logs).

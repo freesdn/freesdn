@@ -78,7 +78,11 @@
     "toast": {
       "previewFailed": "预览失败",
       "pruneCompleted": "清理完成",
-      "pruneFailed": "清理失败"
+      "pruneFailed": "清理失败",
+      "pruneStaged": {
+        "title": "清理已暂存",
+        "description": "请在“待处理更改”中查看并应用。清理会永久删除备份归档。"
+      }
     }
   },
   "CephTab": {
@@ -659,6 +663,10 @@
       "pruneFailed": {
         "title": "清理失败",
         "description": "清理备份失败"
+      },
+      "pruneStaged": {
+        "title": "清理已暂存",
+        "description": "请在“待处理更改”中查看并应用。清理会永久删除备份归档。"
       }
     },
     "storageError": {
@@ -1340,7 +1348,11 @@
       "restoreStarted": "已开始恢复",
       "restoreFailed": "恢复失败",
       "consoleOpened": "控制台已在新窗口中打开",
-      "consoleFailed": "控制台失败"
+      "consoleFailed": "控制台失败",
+      "restoreStaged": {
+        "title": "还原已暂存",
+        "description": "请在“待处理更改”中查看并应用。还原会覆盖目标虚拟机。"
+      }
     },
     "snapshotDialog": {
       "title": "创建快照",

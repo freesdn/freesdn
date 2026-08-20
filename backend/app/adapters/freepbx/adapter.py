@@ -867,6 +867,29 @@ class FreePBXAdapter(BaseAdapter):
         except AdapterError as exc:
             return AdapterResult.fail(error=_safe_error(exc))
 
+    async def get_ring_group(self, grpnum: str) -> AdapterResult:
+        """Read one ring group.
+
+        The gateway service calls ``client.get_ring_group(...)``, and
+        ``_get_client`` returns the ADAPTER, not the inner REST client -- it is
+        documented to, because FreePBX's write helpers live here behind
+        ``_check_write_allowed``. Only the REST client had this method, so
+        ``GET /gateway-freepbx-ring-groups/{id}/ring-groups/{grpnum}`` raised
+        AttributeError on every call and the single-ring-group read could never
+        succeed. The list endpoint beside it worked, which is what hid it.
+        """
+        try:
+            if not self._rest.api_available:
+                return AdapterResult.fail(error="REST API not available")
+            data = await self._rest.get_ring_group(grpnum)
+            if data is None:
+                return AdapterResult.fail(
+                    error=f"ring group {grpnum!r} not found", error_code="NOT_FOUND"
+                )
+            return AdapterResult.ok(data=data)
+        except AdapterError as exc:
+            return AdapterResult.fail(error=_safe_error(exc))
+
     async def create_ring_group(
         self, data: dict[str, Any], *, force: bool = False
     ) -> AdapterResult:
@@ -924,6 +947,20 @@ class FreePBXAdapter(BaseAdapter):
                 data=[e.headers for e in queue_events],
                 message="Queues fetched via AMI",
             )
+        except AdapterError as exc:
+            return AdapterResult.fail(error=_safe_error(exc))
+
+    async def get_queue(self, queue_ext: str) -> AdapterResult:
+        """Read one call queue. Same gap as ``get_ring_group`` above."""
+        try:
+            if not self._rest.api_available:
+                return AdapterResult.fail(error="REST API not available")
+            data = await self._rest.get_queue(queue_ext)
+            if data is None:
+                return AdapterResult.fail(
+                    error=f"queue {queue_ext!r} not found", error_code="NOT_FOUND"
+                )
+            return AdapterResult.ok(data=data)
         except AdapterError as exc:
             return AdapterResult.fail(error=_safe_error(exc))
 
@@ -1300,6 +1337,7 @@ class FreePBXAdapter(BaseAdapter):
         src: str | None = None,
         dst: str | None = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> AdapterResult:
         """Search call detail records."""
         try:
@@ -1310,6 +1348,7 @@ class FreePBXAdapter(BaseAdapter):
                     src=src,
                     dst=dst,
                     limit=limit,
+                    offset=offset,
                 )
                 return AdapterResult.ok(data=data)
             return AdapterResult.fail(error="REST API not available for CDR")
@@ -1441,6 +1480,33 @@ class FreePBXAdapter(BaseAdapter):
 
     # ── Queue management ───────────────────────────────────────────────
 
+    @staticmethod
+    def _ami_write_result(resp: Any, success_message: str) -> AdapterResult:
+        """Turn an AMI response into an AdapterResult, honouring its verdict.
+
+        AMI answers a refused action with ``Response: Error`` and a ``Message``
+        header explaining why -- "Unable to add interface: Already there",
+        "Interface not found", "No such queue" -- over a perfectly healthy
+        connection. ``send_action`` returns that as an ordinary AMIMessage and
+        raises nothing.
+
+        ``AMIMessage.is_error`` has always existed, and ``login()`` and
+        ``send_action_collect()`` both check it. The queue writes below did not:
+        they returned ``AdapterResult.ok(data=resp.headers)`` unconditionally,
+        so adding an agent to a queue that refused them reported success and the
+        operator saw the agent in FreeSDN's own view while Asterisk had never
+        accepted it.
+
+        The three call-control writes (originate / hangup / transfer) already
+        got this right, which is what made the queue ones look correct at a
+        glance -- same file, same shape, three lines shorter.
+        """
+        if getattr(resp, "is_error", False):
+            return AdapterResult.fail(
+                error=getattr(resp, "message", "") or "Asterisk refused the AMI action"
+            )
+        return AdapterResult.ok(data=getattr(resp, "headers", {}), message=success_message)
+
     async def queue_add_member(
         self, queue: str, interface: str, member_name: str = "", *, force: bool = False
     ) -> AdapterResult:
@@ -1448,7 +1514,7 @@ class FreePBXAdapter(BaseAdapter):
         try:
             self._check_write_allowed(force, "queue add member")
             resp = await self._ami.queue_add(queue, interface, member_name=member_name)
-            return AdapterResult.ok(data=resp.headers)
+            return self._ami_write_result(resp, f"{interface} added to queue {queue}")
         except FreePBXReadOnlyError as exc:
             return AdapterResult.fail(error=str(exc))
         except Exception as exc:
@@ -1461,7 +1527,7 @@ class FreePBXAdapter(BaseAdapter):
         try:
             self._check_write_allowed(force, "queue remove member")
             resp = await self._ami.queue_remove(queue, interface)
-            return AdapterResult.ok(data=resp.headers)
+            return self._ami_write_result(resp, f"{interface} removed from queue {queue}")
         except FreePBXReadOnlyError as exc:
             return AdapterResult.fail(error=str(exc))
         except Exception as exc:
@@ -1480,7 +1546,10 @@ class FreePBXAdapter(BaseAdapter):
         try:
             self._check_write_allowed(force, "queue pause member")
             resp = await self._ami.queue_pause(queue, interface, paused, reason)
-            return AdapterResult.ok(data=resp.headers)
+            return self._ami_write_result(
+                resp,
+                f"{interface} {'paused' if paused else 'unpaused'} in queue {queue}",
+            )
         except FreePBXReadOnlyError as exc:
             return AdapterResult.fail(error=str(exc))
         except Exception as exc:
@@ -1520,7 +1589,7 @@ class FreePBXAdapter(BaseAdapter):
                 return AdapterResult.ok(data=result, message="FreePBX config applied")
             # Fallback: AMI reload
             resp = await self._ami.reload_module()
-            return AdapterResult.ok(data=resp.headers, message="Asterisk modules reloaded via AMI")
+            return self._ami_write_result(resp, "Asterisk modules reloaded via AMI")
         except FreePBXReadOnlyError as exc:
             return AdapterResult.fail(error=str(exc))
         except Exception as exc:

@@ -93,6 +93,18 @@ def _bounded_gunzip(payload: bytes, limit: int = MAX_BACKUP_IMPORT_BYTES) -> byt
 # instance's SECRET_KEY so the secret is portable + bound to the new instance.
 CONTROLLER_SECRET_CONFIG_KEYS = ("password", "client_secret")
 
+# Secret-bearing COLUMNS on core.credentials. Stored encrypted under the instance
+# SECRET_KEY; decrypted into a `.fsdnvault` (which is sealed by the operator
+# passphrase) and re-encrypted under the destination instance's key on restore.
+CREDENTIAL_SECRET_FIELDS = (
+    "encrypted_password",
+    "api_key",
+    "token",
+    "ssh_private_key",
+    "certificate",
+    "snmp_community",
+)
+
 
 class BackupEncryption:
     """Fernet encryption with PBKDF2-derived keys and random per-backup salt.
@@ -1775,6 +1787,7 @@ class BackupService:
         """
         from app.models import (
             Controller,
+            Credential,
             Device,
             Site,
             User,
@@ -1866,6 +1879,64 @@ class BackupService:
             for c in controllers
         ]
 
+        # --- Credentials (the credential vault) ---
+        #
+        # These were missing entirely. A `.fsdnvault` is documented as carrying
+        # "every credential in the deployment" and the restore dialog says the
+        # operator will not need to re-enter anything -- but core.credentials was
+        # never collected, so after a bare-metal recovery Settings -> Credentials
+        # was empty and every Device.credential_id pointed at a row that no
+        # longer existed. The restore still reported success.
+        #
+        # Controller secrets and user logins WERE included, which is why the gap
+        # went unnoticed: the vault was partly true.
+        #
+        # Secret columns are stored encrypted under the instance SECRET_KEY. In
+        # vault mode they are decrypted here, inside the passphrase-sealed
+        # payload, and re-encrypted under the TARGET instance's key on restore --
+        # exactly the treatment controller config secrets already get above. In
+        # NON-vault (.fsdn) mode they are omitted entirely rather than carried as
+        # ciphertext, because a config snapshot must not contain secrets at all
+        # and ciphertext from a different SECRET_KEY would be undecryptable
+        # anyway.
+        cred_query = select(Credential).where(
+            Credential.organization_id == org_id,
+            Credential.deleted_at.is_(None),
+        )
+        cred_result = await self.db.execute(cred_query)
+        credentials = list(cred_result.scalars().all())
+
+        def _cred_secret(value: str | None) -> str | None:
+            if not include_secrets:
+                return None
+            if isinstance(value, str) and value and is_encrypted(value):
+                return decrypt_credential(value)
+            return value
+
+        data["credentials"] = [
+            {
+                "id": str(c.id),
+                "organization_id": str(c.organization_id),
+                "site_id": str(c.site_id) if c.site_id else None,
+                "name": c.name,
+                "description": c.description,
+                "credential_type": str(c.credential_type),
+                "scope": str(c.scope),
+                "vendor": c.vendor,
+                "username": c.username,
+                "encrypted_password": _cred_secret(c.encrypted_password),
+                "api_key": _cred_secret(c.api_key),
+                "token": _cred_secret(c.token),
+                "ssh_private_key": _cred_secret(c.ssh_private_key),
+                "certificate": _cred_secret(c.certificate),
+                "snmp_community": _cred_secret(c.snmp_community),
+                "options": c.options or {},
+                "is_default": c.is_default,
+                "is_active": c.is_active,
+            }
+            for c in credentials
+        ]
+
         # --- Devices ---
         if include_devices:
             # Device has NO direct organization_id column — it's tenant-
@@ -1945,28 +2016,45 @@ class BackupService:
         # --- Automation rules ---
         if include_automation:
             try:
-                from app.models.automation import AutomationRule
+                # The model is AutomationRuleRecord. This imported
+                # ``AutomationRule``, which does not exist and never has, so the
+                # ImportError was raised on EVERY call and swallowed by the
+                # bare except below -- every backup ever taken recorded
+                # `automation_rules: []` while the create dialog's Automation
+                # toggle, the detail view's Automation badge and the pre-restore
+                # manifest all reported on data that was not in the file.
+                from app.models.automation import AutomationRuleRecord
 
-                # NOTE H2: filter automation rules by org if the model has
-                # that column; tolerate older schema gracefully.
-                ar_q = select(AutomationRule)
-                if hasattr(AutomationRule, "organization_id"):
-                    ar_q = ar_q.where(AutomationRule.organization_id == org_id)
+                ar_q = select(AutomationRuleRecord).where(
+                    AutomationRuleRecord.organization_id == org_id
+                )
                 result = await self.db.execute(ar_q)
                 rules = result.scalars().all()
+                # Real column names. The old block also read `is_enabled`, which
+                # the model does not have either -- getattr's default quietly
+                # returned True for every rule regardless of its actual status.
                 data["automation_rules"] = [
                     {
                         "id": str(r.id),
-                        "name": getattr(r, "name", ""),
-                        "description": getattr(r, "description", None),
-                        "trigger_type": getattr(r, "trigger_type", None),
-                        "conditions": getattr(r, "conditions", None),
-                        "actions": getattr(r, "actions", None),
-                        "is_enabled": getattr(r, "is_enabled", True),
+                        "organization_id": str(r.organization_id),
+                        "name": r.name,
+                        "description": r.description,
+                        "trigger_type": r.trigger_type,
+                        "trigger_config": r.trigger_config,
+                        "conditions": r.conditions,
+                        "actions": r.actions,
+                        "status": r.status,
+                        "priority": r.priority,
+                        "cooldown_seconds": r.cooldown_seconds,
+                        "max_triggers_per_hour": r.max_triggers_per_hour,
                     }
                     for r in rules
                 ]
             except Exception:
+                # Still tolerant, but no longer SILENT: swallowing without a
+                # trace is what let a permanently-broken import look like "this
+                # org has no automation rules" for the life of the feature.
+                logger.warning("Automation rules omitted from backup", exc_info=True)
                 data["automation_rules"] = []
 
         # NOTE H3: the previous implementation dumped the full Organization
@@ -2107,8 +2195,20 @@ class BackupService:
                 "site_id": site_id,
                 "device_ids": device_ids,
                 "include_devices": include_devices,
-                "include_vlans": include_vlans,
-                "include_ssids": include_ssids,
+                # include_vlans / include_ssids are NOT recorded here.
+                #
+                # A backup contains sites, controllers, credentials, automation
+                # rules, devices and users -- the whole of ``restore_map``. It
+                # has never contained VLANs or SSIDs, and nothing in this file
+                # reads either flag: there is no ``if include_vlans:`` anywhere.
+                #
+                # Writing them into the archive's own metadata made the file
+                # describe contents it does not have, using an answer the
+                # operator was asked for and which changed nothing. On a
+                # disaster restore that is the worst possible place to be
+                # reassured. The UI toggles are gone; these parameters remain
+                # only so existing API callers and stored schedule rows do not
+                # 422, and they are deliberately inert.
                 "include_users": include_users,
                 "include_automation": include_automation,
                 # When True, contributors emit DECRYPTED secret material (creds, VPN
@@ -2475,6 +2575,32 @@ class BackupService:
             raise ValueError(f"Backup {backup_id} not found")
         if backup.status != BackupStatus.COMPLETED:
             raise ValueError(f"Backup {backup_id} is not completed (status: {backup.status})")
+
+        # A Full (.fsdnvault) backup is sealed with the OPERATOR PASSPHRASE, not
+        # the instance key, so the decrypt further down cannot open it. This
+        # method has no passphrase parameter, and the Restore dialog fires the
+        # preview unconditionally the moment it opens -- so every vault produced
+        # a decrypt failure, a 500, a stack trace in the logs, and the "Modules
+        # to restore" panel replaced by "Could not read the backup manifest".
+        # On the artifact documented for bare-metal recovery.
+        #
+        # Answer clearly instead of attempting a decrypt that cannot succeed:
+        # the caller gets a well-formed response it can render as "passphrase
+        # required" rather than an error it cannot explain.
+        if getattr(backup, "include_secrets", False):
+            return {
+                "backup_id": str(backup.id),
+                "format_version": None,
+                "created_at": backup.created_at.isoformat() if backup.created_at else None,
+                "source_version": None,
+                "organization_id": str(organization_id),
+                "contributors": [],
+                "requires_passphrase": True,
+                "reason": (
+                    "This is a Full (.fsdnvault) backup, sealed with your "
+                    "passphrase. Its contents cannot be previewed without it."
+                ),
+            }
 
         backend, _ = await self._resolve_storage(backup.storage_type, backup.storage_location_id)
         raw = await backend.load(backup.storage_path)
@@ -2927,7 +3053,8 @@ class BackupService:
         """
         # NOTE C4/H3: Organization is intentionally excluded from the restore
         # map. A restore must NEVER create or modify Organization rows.
-        from app.models import Controller, Device, Site, User
+        from app.models import Controller, Credential, Device, Site, User
+        from app.models.automation import AutomationRuleRecord
 
         if self.org_id is None:
             raise ValueError("BackupService.org_id must be set before _restore_data")
@@ -2955,6 +3082,14 @@ class BackupService:
         restore_map = [
             ("sites", Site),
             ("controllers", Controller),
+            # Before devices: Device.credential_id references these rows, so a
+            # device restored first would carry a dangling FK.
+            ("credentials", Credential),
+            # Collected since the feature shipped, but nothing ever restored
+            # them -- the rules rode along in the file and were dropped on the
+            # way back in. They reference only the organization, so ordering
+            # against the rest does not matter.
+            ("automation_rules", AutomationRuleRecord),
         ]
         if restore_devices:
             restore_map.append(("devices", Device))
@@ -2987,6 +3122,21 @@ class BackupService:
                         if isinstance(v, str) and v and not is_encrypted(v):
                             cfg[k] = encrypt_credential(v)
                     record = {**record, "config": cfg}
+
+                # Same treatment for the credential vault, whose secrets are
+                # top-level COLUMNS rather than a config dict. They arrived
+                # decrypted inside the passphrase-sealed payload; re-encrypt each
+                # under THIS instance's SECRET_KEY so plaintext never reaches the
+                # database.
+                if include_secrets and model_cls is Credential:
+                    from app.core.crypto import encrypt_credential, is_encrypted
+
+                    fixed = dict(record)
+                    for field in CREDENTIAL_SECRET_FIELDS:
+                        v = fixed.get(field)
+                        if isinstance(v, str) and v and not is_encrypted(v):
+                            fixed[field] = encrypt_credential(v)
+                    record = fixed
 
                 # NOTE H4: reject any record claiming a foreign org.
                 rec_org = record.get("organization_id")
@@ -3066,8 +3216,17 @@ class BackupService:
         page: int = 1,
         per_page: int = 20,
         organization_id: UUID | None = None,
+        accessible_site_ids: set[UUID] | list[UUID] | None = None,
     ) -> dict[str, Any]:
-        """Paginated backup listing with filters."""
+        """Paginated backup listing with filters.
+
+        ``accessible_site_ids`` restricts the result to a site-limited caller's
+        grants IN SQL. The endpoint used to filter the returned PAGE in Python
+        instead, which meant the database happily returned 20 rows the caller
+        could not see, the filter removed all of them, and the operator was told
+        "No backups (0)" while their granted site had plenty on page 2. An empty
+        collection is fail-closed: no grants means no rows, not all rows.
+        """
         if organization_id:
             base_query = self._scoped_backup_select(organization_id)
             query = base_query.order_by(Backup.created_at.desc())
@@ -3084,6 +3243,13 @@ class BackupService:
                 count_query = count_query.where(count_source.c.site_id == site_id)
             else:
                 count_query = count_query.where(Backup.site_id == site_id)
+        if accessible_site_ids is not None:
+            allowed = list(accessible_site_ids)
+            query = query.where(Backup.site_id.in_(allowed))
+            if organization_id:
+                count_query = count_query.where(count_source.c.site_id.in_(allowed))
+            else:
+                count_query = count_query.where(Backup.site_id.in_(allowed))
         if backup_type:
             query = query.where(Backup.backup_type == backup_type)
             if organization_id:

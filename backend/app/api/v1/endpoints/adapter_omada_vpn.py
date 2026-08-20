@@ -913,7 +913,7 @@ async def list_pending_changes_by_gateway(
         Query(
             description=(
                 "Vendor short name: mikrotik | pfsense | opnsense | "
-                "openwrt | unifi. Resolves to its top-level feature "
+                "openwrt | unifi | proxmox. Resolves to its top-level feature "
                 "prefix so one SQL query returns every domain at once."
             ),
         ),
@@ -959,6 +959,13 @@ async def list_pending_changes_by_gateway(
         "openwrt": "openwrt.",
         "unifi": "unifi.",
         "freepbx": "pbx.",
+        # Proxmox stages under ``proxmox.*`` across a dozen per-domain
+        # routers. It was missing here, which meant the Pending Changes
+        # drawer could not list a Proxmox change at all -- so the staged
+        # path the hypervisor module's own catastrophic guard tells
+        # operators to use ("stage it via the staged adapter endpoints")
+        # had no way to review or apply anything once staged.
+        "proxmox": "proxmox.",
     }
     vendor_lower = vendor.lower()
     if vendor_lower not in _VENDOR_PREFIX:

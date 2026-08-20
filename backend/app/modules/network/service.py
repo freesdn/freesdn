@@ -16,7 +16,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -740,8 +740,17 @@ class NetworkClientService:
             query = query.where(NetworkClient.ssid.is_not(None))
 
         if blocked is not None:
+            # ``blocked`` only exists in client_metadata once the block endpoint
+            # has written it, so a client that was never blocked has NO key --
+            # the JSONB expression is NULL, not False. ``is_(False)`` therefore
+            # matched only clients that had been explicitly unblocked, and
+            # filtering for "not blocked" returned almost nothing.
             metadata_filter = NetworkClient.client_metadata["blocked"].as_boolean()
-            query = query.where(metadata_filter.is_(blocked))
+            query = query.where(
+                metadata_filter.is_(True)
+                if blocked
+                else or_(metadata_filter.is_(False), metadata_filter.is_(None))
+            )
 
         if search:
             escaped = escape_like(search)

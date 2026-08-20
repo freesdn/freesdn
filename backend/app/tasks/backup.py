@@ -318,6 +318,23 @@ async def _validate_restore_async() -> dict[str, Any]:
             )
             backup = (await session.execute(stmt)).scalar_one_or_none()
 
+            # A Full (.fsdnvault) backup is sealed with the operator's
+            # passphrase, which this unattended job does not have and must not
+            # store. Dry-running a restore against one therefore ALWAYS fails --
+            # and the job reported that as a CRITICAL backup.validation.failed
+            # event plus a `failed` RestoreJob row nobody initiated, every month,
+            # for a backup that is perfectly healthy. Crying wolf about the
+            # bare-metal recovery artifact is worse than not checking it.
+            if backup is not None and getattr(backup, "include_secrets", False):
+                results.append(
+                    {
+                        "organization_id": str(org.id),
+                        "status": "skipped",
+                        "reason": "vault_requires_passphrase",
+                    }
+                )
+                continue
+
             if backup is None or (backup.completed_at and backup.completed_at < cutoff):
                 results.append(
                     {

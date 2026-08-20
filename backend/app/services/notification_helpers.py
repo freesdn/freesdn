@@ -114,7 +114,24 @@ async def dispatch_notifications(
     # produce a spurious FAILED DeliveryResult / retry-queue entry.
     in_app_cfg = channels_config.get("in_app")
     if in_app_cfg is not None:
-        for uid in _extract_recipients("in_app", in_app_cfg):
+        in_app_targets = _extract_recipients("in_app", in_app_cfg)
+        if not in_app_targets:
+            # The Alert Rules dialog offers In-App as a bare enable toggle and
+            # collects no user IDs at all, so this list was ALWAYS empty and the
+            # channel could never deliver. Enabling it plainly means "raise this
+            # in the bell for this organization", so resolve the org's active
+            # users rather than doing nothing. Scoped to the org and skipped
+            # entirely when organization_id is unknown, so this cannot fan out
+            # across tenants.
+            if organization_id is not None:
+                in_app_targets = [str(uid) for uid in await _org_user_ids(db, organization_id)]
+            if not in_app_targets:
+                logger.warning(
+                    "in_app notification channel is enabled but resolved no "
+                    "recipients (organization_id=%s)",
+                    organization_id,
+                )
+        for uid in in_app_targets:
             try:
                 await service.create_in_app(
                     user_id=UUID(str(uid)),
@@ -244,33 +261,109 @@ async def _find_latest_delivery_id(
         return None
 
 
+# Which config keys hold the recipients, per channel.
+#
+# This map exists because the reader and the writer disagreed. The Alert Rules
+# dialog persists ``recipients`` for email and ``phone_numbers`` for SMS
+# (AlertRulesPage.tsx: updateChannelConfig('email', 'recipients', ...) and
+# ('sms', 'phone_numbers', ...)), while this function read ``to`` for both. The
+# key never matched, so ``_extract_recipients`` returned [] and NO email or SMS
+# alert has ever been delivered from an alert rule -- silently, because an empty
+# recipient list produces no task, no DeliveryResult and no error. Slack, Teams
+# and webhook happened to agree on their key and worked fine, which is why the
+# feature looked healthy.
+#
+# Both spellings are accepted rather than picking one: existing rows in the
+# database carry whichever key was written when they were saved, and a
+# notification config is exactly the kind of thing nobody notices is broken
+# until an incident.
+_RECIPIENT_KEYS: dict[str, tuple[str, ...]] = {
+    "email": ("to", "recipients", "emails"),
+    "sms": ("to", "phone_numbers", "numbers"),
+    "in_app": ("user_ids", "users"),
+    "slack": ("channel",),
+    "teams": ("webhook_url",),
+    "webhook": ("url",),
+}
+
+# Channels whose recipient field is genuinely multi-valued and may arrive as one
+# delimited string from a text input. A slack channel or webhook URL is single
+# valued and must never be split -- a URL containing a comma would be shredded.
+_SPLITTABLE = {"email", "sms", "in_app"}
+
+_RECIPIENT_DELIMITERS = (",", ";", chr(10), chr(13), chr(9))
+
+
+def _split_recipients(raw: Any) -> list[str]:
+    """Normalise a recipient field into a clean list.
+
+    The dialog's inputs are free-text, so ``recipients`` arrives as
+    ``"ops@example.com, devops@example.com"`` -- a single string. Passing that
+    through unsplit is not merely untidy: ``email.utils.parseaddr`` returns
+    ``("", "")`` for it, so ``_validate_email_address`` rejects the whole thing
+    and the send fails. Re-keying without splitting would have swapped a silent
+    no-op for a hard failure.
+    """
+    if raw is None:
+        return []
+    values = raw if isinstance(raw, list | tuple | set) else [raw]
+
+    out: list[str] = []
+    for value in values:
+        if value is None:
+            continue
+        text = str(value)
+        for delimiter in _RECIPIENT_DELIMITERS[1:]:
+            text = text.replace(delimiter, _RECIPIENT_DELIMITERS[0])
+        for part in text.split(_RECIPIENT_DELIMITERS[0]):
+            part = part.strip()
+            if part and part not in out:
+                out.append(part)
+    return out
+
+
+async def _org_user_ids(db: Any, organization_id: Any) -> list[Any]:
+    """Active, non-deleted user ids for one organization.
+
+    Used only as the in_app fallback when a rule enables the channel without
+    naming anyone. Org-scoped by construction.
+    """
+    from sqlalchemy import select
+
+    from app.models.core import User
+
+    stmt = select(User.id).where(
+        User.organization_id == organization_id,
+        User.is_active.is_(True),
+    )
+    if hasattr(User, "deleted_at"):
+        stmt = stmt.where(User.deleted_at.is_(None))
+    try:
+        rows = await db.execute(stmt)
+        return list(rows.scalars().all())
+    except Exception as exc:  # pragma: no cover - never break dispatch on this
+        logger.warning("Could not resolve in_app recipients for org %s: %s", organization_id, exc)
+        return []
+
+
 def _extract_recipients(channel_name: str, config: dict[str, Any]) -> list[str]:
     """Extract recipient addresses from a channel config block."""
     if not isinstance(config, dict):
         return []
 
-    if channel_name == "email":
-        to = config.get("to", [])
-        return to if isinstance(to, list) else [to]
+    keys = _RECIPIENT_KEYS.get(channel_name)
+    if not keys:
+        return []
 
-    if channel_name == "slack":
-        channel = config.get("channel")
-        return [channel] if channel else []
-
-    if channel_name == "teams":
-        url = config.get("webhook_url")
-        return [url] if url else []
-
-    if channel_name == "webhook":
-        url = config.get("url")
-        return [url] if url else []
-
-    if channel_name == "sms":
-        numbers = config.get("to", [])
-        return numbers if isinstance(numbers, list) else [numbers]
-
-    if channel_name == "in_app":
-        user_ids = config.get("user_ids", [])
-        return user_ids if isinstance(user_ids, list) else [user_ids]
+    for key in keys:
+        if key not in config:
+            continue
+        raw = config[key]
+        if channel_name in _SPLITTABLE:
+            found = _split_recipients(raw)
+        else:
+            found = [str(raw).strip()] if raw else []
+        if found:
+            return found
 
     return []

@@ -298,7 +298,7 @@ class TestReadOnlyGate:
     async def test_set_port_poe_refused_by_default(self) -> None:
         adapter = _make_adapter()
         with pytest.raises(AdapterReadOnlyError):
-            await adapter.set_port_poe(
+            await adapter.set_port_poe_on_site(
                 "default",
                 _FAKE_MAC,
                 1,
@@ -328,14 +328,14 @@ class TestReadOnlyGate:
     async def test_block_client_refused_by_default(self) -> None:
         adapter = _make_adapter()
         with pytest.raises(AdapterReadOnlyError):
-            await adapter.block_client("default", _FAKE_MAC)
+            await adapter.block_client_on_site("default", _FAKE_MAC)
 
     @pytest.mark.asyncio
     @patch(_GATE, lambda: True)
     async def test_unblock_client_refused_by_default(self) -> None:
         adapter = _make_adapter()
         with pytest.raises(AdapterReadOnlyError):
-            await adapter.unblock_client("default", _FAKE_MAC)
+            await adapter.unblock_client_on_site("default", _FAKE_MAC)
 
     @pytest.mark.asyncio
     @patch(_GATE, lambda: True)
@@ -381,7 +381,7 @@ class TestForceTrueOptsIn:
         adapter._api.cmd_stamgr = AsyncMock(  # type: ignore[method-assign]
             return_value={"meta": {"rc": "ok"}, "data": []}
         )
-        await adapter.block_client("default", _FAKE_MAC, force=True)
+        await adapter.block_client_on_site("default", _FAKE_MAC, force=True)
         adapter._api.cmd_stamgr.assert_awaited_once_with(
             {"cmd": "block-sta", "mac": _FAKE_MAC},
         )
@@ -394,7 +394,7 @@ class TestForceTrueOptsIn:
         adapter._api.cmd_stamgr = AsyncMock(  # type: ignore[method-assign]
             return_value={"meta": {"rc": "ok"}, "data": []}
         )
-        await adapter.unblock_client("default", _FAKE_MAC, force=True)
+        await adapter.unblock_client_on_site("default", _FAKE_MAC, force=True)
         payload = adapter._api.cmd_stamgr.await_args.args[0]
         assert payload["cmd"] == "unblock-sta"
 
@@ -589,7 +589,7 @@ class TestWriteInputValidation:
     async def test_set_port_poe_rejects_bad_mode(self) -> None:
         adapter = _make_adapter()
         with pytest.raises(AdapterError):
-            await adapter.set_port_poe(
+            await adapter.set_port_poe_on_site(
                 "default",
                 _FAKE_MAC,
                 1,

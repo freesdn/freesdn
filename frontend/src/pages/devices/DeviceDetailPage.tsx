@@ -401,6 +401,11 @@ export default function DeviceDetailPage() {
   const [credDialogOpen, setCredDialogOpen] = useState(false);
   const [selectedCredId, setSelectedCredId] = useState<string>('');
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  // Reboot fired straight from the header with no confirmation. The backend's
+  // confirm=true gate was the only thing between a mis-click and a rebooted
+  // device, and the client never sent it -- so the button 400'd, which hid the
+  // missing dialog. Both halves are fixed together.
+  const [rebootDialogOpen, setRebootDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '',
@@ -599,7 +604,7 @@ export default function DeviceDetailPage() {
             </Button>
             <Button
               variant="outline" size="sm"
-              onClick={() => rebootMutation.mutate()}
+              onClick={() => setRebootDialogOpen(true)}
               disabled={device.status !== 'online' || rebootMutation.isPending}
             >
               {rebootMutation.isPending
@@ -1117,6 +1122,26 @@ export default function DeviceDetailPage() {
       </Dialog>
 
       {/* ──── Remove device confirmation ──── */}
+      <AlertDialog open={rebootDialogOpen} onOpenChange={setRebootDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('DeviceDetailPage.actions.reboot')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('actions.rebootConfirm')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common:cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setRebootDialogOpen(false);
+                rebootMutation.mutate();
+              }}
+            >
+              {t('common:confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

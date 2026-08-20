@@ -248,6 +248,12 @@ export default function DevicesPage() {
   const { toast } = useToast();
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [selectedDevices, setSelectedDevices] = useState<Device[]>([]);
+  // Reboot is destructive and was firing straight from the menu with no
+  // confirmation at all. The backend's confirm=true gate was the only thing
+  // between a mis-click and a rebooted device -- and because the client never
+  // sent it, the button simply 400'd, which hid the missing dialog. Fixing the
+  // payload without adding this would turn a broken button into a dangerous one.
+  const [rebootTargets, setRebootTargets] = useState<string[]>([]);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const selectedSiteId = useSiteStore((s) => s.selectedSiteId);
@@ -312,15 +318,23 @@ export default function DevicesPage() {
       });
       return;
     }
+    // Confirm first -- see the rebootTargets comment above.
+    setRebootTargets(onlineSelected.map((d) => d.id));
+  }, [selectedDevices, toast, t]);
+
+  const confirmReboot = useCallback(() => {
+    const ids = rebootTargets;
+    setRebootTargets([]);
+    if (ids.length === 0) return;
     // Per-device dispatch; each mutation surfaces its own failure toast via
     // the mutation's onError. We only announce dispatch, not success.
-    onlineSelected.forEach((d) => rebootMutation.mutate(d.id));
+    ids.forEach((id) => rebootMutation.mutate(id));
     toast({
       title: t('DevicesPage.toasts.rebootInitiated.title'),
-      description: t('DevicesPage.toasts.rebootInitiated.description', { n: onlineSelected.length }),
+      description: t('DevicesPage.toasts.rebootInitiated.description', { n: ids.length }),
     });
     setSelectedDevices([]);
-  }, [selectedDevices, rebootMutation, toast, t]);
+  }, [rebootTargets, rebootMutation, toast, t]);
 
   const handleBulkDelete = useCallback(async () => {
     if (selectedDevices.length === 0) return;
@@ -686,7 +700,7 @@ export default function DevicesPage() {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => rebootMutation.mutate(d.id)}
+                onClick={() => setRebootTargets([d.id])}
                 disabled={d.status !== 'online' || rebootMutation.isPending}
               >
                 <Power className="mr-2 h-4 w-4" /> {t('DevicesPage.actions.reboot')}
@@ -1028,6 +1042,26 @@ export default function DevicesPage() {
       />
 
       {/* Bulk delete confirmation */}
+      <AlertDialog
+        open={rebootTargets.length > 0}
+        onOpenChange={(open) => !open && setRebootTargets([])}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('DevicesPage.actions.reboot')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {rebootTargets.length > 1
+                ? t('DevicesPage.toasts.rebootInitiated.description', { n: rebootTargets.length })
+                : t('actions.rebootConfirm')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common:cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmReboot}>{t('common:confirm')}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

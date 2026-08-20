@@ -2,8 +2,7 @@
 // Copyright (C) 2024-2026 FreeSDN
 import { api } from './client';
 import type {
-  ScanRequest, ScanResponse, ScanProgress, ScanResults, DiscoveredDevice,
-  ControllerDiscoveryRequest, Driver, DriverDetails,
+  ScanRequest, ScanResponse, ScanProgress, ScanResults, DiscoveredDevice, Driver, DriverDetails,
   AdoptDeviceRequest, AdoptDeviceResponse, BulkAdoptResponse,
   TestCredentialRequest, TestCredentialResponse,
   MatchDriverRequest, MatchDriverResponse, ScanHistoryItem,
@@ -30,9 +29,6 @@ export const discoveryApi = {
 
   fingerprintDevice: (ip: string, ports?: number[], timeout?: number) =>
     api.post<DiscoveredDevice>('/discovery/fingerprint', { ip_address: ip, ports, timeout }),
-
-  discoverFromController: (request: ControllerDiscoveryRequest) =>
-    api.post<ScanResults>('/discovery/controller', request),
 
   discoverController: (controllerId: string, opts?: { sync?: boolean }) =>
     api.post<{ status: string; controller_id: string; stats?: Record<string, unknown>; message?: string }>(

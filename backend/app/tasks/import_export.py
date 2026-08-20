@@ -23,6 +23,58 @@ from app.tasks.base import FreeSDNTask
 logger = logging.getLogger(__name__)
 
 
+async def _record_job_failure(model_name: str, job_id: str, error: str) -> None:
+    """Persist a job's FAILED state in its own transaction.
+
+    ``run_export`` / ``run_import`` set ``status = FAILED`` + ``error_message``
+    and then ``flush()`` -- they never commit, because the caller owns the
+    transaction. The caller then rolled the whole thing back, which is right
+    for the partial import writes and wrong for the verdict: the FAILED status
+    went with it and the row stayed at PENDING.
+
+    So a failed export or import sat in the jobs list as "pending" forever,
+    with no error to explain it, and the UI polled a status that would never
+    change. The operator's only signal was that it never finished.
+
+    Best-effort and guarded on the row still being PENDING/RUNNING, so this
+    cannot overwrite a job some other worker has since completed.
+    """
+    from uuid import UUID as _UUID
+
+    from sqlalchemy import update as _update
+
+    try:
+        from app.models.import_export import ExportJob, ImportJob, JobStatus
+
+        model = ExportJob if model_name == "export" else ImportJob
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                _update(model)
+                .where(
+                    model.id == _UUID(job_id),
+                    # The non-terminal states. There is no RUNNING on this
+                    # enum -- it is PENDING / VALIDATING / IN_PROGRESS -- and
+                    # naming one that does not exist would raise into the
+                    # except below and make this whole fix a no-op.
+                    model.status.in_(
+                        [
+                            JobStatus.PENDING,
+                            JobStatus.VALIDATING,
+                            JobStatus.IN_PROGRESS,
+                        ]
+                    ),
+                )
+                .values(
+                    status=JobStatus.FAILED,
+                    error_message=(error or "job failed")[:2000],
+                )
+            )
+            await session.commit()
+    except Exception:
+        # Never let the bookkeeping write mask the real failure.
+        logger.warning("Could not record failure for %s job %s", model_name, job_id, exc_info=True)
+
+
 @celery_app.task(
     bind=True, base=FreeSDNTask, name="data.run_export_job", soft_time_limit=600, time_limit=720
 )
@@ -44,6 +96,9 @@ def run_export_job(self, job_id: str) -> dict[str, Any]:
                 return result
             except Exception as e:
                 await session.rollback()
+                # Rolled back the partial work; now record the verdict so the
+                # job leaves PENDING instead of hanging there forever.
+                await _record_job_failure("export", job_id, str(e))
                 logger.error("Export job %s failed: %s", job_id, e)
                 return {"success": False, "error": str(e)}
 
@@ -82,6 +137,9 @@ def run_import_job(self, job_id: str) -> dict[str, Any]:
                 return result
             except Exception as e:
                 await session.rollback()
+                # Rolled back the partial work; now record the verdict so the
+                # job leaves PENDING instead of hanging there forever.
+                await _record_job_failure("import", job_id, str(e))
                 logger.error("Import job %s failed: %s", job_id, e)
                 return {"success": False, "error": str(e)}
 

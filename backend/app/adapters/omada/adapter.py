@@ -2027,20 +2027,24 @@ class OmadaAdapter(BaseAdapter):
             logger.error("Failed to set device LED: %s", e)
             return self._fail_from_exception(e, default_error_code="LED_FAILED")
 
-    async def adopt_device(self, device_mac: str) -> AdapterResult:
-        """Adopt a pending device into the controller."""
+    async def adopt_device(self, device_id: str) -> AdapterResult:
+        """Adopt a pending device into the controller.
+
+        ``device_id`` is a MAC here, but the parameter keeps the BaseAdapter
+        name so a vendor-neutral caller can pass it by keyword.
+        """
         site_id = await self._ensure_site_id()
         if not site_id:
             return AdapterResult.fail("No site available", error_code="NO_SITE")
         try:
-            mac = normalize_mac(device_mac)
+            mac = normalize_mac(device_id)
             await self._client.adopt_device(site_id, mac)
             return AdapterResult.ok(
                 {"device_mac": mac, "action": "adopt"},
                 message="Device adoption initiated",
             )
         except Exception as e:
-            logger.error("Failed to adopt device %s: %s", device_mac, e)
+            logger.error("Failed to adopt device %s: %s", device_id, e)
             return self._fail_from_exception(e, default_error_code="ADOPT_FAILED")
 
     async def forget_device(self, device_mac: str) -> AdapterResult:
@@ -2582,9 +2586,9 @@ class OmadaAdapter(BaseAdapter):
             logger.error("Failed to get firmware info: %s", e)
             return {}
 
-    async def upgrade_firmware(self, device_mac: str) -> AdapterResult:
-        """Trigger firmware upgrade for a device."""
-        found = await self._find_device_site(device_mac)
+    async def upgrade_firmware(self, device_id: str) -> AdapterResult:
+        """Trigger firmware upgrade for a device (``device_id`` is a MAC)."""
+        found = await self._find_device_site(device_id)
         if not found:
             return AdapterResult.fail("Device not found", error_code="NOT_FOUND")
         site_id, raw = found

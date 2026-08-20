@@ -78,7 +78,11 @@
     "toast": {
       "previewFailed": "Preview failed",
       "pruneCompleted": "Prune completed",
-      "pruneFailed": "Prune failed"
+      "pruneFailed": "Prune failed",
+      "pruneStaged": {
+        "title": "Prune staged",
+        "description": "Review and apply it from Pending Changes. Pruning deletes backup archives permanently."
+      }
     }
   },
   "CephTab": {
@@ -659,6 +663,10 @@
       "pruneFailed": {
         "title": "Prune failed",
         "description": "Failed to prune backups"
+      },
+      "pruneStaged": {
+        "title": "Prune staged",
+        "description": "Review and apply it from Pending Changes. Pruning deletes backup archives permanently."
       }
     },
     "storageError": {
@@ -1340,7 +1348,11 @@
       "restoreStarted": "Restore started",
       "restoreFailed": "Restore failed",
       "consoleOpened": "Console opened in new window",
-      "consoleFailed": "Console failed"
+      "consoleFailed": "Console failed",
+      "restoreStaged": {
+        "title": "Restore staged",
+        "description": "Review and apply it from Pending Changes. A restore overwrites the target guest."
+      }
     },
     "snapshotDialog": {
       "title": "Create Snapshot",

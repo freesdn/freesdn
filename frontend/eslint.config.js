@@ -1,3 +1,17 @@
+// FreeSDN frontend ESLint config.
+//
+// THIS IS THE CONFIG ESLINT ACTUALLY LOADS. Keep it as .js.
+//
+// There used to be an eslint.config.ts beside this file (plus a generated
+// eslint.config.d.ts), and ESLint resolves eslint.config.js FIRST -- so the
+// TypeScript one was dead weight that looked authoritative. Editing it to
+// tighten a rule changed nothing, silently. The two had not drifted yet; they
+// were deleted before they could.
+//
+// If you want the config in TypeScript again, you must also add `jiti` to
+// devDependencies explicitly -- ESLint 10 needs it to load a .ts config, and it
+// is currently only present as a transitive dependency, which a lockfile change
+// could drop without warning.
 import js from '@eslint/js';
 import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';

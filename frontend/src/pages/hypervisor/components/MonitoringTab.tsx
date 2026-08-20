@@ -12,13 +12,12 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Area, AreaChart,
 } from 'recharts';
-import { Cpu, MemoryStick, Network, HardDrive, Settings, ChevronDown, Info } from 'lucide-react';
+import { Cpu, MemoryStick, Network, HardDrive } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/empty-state';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { hypervisorApi } from '@/lib/api';
 import { formatBytes } from './helpers';
 import type { HypervisorTabProps } from './types';
@@ -108,25 +107,6 @@ function MetricChart({
 
 const DEFAULT_MAX_POINTS = 500;
 
-interface AlertConfig {
-  cpuThreshold: number;
-  memoryThreshold: number;
-  fireAfter: number;
-  resolveAfter: number;
-}
-
-function loadAlertConfig(controllerId: string): AlertConfig {
-  try {
-    const raw = localStorage.getItem(`hypervisor-alert-config-${controllerId}`);
-    if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
-  return { cpuThreshold: 80, memoryThreshold: 85, fireAfter: 3, resolveAfter: 2 };
-}
-
-function saveAlertConfig(controllerId: string, config: AlertConfig) {
-  localStorage.setItem(`hypervisor-alert-config-${controllerId}`, JSON.stringify(config));
-}
-
 export function MonitoringTab({ controllerId, nodes }: HypervisorTabProps) {
   const { t } = useTranslation('hypervisor');
   const TIMEFRAMES = buildTimeframes(t);
@@ -140,13 +120,8 @@ export function MonitoringTab({ controllerId, nodes }: HypervisorTabProps) {
   const [selectedVM, setSelectedVM] = useState<{ node: string; vmid: number; vmType: string } | null>(null);
 
   // Alert hysteresis settings
-  const [alertSettingsOpen, setAlertSettingsOpen] = useState(false);
-  const [alertConfig, setAlertConfig] = useState<AlertConfig>(() => loadAlertConfig(controllerId));
 
   // Persist alert config on change
-  useEffect(() => {
-    saveAlertConfig(controllerId, alertConfig);
-  }, [controllerId, alertConfig]);
 
   const activeNode = selectedNode || nodes[0]?.node || '';
 
@@ -301,77 +276,21 @@ export function MonitoringTab({ controllerId, nodes }: HypervisorTabProps) {
         </div>
       )}
 
-      {/* Alert Settings (Hysteresis) */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div
-            className="flex items-center justify-between cursor-pointer"
-            onClick={() => setAlertSettingsOpen(!alertSettingsOpen)}
-          >
-            <div className="flex items-center gap-2">
-              <Settings className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-sm">{t('MonitoringTab.alerts.title')}</CardTitle>
-            </div>
-            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${alertSettingsOpen ? '' : '-rotate-90'}`} />
-          </div>
-        </CardHeader>
-        {alertSettingsOpen && (
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4 mb-3">
-              <div>
-                <Label className="text-xs">{t('MonitoringTab.alerts.cpuThreshold')}</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={alertConfig.cpuThreshold}
-                  onChange={(e) => setAlertConfig((c) => ({ ...c, cpuThreshold: parseInt(e.target.value) || 80 }))}
-                  className="h-8 text-sm"
-                />
-              </div>
-              <div>
-                <Label className="text-xs">{t('MonitoringTab.alerts.memoryThreshold')}</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={alertConfig.memoryThreshold}
-                  onChange={(e) => setAlertConfig((c) => ({ ...c, memoryThreshold: parseInt(e.target.value) || 85 }))}
-                  className="h-8 text-sm"
-                />
-              </div>
-              <div>
-                <Label className="text-xs">{t('MonitoringTab.alerts.fireAfter')}</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={alertConfig.fireAfter}
-                  onChange={(e) => setAlertConfig((c) => ({ ...c, fireAfter: parseInt(e.target.value) || 3 }))}
-                  className="h-8 text-sm"
-                />
-              </div>
-              <div>
-                <Label className="text-xs">{t('MonitoringTab.alerts.resolveAfter')}</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={alertConfig.resolveAfter}
-                  onChange={(e) => setAlertConfig((c) => ({ ...c, resolveAfter: parseInt(e.target.value) || 2 }))}
-                  className="h-8 text-sm"
-                />
-              </div>
-            </div>
-            <div className="flex items-start gap-2 text-xs text-muted-foreground">
-              <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-              <p>
-                {t('MonitoringTab.alerts.hysteresisInfo')}
-              </p>
-            </div>
-          </CardContent>
-        )}
-      </Card>
+      {/* The Alert Settings (hysteresis) panel was REMOVED here.
+
+          It presented CPU/memory thresholds and fire/resolve sample counts,
+          and wrote them to localStorage under
+          `hypervisor-alert-config-<controllerId>`. Nothing anywhere read that
+          key back except the form itself -- the values drove no request, no
+          rule and no display, so an operator who set 'alert above 80% CPU'
+          was told nothing would ever fire only by it never firing.
+
+          It was also actively harmful next to the REAL alerting system:
+          Enterprise > Alert Rules plus notification channels, which do work.
+          A convincing fake competes with the thing that would have worked.
+
+          Reinstating it means driving real AlertRule rows from these values,
+          not restoring the panel. */}
     </div>
   );
 }

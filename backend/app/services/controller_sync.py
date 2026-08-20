@@ -959,7 +959,29 @@ async def _sync_clients(
         dc.tx_rate_mbps = _rate_kbps_to_mbps(c.get("tx_rate") or c.get("txRate"))
         dc.rx_rate_mbps = _rate_kbps_to_mbps(c.get("rx_rate") or c.get("rxRate"))
         dc.last_seen = datetime.now(UTC)
-        dc.client_metadata = _safe_meta(c)
+        # Merge, do not replace.
+        #
+        # This was a wholesale ``dc.client_metadata = _safe_meta(c)``, and
+        # ``blocked`` is FreeSDN-owned state: ``POST /network/clients/{id}/block``
+        # pushes to the controller, checks the AdapterResult, and then records
+        # ``client_metadata["blocked"] = True`` here. The controller payload has
+        # no such key (only Omada reports one), so the next sync -- minutes
+        # later -- overwrote the dict and the flag was gone.
+        #
+        # The client stayed blocked on the controller, which is the part that
+        # matters and always worked. What broke was FreeSDN's memory of it: the
+        # Clients page showed the client as normal, the "blocked" filter
+        # (``client_metadata["blocked"]`` in modules/network/service.py) matched
+        # nothing, and the stats card counted zero blocked clients. An operator
+        # looking for who they had blocked found no one.
+        incoming = _safe_meta(c)
+        merged = dict(dc.client_metadata or {})
+        merged.update(incoming)
+        # An adapter that genuinely reports block state (Omada does) wins, since
+        # the controller is the authority. Otherwise keep what we recorded.
+        if "blocked" not in incoming and "blocked" in (dc.client_metadata or {}):
+            merged["blocked"] = (dc.client_metadata or {})["blocked"]
+        dc.client_metadata = merged
         synced += 1
 
     await session.flush()

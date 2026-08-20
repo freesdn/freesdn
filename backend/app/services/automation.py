@@ -743,13 +743,23 @@ class AutomationEngine:
                     "error": "rule author no longer holds the required permission for this operation",
                 }
             async with async_session_factory() as db:
+                # The rule AUTHOR's site
+                # grant, resolved from the stored actor_id -- an automation rule
+                # runs on a schedule or an event, so there is no live principal
+                # to take it from. This block already re-checks the author's
+                # PERMISSION above; without the grant a site-limited author's
+                # rule could still reach every site in the org.
+                from app.core.site_access import resolve_actor_site_grants
+
+                rule_actor = UUID(str(actor_raw)) if actor_raw else None
                 ctx = OperationContext(
                     organization_id=UUID(str(org_raw)),
                     params=dict(params.get("operation_params") or {}),
-                    actor_id=UUID(str(actor_raw)) if actor_raw else None,
+                    actor_id=rule_actor,
                     db=db,
                     trigger=context.get("trigger_data", {}) or {},
                     logger=logging.getLogger("fabric.automation"),
+                    accessible_site_ids=await resolve_actor_site_grants(db, rule_actor),
                 )
                 result = await operation_executor.execute(op, ctx)
                 return result.to_dict()

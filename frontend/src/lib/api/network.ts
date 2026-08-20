@@ -53,8 +53,18 @@ export const accessPointsApi = {
     api.patch(`/access-points/${apId}/lan-port`, data),
 
   // Actions
+  //
+  // These three take a destructive-action acknowledgement as a QUERY parameter
+  // and reject the call without it, so every one of them failed after the
+  // operator had already confirmed in the UI dialog. Note the backend spells it
+  // two different ways -- `confirm` for reboot (access_points.py) and
+  // `confirmed` for forget/upgrade -- which is exactly the sort of asymmetry a
+  // path+verb contract check cannot see.
+  //
+  // AccessPointsPage gates all three behind openConfirmDialog/handleConfirmAction,
+  // so the operator HAS acknowledged by the time these run.
   reboot: (apId: string) =>
-    api.post(`/access-points/${apId}/reboot`),
+    api.post(`/access-points/${apId}/reboot?confirm=true`),
 
   locate: (apId: string) =>
     api.post(`/access-points/${apId}/locate`),
@@ -63,10 +73,10 @@ export const accessPointsApi = {
     api.post(`/access-points/${apId}/adopt`),
 
   forget: (apId: string) =>
-    api.post(`/access-points/${apId}/forget`),
+    api.post(`/access-points/${apId}/forget?confirmed=true`),
 
   upgrade: (apId: string) =>
-    api.post(`/access-points/${apId}/upgrade`),
+    api.post(`/access-points/${apId}/upgrade?confirmed=true`),
 
   setLed: (apId: string, enabled: boolean) =>
     api.patch(`/access-points/${apId}/led`, { setting: enabled ? 1 : 0 }),  // body: LEDUpdateIn.setting
@@ -361,33 +371,6 @@ export const poeApi = {
 
   deleteSchedule: (id: string) =>
     api.delete(`/poe/schedules/${id}`),
-
-  // Power consumption analytics
-  getPowerHistory: (params?: {
-    site_id?: string;
-    device_id?: string;
-    start_date?: string;
-    end_date?: string;
-    interval?: 'minute' | 'hour' | 'day' | 'week';
-  }) => api.get('/poe/analytics/consumption', { params }),
-
-  // Get top power consumers
-  getTopConsumers: (siteId?: string, limit?: number) =>
-    api.get('/poe/analytics/top-consumers', { params: { site_id: siteId, limit } }),
-
-  // Site-wide PoE summary
-  getSiteSummary: (siteId: string) =>
-    api.get(`/poe/sites/${siteId}/summary`),
-
-  // PoE alerts
-  getAlerts: (params?: {
-    site_id?: string;
-    severity?: 'info' | 'warning' | 'critical';
-    acknowledged?: boolean;
-  }) => api.get('/poe/alerts', { params }),
-
-  acknowledgeAlert: (alertId: string) =>
-    api.post(`/poe/alerts/${alertId}/acknowledge`),
 };
 
 // Network API
@@ -447,16 +430,13 @@ export const networkApi = {
       api.get<NetworkClient>(`/network/clients/${id}`),
 
     update: (id: string, data: NetworkClientUpdate) =>
-      api.patch<NetworkClient>(`/network/clients/${id}`, data),
+      api.put<NetworkClient>(`/network/clients/${id}`, data),
 
     block: (id: string) =>
       api.post<NetworkClient>(`/network/clients/${id}/block`),
 
     unblock: (id: string) =>
       api.post<NetworkClient>(`/network/clients/${id}/unblock`),
-
-    getStats: (id: string) =>
-      api.get<{ rx_bytes: number; tx_bytes: number; history: Record<string, unknown>[] }>(`/network/clients/${id}/stats`),
   },
 
   // Network Devices (switches, APs, etc.)
@@ -466,9 +446,6 @@ export const networkApi = {
 
     get: (id: string) =>
       api.get<NetworkDevice>(`/network/devices/${id}`),
-
-    getStats: (id: string) =>
-      api.get(`/network/devices/${id}/stats`),
   },
 
   // Switch Ports

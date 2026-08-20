@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
 import { api } from './client';
-import type { Site, SiteHealth, CreateSiteRequest } from './types';
+import type { Site, CreateSiteRequest } from './types';
 
 export const sitesApi = {
   getAll: (params?: { page?: number; per_page?: number; search?: string; is_active?: boolean; organization_id?: string }) =>
@@ -38,26 +38,8 @@ export const sitesApiV2 = {
     api.post<Site>('/sites', data),
 
   update: (id: string, data: Partial<CreateSiteRequest>) =>
-    api.put<Site>(`/sites/${id}`, data),
+    api.patch<Site>(`/sites/${id}`, data),
 
   delete: (id: string, force?: boolean) =>
     api.delete(`/sites/${id}`, { params: { force } }),
-
-  getHealth: (id: string) =>
-    api.get<SiteHealth>(`/sites/${id}/health`),
-
-  getDevices: (id: string, params?: { status?: string; device_type?: string; page?: number; page_size?: number }) =>
-    api.get(`/sites/${id}/devices`, { params }),
-
-  addSubnet: (siteId: string, subnet: Record<string, unknown>) =>
-    api.post<Site>(`/sites/${siteId}/subnets`, subnet),
-
-  removeSubnet: (siteId: string, cidr: string) =>
-    api.delete(`/sites/${siteId}/subnets/${encodeURIComponent(cidr)}`),
-
-  triggerScan: (siteId: string, subnets?: string[]) =>
-    api.post(`/sites/${siteId}/scan`, null, { params: { subnets } }),
-
-  getCredentials: (siteId: string) =>
-    api.get(`/sites/${siteId}/credentials`),
 };

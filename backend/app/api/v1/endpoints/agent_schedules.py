@@ -257,8 +257,12 @@ async def _validate_schedule_agent(
     # the requested scan_type is one it actually supports. Empty
     # `scan_types` is treated as "agent hasn't reported yet" —
     # accept everything until first heartbeat.
-    caps = ag.capabilities or {}
+    # Same defence as the interactive-scan gate: a non-object capabilities
+    # blob must read as "hasn't reported yet", not 500 the schedule form.
+    caps = ag.capabilities if isinstance(ag.capabilities, dict) else {}
     supported = caps.get("scan_types") or []
+    if not isinstance(supported, list):
+        supported = []
     if supported and scan_type not in supported:
         raise HTTPException(
             status_code=400,

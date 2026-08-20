@@ -354,15 +354,18 @@ async def complete_setup(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Setup has already been finalized.",
         )
-    # Extract client IP (honor X-Forwarded-For if present) and user agent
-    # so complete_setup can write an audit log entry identifying the
-    # anonymous actor who ran the one-shot setup wizard.
-    forwarded = http_request.headers.get("x-forwarded-for")
-    client_ip = (
-        forwarded.split(",")[0].strip()
-        if forwarded
-        else (http_request.client.host if http_request.client else None)
-    )
+    # Client IP + user agent, so complete_setup can write an audit log entry
+    # identifying the anonymous actor who ran the one-shot setup wizard.
+    #
+    # From request.client only, NOT the X-Forwarded-For header. This endpoint is
+    # pre-auth by definition, so the header is fully attacker-supplied, and this
+    # particular audit row records who took ownership of a brand-new instance --
+    # the one record you least want the actor to be able to write themselves.
+    # uvicorn's ProxyHeadersMiddleware has already resolved XFF against the
+    # operator's FORWARDED_ALLOW_IPS allowlist by this point, which is the
+    # rule the rest of the codebase follows (provisioning_auth.py,
+    # agent_downloads.py, endpoints/auth.py).
+    client_ip = http_request.client.host if http_request.client else None
     user_agent = http_request.headers.get("user-agent")
     resp = await service.complete_setup(
         request,

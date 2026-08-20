@@ -8,6 +8,7 @@
  */
 
 import { api } from './client';
+import type { PendingChangeResponse } from './gatewayCommon';
 import type {
   HypervisorBackupJob,
   HypervisorCephStatus,
@@ -483,8 +484,16 @@ export const hypervisorApi = {
   renewAcmeCertificate: (cid: string, node: string) =>
     api.post(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/certificates/acme/renew`),
 
+  // `confirmed` is a REQUIRED body field: the endpoint 409s without it
+  // (api.py: `if not body.confirmed`), because replacing a node's TLS cert can
+  // lock the operator out of pveproxy. It was never sent, so the upload failed
+  // 100% of the time. The operator has already supplied the cert and key in the
+  // upload dialog and clicked Upload, so the acknowledgement is real.
   uploadCustomCertificate: (cid: string, node: string, data: { certificates: string; key: string; force?: boolean; restart?: boolean }) =>
-    api.post(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/certificates/custom`, data),
+    api.post(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/certificates/custom`, {
+      ...data,
+      confirmed: true,
+    }),
 
   deleteCustomCertificate: (cid: string, node: string) =>
     api.delete(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/certificates/custom`, {
@@ -561,8 +570,12 @@ export const hypervisorApi = {
   getClusterOptions: (cid: string) =>
     api.get(`/hypervisor/controllers/${enc(cid)}/cluster/options`),
 
+  // The query parameter is `max_entries` (api.py: `max_entries: int = Query(50,
+  // ge=1, le=5000)`). Sending `max` was ignored, so the Cluster Log tab asked
+  // for 200 entries and silently got the backend default of 50 -- and its own
+  // count badge reported 50 as if that were all there was.
   getClusterLog: (cid: string, max?: number) =>
-    api.get(`/hypervisor/controllers/${enc(cid)}/cluster/log`, { params: { max } }),
+    api.get(`/hypervisor/controllers/${enc(cid)}/cluster/log`, { params: { max_entries: max } }),
 
   getClusterConfigNodes: (cid: string) =>
     api.get(`/hypervisor/controllers/${enc(cid)}/cluster/config/nodes`),
@@ -623,16 +636,68 @@ export const hypervisorApi = {
       params: { threshold_hours: thresholdHours || 24 },
     }),
 
-  // ── Backup Restore ────────────────────────────────────────────────────
-  restoreBackup: (cid: string, data: { archive: string; vmid: number; node: string; vm_type: string; storage?: string; start_after_restore?: boolean; unique_mac?: boolean }) =>
-    api.post(`/hypervisor/controllers/${enc(cid)}/backup/restore`, data),
+  // ── Backup Restore / Prune (STAGED) ───────────────────────────────────
+  //
+  // These used to POST the direct hypervisor endpoints. Both are refused
+  // there: `_refuse_direct_catastrophic` is the FIRST statement of
+  // `HypervisorService.restore_backup` and `.prune_backups`, and the API maps
+  // its ValueError to HTTP 400. So every click on Restore, "Prune Now" or
+  // "Prune Backups" returned:
+  //
+  //   "backup restore (overwrites a guest) is catastrophic and cannot be
+  //    applied on the direct path; stage it via the staged adapter endpoints
+  //    (which run the pre-flight and require confirmed=true) to proceed."
+  //
+  // The guard is correct — restore overwrites a live guest, prune deletes
+  // archives permanently, and the direct path had neither the pre-flight nor
+  // the archive-volid allowlist. What was missing was the other half: the
+  // staged endpoints it names were never reachable from the UI, so the
+  // disaster-recovery action the product advertises could not be performed
+  // from the product.
+  //
+  // Staging returns a pending change; the operator reviews and applies it
+  // from the Pending Changes drawer, which supplies `confirmed: true` after
+  // an explicit acknowledgement.
+  stageBackupRestore: (
+    cid: string,
+    data: {
+      node: string;
+      vm_type: 'qemu' | 'lxc';
+      archive: string;
+      vmid: number;
+      storage?: string;
+      start?: boolean;
+      unique?: boolean;
+    },
+  ) =>
+    api.post<PendingChangeResponse>(
+      `/gateway-proxmox-backup/${enc(cid)}/changes/proxmox.backup.restore`,
+      { payload: data, target_id: String(data.vmid) },
+      { params: { operation: 'create' } },
+    ),
 
-  // ── Prune Backups ─────────────────────────────────────────────────────
   getPrunePreview: (cid: string, node: string, storage: string, vmid?: number) =>
     api.get(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/storage/${enc(storage)}/prune-preview`, { params: vmid ? { vmid } : undefined }),
 
-  pruneBackups: (cid: string, node: string, storage: string, data: { node: string; storage: string; keep_last?: number; keep_hourly?: number; keep_daily?: number; keep_weekly?: number; keep_monthly?: number; keep_yearly?: number; vmid?: number }) =>
-    api.post(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/storage/${enc(storage)}/prune`, data),
+  stageBackupPrune: (
+    cid: string,
+    data: {
+      node: string;
+      storage: string;
+      keep_last?: number;
+      keep_hourly?: number;
+      keep_daily?: number;
+      keep_weekly?: number;
+      keep_monthly?: number;
+      keep_yearly?: number;
+      vmid?: number;
+    },
+  ) =>
+    api.post<PendingChangeResponse>(
+      `/gateway-proxmox-backup/${enc(cid)}/changes/proxmox.backup.prune`,
+      { payload: data, target_id: `${data.node}:${data.storage}` },
+      { params: { operation: 'create' } },
+    ),
 
   // ── CloudInit ─────────────────────────────────────────────────────────
   getCloudInit: (cid: string, node: string, vmid: number) =>

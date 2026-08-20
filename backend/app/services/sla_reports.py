@@ -472,6 +472,15 @@ class SLAReportGenerator:
             enabled=data.get("enabled", True),
             next_run_at=data.get("next_run_at"),
         )
+        # Give it a first fire time.
+        #
+        # ``generate_scheduled`` selects on ``next_run_at <= now`` and skips
+        # NULL, and the API does not collect next_run_at -- so every schedule
+        # ever created was born NULL and could never come due. It appeared in
+        # the list, said "enabled", and generated nothing. ``_compute_next_run``
+        # already existed but only ran AFTER a report, which never happened.
+        if schedule.next_run_at is None:
+            schedule.next_run_at = self._compute_next_run(schedule, datetime.now(UTC))
         if created_by and hasattr(schedule, "created_by"):
             schedule.created_by = created_by
         self.db.add(schedule)
@@ -498,9 +507,17 @@ class SLAReportGenerator:
             "enabled",
             "next_run_at",
         }
+        retimed = any(k in {"frequency", "day_of_week", "day_of_month"} for k in data)
         for key, value in data.items():
             if key in allowed_fields:
                 setattr(schedule, key, value)
+
+        # Changing the cadence has to move the next fire time, or the edit is
+        # cosmetic. Also recompute when a schedule is re-enabled or has never
+        # had one -- the second case heals rows created before schedules got a
+        # first fire time at all.
+        if schedule.next_run_at is None or retimed or data.get("enabled") is True:
+            schedule.next_run_at = self._compute_next_run(schedule, datetime.now(UTC))
 
         await self.db.flush()
         return schedule

@@ -312,7 +312,7 @@ export default function NVRListPage() {
 
   const { data: streamStatsData } = useQuery({
     queryKey: ['stream-stats', { siteId: selectedSiteId }],
-    queryFn: async () => (await nvrApi.getStreamStats({ site_id: selectedSiteId || undefined })).data,
+    queryFn: async () => (await nvrApi.getStreamStats()).data,
     refetchInterval: 5_000,
   });
 

@@ -65,12 +65,39 @@ SEVERITY_NAMES = {
     7: "debug",
 }
 
-# RFC 3164 pattern
+# Hard cap on the bytes handed to the parsers. RFC 3164 sets 1024 as the
+# maximum a relay must handle and RFC 5426 puts the practical UDP ceiling at
+# 2048; 8 KB is generous for both while keeping the regexes bounded. A UDP
+# datagram can carry 65507 bytes, and nothing capped it before.
+_MAX_PARSE_BYTES = 8192
+
+# RFC 3164 pattern.
+#
+# The quantifiers are BOUNDED, and that is load-bearing rather than tidiness.
+# The unbounded form --
+#     (?P<timestamp>...)?\s*(?P<hostname>\S+)?\s+(?P<tag>[^:]+):
+# -- has three overlapping variable-length runs competing for the same
+# characters: \s* against \s+ over a run of spaces, and \S+ against [^:]+ over
+# the non-space tail. On input shaped like "<13>" + " "*n + "A"*n, which never
+# contains the colon the tag needs, the engine explores every split of both
+# runs before failing. Measured on the shipped pattern: 0.0023s at 204 bytes,
+# 0.018s at 404, 0.145s at 804 -- a clean cubic, x8 per doubling. A single
+# 4 KB datagram takes ~20 SECONDS.
+#
+# _process runs inline on the event loop (see datagram_received), so that is
+# not one slow packet: it is the whole collector -- every other syslog source,
+# every NetFlow packet, every HTTP request served by the same worker -- stalled
+# for twenty seconds by one unauthenticated UDP datagram from any allowlisted
+# source. The allowlist is the only thing standing in front of it.
+#
+# The bounds below are the real protocol limits, so they cost nothing on valid
+# input: RFC 3164 caps TAG at 32 characters, and a hostname at 255. Bounding
+# the runs removes the combinatorial explosion at its source.
 _RFC3164 = re.compile(
     r"^<(?P<pri>\d+)>"
-    r"(?P<timestamp>\w{3}\s+\d+\s+\d+:\d+:\d+)?\s*"
-    r"(?P<hostname>\S+)?\s+"
-    r"(?P<tag>[^:]+):\s*"
+    r"(?P<timestamp>\w{3}\s+\d+\s+\d+:\d+:\d+)?[ 	]{0,64}"
+    r"(?P<hostname>\S{1,255})?[ 	]{1,64}"
+    r"(?P<tag>[^:]{1,64}):[ 	]{0,64}"
     r"(?P<message>.*)$"
 )
 
@@ -99,7 +126,9 @@ class _SyslogProtocol(asyncio.DatagramProtocol):
     def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
         source_ip = addr[0]
         try:
-            line = data.decode("utf-8", errors="replace").strip()
+            # Truncate BEFORE decoding/parsing. Without this the parsers see
+            # the full datagram (up to 65507 bytes).
+            line = data[:_MAX_PARSE_BYTES].decode("utf-8", errors="replace").strip()
             asyncio.create_task(self._receiver._process(line, source_ip)).add_done_callback(
                 _task_error_handler
             )

@@ -20,7 +20,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -970,12 +970,27 @@ async def _push_vlan_to_controller(
     (nothing to sync).  On adapter failure the warning message is set so
     callers can surface it to the client without raising.
     """
-    if not net.controller_id:
+    ctrl_id = net.controller_id
+    # Resolve the controller from the site when it is not set directly. create_vlan
+    # never sets controller_id (VlanCreate has no such field), so without this the
+    # guard below short-circuited on EVERY create/update/delete and reported
+    # controller_synced=True having never opened an adapter. The WiFi twin below
+    # has always done this; the VLAN path simply never got it.
+    if not ctrl_id and net.site_id:
+        site_result = await session.execute(
+            select(Controller)
+            .join(Site, Controller.site_id == Site.id)
+            .where(Site.id == net.site_id)
+        )
+        resolved = site_result.scalar_one_or_none()
+        if resolved:
+            ctrl_id = resolved.id
+            net.controller_id = ctrl_id
+            await session.flush()
+    if not ctrl_id:
         return {"controller_synced": True, "controller_warning": None}
     try:
-        ctrl_result = await session.execute(
-            select(Controller).where(Controller.id == net.controller_id)
-        )
+        ctrl_result = await session.execute(select(Controller).where(Controller.id == ctrl_id))
         ctrl = ctrl_result.scalar_one_or_none()
         if not ctrl:
             return {"controller_synced": True, "controller_warning": None}
@@ -1326,6 +1341,22 @@ async def _push_wifi_to_controller(
                 config["broadcast"] = not wifi.hidden
                 config["security"] = _map_security_to_omada(wifi.security)
                 config["band"] = _map_band_to_omada(wifi.band)
+                # VLAN was sent on CREATE and silently dropped on UPDATE, so
+                # changing an existing SSID's VLAN saved the new id in FreeSDN,
+                # returned ``controller_synced: true``, and left the controller
+                # on the old VLAN. That is a segmentation failure, not a display
+                # one: an operator moving a guest SSID onto the guest VLAN got a
+                # success message while guests kept landing wherever they were
+                # before -- possibly the corporate VLAN.
+                #
+                # Clearing the VLAN has to be sent too. Omitting the keys when
+                # vlan_id is empty would make "remove the VLAN tag" the one edit
+                # that still silently does nothing.
+                if wifi.vlan_id:
+                    config["vlanEnable"] = True
+                    config["vlanId"] = wifi.vlan_id
+                else:
+                    config["vlanEnable"] = False
                 if wlan_group_id:
                     config["wlan_group_id"] = wlan_group_id
                 result = await adapter.update_ssid(wifi.external_id or "", config)
@@ -1428,6 +1459,22 @@ async def list_clients(
         q = q.where(DeviceClient.ssid.isnot(None))
     elif connection_type == "wired":
         q = q.where(DeviceClient.ssid.is_(None))
+    if blocked is not None:
+        # ``blocked`` was declared as a query param, used in the RESPONSE, and
+        # never applied to the query. Every sibling filter here is applied, so
+        # the Clients page's Blocked filter looked implemented and silently
+        # returned the whole list either way.
+        #
+        # The NULL case matters: ``blocked`` only exists in client_metadata
+        # once the block endpoint has written it, so a client that was never
+        # blocked has no key at all. ``is_(False)`` would miss all of them and
+        # "not blocked" would return almost nothing.
+        blocked_flag = DeviceClient.client_metadata["blocked"].as_boolean()
+        q = q.where(
+            blocked_flag.is_(True)
+            if blocked
+            else or_(blocked_flag.is_(False), blocked_flag.is_(None))
+        )
 
     total_q = select(func.count()).select_from(q.subquery())
     total = (await session.execute(total_q)).scalar() or 0

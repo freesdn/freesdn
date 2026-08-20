@@ -229,8 +229,11 @@ export const voipApi = {
   // client's /cgi-bin/api-sys_operation endpoint.
   rebootPhone: (phoneId: string) =>
     api.post(`/voip/phones/${phoneId}/reboot`),
+  // `confirm` is a QUERY parameter the endpoint requires (voip/api.py:619); the
+  // call failed after the operator confirmed in PhoneDetailPage's factory-reset
+  // dialog.
   factoryResetPhone: (phoneId: string) =>
-    api.post(`/voip/phones/${phoneId}/factory-reset`),
+    api.post(`/voip/phones/${phoneId}/factory-reset?confirm=true`),
 
   // Cheap live-state probe, designed for ~5 s polling. Returns
   // phone_state (available/in_call/ringing), per-line activity,
@@ -259,8 +262,11 @@ export const voipApi = {
     api.get('/voip/firmware/compliance', { params: { site_id: siteId } }),
 
   // Bulk Operations
+  // Same required `confirm` query flag. PhonesListPage now confirms before
+  // calling -- it did not before, and the backend's rejection was the only thing
+  // stopping a one-click fleet-wide reboot.
   bulkReboot: (phoneIds: string[]) =>
-    api.post('/voip/fleet/bulk/reboot', { phone_ids: phoneIds }),
+    api.post('/voip/fleet/bulk/reboot?confirm=true', { phone_ids: phoneIds }),
   bulkProvision: (phoneIds: string[]) =>
     api.post('/voip/fleet/bulk/provision', { phone_ids: phoneIds }),
   bulkFirmware: (phoneIds: string[], targetVersion: string, scheduleAt?: string) =>

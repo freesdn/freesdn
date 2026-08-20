@@ -106,9 +106,26 @@ class LoginRequest(BaseSchema):
 
 
 class RefreshTokenRequest(BaseSchema):
-    """Token refresh request."""
+    """Token refresh request.
 
-    refresh_token: str
+    ``refresh_token`` is OPTIONAL because the endpoint documents itself as
+    accepting "refresh token from JSON body OR httpOnly cookie" -- a browser
+    has the cookie and has nothing to put in the body.
+
+    It used to be required, and that made the whole refresh path unusable from
+    the SPA. The axios interceptor posts ``{}`` (client.ts) and the auth store
+    posts ``{}`` (authStore.ts), which is a PRESENT body that failed
+    validation, so every refresh returned 422. The interceptor treats that as
+    a failed refresh, clears auth state and drops the user on the login screen.
+
+    Net effect: the access token lives 3600s, and at expiry the very mechanism
+    meant to renew the session silently ended it instead. Sessions could never
+    outlive one token lifetime. Found by driving the live UI -- the suite never
+    posts an empty body, and ``curl`` with no body at all returns 200, so both
+    of the obvious checks pass.
+    """
+
+    refresh_token: str | None = None
 
 
 class PasswordChangeRequest(BaseSchema):

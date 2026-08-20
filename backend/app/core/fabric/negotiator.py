@@ -459,6 +459,15 @@ class Negotiator:
             }
 
         resolved = resolve_template(step.params, context)
+        # Thread the CONNECTION AUTHOR's
+        # per-user site grant. There is no live principal here -- a Connection
+        # fires on an event, not a request -- so the grant is resolved from the
+        # stored actor_id. Leaving it None (which the field documents as
+        # "unrestricted") let a site-limited author's Connection act on any
+        # site in the org, while the same operation via POST /fabric/invoke
+        # could not.
+        from app.core.site_access import resolve_actor_site_grants
+
         ctx = OperationContext(
             organization_id=conn.organization_id,
             params=resolved if isinstance(resolved, dict) else {},
@@ -468,6 +477,7 @@ class Negotiator:
             artifacts=self._executor._artifacts,
             input_artifact=input_artifact,
             logger=logger,
+            accessible_site_ids=await resolve_actor_site_grants(db, conn.actor_id),
         )
         result = await self._executor.execute(op, ctx)
         # Record into the templating context for downstream steps.

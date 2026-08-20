@@ -232,7 +232,9 @@ export const nvrApi = {
   update: (id: string, data: { name?: string; description?: string; ip_address?: string; port?: number; status?: string; channel_count?: number; username?: string; password?: string; stream_encryption_key?: string }) =>
     api.patch(`/cameras/nvrs/${e(id)}`, data),
   delete: (id: string) => api.delete(`/cameras/nvrs/${e(id)}`),
-  getStreamStats: (params?: { site_id?: string }) => api.get('/cameras/streams/stats', { params }),
+  // Stream stats are pool counters for this process, not per-site data;
+  // the endpoint never had a site dimension to filter on.
+  getStreamStats: () => api.get('/cameras/streams/stats'),
 
   getSystemInfo: (id: string) => api.get(`/cameras/nvrs/${e(id)}/system-info`),
   getNetwork: (id: string) => api.get(`/cameras/nvrs/${e(id)}/network`),

@@ -407,7 +407,16 @@ class OpenWRTAdapter(BaseAdapter):
         except Exception as exc:
             return AdapterResult.fail(str(exc))
 
-    async def get_device_info(self) -> AdapterResult:
+    async def get_device_info(self, device_id: str | None = None) -> AdapterResult:  # type: ignore[override]
+        """Board + system info for THIS device.
+
+        OpenWrt is a single-device adapter -- one adapter instance talks to one
+        router -- so there is nothing to select and ``device_id`` is ignored. It
+        is accepted anyway because BaseAdapter declares it: a vendor-neutral
+        caller does ``adapter.get_device_info(device.id)``, and refusing that
+        argument raised TypeError instead of returning information the adapter
+        had readily available.
+        """
         try:
             board = await self._api.get_board_info()
             info = await self._api.get_system_info()
@@ -1339,10 +1348,29 @@ class OpenWRTAdapter(BaseAdapter):
                 error_code="SERVICE_NOT_ALLOWED",
             )
         try:
-            await self._api.restart_service(service_name)
-            return AdapterResult.ok(message=f"Restarted {service_name}")
+            result = await self._api.restart_service(service_name)
         except Exception as exc:
             return AdapterResult.fail(str(exc))
+
+        # ``client.restart_service`` SWALLOWS ubus failures and returns a
+        # ``{"reload_skipped": True, "reason": ...}`` sentinel instead of
+        # raising. That is deliberate and right for the reload that follows a
+        # UCI write: the config was already committed, so a refused reload
+        # should not 503 a write that landed.
+        #
+        # It is wrong here. This method is the operator pressing "Restart" on a
+        # service, and there is no committed write behind it -- the restart IS
+        # the whole action. Inheriting the swallow meant ubus answering
+        # "Access denied" (the common case: OpenWrt 24.10+ needs an explicit
+        # ``rc.exec`` ACL grant, which the docs call out) produced HTTP 200
+        # "Restarted dnsmasq" while nothing had restarted.
+        if isinstance(result, dict) and result.get("reload_skipped"):
+            reason = result.get("reason") or "ubus refused the request"
+            return AdapterResult.fail(
+                f"Could not restart {service_name}: {reason}",
+                error_code="SERVICE_RESTART_REFUSED",
+            )
+        return AdapterResult.ok(message=f"Restarted {service_name}")
 
     async def start_service(self, service_name: str) -> AdapterResult:
         _ALLOWED_SERVICES = {
@@ -2073,24 +2101,37 @@ class OpenWRTAdapter(BaseAdapter):
     ) -> AdapterResult:
         try:
             target_section = None
-            if name:
+            # ``uuid`` was declared, accepted, and READ BY NOTHING. Deleting an
+            # alias by id therefore fell through to the failure below and told
+            # the caller "Either uuid or name required" -- while holding the
+            # uuid they had just supplied. Delete-by-id was impossible, and the
+            # error blamed the caller for the adapter's own gap.
+            #
+            # ``update_alias`` directly above resolves the same identifier with
+            # ``_find_uci_section``; use it here so the two agree on what an
+            # alias id means.
+            if uuid:
+                raw = await self._api.uci_get_all("firewall")
+                target_section = self._find_uci_section(raw, "ipset", uuid)
+            if not target_section and name:
                 raw = await self._api.uci_get_all("firewall")
                 for sec_name, section in self._uci_sections(raw, "ipset"):
                     if section.get("name", sec_name) == name:
                         target_section = sec_name
                         break
             if not target_section:
-                if name:
+                if name or uuid:
+                    # Idempotent delete: already gone is the desired state.
                     return AdapterResult.ok(
-                        data={"name": name, "already_absent": True},
-                        message=f"ipset '{name}' not found",
+                        data={"name": name, "uuid": uuid, "already_absent": True},
+                        message=f"ipset {name or uuid!r} not found",
                     )
                 return AdapterResult.fail("Either uuid or name required")
 
             await self._api.uci_delete("firewall", target_section)
             await self._api.uci_commit("firewall")
             await self._api.restart_service("firewall")
-            return AdapterResult.ok(message=f"ipset '{name}' deleted")
+            return AdapterResult.ok(message=f"ipset {name or uuid!r} deleted")
         except (AdapterConnectionError, AdapterAuthenticationError):
             raise
         except Exception as exc:

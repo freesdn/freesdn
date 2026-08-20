@@ -303,7 +303,7 @@ async def set_port_poe(
     adapter: Annotated[UniFiAdapter, Depends(get_adapter_for_controller)],
 ) -> UniFiWriteResponse:
     try:
-        detail = await adapter.set_port_poe(
+        detail = await adapter.set_port_poe_on_site(
             site,
             mac,
             port_idx,

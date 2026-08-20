@@ -27,7 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters import get_adapter
-from app.core.crypto import decrypt_credential, is_encrypted
+from app.core.crypto import decrypt_credential, encrypt_credential, is_encrypted
 from app.models.core import Controller, Site
 from app.models.vpn import SiteVPNConfiguration, VPNSource, VPNStatus, VPNType
 from app.schemas.vpn import (
@@ -314,8 +314,19 @@ class BrainVPNService:
         ).scalar_one_or_none()
 
         if not vpn_config:
+            # organization_id is required by every org-scoped read of this
+            # table (endpoints/vpn.py, vpn_cert_lifecycle.py); a row created
+            # without it is invisible to all of them.
+            _site = (
+                await self.db.execute(
+                    select(Site.organization_id).where(
+                        Site.id == target_site_id, Site.deleted_at.is_(None)
+                    )
+                )
+            ).scalar_one_or_none()
             vpn_config = SiteVPNConfiguration(
                 site_id=target_site_id,
+                organization_id=_site,
                 vpn_type=vpn_type,
                 enabled=True,
                 vpn_source=VPNSource.BRAIN_IMPORT,
@@ -725,7 +736,6 @@ class BrainVPNService:
         site_id: UUID,
         org_id: UUID,
         config_content: str,
-        description: str = "",
     ) -> SiteVPNConfiguration:
         """
         Import an OpenVPN .ovpn config for a site.
@@ -759,12 +769,37 @@ class BrainVPNService:
         ).scalar_one_or_none()
 
         if not vpn_config:
+            # See the note on the sibling construction above: without
+            # organization_id this row is invisible to every org-scoped read.
+            _site = (
+                await self.db.execute(
+                    select(Site.organization_id).where(
+                        Site.id == site_id, Site.deleted_at.is_(None)
+                    )
+                )
+            ).scalar_one_or_none()
             vpn_config = SiteVPNConfiguration(
                 site_id=site_id,
+                organization_id=_site,
                 vpn_type=VPNType.OPENVPN,
                 enabled=True,
                 vpn_source=VPNSource.MANUAL,
-                openvpn_config_content=config_content,
+                # Encrypted at rest, like every other write of this column.
+                #
+                # ``POST /vpn/connections`` stores it as
+                # ``encrypt_credential(data.openvpn_config_content)``; this
+                # site-import path stored the raw text. An .ovpn file is not
+                # config, it is a CREDENTIAL: it carries the CA cert, the client
+                # cert and, inline, the client private key. So importing a
+                # site's OpenVPN profile wrote a complete VPN identity into the
+                # database in plaintext, on a column the backup module already
+                # lists as per-field encrypted.
+                #
+                # It also split the two readers: adapter_overlay_vpn does
+                # ``_safe_decrypt(rec.openvpn_config_content)``, which quietly
+                # returned None for these rows, so "connect this site's OpenVPN
+                # overlay" handed the manager no config at all.
+                openvpn_config_content=encrypt_credential(config_content),
                 openvpn_protocol=meta["protocol"],
                 openvpn_mode="client",
                 vpn_endpoint=meta["remote"],
@@ -775,7 +810,7 @@ class BrainVPNService:
             self.session.add(vpn_config)
         else:
             vpn_config.vpn_type = VPNType.OPENVPN
-            vpn_config.openvpn_config_content = config_content
+            vpn_config.openvpn_config_content = encrypt_credential(config_content)
             vpn_config.openvpn_protocol = meta["protocol"]
             vpn_config.openvpn_mode = "client"
             vpn_config.vpn_endpoint = meta["remote"]

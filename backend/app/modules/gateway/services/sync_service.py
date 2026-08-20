@@ -38,6 +38,63 @@ from app.modules.gateway.models import (
 logger = logging.getLogger(__name__)
 
 
+def _normalize_vpn_tunnels(data: Any) -> list[dict[str, Any]]:
+    """Flatten a vendor's ``get_vpn_status`` payload into tunnel dicts.
+
+    This used to be ``data.get("tunnels", [])``, and NO supported brain
+    firewall returns a top-level ``tunnels`` list:
+
+      OPNsense  {"wireguard": {...}, "openvpn": {...}, "ipsec": ...}
+      pfSense   {"openvpn": ..., "wireguard": {"tunnels": [...], ...}, ...}
+      MikroTik  {"ipsec": {...}, "wireguard": {...}, "l2tp": ..., "pptp": ...}
+      OpenWrt   {"tunnels": {"wireguard": [...], "openvpn": [...]}}
+
+    So three vendors yielded ``[]`` and the Gateway VPN Tunnels table stayed
+    permanently empty, while OpenWrt yielded a DICT -- truthy, so it reached
+    ``_upsert_vpn_tunnels``, whose ``for t in tunnels`` then iterated the KEYS
+    and produced rows from the strings "wireguard" and "openvpn" before failing
+    into the except above. Either way nobody ever saw a tunnel.
+
+    Deliberately conservative: this walks the shapes those four adapters
+    actually return and tags each tunnel with the protocol it came from. It
+    does not try to guess at unknown shapes -- an unrecognised payload yields
+    nothing, which is the same as today rather than a table of garbage.
+    """
+    if not isinstance(data, dict):
+        return []
+
+    out: list[dict[str, Any]] = []
+
+    def _add(items: Any, vpn_type: str) -> None:
+        if isinstance(items, dict):
+            # A mapping of name -> tunnel, or a single tunnel object.
+            items = list(items.values()) if all(isinstance(v, dict) for v in items.values()) else []
+        if not isinstance(items, list):
+            return
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            out.append({**item, "type": item.get("type") or vpn_type})
+
+    # OpenWrt nests everything under "tunnels"; the others are top-level.
+    root = data.get("tunnels") if isinstance(data.get("tunnels"), dict) else data
+
+    for vpn_type in ("wireguard", "openvpn", "ipsec", "l2tp", "pptp"):
+        section = root.get(vpn_type)
+        if section is None:
+            continue
+        if isinstance(section, list):
+            _add(section, vpn_type)
+        elif isinstance(section, dict):
+            # pfSense: {"tunnels": [...]}; OPNsense: {"status": ..., "peers": [...]};
+            # MikroTik: {"interfaces": [...], "peers": [...]}.
+            for key in ("tunnels", "interfaces", "instances", "providers", "peers", "status"):
+                if key in section:
+                    _add(section[key], vpn_type)
+
+    return out
+
+
 class SyncService:
     """Refreshes imported-cache tables from brain devices."""
 
@@ -116,10 +173,8 @@ class SyncService:
                 # Sync VPN tunnels
                 try:
                     vpn_result = await adapter.get_vpn_status()
-                    tunnels = (
-                        vpn_result.data.get("tunnels", [])
-                        if (vpn_result.success and vpn_result.data)
-                        else []
+                    tunnels = _normalize_vpn_tunnels(
+                        vpn_result.data if (vpn_result.success and vpn_result.data) else None
                     )
                     if tunnels:
                         synced["vpn_tunnels"] = await self._upsert_vpn_tunnels(gw, tunnels)

@@ -661,15 +661,36 @@ async def enable_plugin(
     plugin = result.scalar_one_or_none()
     if not plugin:
         raise HTTPException(status_code=404, detail="Plugin not found")
-    # NOTE: serialise enable against concurrent install / upgrade /
-    # uninstall / disable for the same plugin via the loader's per-plugin
-    # lifecycle lock.
+    # Serialise the DB flip against a concurrent install / upgrade / uninstall
+    # of the same plugin via the loader's per-plugin lifecycle lock.
+    #
+    # STARTING the plugin happens AFTER the lock is released, and that placement
+    # is load-bearing rather than stylistic. lifecycle_lock is documented
+    # non-reentrant ("callers MUST NOT re-acquire it from within an already-held
+    # block"), and the start path re-acquires it three frames down:
+    #
+    #   _start_plugin_everywhere -> _start_plugin_for_org
+    #     -> plugin_loader.load_plugin  ->  async with await self._lock_for(...)
+    #
+    # so doing it inside the block deadlocked the request FOREVER -- no timeout,
+    # no error, the connection simply never returned. It fired whenever the
+    # plugin was absent from the loader's in-process _loaded map, which
+    # load_all_plugins guarantees for any globally-disabled plugin after a
+    # restart: i.e. the ordinary "disable a plugin, restart the API, re-enable
+    # it" flow.
+    #
+    # Every sibling endpoint already had this right -- install (:544), the
+    # install-retry path (:604) and upgrade (:809) all call
+    # _start_plugin_everywhere outside any lock and rely on the loader's own
+    # per-operation locking. Enable was the sole exception. Disable is safe
+    # because the stop_* methods take no lock.
+    start_scope: tuple[str, Any] | None = None
     async with plugin_loader.lifecycle_lock(plugin_id):
         if _is_global_scope(current_user):
             plugin.is_active = True
             plugin.status = "installed"
             await session.commit()
-            await _start_plugin_everywhere(plugin_id, session, request.app)
+            start_scope = ("global", None)
             effective_status = "installed"
             extra_metadata = {"scope": "global"}
         else:
@@ -687,17 +708,19 @@ async def enable_plugin(
                 is_enabled=True,
             )
             await session.commit()
-            await _start_plugin_for_org(
-                plugin_id,
-                current_user.organization_id,
-                session,
-                request.app,
-            )
+            start_scope = ("org", current_user.organization_id)
             effective_status = "installed"
             extra_metadata = {
                 "scope": "organization",
                 "organization_id": str(current_user.organization_id),
             }
+
+    # Lock released — safe to let the loader take it for itself.
+    if start_scope is not None:
+        if start_scope[0] == "global":
+            await _start_plugin_everywhere(plugin_id, session, request.app)
+        else:
+            await _start_plugin_for_org(plugin_id, start_scope[1], session, request.app)
     # audit lifecycle operation
     await _audit_plugin_lifecycle(
         session,

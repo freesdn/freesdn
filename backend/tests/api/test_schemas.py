@@ -196,29 +196,13 @@ class TestVlanIdRange:
         with pytest.raises(ValidationError):
             VlanConfig(native_vlan=4095)
 
-    def test_voice_vlan_range(self):
-        v = VlanConfig(voice_vlan=100)
-        assert v.voice_vlan == 100
-
-    def test_voice_vlan_rejects_zero(self):
-        with pytest.raises(ValidationError):
-            VlanConfig(voice_vlan=0)
-
-    def test_voice_vlan_rejects_above_4094(self):
-        with pytest.raises(ValidationError):
-            VlanConfig(voice_vlan=4095)
-
-    def test_guest_vlan_range(self):
-        v = VlanConfig(guest_vlan=200)
-        assert v.guest_vlan == 200
-
-    def test_guest_vlan_rejects_zero(self):
-        with pytest.raises(ValidationError):
-            VlanConfig(guest_vlan=0)
-
-    def test_guest_vlan_rejects_above_4094(self):
-        with pytest.raises(ValidationError):
-            VlanConfig(guest_vlan=4095)
+    # voice_vlan / guest_vlan range tests removed with the fields.
+    #
+    # They validated the SHAPE of input the port-save endpoint accepted,
+    # echoed back, and never pushed to any controller -- so a green suite
+    # was confirming that a dead control's numbers were in range. The
+    # fields are gone from VlanConfig; the dialog no longer offers them.
+    # Port PROFILES keep their own voice_vlan on a different path.
 
     def test_tagged_vlans_list(self):
         v = VlanConfig(tagged_vlans=[10, 20, 30])
@@ -229,5 +213,5 @@ class TestVlanIdRange:
         assert v.mode == "access"
         assert v.native_vlan == 1
         assert v.tagged_vlans == []
-        assert v.voice_vlan is None
-        assert v.guest_vlan is None
+        assert not hasattr(v, "voice_vlan"), "the dead voice_vlan field is back"
+        assert not hasattr(v, "guest_vlan"), "the dead guest_vlan field is back"

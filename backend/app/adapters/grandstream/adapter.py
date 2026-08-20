@@ -603,7 +603,14 @@ class GrandstreamAdapter(BaseAdapter):
                     f"safe allowlist: {unknown}"
                 )
             client = await self._get_or_connect(normalize_mac(mac))
-            await client.set_config(p_values)
+            if not await client.set_config(p_values):
+                # The request reached the phone and the phone answered -- the
+                # transport is healthy, the write was rejected. Record it as a
+                # success for circuit-breaker purposes so a bad P-value cannot
+                # trip the breaker and cut off reads to a perfectly reachable
+                # phone; the caller still gets a failed AdapterResult.
+                self._circuit.record_success()
+                return AdapterResult.fail(error=f"Phone {mac} refused the config write")
             self._circuit.record_success()
             return AdapterResult.ok(message=f"Config pushed to {mac}")
         except GrandstreamReadOnlyError as exc:
@@ -637,7 +644,11 @@ class GrandstreamAdapter(BaseAdapter):
                 client = await self._get_or_connect(normalize_mac(mac))
                 # Extract P-values from config and push
                 p_values = self._config_to_p_values(config)
-                await client.set_config(p_values)
+                if not await client.set_config(p_values):
+                    # An explicit refusal is an API rejection, not an
+                    # unreachable phone -- it must not degrade quietly to
+                    # "XML only". Raise so the outer handler fails the call.
+                    raise GrandstreamError(f"Phone {mac} refused the config write")
                 direct_push = True
             except (
                 GrandstreamConnectionError,
@@ -668,7 +679,8 @@ class GrandstreamAdapter(BaseAdapter):
         try:
             self._check_write_allowed(force, "reboot_phone")
             client = await self._get_or_connect(normalize_mac(mac))
-            await client.reboot()
+            if not await client.reboot():
+                return AdapterResult.fail(error=f"Reboot of {mac} could not be confirmed")
             return AdapterResult.ok(message=f"Reboot sent to {mac}")
         except GrandstreamReadOnlyError as exc:
             return AdapterResult.fail(error=str(exc))
@@ -738,13 +750,16 @@ class GrandstreamAdapter(BaseAdapter):
             # phone will re-fetch via its own HTTPS connection — we
             # cannot push the blob over the CGI interface.
             client = await self._get_or_connect(normalize_mac(mac))
-            await client.set_config(
+            if not await client.set_config(
                 {
                     "P192": firmware_url.rsplit("/", 1)[0],  # upgrade server (URL minus filename)
                     "P145": "1",  # firmware upgrade enabled
                     "P237": firmware_url.rsplit("/", 1)[0],  # provision server (same path)
                 }
-            )
+            ):
+                return AdapterResult.fail(
+                    error=f"Phone {mac} refused the firmware upgrade settings"
+                )
             return AdapterResult.ok(
                 data={"firmware_url": firmware_url, "sha256": actual},
                 message=f"Firmware upgrade scheduled on {mac}",
@@ -798,7 +813,8 @@ class GrandstreamAdapter(BaseAdapter):
                 ]
             )
             p_values = self._config_to_p_values(config)
-            await client.set_config(p_values)
+            if not await client.set_config(p_values):
+                return AdapterResult.fail(error=f"Phone {mac} refused the SIP account write")
 
             return AdapterResult.ok(
                 data={"xml": xml, "extension": extension},
@@ -819,7 +835,8 @@ class GrandstreamAdapter(BaseAdapter):
             p_values: dict[str, str] = {}
             for key in keys:
                 p_values.update(self._provisioner._line_key_to_p_values(key))
-            await client.set_config(p_values)
+            if not await client.set_config(p_values):
+                return AdapterResult.fail(error=f"Phone {mac} refused the line-key write")
             return AdapterResult.ok(message=f"{len(keys)} line keys configured on {mac}")
         except GrandstreamReadOnlyError as exc:
             return AdapterResult.fail(error=str(exc))
@@ -847,8 +864,7 @@ class GrandstreamAdapter(BaseAdapter):
             async with sem:
                 try:
                     client = await self._get_or_connect(normalize_mac(mac))
-                    await client.reboot()
-                    results[mac] = True
+                    results[mac] = await client.reboot()
                 except Exception as exc:
                     logger.warning("Reboot failed for %s: %s", mac, exc)
                     results[mac] = False

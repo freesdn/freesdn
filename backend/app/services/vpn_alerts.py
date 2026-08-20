@@ -16,7 +16,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.events import Event, EventPriority, get_event_bus
+from app.core.events import Event, EventCategory, EventPriority, get_event_bus
 from app.models.vpn import VPNConnectionRecord, VPNEvent, VPNEventSeverity
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ class VPNAlertService:
             await bus.publish(
                 Event(
                     event_type=event_type,
-                    category="vpn",
+                    category=EventCategory.VPN,
                     priority=EventPriority(priority)
                     if priority != "normal"
                     else EventPriority.NORMAL,

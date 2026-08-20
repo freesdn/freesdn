@@ -22,6 +22,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.crypto import decrypt_credential, is_encrypted
 from app.models.core import Site
 from app.models.vpn import SiteVPNConfiguration
 
@@ -227,9 +228,21 @@ class VPNCertLifecycleService:
         """Return PEM cert strings found in *cfg*."""
         pems: list[str] = []
 
-        # OpenVPN: look in openvpn_config_content
-        if cfg.openvpn_config_content:
-            pems.extend(self._extract_pem_from_ovpn(cfg.openvpn_config_content))
+        # OpenVPN: look in openvpn_config_content.
+        #
+        # The column is encrypted at rest (an .ovpn carries the client cert and
+        # its inline private key). This used to read it raw, which worked only
+        # because the site-import path stored plaintext -- the same
+        # inconsistency that made adapter_overlay_vpn's _safe_decrypt return
+        # None for these rows. Now that every write encrypts, this has to
+        # decrypt, or certificate-expiry monitoring silently finds no PEMs and
+        # nobody is warned before a site's VPN cert expires.
+        #
+        # Tolerant of a row written before the fix: _decrypted_config returns
+        # the value unchanged when it is not ciphertext.
+        raw_config = self._decrypted_config(cfg.openvpn_config_content)
+        if raw_config:
+            pems.extend(self._extract_pem_from_ovpn(raw_config))
 
         # IPsec / generic: if cert_metadata already has a "pem" key (e.g.
         # uploaded via API), parse that directly.
@@ -239,6 +252,19 @@ class VPNCertLifecycleService:
                 pems.extend(_PEM_BLOCK_RE.findall(existing_pem))
 
         return pems
+
+    @staticmethod
+    def _decrypted_config(value: str | None) -> str | None:
+        """Plaintext for an at-rest-encrypted config, tolerant of legacy rows."""
+        if not value:
+            return None
+        try:
+            if is_encrypted(value):
+                return decrypt_credential(value)
+        except Exception:
+            logger.warning("Could not decrypt a stored VPN config; skipping cert scan")
+            return None
+        return value
 
     def _extract_pem_from_ovpn(self, content: str) -> list[str]:
         """Extract PEM certificate blocks from OpenVPN config content.

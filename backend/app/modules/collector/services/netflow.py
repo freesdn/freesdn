@@ -57,18 +57,58 @@ def _parse_v5(data: bytes) -> list[dict[str, Any]]:
     for _ in range(min(count, 30)):  # cap at 30 per packet
         if offset + _NF5_RECORD.size > len(data):
             break
-        rec = _NF5_RECORD.unpack_from(data, offset)
+        # Destructured by NAME rather than indexed. The struct format above was
+        # always correct; the INDICES were not, and every one of them was wrong:
+        #
+        #   source_port read rec[10]  -> dstport      (ports swapped)
+        #   dest_port   read rec[11]  -> pad1         (hence ALWAYS 0)
+        #   protocol    read rec[14]  -> tos
+        #   bytes_in    read rec[8]   -> Last         (a sysUptime millisecond
+        #   packets     read rec[7]   -> First         count, not a byte count)
+        #
+        # So every flow record the collector has ever stored carries a byte
+        # count that is really a device uptime timestamp, a packet count that is
+        # really another one, a destination port of 0, and the ToS byte in the
+        # protocol column. Nothing errored -- the numbers were simply wrong, and
+        # they aggregate into every top-talkers, bandwidth and protocol view.
+        #
+        # Names make the next edit safe; a positional read of a 20-field tuple
+        # does not.
+        (
+            src_addr,
+            dst_addr,
+            _next_hop,
+            _snmp_in,
+            _snmp_out,
+            d_pkts,
+            d_octets,
+            _first,
+            _last,
+            src_port,
+            dst_port,
+            _pad1,
+            _tcp_flags,
+            protocol,
+            _tos,
+            _src_as,
+            _dst_as,
+            _src_mask,
+            _dst_mask,
+            _pad2,
+        ) = _NF5_RECORD.unpack_from(data, offset)
         offset += _NF5_RECORD.size
         flows.append(
             {
-                "source_ip": socket.inet_ntoa(rec[0].to_bytes(4, "big")),
-                "dest_ip": socket.inet_ntoa(rec[1].to_bytes(4, "big")),
-                "source_port": rec[10],
-                "dest_port": rec[11],
-                "protocol": rec[14],
-                "bytes_in": rec[8],
+                "source_ip": socket.inet_ntoa(src_addr.to_bytes(4, "big")),
+                "dest_ip": socket.inet_ntoa(dst_addr.to_bytes(4, "big")),
+                "source_port": src_port,
+                "dest_port": dst_port,
+                "protocol": protocol,
+                "bytes_in": d_octets,
+                # v5 is unidirectional -- one record describes one direction --
+                # so there is no reverse byte count to report.
                 "bytes_out": 0,
-                "packets": rec[7],
+                "packets": d_pkts,
             }
         )
     return flows
@@ -259,7 +299,7 @@ class NetFlowReceiver:
             if self._session_factory:
                 async with self._session_factory() as db:
                     await self._classifier.load_rules(db)
-                logger.info("DPI classifier loaded with %d rules", len(self._classifier._port_map))
+                logger.info("DPI classifier loaded with %d rules", self._classifier.rule_count())
         except Exception:
             logger.warning(
                 "DPI classifier failed to load — flows will not be classified", exc_info=True
@@ -342,7 +382,12 @@ class NetFlowReceiver:
             for f in flows:
                 proto = f.get("protocol", 0)
                 dest_port = f.get("dest_port") or 0
-                app_name, app_category = self._classifier.classify(proto, dest_port)
+                # Pass the exporter's org so its own classification rules
+                # apply. Without it only built-ins matched, and every rule an
+                # operator created through the API classified nothing.
+                app_name, app_category = self._classifier.classify(
+                    proto, dest_port, organization_id=org_id
+                )
                 if app_name:
                     f["app_name"] = app_name
                 if app_category:
@@ -408,6 +453,32 @@ class NetFlowReceiver:
             clean_batch = [
                 {k: v for k, v in f.items() if not k.startswith("_")} for f in batch.flows
             ]
+
+            # Normalise every row to the SAME key set.
+            #
+            # insert().values(list_of_dicts) derives its column list from the
+            # FIRST dict only, and flows are heterogeneous: app_name/app_category
+            # are attached solely to flows the DPI classifier actually matched.
+            # That produced two distinct failures, both verified against the real
+            # compile path:
+            #
+            #   first row classified, a later one not
+            #       -> CompileError, _persist_batch retries then DROPS the batch:
+            #          a whole minute of flows lost.
+            #   first row unclassified, a later one classified
+            #       -> compiles fine and SILENTLY DISCARDS the later row's
+            #          app_name/app_category. No error, just missing data.
+            #
+            # This mattered little while dest_port was always 0, because the
+            # classifier keys off the destination port and almost never matched.
+            # Now that the v5 parser reads the real port, classification succeeds
+            # routinely -- so fixing the parser WITHOUT this would have turned a
+            # rare failure into a constant one.
+            if clean_batch:
+                all_keys: set[str] = set()
+                for row in clean_batch:
+                    all_keys.update(row)
+                clean_batch = [{k: row.get(k) for k in all_keys} for row in clean_batch]
             async with self._session_factory() as db:
                 await db.execute(insert(FlowRecord).values(clean_batch))
                 await db.commit()

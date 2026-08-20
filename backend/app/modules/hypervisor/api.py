@@ -3490,7 +3490,28 @@ async def get_node_sensors(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-_RE_DISK = re.compile(r"^/dev/[a-z]+[0-9]*$")
+# Disk device paths accepted by the SMART endpoint.
+#
+# This was ``^/dev/[a-z]+[0-9]*$``, which cannot match an NVMe device: after
+# ``nvme`` (letters) comes ``0`` (digits) and then ``n`` (a letter again), and
+# the pattern allows no letters after the digits. So ``/dev/nvme0n1`` was
+# rejected with "Invalid disk path" and SMART health was unreachable for every
+# NVMe disk -- which on a modern Proxmox host is usually all of them. SATA
+# worked, so the feature looked fine on older hardware.
+#
+# Kept as a strict allowlist rather than widened to ``[a-z0-9]+``: this value
+# is a device path handed to the hypervisor, and an allowlist of the shapes
+# Linux actually uses is the whole point of the check.
+_RE_DISK = re.compile(
+    r"^/dev/(?:"
+    r"[sv]d[a-z]+"  # /dev/sda, /dev/vdb
+    r"|hd[a-z]+"  # /dev/hda (legacy IDE)
+    r"|xvd[a-z]+"  # /dev/xvda (Xen)
+    r"|nvme\d+n\d+"  # /dev/nvme0n1
+    r"|mmcblk\d+"  # /dev/mmcblk0
+    r"|sg\d+"  # /dev/sg0 (SCSI generic)
+    r")$"
+)
 
 
 @router.get(

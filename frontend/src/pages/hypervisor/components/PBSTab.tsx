@@ -129,7 +129,9 @@ export function PBSTab({ controllerId, nodes }: PBSTabProps) {
   // Prune mutation
   const pruneMut = useMutation({
     mutationFn: () =>
-      hypervisorApi.pruneBackups(controllerId, selectedNode, effectiveStorage, {
+      // STAGED -- see BackupAgeTab. The direct prune endpoint refuses this
+      // as catastrophic, so this button always returned HTTP 400.
+      hypervisorApi.stageBackupPrune(controllerId, {
         node: selectedNode,
         storage: effectiveStorage,
         keep_last: parseInt(pruneKeepLast) || undefined,
@@ -139,8 +141,9 @@ export function PBSTab({ controllerId, nodes }: PBSTabProps) {
         vmid: parsedVmid && !isNaN(parsedVmid) ? parsedVmid : undefined,
       }),
     onSuccess: () => {
-      toast({ title: t('PBSTab.toast.pruneStarted.title'), description: t('PBSTab.toast.pruneStarted.description') });
+      toast({ title: t('PBSTab.toast.pruneStaged.title'), description: t('PBSTab.toast.pruneStaged.description') });
       setPruneDialog(false);
+      queryClient.invalidateQueries({ queryKey: ['pending-changes'] });
       queryClient.invalidateQueries({ queryKey: ['hypervisor', 'prune-preview'] });
       queryClient.invalidateQueries({ queryKey: ['hypervisor', 'storage-content'] });
     },

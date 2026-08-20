@@ -562,10 +562,20 @@ function GroupDialog({
   };
 
   const createMut = useMutation({
-    mutationFn: () =>
-      existingGroup
-        ? camerasApi.updateGroup(existingGroup.id, { name, description: description || undefined, color, camera_ids: [...selectedIds] })
-        : camerasApi.createGroup({ name, description: description || undefined, color, camera_ids: [...selectedIds] }),
+    // Awaited rather than returned: the two branches produce AxiosResponse
+    // types whose request-body parameter differs (`name: string` on create vs
+    // `name?: string` on update), and react-query's MutationFunction cannot
+    // accept that union. The response was never used -- onSuccess only
+    // invalidates queries -- so both branches resolving to void is both the
+    // smaller change and the more honest signature.
+    mutationFn: async () => {
+      const body = { name, description: description || undefined, color, camera_ids: [...selectedIds] };
+      if (existingGroup) {
+        await camerasApi.updateGroup(existingGroup.id, body);
+      } else {
+        await camerasApi.createGroup(body);
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['camera-groups'] });
       if (existingGroup) qc.invalidateQueries({ queryKey: ['camera-group-detail', existingGroup.id] });

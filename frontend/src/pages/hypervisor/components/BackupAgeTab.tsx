@@ -70,16 +70,28 @@ export function BackupAgeTab({ controllerId, nodes }: BackupAgeTabProps) {
   const report: any = reportResp?.data || {};
   const vms: any[] = report?.vms || report?.guests || [];
 
-  // Derive summary counts
-  const totalVMs = vms.length;
-  const neverBacked = vms.filter((v: any) => v.status === 'never' || v.last_backup == null).length;
-  const stale = vms.filter((v: any) => v.status === 'stale').length;
-  const ok = vms.filter((v: any) => v.status === 'ok').length;
+  // This tab read `v.status` and `v.last_backup`. Neither field exists.
+  // BackupAgeReport carries `last_backup_time`, `age_hours` and `is_stale`,
+  // so `v.status === 'never'` was never true and `v.last_backup == null` was
+  // ALWAYS true -- every guest counted and rendered as "Never backed up",
+  // including ones backed up an hour ago. `stale` and `ok` were always 0 and
+  // the sort was a no-op.
+  const statusOf = (v: any): 'never' | 'stale' | 'ok' => {
+    if (v?.last_backup_time == null) return 'never';
+    return v?.is_stale ? 'stale' : 'ok';
+  };
+
+  // Prefer the server's own counts -- it computed them against the same
+  // threshold and does not depend on this page agreeing about field names.
+  const totalVMs = report?.total_vms ?? vms.length;
+  const neverBacked = report?.never_backed_up ?? vms.filter((v) => statusOf(v) === 'never').length;
+  const stale = report?.stale ?? vms.filter((v) => statusOf(v) === 'stale').length;
+  const ok = report?.backed_up ?? vms.filter((v) => statusOf(v) === 'ok').length;
 
   // Sort by age descending (worst first): never > stale > ok
   const sorted = [...vms].sort((a: any, b: any) => {
-    const statusOrder = (s: string) => s === 'never' ? 3 : s === 'stale' ? 2 : 1;
-    const orderDiff = statusOrder(b.status) - statusOrder(a.status);
+    const statusOrder = (s: string) => (s === 'never' ? 3 : s === 'stale' ? 2 : 1);
+    const orderDiff = statusOrder(statusOf(b)) - statusOrder(statusOf(a));
     if (orderDiff !== 0) return orderDiff;
     return (b.age_hours ?? Infinity) - (a.age_hours ?? Infinity);
   });
@@ -134,7 +146,12 @@ export function BackupAgeTab({ controllerId, nodes }: BackupAgeTabProps) {
     mutationFn: () => {
       if (!pruneNode || !pruneStorage) throw new Error(t('BackupAgeTab.errors.selectNodeStorage'));
       const toNum = (v: string) => v ? parseInt(v) : undefined;
-      return hypervisorApi.pruneBackups(controllerId, pruneNode, pruneStorage, {
+      // STAGED. The direct prune endpoint refuses this outright -- prune
+      // permanently deletes backup archives, and the direct path runs no
+      // pre-flight -- so "Prune Now" returned HTTP 400 on every click. The
+      // operator applies the staged change from the Pending Changes drawer,
+      // which carries the confirmed=true second factor.
+      return hypervisorApi.stageBackupPrune(controllerId, {
         node: pruneNode,
         storage: pruneStorage,
         keep_last: toNum(keepLast),
@@ -147,8 +164,12 @@ export function BackupAgeTab({ controllerId, nodes }: BackupAgeTabProps) {
       });
     },
     onSuccess: () => {
-      toast({ title: t('BackupAgeTab.toast.pruneCompleted') });
+      toast({
+        title: t('BackupAgeTab.toast.pruneStaged.title'),
+        description: t('BackupAgeTab.toast.pruneStaged.description'),
+      });
       setPrunePreview(null);
+      queryClient.invalidateQueries({ queryKey: ['pending-changes'] });
       queryClient.invalidateQueries({ queryKey: ['hypervisor', 'backup-age'] });
     },
     onError: (err: any) => {
@@ -238,17 +259,17 @@ export function BackupAgeTab({ controllerId, nodes }: BackupAgeTabProps) {
                     <TableCell className="font-medium text-sm">{vm.name || '-'}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{vm.node || '-'}</TableCell>
                     <TableCell className="text-xs">
-                      {vm.last_backup
-                        ? new Date(typeof vm.last_backup === 'number' ? vm.last_backup * 1000 : vm.last_backup).toLocaleString()
+                      {vm.last_backup_time
+                        ? new Date(typeof vm.last_backup_time === 'number' ? vm.last_backup_time * 1000 : vm.last_backup_time).toLocaleString()
                         : '-'}
                     </TableCell>
                     <TableCell className="text-xs tabular-nums">{formatAge(vm.age_hours, t)}</TableCell>
                     <TableCell>
-                      {vm.status === 'ok' ? (
+                      {statusOf(vm) === 'ok' ? (
                         <Badge variant="default" className="gap-1 text-xs">
                           <CheckCircle className="h-3 w-3" /> {t('BackupAgeTab.status.ok')}
                         </Badge>
-                      ) : vm.status === 'stale' ? (
+                      ) : statusOf(vm) === 'stale' ? (
                         <Badge variant="secondary" className="gap-1 text-xs bg-amber-500/10 text-amber-500 border-amber-500/20">
                           <AlertTriangle className="h-3 w-3" /> {t('BackupAgeTab.status.stale')}
                         </Badge>

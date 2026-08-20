@@ -42,8 +42,8 @@ from app.services.adapter_unifi_common import enforce_unifi_site_grant
 # reads this to dispatch by shape — same pattern as the MikroTik
 # per-domain services so the dispatcher is uniform across vendors.
 _APPLY: dict[tuple[str, str], str] = {
-    ("unifi.clients.block", "update"): "block_client",
-    ("unifi.clients.unblock", "update"): "unblock_client",
+    ("unifi.clients.block", "update"): "block_client_on_site",
+    ("unifi.clients.unblock", "update"): "unblock_client_on_site",
     # reconnect kicks the client so it re-associates — disruptive but
     # RECOVERABLE (the client just reconnects), so operation=update (not a
     # catastrophic delete) and it needs no confirmation. Same (site, mac,

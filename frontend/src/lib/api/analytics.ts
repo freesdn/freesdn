@@ -104,9 +104,4 @@ export const analyticsApi = {
   getAggregations: () =>
     api.get('/analytics/aggregations'),
 
-  getTimeRanges: () =>
-    api.get('/analytics/time-ranges'),
-
-  getGranularities: () =>
-    api.get('/analytics/granularities'),
 };

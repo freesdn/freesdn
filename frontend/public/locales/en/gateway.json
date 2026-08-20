@@ -128,7 +128,8 @@
       "rollback": "Rollback"
     },
     "distribution": {
-      "stepDetails": "Step Details · {{action}} {{resource}}"
+      "stepDetails": "Step Details · {{action}} {{resource}}",
+      "loadingSteps": "Loading step details..."
     },
     "driftColumns": {
       "severity": "Severity",

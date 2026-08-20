@@ -270,6 +270,18 @@ export default function GatewayPage() {
   });
   const distributions: DistributionResponse[] = distRes?.data?.items ?? [];
 
+  // The expanded row's step details come from the DETAIL endpoint, not the
+  // list. The list response has no step_results -- the field is optional on
+  // the TS type, so reading it off a list row type-checked and was undefined
+  // at runtime, and the expander rendered empty for every distribution. Which
+  // tier failed, on which device, with what error is the whole point of the
+  // log, and none of it was reachable.
+  const { data: distDetailRes, isLoading: distDetailLoading } = useQuery({
+    queryKey: ['gateway', 'distribution-detail', expandedDistId],
+    queryFn: () => gatewayOrchApi.getDistribution(expandedDistId as string),
+    enabled: !!expandedDistId,
+  });
+
   // ── Drift Events ─────────────────────────────────────────────────────
   const { data: driftRes, isLoading: driftLoading, isError: driftError } = useQuery({
     queryKey: ['gateway', 'drift-events', siteParam],
@@ -788,8 +800,21 @@ export default function GatewayPage() {
 
         {/* Expanded step details */}
         {expandedDistId && (() => {
-          const dist = distributions.find((d) => d.id === expandedDistId);
-          if (!dist?.step_results?.length) return null;
+          // Prefer the fetched detail; fall back to the list row purely for
+          // the header labels while the detail request is in flight.
+          const listRow = distributions.find((d) => d.id === expandedDistId);
+          const dist = distDetailRes?.data ?? listRow;
+          if (!dist) return null;
+          if (distDetailLoading && !dist.step_results?.length) {
+            return (
+              <Card className="border-dashed">
+                <CardContent className="px-4 py-3 text-sm text-muted-foreground">
+                  {t('GatewayPage.distribution.loadingSteps')}
+                </CardContent>
+              </Card>
+            );
+          }
+          if (!dist.step_results?.length) return null;
           return (
             <Card className="border-dashed">
               <CardHeader className="py-3 px-4">

@@ -28,6 +28,16 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.grandstream.constants import (
+    P_ACCOUNT_ACTIVE,
+    P_ACCOUNT_NAME,
+    P_AUTH_ID,
+    P_AUTH_PASSWORD,
+    P_DISPLAY_NAME,
+    P_SIP_USER_ID,
+)
+from app.core.crypto import decrypt_credential
+
 logger = logging.getLogger(__name__)
 
 # Default provisioning directory
@@ -219,12 +229,19 @@ class ProvisioningService:
         self,
         phone_id: UUID,
         write_file: bool = True,
+        force: bool = False,
     ) -> dict[str, Any]:
         """
         Generate provisioning config for a single phone.
 
         Merges template settings with phone-specific overrides to produce
         a vendor-appropriate XML config file.
+
+        ``force`` rewrites the config file even when the rendered XML is
+        byte-identical to the stored checksum. Without it, a re-provision
+        after the file was deleted, truncated or corrupted on disk is a
+        silent no-op: the checksum still matches, so nothing is written and
+        the phone keeps pulling whatever is (or is not) there.
 
         Returns:
             {xml: str, checksum: str, file_path: str | None}
@@ -279,7 +296,7 @@ class ProvisioningService:
         config_changed = phone.config_checksum != checksum
 
         file_path = None
-        if write_file and config_changed:
+        if write_file and (config_changed or force):
             file_path = await self._write_config_file(phone.mac_address, vendor, xml_content)
 
         # Update phone provisioning state
@@ -296,6 +313,7 @@ class ProvisioningService:
             "checksum": checksum,
             "file_path": file_path,
             "config_changed": config_changed,
+            "forced": bool(force and not config_changed),
             "phone_id": str(phone_id),
             "mac_address": phone.mac_address,
         }
@@ -521,13 +539,42 @@ class ProvisioningService:
             for key, val in (template.raw_overrides or {}).items():
                 p_values[key] = str(val)
 
-        # Phone-specific SIP account (from extension)
+        # Phone-specific SIP account (from extension).
+        #
+        # The P-value map is authoritative in adapters/grandstream/constants.py.
+        # This block previously carried comments shifted one row against it, and
+        # the mislabelling had a real consequence: P34 is the Authenticate
+        # PASSWORD, not the Auth ID, and it was being set to the extension
+        # NUMBER. A factory phone pulling cfg{mac}.xml therefore registered with
+        # its own extension as the password and was rejected by the PBX. P271
+        # (account active) was never emitted at all, so the account stayed off,
+        # and the display name landed in P270 (Account Name) instead of P3.
         if phone.extension:
             ext = phone.extension
-            p_values["P35"] = ext.extension_number  # Account Name
-            p_values["P36"] = ext.extension_number  # SIP User ID
-            p_values["P34"] = ext.extension_number  # Auth ID
-            p_values["P270"] = ext.display_name or ext.extension_number  # Display Name
+            p_values[P_SIP_USER_ID] = ext.extension_number  # P35
+            p_values[P_AUTH_ID] = ext.extension_number  # P36
+            p_values[P_DISPLAY_NAME] = ext.display_name or ext.extension_number  # P3
+            p_values[P_ACCOUNT_NAME] = ext.display_name or ext.extension_number  # P270
+            p_values[P_ACCOUNT_ACTIVE] = "1"  # P271
+
+            # Auth password. Omit rather than emit a wrong credential: a phone
+            # with no P34 fails to register visibly, whereas the old behaviour
+            # sent the extension number and looked like a PBX-side auth fault.
+            if getattr(phone, "sip_password_enc", None):
+                try:
+                    p_values[P_AUTH_PASSWORD] = decrypt_credential(phone.sip_password_enc)  # P34
+                except ValueError:
+                    logger.error(
+                        "Phone %s: cannot decrypt sip_password_enc; omitting P34 from "
+                        "provisioning config so the failure is visible at registration",
+                        phone.id,
+                    )
+            else:
+                logger.warning(
+                    "Phone %s has no stored SIP password; provisioning config omits P34 "
+                    "and the phone will not register until one is set",
+                    phone.id,
+                )
 
         # Phone-specific overrides from settings JSONB
         phone_overrides = phone.settings.get("p_values", {})

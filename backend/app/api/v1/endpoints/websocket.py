@@ -558,6 +558,36 @@ async def authenticate_websocket(
             logger.warning("WebSocket auth: No 'sub' claim in token")
             return None
 
+        # A NARROWED token must not open the org-wide realtime socket.
+        #
+        # /cameras/{id}/stream-token mints a deliberately tiny credential: it
+        # lives ~60 seconds and carries scope="stream" plus the single camera_id
+        # it was issued for, precisely so it can be put in a URL query string
+        # where it will be logged by proxies and land in browser history. The
+        # camera endpoints honour that (cameras/api.py: a query token must be
+        # scope="stream", and its camera_id must equal the camera being
+        # requested).
+        #
+        # This endpoint read the claim -- the line below used to be the only
+        # mention of "scope" in the file -- and then never compared it to
+        # anything. So that one-camera, one-minute token also opened the general
+        # realtime WebSocket and subscribed to the caller's whole organization:
+        # device status, alerts, VPN, discovery, every event family the socket
+        # carries. A credential designed to be the narrowest in the product was
+        # silently the widest.
+        #
+        # Refuse ANY token carrying a narrowing scope, not just "stream": a
+        # future scope would otherwise inherit the same hole by default.
+        token_scope = payload.get("scope")
+        if token_scope:
+            logger.warning(
+                "WebSocket auth: refusing scope=%r token for user %s — the realtime "
+                "socket requires a full access token",
+                token_scope,
+                user_id,
+            )
+            return None
+
         return {
             "user_id": user_id,
             "organization_id": payload.get("org_id"),
@@ -565,7 +595,8 @@ async def authenticate_websocket(
             "permissions": payload.get("permissions", []),
             "token_version": payload.get("tv", 0),
             "access_jti": payload.get("jti"),  # per-device revocation check
-            "scope": payload.get("scope"),  # query-token stream-scope check
+            # Always None past the guard above; kept so callers can log it.
+            "scope": token_scope,
         }
 
     except Exception as e:

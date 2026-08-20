@@ -172,8 +172,13 @@ class FirewallService:
         site_id: UUID | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[Any]:
-        """List firewall rules."""
+    ) -> tuple[list[Any], int]:
+        """List firewall rules.
+
+        Returns ``(rows, total)``. The annotation used to say ``list[Any]``
+        while the body returned a 2-tuple, which is how ``reorder_rules`` below
+        ended up handing an endpoint something it could not iterate.
+        """
         from app.modules.firewall.models import FirewallRule
 
         dev_sq = self._devices_for_org(site_id=site_id)
@@ -249,7 +254,7 @@ class FirewallService:
         return True
 
     async def reorder_rules(self, device_id: UUID, rule_ids: list[UUID]) -> list[Any]:
-        """Reorder firewall rules."""
+        """Reorder firewall rules, returning the rules in their new order."""
         from app.modules.firewall.models import FirewallRule
 
         await self._verify_device_org(device_id)
@@ -268,7 +273,23 @@ class FirewallService:
                 rule.rule_order = order
 
         await self.db.commit()
-        return await self.list_rules(device_id=device_id)
+        # ``list_rules`` returns ``(rows, total)``. This returned it whole, and
+        # the endpoint does ``[FirewallRuleResponse.model_validate(r) for r in
+        # rules]`` -- iterating a 2-tuple yields the LIST and then the int, so
+        # validating a list against a rule model raised and every single call
+        # to POST /firewall/rules/reorder came back 500.
+        #
+        # The rule_order writes above had already been committed by then, so
+        # the reorder actually took effect and only the response failed. The
+        # UI treats the 500 as a failure and refetches, showing the new order
+        # under an error toast -- which is exactly the shape that gets a bug
+        # written off as cosmetic.
+        #
+        # Also bump the page cap: the default limit is 100, and reordering is
+        # the one operation where returning a truncated list would tell the
+        # operator their rules had been reordered into a shorter set.
+        rows, _total = await self.list_rules(device_id=device_id, limit=max(len(rule_ids), 100))
+        return rows
 
     # -------------------------------------------------------------------------
     # NAT Rules

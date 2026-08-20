@@ -1845,7 +1845,6 @@ async def live_mse_ws(
 @router.get("/streams/stats", response_model=StreamStatsResponse)
 async def get_stream_stats(
     current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.view"))],
-    site_id: UUID | None = Query(None),
 ) -> Any:
     """
     Return current MJPEG stream pool statistics.
@@ -1961,7 +1960,30 @@ async def control_ptz(
             organization_id=org_scope_or_platform(current_user),
         )
         adapter_id = (result.get("adapter") or result.get("vendor") or "").lower() or "onvif"
-        # Audit log — PTZ control
+
+        # The adapters DO report refusal faithfully -- Hikvision maps a non-1
+        # ISAPI <statusCode> to AdapterResult.fail, ONVIF maps a SOAP fault the
+        # same way -- and PTZService.control_ptz passes that through as
+        # ``success``. This endpoint used to discard it: it hardcoded
+        # ``outcome = "ok"`` and returned {"status": "ok", **result}, and
+        # PTZActionResponse declares only ``status``, so pydantic stripped
+        # ``success`` before the client ever saw it.
+        #
+        # The result was that a camera which refused to move -- a non-PTZ
+        # channel, an ISAPI account without PTZ rights, an ONVIF device with no
+        # PTZ service -- returned HTTP 200 {"status": "ok"}. The React mutation
+        # resolved, so its onError toast never fired and the operator got no
+        # feedback at all, while the audit row recorded an UPDATE and the event
+        # bus published ptz_<action> with outcome=ok at HIGH priority. Any
+        # Fabric automation watching for camera movement fired on movement that
+        # never happened.
+        #
+        # Default to True: adapters that do not report the flag are unchanged.
+        succeeded = result.get("success", True) is not False
+        outcome = "ok" if succeeded else "failed"
+
+        # Audit log — PTZ control. Recorded either way, because an attempted
+        # move is what an investigator needs to see, but tagged honestly.
         audit = AuditService(db=ptz_service.db)
         await audit.log(
             action=AuditAction.UPDATE,
@@ -1969,10 +1991,27 @@ async def control_ptz(
             resource_id=camera_id,
             organization_id=org_scope_or_platform(current_user),
             actor_id=current_user.id,
-            extra_metadata={"ptz_action": action, "speed": speed, "preset": preset},
+            extra_metadata={
+                "ptz_action": action,
+                "speed": speed,
+                "preset": preset,
+                "succeeded": succeeded,
+            },
             tags=["ptz"],
         )
-        outcome = "ok"
+
+        if not succeeded:
+            # 502, matching how the rest of the product reports an upstream
+            # device refusing a write (see the client block/unblock path).
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "The camera refused the PTZ command; it did not move. "
+                    "Check that this channel supports PTZ and that the "
+                    "credentials have PTZ permission."
+                ),
+            )
+
         return {"status": "ok", **result}
 
     except CameraNotFoundError:
@@ -2039,6 +2078,7 @@ async def search_recordings(
         limit=limit,
         organization_id=org_scope_or_platform(current_user),
         accessible_site_ids=_sites,
+        site_id=site_id,
     )
     return {"items": recordings, "total": total}
 
@@ -7023,7 +7063,58 @@ async def set_thermal_threshold(
         raise HTTPException(status_code=404, detail="Camera not found")
     assert_can_access_site(current_user, camera.site_id, detail="Camera not found")
 
-    # Store config in camera settings
+    # PUSH IT TO THE CAMERA FIRST.
+    #
+    # This endpoint used to store the values in ``camera.settings``, write an
+    # audit row, and hand the operator's own numbers straight back as if they
+    # had been applied. Nothing reached the device. So an operator setting a
+    # 60°C fire-detection threshold got a green save, a matching audit entry
+    # and a UI that read back exactly what they typed -- while the camera kept
+    # whatever thresholds it shipped with and no alarm would ever fire.
+    #
+    # ``HikvisionAdapter.set_thermal_threshold`` has always existed and writes
+    # the ISAPI thermometry rule. The GET beside this one already talks to the
+    # camera (``adapter.get_thermal_capabilities``); only the write did not.
+    adapter, channel = await _get_adapter_for_camera(camera, session)
+    try:
+        import inspect as _inspect
+
+        kwargs: dict[str, Any] = {
+            "channel": channel,
+            "min_temp": body.min_temp,
+            "max_temp": body.max_temp,
+        }
+        # Thermal threshold is a config write, so Hikvision gates it behind
+        # ADAPTER_READ_ONLY. This endpoint is already behind cameras.manage and
+        # an explicit operator action, which is the same standing the other
+        # direct camera writes in this module have.
+        try:
+            if "force" in _inspect.signature(adapter.set_thermal_threshold).parameters:
+                kwargs["force"] = True
+        except (TypeError, ValueError):
+            pass
+        result = await adapter.set_thermal_threshold(**kwargs)
+    except AttributeError:
+        raise HTTPException(
+            status_code=501,
+            detail="This camera's adapter does not support thermal thresholds",
+        )
+    except Exception:
+        logger.exception("Failed to set thermal threshold for camera %s", camera_id)
+        raise HTTPException(status_code=502, detail="Camera did not accept the threshold")
+    finally:
+        await adapter.disconnect()
+
+    # A refused write comes back as AdapterResult(success=False) rather than
+    # raising, so it has to be checked explicitly or it reads as success.
+    if getattr(result, "success", True) is False:
+        raise HTTPException(
+            status_code=502,
+            detail=getattr(result, "error", None) or "Camera refused the threshold",
+        )
+
+    # Store config in camera settings only after the camera accepted it, so the
+    # UI cannot show a threshold the device is not enforcing.
     if not camera.settings:
         camera.settings = {}
     camera.settings["thermal_threshold"] = {

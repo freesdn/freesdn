@@ -45,6 +45,10 @@ class EventCategory(StrEnum):
     SECURITY = "security"
     USER = "user"
     TASK = "task"
+    # VPN alerting published Event(category="vpn") against this enum for a long
+    # time. There was no such member, so the field held a raw str and every
+    # ``category.value`` downstream raised.
+    VPN = "vpn"
 
 
 @dataclass
@@ -86,6 +90,41 @@ class Event:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     sequence: int = 0
+
+    def __post_init__(self) -> None:
+        """Coerce a string ``category`` to the enum.
+
+        ``Event`` is a plain dataclass, so ``category`` is ANNOTATED
+        ``EventCategory`` and never checked. ``Event(category="vpn")`` therefore
+        stored the raw string, and every ``self.category.value`` downstream --
+        ``to_dict()`` and the Redis channel name in ``publish()`` -- raised
+        AttributeError on it.
+
+        The failure was shaped to hide: local in-process dispatch happens
+        BEFORE the Redis branch, so the publishing worker's own subscribers saw
+        the event and everything looked fine in a single-process dev run. In a
+        real deployment -- several uvicorn workers plus Celery -- the publish
+        raised on the channel name, VPN events never reached Redis, and no
+        other process ever saw one. ``VPNAlertService._publish`` wraps the call
+        in ``except Exception: logger.debug(...)``, so there was nothing to
+        find in the logs either.
+
+        An unrecognised category falls back to SYSTEM with a warning rather
+        than raising: an event that arrives under the wrong category is
+        recoverable, and one that is never published is not.
+        """
+        if isinstance(self.category, EventCategory):
+            return
+        raw = self.category
+        try:
+            self.category = EventCategory(raw)
+        except ValueError:
+            logger.warning(
+                "Event %r built with unknown category %r; publishing as 'system'",
+                self.event_type,
+                raw,
+            )
+            self.category = EventCategory.SYSTEM
 
     def to_dict(self) -> dict[str, Any]:
         return {

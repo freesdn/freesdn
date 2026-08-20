@@ -112,6 +112,11 @@ async def test_login_json_body_has_no_raw_tokens() -> None:
     login_data = LoginRequest(login="test@example.com", password="hunter2")
 
     mock_result = MagicMock()
+    # The login identifier lookup reads .scalars().all() -- it must resolve an
+    # ambiguous identifier deterministically rather than raise, so it can no
+    # longer use scalar_one_or_none. Kept alongside for any other query this
+    # endpoint makes.
+    mock_result.scalars.return_value.all.return_value = [fake_user]
     mock_result.scalar_one_or_none.return_value = fake_user
     mock_session = AsyncMock()
     mock_session.execute.return_value = mock_result

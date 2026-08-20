@@ -279,6 +279,27 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         "collector.config",
         "collector.flows.read",
         "collector.logs.read",
+        # Fabric Operation permissions. These are declared by
+        # app/modules/*/module.py as Operation(permission=...) and were
+        # never wired into this map, so the whole Fabric surface for five
+        # modules answered "permission denied" to every role except
+        # super_admin. Same defect the network HTTP surface had; the guard
+        # that was added for it (tests/security/test_rbac_permission_parity)
+        # only scanned require_permissions() call sites, not Operation
+        # declarations, so this half went unnoticed. It now scans both.
+        "hypervisor.*",
+        "network.*",
+        "storage.*",
+        "backup.*",
+        "ai.*",
+        "automation.*",
+        # NOTE: three-part codes must be listed explicitly -- the dot
+        # wildcard above only expands two-part codes (see has_permission,
+        # `if len(dot_parts) == 2`), which is why collector.*.read has
+        # always been spelled out in full rather than as "collector.*".
+        "network.vlan.manage",
+        "network.wifi.manage",
+        "automation.rules.read",
     ],
     "org_admin": [
         # Core resources
@@ -328,6 +349,27 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         "collector.config",
         "collector.flows.read",
         "collector.logs.read",
+        # Fabric Operation permissions. These are declared by
+        # app/modules/*/module.py as Operation(permission=...) and were
+        # never wired into this map, so the whole Fabric surface for five
+        # modules answered "permission denied" to every role except
+        # super_admin. Same defect the network HTTP surface had; the guard
+        # that was added for it (tests/security/test_rbac_permission_parity)
+        # only scanned require_permissions() call sites, not Operation
+        # declarations, so this half went unnoticed. It now scans both.
+        "hypervisor.*",
+        "network.*",
+        "storage.*",
+        "backup.*",
+        "ai.*",
+        "automation.*",
+        # NOTE: three-part codes must be listed explicitly -- the dot
+        # wildcard above only expands two-part codes (see has_permission,
+        # `if len(dot_parts) == 2`), which is why collector.*.read has
+        # always been spelled out in full rather than as "collector.*".
+        "network.vlan.manage",
+        "network.wifi.manage",
+        "automation.rules.read",
     ],
     "site_admin": [
         # Core resources
@@ -385,6 +427,25 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         # Collector / Observability (read-only)
         "collector.flows.read",
         "collector.logs.read",
+        # Fabric Operation permissions. These are declared by
+        # app/modules/*/module.py as Operation(permission=...) and were
+        # never wired into this map, so the whole Fabric surface for five
+        # modules answered "permission denied" to every role except
+        # super_admin. Same defect the network HTTP surface had; the guard
+        # that was added for it (tests/security/test_rbac_permission_parity)
+        # only scanned require_permissions() call sites, not Operation
+        # declarations, so this half went unnoticed. It now scans both.
+        "hypervisor.*",
+        "network.*",
+        "storage.view",
+        "storage.write",
+        "backup.view",
+        "ai.chat",
+        # Three-part codes: the dot wildcard only expands two-part
+        # codes (has_permission, `if len(dot_parts) == 2`).
+        "network.vlan.manage",
+        "network.wifi.manage",
+        "automation.rules.read",
     ],
     "operator": [
         # Core resources
@@ -429,6 +490,20 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         # Collector / Observability (read-only)
         "collector.flows.read",
         "collector.logs.read",
+        # Fabric Operation permissions. These are declared by
+        # app/modules/*/module.py as Operation(permission=...) and were
+        # never wired into this map, so the whole Fabric surface for five
+        # modules answered "permission denied" to every role except
+        # super_admin. Same defect the network HTTP surface had; the guard
+        # that was added for it (tests/security/test_rbac_permission_parity)
+        # only scanned require_permissions() call sites, not Operation
+        # declarations, so this half went unnoticed. It now scans both.
+        "hypervisor.view",
+        "network.view",
+        "storage.view",
+        "backup.view",
+        "ai.chat",
+        "automation.rules.read",
     ],
     "viewer": [
         # Core resources
@@ -460,6 +535,18 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         "voip.view_calls",
         "access.view",
         "access.view_events",
+        # Fabric Operation permissions. These are declared by
+        # app/modules/*/module.py as Operation(permission=...) and were
+        # never wired into this map, so the whole Fabric surface for five
+        # modules answered "permission denied" to every role except
+        # super_admin. Same defect the network HTTP surface had; the guard
+        # that was added for it (tests/security/test_rbac_permission_parity)
+        # only scanned require_permissions() call sites, not Operation
+        # declarations, so this half went unnoticed. It now scans both.
+        "hypervisor.view",
+        "network.view",
+        "storage.view",
+        "backup.view",
     ],
     "guest": [
         "site:read",
@@ -762,6 +849,30 @@ def _is_admin_or_delete_permission(permission: str) -> bool:
 # ===========================================
 
 
+def _permission_granted_by(permission: str, granted: list[str]) -> bool:
+    """Does ``granted`` cover ``permission``? Same rules as ``has_permission``.
+
+    Role permissions are written with wildcards -- ``network:*``,
+    ``organization:*``, and ``*`` for super_admin -- so a plain set
+    intersection would drop an API-key scope of ``network:read`` from an admin
+    whose role list holds ``network:*`` but not that literal string. That would
+    break working keys, which is a worse outcome than the bug being fixed.
+
+    Kept as a module function rather than reusing CurrentUser.has_permission
+    because the intersection happens while BUILDING the principal, before one
+    exists.
+    """
+    if "*" in granted or permission in granted:
+        return True
+    colon = permission.split(":")
+    if len(colon) == 2 and f"{colon[0]}:*" in granted:
+        return True
+    dot = permission.split(".")
+    if len(dot) == 2 and f"{dot[0]}.*" in granted:
+        return True
+    return False
+
+
 async def _load_user_permissions(user: User) -> list[str]:
     """
     Load permissions for a user based on their role.
@@ -902,11 +1013,37 @@ async def get_current_user_optional(
                         # principal scoped so has_permission enforces it even for a
                         # super_admin owner.
                         is_scoped = bool(db_key.scopes)
-                        permissions = (
-                            list(db_key.scopes)
-                            if db_key.scopes
-                            else await _load_user_permissions(user)
-                        )
+                        # A key's scopes are a ceiling, NOT a grant.
+                        #
+                        # ``list(db_key.scopes)`` was used verbatim, so a key
+                        # minted while its owner was an org_admin kept those
+                        # permissions after the owner was demoted to viewer.
+                        # Demoting bumps ``token_version``, which kills the
+                        # user's JWTs -- and does nothing to their API keys. So
+                        # the documented way to strip someone's access left
+                        # their long-lived credential holding the old role's
+                        # powers indefinitely.
+                        #
+                        # The ceiling is now the INTERSECTION with whatever the
+                        # owner can do today. Self-healing: it applies to keys
+                        # already in the database, with no migration and no
+                        # revocation sweep.
+                        #
+                        # Deliberately not auto-revoking on demote instead:
+                        # deleting somebody's credential as a side effect of a
+                        # role edit is a surprise, and a key that quietly stops
+                        # authorising what its owner can no longer do is both
+                        # safer and easier to reason about. The permission load
+                        # is a dict lookup, so this costs nothing per request.
+                        user_permissions = await _load_user_permissions(user)
+                        if db_key.scopes:
+                            permissions = [
+                                s
+                                for s in db_key.scopes
+                                if _permission_granted_by(s, user_permissions)
+                            ]
+                        else:
+                            permissions = user_permissions
                         site_accesses = (
                             user.site_access
                             if hasattr(user, "site_access") and user.site_access

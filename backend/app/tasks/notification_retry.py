@@ -265,6 +265,39 @@ async def _do_retry(
             runtime = service._providers.get(ch_enum)
 
         if runtime is None:
+            # THE RETRY QUEUE NEVER RETRIED ANYTHING.
+            #
+            # ``NotificationService._providers`` is an INSTANCE attribute,
+            # populated by ``load_providers_from_db()`` during API startup. This
+            # task runs in a Celery worker -- a different process, with a
+            # brand-new NotificationService whose ``_providers`` is ``{}`` --
+            # and nothing here ever loaded it. The dispatch path meanwhile
+            # enqueues with ``provider_id=None`` ("dispatch path uses in-memory
+            # provider"), which is true of the API process and false of this
+            # one.
+            #
+            # So the first branch found no record, the second found no
+            # in-memory provider, and every single retry fell straight to the
+            # dead-letter below on attempt 1 with "No provider available". The
+            # feature logged ``retry_scheduled``, enqueued a real Celery task,
+            # and dead-lettered it -- an exponential-backoff queue that has
+            # never resent one notification.
+            #
+            # Load them the same way the API process does before giving up.
+            try:
+                await service.load_providers_from_db(
+                    UUID(organization_id) if organization_id else None
+                )
+                runtime = service._providers.get(ch_enum)
+            except Exception:
+                logger.warning(
+                    "notification.delivery.retry_provider_load_failed delivery_id=%s ch=%s",
+                    delivery_id,
+                    channel,
+                    exc_info=True,
+                )
+
+        if runtime is None:
             await _mark_dead_letter(
                 session,
                 delivery_id=delivery_id,

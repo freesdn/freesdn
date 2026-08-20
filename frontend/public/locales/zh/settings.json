@@ -396,6 +396,12 @@
       "cancel": "取消",
       "confirm": "吊销密钥",
       "revoking": "正在吊销…"
+    },
+    "toast": {
+      "revokeFailed": {
+        "title": "无法吊销密钥",
+        "description": "该密钥仍然有效，请重试。"
+      }
     }
   },
   "ModuleDetailPage": {

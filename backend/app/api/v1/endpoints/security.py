@@ -184,7 +184,6 @@ async def list_security_events(
     # the param back in the response envelope. Cap to 128 chars.
     search: str | None = Query(None, max_length=128),
     reviewed: bool | None = None,
-    site_id: UUID | None = Query(None),
 ) -> Any:
     """List security events with filters."""
     items, total = await Svc.query_security_events(
@@ -254,7 +253,6 @@ async def get_security_summary(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_active_user),
     period: str | None = Query("7d"),
-    site_id: UUID | None = Query(None),
 ) -> Any:
     """Get security summary for a period."""
     start, end = _parse_period(period)
@@ -282,7 +280,6 @@ async def list_anomalies(
     severity: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    site_id: UUID | None = Query(None),
 ) -> Any:
     """List security anomalies."""
     start, end = _parse_period(period)
@@ -387,7 +384,6 @@ async def list_blocked_ips(
     active_only: bool = Query(True),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    site_id: UUID | None = Query(None),
 ) -> Any:
     """List blocked IPs.
 
@@ -549,7 +545,6 @@ async def list_failed_logins(
     end_date: datetime | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    site_id: UUID | None = Query(None),
 ) -> Any:
     """List failed login attempts.
 

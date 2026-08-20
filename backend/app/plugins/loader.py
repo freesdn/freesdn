@@ -350,11 +350,43 @@ class PluginLoader:
 
         from_version = existing.version
 
-        # Re-install overtop (install_plugin handles this)
+        # Re-install overtop (install_plugin handles this).
+        #
+        # The "upgrading" marker is COMMITTED before the install runs, so if the
+        # install raises -- a corrupt archive, a failed manifest validation, a
+        # bad signature -- the exception used to propagate with the row still
+        # reading "upgrading". Nothing ever set it back. load_all_plugins only
+        # loads rows whose status is "installed", so the plugin was silently
+        # dropped at every subsequent startup: a single bad upload permanently
+        # disabled a working plugin, and the only visible symptom was that it
+        # stopped existing.
+        previous_status = existing.status
+        previous_active = existing.is_active
         existing.status = "upgrading"
         await db.commit()
 
-        record = await self.install_plugin(source, db, installed_by_id)
+        try:
+            record = await self.install_plugin(source, db, installed_by_id)
+        except Exception:
+            # Put the row back the way we found it, then let the caller see the
+            # real error. Best-effort: a rollback failure must not mask the
+            # original exception.
+            try:
+                await db.rollback()
+                stale = await _get_installed_plugin(db, plugin_id)
+                if stale is not None:
+                    stale.status = previous_status
+                    stale.is_active = previous_active
+                    await db.commit()
+            except Exception:
+                logger.error(
+                    "Could not restore plugin %s to status=%r after a failed upgrade; "
+                    "it may need to be re-enabled by hand",
+                    plugin_id,
+                    previous_status,
+                    exc_info=True,
+                )
+            raise
 
         # Call upgrade hook
         plugin_instance = self._loaded.get(plugin_id)

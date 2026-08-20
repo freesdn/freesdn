@@ -650,7 +650,20 @@ export default function PhonesListPage() {
           {
             label: t('PhonesListPage.bulkActions.reboot'),
             icon: Power,
-            onClick: () => bulkRebootMutation.mutate(selectedIds),
+            // Confirm first. This fired straight from the bulk bar with no
+            // prompt; the backend's required confirm flag (which the client
+            // never sent) was the only thing preventing a one-click fleet-wide
+            // reboot. Same window.confirm pattern the bulk-delete action above
+            // already uses.
+            onClick: () => {
+              if (
+                !window.confirm(
+                  t('PhonesListPage.bulkActions.reboot') + ` (${selectedIds.length})`,
+                )
+              )
+                return;
+              bulkRebootMutation.mutate(selectedIds);
+            },
           },
           {
             label: t('PhonesListPage.bulkActions.provision'),

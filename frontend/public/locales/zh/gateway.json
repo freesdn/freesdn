@@ -128,7 +128,8 @@
       "rollback": "回滚"
     },
     "distribution": {
-      "stepDetails": "步骤详情 · {{action}} {{resource}}"
+      "stepDetails": "步骤详情 · {{action}} {{resource}}",
+      "loadingSteps": "正在加载步骤详情…"
     },
     "driftColumns": {
       "severity": "严重程度",

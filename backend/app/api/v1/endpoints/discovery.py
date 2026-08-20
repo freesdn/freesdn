@@ -1731,7 +1731,37 @@ async def start_agent_scan(
     if agent.status != "online":
         raise HTTPException(status_code=400, detail=f"Agent is {agent.status}, must be online")
 
-    # Create agent task
+    # The agent's live WebSocket is the only way work reaches it.
+    #
+    # This endpoint used to INSERT the AgentTask row below and stop there,
+    # returning "Scan task dispatched to agent 'X'" and publishing
+    # ``discovery.agent_scan_started``. Nothing dispatched anything. The only
+    # consumer of a PENDING AgentTask row is ``GET /agents/{id}/tasks/pending``,
+    # documented as "called by the agent process to poll for work" -- and the
+    # shipped agent never calls it. It wires ``ws_client.on_command`` straight
+    # to its TaskExecutor and receives work exclusively over the socket
+    # (agent/src/freesdn_agent/daemon/main.py:114). There is no poller.
+    #
+    # So the row sat at PENDING forever, the Discovery page showed its "scan
+    # started" toast, and its status poll returned "pending" until the operator
+    # gave up. ``POST /agents/{id}/scan`` next door has always done this
+    # correctly; this one was written against a polling model that was never
+    # built.
+    from datetime import datetime as _dt
+
+    from app.api.v1.endpoints.agents import get_agent_registry
+    from app.services.remote_agent import AgentCommand, AgentCommandType
+
+    registry = await get_agent_registry(session)
+    connection = registry.get_connection_for_site(agent.site_id)
+    if connection is None or connection.info.agent_id != str(agent.id):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Agent has no active WebSocket connection (DB status: {agent.status})",
+        )
+
+    # Create agent task — the tracking record the UI polls, not the delivery
+    # mechanism.
     task = AgentTask(
         agent_id=agent.id,
         task_type=AgentTaskType.SCAN_NETWORK,
@@ -1746,6 +1776,36 @@ async def start_agent_scan(
     session.add(task)
     await session.commit()
     await session.refresh(task)
+
+    # Mark running before the push, so the UI never shows "pending" against a
+    # command already on the wire.
+    task.status = AgentTaskStatus.RUNNING
+    task.started_at = _dt.now(UTC)
+    await session.commit()
+
+    registry.register_interactive_task(str(task.id))
+    try:
+        await connection.send_command(
+            AgentCommand(
+                id=str(task.id),
+                type=AgentCommandType.SCAN_NETWORK,
+                payload={"scan_type": request.scan_type, "targets": request.targets},
+                priority=3,
+                timeout_seconds=300.0,
+            ),
+            wait_result=False,
+        )
+    except Exception as exc:
+        registry.unregister_interactive_task(str(task.id))
+        task.status = AgentTaskStatus.FAILED
+        task.error_message = f"Dispatch failed: {exc}"
+        task.completed_at = _dt.now(UTC)
+        await session.commit()
+        logger.exception("Agent scan dispatch failed for agent %s", agent.id)
+        raise HTTPException(
+            status_code=409,
+            detail="Agent disconnected before the scan could be dispatched",
+        ) from exc
 
     # Emit event for WebSocket notification
     # NOTE: see comment on the device.adopted publish above — publish()
@@ -1774,8 +1834,8 @@ async def start_agent_scan(
     return AgentScanResponse(
         task_id=task.id,
         agent_id=agent.id,
-        status="pending",
-        message=f"Scan task dispatched to agent '{agent.name}'",
+        status="running",
+        message=f"Scan dispatched to agent '{agent.name}'",
     )
 
 

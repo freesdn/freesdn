@@ -13,7 +13,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -252,16 +252,31 @@ async def create_user(
     # existing role-based access; a scoped key must explicitly hold user:create.
     require_user_write(current_user, "user:create")
 
-    # Check email uniqueness among LIVE users only — the unique index is partial
-    # (deleted_at IS NULL), so an email freed by a soft-deleted user is reusable.
-    result = await session.execute(
-        select(User).where(User.email == user_data.email, User.deleted_at.is_(None))
-    )
-    if result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered",
+    # Check email + username uniqueness among LIVE users only — the unique index
+    # is partial (deleted_at IS NULL), so an identifier freed by a soft-deleted
+    # user is reusable.
+    #
+    # CROSS-field on purpose. Login accepts either in one field
+    # (``or_(email == x, username == x)``), so a username equal to someone
+    # else's email makes that identifier ambiguous, and the person who loses is
+    # the email's owner -- who cannot see or fix the record causing it. The DB's
+    # separate per-column unique indexes cannot express this. Username was not
+    # pre-checked here at all, so that half relied entirely on an index that
+    # never had a chance of catching the collision.
+    for value in (user_data.email, user_data.username):
+        if not value:
+            continue
+        clash = await session.execute(
+            select(User.id).where(
+                or_(User.email == value, User.username == value),
+                User.deleted_at.is_(None),
+            )
         )
+        if clash.first() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already registered",
+            )
 
     # SECURITY: enforce strict role hierarchy — a caller can only
     # assign roles STRICTLY LOWER than their own. This prevents an org_admin
@@ -468,17 +483,24 @@ async def update_user(
     # DB unique constraint would reject the write anyway but raise
     # IntegrityError → 500. A clean SELECT-then-409 gives operators a
     # readable error and frees the DB session for the next request.
+    # The check is deliberately CROSS-field: a new username must not collide
+    # with another user's EMAIL either, and vice versa. Login accepts both in
+    # one field (``or_(email == x, username == x)``), so a username equal to
+    # someone else's email makes that identifier ambiguous -- and the person who
+    # loses is the email's owner, who cannot see or fix the record causing it.
+    # The DB's separate per-column unique indexes cannot express this, which is
+    # why the same-field-only version passed every constraint.
     for unique_field in ("email", "username"):
         new_value = update_data.get(unique_field)
         if new_value is not None and new_value != getattr(user, unique_field):
             dup = await session.execute(
                 select(User.id).where(
-                    getattr(User, unique_field) == new_value,
+                    or_(User.email == new_value, User.username == new_value),
                     User.id != user.id,
                     User.deleted_at.is_(None),
                 )
             )
-            if dup.scalar_one_or_none() is not None:
+            if dup.first() is not None:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"{unique_field.title()} already registered",

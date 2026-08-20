@@ -8,7 +8,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { useSiteStore } from '@/stores/siteStore';
 import { PageHeader } from '@/components/layout';
 import { securityAuditApi, SecurityEvent } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -235,7 +234,6 @@ const AnomalyAlerts: React.FC<AnomalyAlertProps> = ({ anomalies }) => {
 export default function SecurityAuditPage() {
   const { t } = useTranslation('security');
   const { toast } = useToast();
-  const selectedSiteId = useSiteStore((s) => s.selectedSiteId);
   const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null);
 
   const [filters, setFilters] = useState({
@@ -253,14 +251,15 @@ export default function SecurityAuditPage() {
     isFetching: eventsFetching,
     refetch: refetchEvents,
   } = useQuery({
-    queryKey: ['security-events', filters, { siteId: selectedSiteId }],
+    // No siteId in the key: /security/events has no site dimension, so
+    // re-keying on it only refetched the same rows on every site switch.
+    queryKey: ['security-events', filters],
     queryFn: async () => {
       const res = await securityAuditApi.listEvents({
         event_type: filters.event_type || undefined,
         severity: filters.severity || undefined,
         page: filters.page,
         page_size: 20,
-        site_id: selectedSiteId || undefined,
       });
       return res.data;
     },
@@ -273,9 +272,9 @@ export default function SecurityAuditPage() {
     isError: summaryError,
     refetch: refetchSummary,
   } = useQuery({
-    queryKey: ['security-summary', filters.period, { siteId: selectedSiteId }],
+    queryKey: ['security-summary', filters.period],
     queryFn: async () => {
-      const res = await securityAuditApi.getSummary({ period: filters.period, site_id: selectedSiteId || undefined });
+      const res = await securityAuditApi.getSummary({ period: filters.period });
       return res.data;
     },
     placeholderData: {
@@ -292,9 +291,9 @@ export default function SecurityAuditPage() {
     isError: anomaliesError,
     refetch: refetchAnomalies,
   } = useQuery({
-    queryKey: ['security-anomalies', filters.period, { siteId: selectedSiteId }],
+    queryKey: ['security-anomalies', filters.period],
     queryFn: async () => {
-      const res = await securityAuditApi.getAnomalies({ period: filters.period, site_id: selectedSiteId || undefined });
+      const res = await securityAuditApi.getAnomalies({ period: filters.period });
       return res.data || [];
     },
   });

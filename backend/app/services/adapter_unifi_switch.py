@@ -86,7 +86,7 @@ class GatewayUniFiSwitchService(GatewayUniFiServiceBase):
                     raise HTTPException(
                         400, detail="unifi.switch.set_poe requires payload.poe_mode"
                     )
-                return await adapter.set_port_poe(site, mac, port_idx, poe_mode, force=True)
+                return await adapter.set_port_poe_on_site(site, mac, port_idx, poe_mode, force=True)
             if c.feature == "unifi.switch.port_profile":
                 profile_id = payload.get("profile_id")
                 if not profile_id:

@@ -47,7 +47,9 @@ through the rename.
 
 from __future__ import annotations
 
+import json
 import re
+from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -62,6 +64,52 @@ from app.core.site_access import (
     site_scope_filter,
 )
 from app.models.staging import AdapterPendingChange
+
+
+def _jsonable_applied_response(response: Any) -> dict[str, Any]:
+    """
+    Render an applier's return value into something the JSONB column accepts.
+
+    This must NEVER raise, and the reason is the whole point of the function:
+    by the time it runs, the write has ALREADY landed on the live device. A
+    serialisation error here does not prevent a bad write -- it corrupts the
+    bookkeeping for a good one.
+
+    That is exactly what used to happen. The code stored
+    ``response if isinstance(response, dict) else {"data": response}``, and most
+    appliers return an ``AdapterResult`` dataclass, not a dict -- the success
+    check immediately above literally reads ``getattr(response, "success", ...)``,
+    so the author knew. ``{"data": AdapterResult(...)}`` is not JSON
+    serialisable, so committing raised, the operator was told the apply FAILED
+    for a VLAN that exists on the controller, and the audit row went back with
+    it. Even ``asdict()`` alone is not enough: AdapterResult carries a
+    ``datetime``.
+
+    So: coerce to a plain dict, then force a real json round-trip with
+    ``default=str`` as the backstop for anything still exotic nested inside
+    (UUIDs, datetimes, adapter-specific objects in ``data``).
+    """
+    candidate: Any
+    if isinstance(response, dict):
+        candidate = response
+    elif is_dataclass(response) and not isinstance(response, type):
+        candidate = asdict(response)
+    elif hasattr(response, "model_dump"):
+        try:
+            candidate = response.model_dump()
+        except Exception:  # pragma: no cover - defensive
+            candidate = {"data": response}
+    else:
+        candidate = {"data": response}
+
+    if not isinstance(candidate, dict):
+        candidate = {"data": candidate}
+
+    try:
+        return dict(json.loads(json.dumps(candidate, default=str)))
+    except Exception:  # pragma: no cover - last resort, must not raise
+        return {"data": repr(response)[:2000]}
+
 
 # ── Cross-cutting integration ────────────────────────────────────────
 #
@@ -660,6 +708,16 @@ class AdapterStagingService:
             select(AdapterPendingChange)
             .where(AdapterPendingChange.id == change_id)
             .with_for_update()
+            # populate_existing is what makes the lock mean anything. Without
+            # it, SQLAlchemy sees this row is already in the session's identity
+            # map -- the endpoint loaded it moments earlier via staging.get() --
+            # and returns THAT object with its ORIGINAL attribute values, never
+            # overwriting them from the freshly-locked row. So the status
+            # re-check below read a pre-lock snapshot: a racing request would
+            # block on the lock exactly as designed, then wake up, consult its
+            # own stale copy, still see "pending", and apply the same change to
+            # the live device a second time.
+            .execution_options(populate_existing=True)
         )
         change = (await self.db.execute(claim_stmt)).scalar_one_or_none()
         if change is None or change.organization_id != organization_id:
@@ -826,6 +884,16 @@ class AdapterStagingService:
             select(AdapterPendingChange)
             .where(AdapterPendingChange.id == change_id)
             .with_for_update()
+            # populate_existing is what makes the lock mean anything. Without
+            # it, SQLAlchemy sees this row is already in the session's identity
+            # map -- the endpoint loaded it moments earlier via staging.get() --
+            # and returns THAT object with its ORIGINAL attribute values, never
+            # overwriting them from the freshly-locked row. So the status
+            # re-check below read a pre-lock snapshot: a racing request would
+            # block on the lock exactly as designed, then wake up, consult its
+            # own stale copy, still see "pending", and apply the same change to
+            # the live device a second time.
+            .execution_options(populate_existing=True)
         )
         change = (await self.db.execute(claim_stmt)).scalar_one_or_none()
         if change is None:
@@ -999,7 +1067,7 @@ class AdapterStagingService:
                 )
             change.status = "applied"
             change.applied_at = datetime.now(UTC)
-            change.applied_response = response if isinstance(response, dict) else {"data": response}
+            change.applied_response = _jsonable_applied_response(response)
             change.updated_by = actor_id
             # emit an AuditLogRecord row on every successful
             # apply so a tenant admin can reconstruct exactly which

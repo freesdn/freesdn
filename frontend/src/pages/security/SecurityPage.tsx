@@ -85,12 +85,10 @@ interface AuditLog {
 // API functions
 const securityApi = {
   getEvents: (params?: any) => api.get('/audit/security-events', { params }),
-  getEventById: (id: string) => api.get(`/audit/security-events/${id}`),
 };
 
 const auditApi = {
   getLogs: (params?: any) => api.get('/audit/logs', { params }),
-  getLogById: (id: string) => api.get(`/audit/logs/${id}`),
 };
 
 export default function SecurityPage() {

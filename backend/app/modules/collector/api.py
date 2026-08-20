@@ -16,7 +16,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,8 +48,13 @@ class CollectorConfigSchema(BaseModel):
     syslog_port: int = 514
     netflow_enabled: bool = False
     netflow_port: int = 2055
-    log_retention_days: int = 30
-    flow_retention_days: int = 7
+    # Bounded, because these two drive a DELETE. The nightly prune builds
+    # `NOW() - make_interval(days => :days)`; a NEGATIVE value makes that a
+    # FUTURE timestamp, so `timestamp < ...` matches every row the org has and
+    # the prune becomes a delete-everything sweep. Zero is equally fatal
+    # (everything up to now). Neither field was constrained.
+    log_retention_days: int = Field(default=30, ge=1, le=3650)
+    flow_retention_days: int = Field(default=7, ge=1, le=3650)
     # NOTE(C3): CIDRs from which collector packets are accepted.
     # Empty list = block all (secure default).
     allowed_source_ips: list[str] = []
@@ -66,8 +71,8 @@ class CollectorConfigUpdate(BaseModel):
     syslog_port: int | None = None
     netflow_enabled: bool | None = None
     netflow_port: int | None = None
-    log_retention_days: int | None = None
-    flow_retention_days: int | None = None
+    log_retention_days: int | None = Field(default=None, ge=1, le=3650)
+    flow_retention_days: int | None = Field(default=None, ge=1, le=3650)
     allowed_source_ips: list[str] | None = None
 
 

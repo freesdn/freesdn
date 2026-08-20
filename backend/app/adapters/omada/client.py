@@ -639,6 +639,27 @@ class OmadaApiClient:
                 adapter_id="omada",
             )
 
+        # Path-traversal guard (chokepoint for ALL endpoint wrappers). Path
+        # segments are built from caller-supplied values (MAC, site_id,
+        # ssid_id, network_id, …) that can originate from untrusted API path
+        # params — e.g. /gateway-firmware/.../devices/{device_mac}. The MAC
+        # normalize regex further down only matches *valid* colon-MACs and
+        # would pass a hostile value like "AA../BB:CC:DD:EE:FF" or a
+        # percent-encoded "%2e%2e%2f" through to the controller URL, where path
+        # normalization could escape the intended resource. No legitimate Omada
+        # path parameter contains "..", a backslash, or percent-encoding, so
+        # reject them outright instead of trying to encode-and-forward.
+        #
+        # This runs BEFORE the breaker and _ensure_session(): validating an
+        # argument must not cost a login round-trip to the controller. It used
+        # to sit after session establishment, which meant a malformed path
+        # authenticated first and only then got refused.
+        if ".." in path or "\\" in path or re.search(r"%(?:2[eEfF]|5[cC])", path):
+            _record_metric(method.upper(), "invalid_path")
+            raise OmadaValidationError(
+                "Refusing Omada request with unsafe path segment (possible path traversal)",
+            )
+
         # Circuit breaker: fail-fast if we've seen N consecutive
         # failures recently. The retry layer below absorbs transient
         # blips; this protects against a hard-down controller. A
@@ -658,21 +679,6 @@ class OmadaApiClient:
             raise OmadaConnectionError("HTTP client is not initialized")
 
         method_upper = method.upper()
-        # Path-traversal guard (chokepoint for ALL endpoint wrappers). Path
-        # segments are built from caller-supplied values (MAC, site_id,
-        # ssid_id, network_id, …) that can originate from untrusted API path
-        # params — e.g. /gateway-firmware/.../devices/{device_mac}. The MAC
-        # normalize regex below only matches *valid* colon-MACs and would pass
-        # a hostile value like "AA../BB:CC:DD:EE:FF" or a percent-encoded
-        # "%2e%2e%2f" through to the controller URL, where path normalization
-        # could escape the intended resource. No legitimate Omada path
-        # parameter contains "..", a backslash, or percent-encoding, so reject
-        # them outright instead of trying to encode-and-forward.
-        if ".." in path or "\\" in path or re.search(r"%(?:2[eEfF]|5[cC])", path):
-            _record_metric(method_upper, "invalid_path")
-            raise OmadaValidationError(
-                "Refusing Omada request with unsafe path segment (possible path traversal)",
-            )
         # Omada API requires dash-separated MACs in URL paths.
         # normalize_mac() uses colons — convert any colon-MAC segments to dashes.
         path = re.sub(

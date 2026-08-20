@@ -396,6 +396,12 @@
       "cancel": "Cancelar",
       "confirm": "Revocar clave",
       "revoking": "Revocando…"
+    },
+    "toast": {
+      "revokeFailed": {
+        "title": "No se pudo revocar la clave",
+        "description": "La clave sigue activa. Inténtelo de nuevo."
+      }
     }
   },
   "ModuleDetailPage": {

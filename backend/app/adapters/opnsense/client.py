@@ -439,6 +439,30 @@ class OPNsenseClient:
                     return {}
                 try:
                     result = response.json()
+                    # An OPNsense write can return HTTP 200 and still declare
+                    # refusal in the body: {"result": "failed", "validations":
+                    # {...}}. Without this check every such rejection was
+                    # returned as a success, so a rule the firewall refused was
+                    # recorded as applied and audit-logged. The pfSense sibling
+                    # has always done this (pfsense/client.py, status=error).
+                    #
+                    # Deliberately narrow: ONLY the exact string "failed"
+                    # counts. Any other shape passes through untouched, so
+                    # reads and the success path are unaffected. The breaker is
+                    # NOT tripped -- the controller is reachable and answered,
+                    # it just rejected this payload, which is the same
+                    # reasoning as the 4xx branch above.
+                    if isinstance(result, dict):
+                        _res = result.get("result")
+                        if isinstance(_res, str) and _res.strip().lower() == "failed":
+                            detail = result.get("validations") or result.get("message") or ""
+                            msg = "OPNsense rejected the request (result=failed)"
+                            if detail:
+                                msg = f"{msg}: {detail}"
+                            self._circuit.record_success()
+                            _record_request_metric(method_upper, "body_error")
+                            _record_error("body_error")
+                            raise OPNsenseAPIError(msg, status_code=response.status_code)
                     self._circuit.record_success()
                     _record_request_metric(method_upper, "success")
                     _record_latency(method_upper, time.monotonic() - request_start)

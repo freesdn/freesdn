@@ -369,8 +369,16 @@ def prune_collector_logs(self: Any) -> dict[str, Any]:
 
             for cfg in configs:
                 org_id = cfg.organization_id
-                log_days = int(cfg.log_retention_days or 30)
-                flow_days = int(cfg.flow_retention_days or 7)
+                # Clamp to at least one day. The schema now rejects <1, but a
+                # row written before that constraint existed would still be read
+                # here -- and this builds `NOW() - make_interval(days => :days)`,
+                # so a negative value yields a FUTURE cutoff and
+                # `timestamp < cutoff` matches every row the org has, including
+                # ones written seconds ago. Zero is equally fatal. The prune
+                # would report a perfectly ordinary success while emptying the
+                # org's entire log and flow history.
+                log_days = max(1, int(cfg.log_retention_days or 30))
+                flow_days = max(1, int(cfg.flow_retention_days or 7))
 
                 # Bind parameters for the interval — never interpolate
                 # user-derived integers into SQL.

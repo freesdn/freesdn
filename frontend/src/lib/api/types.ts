@@ -67,14 +67,15 @@ export interface SwitchPort {
     mode: string;
     native_vlan: number;
     tagged_vlans: number[];
-    voice_vlan?: number;
-    guest_vlan?: number;
+    // voice_vlan / guest_vlan removed: the port dialog collected them, the API
+    // accepted them, and nothing ever pushed them to the controller.
   };
   poe_config?: {
     enabled: boolean;
     mode: string;
     power_limit?: number;
-    priority: number;
+    // priority removed: no validated controller key exists for per-port PoE
+    // priority, so it was collected and silently dropped.
   };
   stp_config?: {
     enabled: boolean;
@@ -3184,6 +3185,15 @@ export interface StorageLocationCreate {
   storage_type: BackupStorageType;
   is_default?: boolean;
   config: StorageLocationConfig;
+  /**
+   * Secrets — access_key, secret_key, password, token, … The backend
+   * Fernet-encrypts these into `encrypted_credentials` and never echoes them.
+   *
+   * These must NOT be sent inside `config`: `_validate_storage_config`
+   * rejects any credential-class key there, which is why the storage-location
+   * form used to 422 on every backend that has a secret.
+   */
+  credentials?: Record<string, string>;
 }
 
 export interface StorageLocationUpdate {
@@ -3192,6 +3202,12 @@ export interface StorageLocationUpdate {
   is_active?: boolean;
   is_default?: boolean;
   config?: Partial<StorageLocationConfig>;
+  /**
+   * Merged with the stored credentials (new keys win) and re-encrypted.
+   * An EMPTY dict clears every stored credential, so omit the field entirely
+   * when the operator left the secret inputs blank to keep what is there.
+   */
+  credentials?: Record<string, string>;
 }
 
 export type StorageLocationConfig =

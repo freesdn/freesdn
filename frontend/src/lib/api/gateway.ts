@@ -18,7 +18,7 @@ import type {
   CanonicalVLANDetailResponse, CanonicalVLANListResponse,
   DHCPScopeCreate, DHCPScopeResponse, DHCPReservationCreate, DHCPReservationResponse,
   DNSRecordCreate, DNSRecordUpdate, DNSRecordResponse,
-  DistributionTriggerRequest, DistributionRetractRequest, DistributionResponse,
+  DistributionTriggerRequest, DistributionResponse,
   DriftEventResponse, DriftResolveRequest, DriftSummaryResponse, DriftCheckResponse,
   SuppressionRuleCreate, SuppressionRuleResponse,
   ImportSessionCreate, ImportSessionStep, ImportSessionResponse,
@@ -302,12 +302,18 @@ export const gatewayApi = {
     api.post<GatewayWriteResponse>(`/firewall/gateways/${enc(id)}/services/${enc(serviceName)}/control`, data),
 
   // Reboot
+  // Both take the destructive-action acknowledgement as a QUERY parameter and
+  // reject the call without it (gateway_api.py: `confirm: bool = Query(...)`,
+  // "Must be true - halting powers the gateway OFF."). Neither was sent, so both
+  // failed AFTER the operator had already confirmed in the UI - the reboot
+  // AlertDialog (GatewayDetailPage) and the halt window.confirm
+  // (GatewaySystemTab). The acknowledgement below reflects that real consent.
   rebootGateway: (id: string) =>
-    api.post<GatewayWriteResponse>(`/firewall/gateways/${enc(id)}/reboot`),
+    api.post<GatewayWriteResponse>(`/firewall/gateways/${enc(id)}/reboot?confirm=true`),
 
   // Halt
   haltGateway: (id: string) =>
-    api.post<GatewayWriteResponse>(`/firewall/gateways/${enc(id)}/halt`),
+    api.post<GatewayWriteResponse>(`/firewall/gateways/${enc(id)}/halt?confirm=true`),
 
   // Firmware extras
   getFirmwareChangelog: (id: string) =>
@@ -638,8 +644,6 @@ export const gatewayOrchApi = {
     api.post<DistributionResponse>(`/firewall/distribution/${enc(id)}/retry`),
   rollbackDistribution: (id: string) =>
     api.post<DistributionResponse>(`/firewall/distribution/${enc(id)}/rollback`),
-  retractDistribution: (data: DistributionRetractRequest) =>
-    api.post<DistributionResponse>('/firewall/distribution/retract', data),
 
   // Drift Detection
   getDriftEvents: (params?: { site_id?: string; severity?: string; resolved?: boolean; limit?: number; offset?: number }) =>

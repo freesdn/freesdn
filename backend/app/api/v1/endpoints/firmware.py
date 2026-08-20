@@ -376,14 +376,22 @@ async def rollback_device(
     # site-grant boundary on the rollback action.
     _validate_site_grant(user, status.site_id, detail="Device firmware status not found")
 
-    result = await svc.rollback_device(
-        session,
-        device_id,
-        target_version=data.target_version,
-        backup_id=data.backup_id,
+    # The org + site-grant checks above run FIRST so an unauthorized caller
+    # still gets 404 rather than learning the endpoint exists at all.
+    #
+    # 501 matches how this codebase already reports an operation the vendor
+    # layer cannot perform (see the FreePBX trunk-write endpoints). The
+    # previous 200 + "Rollback initiated" was indistinguishable from a real
+    # rollback.
+    raise HTTPException(
+        # literal 501: `status` is shadowed by the local device-status variable
+        status_code=501,
+        detail=(
+            "Firmware rollback is not implemented: no adapter exposes a "
+            "rollback primitive. Re-flash the desired version through the "
+            "normal upgrade path instead."
+        ),
     )
-    await session.commit()
-    return result
 
 
 # =========================================================================

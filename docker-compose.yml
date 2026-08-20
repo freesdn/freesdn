@@ -162,7 +162,7 @@ services:
   # is a drop-in (same RESP protocol, same Sentinel, same redis-py clients). The
   # service is still keyed `redis` so REDIS_HOST/redis:// URLs are unchanged.
   redis:
-    image: valkey/valkey:${VALKEY_VERSION:-8.1.8-trixie}
+    image: valkey/valkey:${VALKEY_VERSION:-8.1.9-trixie}
     restart: unless-stopped
     stop_grace_period: 30s
     init: true

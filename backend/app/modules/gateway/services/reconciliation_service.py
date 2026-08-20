@@ -680,14 +680,18 @@ class ReconciliationService:
     ) -> bool:
         """Push a VLAN to a controller via the network adapter."""
         from app.models.core import Controller
-        from app.services.adapter_factory import get_adapter
+        from app.services.adapter_factory import build_adapter_for_controller
 
         ctrl = await self.db.get(Controller, controller_id)
         if ctrl is None:
             raise ReconciliationError(f"Controller {controller_id} not found")
 
         try:
-            adapter = await get_adapter(ctrl, self.db)
+            # Was `await get_adapter(ctrl, self.db)`. get_adapter is synchronous
+            # and takes (controller_type, host, username, password), so that
+            # call raised TypeError before a single packet reached the device --
+            # every VLAN push to a controller limb failed 100% of the time.
+            adapter = build_adapter_for_controller(ctrl)
             async with _DEVICE_SEMAPHORE:
                 result = await asyncio.wait_for(
                     adapter.create_vlan(

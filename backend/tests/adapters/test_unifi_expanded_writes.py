@@ -226,7 +226,7 @@ class TestExpandedWritesRefusedByDefault:
         adapter = _make_adapter()
         client_mock = _stub_client_method(adapter, "cmd_devmgr")
         with pytest.raises(AdapterReadOnlyError):
-            await adapter.adopt_device("default", _FAKE_MAC)
+            await adapter.adopt_device_on_site("default", _FAKE_MAC)
         client_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -473,7 +473,7 @@ class TestExpandedWritesForceCallsClient:
         adapter = _make_adapter()
         _stub_owned_site(adapter)
         mock = _stub_client_method(adapter, "cmd_devmgr")
-        await adapter.adopt_device("default", _FAKE_MAC, force=True)
+        await adapter.adopt_device_on_site("default", _FAKE_MAC, force=True)
         mock.assert_awaited_once_with({"cmd": "adopt", "mac": _FAKE_MAC})
 
     @pytest.mark.asyncio

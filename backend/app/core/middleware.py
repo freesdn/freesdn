@@ -72,8 +72,27 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     _CSRF_EXEMPT_PATHS: frozenset[str] = frozenset(
         {
             # Setup wizard — runs before any session exists
+            #
+            # Every POST here is gated by require_setup_incomplete, which 403s
+            # the instant a super_admin exists, so exempting them is bounded by
+            # that gate rather than by CSRF.
+            #
+            # /restore and /database/migrate were missing, and both are on the
+            # disaster-recovery path. On a fresh install the operator clicks
+            # "Restore from a backup instead", picks their .fsdnvault, enters
+            # the passphrase -- and gets 403 "CSRF token missing" before
+            # restore_from_vault is ever entered. There is no session cookie yet,
+            # so no browser could ever have satisfied it. That is the single
+            # worst moment to hand someone an error: they have already lost the
+            # instance and this file is the only copy.
+            #
+            # /admin sits beside them with the identical gate and was exempt,
+            # which is what made the omission invisible: the wizard's happy path
+            # worked perfectly.
             "/api/v1/setup/status",
             "/api/v1/setup/admin",
+            "/api/v1/setup/restore",
+            "/api/v1/setup/database/migrate",
             "/api/v1/setup/organization",
             "/api/v1/setup/controllers",
             "/api/v1/setup/modules",
@@ -610,6 +629,11 @@ from app.adapters.exceptions import (
 def setup_exception_handlers(app: FastAPI) -> None:
     """Configure global exception handlers."""
 
+    # Imported inside the function: app.modules.firewall imports models, which
+    # import the DB metadata, and pulling that at module scope here would
+    # invert the import order the app relies on at startup.
+    from app.modules.firewall.service import FirewallError
+
     # ── Adapter exceptions → structured HTTP responses ────────────────
 
     @app.exception_handler(AdapterConnectionError)
@@ -752,6 +776,38 @@ def setup_exception_handlers(app: FastAPI) -> None:
             },
         )
 
+    @app.exception_handler(FirewallError)
+    async def firewall_domain_handler(request: Request, exc: FirewallError) -> JSONResponse:
+        """Map the firewall module's domain exceptions to 404, not 500.
+
+        ``FirewallService._verify_device_org`` raises ``DeviceNotFoundError``
+        when the given device is not a firewall device in the caller's org. The
+        firewall API catches its SIBLINGS -- RuleNotFoundError,
+        NATNotFoundError, VPNNotFoundError -- but never that one; it is not
+        even imported there. So four write paths (rule create, rule reorder,
+        NAT create, VPN create) answered a wrong-or-foreign device id with a
+        500 and an opaque "Internal server error".
+
+        Found by driving the live API, not by the suite: the unit tests call the
+        service directly and never exercise FastAPI's handler registration.
+
+        404 rather than 400/403 deliberately, matching ``_verify_device_org``'s
+        own intent and the site-grant convention elsewhere -- a device in
+        another org must not be distinguishable from one that does not exist.
+        """
+        request_id = getattr(request.state, "request_id", None)
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": 404,
+                    "type": "not_found",
+                    "message": str(exc),
+                    "request_id": request_id,
+                }
+            },
+        )
+
     @app.exception_handler(AdapterError)
     async def adapter_generic_handler(request: Request, exc: AdapterError) -> JSONResponse:
         """Catch-all for any other adapter error.
@@ -880,6 +936,35 @@ def setup_exception_handlers(app: FastAPI) -> None:
 # ===========================================
 
 
+# Routes that legitimately accept a large body. The global cap below is sized
+# for JSON control-plane writes; these are file uploads whose handlers enforce
+# their own, precise limit (64 MB vault restore, 50 MB config import, 4 GB ISO,
+# firmware/plugin/agent artifacts). Before this list existed the 1 MB global cap
+# silently won over every one of them, so `/setup/restore` -- the first-install
+# .fsdnvault rebuild -- 413'd on any vault over 1 MB, at exactly the moment an
+# operator has lost their instance and has no other copy.
+#
+# These are PREFIXES matched against request.url.path. They raise the ceiling
+# only; each handler still enforces its own limit, so this stays a backstop
+# rather than an exemption. Keep it in sync when a new upload route lands.
+_LARGE_BODY_PATH_PREFIXES: tuple[str, ...] = (
+    "/api/v1/setup/restore",  # .fsdnvault first-install restore (handler: 64 MB)
+    "/api/v1/backups/import",  # .fsdn config import (handler: MAX_CONFIG_IMPORT_BYTES, 50 MB)
+    "/api/v1/firmware/upload",  # vendor firmware image
+    "/api/v1/plugins/install",  # plugin package
+    "/api/v1/plugins/",  # covers /{plugin_id}/upgrade
+    "/api/v1/agents/releases",  # signed agent release artifacts
+    "/api/v1/data/imports",  # bulk data import + validate
+    "/api/v1/hypervisor/",  # Proxmox ISO upload (handler: 4 GB, chunked)
+    "/api/v1/cameras/",  # recording export
+)
+
+# Ceiling for the routes above. Deliberately generous: the streaming counter
+# never buffers, so this only bounds pathological uploads, and the handler's own
+# check is what produces a precise, user-facing error.
+_LARGE_BODY_MAX_BYTES = 4 * 1024 * 1024 * 1024  # 4 GB
+
+
 class BodySizeLimitMiddleware(BaseHTTPMiddleware):
     """Reject requests whose body exceeds ``max_bytes``.
 
@@ -908,7 +993,13 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
         self.max_bytes = max_bytes
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
-        max_bytes = self.max_bytes
+        # Upload routes carry their own (larger, precise) limit; the global cap
+        # is sized for JSON control-plane writes and would otherwise win.
+        path = request.url.path
+        if path.startswith(_LARGE_BODY_PATH_PREFIXES):
+            max_bytes = _LARGE_BODY_MAX_BYTES
+        else:
+            max_bytes = self.max_bytes
 
         # 1. Fast path: reject an oversize *declared* Content-Length up front.
         cl = request.headers.get("content-length")

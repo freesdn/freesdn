@@ -97,6 +97,22 @@ class VPNTunnelTemplateResponse(BaseModel):
     class Config:
         from_attributes = True
 
+    def model_post_init(self, __context: Any) -> None:
+        """Strip sensitive keys from the template config before returning.
+
+        ``SiteToSiteTunnelResponse`` below does exactly this for ``config_a`` /
+        ``config_b``, and a tunnel's config is BUILT FROM this template -- so
+        the template holds the same pre-shared keys, certificates and
+        credentials in their source form.
+
+        Returning it unredacted meant the careful redaction on the tunnel
+        endpoint bought nothing: anyone who could read a tunnel could read the
+        template it came from, secrets included, from
+        ``GET /vpn-orchestration/templates``. Both now use the same helper and
+        the same key set, so they cannot drift apart again.
+        """
+        self.config_template = _redact_sensitive(self.config_template)
+
 
 class VPNTunnelTemplateListResponse(BaseModel):
     templates: list[VPNTunnelTemplateResponse]

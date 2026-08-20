@@ -37,6 +37,55 @@ def execute_adoption(self, job_id: str) -> dict[str, Any]:
         raise self.retry(exc=e, countdown=60)
 
 
+async def _record_terminal_failure(job_id: str, error: str) -> None:
+    """Persist a job's FAILED state in its own transaction.
+
+    ``AdoptionOrchestrator._fail_job`` sets status/error_message/completed_at
+    and then ``flush()``es -- it never commits, because the caller owns the
+    transaction. The caller then rolled the whole thing back, which is right for
+    the pipeline's partial device writes and wrong for the verdict: the FAILED
+    status went with it and the row stayed PENDING.
+
+    That mattered because PENDING is a work queue. ``sync_controller`` selects
+    every AdoptionJob in PENDING for its controller and dispatches
+    ``execute_adoption`` for each, on every sync. So a job that failed was
+    re-run in full -- validate, provision, configure, the whole pipeline,
+    against real hardware -- on every single sync cycle, forever.
+
+    And it bypassed the designed backstop entirely: ``retry_failed_adoptions``
+    only looks at FAILED jobs and honours MAX_RETRY_COUNT. A job that never
+    reaches FAILED is never counted, so the cap it enforces never applied.
+
+    The UPDATE is guarded on ``status == PENDING`` so this cannot clobber a job
+    another worker has since claimed, and cannot re-fail one that the "job is
+    not in pending state" branch already declined to touch.
+    """
+    from uuid import UUID as _UUID
+
+    from sqlalchemy import update as _update
+
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                _update(AdoptionJob)
+                .where(
+                    AdoptionJob.id == _UUID(job_id),
+                    AdoptionJob.status == AdoptionJobStatus.PENDING,
+                )
+                .values(
+                    status=AdoptionJobStatus.FAILED,
+                    error_message=(error or "Adoption failed")[:2000],
+                    completed_at=datetime.now(UTC),
+                )
+            )
+            await session.commit()
+    except Exception:
+        # Best-effort: never let the bookkeeping write mask the real failure.
+        logger.warning(
+            "Could not record terminal failure for adoption job %s", job_id, exc_info=True
+        )
+
+
 async def _execute_adoption(job_id: str) -> dict[str, Any]:
     """Execute the adoption pipeline."""
     from uuid import UUID as _UUID
@@ -47,12 +96,17 @@ async def _execute_adoption(job_id: str) -> dict[str, Any]:
             result = await orchestrator.execute(_UUID(job_id), session)
             if result.get("success"):
                 await session.commit()
-            else:
-                await session.rollback()
-            return result
-        except Exception:
+                return result
             await session.rollback()
+        except Exception as exc:
+            await session.rollback()
+            await _record_terminal_failure(job_id, str(exc))
             raise
+
+    # Rolled back the pipeline's partial work; now record the verdict, so the
+    # job leaves the PENDING work queue instead of being re-dispatched forever.
+    await _record_terminal_failure(job_id, str(result.get("error") or "Adoption failed"))
+    return result
 
 
 @celery_app.task(name="adoption.retry_failed", soft_time_limit=120, time_limit=180)

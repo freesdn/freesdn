@@ -1,10 +1,29 @@
 # FreeSDN - Dependabot configuration
-# Automated dependency update PRs for security patches and version bumps.
 # https://docs.github.com/en/code-security/dependabot
 #
-# NOTE: external code PRs are not accepted (see CONTRIBUTING.md), but Dependabot
-# PRs are maintainer-reviewed dependency bumps, not community contributions -
-# this is the managed path for keeping pinned actions and libraries current.
+# ############################################################################
+# #  DO NOT MERGE DEPENDABOT PRs ON THIS REPOSITORY. CLOSE THEM.             #
+# ############################################################################
+#
+# Dependabot here is a NOTIFICATION mechanism, not a merge path. This repo is
+# published by a flatten from a private monorepo, and the publisher seeds from
+# origin/main and then runs `git add -A` over the flattened worktree. Anything
+# present upstream but absent from the flatten is therefore staged as a REVERT.
+#
+# So a merged Dependabot PR SILENTLY UN-FIXES ITSELF on the very next release:
+# the bump disappears, the CVE comes back, and the release that removed it looks
+# like an ordinary content update. Nothing fails; nothing warns.
+#
+# The correct response to a PR opened here:
+#   1. Read it - it is telling you a real bump exists.
+#   2. Apply that bump in the PRIVATE monorepo (freesdn/backend, freesdn/frontend,
+#      or the pinned SHA in the workflow), and run the gates there.
+#   3. CLOSE the PR here without merging. The fix reaches users through the
+#      flatten, not through this branch.
+#
+# An earlier version of this header called Dependabot "the managed path for
+# keeping pinned actions and libraries current", which read as an invitation to
+# merge. It was wrong and is corrected here.
 
 version: 2
 updates:

@@ -1133,7 +1133,20 @@ class VoIPService:
             "P47": str(pbx.ip_address or ""),
             "P35": str(ext.extension_number),
             "P36": str(ext.extension_number),
-            "P34": "********" if dry_run else str(sip_password),
+            # ALWAYS redacted. `plan` is what goes back to the caller in the
+            # HTTP response body; `write_plan` below is the only dict that ever
+            # carries the real secret, and it never leaves this method.
+            #
+            # This used to read `"********" if dry_run else str(sip_password)`,
+            # so the LIVE push -- the one an operator actually clicks -- returned
+            # the SIP secret in cleartext, into the browser's react-query cache,
+            # any HAR or devtools capture, and any reverse proxy or APM that
+            # records response bodies. Only the dry run, which never carries a
+            # secret worth protecting, was redacted. The two comments below
+            # ("NEVER returned to the caller" and "password redacted before
+            # returning") both described this intended behaviour rather than
+            # what the code did.
+            "P34": "********",
             "P3": str(ext.display_name or ext.extension_number),
             "P271": "1",
             "P48": "5060",
@@ -3599,6 +3612,7 @@ class VoIPService:
         src: str | None = None,
         dst: str | None = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         """Search call logs from the PBX adapter (live CDR)."""
 
@@ -3609,6 +3623,7 @@ class VoIPService:
                 src=src,
                 dst=dst,
                 limit=limit,
+                offset=offset,
             )
             if not result.success:
                 raise VoIPError(f"Failed to search CDR: {result.error}")

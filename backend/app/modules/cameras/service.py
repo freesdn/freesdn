@@ -763,6 +763,7 @@ class RecordingService:
         offset: int = 0,
         organization_id: UUID | None = None,
         accessible_site_ids: set[UUID] | list[UUID] | None = None,
+        site_id: UUID | None = None,
     ) -> list[Any]:
         """Search for recordings scoped to organization.
 
@@ -771,6 +772,12 @@ class RecordingService:
         set.  An empty set is fail-closed — ``Camera.site_id IN ()`` matches no
         rows — so a site-limited user with zero grants never sees sibling-site
         recordings (R5 cameras site-grant).
+
+        ``site_id``: the caller's explicit single-site narrowing (the global
+        site selector). Distinct from ``accessible_site_ids``, which is a
+        permission ceiling -- this one only narrows further, and is applied
+        through the same parent-Camera join, so it can never widen what a
+        site-limited caller may reach.
         """
         from app.modules.cameras.models import Camera, Recording
 
@@ -781,7 +788,7 @@ class RecordingService:
 
         # A site-grant restriction is enforced through the parent Camera, so the
         # Camera join must be present even when no org filter is supplied.
-        if organization_id or accessible_site_ids is not None:
+        if organization_id or accessible_site_ids is not None or site_id is not None:
             query = query.join(Camera, Recording.camera_id == Camera.id).where(
                 Camera.deleted_at.is_(None),
             )
@@ -789,6 +796,8 @@ class RecordingService:
                 query = query.where(Camera.organization_id == organization_id)
             if accessible_site_ids is not None:
                 query = query.where(Camera.site_id.in_(list(accessible_site_ids)))
+            if site_id is not None:
+                query = query.where(Camera.site_id == site_id)
 
         if camera_id:
             query = query.where(Recording.camera_id == camera_id)
@@ -1437,7 +1446,71 @@ class PTZService:
         if not camera.has_ptz:
             raise CameraError(f"Camera does not support PTZ: {camera_id}")
 
-        # Update camera presets
+        # SAVE THE POSITION ON THE CAMERA FIRST.
+        #
+        # This method used to write ``camera.settings["ptz_presets"]`` and stop
+        # there, so the Presets panel was a notepad: the operator aimed the
+        # camera, saved "Front Gate" as preset 1, and the camera never recorded
+        # the position.
+        #
+        # That would merely be inert if recall were local too -- but it is not.
+        # ``control_ptz(action="preset")`` calls ``adapter.goto_preset`` on the
+        # real camera. So clicking "Front Gate" moved the camera to whatever
+        # ITS OWN preset 1 happened to be: uninitialised, or something set from
+        # the camera's native web UI, or a position saved by a previous
+        # installer. A preset panel that aims the camera somewhere other than
+        # where you saved it is worse than one that does nothing.
+        #
+        # Both shipped camera adapters implement this properly --
+        # HikvisionAdapter.set_preset PUTs the ISAPI preset, ONVIFAdapter
+        # .set_preset issues SetPreset -- and each stores the CURRENT position
+        # under that number, which is exactly the semantic the UI promises.
+        from app.adapters import get_adapter
+
+        adapter = await get_adapter(
+            adapter_type=camera.device_type or "onvif",
+            host=camera.ip_address,
+            username=camera.username,
+            password=decrypt_credential(camera.password_encrypted)
+            if camera.password_encrypted
+            else "",
+        )
+        try:
+            # Same force treatment as control_ptz: saving a preset is an
+            # operational PTZ action, and Hikvision gates it behind
+            # ADAPTER_READ_ONLY (which defaults True), so a default deploy
+            # would otherwise refuse every save. ONVIF takes no force kwarg.
+            import inspect as _inspect
+
+            kwargs: dict[str, Any] = {
+                "device_id": str(camera.id),
+                "preset": preset,
+                "name": name,
+            }
+            try:
+                if "force" in _inspect.signature(adapter.set_preset).parameters:
+                    kwargs["force"] = True
+            except (TypeError, ValueError):
+                pass
+            ptz_result = await adapter.set_preset(**kwargs)
+        except Exception as exc:
+            logger.error("Set preset failed for camera %s: %s", camera_id, exc)
+            raise CameraError("Preset save failed on the camera") from exc
+        finally:
+            if hasattr(adapter, "disconnect"):
+                await adapter.disconnect()
+
+        # A refused save does not raise -- it comes back as
+        # AdapterResult(success=False), the same shape every other camera write
+        # in this module has to check.
+        if getattr(ptz_result, "success", True) is False:
+            raise CameraError(
+                getattr(ptz_result, "error", None) or "Camera refused the preset save"
+            )
+
+        # Only now record the friendly name locally. The camera owns the
+        # POSITION; FreeSDN owns the label the operator typed, because neither
+        # ISAPI nor ONVIF guarantees the name survives a round trip.
         presets = camera.settings.get("ptz_presets", [])
         preset_data = {"id": preset, "name": name}
 

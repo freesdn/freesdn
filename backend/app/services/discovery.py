@@ -24,7 +24,8 @@ from app.adapters.opnsense import OPNsenseAdapter
 from app.adapters.pfsense import PfSenseAdapter
 from app.adapters.proxmox import ProxmoxAdapter
 from app.core.events import device_event, discovery_event, get_event_bus, org_id_for_site
-from app.db.models import Controller, Device, DeviceStatus, DeviceType
+from app.db.models import Controller, Device, DeviceStatus
+from app.models.devices import normalize_device_type
 
 logger = logging.getLogger(__name__)
 
@@ -319,7 +320,7 @@ class DiscoveryService:
             controller_id=controller_id,
             vendor=data.vendor,
             model=data.model,
-            device_type=DeviceType(data.device_type) if data.device_type else DeviceType.UNKNOWN,
+            device_type=normalize_device_type(data.device_type),
             serial=data.serial,
             mac=data.mac,
             ip=data.ip,

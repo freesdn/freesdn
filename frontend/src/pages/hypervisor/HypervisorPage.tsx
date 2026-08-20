@@ -65,6 +65,8 @@ import {
   Filter,
 } from 'lucide-react';
 
+import { PendingChangesBadge } from '@/components/gateways/PendingChangesBadge';
+import { PendingChangesDrawer } from '@/components/gateways/PendingChangesDrawer';
 import { PageHeader, PageTabs } from '@/components/layout';
 import { StatsGrid } from '@/components/ui/stats-grid';
 import { StatusBadge } from '@/components/ui/status-indicator';
@@ -777,7 +779,10 @@ const NodesTab = ({
                                       : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
                                   </TableCell>
                                   <TableCell className="font-mono text-xs">{devpath}</TableCell>
-                                  <TableCell className="text-xs">{disk.type || '-'}</TableCell>
+                                  {/* The field is `disk_type` (DiskInfoResponse.disk_type); the generated
+                                      type agrees. `disk.type` does not exist, so this
+                                      column showed "-" for every disk. */}
+                                  <TableCell className="text-xs">{disk.disk_type || '-'}</TableCell>
                                   <TableCell className="text-xs">{disk.size ? formatBytes(disk.size) : '-'}</TableCell>
                                   <TableCell className="text-xs text-muted-foreground">{disk.model || '-'}</TableCell>
                                   <TableCell className="font-mono text-xs text-muted-foreground">{disk.serial || '-'}</TableCell>
@@ -2068,6 +2073,10 @@ export function HypervisorPage() {
   const [selectedCtrlId, setSelectedCtrlId] = useState<string>('');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const controllerId = selectedCtrlId || proxmoxControllers[0]?.id || '';
+  // Restore and prune are staged rather than applied directly (the direct
+  // path refuses both as catastrophic), so this page needs the same review
+  // and apply surface the gateway pages have.
+  const [pendingChangesOpen, setPendingChangesOpen] = useState(false);
 
   // First tab is 'fleet' when multiple controllers, else 'dashboard'
   const defaultTab = proxmoxControllers.length > 1 ? 'fleet' : 'dashboard';
@@ -2691,24 +2700,35 @@ export function HypervisorPage() {
   const [restoreStartAfter, setRestoreStartAfter] = useState(false);
   const [restoreUniqueMac, setRestoreUniqueMac] = useState(true);
 
+  // Restore is STAGED, not applied here. The direct hypervisor endpoint
+  // refuses it outright (`_refuse_direct_catastrophic`) because a restore
+  // overwrites a live guest and the direct path runs no pre-flight and no
+  // archive-volid allowlist -- so this button returned HTTP 400 on every
+  // click. Staging queues the change; the operator reviews and applies it
+  // from the Pending Changes drawer, which supplies the `confirmed: true`
+  // second factor after an explicit acknowledgement.
   const restoreBackupMutation = useMutation({
     mutationFn: () => {
       if (!restoreDialog || !restoreVmid) throw new Error('Missing required fields');
-      return hypervisorApi.restoreBackup(controllerId, {
+      return hypervisorApi.stageBackupRestore(controllerId, {
         archive: restoreDialog.archive,
         vmid: parseInt(restoreVmid),
         node: restoreTargetNode || restoreDialog.node,
-        vm_type: restoreDialog.vmType || 'qemu',
+        vm_type: (restoreDialog.vmType || 'qemu') as 'qemu' | 'lxc',
         storage: restoreTargetStorage || undefined,
-        start_after_restore: restoreStartAfter,
-        unique_mac: restoreUniqueMac,
+        start: restoreStartAfter,
+        unique: restoreUniqueMac,
       });
     },
     onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.restoreStarted') });
+      toast({
+        title: t('HypervisorPage.toast.restoreStaged.title'),
+        description: t('HypervisorPage.toast.restoreStaged.description'),
+      });
       setRestoreDialog(null);
       setRestoreVmid('');
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'tasks'] });
+      setPendingChangesOpen(true);
+      queryClient.invalidateQueries({ queryKey: ['pending-changes'] });
     },
     onError: (err: any) => {
       toast({ title: t('HypervisorPage.toast.restoreFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
@@ -2725,7 +2745,12 @@ export function HypervisorPage() {
     enabled: proxmoxControllers.length > 0 && (activeTab === 'fleet' || activeTab === 'dashboard'),
     refetchInterval: 30_000,
   });
-  const taskStats: any = taskStatsResp?.data || {};
+  // FleetTaskStatistics is {controllers: {...}, aggregate: {ok, running,
+  // warning, error, ...}} -- the counters are NESTED under `aggregate`. The
+  // Fleet tab read them from the top level, so every counter was undefined, the
+  // card's render guard never passed, and the Task Statistics card simply never
+  // appeared. Unwrap here so the tab keeps its flat shape.
+  const taskStats: any = taskStatsResp?.data?.aggregate || {};
 
   // ── Node detail state (must be before any early return · Rules of Hooks) ──
   const [expandedNode, setExpandedNode] = useState<string | null>(null);
@@ -2938,6 +2963,14 @@ export function HypervisorPage() {
           <div className="flex items-center gap-2 flex-wrap">
             {controllerSelector}
             {controllerId && (
+              <PendingChangesBadge
+                vendor="proxmox"
+                gatewayId={controllerId}
+                open={pendingChangesOpen}
+                onOpenChange={setPendingChangesOpen}
+              />
+            )}
+            {controllerId && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm">
@@ -2997,6 +3030,25 @@ export function HypervisorPage() {
       />
 
       <AddHypervisorDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
+
+      {controllerId && (
+        <PendingChangesDrawer
+          open={pendingChangesOpen}
+          onOpenChange={setPendingChangesOpen}
+          vendor="proxmox"
+          gatewayId={controllerId}
+          gatewayName={
+            proxmoxControllers.find((c: any) => c.id === controllerId)?.name ||
+            t('HypervisorPage.header.title')
+          }
+          onApplied={() => {
+            refetchBackup();
+            refetchStorage();
+            refetchTasks();
+            queryClient.invalidateQueries({ queryKey: ['hypervisor'] });
+          }}
+        />
+      )}
 
       {controllersLoading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -869,7 +869,7 @@ class UniFiAdapter(BaseAdapter):
 
         return _redact(await self._patch_device(mac, _mutate))
 
-    async def set_port_poe(
+    async def set_port_poe_on_site(
         self,
         site: str,
         device_mac: str,
@@ -979,7 +979,7 @@ class UniFiAdapter(BaseAdapter):
         result = await self._api.update_wlan(wlan_id, {"enabled": bool(enabled)})
         return _redact(result)
 
-    async def block_client(
+    async def block_client_on_site(
         self,
         site: str,
         client_mac: str,
@@ -1005,7 +1005,7 @@ class UniFiAdapter(BaseAdapter):
         result = await self._api.cmd_stamgr({"cmd": "block-sta", "mac": mac})
         return _redact(result)
 
-    async def unblock_client(
+    async def unblock_client_on_site(
         self,
         site: str,
         client_mac: str,
@@ -1881,7 +1881,7 @@ class UniFiAdapter(BaseAdapter):
     # NB: ``locate_device`` is the BaseAdapter override further down (legacy
     # wrappers) — it keeps the contract ``(mac, enabled)`` signature; the
     # rest below are reference ``(site, device_mac, *, force)`` writes.
-    async def adopt_device(
+    async def adopt_device_on_site(
         self, site: str, device_mac: str, *, force: bool = False
     ) -> dict[str, Any]:
         mac = validate_mac(device_mac)
@@ -2220,10 +2220,14 @@ class UniFiAdapter(BaseAdapter):
     # They route through the new dual-gated write methods where
     # state-changing.
 
-    async def get_vlans(self) -> AdapterResult:
-        """Legacy alias for ``list_networks(default_site)``."""
+    async def get_vlans(self, site_id: str | None = None) -> AdapterResult:  # type: ignore[override]
+        """Legacy alias for ``list_networks(site_id or default_site)``.
+
+        Accepts the BaseAdapter ``site_id`` so a vendor-neutral caller that
+        passes one does not get a TypeError.
+        """
         try:
-            data = await self.list_networks(self._default_site)
+            data = await self.list_networks(site_id or self._default_site)
             return AdapterResult.ok(
                 data=[
                     {
@@ -2504,10 +2508,14 @@ class UniFiAdapter(BaseAdapter):
         except Exception as exc:  # noqa: BLE001
             return AdapterResult.fail(f"delete_alias failed: {exc}")
 
-    async def get_clients(self) -> AdapterResult:  # type: ignore[override]
-        """Legacy alias for ``list_clients(default_site)``."""
+    async def get_clients(self, site_id: str | None = None) -> AdapterResult:  # type: ignore[override]
+        """Legacy alias for ``list_clients(site_id or default_site)``.
+
+        Accepts the BaseAdapter ``site_id`` so a vendor-neutral caller that
+        passes one does not get a TypeError.
+        """
         try:
-            data = await self.list_clients(self._default_site)
+            data = await self.list_clients(site_id or self._default_site)
             return AdapterResult.ok(
                 data=[
                     {
@@ -2579,14 +2587,16 @@ class UniFiAdapter(BaseAdapter):
         except Exception as exc:
             return AdapterResult.fail(f"Failed to get firewall rules: {exc}")
 
-    async def reboot_device(self, mac: str) -> AdapterResult:
+    async def reboot_device(self, device_id: str) -> AdapterResult:
         """Legacy alias — preserved for the discovery / sync path.
 
-        Routes through the dual-gated :meth:`restart_device`.
+        Routes through the dual-gated :meth:`restart_device`. ``device_id`` is a
+        MAC here, but keeps the BaseAdapter parameter name so a vendor-neutral
+        caller can pass it by keyword.
         """
         try:
-            await self.restart_device(self._default_site, mac, force=False)
-            return AdapterResult.ok(message=f"Reboot command sent to {mac}")
+            await self.restart_device(self._default_site, device_id, force=False)
+            return AdapterResult.ok(message=f"Reboot command sent to {device_id}")
         except AdapterReadOnlyError as exc:
             return AdapterResult.fail(str(exc), error_code="READ_ONLY")
         except Exception as exc:
@@ -2594,15 +2604,18 @@ class UniFiAdapter(BaseAdapter):
 
     async def locate_device(
         self,
-        mac: str,
-        enabled: bool = True,
+        device_id: str,
+        duration: int | bool = True,
         *,
         site: str | None = None,
         force: bool = False,
     ) -> AdapterResult:  # type: ignore[override]
-        """Blink (``enabled=True``) or stop blinking a device's locate LED.
+        """Blink (truthy ``duration``) or stop blinking a device's locate LED.
 
-        BaseAdapter contract method — keeps the ``(mac, enabled)`` signature; the
+        BaseAdapter contract method. The base names the second argument
+        ``duration`` (seconds) while UniFi's API only has blink on/off, so any
+        truthy value blinks. ``bool`` is an ``int`` subclass, so the staged
+        applier's ``bool`` and a neutral caller's seconds both work; the
         UniFi staged applier additionally passes ``site=`` so the command targets
         the device's ACTUAL site. Without it, locate always hit ``_default_site``,
         so on a multi-site controller a device on a branch site would never blink
@@ -2614,8 +2627,9 @@ class UniFiAdapter(BaseAdapter):
         Live-validated against a real UCG (set-locate → unset-locate).
         """
         try:
-            _enforce_read_only(force=force, action=f"locate_device({mac}, enabled={enabled})")
-            validated = validate_mac(mac)
+            enabled = bool(duration)
+            _enforce_read_only(force=force, action=f"locate_device({device_id}, enabled={enabled})")
+            validated = validate_mac(device_id)
             target_site = validate_site(site) if site else self._default_site
             # IDOR parity with the other write methods — don't let a caller pivot
             # to a sibling tenant's site (the staged applier also verifies).
@@ -2628,6 +2642,79 @@ class UniFiAdapter(BaseAdapter):
             return AdapterResult.fail(str(exc), error_code="READ_ONLY")
         except Exception as exc:  # noqa: BLE001
             return AdapterResult.fail(f"Failed to locate device: {exc}")
+
+    # ────────────────────────────────────────────────────────────────
+    # BaseAdapter contract forms
+    #
+    # UniFi's native API is site-scoped, so the rich methods above take an
+    # explicit ``site`` first. That is the right shape for the staged appliers
+    # and the /unifi/* endpoints, which know the site the operator picked.
+    #
+    # It is the WRONG shape for a BaseAdapter override, and putting it there
+    # silently broke every vendor-neutral call site. ``adapter.block_client(mac)``
+    # bound the MAC to ``site`` and then raised TypeError for the missing
+    # ``client_mac`` -- the endpoint caught it and returned 502, so blocking a
+    # client on a UniFi network failed 100% of the time. Same for the Switches
+    # page PoE toggle and device adoption.
+    #
+    # Omada already had this right: its ADAPTER conforms to the contract and
+    # resolves the site internally, while its CLIENT takes the site. These
+    # wrappers give UniFi the same shape, and follow the pattern the file
+    # already used for reboot_device -> restart_device.
+    # ────────────────────────────────────────────────────────────────
+
+    async def adopt_device(self, device_id: str) -> AdapterResult:  # type: ignore[override]
+        """Adopt a device on the controller's default site."""
+        try:
+            await self.adopt_device_on_site(self._default_site, device_id, force=False)
+            return AdapterResult.ok(message=f"Adopt command sent to {device_id}")
+        except AdapterReadOnlyError as exc:
+            return AdapterResult.fail(str(exc), error_code="READ_ONLY")
+        except Exception as exc:  # noqa: BLE001
+            return AdapterResult.fail(f"Failed to adopt device: {exc}")
+
+    async def set_port_poe(  # type: ignore[override]
+        self, device_id: str, port: int, enabled: bool
+    ) -> AdapterResult:
+        """Enable or disable PoE on a port of a device on the default site.
+
+        The contract is a boolean; UniFi wants a mode string. "auto" is the
+        UniFi UI's own default for an enabled PoE port.
+        """
+        try:
+            await self.set_port_poe_on_site(
+                self._default_site,
+                device_id,
+                port,
+                "auto" if enabled else "off",
+                force=False,
+            )
+            state = "enabled" if enabled else "disabled"
+            return AdapterResult.ok(message=f"PoE {state} on {device_id} port {port}")
+        except AdapterReadOnlyError as exc:
+            return AdapterResult.fail(str(exc), error_code="READ_ONLY")
+        except Exception as exc:  # noqa: BLE001
+            return AdapterResult.fail(f"Failed to set PoE: {exc}")
+
+    async def block_client(self, client_mac: str) -> AdapterResult:  # type: ignore[override]
+        """Block a client on the controller's default site."""
+        try:
+            await self.block_client_on_site(self._default_site, client_mac, force=False)
+            return AdapterResult.ok(message=f"Blocked {client_mac}")
+        except AdapterReadOnlyError as exc:
+            return AdapterResult.fail(str(exc), error_code="READ_ONLY")
+        except Exception as exc:  # noqa: BLE001
+            return AdapterResult.fail(f"Failed to block client: {exc}")
+
+    async def unblock_client(self, client_mac: str) -> AdapterResult:  # type: ignore[override]
+        """Unblock a client on the controller's default site."""
+        try:
+            await self.unblock_client_on_site(self._default_site, client_mac, force=False)
+            return AdapterResult.ok(message=f"Unblocked {client_mac}")
+        except AdapterReadOnlyError as exc:
+            return AdapterResult.fail(str(exc), error_code="READ_ONLY")
+        except Exception as exc:  # noqa: BLE001
+            return AdapterResult.fail(f"Failed to unblock client: {exc}")
 
     # ────────────────────────────────────────────────────────────────
     # Internal helpers

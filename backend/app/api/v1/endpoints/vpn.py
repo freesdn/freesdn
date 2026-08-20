@@ -159,7 +159,8 @@ class _OpenVPNImportRequest(BaseModel):
 
     site_id: UUID
     config_content: str = Field(..., min_length=1, max_length=102400)
-    description: str = Field(default="", max_length=500)
+    # No `description`: SiteVPNConfiguration has no column for one, so the
+    # value was collected, passed down and dropped on every import.
 
 
 # Allowlist for VPN interface / connection names passed to subprocess.
@@ -766,7 +767,31 @@ async def connection_action(
     action_result: dict[str, Any] = {"success": False, "message": "Unsupported VPN type"}
 
     if record.vpn_type == "tailscale":
-        action_result = {"success": True, "message": "Tailscale managed at system level"}
+        # This used to return a hard-coded success for BOTH actions -- "Tailscale
+        # managed at system level" -- and then the block below recorded
+        # ``status = "disconnected"``. So clicking Disconnect left the node up
+        # and routing on the tailnet while FreeSDN showed it as disconnected:
+        # the operator believed they had cut a link that was still carrying
+        # traffic. Connect was equally inert, just less dangerous.
+        #
+        # The capability was always there. ``TailscaleSetupService`` has real
+        # ``disconnect()`` (``tailscale down``) and ``reconnect()``, and the
+        # STAGED overlay path (adapter_overlay_vpn.py) has called them all
+        # along. Only this direct endpoint was faking it.
+        from app.services.vpn_integration import get_tailscale_setup
+
+        setup = get_tailscale_setup()
+        if data.action == "connect":
+            # netfilter_mode MUST be re-passed: reconnect uses
+            # ``tailscale up --reset``, which wipes unspecified prefs, and
+            # dropping --netfilter-mode silently reverts NetBird coexistence to
+            # the default and breaks the overlay sharing 100.64.0.0/10. The
+            # resolver for it already lives in this module.
+            action_result = await setup.reconnect(
+                netfilter_mode=await _resolve_tailscale_netfilter_mode(session, org_id)
+            )
+        else:
+            action_result = await setup.disconnect()
 
     elif record.vpn_type == "wireguard":
         iface = _wireguard_iface_name(record)
@@ -1664,7 +1689,6 @@ async def import_openvpn_config(
             site_id=payload.site_id,
             org_id=_org_id(current_user),
             config_content=payload.config_content,
-            description=payload.description,
         )
         return {
             "success": True,

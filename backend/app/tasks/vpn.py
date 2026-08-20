@@ -59,8 +59,13 @@ def sync_vpn_connections(self) -> dict[str, Any]:
 
         async with AsyncSessionLocal() as session:
             try:
-                connections = await svc.sync_live_connections(session)
-                synced = len(connections) if connections else 0
+                # sync_live_connections returns an INT (the number of rows it
+                # synced), not a list. `len()` on it raised TypeError -- caught
+                # below, rolled back -- so the sync only ever "succeeded" when
+                # the count was 0 and the falsy branch short-circuited. Any run
+                # that actually had something to sync threw away its own work,
+                # and live VPN telemetry never reached the database.
+                synced = await svc.sync_live_connections(session)
                 await session.commit()
                 logger.info("Synced %d VPN connections", synced)
             except Exception as e:

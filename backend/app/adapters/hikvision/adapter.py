@@ -335,6 +335,75 @@ def _parse_xml(text: str) -> ET.Element | None:
         return None
 
 
+def _isapi_write_result(response: Any, *, context: str = "") -> dict[str, Any]:
+    """
+    Decide whether an ISAPI write actually succeeded.
+
+    Every write site in this adapter used to answer that question with
+    ``status_code == 200`` alone. That is not sufficient on ISAPI: a Hikvision
+    device answers a REJECTED write with **HTTP 200** and puts the refusal in
+    the body::
+
+        <ResponseStatus>
+          <requestURL>/ISAPI/Image/channels/1/color</requestURL>
+          <statusCode>4</statusCode>
+          <statusString>Invalid Operation</statusString>
+          <subStatusCode>notSupported</subStatusCode>
+        </ResponseStatus>
+
+    ``statusCode`` 1 (and its string form "OK") is the only success. Everything
+    else -- 4 invalid operation, 6 invalid content, 7 reboot required -- means
+    the camera did NOT apply the change. Reporting those as ``success: True``
+    is the worst possible outcome for a staged-write product: the change is
+    marked applied, the audit log records it, and the device is untouched. The
+    operator learns about it the next time they need the footage.
+
+    Deliberately fail-open on shape: a body that is empty, unparseable, or
+    simply is not a ``ResponseStatus`` document is treated as success, exactly
+    as before. Many ISAPI endpoints answer a good write with an empty body or
+    with a domain document, and this adapter runs against the maintainer's live
+    NVR fleet -- inventing failures there is worse than the bug being fixed.
+    Only an explicit, well-formed refusal flips the result.
+    """
+    status_code = getattr(response, "status_code", 0)
+    if status_code != 200:
+        return {"success": False, "status_code": status_code, "error": f"HTTP {status_code}"}
+
+    try:
+        text = response.text or ""
+    except Exception:  # pragma: no cover - defensive; body already consumed
+        return {"success": True, "status_code": status_code}
+
+    if not text.strip():
+        return {"success": True, "status_code": status_code}
+
+    root = _parse_xml(text)
+    if root is None or _strip_ns(root.tag) != "ResponseStatus":
+        return {"success": True, "status_code": status_code}
+
+    isapi_status = _findtext(root, "statusCode", "")
+    if isapi_status in ("", "1") or isapi_status.upper() == "OK":
+        return {"success": True, "status_code": status_code}
+
+    status_string = _findtext(root, "statusString", "") or "unknown error"
+    sub_status = _findtext(root, "subStatusCode", "")
+    detail = f"{status_string} ({sub_status})" if sub_status else status_string
+    where = f"{context}: " if context else ""
+    logger.warning(
+        "%sISAPI write refused by device — statusCode=%s statusString=%s subStatusCode=%s",
+        where,
+        isapi_status,
+        status_string,
+        sub_status,
+    )
+    return {
+        "success": False,
+        "status_code": status_code,
+        "isapi_status_code": isapi_status,
+        "error": f"Device rejected the change: {detail}",
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Digest Authentication
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1047,9 +1116,10 @@ class HikvisionAdapter(BaseAdapter):
                 content=xml_data,
                 headers={"Content-Type": "application/xml"},
             )
-            if response.status_code == 200:
+            outcome = _isapi_write_result(response, context="ptz_control")
+            if outcome["success"]:
                 return AdapterResult.ok({"action": action, "speed": speed, "channel": ch})
-            return AdapterResult.fail(f"PTZ control failed: HTTP {response.status_code}")
+            return AdapterResult.fail(f"PTZ control failed: {outcome['error']}")
         except Exception as exc:
             logger.error("PTZ control failed: %s", exc)
             return AdapterResult.fail("PTZ command failed")
@@ -1078,9 +1148,10 @@ class HikvisionAdapter(BaseAdapter):
             url = urljoin(self.base_url, "/ISAPI/System/reboot")
             response = await self._request("PUT", url)
 
-            if response.status_code == 200:
+            outcome = _isapi_write_result(response, context="reboot_device")
+            if outcome["success"]:
                 return AdapterResult.ok({"action": "reboot"})
-            return AdapterResult.fail(f"Reboot failed: HTTP {response.status_code}")
+            return AdapterResult.fail(f"Reboot failed: {outcome['error']}")
         except Exception as e:
             logger.error("Hikvision reboot failed: %s", e)
             return AdapterResult.fail("Device reboot command failed")
@@ -1550,9 +1621,10 @@ class HikvisionAdapter(BaseAdapter):
                 f"/ISAPI/PTZCtrl/channels/{ch}/presets/{preset}/goto",
             )
             response = await self._http.put(url)
-            if response.status_code == 200:
+            outcome = _isapi_write_result(response, context="goto_preset")
+            if outcome["success"]:
                 return AdapterResult.ok({"preset": preset, "channel": ch})
-            return AdapterResult.fail(f"Goto preset failed: HTTP {response.status_code}")
+            return AdapterResult.fail(f"Goto preset failed: {outcome['error']}")
         except Exception as exc:
             logger.error("Goto preset failed: %s", exc)
             return AdapterResult.fail("PTZ preset command failed")
@@ -1596,9 +1668,10 @@ class HikvisionAdapter(BaseAdapter):
                 content=xml_data,
                 headers={"Content-Type": "application/xml"},
             )
-            if response.status_code == 200:
+            outcome = _isapi_write_result(response, context="set_preset")
+            if outcome["success"]:
                 return AdapterResult.ok({"preset": preset, "name": name, "channel": ch})
-            return AdapterResult.fail(f"Set preset failed: HTTP {response.status_code}")
+            return AdapterResult.fail(f"Set preset failed: {outcome['error']}")
         except Exception as exc:
             logger.error("Set preset failed: %s", exc)
             return AdapterResult.fail("PTZ preset save failed")
@@ -1626,9 +1699,10 @@ class HikvisionAdapter(BaseAdapter):
                 f"/ISAPI/PTZCtrl/channels/{ch}/presets/{preset}",
             )
             response = await self._http.delete(url)
-            if response.status_code == 200:
+            outcome = _isapi_write_result(response, context="delete_preset")
+            if outcome["success"]:
                 return AdapterResult.ok({"deleted": preset, "channel": ch})
-            return AdapterResult.fail(f"Delete preset failed: HTTP {response.status_code}")
+            return AdapterResult.fail(f"Delete preset failed: {outcome['error']}")
         except Exception as exc:
             logger.error("Delete preset failed: %s", exc)
             return AdapterResult.fail("PTZ preset delete failed")
@@ -2241,9 +2315,10 @@ class HikvisionAdapter(BaseAdapter):
             url = urljoin(self.base_url, f"/ISAPI/Event/notification/httpHosts/{subscription_id}")
             response = await self._http.delete(url)
 
-            if response.status_code == 200:
+            outcome = _isapi_write_result(response, context="unsubscribe_events")
+            if outcome["success"]:
                 return AdapterResult.ok({"unsubscribed": True})
-            return AdapterResult.fail(f"Failed to unsubscribe: HTTP {response.status_code}")
+            return AdapterResult.fail(f"Failed to unsubscribe: {outcome['error']}")
         except Exception as e:
             logger.error("Hikvision unsubscribe_events failed: %s", e)
             return AdapterResult.fail("Event unsubscription failed")
@@ -2513,10 +2588,7 @@ class HikvisionAdapter(BaseAdapter):
                 timeout=10.0,
             )
 
-            if put_resp.status_code == 200:
-                return {"success": True}
-            else:
-                return {"success": False, "error": f"HTTP {put_resp.status_code}"}
+            return _isapi_write_result(put_resp, context="set_image_settings")
         except Exception as exc:
             logger.error("set_image_settings failed: %s", exc)
             return {"success": False, "error": "Device configuration update failed"}
@@ -2911,8 +2983,7 @@ class HikvisionAdapter(BaseAdapter):
                 headers={"Content-Type": "application/xml"},
                 timeout=10.0,
             )
-            ok = put_resp.status_code == 200
-            return {"success": ok, "status_code": put_resp.status_code}
+            return _isapi_write_result(put_resp, context="set_motion_detection")
         except Exception as exc:
             logger.error("set_motion_detection failed: %s", exc)
             return {"success": False, "error": "Failed to update motion detection settings"}
@@ -3044,8 +3115,7 @@ class HikvisionAdapter(BaseAdapter):
                 headers={"Content-Type": "application/xml"},
                 timeout=10.0,
             )
-            ok = put_resp.status_code == 200
-            return {"success": ok, "status_code": put_resp.status_code}
+            return _isapi_write_result(put_resp, context="set_privacy_masks")
         except Exception as exc:
             logger.error("set_privacy_masks failed: %s", exc)
             return {"success": False, "error": "Device configuration update failed"}
@@ -3191,8 +3261,7 @@ class HikvisionAdapter(BaseAdapter):
                 headers={"Content-Type": "application/xml"},
                 timeout=10.0,
             )
-            ok = put_resp.status_code == 200
-            return {"success": ok, "status_code": put_resp.status_code}
+            return _isapi_write_result(put_resp, context="set_line_crossing")
         except Exception as exc:
             logger.error("set_line_crossing failed: %s", exc)
             return {"success": False, "error": "Device configuration update failed"}
@@ -3336,8 +3405,7 @@ class HikvisionAdapter(BaseAdapter):
                 headers={"Content-Type": "application/xml"},
                 timeout=10.0,
             )
-            ok = put_resp.status_code == 200
-            return {"success": ok, "status_code": put_resp.status_code}
+            return _isapi_write_result(put_resp, context="set_intrusion_detection")
         except Exception as exc:
             logger.error("set_intrusion_detection failed: %s", exc)
             return {"success": False, "error": "Device configuration update failed"}
@@ -3476,8 +3544,7 @@ class HikvisionAdapter(BaseAdapter):
                     headers={"Content-Type": "application/xml"},
                     timeout=10.0,
                 )
-                ok = put_resp.status_code == 200
-                return {"success": ok, "status_code": put_resp.status_code}
+                return _isapi_write_result(put_resp, context="set_recording_schedule")
         except Exception as exc:
             logger.error("set_recording_schedule failed: %s", exc)
             return {"success": False, "error": "Device configuration update failed"}
@@ -3925,8 +3992,7 @@ class HikvisionAdapter(BaseAdapter):
                 headers={"Content-Type": "application/xml"},
                 timeout=10.0,
             )
-            ok = put_resp.status_code == 200
-            return {"success": ok, "status_code": put_resp.status_code}
+            return _isapi_write_result(put_resp, context="set_face_detection")
         except Exception as exc:
             logger.error("set_face_detection failed: %s", exc)
             return {"success": False, "error": "Device configuration update failed"}
@@ -4043,8 +4109,7 @@ class HikvisionAdapter(BaseAdapter):
                 headers={"Content-Type": "application/xml"},
                 timeout=10.0,
             )
-            ok = put_resp.status_code == 200
-            return {"success": ok, "status_code": put_resp.status_code}
+            return _isapi_write_result(put_resp, context="set_holidays")
         except Exception as exc:
             logger.error("set_holidays failed: %s", exc)
             return {"success": False, "error": "Device configuration update failed"}
@@ -4163,8 +4228,7 @@ class HikvisionAdapter(BaseAdapter):
                 headers={"Content-Type": "application/xml"},
                 timeout=10.0,
             )
-            ok = put_resp.status_code == 200
-            return {"success": ok, "status_code": put_resp.status_code}
+            return _isapi_write_result(put_resp, context="set_holiday_schedule")
         except Exception as exc:
             logger.error("set_holiday_schedule failed: %s", exc)
             return {"success": False, "error": "Device configuration update failed"}
@@ -4314,8 +4378,7 @@ class HikvisionAdapter(BaseAdapter):
                 headers={"Content-Type": "application/xml"},
                 timeout=10.0,
             )
-            ok = put_resp.status_code == 200
-            return {"success": ok, "status_code": put_resp.status_code}
+            return _isapi_write_result(put_resp, context="set_patrol")
         except Exception as exc:
             logger.error("set_patrol failed: %s", exc)
             return {"success": False, "error": "Device configuration update failed"}
@@ -4341,8 +4404,7 @@ class HikvisionAdapter(BaseAdapter):
                 f"/ISAPI/PTZCtrl/channels/{channel}/patrols/{patrol_id}",
             )
             resp = await self._http.delete(url, timeout=10.0)
-            ok = resp.status_code == 200
-            return {"success": ok, "status_code": resp.status_code}
+            return _isapi_write_result(resp, context="delete_patrol")
         except Exception as exc:
             logger.error("delete_patrol failed: %s", exc)
             return {"success": False, "error": "Device configuration update failed"}
@@ -4368,8 +4430,7 @@ class HikvisionAdapter(BaseAdapter):
                 f"/ISAPI/PTZCtrl/channels/{channel}/patrols/{patrol_id}/start",
             )
             resp = await self._http.put(url, timeout=10.0)
-            ok = resp.status_code == 200
-            return {"success": ok, "status_code": resp.status_code}
+            return _isapi_write_result(resp, context="start_patrol")
         except Exception as exc:
             logger.error("start_patrol failed: %s", exc)
             return {"success": False, "error": "Device configuration update failed"}
@@ -4395,8 +4456,7 @@ class HikvisionAdapter(BaseAdapter):
                 f"/ISAPI/PTZCtrl/channels/{channel}/patrols/{patrol_id}/stop",
             )
             resp = await self._http.put(url, timeout=10.0)
-            ok = resp.status_code == 200
-            return {"success": ok, "status_code": resp.status_code}
+            return _isapi_write_result(resp, context="stop_patrol")
         except Exception as exc:
             logger.error("stop_patrol failed: %s", exc)
             return {"success": False, "error": "Device configuration update failed"}
@@ -4466,9 +4526,10 @@ class HikvisionAdapter(BaseAdapter):
             response = await self._request(
                 "PUT", url, content=xml_data, timeout=httpx.Timeout(10.0)
             )
-            if response.status_code == 200:
+            outcome = _isapi_write_result(response, context="set_thermal_threshold")
+            if outcome["success"]:
                 return AdapterResult.ok({"status": "threshold_set"})
-            return AdapterResult.fail("Failed to set thermal threshold")
+            return AdapterResult.fail(f"Failed to set thermal threshold: {outcome['error']}")
         except Exception:
             logger.exception("Failed to set thermal threshold")
             return AdapterResult.fail("Device communication error")
@@ -4581,9 +4642,10 @@ class HikvisionAdapter(BaseAdapter):
         url = urljoin(self.base_url, f"/ISAPI/System/TwoWayAudio/channels/{channel}/open")
         try:
             response = await self._request("PUT", url, timeout=httpx.Timeout(10.0))
-            if response.status_code == 200:
+            outcome = _isapi_write_result(response, context="open_two_way_audio")
+            if outcome["success"]:
                 return {"success": True, "channel": channel}
-            return {"success": False, "error": "Failed to open audio channel"}
+            return {"success": False, "error": outcome["error"]}
         except Exception:
             logger.exception("Failed to open two-way audio")
             return {"success": False, "error": "Device communication error"}

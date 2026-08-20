@@ -788,8 +788,25 @@ async def provision_phone(
     prov = ProvisioningService(session, organization_id=_org_id(current_user))
     outcome = "failed"
     try:
-        result = await prov.generate_phone_config(phone_id, write_file=True)
+        result = await prov.generate_phone_config(phone_id, write_file=True, force=data.force)
         outcome = "ok"
+        # ``reboot_after`` defaults to True because a phone does not apply a
+        # freshly written config until it re-provisions. Best-effort: the
+        # config IS written by this point, so a phone that refuses the reboot
+        # must not turn a successful provision into an error -- report it
+        # instead, so the operator knows to power-cycle.
+        if data.reboot_after:
+            svc = VoIPService(db=session)
+            _set_org(svc, current_user)
+            try:
+                await svc.reboot_phone(phone_id)
+                result["rebooted"] = True
+            except (PhoneNotFoundError, VoIPError) as exc:
+                logger.warning("Provision succeeded but reboot failed for %s: %s", phone_id, exc)
+                result["rebooted"] = False
+                result["reboot_error"] = "Phone did not accept the reboot"
+        else:
+            result["rebooted"] = False
         return result
     except ProvisioningError as exc:
         logger.error("Phone provisioning failed: %s", exc, exc_info=True)
@@ -1918,7 +1935,6 @@ async def list_extensions(
     service: Annotated[VoIPService, Depends(get_voip_service)],
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    site_id: UUID | None = Query(None),
 ):
     """List extensions for a PBX."""
     _set_org(service, current_user)
@@ -2047,7 +2063,6 @@ async def list_pbx_trunks(
     pbx_id: UUID,
     current_user: Annotated[CurrentUser, Depends(require_permissions("voip.view"))],
     service: Annotated[VoIPService, Depends(get_voip_service)],
-    site_id: UUID | None = Query(None),
 ):
     """List SIP trunks from the PBX."""
     _set_org(service, current_user)
@@ -2139,7 +2154,6 @@ async def list_pbx_queues(
     pbx_id: UUID,
     current_user: Annotated[CurrentUser, Depends(require_permissions("voip.view"))],
     service: Annotated[VoIPService, Depends(get_voip_service)],
-    site_id: UUID | None = Query(None),
 ):
     """List call queues from the PBX."""
     _set_org(service, current_user)
@@ -2160,7 +2174,6 @@ async def list_pbx_ivrs(
     pbx_id: UUID,
     current_user: Annotated[CurrentUser, Depends(require_permissions("voip.view"))],
     service: Annotated[VoIPService, Depends(get_voip_service)],
-    site_id: UUID | None = Query(None),
 ):
     """List IVR menus from the PBX."""
     _set_org(service, current_user)
@@ -2181,7 +2194,6 @@ async def list_pbx_dids(
     pbx_id: UUID,
     current_user: Annotated[CurrentUser, Depends(require_permissions("voip.view"))],
     service: Annotated[VoIPService, Depends(get_voip_service)],
-    site_id: UUID | None = Query(None),
 ):
     """List DIDs / Inbound Routes from the PBX."""
     _set_org(service, current_user)
@@ -2464,8 +2476,20 @@ async def search_pbx_call_logs(
             src=src,
             dst=dst,
             limit=limit,
+            offset=offset,
         )
-        return {"items": redact_list(items), "total": len(items)}
+        # ``total`` used to be ``len(items)`` -- the size of the page, not the
+        # size of the result set, so the UI saw one page and every "next"
+        # returned the same rows. The upstream CDR API exposes no count, so
+        # report the honest lower bound plus an explicit ``has_more``.
+        page = redact_list(items)
+        return {
+            "items": page,
+            "total": offset + len(page),
+            "has_more": len(page) == limit,
+            "offset": offset,
+            "limit": limit,
+        }
     except PBXNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PBX not found")
     except VoIPError as exc:

@@ -19,6 +19,7 @@ from app.core.dependencies import CurrentUser, require_permissions
 from app.core.site_access import assert_can_access_site
 from app.db import get_session
 from app.modules.gateway.schemas import (
+    DistributionDetailResponse,
     DistributionListResponse,
     DistributionResponse,
     DistributionTriggerRequest,
@@ -90,19 +91,34 @@ async def list_distributions(
 # ── GET  /gateway/distribution/{record_id} ──────────────────────────────
 
 
-@router.get("/{record_id}", response_model=DistributionResponse)
+@router.get("/{record_id}", response_model=DistributionDetailResponse)
 async def get_distribution(
     record_id: UUID,
     current_user: Annotated[CurrentUser, Depends(require_permissions("gateway.view"))],
     svc: Annotated[DistributionService, Depends(_svc)],
 ):
-    """Get a single distribution record with step details."""
+    """Get a single distribution record with step details.
+
+    Returns DistributionDetailResponse, which is what the docstring has always
+    promised. It used to declare ``DistributionResponse`` -- the LIST shape --
+    which has no ``step_results``, ``plan`` or ``rollback_plan``, so FastAPI
+    stripped every one of them from the response.
+
+    ``DistributionDetailResponse`` was therefore referenced by nothing at all,
+    and the Distribution Log's per-row expander in the UI reads
+    ``dist.step_results``: always undefined, so the panel rendered empty on
+    every distribution, successful or failed. Which tier failed, on which
+    device, with what error -- the entire point of the log -- was unreachable.
+
+    The list endpoint keeps the slim shape deliberately: step_results is a
+    JSONB blob per row and does not belong in a paginated log.
+    """
     org_id = _org_id(current_user)
     record = await svc.get_distribution(record_id, org_id=org_id)
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Distribution not found")
     assert_can_access_site(current_user, record.site_id, detail="Distribution not found")
-    return DistributionResponse.model_validate(record)
+    return DistributionDetailResponse.model_validate(record)
 
 
 # ── POST  /gateway/distribution/trigger ─────────────────────────────────

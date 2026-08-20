@@ -7,6 +7,7 @@ FreeSDN - Device Models
 Models for network devices discovered from controllers.
 """
 
+import logging
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -17,6 +18,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import AuditMixin, Base, SoftDeleteMixin, UUIDMixin
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.models.core import Controller, Site
@@ -49,6 +52,95 @@ class DeviceType(StrEnum):
     IOT = "iot"
     SENSOR = "sensor"
     OTHER = "other"
+    # "we could not determine the type", as distinct from OTHER ("a type we
+    # recognise but do not model"). Its absence was a live bug: discovery.py
+    # referenced DeviceType.UNKNOWN, which raised AttributeError for any device
+    # an adapter reported without a type, and several import paths persisted the
+    # literal string "unknown" into the column. DeviceStatus has always had this
+    # member; DeviceType simply never grew one.
+    UNKNOWN = "unknown"
+
+
+# Vendor / adapter strings that are NOT DeviceType members but arrive at the
+# persist boundary anyway. This is by design at the adapter layer: the adapter
+# contract declares ``DiscoveredDevice.device_type: str  # ap, switch, router,
+# camera, nvr, phone, etc.`` -- a deliberately loose string. The defect was that
+# NOTHING translated it before it reached a column whose readers demand the
+# strict enum.
+_DEVICE_TYPE_ALIASES: dict[str, DeviceType] = {
+    # UniFi maps both uap (access point) and ubb (building bridge) to "ap".
+    "ap": DeviceType.ACCESS_POINT,
+    "accesspoint": DeviceType.ACCESS_POINT,
+    "wireless": DeviceType.ACCESS_POINT,
+    # FreePBX / Grandstream report handsets as "phone".
+    "phone": DeviceType.VOIP_PHONE,
+    "voip": DeviceType.VOIP_PHONE,
+    "sip_phone": DeviceType.VOIP_PHONE,
+    # Hikvision / ONVIF distinguish a PTZ camera; for inventory it is a camera.
+    "camera_ptz": DeviceType.CAMERA,
+    "ptz": DeviceType.CAMERA,
+    "ipcamera": DeviceType.CAMERA,
+    # TrueNAS. There is no STORAGE member; a NAS appliance is closest to SERVER.
+    "storage": DeviceType.SERVER,
+    "nas": DeviceType.SERVER,
+    # Controllers discovered as devices.
+    "unifi_controller": DeviceType.GATEWAY,
+    "omada_controller": DeviceType.GATEWAY,
+    "controller": DeviceType.GATEWAY,
+    # Common spellings of the real members.
+    "access-point": DeviceType.ACCESS_POINT,
+    "voip-phone": DeviceType.VOIP_PHONE,
+    "access-control": DeviceType.ACCESS_CONTROL,
+}
+
+
+def normalize_device_type(value: object) -> DeviceType:
+    """
+    Coerce anything an adapter, import file or agent reports into a DeviceType.
+
+    NEVER raises. That is the point: ``Device.device_type`` is a plain
+    ``String(50)`` column, so an unrecognised value is written happily and only
+    explodes much later, when a response model declared ``device_type:
+    DeviceType`` tries to serialise the row. Before this existed, the two
+    failure modes were:
+
+      * ``DeviceType(data.device_type)`` -> ValueError on "ap" / "phone" /
+        "storage" / "camera_ptz", which the sync loop caught and turned into a
+        silently skipped device. A UniFi access point -- the single most common
+        UniFi device -- never appeared in inventory, and the only trace was one
+        line in ``stats["errors"]``.
+      * arbitrary strings ("unknown", or anything in an import file) written
+        straight through, poisoning the row for every later read.
+
+    Unrecognised values fall back to ``OTHER`` and are logged, so a new vendor
+    string shows up in the logs as something to add above rather than as a
+    missing device nobody can explain.
+    """
+    if value is None:
+        return DeviceType.UNKNOWN
+    if isinstance(value, DeviceType):
+        return value
+
+    raw = str(value).strip().lower().replace(" ", "_")
+    if not raw:
+        return DeviceType.UNKNOWN
+
+    try:
+        return DeviceType(raw)
+    except ValueError:
+        pass
+
+    alias = _DEVICE_TYPE_ALIASES.get(raw)
+    if alias is not None:
+        return alias
+
+    logger.warning(
+        "Unrecognised device_type %r; storing as %s. Add an alias in "
+        "_DEVICE_TYPE_ALIASES if this is a real vendor type.",
+        raw,
+        DeviceType.OTHER.value,
+    )
+    return DeviceType.OTHER
 
 
 class DeviceStatus(StrEnum):

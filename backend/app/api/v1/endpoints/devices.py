@@ -956,6 +956,76 @@ _DEFAULT_CAPS: dict[str, bool] = {
 }
 
 
+# Maps the legacy ``can_*`` booleans this endpoint returns onto the typed
+# Capability codes an adapter manifest actually declares. Only entries listed
+# here are resolved from the manifest; anything absent keeps the device-type
+# default, so an unmapped key degrades to today's behaviour rather than
+# silently reporting False.
+_CAP_CODE_BY_FLAG: dict[str, tuple[str, ...]] = {
+    "can_poe_control": ("switch.poe.control",),
+    "can_poe_status": ("switch.poe.status",),
+    "can_port_control": ("switch.port.enable",),
+    "can_port_status": ("switch.port.status",),
+    "can_port_config": ("switch.port.config",),
+    "can_vlan_config": ("switch.vlan.management", "switch.vlan.create"),
+    "can_ssid_control": ("wifi.ssid.management", "wifi.ssid.create"),
+    "can_client_list": ("wifi.client.list",),
+    "can_firmware_update": ("device.firmware.upgrade",),
+    "can_backup": ("device.backup",),
+    "can_reboot": ("device.reboot",),
+}
+
+
+async def _manifest_caps_for_device(device: Any, session: AsyncSession) -> dict[str, bool] | None:
+    """
+    Resolve a device's real capabilities from its controller's adapter manifest.
+
+    Returns None when there is no controller, no registered adapter, or the
+    manifest declares nothing for this device type -- callers then fall back to
+    the device-type table.
+
+    Without this the endpoint answered purely from ``_TYPE_CAPS``, so EVERY row
+    with device_type == "switch" was advertised can_poe_control=True regardless
+    of vendor, and the UI (PoEPage, SwitchesPage gate on this) offered PoE
+    controls on hardware that has none. Adapters never populated the override
+    path either: they emit typed Capability enums, not ``can_*`` keys, so
+    ``stored`` was empty in practice.
+    """
+    controller_id = getattr(device, "controller_id", None)
+    if not controller_id:
+        return None
+    try:
+        from app.adapters.registry import get_adapter_registry
+        from app.models.core import Controller
+
+        ctrl = (
+            await session.execute(
+                select(Controller).where(
+                    Controller.id == controller_id, Controller.deleted_at.is_(None)
+                )
+            )
+        ).scalar_one_or_none()
+        if ctrl is None:
+            return None
+        registry = get_adapter_registry()
+        if not registry.has_adapter(ctrl.controller_type):
+            return None
+        manifest = registry.get_manifest(ctrl.controller_type)
+        dtcap = (manifest.device_types or {}).get(device.device_type)
+        if dtcap is None:
+            return None
+        declared = {str(c) for c in (dtcap.capabilities or [])}
+        if not declared:
+            return None
+        return {
+            flag: any(code in declared for code in codes)
+            for flag, codes in _CAP_CODE_BY_FLAG.items()
+        }
+    except Exception:  # pragma: no cover - never fail a read on capability lookup
+        logger.exception("capability manifest lookup failed for device %s", device.id)
+        return None
+
+
 @router.get("/{device_id}/capabilities")
 async def get_device_capabilities(
     device_id: UUID,
@@ -971,7 +1041,13 @@ async def get_device_capabilities(
     device = await _load_device(device_id, current_user, session)
 
     stored: dict[str, Any] = device.capabilities or {}
-    type_caps = _TYPE_CAPS.get(device.device_type, _DEFAULT_CAPS)
+    type_caps = dict(_TYPE_CAPS.get(device.device_type, _DEFAULT_CAPS))
+
+    # Prefer what the backing adapter actually declares over the device-type
+    # guess. Stored per-device overrides still win over both (applied below).
+    manifest_caps = await _manifest_caps_for_device(device, session)
+    if manifest_caps:
+        type_caps.update({k: v for k, v in manifest_caps.items() if k in type_caps})
 
     # Build per-capability detail dicts
     driver_base_caps: dict[str, dict[str, Any]] = {}

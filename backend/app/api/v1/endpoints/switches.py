@@ -120,18 +120,34 @@ class AdapterActionResponse(BaseModel):
 
 
 class VlanConfig(BaseModel):
+    """Per-port VLAN settings sent by the port dialog.
+
+    ``voice_vlan`` and ``guest_vlan`` used to live here. Both were collected by
+    the dialog, accepted here, echoed back in the response -- and never added
+    to the config pushed to the controller. Omada models voice VLAN as
+    ``voiceNetworkEnable`` plus a network reference rather than a bare id, and
+    no write mapping for either has been validated against real hardware, so
+    they are not offered rather than accepted and dropped. Port PROFILES keep
+    their own voice_vlan field; that is a different path.
+    """
+
     mode: str = "access"
     native_vlan: int = Field(default=1, ge=1, le=4094)
     tagged_vlans: list[int] = Field(default_factory=list)
-    voice_vlan: int | None = Field(default=None, ge=1, le=4094)
-    guest_vlan: int | None = Field(default=None, ge=1, le=4094)
 
 
 class PoeConfig(BaseModel):
+    """PoE settings for one port.
+
+    ``priority`` used to live here. The dialog collected it, this schema
+    accepted it, and no code ever put it in the config dict -- there is no
+    validated controller key for per-port PoE priority. Removed from both
+    rather than kept as a control that does nothing.
+    """
+
     enabled: bool = False
     mode: Literal["auto", "manual", "fixed"] = "auto"
     power_limit: float | None = Field(default=None, ge=0.0, le=95.0)
-    priority: int = Field(default=0, ge=0, le=7)
 
 
 class StpConfig(BaseModel):
@@ -143,10 +159,17 @@ class StpConfig(BaseModel):
 
 
 class SecurityConfig(BaseModel):
+    #: Master toggle. False means "FreeSDN is not managing port security here",
+    #: NOT "actively disable whatever the switch has". The two are very
+    #: different on a port someone configured by hand.
     enabled: bool = False
     mac_limit: int | None = Field(default=None, ge=1, le=4092)
     violation_action: Literal["restrict", "shutdown", "drop"] = "restrict"
-    dot1x_enabled: bool = False
+    #: OPTIONAL on purpose. This was ``bool = False``, and the port dialog has
+    #: no 802.1X control at all, so every save arrived with the DEFAULT and the
+    #: endpoint pushed ``dot1x=0`` off the back of it. None means "the caller
+    #: said nothing about 802.1X", which is what the UI actually means.
+    dot1x_enabled: bool | None = None
     dot1x_mode: Literal["auto", "force_auth", "force_unauth", "disable"] = "auto"
 
 
@@ -1300,8 +1323,30 @@ async def update_switch_port(
         config["pvid"] = data.vlan_config.native_vlan
         config["taggedVlans"] = data.vlan_config.tagged_vlans
         port.vlan_id = data.vlan_config.native_vlan
+        # NOTE: voice_vlan / guest_vlan are deliberately NOT pushed. The port
+        # dialog used to collect a voice VLAN and this endpoint dropped it on
+        # the floor -- accepted, echoed back, never sent. Omada exposes voice
+        # VLAN as `voiceNetworkEnable` plus a network reference rather than a
+        # bare VLAN id, and no write mapping for it has been validated against
+        # real hardware, so the honest state is "not offered". The control has
+        # been removed from the dialog rather than left there lying.
     if data.poe_config is not None:
-        config["poeEnabled"] = data.poe_config.enabled
+        # These were the wrong keys and the wrong count.
+        #
+        # `poeEnabled` (flat) is not what the controller takes -- the PoE page's
+        # own endpoint, which IS validated against the maintainer's Omada fleet,
+        # sends `poe: {enable: ...}`. So the port dialog's PoE toggle was
+        # writing a key the controller ignores.
+        #
+        # And `mode` and `power_limit` were collected by the dialog, accepted by
+        # the schema, and never added to the config dict at all: the operator
+        # set a 15W cap, saved, saw it echoed back, and nothing reached the
+        # switch. Both have proven key names on the PoE endpoint; use those.
+        config["poe"] = {"enable": data.poe_config.enabled}
+        if data.poe_config.mode is not None:
+            config["poeMode"] = data.poe_config.mode
+        if data.poe_config.power_limit is not None:
+            config["poePowerLimit"] = data.poe_config.power_limit
         port.is_poe_enabled = data.poe_config.enabled
     if data.stp_config is not None:
         config["stpEnabled"] = data.stp_config.enabled
@@ -1311,15 +1356,48 @@ async def update_switch_port(
         config["bpduFilter"] = data.stp_config.bpdu_filter
         config["bpduGuard"] = data.stp_config.bpdu_guard
     if data.security_config is not None:
-        dot1x_mode_map = {"auto": 1, "force_auth": 2, "force_unauth": 3, "disable": 0}
-        if data.security_config.dot1x_enabled:
-            config["dot1x"] = dot1x_mode_map[data.security_config.dot1x_mode]
-        else:
-            config["dot1x"] = 0
-        if data.security_config.mac_limit is not None:
-            config["macLimit"] = data.security_config.mac_limit
-        if data.security_config.violation_action != "restrict":
-            config["violationAction"] = data.security_config.violation_action
+        # ``SecurityConfig.enabled`` -- the master "Port Security" toggle the
+        # dialog shows -- was collected, sent on every save, and READ BY
+        # NOTHING. The block below ran unconditionally, so:
+        #
+        #   * ``dot1x_enabled`` defaulted to False (the dialog has no 802.1X
+        #     control, so it never sent one) and the else-branch pushed
+        #     ``dot1x=0``. Saving a port to change its NAME or MTU silently
+        #     turned off 802.1X on that switch port -- including 802.1X someone
+        #     had configured outside FreeSDN, which FreeSDN cannot see and did
+        #     not warn about.
+        #   * ``macLimit`` went out whenever the field was non-null, even with
+        #     the security toggle switched off. The dialog only lets you EDIT
+        #     mac_limit while the toggle is on, but it sends the value either
+        #     way, so turning security off and saving still applied a limit.
+        #
+        # Now: nothing security-related is pushed unless the operator turned
+        # the toggle on, and 802.1X is only touched when the caller says
+        # something about it. Turning the toggle OFF pushes an explicit disable
+        # only if FreeSDN was the one that turned it on -- recorded in
+        # port_metadata, because the port table stores no security state and
+        # guessing would be how this bug started.
+        security_state = dict(port.port_metadata or {})
+        was_managed = bool(security_state.get("security_managed"))
+
+        if data.security_config.enabled:
+            dot1x_mode_map = {"auto": 1, "force_auth": 2, "force_unauth": 3, "disable": 0}
+            if data.security_config.dot1x_enabled is True:
+                config["dot1x"] = dot1x_mode_map[data.security_config.dot1x_mode]
+            elif data.security_config.dot1x_enabled is False:
+                config["dot1x"] = 0
+            if data.security_config.mac_limit is not None:
+                config["macLimit"] = data.security_config.mac_limit
+            if data.security_config.violation_action != "restrict":
+                config["violationAction"] = data.security_config.violation_action
+            security_state["security_managed"] = True
+            port.port_metadata = security_state
+        elif was_managed:
+            # We turned it on, the operator is turning it off: undo our own
+            # change rather than leaving a MAC limit nobody can see in the UI.
+            config["macLimit"] = 0
+            security_state["security_managed"] = False
+            port.port_metadata = security_state
 
     try:
         async with adapter:

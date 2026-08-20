@@ -296,15 +296,38 @@ class VPNOrchestrationService:
                     ssl=ctrl.use_ssl,
                     verify_ssl=ctrl.verify_ssl,
                 )
-                if hasattr(adapter, "push_vpn_config"):
-                    async with adapter:
-                        await adapter.push_vpn_config(device.mac_address, config_dict)
-                    logger.info("VPN config pushed to gateway %s (side %s)", gw_id, side)
-                else:
-                    logger.info(
-                        "Adapter for gateway %s does not support VPN push — config saved in DB",
-                        gw_id,
+                # The hasattr() guard below is always TRUE: BaseAdapter defines
+                # push_vpn_config as a stub returning
+                # AdapterResult.fail(NOT_SUPPORTED), so every adapter has the
+                # attribute and the honest "does not support VPN push" branch was
+                # unreachable dead code. Only OPNsense actually implements it.
+                #
+                # The result was then DISCARDED, and a failed AdapterResult does
+                # not raise -- so for every adapter except OPNsense the tunnel was
+                # marked provisioned/active while nothing had been pushed to
+                # either gateway. The operator saw a live site-to-site tunnel that
+                # did not exist.
+                #
+                # Read the result. An unsupported adapter is not an error worth a
+                # stack trace, but it is emphatically not "provisioned" either.
+                async with adapter:
+                    push_result = await adapter.push_vpn_config(device.mac_address, config_dict)
+                if getattr(push_result, "success", True) is False:
+                    reason = (
+                        getattr(push_result, "error", None)
+                        or getattr(push_result, "message", None)
+                        or "adapter refused the VPN push"
                     )
+                    logger.warning(
+                        "Gateway %s did not accept the VPN config (side %s): %s",
+                        gw_id,
+                        side,
+                        reason,
+                    )
+                    provisioned = False
+                    tunnel.error_message = f"Side {side}: {reason}"
+                else:
+                    logger.info("VPN config pushed to gateway %s (side %s)", gw_id, side)
             except Exception:
                 logger.warning("Failed to push VPN config to gateway %s", gw_id, exc_info=True)
                 provisioned = False

@@ -121,6 +121,46 @@ class DistributionService:
 
     # ─── VLAN Distribution ──────────────────────────────────────────────
 
+    @staticmethod
+    def _reject_unsupported_limbs(limbs: list[SiteRoleAssignment]) -> None:
+        """
+        Fail honestly on a role map this engine cannot execute.
+
+        A SiteRoleAssignment is polymorphic: exactly one of ``gateway_id`` or
+        ``controller_id`` is set, and ``device_id`` returns whichever it is. The
+        plan builders below only ever read ``gateway_id``, and the executor is
+        gateway-shaped throughout -- it resolves every step through the
+        GatewayConnection cache and calls ``build_adapter(gw)``. There is no
+        controller path in it at all.
+
+        So for a controller limb the builders emitted ``str(None) == "None"`` as
+        the device_id and the executor then did ``UUID("None")``, raising
+        ValueError. ``_execute_plan`` catches only DistributionError, so it
+        escaped as an unhandled 500 -- and because the session rolls back on an
+        exception, the DistributionRecord was never committed either, leaving the
+        operator with a red toast, an empty Distribution Log, and nothing to
+        retry. That is the worst possible shape for a failure.
+
+        This is a genuine capability gap, not an oversight to paper over:
+        ``GatewayConnection.vendor`` is limited to opnsense/pfsense/mikrotik/
+        openwrt, so a UniFi or Omada device can ONLY be represented as a
+        controller assignment. Until the executor grows a controller lane, say so
+        clearly and point at the path that does work -- ReconciliationService's
+        distribute-to-limbs handles controller limbs today.
+        """
+        controller_limbs = [limb for limb in limbs if limb.device_type == "controller"]
+        if not controller_limbs:
+            return
+        ids = ", ".join(str(limb.controller_id) for limb in controller_limbs)
+        raise DistributionError(
+            "This site's role map assigns controller(s) as limbs "
+            f"({ids}), which the distribution engine cannot push to: its "
+            "execution lane resolves every step against gateway connections. "
+            "Use Reconciliation -> Distribute to Limbs for controller-backed "
+            "limbs, or assign a supported gateway (opnsense/pfsense/mikrotik/"
+            "openwrt) as the limb."
+        )
+
     async def distribute_vlan(
         self,
         vlan: CanonicalVLAN,
@@ -136,6 +176,7 @@ class DistributionService:
         )
         limbs = [a for a in role_map.assignments if a.role == NetworkRole.LIMB]
 
+        self._reject_unsupported_limbs(limbs)
         plan = self._build_vlan_plan(vlan, brain, limbs)
         record = DistributionRecord(
             organization_id=vlan.organization_id,
@@ -170,7 +211,7 @@ class DistributionService:
             steps.append(
                 {
                     "tier": 0,
-                    "device_id": str(brain.gateway_id),
+                    "device_id": str(brain.device_id),
                     "action": "verify_reachable",
                     "params": {},
                 }
@@ -179,7 +220,7 @@ class DistributionService:
             steps.append(
                 {
                     "tier": 0,
-                    "device_id": str(limb.gateway_id),
+                    "device_id": str(limb.device_id),
                     "action": "verify_reachable",
                     "params": {},
                 }
@@ -190,7 +231,7 @@ class DistributionService:
             steps.append(
                 {
                     "tier": 1,
-                    "device_id": str(brain.gateway_id),
+                    "device_id": str(brain.device_id),
                     "action": "create_vlan_interface",
                     "params": {
                         "vlan_id": vlan.vlan_id,
@@ -207,7 +248,7 @@ class DistributionService:
             steps.append(
                 {
                     "tier": 2,
-                    "device_id": str(brain.gateway_id),
+                    "device_id": str(brain.device_id),
                     "action": "create_dhcp_scope",
                     "params": {
                         "interface": f"vlan{vlan.vlan_id}",
@@ -222,7 +263,7 @@ class DistributionService:
             steps.append(
                 {
                     "tier": 2,
-                    "device_id": str(brain.gateway_id),
+                    "device_id": str(brain.device_id),
                     "action": "create_alias",
                     "params": {
                         "name": f"FreeSdn_VLAN{vlan.vlan_id}_net",
@@ -238,7 +279,7 @@ class DistributionService:
             steps.append(
                 {
                     "tier": 3,
-                    "device_id": str(limb.gateway_id),
+                    "device_id": str(limb.device_id),
                     "action": "create_vlan",
                     "params": {"vlan_id": vlan.vlan_id, "name": vlan.name},
                 }
@@ -247,7 +288,7 @@ class DistributionService:
                 steps.append(
                     {
                         "tier": 3,
-                        "device_id": str(limb.gateway_id),
+                        "device_id": str(limb.device_id),
                         "action": "suppress_dhcp",
                         "params": {"vlan_id": vlan.vlan_id},
                     }
@@ -543,6 +584,7 @@ class DistributionService:
         )
         limbs = [a for a in role_map.assignments if a.role == NetworkRole.LIMB]
 
+        self._reject_unsupported_limbs(limbs)
         plan = self._build_retract_plan(vlan, brain, limbs)
         record = DistributionRecord(
             organization_id=vlan.organization_id,
@@ -585,7 +627,7 @@ class DistributionService:
             steps.append(
                 {
                     "tier": 0,
-                    "device_id": str(brain.gateway_id),
+                    "device_id": str(brain.device_id),
                     "action": "verify_reachable",
                     "params": {},
                 }
@@ -594,7 +636,7 @@ class DistributionService:
             steps.append(
                 {
                     "tier": 0,
-                    "device_id": str(limb.gateway_id),
+                    "device_id": str(limb.device_id),
                     "action": "verify_reachable",
                     "params": {},
                 }
@@ -605,7 +647,7 @@ class DistributionService:
             steps.append(
                 {
                     "tier": 1,
-                    "device_id": str(limb.gateway_id),
+                    "device_id": str(limb.device_id),
                     "action": "delete_vlan",
                     "params": {"vlan_id": vlan.vlan_id},
                 }
@@ -616,7 +658,7 @@ class DistributionService:
             steps.append(
                 {
                     "tier": 2,
-                    "device_id": str(brain.gateway_id),
+                    "device_id": str(brain.device_id),
                     "action": "delete_alias",
                     "params": {"name": f"FreeSdn_VLAN{vlan.vlan_id}_net"},
                 }
@@ -627,7 +669,7 @@ class DistributionService:
             steps.append(
                 {
                     "tier": 3,
-                    "device_id": str(brain.gateway_id),
+                    "device_id": str(brain.device_id),
                     "action": "delete_dhcp_scope",
                     "params": {"interface": f"vlan{vlan.vlan_id}"},
                 }
@@ -638,7 +680,7 @@ class DistributionService:
             steps.append(
                 {
                     "tier": 4,
-                    "device_id": str(brain.gateway_id),
+                    "device_id": str(brain.device_id),
                     "action": "delete_vlan_interface",
                     "params": {"vlan_id": vlan.vlan_id},
                 }

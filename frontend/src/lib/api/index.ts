@@ -13,7 +13,7 @@ export { api, apiClient, API_URL, getCookie, getWebSocketUrl, getApiErrorMessage
 export * from './types';
 
 // Domain API clients
-export { devicesApi, actionsApi, devicePortsApi, deviceControlApi } from './devices';
+export { devicesApi, actionsApi, deviceControlApi } from './devices';
 export {
   controllersApi,
   type TestConnectionResult,
@@ -29,7 +29,6 @@ export { sitesApi, sitesApiV2 } from './sites';
 export { usersApi } from './users';
 export { camerasApi, nvrApi, cameraAccessApi, cameraDiscoveryApi, evidenceApi, cameraReportsApi, type EvidenceArchive, type CameraReport } from './cameras';
 export { discoveryApi } from './discovery';
-export { organizationsApi } from './organizations';
 export { analyticsApi } from './analytics';
 export { systemApi, backupApi, storageLocationsApi, configApi, notificationApi, modulesApi } from './system';
 export { accessPointsApi, switchesApi, poeApi, networkApi } from './network';

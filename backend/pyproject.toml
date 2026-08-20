@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "freesdn-backend"
-version = "26.08.1"
+version = "26.08.2"
 description = "FreeSDN - Unified Network Management Platform"
 license = "AGPL-3.0-only"
 authors = ["PyPV - Python Platform Ventures <contact@freesdn.org>"]
@@ -10,12 +10,17 @@ packages = [{include = "app"}]
 [tool.poetry.dependencies]
 python = "^3.13"
 # Web Framework
-# starlette 1.x: the old <0.137 hold is LIFTED. fastapi 0.138.1 declares
+# starlette 1.x: the old <0.137 hold is LIFTED. fastapi declares
 # starlette>=0.46 with no upper bound, and prometheus-fastapi-instrumentator 8.x
-# now handles fastapi's _IncludedRouter route type (the .path crash 7.x hit). The
-# three move together (instrumentator 8.x REQUIRES starlette 1.x) and pull
-# starlette 1.3.1, which fixes CVE-2026-48818 / CVE-2026-54283.
-fastapi = ">=0.138.1,<0.139"
+# handles fastapi's _IncludedRouter route type (the .path crash 7.x hit). The
+# three move together (instrumentator 8.x REQUIRES starlette 1.x).
+#
+# 2026-08-20: ceiling moved 0.139 -> 0.142. Re-resolved against PyPI: fastapi
+# 0.141.1 + starlette 1.6.0 + instrumentator 8.1.0 install together with no
+# upper-bound conflict, and the full suite gates the bump. The minor is still
+# pinned deliberately -- fastapi 0.137 changed the route type the OpenAPI export
+# walks, and that ripple is the reason this ceiling exists at all.
+fastapi = ">=0.141.1,<0.142"
 uvicorn = {extras = ["standard"], version = ">=0.46.0"}
 gunicorn = ">=26.0.0"
 # Database

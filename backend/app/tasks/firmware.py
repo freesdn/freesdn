@@ -71,6 +71,38 @@ def check_scheduled_upgrades(self) -> dict[str, Any]:
         async with AsyncSessionLocal() as session:
             now = datetime.now(UTC)
 
+            from app.services.firmware import PersistentFirmwareService
+
+            # Backfill any enabled schedule that has no next_run_at.
+            #
+            # Nothing ever wrote that column, so EVERY existing row is NULL, and
+            # `next_run_at <= now` is never true for NULL -- which is why
+            # firmware schedules have never fired. New and edited schedules get
+            # a next_run_at from the service now; this heals the rows that were
+            # created before that. Self-healing rather than a migration, so an
+            # operator's existing schedules start working on the next tick
+            # without anyone having to notice.
+            unscheduled = (
+                (
+                    await session.execute(
+                        select(FirmwareSchedule).where(
+                            FirmwareSchedule.is_enabled.is_(True),
+                            FirmwareSchedule.next_run_at.is_(None),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for stale in unscheduled:
+                stale.next_run_at = PersistentFirmwareService.compute_next_run(stale, after=now)
+            if unscheduled:
+                await session.commit()
+                logger.info(
+                    "Firmware: computed a first next_run_at for %d schedule(s)",
+                    len(unscheduled),
+                )
+
             # Find enabled schedules that are due
             q = select(FirmwareSchedule).where(
                 FirmwareSchedule.is_enabled.is_(True),

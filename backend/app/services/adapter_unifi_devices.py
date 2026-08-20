@@ -36,7 +36,7 @@ _APPLY: dict[tuple[str, str], str] = {
     ("unifi.devices.restart", "update"): "restart_device",
     ("unifi.devices.disable", "update"): "disable_device",
     ("unifi.devices.port_override", "update"): "update_switch_port",
-    ("unifi.devices.set_port_poe", "update"): "set_port_poe",
+    ("unifi.devices.set_port_poe", "update"): "set_port_poe_on_site",
     ("unifi.devices.adopt", "update"): "adopt_device",
     ("unifi.devices.upgrade", "update"): "upgrade_device",
     ("unifi.devices.force_provision", "update"): "force_provision_device",

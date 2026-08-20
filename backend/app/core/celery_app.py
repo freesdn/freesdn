@@ -92,6 +92,13 @@ celery_app = Celery(
         "app.modules.gateway.tasks.distribution_tasks",
         "app.tasks.cameras",
         "app.modules.voip.tasks",
+        # ai.reset_monthly_budgets is registered as a side effect of
+        # importing this module (governance.py calls
+        # _register_monthly_reset_task() at import time). Without the
+        # module here NO worker ever imported it, so the task did not
+        # exist and the "monthly" AI token counter was never reset --
+        # it only ever went up.
+        "app.modules.ai.governance",
         "app.tasks.adoption",
         "app.tasks.poe",
         "app.tasks.radius",
@@ -470,6 +477,17 @@ celery_app.conf.update(
             "schedule": crontab(minute="*/5"),
             "options": {"queue": "metrics"},
         },
+        # SLA: generate scheduled reports - hourly.
+        #
+        # ``SLAReportService.generate_scheduled`` existed complete and had NO
+        # caller: its docstring said "Called by a periodic task" and none was
+        # ever added, so SLA report schedules generated nothing. Hourly is
+        # enough granularity for weekly/monthly/quarterly cadences.
+        "sla-generate-scheduled-reports": {
+            "task": "app.tasks.sla.generate_scheduled_reports",
+            "schedule": crontab(minute="7"),
+            "options": {"queue": "metrics"},
+        },
         # Backup: run scheduled backups - every 15 minutes
         "backup-run-scheduled": {
             "task": "backup.run_scheduled",
@@ -549,6 +567,14 @@ celery_app.conf.update(
             "options": {"queue": "default"},
         },
         # Camera: generate daily report - daily at 1:00 AM
+        # AI: reset the monthly token budget. The counter this clears is what
+        # check_token_budget compares against, so without it an organization's
+        # usage accumulated forever and eventually refused every AI call.
+        "ai-reset-monthly-budgets": {
+            "task": "ai.reset_monthly_budgets",
+            "schedule": crontab(hour=0, minute=5, day_of_month=1),
+            "options": {"queue": "default"},
+        },
         "camera-generate-daily-report": {
             "task": "cameras.generate_daily_report",
             "schedule": crontab(hour=1, minute=0),

@@ -117,8 +117,22 @@ class ApplicationClassifier:
     """
 
     def __init__(self) -> None:
-        # (protocol, port) → (app_name, app_category)
+        # (protocol, port) → (app_name, app_category). Built-ins plus any
+        # system-wide custom rules; the fallback for every organization.
         self._port_map: dict[tuple[int, int], tuple[str, str]] = {}
+        # organization_id → its own overrides, consulted before _port_map.
+        #
+        # The NetFlow receiver is ONE process-wide UDP listener serving every
+        # organization, so it has no single org to load rules for. It called
+        # ``load_rules(db)`` with no organization_id, which takes the
+        # ``else`` branch below and filters to ``is_system`` only -- so every
+        # rule an operator created through the API was loaded by nothing and
+        # classified nothing. The rule appeared in the list, said "enabled",
+        # and did not exist as far as traffic was concerned.
+        #
+        # A per-org map is what lets one shared listener honour them without
+        # letting org A's naming leak onto org B's flows.
+        self._org_port_maps: dict[UUID, dict[tuple[int, int], tuple[str, str]]] = {}
         self._loaded: bool = False
 
     async def load_rules(self, session: AsyncSession, organization_id: UUID | None = None) -> None:
@@ -143,14 +157,26 @@ class ApplicationClassifier:
                         ApplicationClassificationRule.organization_id == organization_id,
                     )
                 )
-            else:
-                query = query.where(ApplicationClassificationRule.is_system)
-
+            # No organization_id means "load for everyone" -- the shared
+            # NetFlow listener's case. It used to mean "system rules only",
+            # which is what made every operator-created rule inert.
             result = await session.execute(query)
             custom_rules = result.scalars().all()
             for rule in custom_rules:
+                # A system rule is the global fallback; an org's rule goes in
+                # that org's own map so it cannot rename another tenant's
+                # traffic.
+                if rule.is_system or rule.organization_id is None:
+                    target = self._port_map
+                elif organization_id is not None:
+                    # Loading for one specific org: keep the historical
+                    # behaviour of folding its rules into the flat map.
+                    target = self._port_map
+                else:
+                    target = self._org_port_maps.setdefault(rule.organization_id, {})
+
                 if rule.port is not None and rule.protocol is not None:
-                    self._port_map[(rule.protocol, rule.port)] = (
+                    target[(rule.protocol, rule.port)] = (
                         rule.name,
                         rule.app_category,
                     )
@@ -164,7 +190,7 @@ class ApplicationClassifier:
                         continue
                     proto = rule.protocol or 6
                     for p in range(rule.port_range_start, rule.port_range_end + 1):
-                        self._port_map[(proto, p)] = (rule.name, rule.app_category)
+                        target[(proto, p)] = (rule.name, rule.app_category)
 
             logger.info(
                 "Application classifier loaded: %d rules (%d built-in + %d custom)",
@@ -177,20 +203,35 @@ class ApplicationClassifier:
 
         self._loaded = True
 
-    def classify(self, protocol: int, dest_port: int | None) -> tuple[str | None, str | None]:
+    def classify(
+        self,
+        protocol: int,
+        dest_port: int | None,
+        organization_id: UUID | None = None,
+    ) -> tuple[str | None, str | None]:
         """
         O(1) lookup: returns (app_name, app_category) or (None, None).
+
+        An organization's own rules win over the built-in / system map, which
+        is the point of letting an operator define one. Passing no
+        organization_id consults the shared map only -- the historical
+        behaviour, kept so existing callers are unaffected.
         """
         if dest_port is None:
             return (None, None)
-        return self._port_map.get((protocol, dest_port), (None, None))
+        key = (protocol, dest_port)
+        if organization_id is not None:
+            org_map = self._org_port_maps.get(organization_id)
+            if org_map is not None and key in org_map:
+                return org_map[key]
+        return self._port_map.get(key, (None, None))
 
     @property
     def is_loaded(self) -> bool:
         return self._loaded
 
     def rule_count(self) -> int:
-        return len(self._port_map)
+        return len(self._port_map) + sum(len(m) for m in self._org_port_maps.values())
 
 
 async def seed_builtin_rules(session: AsyncSession) -> int:

@@ -102,6 +102,47 @@ class AgentReportType(StrEnum):
 
 
 # =============================================================================
+# Wire-value coercion
+# =============================================================================
+#
+# Everything arriving over the agent WebSocket is untrusted JSON. The metrics
+# below land in typed DB columns, so a string or null from an older/foreign
+# agent build would otherwise surface as a DBAPI error inside a handler whose
+# only recovery is to drop the report -- or, on the heartbeat path, to tear the
+# connection down. Coerce once, at the edge, and clamp to the range the column
+# and the UI both assume.
+
+
+def _as_float(value: Any, *, default: float = 0.0, lo: float = 0.0, hi: float = 100.0) -> float:
+    """A percentage from the wire, or ``default``. Never raises."""
+    try:
+        if isinstance(value, bool) or value is None:
+            return default
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    # NaN and infinities survive min/max: ``min(100.0, nan)`` is 100.0 because
+    # every comparison against NaN is False. Clamping them would report a fake
+    # 100% CPU rather than "unknown", so reject them before the clamp.
+    if number != number or number in (float("inf"), float("-inf")):
+        return default
+    return max(lo, min(hi, number))
+
+
+def _as_int(value: Any, *, default: int = 0, lo: int = 0, hi: int = 2**31 - 1) -> int:
+    """A counter from the wire, or ``default``. Never raises."""
+    try:
+        if isinstance(value, bool) or value is None:
+            return default
+        number = float(value)
+        if number != number:  # NaN: int(nan) raises, and it means nothing here
+            return default
+        return max(lo, min(hi, int(number)))
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+# =============================================================================
 # Data Classes
 # =============================================================================
 
@@ -149,9 +190,24 @@ class AgentReport:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AgentReport":
+        # ``payload`` is untrusted wire data. It is DECLARED dict and every
+        # consumer in the codebase calls ``.get`` on it, but nothing enforced
+        # the shape -- an agent (or anything holding an agent key) sending
+        # ``"payload": []`` produced an AttributeError inside _handle_report,
+        # which _receiver_loop catches with ``break``. One malformed frame
+        # therefore tore the WebSocket down, and a persistently malformed one
+        # became a reconnect loop. Coerce here, at the single boundary every
+        # report crosses, rather than defending in each handler.
+        payload = data.get("payload", {})
+        if not isinstance(payload, dict):
+            logger.warning(
+                "Agent report payload is %s, not an object — discarding it",
+                type(payload).__name__,
+            )
+            payload = {}
         return cls(
             type=AgentReportType(data.get("type", "heartbeat")),
-            payload=data.get("payload", {}),
+            payload=payload,
             command_id=data.get("command_id"),
             correlation_id=data.get("correlation_id"),
             timestamp=datetime.fromisoformat(data["timestamp"])
@@ -415,7 +471,32 @@ class AgentConnection:
                 logger.error("Sender error: %s", e)
 
     async def _receiver_loop(self) -> None:
-        """Receive and process messages from agent."""
+        """Receive and process messages from agent.
+
+        Exiting this loop means the peer is gone -- the socket closed, the
+        agent tripped the rate limit, or a frame could not be handled. Whatever
+        the reason, ``_running`` MUST be cleared on the way out.
+
+        It was not, and the WebSocket endpoint parks on
+        ``while connection._running: await asyncio.sleep(1)``. So when an agent
+        disconnected, this loop broke and that one spun forever: the endpoint
+        coroutine never returned, its ``finally`` never ran, and the registry
+        kept a connection whose socket was closed.
+
+        Which matters because the registry is deliberately treated as ground
+        truth over the DB status column -- ``run_interactive_scan`` says so in
+        as many words and dispatches on ``get_connection_for_site``. So an
+        operator hitting Scan got their command written into a dead socket.
+        Meanwhile the row never flipped to offline, ``disconnected_at`` stayed
+        null, and every disconnect leaked one coroutine and one registry entry
+        for the life of the process.
+        """
+        try:
+            await self._receive_forever()
+        finally:
+            self._running = False
+
+    async def _receive_forever(self) -> None:
         while self._running:
             try:
                 # Read as text first so we can enforce a size cap + rate limit
@@ -459,21 +540,32 @@ class AgentConnection:
 
             # Update agent stats from heartbeat
             payload = report.payload
-            self.info.uptime_seconds = payload.get("uptime_seconds", 0)
-            self.info.cpu_percent = payload.get("cpu_percent", 0)
-            self.info.memory_percent = payload.get("memory_percent", 0)
-            self.info.disk_percent = payload.get("disk_percent", 0)
-            self.info.version = payload.get("version", self.info.version)
+            self.info.uptime_seconds = _as_int(payload.get("uptime_seconds"))
+            self.info.cpu_percent = _as_float(payload.get("cpu_percent"))
+            self.info.memory_percent = _as_float(payload.get("memory_percent"))
+            self.info.disk_percent = _as_float(payload.get("disk_percent"))
+            self.info.version = payload.get("version") or self.info.version
 
-            # Persist heartbeat freshness + capabilities back to the DB.
+            # Persist heartbeat freshness + telemetry back to the DB.
+            #
             # Without this, ``cleanup_stale_agents`` (which compares
-            # remote_agents.last_heartbeat to a cutoff) would mark every
-            # live agent offline once a minute, because the in-memory
-            # ``AgentInfo.last_heartbeat`` update above never reaches
-            # the row. Done in a fresh session because ``self.db`` is
-            # bound at registry-construct time and goes stale on
-            # long-lived WS connections.
-            caps = payload.get("capabilities")
+            # remote_agents.last_heartbeat to a cutoff) would mark every live
+            # agent offline once a minute, because the in-memory
+            # ``AgentInfo.last_heartbeat`` update above never reaches the row.
+            #
+            # The metrics half was missing entirely. The shipped agent sends
+            # cpu/memory/disk/uptime/version/platform/hostname every 30s over
+            # this socket, and all of it stopped at AgentInfo -- an in-memory
+            # object no API reads. So ``GET /agents`` reported
+            # ``uptime_seconds: 0`` forever, and ``version`` kept showing
+            # whatever the agent registered with, even after it self-updated.
+            # WS is the only transport the shipped agent uses; the HTTP
+            # ``POST /{id}/heartbeat`` endpoint that does persist all this is
+            # dead code by comparison.
+            #
+            # Done in a fresh session because ``self.db`` is bound at
+            # registry-construct time and goes stale on long-lived WS
+            # connections.
             try:
                 from sqlalchemy import update as _upd
 
@@ -484,9 +576,31 @@ class AgentConnection:
                     "last_heartbeat": self.info.last_heartbeat,
                     "last_seen": self.info.last_heartbeat,
                     "status": AgentStatus.ONLINE.value,
+                    "uptime_seconds": self.info.uptime_seconds,
                 }
-                if caps:
+                # ``capabilities`` gates which scan_types the operator may
+                # schedule, and it is read back as ``caps.get("scan_types")``.
+                # A non-object here (an agent sending a bare list) used to be
+                # stored verbatim and then 500'd every later read.
+                caps = payload.get("capabilities")
+                if isinstance(caps, dict) and caps:
                     values["capabilities"] = caps
+                elif caps:
+                    logger.warning(
+                        "Agent %s reported capabilities as %s, not an object — ignoring",
+                        self.info.agent_id,
+                        type(caps).__name__,
+                    )
+                version = payload.get("version")
+                if isinstance(version, str) and version:
+                    values["version"] = version[:50]
+                platform = payload.get("platform")
+                if isinstance(platform, str) and platform:
+                    values["platform"] = platform[:100]
+                hostname = payload.get("hostname")
+                if isinstance(hostname, str) and hostname:
+                    values["last_hostname"] = hostname[:255]
+
                 async with async_session_factory() as _s:
                     await _s.execute(
                         _upd(_RA).where(_RA.id == UUID(self.info.agent_id)).values(**values)
@@ -498,6 +612,14 @@ class AgentConnection:
                     self.info.agent_id,
                     exc_info=True,
                 )
+
+            # Time-series row, so the health history the UI and
+            # ``GET /agents/{id}/heartbeats`` read is not permanently empty
+            # for every agent that connects over the socket. Separate try so
+            # a LogDB outage cannot cost us the freshness write above --
+            # losing history is cosmetic, losing freshness marks a live agent
+            # offline.
+            await self._record_heartbeat_sample(payload)
 
         # Resolve pending command
         if report.command_id and report.command_id in self._pending_commands:
@@ -523,6 +645,47 @@ class AgentConnection:
                     handler(report)
             except Exception as e:
                 logger.error("Report handler error: %s", e)
+
+    async def _record_heartbeat_sample(self, payload: dict[str, Any]) -> None:
+        """Append one ``agent_heartbeats`` row from a WS heartbeat.
+
+        The same row ``POST /agents/{id}/heartbeat`` writes. That HTTP endpoint
+        exists, has a read endpoint (``GET /agents/{id}/heartbeats``) and a
+        retention endpoint (``DELETE /agents/heartbeats/old``) behind it -- but
+        the shipped agent has always used this WebSocket instead, so nothing
+        ever wrote a row and the whole health-history feature returned an empty
+        list on every deployment.
+
+        Best-effort and fully swallowed: heartbeat HISTORY is a nice-to-have,
+        while heartbeat FRESHNESS (persisted by the caller) is what keeps a
+        live agent from being marked offline.
+        """
+        try:
+            from app.db.session import get_logdb_factory
+            from app.models.agents import AgentHeartbeat as _HB
+
+            factory = get_logdb_factory()
+            async with factory() as _log:
+                _log.add(
+                    _HB(
+                        agent_id=UUID(self.info.agent_id),
+                        timestamp=self.info.last_heartbeat or datetime.now(UTC),
+                        cpu_percent=_as_float(payload.get("cpu_percent")),
+                        memory_percent=_as_float(payload.get("memory_percent")),
+                        disk_percent=_as_float(payload.get("disk_percent")),
+                        status=AgentStatus.ONLINE.value,
+                        latency_ms=None,
+                        managed_devices=_as_int(payload.get("managed_devices")),
+                        active_tasks=_as_int(payload.get("active_tasks")),
+                    )
+                )
+                await _log.commit()
+        except Exception:
+            logger.debug(
+                "Failed to record heartbeat sample for %s",
+                self.info.agent_id,
+                exc_info=True,
+            )
 
 
 # =============================================================================
@@ -755,23 +918,82 @@ class AgentRegistryService:
         """
         try:
             payload = report.payload or {}
-            hosts = payload.get("devices") or payload.get("results") or []
+            raw_hosts = payload.get("devices") or payload.get("results") or []
             # Bound the batch to the SAME cap the HTTP ingestion enforces
             # (DiscoveryResultsRequest max_length=5000) so the WS path can't be a
             # cap bypass for per-host DB-write amplification.
             _MAX_HOSTS = 5000
-            if isinstance(hosts, list) and len(hosts) > _MAX_HOSTS:
+            #
+            # The cap used to be guarded by ``isinstance(hosts, list)``, which
+            # meant a non-list slipped past it AND straight into upsert_batch,
+            # whose loop does ``h.get("ip_address")``. Iterating a dict yields
+            # its keys, so the first element was a str and the whole scan died
+            # on AttributeError -- swallowed by the except at the bottom of this
+            # method. The operator saw a scan that "completed" with zero hosts
+            # and no error anywhere. A dict payload also bypassed the cap
+            # entirely, which was the exact amplification the cap exists for.
+            #
+            # NOTE the log arguments below: this method hangs off
+            # AgentRegistryService, which has NO ``self.info`` -- that lives on
+            # AgentConnection. The original truncation warning read
+            # ``getattr(self.info, "agent_id", "?")``, and getattr evaluates
+            # ``self.info`` before it can supply the default, so the warning
+            # itself raised AttributeError. The except at the bottom of this
+            # method caught it, which meant the 5000-host CAP -- whose entire
+            # job is to truncate an oversized scan down to something safe --
+            # instead discarded the scan whole, and logged nothing an operator
+            # would ever see. Use ``report.agent_id``, which is stamped on
+            # every report by _handle_report.
+            if not isinstance(raw_hosts, list):
+                logger.warning(
+                    "Agent %s scan_result 'devices' is %s, not a list — dropping",
+                    report.agent_id,
+                    type(raw_hosts).__name__,
+                )
+                raw_hosts = []
+            if len(raw_hosts) > _MAX_HOSTS:
                 logger.warning(
                     "Agent %s scan_result has %d hosts > cap %d — truncating",
-                    getattr(self.info, "agent_id", "?"),
-                    len(hosts),
+                    report.agent_id,
+                    len(raw_hosts),
                     _MAX_HOSTS,
                 )
-                hosts = hosts[:_MAX_HOSTS]
+                raw_hosts = raw_hosts[:_MAX_HOSTS]
+            # Drop non-object entries rather than letting one poison the batch:
+            # upsert_batch runs in a single transaction, so one bad element used
+            # to cost every good host beside it.
+            hosts = [h for h in raw_hosts if isinstance(h, dict)]
+            if len(hosts) != len(raw_hosts):
+                logger.warning(
+                    "Agent %s scan_result had %d non-object host entries — skipped",
+                    report.agent_id,
+                    len(raw_hosts) - len(hosts),
+                )
+
             schedule_name = payload.get("schedule_name")
-            run_status = payload.get("status", "completed")
-            duration = payload.get("duration_seconds")
+            if schedule_name is not None and not isinstance(schedule_name, str):
+                schedule_name = None
+            # These land in typed columns on agent_schedule_runs, and the INSERT
+            # is what records that a scheduled scan ran at all. A wire value of
+            # the wrong type or length fails it, and the failure is swallowed by
+            # the except at the bottom of this method -- so the run silently
+            # never happened as far as the operator can tell.
+            #
+            # ``status`` is String(16), not the 50 these columns usually get.
+            run_status = str(payload.get("status") or "completed")[:16]
+            raw_duration = payload.get("duration_seconds")
+            # Nullable Float: None means "the agent did not say", which is a
+            # different fact from "it took no time".
+            duration = (
+                None
+                if raw_duration is None
+                else _as_float(raw_duration, default=0.0, hi=float(2**31))
+            )
             error_message = payload.get("error")
+            if error_message is not None:
+                # Text column, so no hard limit — bound it anyway so one agent
+                # cannot write an unbounded blob per scheduled run.
+                error_message = str(error_message)[:4000]
 
             # Need the agent's site_id + organization_id. Look up the
             # connection that owns this report.

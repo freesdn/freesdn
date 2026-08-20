@@ -128,7 +128,7 @@ def _agent_to_response(agent: Any) -> AgentResponse:
         agent_type=agent.agent_type,
         version=agent.version,
         platform=agent.platform,
-        capabilities=agent.capabilities or {},
+        capabilities=agent.capabilities if isinstance(agent.capabilities, dict) else {},
         supported_vendors=agent.supported_vendors or [],
         config=agent.config or {},
         last_ip=agent.last_ip,
@@ -780,8 +780,14 @@ async def run_interactive_scan(
     # Capability gate — matches the schedule-create validation so the
     # operator gets the same 400 they'd see when scheduling a scan_type
     # the agent can't run.
-    caps = agent.capabilities or {}
+    # ``capabilities`` is agent-reported JSONB. The heartbeat path now refuses
+    # a non-object, but a row written by an older build (or by a foreign agent
+    # against an older backend) can still hold a list or a string, and ``.get``
+    # on one of those is a 500 rather than a graceful "nothing reported yet".
+    caps = agent.capabilities if isinstance(agent.capabilities, dict) else {}
     supported_types = caps.get("scan_types") or []
+    if not isinstance(supported_types, list):
+        supported_types = []
     if supported_types and data.scan_type not in supported_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -790,12 +796,11 @@ async def run_interactive_scan(
             ),
         )
 
-    # Live WS in the registry is the ground truth, not the DB status
-    # column. There's a known lag where ``cleanup_stale_agents`` flips
-    # the row to offline because heartbeat WS messages don't currently
-    # persist ``last_heartbeat`` (followed up separately). Trusting the
-    # registry here means an operator can still dispatch as long as the
-    # daemon's WebSocket is genuinely connected.
+    # Live WS in the registry is the ground truth, not the DB status column.
+    # (The lag this used to work around is gone -- WS heartbeats do persist
+    # ``last_heartbeat`` now -- but the registry is still the better source:
+    # it knows whether the socket is up this instant, while the row knows only
+    # when the last frame arrived.)
     registry = await get_agent_registry(session)
     connection = registry.get_connection_for_site(agent.site_id)
     if connection is None or connection.info.agent_id != str(agent.id):

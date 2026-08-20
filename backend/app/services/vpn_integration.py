@@ -2540,10 +2540,24 @@ class PersistentVPNService:
 
         from app.models.vpn import SiteVPNConfiguration
 
+        # A site can legitimately hold more than one VPN configuration -- the
+        # UI offers "Add VPN configuration" and the model carries `is_primary`
+        # precisely to distinguish them. scalar_one_or_none() raises
+        # MultipleResultsFound on the second row, so the multi-VPN feature broke
+        # the very panel that displays it: the site's VPN tab 500'd.
+        #
+        # Pick deterministically instead of arbitrarily: the primary first, then
+        # the oldest, so repeated reads agree with each other.
         result = await session.execute(
-            select(SiteVPNConfiguration).where(SiteVPNConfiguration.site_id == site_id)
+            select(SiteVPNConfiguration)
+            .where(SiteVPNConfiguration.site_id == site_id)
+            .order_by(
+                SiteVPNConfiguration.is_primary.desc(),
+                SiteVPNConfiguration.created_at.asc(),
+            )
+            .limit(1)
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     @staticmethod
     async def upsert_site_config(
@@ -2556,15 +2570,42 @@ class PersistentVPNService:
 
         from app.models.vpn import SiteVPNConfiguration
 
+        # Same multi-row hazard as get_site_config above.
         result = await session.execute(
-            select(SiteVPNConfiguration).where(SiteVPNConfiguration.site_id == site_id)
+            select(SiteVPNConfiguration)
+            .where(SiteVPNConfiguration.site_id == site_id)
+            .order_by(
+                SiteVPNConfiguration.is_primary.desc(),
+                SiteVPNConfiguration.created_at.asc(),
+            )
+            .limit(1)
         )
-        config = result.scalar_one_or_none()
+        config = result.scalars().first()
         if config:
             for k, v in data.items():
                 if v is not None and hasattr(config, k):
                     setattr(config, k, v)
         else:
+            # organization_id was never set here, and EVERY read filters on it
+            # (endpoints/vpn.py and vpn_cert_lifecycle.py both do), so a config
+            # created through this path was invisible to the org-scoped queries
+            # that are supposed to find it -- including certificate renewal.
+            # Derive it from the site rather than making callers remember.
+            if "organization_id" not in data:
+                from app.models.core import Site
+
+                # Alive-only: a soft-deleted site must not lend its org to a new
+                # VPN config (and the soft-delete guard rightly rejects a bare
+                # session.get here).
+                site_row = await session.execute(
+                    select(Site.organization_id).where(
+                        Site.id == site_id,
+                        Site.deleted_at.is_(None),
+                    )
+                )
+                site_org = site_row.scalar_one_or_none()
+                if site_org is not None:
+                    data = {**data, "organization_id": site_org}
             config = SiteVPNConfiguration(site_id=site_id, **data)
             if created_by:
                 config.created_by = created_by

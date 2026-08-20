@@ -436,6 +436,27 @@ class AIChatService:
                     f"complete the full reasoning chain. Try a more specific question "
                     f"or break the request into smaller steps."
                 )
+        except Exception:
+            # The budget check PRE-INCREMENTED the org's Redis counter by
+            # estimated_total. The reconciliation that gives it back lives in the
+            # governance block BELOW this try, so an exception escaping here --
+            # an upstream 500, a timeout, a malformed provider response -- skipped
+            # it entirely and the reservation was never released.
+            #
+            # Each failed call therefore burned ~4k tokens of the org's monthly
+            # allowance permanently. A provider having a bad afternoon could lock
+            # an organization out of AI for the rest of the month, and nothing in
+            # the product would explain why the counter did not match usage.
+            #
+            # Release it, then let the exception continue unchanged.
+            try:
+                await governance._redis_budget_rollback(user.organization_id, estimated_total)
+            except Exception:
+                logger.warning(
+                    "Could not release the AI token reservation after a failed call",
+                    exc_info=True,
+                )
+            raise
         finally:
             # H1: providers hold a persistent httpx.AsyncClient — leaking
             # one per chat request exhausted the connection pool under load.

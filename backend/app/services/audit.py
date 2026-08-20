@@ -283,6 +283,8 @@ class AuditEntry:
     actor_id: UUID | None
     actor_type: str
     actor_name: str | None
+    actor_email: str | None
+    session_id: str | None
     organization_id: UUID | None
     site_id: UUID | None
     ip_address: str | None
@@ -392,7 +394,6 @@ class AuditService:
         request_id: str | None = None,
         request_method: str | None = None,
         request_path: str | None = None,
-        request_body: dict[str, Any] | None = None,
         response_code: int | None = None,
         response_time_ms: int | None = None,
         status: str = "success",
@@ -423,7 +424,6 @@ class AuditService:
             request_id: Correlation ID
             request_method: HTTP method
             request_path: Request path
-            request_body: Sanitized request body
             response_code: HTTP response code
             response_time_ms: Request duration
             status: success, failure, error
@@ -448,6 +448,8 @@ class AuditService:
             actor_id=actor_id or ctx.get("user_id"),
             actor_type=actor_type,
             actor_name=actor_name or ctx.get("user_name"),
+            actor_email=actor_email or ctx.get("user_email"),
+            session_id=str(session_id) if session_id else ctx.get("session_id"),
             organization_id=organization_id or ctx.get("organization_id"),
             site_id=site_id,
             ip_address=ip_address or ctx.get("ip_address"),
@@ -571,6 +573,8 @@ class AuditService:
             actor_id=str(entry.actor_id) if entry.actor_id else None,
             actor_type=entry.actor_type,
             actor_name=entry.actor_name,
+            actor_email=entry.actor_email,
+            session_id=entry.session_id,
             organization_id=entry.organization_id,
             site_id=entry.site_id,
             ip_address=entry.ip_address,
@@ -864,6 +868,8 @@ class AuditService:
                 actor_id=UUID(r.actor_id) if r.actor_id else None,
                 actor_type=r.actor_type,
                 actor_name=r.actor_name,
+                actor_email=r.actor_email,
+                session_id=r.session_id,
                 organization_id=r.organization_id,
                 site_id=r.site_id,
                 ip_address=r.ip_address,

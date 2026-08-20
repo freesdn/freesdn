@@ -336,7 +336,67 @@ async def reset_auth_user_rate_limit(identifier: str) -> None:
 
 
 def _client_ip(request: Request) -> str:
+    """The client IP for the auth forensic trail.
+
+    ``request.client.host``, never the ``X-Forwarded-For`` header. This is the
+    same rule ``modules/voip/provisioning_auth.py`` and
+    ``endpoints/agent_downloads.py`` already document: uvicorn's
+    ProxyHeadersMiddleware has ALREADY resolved XFF against the operator's
+    ``FORWARDED_ALLOW_IPS`` allowlist by the time we see ``request.client``, so
+    that value is trustworthy and the raw header is not.
+
+    This file used to define ``_client_ip`` TWICE. The second definition (below
+    _client_user_agent) read the header directly, and being later in the module
+    it silently won for all four call sites -- including the two above it, which
+    were written for the peer-only helper and read as if they still used it.
+    So every FailedLoginRecord and every auth AuditLogRecord stored whatever IP
+    the caller put in a header. On the Security Audit page that is a forensic
+    trail an attacker writes: brute-force from one host while attributing every
+    attempt to a different address per request, and the page shows a spread of
+    innocent IPs and nothing about the real one.
+    """
     return request.client.host if request.client else "unknown"
+
+
+async def _lookup_login_identity(session: AsyncSession, identifier: str) -> User | None:
+    """Resolve a login identifier to at most one user, deterministically.
+
+    Both login endpoints matched ``or_(email == x, username == x)`` and then
+    called ``scalar_one_or_none()``. That call RAISES MultipleResultsFound the
+    moment two rows come back, and two rows is a reachable state: username
+    uniqueness is checked against other USERNAMES only, never against emails,
+    so a username may legitimately equal a different user's email address.
+
+    The consequence landed entirely on the innocent party. Once user B holds
+    the username ``alice@example.com``, Alice logging in with her own email
+    matches both rows and gets a 500 -- not a wrong-password error she could
+    act on, and not something she can fix, since the collision is on someone
+    else's record. Her account is simply unusable via email from then on.
+
+    So: the exact EMAIL match always wins. An email address is the identity a
+    user is issued and cannot change unilaterally; a username is a nickname.
+    A username-only match is still honoured when no email matches, which is
+    what makes username login work at all.
+    """
+    result = await session.execute(
+        select(User)
+        .where(
+            or_(User.email == identifier, User.username == identifier),
+            User.deleted_at.is_(None),
+        )
+        # Email match first, then oldest — so repeated logins always land on the
+        # same account even if several usernames somehow collide.
+        .order_by((User.email == identifier).desc(), User.created_at.asc())
+        .limit(2)
+    )
+    users = list(result.scalars().all())
+    if len(users) > 1:
+        logger.warning(
+            "Login identifier resolves to %d accounts; preferring the email match. "
+            "A username is shadowing an email address.",
+            len(users),
+        )
+    return users[0] if users else None
 
 
 async def _audit_failed_login(
@@ -492,15 +552,6 @@ def _client_user_agent(request: Request) -> str | None:
     return ua[:512]  # cap so a hostile UA can't bloat the row
 
 
-def _client_ip(request: Request) -> str | None:
-    # Trust X-Forwarded-For only when behind the reverse proxy; otherwise
-    # fall back to the direct peer.
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()[:45]
-    return request.client.host if request.client else None
-
-
 async def _upsert_session(
     session: AsyncSession,
     *,
@@ -542,7 +593,7 @@ async def _upsert_session(
                 refresh_jti=refresh_jti,
                 access_jti=access_jti,
                 user_agent=_client_user_agent(request),
-                ip_address=_client_ip(request),
+                ip_address=_client_ip(request)[:45],
                 created_at=now,
                 last_used_at=now,
                 is_revoked=False,
@@ -555,7 +606,7 @@ async def _upsert_session(
             # Update fingerprint in case the user moved networks; this
             # is informational, not an auth gate.
             row.user_agent = _client_user_agent(request) or row.user_agent
-            row.ip_address = _client_ip(request) or row.ip_address
+            row.ip_address = _client_ip(request)[:45] or row.ip_address
     except Exception:
         # Bookkeeping must never break login.
         logger.exception("Session upsert failed (continuing without record)")
@@ -727,13 +778,7 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    result = await session.execute(
-        select(User).where(
-            or_(User.email == identifier, User.username == identifier),
-            User.deleted_at.is_(None),
-        )
-    )
-    user = result.scalar_one_or_none()
+    user = await _lookup_login_identity(session, identifier)
 
     # SECURITY: if the user does not exist, burn the same CPU
     # time as a real Argon2id verify() so attackers cannot enumerate valid
@@ -895,13 +940,7 @@ async def login(
             detail="Incorrect email/username or password",
         )
 
-    result = await session.execute(
-        select(User).where(
-            or_(User.email == identifier, User.username == identifier),
-            User.deleted_at.is_(None),
-        )
-    )
-    user = result.scalar_one_or_none()
+    user = await _lookup_login_identity(session, identifier)
 
     # SECURITY: timing-safe failure when user does not exist.
     # Run Argon2id against a dummy hash so the response time matches the
@@ -1431,24 +1470,28 @@ async def register(
         "message": "If the information provided is valid, your account has been created."
     }
 
+    # Cross-field: an existing USERNAME equal to this email would make the
+    # resulting login identifier ambiguous for both accounts. Returns the same
+    # generic response as a duplicate email, so this adds no enumeration
+    # signal -- the caller cannot tell the two cases apart.
     existing = await session.execute(
-        select(User).where(
-            User.email == data.email.lower(),
+        select(User.id).where(
+            or_(User.email == data.email.lower(), User.username == data.email.lower()),
             User.deleted_at.is_(None),
         )
     )
-    if existing.scalar_one_or_none():
+    if existing.first() is not None:
         return _GENERIC_REGISTER_OK
 
     # Check username uniqueness
     target_username = data.email.split("@")[0]
     existing_username = await session.execute(
-        select(User).where(
-            User.username == target_username,
+        select(User.id).where(
+            or_(User.username == target_username, User.email == target_username),
             User.deleted_at.is_(None),
         )
     )
-    if existing_username.scalar_one_or_none():
+    if existing_username.first() is not None:
         # Append random suffix to avoid collision
         import secrets as _sec
 

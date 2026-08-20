@@ -103,6 +103,63 @@ function formatDate(iso: string | null | undefined, neverLabel = 'Never') {
   });
 }
 
+// ─── Credential / config split ──────────────────────────────────────────────
+//
+// The form collects every storage-type field into one flat `config` record,
+// secrets included, and the page posted that record straight through as
+// `config`. The backend REJECTS that: `_validate_storage_config` raises on any
+// credential-class key, on purpose, so secrets go to `credentials` and get
+// Fernet-encrypted into `encrypted_credentials` instead of sitting in a
+// plaintext JSONB blob.
+//
+// So creating an S3, SFTP, Azure or any other location with a secret returned
+// 422 with "config['secret_key'] looks like a credential", every time. Every
+// remote storage backend the product offers was unconfigurable; only the local
+// filesystem type, which has no secret, could be created at all.
+//
+// The split below mirrors `_looks_like_credential_key` in
+// `app/schemas/backup.py` so the client and the validator agree. Field
+// metadata (`type: 'password'`) is the primary signal; the name patterns are
+// the safety net for a backend that ships a secret field typed as text.
+const CREDENTIAL_KEY_PATTERNS = [
+  'password',
+  'passwd',
+  'passphrase',
+  'secret',
+  'privatekey',
+  'apikey',
+  'accesskey',
+  'token',
+  'clientsecret',
+  'servicekey',
+  'bearer',
+];
+
+function looksLikeCredentialKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[_-]/g, '');
+  // Path / file indirection is exempt, same as the backend: the secret lives
+  // in the file the path points at, not in this value.
+  if (/(path|file|filename|filepath)$/.test(normalized)) return false;
+  return CREDENTIAL_KEY_PATTERNS.some((pattern) => normalized.includes(pattern));
+}
+
+function splitStorageValues(
+  config: Record<string, string>,
+  fields: StorageTypeField[],
+): { config: Record<string, string>; credentials: Record<string, string> } {
+  const secretByName = new Map(fields.map((f) => [f.name, f.type === 'password']));
+  const plain: Record<string, string> = {};
+  const secrets: Record<string, string> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (secretByName.get(key) || looksLikeCredentialKey(key)) {
+      secrets[key] = value;
+    } else {
+      plain[key] = value;
+    }
+  }
+  return { config: plain, credentials: secrets };
+}
+
 // ─── Form schema ────────────────────────────────────────────────────────────
 //
 // Storage type fields are dynamic (fetched from API), so the `config` map is
@@ -530,12 +587,18 @@ export default function StorageLocationsPage() {
         typesLoading={typesLoading}
         typesError={typesError}
         onSubmit={async (values) => {
+          const fields =
+            supportedTypes?.types?.find((ty) => ty.id === values.storage_type)?.fields ?? [];
+          const split = splitStorageValues(values.config, fields);
           await createMutation.mutateAsync({
             name: values.name,
             description: values.description || undefined,
             storage_type: values.storage_type as BackupStorageType,
             is_default: values.is_default,
-            config: values.config,
+            config: split.config,
+            ...(Object.keys(split.credentials).length > 0
+              ? { credentials: split.credentials }
+              : {}),
           });
         }}
       />
@@ -559,10 +622,25 @@ export default function StorageLocationsPage() {
             description: values.description || undefined,
             is_default: values.is_default,
           };
-          // Only include config if user filled in fields
-          const hasConfig = Object.values(values.config).some((v) => v && v.trim() !== '');
-          if (hasConfig) {
-            updateData.config = values.config;
+          // Only include what the operator actually filled in. Secrets go to
+          // `credentials`; blank secret fields mean "keep the stored one", so
+          // they must not be sent as empty strings (an empty credentials dict
+          // CLEARS every stored credential server-side).
+          const fields =
+            supportedTypes?.types?.find((ty) => ty.id === selectedLocation.storage_type)
+              ?.fields ?? [];
+          const split = splitStorageValues(values.config, fields);
+          const filledConfig = Object.fromEntries(
+            Object.entries(split.config).filter(([, v]) => v && v.trim() !== ''),
+          );
+          const filledCredentials = Object.fromEntries(
+            Object.entries(split.credentials).filter(([, v]) => v && v.trim() !== ''),
+          );
+          if (Object.keys(filledConfig).length > 0) {
+            updateData.config = filledConfig;
+          }
+          if (Object.keys(filledCredentials).length > 0) {
+            updateData.credentials = filledCredentials;
           }
           await updateMutation.mutateAsync({ id: selectedLocation.id, data: updateData });
         }}

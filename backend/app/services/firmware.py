@@ -15,7 +15,7 @@ DB-backed service for firmware lifecycle management:
 
 import hashlib
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -453,18 +453,25 @@ class PersistentFirmwareService:
         target_version: str | None = None,
         backup_id: str | None = None,
     ) -> dict[str, Any]:
-        """Initiate a device firmware rollback."""
-        status = await PersistentFirmwareService.get_device_status(session, device_id)
-        if not status:
-            return {"success": False, "error": "Device firmware status not found"}
+        """Initiate a device firmware rollback.
 
-        # In a real implementation this would trigger adapter-level rollback
-        return {
-            "success": True,
-            "device_id": str(device_id),
-            "target_version": target_version or "previous",
-            "message": "Rollback initiated",
-        }
+        NOT IMPLEMENTED. No adapter exposes a firmware rollback primitive
+        yet, so there is nothing to dispatch to.
+
+        This used to return ``{"success": True, "message": "Rollback
+        initiated"}`` unconditionally, having done nothing at all -- it
+        ignored ``backup_id`` entirely and echoed ``target_version`` back.
+        An operator rolling a device off bad firmware was told it worked
+        while the device kept running the firmware they were trying to
+        escape. Reporting the absence honestly is the whole point of the
+        adapter-maturity discipline; a fabricated success is the one
+        outcome that discipline exists to prevent.
+        """
+        raise NotImplementedError(
+            "Firmware rollback is not implemented: no adapter exposes a "
+            "rollback primitive. Re-flash the desired version through the "
+            "normal upgrade path instead."
+        )
 
     # =====================================================================
     # Compatibility Check
@@ -754,12 +761,90 @@ class PersistentFirmwareService:
     # =====================================================================
 
     @staticmethod
+    def compute_next_run(schedule: Any, *, after: datetime | None = None) -> datetime | None:
+        """Next fire time for a firmware schedule, in UTC.
+
+        NOTHING in the codebase ever wrote ``FirmwareSchedule.next_run_at``.
+        ``create_schedule`` passes the API payload straight through and the API
+        does not collect it; ``update_schedule`` copies fields verbatim;
+        ``run_schedule_now`` advanced last_run_at / last_job_id / total_runs and
+        left next_run_at alone. So the column was NULL on every row ever
+        created.
+
+        The beat task selects ``next_run_at <= now``, and NULL never satisfies
+        a comparison. Firmware upgrade schedules have therefore never run --
+        not late, not partially: never. The operator configured "upgrade the
+        APs Sunday 02:00", the UI listed the schedule as enabled, the
+        five-minute checker ran on time and matched zero rows every time.
+
+        ``on_release`` schedules are deliberately excluded: those are meant to
+        fire when a new release appears, not on a clock, so a wall-clock
+        next_run_at would be wrong rather than merely absent.
+        """
+        from app.models.firmware import ScheduleFrequency
+
+        frequency = str(getattr(schedule, "frequency", "") or "")
+        if frequency == ScheduleFrequency.ON_RELEASE:
+            return None
+
+        base = after or datetime.now(UTC)
+
+        # "HH:MM" in the schedule's own timezone; default 02:00, the
+        # conventional maintenance hour and what the UI placeholder shows.
+        hour, minute = 2, 0
+        time_of_day = getattr(schedule, "time_of_day", None)
+        if isinstance(time_of_day, str) and ":" in time_of_day:
+            try:
+                raw_h, raw_m = time_of_day.split(":", 1)
+                hour, minute = int(raw_h), int(raw_m)
+            except (TypeError, ValueError):
+                hour, minute = 2, 0
+        hour = max(0, min(23, hour))
+        minute = max(0, min(59, minute))
+
+        tz = UTC
+        tz_name = getattr(schedule, "timezone", None)
+        if tz_name:
+            try:
+                from zoneinfo import ZoneInfo
+
+                tz = ZoneInfo(str(tz_name))
+            except Exception:
+                # An unknown tz must not make the schedule unschedulable; UTC
+                # is late or early by hours, NULL is never.
+                tz = UTC
+
+        local = base.astimezone(tz)
+        candidate = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+        if frequency == ScheduleFrequency.MONTHLY:
+            day = getattr(schedule, "day_of_month", None) or 1
+            day = max(1, min(28, int(day)))  # 28 keeps every month valid
+            candidate = candidate.replace(day=day)
+            while candidate <= local:
+                month = candidate.month + 1
+                year = candidate.year + (month > 12)
+                candidate = candidate.replace(year=year, month=(month - 1) % 12 + 1, day=day)
+        else:
+            # WEEKLY (the default) and anything unrecognised.
+            target = getattr(schedule, "day_of_week", None)
+            target = 6 if target is None else max(0, min(6, int(target)))  # 0=Mon
+            delta = (target - candidate.weekday()) % 7
+            candidate += timedelta(days=delta)
+            if candidate <= local:
+                candidate += timedelta(days=7)
+
+        return candidate.astimezone(UTC)
+
+    @staticmethod
     async def create_schedule(
         session: AsyncSession, data: dict[str, Any], user_id: UUID | None = None
     ) -> Any:
         from app.models.firmware import FirmwareSchedule
 
         schedule = FirmwareSchedule(**data, created_by=user_id)
+        if schedule.next_run_at is None:
+            schedule.next_run_at = PersistentFirmwareService.compute_next_run(schedule)
         session.add(schedule)
         await session.flush()
         await session.refresh(schedule)
@@ -809,9 +894,17 @@ class PersistentFirmwareService:
         if not schedule:
             return None
 
+        timing_fields = {"frequency", "time_of_day", "day_of_week", "day_of_month", "timezone"}
+        retimed = any(k in timing_fields for k in data)
+
         for k, v in data.items():
             if v is not None:
                 setattr(schedule, k, v)
+        # Moving a schedule from Sunday to Wednesday has to move its next fire
+        # time, or the edit is cosmetic. Also recompute when a schedule is
+        # re-enabled, since a disabled one may have gone stale.
+        if retimed or data.get("is_enabled") is True or schedule.next_run_at is None:
+            schedule.next_run_at = PersistentFirmwareService.compute_next_run(schedule)
         schedule.updated_at = datetime.now(UTC)
         await session.flush()
         await session.refresh(schedule)
@@ -859,9 +952,14 @@ class PersistentFirmwareService:
 
         job = await PersistentFirmwareService.create_job(session, job_data, schedule.created_by)
 
-        schedule.last_run_at = datetime.now(UTC)
+        now = datetime.now(UTC)
+        schedule.last_run_at = now
         schedule.last_job_id = job.id
         schedule.total_runs += 1
+        # Advance the clock. Without this a schedule that somehow DID have a
+        # next_run_at would re-fire on every five-minute tick, which is the
+        # opposite failure and worse: a firmware upgrade every five minutes.
+        schedule.next_run_at = PersistentFirmwareService.compute_next_run(schedule, after=now)
         await session.flush()
 
         return job

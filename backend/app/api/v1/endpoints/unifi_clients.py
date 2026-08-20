@@ -119,7 +119,7 @@ async def block_client(
     adapter: Annotated[UniFiAdapter, Depends(get_adapter_for_controller)],
 ) -> UniFiClientWriteResponse:
     try:
-        detail = await adapter.block_client(site, mac, force=body.force)
+        detail = await adapter.block_client_on_site(site, mac, force=body.force)
     except Exception as exc:
         raise HTTPException(400, detail=str(exc)) from exc
     finally:
@@ -146,7 +146,7 @@ async def unblock_client(
     adapter: Annotated[UniFiAdapter, Depends(get_adapter_for_controller)],
 ) -> UniFiClientWriteResponse:
     try:
-        detail = await adapter.unblock_client(site, mac, force=body.force)
+        detail = await adapter.unblock_client_on_site(site, mac, force=body.force)
     except Exception as exc:
         raise HTTPException(400, detail=str(exc)) from exc
     finally:

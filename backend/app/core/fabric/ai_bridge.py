@@ -69,6 +69,23 @@ def _make_handler(op: Any):  # noqa: ANN201 — returns an async tool handler
             artifacts=None,
             trigger={},
             logger=logging.getLogger("fabric.ai_bridge"),
+            # thread the caller's per-user site grant.
+            #
+            # This ran the SAME Fabric operations as POST /fabric/invoke, which
+            # threads this and says so, and left it None -- which the field
+            # documents as "unrestricted". So a site-limited operator who could
+            # not reach a sibling site through the API could reach it by asking
+            # the AI assistant to do the same thing, because the assistant's
+            # tool call built a context with no grant in it.
+            #
+            # getattr-guarded because this handler takes ``user: Any`` (the AI
+            # tool-invocation path, not a FastAPI dependency), so it may be
+            # handed a principal shape without these attributes.
+            accessible_site_ids=(
+                getattr(user, "accessible_site_ids", None)
+                if getattr(user, "is_site_limited", False)
+                else None
+            ),
         )
         result = await operation_executor.execute(op, ctx)
         return result.to_dict()

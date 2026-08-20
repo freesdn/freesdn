@@ -302,10 +302,77 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
           // NVR-level events (reboot, status), refresh NVR + camera lists.
           queryClient.invalidateQueries({ queryKey: ['cameras'] });
           queryClient.invalidateQueries({ queryKey: ['devices'] });
+        } else {
+          // Everything ELSE the bus publishes used to fall off the end of
+          // this chain and vanish.
+          //
+          // The backend publishes ~48 distinct event_type values. Exactly
+          // three families were routed: pbx.sync.*, camera.* and nvr.*. So an
+          // alert firing, a device being adopted, a staged change being
+          // applied, a VLAN or SSID changing, an SLA breach, a VPN peer going
+          // down, a fabric distribution finishing -- all of them arrived on a
+          // live socket, were unwrapped, matched nothing, and were dropped.
+          //
+          // The pages built on those events did not know they were stale;
+          // they waited on their own refetchInterval instead. Which is why
+          // this looked like "the UI is a bit slow to update" rather than a
+          // bug: the realtime layer was carrying the news and throwing it
+          // away at the last step.
+          const invalidate = (...keys: string[]) => {
+            for (const key of keys) queryClient.invalidateQueries({ queryKey: [key] });
+          };
+
+          if (eventType.startsWith('alert.')) {
+            invalidate(
+              'alerts',
+              'alert-instances',
+              'alert-instances-all',
+              'dashboard-alerts',
+              'alert-rules-stats',
+            );
+          } else if (eventType.startsWith('notification.')) {
+            invalidate('in-app-notifications');
+          } else if (eventType.startsWith('device.')) {
+            invalidate('devices', 'discovered-hosts');
+          } else if (eventType.startsWith('discovery.')) {
+            invalidate('discovery', 'discovered-hosts');
+          } else if (eventType.startsWith('controller.change.')) {
+            // A change staged or applied elsewhere (another operator, another
+            // tab, a Fabric run) must move the Pending Changes badge here.
+            invalidate('pending-changes', 'controllers');
+          } else if (eventType.startsWith('network.vlan.')) {
+            invalidate('vlans', 'devices');
+          } else if (eventType.startsWith('network.wifi.')) {
+            invalidate('wifi-networks');
+          } else if (eventType.startsWith('sla.')) {
+            invalidate('sla-summary', 'sla-breaches', 'sla-policies');
+          } else if (eventType.startsWith('fabric.')) {
+            invalidate('fabric-connections', 'fabric-runs');
+          } else if (eventType.startsWith('vpn.') || eventType.startsWith('overlay.')) {
+            invalidate('vpn', 'vpnConnections', 'site-vpn', 'tailscaleStatus');
+          } else if (eventType.startsWith('gateway.')) {
+            invalidate('gateways', 'gateway', 'fw-gateways');
+          } else if (eventType.startsWith('backup.')) {
+            invalidate('backups', 'backup-schedules');
+          } else if (eventType.startsWith('omada.event.')) {
+            invalidate('controllers');
+          } else if (import.meta.env.DEV) {
+            // Loud in dev so a NEW event family cannot quietly join the set
+            // that gets dropped -- which is exactly how the original three
+            // ended up being the only ones handled.
+            console.warn('Unrouted bus event family:', eventType);
+          }
         }
-        // Other ``<adapter>.<resource>.<action>`` event families can
-        // be routed here too, keep the dispatch close to the wire
-        // format so handlers stay declarative.
+
+        // Every bus event also goes out as a generic window event, so a page
+        // can subscribe to something specific without this switch having to
+        // know about it. Dispatched for routed families too -- routing and
+        // observation are different jobs.
+        dispatchWindowEvent(
+          new CustomEvent('freesdn:bus-event', {
+            detail: { type: eventType, data },
+          }),
+        );
         break;
       }
 

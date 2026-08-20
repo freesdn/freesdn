@@ -42,7 +42,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.core import Site
-from app.models.devices import DiscoveredHost
+from app.models.devices import DiscoveredHost, normalize_device_type
 
 logger = logging.getLogger(__name__)
 
@@ -741,7 +741,7 @@ async def _maybe_auto_adopt_for_site(
             name=h.get("hostname") or f"auto-{ip}",
             ip_address=ip,
             mac_address=mac_norm,
-            device_type=h.get("device_type") or "other",
+            device_type=normalize_device_type(h.get("device_type")),
             site_id=site_id,
             driver_id=recommended,
             status=DeviceStatus.ONLINE,

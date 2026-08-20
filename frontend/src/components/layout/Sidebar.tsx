@@ -119,7 +119,13 @@ export function Sidebar({
   const { data: alertsData } = useQuery({
     queryKey: ['security-events'],
     queryFn: async () => {
-      const response = await api.get('/audit/security', { params: { limit: 200 } });
+      // ``per_page``, not ``limit``. GET /audit/security paginates on
+      // page/per_page (default 50, max 200); ``limit`` is not a parameter it
+      // accepts, so it was silently ignored and every request came back with
+      // 50 rows. The alert badge counts UNSUCCESSFUL events out of that page,
+      // so it could never reflect more than the first 50 -- undercounting
+      // exactly when there is a burst worth noticing.
+      const response = await api.get('/audit/security', { params: { per_page: 200 } });
       return response.data;
     },
     enabled: isAuthenticated,

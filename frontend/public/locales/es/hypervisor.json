@@ -78,7 +78,11 @@
     "toast": {
       "previewFailed": "Error en la vista previa",
       "pruneCompleted": "Purga completada",
-      "pruneFailed": "Error al purgar"
+      "pruneFailed": "Error al purgar",
+      "pruneStaged": {
+        "title": "Purga preparada",
+        "description": "Revísela y aplíquela desde Cambios pendientes. La purga elimina los archivos de copia de seguridad de forma permanente."
+      }
     }
   },
   "CephTab": {
@@ -659,6 +663,10 @@
       "pruneFailed": {
         "title": "Error en la depuración",
         "description": "No se pudieron depurar las copias de seguridad"
+      },
+      "pruneStaged": {
+        "title": "Purga preparada",
+        "description": "Revísela y aplíquela desde Cambios pendientes. La purga elimina los archivos de copia de seguridad de forma permanente."
       }
     },
     "storageError": {
@@ -1340,7 +1348,11 @@
       "restoreStarted": "Restauración iniciada",
       "restoreFailed": "Error en la restauración",
       "consoleOpened": "Consola abierta en una nueva ventana",
-      "consoleFailed": "Error en la consola"
+      "consoleFailed": "Error en la consola",
+      "restoreStaged": {
+        "title": "Restauración preparada",
+        "description": "Revísela y aplíquela desde Cambios pendientes. Una restauración sobrescribe el invitado de destino."
+      }
     },
     "snapshotDialog": {
       "title": "Crear instantánea",

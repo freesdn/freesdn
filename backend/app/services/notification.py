@@ -16,6 +16,10 @@ Features:
 - Delivery tracking
 """
 
+import asyncio
+import base64
+import hashlib
+import hmac
 import json
 import logging
 import re
@@ -379,6 +383,12 @@ class NotificationProvider:
     # can attribute deliveries to a specific provider type. Subclasses
     # override.
     provider_type: str = "unknown"
+    #: Set by NotificationService._attach_limits when built from a DB record.
+    #: Zero or None means "no limit", which is what an unconfigured provider
+    #: and every legacy in-memory provider get.
+    provider_record_id: UUID | None = None
+    rate_limit_per_hour: int = 0
+    rate_limit_per_day: int = 0
 
     def __init__(self, config: dict[str, Any]):
         self.config = config
@@ -394,6 +404,12 @@ class NotificationProvider:
     async def verify(self) -> tuple[bool, str]:
         """Verify provider configuration."""
         raise NotImplementedError
+
+
+# Per-socket and whole-conversation bounds for the blocking SMTP client.
+# Neither existed on the send path, so a silent SMTP host froze the worker.
+_SMTP_TIMEOUT_SECONDS = 10
+_SMTP_TOTAL_TIMEOUT_SECONDS = 30
 
 
 class SMTPProvider(NotificationProvider):
@@ -449,16 +465,41 @@ class SMTPProvider(NotificationProvider):
             if payload.body_html:
                 msg.add_alternative(payload.body_html, subtype="html")
 
-            with smtplib.SMTP(self.host, self.port) as server:
-                if self.use_tls:
-                    server.starttls()
-                if self.username and self.password:
-                    server.login(self.username, self.password)
-                server.send_message(
-                    msg,
-                    from_addr=safe_from_email,
-                    to_addrs=[safe_recipient],
-                )
+            # smtplib is BLOCKING, and this is an async method running on the
+            # event loop. Two things were wrong with calling it directly:
+            #
+            #  * No timeout. smtplib.SMTP() with timeout=None waits on the
+            #    socket indefinitely, so an SMTP host that accepts the TCP
+            #    connection and then goes quiet -- a firewall blackhole, an
+            #    overloaded relay, a greylister -- froze the ENTIRE worker.
+            #    Not just notifications: every request that worker was serving,
+            #    forever, with no error and nothing in the logs.
+            #  * Even bounded, a multi-second SMTP conversation on the loop
+            #    stalls every other coroutine for its duration.
+            #
+            # verify() ten lines below already passed timeout=10, which is what
+            # makes the omission here an oversight rather than a policy.
+            #
+            # to_thread moves the whole conversation off the loop; the timeout
+            # bounds the socket itself.
+            def _deliver() -> None:
+                with smtplib.SMTP(self.host, self.port, timeout=_SMTP_TIMEOUT_SECONDS) as server:
+                    if self.use_tls:
+                        server.starttls()
+                    if self.username and self.password:
+                        server.login(self.username, self.password)
+                    server.send_message(
+                        msg,
+                        from_addr=safe_from_email,
+                        to_addrs=[safe_recipient],
+                    )
+
+            # Outer bound too: a timeout on the socket does not cover a server
+            # that trickles one byte at a time through a long conversation.
+            await asyncio.wait_for(
+                asyncio.to_thread(_deliver),
+                timeout=_SMTP_TOTAL_TIMEOUT_SECONDS,
+            )
 
             return DeliveryResult(
                 success=True,
@@ -482,11 +523,15 @@ class SMTPProvider(NotificationProvider):
         try:
             import smtplib
 
-            with smtplib.SMTP(self.host, self.port, timeout=10) as server:
-                if self.use_tls:
-                    server.starttls()
-                if self.username and self.password:
-                    server.login(self.username, self.password)
+            def _probe() -> None:
+                with smtplib.SMTP(self.host, self.port, timeout=_SMTP_TIMEOUT_SECONDS) as server:
+                    if self.use_tls:
+                        server.starttls()
+                    if self.username and self.password:
+                        server.login(self.username, self.password)
+
+            # Same reasoning as send(): bounded, and off the event loop.
+            await asyncio.wait_for(asyncio.to_thread(_probe), timeout=_SMTP_TOTAL_TIMEOUT_SECONDS)
             return True, "SMTP connection successful"
         except Exception as e:
             return False, f"SMTP error: {e}"
@@ -863,15 +908,36 @@ class WebhookProvider(NotificationProvider):
             )
 
     async def verify(self) -> tuple[bool, str]:
-        """Verify webhook endpoint."""
+        """Verify webhook endpoint.
+
+        This used to return ``True`` for ANY status code that came back, so a
+        404, a 500 or an auth-rejecting 403 all set ``is_verified`` and showed
+        the provider as Verified in the UI. That is worse than not verifying:
+        the operator gets a green check on an endpoint that will drop every
+        alert. The Slack and Teams verifies right beside it already checked the
+        status; this one did not.
+
+        OPTIONS is the right probe -- it must not deliver a real notification --
+        but plenty of endpoints answer it with 405 while accepting POST
+        perfectly well, so 405 counts as reachable. 501 likewise: it means
+        "method not implemented", not "endpoint absent".
+        """
+        if not self.url:
+            return False, "No webhook URL configured"
         try:
             # DNS-rebinding-safe request
             response = await safe_http_request("OPTIONS", self.url, timeout=15.0)
-            return True, f"Webhook reachable (status: {response.status_code})"
         except ValueError as e:
             return False, f"Webhook URL blocked (SSRF): {e}"
         except Exception as e:
             return False, f"Webhook error: {e}"
+
+        code = response.status_code
+        if code < 400 or code in (405, 501):
+            return True, f"Webhook reachable (status: {code})"
+        if code in (401, 403):
+            return False, f"Webhook rejected the request (HTTP {code}) — check the URL secret"
+        return False, f"Webhook returned HTTP {code}"
 
 
 class TeamsProvider(NotificationProvider):
@@ -964,6 +1030,710 @@ class TeamsProvider(NotificationProvider):
             return False, f"Teams webhook URL blocked (SSRF): {e}"
         except Exception as e:
             return False, f"Teams error: {e}"
+
+
+# =============================================================================
+# Transactional email + SMS providers
+# =============================================================================
+#
+# Every type below was ADVERTISED in `get_provider_catalog` with a complete,
+# provider-specific config schema (Mailgun wants an api_key + domain + region,
+# SendGrid a bearer key, SES a SigV4 credential pair, Twilio an account SID),
+# and each one was then built as a bare `WebhookProvider`.
+#
+# WebhookProvider reads exactly one config key: `url`. None of these schemas
+# has a `url` field, so `self.url` was always None and every send hit
+# `safe_http_request("POST", None, ...)`, raised, and returned
+# `DeliveryResult(success=False)`. Eight of the fifteen offered provider types
+# could be configured, enabled, marked default and shown as healthy in the UI,
+# and could never deliver a single message. The failure only surfaced at the
+# moment an alert actually needed to go out.
+#
+# The generic body WebhookProvider posts (`{title, body, data, timestamp}`) is
+# not a shape any of these APIs accept either, so a URL alone would not have
+# been enough — each needs its own request. These classes are that request,
+# written against each vendor's documented API and the config schema the
+# catalogue already collects.
+#
+# HONESTY NOTE, in the spirit of `app/adapters/maturity.py`: these are
+# implemented against published API specifications and covered by tests that
+# pin the exact wire shape. They are NOT live-validated against a real vendor
+# account — nobody here holds one. `verify()` is what proves a given
+# deployment's credentials work, and it makes a real authenticated call rather
+# than returning True.
+
+
+class _HTTPEmailProvider(NotificationProvider):
+    """Shared plumbing for the HTTP-API email providers.
+
+    Subclasses supply `_endpoint()`, `_headers()` and `_body()`. Everything
+    else -- header sanitisation, the SSRF-safe request, success classification,
+    error shaping -- is identical across vendors and belongs in one place.
+    """
+
+    channel = NotificationChannel.EMAIL
+    #: Status codes the vendor returns for "accepted for delivery".
+    accepted_statuses: tuple[int, ...] = (200, 201, 202)
+
+    def __init__(self, config: dict[str, Any]):
+        super().__init__(config)
+        self.from_email = config.get("from_email") or ""
+        self.from_name = config.get("from_name") or "FreeSDN"
+
+    # -- subclass contract ------------------------------------------------
+
+    def _endpoint(self) -> str:
+        raise NotImplementedError
+
+    def _headers(self) -> dict[str, str]:
+        raise NotImplementedError
+
+    def _body(self, recipient: str, payload: NotificationPayload) -> dict[str, Any]:
+        """Return kwargs for the request (`json=` or `data=`)."""
+        raise NotImplementedError
+
+    def _missing_config(self) -> str | None:
+        """Name the first required setting that is absent, if any."""
+        if not self.from_email:
+            return "from_email"
+        return None
+
+    # -- shared behaviour -------------------------------------------------
+
+    def _safe_fields(self, recipient: str, payload: NotificationPayload) -> tuple[str, str, str]:
+        """Validated recipient / from / subject, same rules as SMTPProvider."""
+        return (
+            _validate_email_address(recipient),
+            _validate_email_address(self.from_email),
+            _sanitize_header_value(payload.title or "", max_length=255),
+        )
+
+    async def send(self, recipient: str, payload: NotificationPayload) -> DeliveryResult:
+        missing = self._missing_config()
+        if missing:
+            # Loud and specific. The whole point of this class is that a
+            # misconfigured provider must not look like a transient send
+            # failure the retry queue will eventually resolve.
+            return self._failure(f"{self.provider_type} is missing required setting: {missing}")
+        # Build the request FIRST, in its own guard. _safe_fields raises
+        # ValueError on a header-injection attempt, and folding that into the
+        # request's own except would report an injection attempt as an SSRF
+        # block -- the wrong incident in the operator's log.
+        try:
+            request_kwargs = self._body(recipient, payload)
+        except ValueError as e:
+            return self._failure(f"{self.provider_type} rejected the message: {e}")
+
+        try:
+            response = await safe_http_request(
+                "POST",
+                self._endpoint(),
+                headers=self._headers(),
+                timeout=30.0,
+                **request_kwargs,
+            )
+        except ValueError as e:
+            return self._failure(f"{self.provider_type} endpoint blocked (SSRF): {e}")
+        except Exception as e:
+            logger.error("%s delivery failed: %s", self.provider_type, e)
+            return self._failure(str(e))
+
+        if response.status_code not in self.accepted_statuses:
+            # A 4xx here is a real refusal -- unverified sender, bad key, over
+            # quota -- and the operator needs the vendor's own words for it.
+            return self._failure(
+                f"{self.provider_type} returned HTTP {response.status_code}: "
+                f"{self._response_text(response)[:500]}"
+            )
+
+        return DeliveryResult(
+            success=True,
+            channel=self.channel,
+            status=DeliveryStatus.SENT,
+            message_id=self._message_id(response),
+            provider_response={"status_code": response.status_code},
+            provider=self.provider_type,
+        )
+
+    @staticmethod
+    def _response_text(response: Any) -> str:
+        try:
+            return response.text or ""
+        except Exception:
+            return ""
+
+    def _message_id(self, response: Any) -> str:
+        """The vendor's own id when it gives one, so a bounce can be traced."""
+        try:
+            data = response.json()
+        except Exception:
+            return str(uuid4())
+        if isinstance(data, dict):
+            for key in ("id", "MessageID", "messageId", "message-id"):
+                value = data.get(key)
+                if isinstance(value, str) and value:
+                    return value
+        return str(uuid4())
+
+    def _failure(self, error: str) -> DeliveryResult:
+        return DeliveryResult(
+            success=False,
+            channel=self.channel,
+            status=DeliveryStatus.FAILED,
+            error=error,
+            provider=self.provider_type,
+        )
+
+    async def verify(self) -> tuple[bool, str]:
+        """Prove the credential works, without sending mail to anyone.
+
+        Subclasses that have a cheap authenticated read override
+        `_verify_request`. The default reports what is missing rather than
+        claiming success it has not established.
+        """
+        missing = self._missing_config()
+        if missing:
+            return False, f"Missing required setting: {missing}"
+        probe = self._verify_request()
+        if probe is None:
+            return True, f"{self.provider_type} configuration is complete"
+        method, url, kwargs = probe
+        try:
+            response = await safe_http_request(method, url, timeout=15.0, **kwargs)
+        except ValueError as e:
+            return False, f"Endpoint blocked (SSRF): {e}"
+        except Exception as e:
+            return False, f"{self.provider_type} error: {e}"
+        if response.status_code in (200, 201, 202, 204):
+            return True, f"{self.provider_type} credentials verified"
+        if response.status_code in (401, 403):
+            return (
+                False,
+                f"{self.provider_type} rejected the credentials (HTTP {response.status_code})",
+            )
+        return False, f"{self.provider_type} returned HTTP {response.status_code}"
+
+    def _verify_request(self) -> tuple[str, str, dict[str, Any]] | None:
+        return None
+
+
+class MailgunProvider(_HTTPEmailProvider):
+    """Mailgun Messages API (form-encoded, HTTP basic auth as ``api:<key>``)."""
+
+    provider_type = "mailgun"
+
+    def __init__(self, config: dict[str, Any]):
+        super().__init__(config)
+        self.api_key = config.get("api_key") or ""
+        self.domain = config.get("domain") or ""
+        # Mailgun runs two independent stacks; a EU-region key is rejected by
+        # the US host, which is why the catalogue asks for the region.
+        self.region = (config.get("region") or "us").lower()
+
+    @property
+    def _base(self) -> str:
+        host = "api.eu.mailgun.net" if self.region == "eu" else "api.mailgun.net"
+        return f"https://{host}/v3"
+
+    def _missing_config(self) -> str | None:
+        for name, value in (("api_key", self.api_key), ("domain", self.domain)):
+            if not value:
+                return name
+        return super()._missing_config()
+
+    def _endpoint(self) -> str:
+        return f"{self._base}/{self.domain}/messages"
+
+    def _headers(self) -> dict[str, str]:
+        token = base64.b64encode(f"api:{self.api_key}".encode()).decode()
+        return {"Authorization": f"Basic {token}"}
+
+    def _body(self, recipient: str, payload: NotificationPayload) -> dict[str, Any]:
+        to, sender, subject = self._safe_fields(recipient, payload)
+        name = _sanitize_header_value(self.from_name, max_length=255)
+        data = {
+            "from": f"{name} <{sender}>" if name else sender,
+            "to": to,
+            "subject": subject,
+            "text": payload.body or "",
+        }
+        if payload.body_html:
+            data["html"] = payload.body_html
+        return {"data": data}
+
+    def _verify_request(self) -> tuple[str, str, dict[str, Any]] | None:
+        # Cheapest authenticated read that also proves the domain exists.
+        return ("GET", f"{self._base}/domains/{self.domain}", {"headers": self._headers()})
+
+
+class SendGridProvider(_HTTPEmailProvider):
+    """SendGrid v3 Mail Send API."""
+
+    provider_type = "sendgrid"
+    accepted_statuses = (200, 202)
+
+    def __init__(self, config: dict[str, Any]):
+        super().__init__(config)
+        self.api_key = config.get("api_key") or ""
+
+    def _missing_config(self) -> str | None:
+        if not self.api_key:
+            return "api_key"
+        return super()._missing_config()
+
+    def _endpoint(self) -> str:
+        return "https://api.sendgrid.com/v3/mail/send"
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def _body(self, recipient: str, payload: NotificationPayload) -> dict[str, Any]:
+        to, sender, subject = self._safe_fields(recipient, payload)
+        content = [{"type": "text/plain", "value": payload.body or ""}]
+        if payload.body_html:
+            # SendGrid requires content parts in increasing MIME preference.
+            content.append({"type": "text/html", "value": payload.body_html})
+        return {
+            "json": {
+                "personalizations": [{"to": [{"email": to}]}],
+                "from": {
+                    "email": sender,
+                    "name": _sanitize_header_value(self.from_name, max_length=255),
+                },
+                "subject": subject,
+                "content": content,
+            }
+        }
+
+    def _verify_request(self) -> tuple[str, str, dict[str, Any]] | None:
+        return (
+            "GET",
+            "https://api.sendgrid.com/v3/scopes",
+            {"headers": {"Authorization": f"Bearer {self.api_key}"}},
+        )
+
+
+class BrevoProvider(_HTTPEmailProvider):
+    """Brevo (formerly Sendinblue) transactional email API."""
+
+    provider_type = "brevo"
+    accepted_statuses = (200, 201, 202)
+
+    def __init__(self, config: dict[str, Any]):
+        super().__init__(config)
+        self.api_key = config.get("api_key") or ""
+
+    def _missing_config(self) -> str | None:
+        if not self.api_key:
+            return "api_key"
+        return super()._missing_config()
+
+    def _endpoint(self) -> str:
+        return "https://api.brevo.com/v3/smtp/email"
+
+    def _headers(self) -> dict[str, str]:
+        return {"api-key": self.api_key, "Content-Type": "application/json"}
+
+    def _body(self, recipient: str, payload: NotificationPayload) -> dict[str, Any]:
+        to, sender, subject = self._safe_fields(recipient, payload)
+        body: dict[str, Any] = {
+            "sender": {
+                "email": sender,
+                "name": _sanitize_header_value(self.from_name, max_length=255),
+            },
+            "to": [{"email": to}],
+            "subject": subject,
+            "textContent": payload.body or "",
+        }
+        if payload.body_html:
+            body["htmlContent"] = payload.body_html
+        return {"json": body}
+
+    def _verify_request(self) -> tuple[str, str, dict[str, Any]] | None:
+        return ("GET", "https://api.brevo.com/v3/account", {"headers": {"api-key": self.api_key}})
+
+
+class PostmarkProvider(_HTTPEmailProvider):
+    """Postmark single-send API."""
+
+    provider_type = "postmark"
+    accepted_statuses = (200,)
+
+    def __init__(self, config: dict[str, Any]):
+        super().__init__(config)
+        self.server_token = config.get("server_token") or ""
+        self.message_stream = config.get("message_stream") or "outbound"
+
+    def _missing_config(self) -> str | None:
+        if not self.server_token:
+            return "server_token"
+        return super()._missing_config()
+
+    def _endpoint(self) -> str:
+        return "https://api.postmarkapp.com/email"
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "X-Postmark-Server-Token": self.server_token,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+
+    def _body(self, recipient: str, payload: NotificationPayload) -> dict[str, Any]:
+        to, sender, subject = self._safe_fields(recipient, payload)
+        name = _sanitize_header_value(self.from_name, max_length=255)
+        body: dict[str, Any] = {
+            "From": f"{name} <{sender}>" if name else sender,
+            "To": to,
+            "Subject": subject,
+            "TextBody": payload.body or "",
+            "MessageStream": self.message_stream,
+        }
+        if payload.body_html:
+            body["HtmlBody"] = payload.body_html
+        return {"json": body}
+
+    def _verify_request(self) -> tuple[str, str, dict[str, Any]] | None:
+        return (
+            "GET",
+            "https://api.postmarkapp.com/server",
+            {
+                "headers": {
+                    "X-Postmark-Server-Token": self.server_token,
+                    "Accept": "application/json",
+                }
+            },
+        )
+
+
+class ResendProvider(_HTTPEmailProvider):
+    """Resend email API."""
+
+    provider_type = "resend"
+    accepted_statuses = (200, 201, 202)
+
+    def __init__(self, config: dict[str, Any]):
+        super().__init__(config)
+        self.api_key = config.get("api_key") or ""
+
+    def _missing_config(self) -> str | None:
+        if not self.api_key:
+            return "api_key"
+        return super()._missing_config()
+
+    def _endpoint(self) -> str:
+        return "https://api.resend.com/emails"
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def _body(self, recipient: str, payload: NotificationPayload) -> dict[str, Any]:
+        to, sender, subject = self._safe_fields(recipient, payload)
+        name = _sanitize_header_value(self.from_name, max_length=255)
+        body: dict[str, Any] = {
+            "from": f"{name} <{sender}>" if name else sender,
+            "to": [to],
+            "subject": subject,
+            "text": payload.body or "",
+        }
+        if payload.body_html:
+            body["html"] = payload.body_html
+        return {"json": body}
+
+    def _verify_request(self) -> tuple[str, str, dict[str, Any]] | None:
+        return (
+            "GET",
+            "https://api.resend.com/domains",
+            {"headers": {"Authorization": f"Bearer {self.api_key}"}},
+        )
+
+
+class AmazonSESProvider(_HTTPEmailProvider):
+    """Amazon SES v2 SendEmail, signed with SigV4.
+
+    SES is the only provider here that cannot authenticate with a static
+    header: every request carries a signature over its own method, path, query,
+    headers, body and timestamp. The signing below is the documented SigV4
+    algorithm, kept inline rather than pulling boto3 in for one call.
+    """
+
+    provider_type = "amazon_ses"
+    accepted_statuses = (200,)
+    _SERVICE = "ses"
+
+    def __init__(self, config: dict[str, Any]):
+        super().__init__(config)
+        self.access_key_id = config.get("access_key_id") or ""
+        self.secret_access_key = config.get("secret_access_key") or ""
+        self.region = config.get("region") or "us-east-1"
+        self.configuration_set = config.get("configuration_set") or ""
+
+    def _missing_config(self) -> str | None:
+        for name, value in (
+            ("access_key_id", self.access_key_id),
+            ("secret_access_key", self.secret_access_key),
+            ("region", self.region),
+        ):
+            if not value:
+                return name
+        return super()._missing_config()
+
+    @property
+    def _host(self) -> str:
+        return f"email.{self.region}.amazonaws.com"
+
+    _PATH = "/v2/email/outbound-emails"
+
+    def _endpoint(self) -> str:
+        return f"https://{self._host}{self._PATH}"
+
+    def _headers(self) -> dict[str, str]:
+        # Signed per-request in _body, which is the only place the payload
+        # (and therefore its hash) is known.
+        return {}
+
+    @staticmethod
+    def _sign(key: bytes, message: str) -> bytes:
+        return hmac.new(key, message.encode(), hashlib.sha256).digest()
+
+    def _sigv4_headers(self, body: str, now: datetime) -> dict[str, str]:
+        amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+        date_stamp = now.strftime("%Y%m%d")
+        payload_hash = hashlib.sha256(body.encode()).hexdigest()
+
+        canonical_headers = (
+            f"content-type:application/json\n"
+            f"host:{self._host}\n"
+            f"x-amz-content-sha256:{payload_hash}\n"
+            f"x-amz-date:{amz_date}\n"
+        )
+        signed_headers = "content-type;host;x-amz-content-sha256;x-amz-date"
+        canonical_request = "\n".join(
+            ["POST", self._PATH, "", canonical_headers, signed_headers, payload_hash]
+        )
+
+        scope = f"{date_stamp}/{self.region}/{self._SERVICE}/aws4_request"
+        string_to_sign = "\n".join(
+            [
+                "AWS4-HMAC-SHA256",
+                amz_date,
+                scope,
+                hashlib.sha256(canonical_request.encode()).hexdigest(),
+            ]
+        )
+
+        k_date = self._sign(f"AWS4{self.secret_access_key}".encode(), date_stamp)
+        k_region = self._sign(k_date, self.region)
+        k_service = self._sign(k_region, self._SERVICE)
+        k_signing = self._sign(k_service, "aws4_request")
+        signature = hmac.new(k_signing, string_to_sign.encode(), hashlib.sha256).hexdigest()
+
+        return {
+            "Content-Type": "application/json",
+            "X-Amz-Date": amz_date,
+            "X-Amz-Content-Sha256": payload_hash,
+            "Authorization": (
+                f"AWS4-HMAC-SHA256 Credential={self.access_key_id}/{scope}, "
+                f"SignedHeaders={signed_headers}, Signature={signature}"
+            ),
+        }
+
+    def _body(self, recipient: str, payload: NotificationPayload) -> dict[str, Any]:
+        to, sender, subject = self._safe_fields(recipient, payload)
+        name = _sanitize_header_value(self.from_name, max_length=255)
+        content: dict[str, Any] = {
+            "Simple": {
+                "Subject": {"Data": subject, "Charset": "UTF-8"},
+                "Body": {"Text": {"Data": payload.body or "", "Charset": "UTF-8"}},
+            }
+        }
+        if payload.body_html:
+            content["Simple"]["Body"]["Html"] = {"Data": payload.body_html, "Charset": "UTF-8"}
+        request: dict[str, Any] = {
+            "FromEmailAddress": f"{name} <{sender}>" if name else sender,
+            "Destination": {"ToAddresses": [to]},
+            "Content": content,
+        }
+        if self.configuration_set:
+            request["ConfigurationSetName"] = self.configuration_set
+
+        raw = json.dumps(request, separators=(",", ":"))
+        return {"content": raw, "headers": self._sigv4_headers(raw, datetime.now(UTC))}
+
+    async def send(self, recipient: str, payload: NotificationPayload) -> DeliveryResult:
+        # _body already carries the signed headers; passing _headers() as well
+        # would overwrite them with an empty dict.
+        missing = self._missing_config()
+        if missing:
+            return self._failure(f"{self.provider_type} is missing required setting: {missing}")
+        try:
+            kwargs = self._body(recipient, payload)
+        except ValueError as e:
+            return self._failure(f"{self.provider_type} rejected the message: {e}")
+
+        try:
+            response = await safe_http_request("POST", self._endpoint(), timeout=30.0, **kwargs)
+        except ValueError as e:
+            return self._failure(f"{self.provider_type} endpoint blocked (SSRF): {e}")
+        except Exception as e:
+            logger.error("%s delivery failed: %s", self.provider_type, e)
+            return self._failure(str(e))
+
+        if response.status_code not in self.accepted_statuses:
+            return self._failure(
+                f"{self.provider_type} returned HTTP {response.status_code}: "
+                f"{self._response_text(response)[:500]}"
+            )
+        return DeliveryResult(
+            success=True,
+            channel=self.channel,
+            status=DeliveryStatus.SENT,
+            message_id=self._message_id(response),
+            provider_response={"status_code": response.status_code},
+            provider=self.provider_type,
+        )
+
+    def _message_id(self, response: Any) -> str:
+        try:
+            data = response.json()
+        except Exception:
+            return str(uuid4())
+        if isinstance(data, dict):
+            value = data.get("MessageId")
+            if isinstance(value, str) and value:
+                return value
+        return str(uuid4())
+
+
+class TwilioSMSProvider(NotificationProvider):
+    """Twilio Messages API (form-encoded, HTTP basic auth)."""
+
+    channel = NotificationChannel.SMS
+    provider_type = "twilio_sms"
+    #: Prefix Twilio requires on the To/From addresses for this channel.
+    address_prefix = ""
+
+    def __init__(self, config: dict[str, Any]):
+        super().__init__(config)
+        self.account_sid = config.get("account_sid") or ""
+        self.auth_token = config.get("auth_token") or ""
+        self.from_number = config.get("from_number") or ""
+
+    def _missing_config(self) -> str | None:
+        for name, value in (
+            ("account_sid", self.account_sid),
+            ("auth_token", self.auth_token),
+            ("from_number", self.from_number),
+        ):
+            if not value:
+                return name
+        return None
+
+    def _headers(self) -> dict[str, str]:
+        token = base64.b64encode(f"{self.account_sid}:{self.auth_token}".encode()).decode()
+        return {"Authorization": f"Basic {token}"}
+
+    def _address(self, number: str) -> str:
+        """Apply the channel prefix, without doubling one already present."""
+        number = number.strip()
+        if not self.address_prefix or number.startswith(self.address_prefix):
+            return number
+        return f"{self.address_prefix}{number}"
+
+    def _failure(self, error: str) -> DeliveryResult:
+        return DeliveryResult(
+            success=False,
+            channel=self.channel,
+            status=DeliveryStatus.FAILED,
+            error=error,
+            provider=self.provider_type,
+        )
+
+    async def send(self, recipient: str, payload: NotificationPayload) -> DeliveryResult:
+        missing = self._missing_config()
+        if missing:
+            return self._failure(f"{self.provider_type} is missing required setting: {missing}")
+
+        # SMS is one field: title and body run together, capped at the
+        # concatenated-segment limit so Twilio does not reject the request.
+        text = " ".join(part for part in (payload.title, payload.body) if part).strip()
+        try:
+            response = await safe_http_request(
+                "POST",
+                f"https://api.twilio.com/2010-04-01/Accounts/{self.account_sid}/Messages.json",
+                headers=self._headers(),
+                data={
+                    "To": self._address(recipient),
+                    "From": self._address(self.from_number),
+                    "Body": text[:1600],
+                },
+                timeout=30.0,
+            )
+        except ValueError as e:
+            return self._failure(f"{self.provider_type} endpoint blocked (SSRF): {e}")
+        except Exception as e:
+            logger.error("%s delivery failed: %s", self.provider_type, e)
+            return self._failure(str(e))
+
+        if response.status_code not in (200, 201):
+            try:
+                detail = response.text or ""
+            except Exception:
+                detail = ""
+            return self._failure(
+                f"{self.provider_type} returned HTTP {response.status_code}: {detail[:500]}"
+            )
+
+        message_id = str(uuid4())
+        try:
+            data = response.json()
+            if isinstance(data, dict) and isinstance(data.get("sid"), str):
+                message_id = data["sid"]
+        except Exception:
+            pass
+        return DeliveryResult(
+            success=True,
+            channel=self.channel,
+            status=DeliveryStatus.SENT,
+            message_id=message_id,
+            provider_response={"status_code": response.status_code},
+            provider=self.provider_type,
+        )
+
+    async def verify(self) -> tuple[bool, str]:
+        missing = self._missing_config()
+        if missing:
+            return False, f"Missing required setting: {missing}"
+        try:
+            response = await safe_http_request(
+                "GET",
+                f"https://api.twilio.com/2010-04-01/Accounts/{self.account_sid}.json",
+                headers=self._headers(),
+                timeout=15.0,
+            )
+        except ValueError as e:
+            return False, f"Endpoint blocked (SSRF): {e}"
+        except Exception as e:
+            return False, f"{self.provider_type} error: {e}"
+        if response.status_code == 200:
+            return True, "Twilio credentials verified"
+        if response.status_code in (401, 403):
+            return False, "Twilio rejected the Account SID / Auth Token"
+        return False, f"Twilio returned HTTP {response.status_code}"
+
+
+class TwilioWhatsAppProvider(TwilioSMSProvider):
+    """Twilio WhatsApp — same API, addresses prefixed ``whatsapp:``."""
+
+    channel = NotificationChannel.WHATSAPP
+    provider_type = "twilio_whatsapp"
+    address_prefix = "whatsapp:"
 
 
 # =============================================================================
@@ -1146,6 +1916,28 @@ class NotificationService:
                             severity_override=severity,
                         )
                         return skip
+
+        # Spend cap, checked immediately before the send so nothing slips
+        # between the check and the call.
+        limited = await self._rate_limit_exceeded(provider)
+        if limited:
+            capped = DeliveryResult(
+                success=False,
+                channel=channel,
+                status=DeliveryStatus.FAILED,
+                error=f"Provider {limited}",
+                provider=getattr(provider, "provider_type", None),
+            )
+            await self._track_delivery(
+                user_id=user_id,
+                organization_id=organization_id,
+                channel=channel,
+                result=capped,
+                payload=payload,
+                category_override=category,
+                severity_override=severity,
+            )
+            return capped
 
         # Send
         result = await provider.send(recipient, payload)
@@ -2428,6 +3220,64 @@ class NotificationService:
         }
         return mapping.get(provider_type, "webhook")
 
+    @staticmethod
+    def _attach_limits(provider: NotificationProvider, record: NotificationProviderRecord) -> None:
+        """Carry the record's rate limits onto the runtime instance.
+
+        ``load_providers_from_db`` copies runtime providers into the in-memory
+        ``_providers`` dict and drops the record, so without this the limits
+        are unreachable from the send path.
+        """
+        provider.provider_record_id = record.id
+        provider.rate_limit_per_hour = record.rate_limit_per_hour
+        provider.rate_limit_per_day = record.rate_limit_per_day
+
+    async def _rate_limit_exceeded(self, provider: NotificationProvider) -> str | None:
+        """Name the window a send would breach, or None to proceed.
+
+        ``rate_limit_per_hour`` / ``rate_limit_per_day`` were collected by the
+        provider form, stored on the record, returned by the API and rendered
+        in the UI -- and read by nothing. An operator who set "200/hour" on a
+        Twilio account to cap their bill got no cap at all, and an alert storm
+        billed every message.
+
+        Counters live in Redis keyed on the provider record and the wall-clock
+        bucket, so they hold across API workers and Celery retry workers alike.
+        FAIL-OPEN by design: a Redis outage must not silence alerting, which is
+        the failure this system exists to prevent. That is a deliberate trade,
+        and it is why this is a spend cap rather than a security control.
+        """
+        record_id = getattr(provider, "provider_record_id", None)
+        if record_id is None:
+            return None
+        windows = (
+            ("hour", getattr(provider, "rate_limit_per_hour", 0), 3600, "%Y%m%d%H"),
+            ("day", getattr(provider, "rate_limit_per_day", 0), 86400, "%Y%m%d"),
+        )
+        if not any(limit and limit > 0 for _, limit, _, _ in windows):
+            return None
+
+        try:
+            from app.core.redis_client import get_async_redis
+
+            redis = get_async_redis(decode_responses=True)
+            now = datetime.now(UTC)
+            for name, limit, ttl, fmt in windows:
+                if not limit or limit <= 0:
+                    continue
+                key = f"notif:ratelimit:{record_id}:{name}:{now.strftime(fmt)}"
+                used = await redis.incr(key)
+                if used == 1:
+                    # Only the first writer sets the TTL, so a long-running
+                    # bucket is not repeatedly extended into never expiring.
+                    await redis.expire(key, ttl)
+                if used > limit:
+                    return f"{name}ly rate limit reached ({limit}/{name})"
+        except Exception:
+            logger.debug("Notification rate-limit check unavailable", exc_info=True)
+            return None
+        return None
+
     def _build_runtime_provider(
         self, record: NotificationProviderRecord
     ) -> NotificationProvider | None:
@@ -2437,18 +3287,14 @@ class NotificationService:
             "slack_webhook": SlackProvider,
             "teams_webhook": TeamsProvider,
             "generic_webhook": WebhookProvider,
-            # Twilio SMS/WhatsApp reuse WebhookProvider with Twilio REST semantics;
-            # a dedicated TwilioProvider class can replace these later.
-            "twilio_sms": WebhookProvider,
-            "twilio_whatsapp": WebhookProvider,
-            # Transactional email providers — all use WebhookProvider (HTTP API)
-            # until dedicated provider classes are implemented.
-            "mailgun": WebhookProvider,
-            "sendgrid": WebhookProvider,
-            "brevo": WebhookProvider,
-            "amazon_ses": WebhookProvider,
-            "postmark": WebhookProvider,
-            "resend": WebhookProvider,
+            "twilio_sms": TwilioSMSProvider,
+            "twilio_whatsapp": TwilioWhatsAppProvider,
+            "mailgun": MailgunProvider,
+            "sendgrid": SendGridProvider,
+            "brevo": BrevoProvider,
+            "amazon_ses": AmazonSESProvider,
+            "postmark": PostmarkProvider,
+            "resend": ResendProvider,
             "google_gmail": GmailOAuthProvider,
             "gmail_smtp": SMTPProvider,
         }
@@ -2471,16 +3317,18 @@ class NotificationService:
             # Override provider_type so DeliveryResult.provider reflects
             # gmail_smtp rather than the bare smtp identifier.
             inst.provider_type = "gmail_smtp"
+            self._attach_limits(inst, record)
             return inst
         cls = builders.get(record.provider_type)
         if cls is None:
             logger.warning("No runtime builder for provider type: %s", record.provider_type)
             return None
         inst = cls(cfg)
-        # Reflect the *stored* provider_type so a Mailgun/Postmark/etc.
-        # record (all backed by WebhookProvider today) still reports its
-        # true type in delivery analytics.
+        # Reflect the *stored* provider_type in delivery analytics. Each type
+        # now has its own class, so this is normally a no-op; it still matters
+        # for gmail_smtp, which reuses SMTPProvider.
         inst.provider_type = record.provider_type
+        self._attach_limits(inst, record)
         return inst
 
     async def load_providers_from_db(self, organization_id: UUID | None = None) -> None:

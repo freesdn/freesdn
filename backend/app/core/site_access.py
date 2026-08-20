@@ -25,6 +25,7 @@ site-limiting does not apply.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -33,6 +34,8 @@ from sqlalchemy import true
 
 if TYPE_CHECKING:
     from app.core.dependencies import CurrentUser
+
+logger = logging.getLogger(__name__)
 
 
 def assert_can_access_site(
@@ -107,3 +110,57 @@ def site_ids_for_request(current_user: CurrentUser | Any | None = None) -> Any:
     if user is not None and getattr(user, "is_site_limited", False):
         return user.accessible_site_ids
     return None
+
+
+async def resolve_actor_site_grants(db: Any, actor_id: UUID | None) -> set[UUID] | None:
+    """Site grants for a STORED actor id, or ``None`` for unrestricted.
+
+    The request-scoped helpers above take a ``CurrentUser``, which only exists
+    while a request is in flight. Event-driven paths -- a Fabric Connection
+    firing on an event, an automation rule running on a schedule -- have no
+    live principal, only the ``actor_id`` recorded when the rule or connection
+    was authored. They therefore built an ``OperationContext`` with
+    ``accessible_site_ids=None``, which that field documents as
+    "unrestricted": a site-limited author's automation could act on any site in
+    the org, even though the same operation through the API could not.
+
+    Returns ``None`` (unrestricted) rather than an empty set for a
+    super_admin / org_admin and for an actor with no grants at all, matching
+    ``CurrentUser.is_site_limited`` exactly -- the hybrid model in
+    FSDN-SEC-006, where zero grants means unrestricted, not denied. Returning
+    an empty set for those would be fail-CLOSED and would silently break every
+    existing automation rule, which is a different outage rather than a fix.
+
+    ``None`` is also returned when the actor cannot be resolved (deleted user,
+    missing id). That is deliberate: these paths already re-check the author's
+    PERMISSION at run time, and failing closed here would disable automations
+    on a lookup blip. The grant is a narrowing, not the authorisation.
+    """
+    if actor_id is None:
+        return None
+    try:
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
+        from app.models.core import User
+
+        result = await db.execute(
+            select(User)
+            .options(selectinload(User.site_access))
+            .where(User.id == actor_id, User.deleted_at.is_(None))
+        )
+        user = result.scalar_one_or_none()
+        if user is None:
+            return None
+        # Mirrors CurrentUser.is_org_admin / is_superuser.
+        if (user.role or "") in ("super_admin", "admin", "org_admin"):
+            return None
+        granted = {sa.site_id for sa in (user.site_access or []) if sa.site_id}
+        return granted or None
+    except Exception:  # pragma: no cover - defensive, see docstring
+        logger.warning(
+            "Could not resolve site grants for actor %s; proceeding unrestricted",
+            actor_id,
+            exc_info=True,
+        )
+        return None

@@ -770,7 +770,14 @@ class GrandstreamPhoneClient:
         return True
 
     async def reboot(self) -> bool:
-        """Reboot the phone."""
+        """Reboot the phone.
+
+        Mirrors :meth:`factory_reset`: True ONLY when the phone
+        acknowledged the command, either with a response or by dropping
+        the connection as it goes down. A rejection (expired sid, auth
+        failure) is NOT a reboot, and the blanket ``except Exception:
+        return True`` this used to end with reported one as a success.
+        """
         try:
             await self._sys_operation("REBOOT")
             logger.info("Reboot command sent to %s", self.host)
@@ -779,9 +786,15 @@ class GrandstreamPhoneClient:
             # Connection went away mid-response — phone is rebooting.
             logger.info("Reboot acknowledged via dropped connection at %s", self.host)
             return True
-        except Exception as exc:
-            logger.warning("Reboot may have succeeded (connection lost): %s", exc)
-            return True
+        except GrandstreamConnectionError as exc:
+            logger.warning("Reboot transport error at %s: %s", self.host, exc)
+            return False
+        except (ConnectionError, OSError) as exc:
+            logger.warning("Reboot failed at %s (transport): %s", self.host, exc)
+            return False
+        except aiohttp.ClientError as exc:
+            logger.warning("Reboot failed at %s (client): %s", self.host, exc)
+            return False
 
     async def factory_reset(self) -> bool:
         """Factory reset the phone.

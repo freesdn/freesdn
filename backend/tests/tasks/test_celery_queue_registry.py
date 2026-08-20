@@ -68,7 +68,9 @@ def _tasks_declaring_a_queue() -> list[tuple[str, str, int]]:
                 for kw in deco.keywords:
                     if kw.arg == "queue" and isinstance(kw.value, ast.Constant):
                         if isinstance(kw.value.value, str):
-                            found.append((str(py.relative_to(APP_DIR)), kw.value.value, deco.lineno))
+                            found.append(
+                                (str(py.relative_to(APP_DIR)), kw.value.value, deco.lineno)
+                            )
     return found
 
 
@@ -135,8 +137,7 @@ def test_every_task_declared_queue_is_actually_declared() -> None:
     assert not offenders, (
         "Task(s) route to an undeclared queue. Declare it in "
         "app/core/celery_app.py task_queues, or drop the queue= kwarg so the "
-        f"task routes to 'default'.\nDeclared queues: {sorted(declared)}\n"
-        + "\n".join(offenders)
+        f"task routes to 'default'.\nDeclared queues: {sorted(declared)}\n" + "\n".join(offenders)
     )
 
 
@@ -166,7 +167,7 @@ def test_default_queue_is_consumed_by_every_tier() -> None:
         )
 
 
-@pytest.mark.parametrize("module", sorted({m for m in (celery_app.conf.include or [])}))
+@pytest.mark.parametrize("module", sorted(set(celery_app.conf.include or [])))
 def test_included_modules_are_importable(module: str) -> None:
     """Every module in ``include=`` must import — an unimportable one is silently skipped."""
     __import__(module)
@@ -200,6 +201,5 @@ def test_task_modules_defining_tasks_are_in_the_include_list() -> None:
 
     assert not missing, (
         "Module(s) define Celery tasks but are absent from the include= list in "
-        "app/core/celery_app.py, so no worker registers them:\n  "
-        + "\n  ".join(sorted(missing))
+        "app/core/celery_app.py, so no worker registers them:\n  " + "\n  ".join(sorted(missing))
     )

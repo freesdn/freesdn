@@ -953,6 +953,13 @@ async def get_client_analytics(
 
     from app.models.devices import Device, DeviceClient
 
+    # ``hours`` was declared, validated and then ignored: the counts covered
+    # every client ever seen at the site, so the range selector produced the
+    # same two numbers for 1 hour and for 30 days. Bound both counts by
+    # ``last_seen`` within the window; rows that have never reported a
+    # ``last_seen`` are outside any window and are excluded.
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
+
     total = 0
     active = 0
     try:
@@ -960,7 +967,11 @@ async def get_client_analytics(
             select(func.count())
             .select_from(DeviceClient)
             .join(Device, DeviceClient.device_id == Device.id)
-            .where(Device.site_id == site_id)
+            .where(
+                Device.site_id == site_id,
+                DeviceClient.last_seen.is_not(None),
+                DeviceClient.last_seen >= cutoff,
+            )
         )
         total = (await session.execute(q)).scalar() or 0
 
@@ -968,7 +979,12 @@ async def get_client_analytics(
             select(func.count())
             .select_from(DeviceClient)
             .join(Device, DeviceClient.device_id == Device.id)
-            .where(Device.site_id == site_id, DeviceClient.is_online.is_(True))
+            .where(
+                Device.site_id == site_id,
+                DeviceClient.is_online.is_(True),
+                DeviceClient.last_seen.is_not(None),
+                DeviceClient.last_seen >= cutoff,
+            )
         )
         active = (await session.execute(active_q)).scalar() or 0
     except SQLAlchemyError:

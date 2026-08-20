@@ -159,6 +159,16 @@ export default function PendingChangesPage() {
         // Destructive ops need the operator's apply-time sign-off or the vendor
         // pre-flight 409s; the confirm dialog below is that acknowledgment.
         confirmed: isCatastrophic(change),
+        // Sent explicitly, matching the backend default. openapi-typescript
+        // runs with --default-non-nullable (its default), which marks any
+        // schema field carrying a `default` as required -- correct for
+        // responses, where the value is always present, and over-strict for
+        // request bodies, where it may be omitted. Sending it is cheaper than
+        // weakening response typing across all 674 schemas to fix one call.
+        //
+        // False is the safe two-step behaviour: apply now, operator reloads
+        // Asterisk when there are no active calls.
+        auto_reload: false,
       }),
     onSuccess: () => {
       toast({

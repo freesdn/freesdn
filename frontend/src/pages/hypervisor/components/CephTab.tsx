@@ -62,7 +62,10 @@ export function CephTab({ controllerId, nodes }: CephTabProps) {
     queryFn: () => hypervisorApi.getCephDetail(controllerId, queryNode),
     enabled: !!controllerId && !!queryNode,
     refetchInterval: 30_000,
-  });  const detail: any = detailResp?.data || {};  const osds: any[] = detail.osds || [];  const pools: any[] = detail.pools || [];  const mons: any[] = detail.mons || detail.mon || [];
+  });  const detail: any = detailResp?.data || {};  const osds: any[] = detail.osds || [];  const pools: any[] = detail.pools || [];  // The API field is `monitors` (CephDetailResponse.monitors). Neither `mons`
+  // nor `mon` has ever existed on the payload, so the Monitors table always
+  // rendered empty.
+  const mons: any[] = detail.monitors || [];
 
   if (nodes.length === 0) {
     return (

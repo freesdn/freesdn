@@ -55,6 +55,66 @@ afterEach(() => {
   cleanup();
 });
 
+// ---------------------------------------------------------------------------
+// Web Storage.
+//
+// Node 26 ships its own EXPERIMENTAL `localStorage` / `sessionStorage` globals,
+// and they are `undefined` unless the process was started with
+// `--localstorage-file`. Node 24 had no such globals at all, so a bare
+// `localStorage` reference resolved to happy-dom's. On Node 26 it resolves to
+// Node's own undefined global instead, which shadows happy-dom entirely for
+// any code that does not go through `window`.
+//
+// Zustand's `persist` middleware does exactly that -- its default
+// `createJSONStorage` returns bare `localStorage` -- so every store using
+// persist() threw
+//
+//     TypeError: Cannot read properties of undefined (reading 'setItem')
+//
+// and 66 tests across 9 files failed on Node 26 while passing on Node 24. The
+// production image builds on node:26.7.0, so CI was green on a runtime the
+// shipped image does not use.
+//
+// Bind the globals to a working implementation: happy-dom's if it exists,
+// otherwise an in-memory one. No-op on Node 24, where the globals already
+// resolve correctly.
+// ---------------------------------------------------------------------------
+function createMemoryStorage(): Storage {
+  let store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    getItem: (key: string) => (store.has(key) ? (store.get(key) as string) : null),
+    setItem: (key: string, value: string) => {
+      store.set(key, String(value));
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store = new Map<string, string>();
+    },
+  } as Storage;
+}
+
+for (const name of ['localStorage', 'sessionStorage'] as const) {
+  const current = (globalThis as Record<string, unknown>)[name] as Storage | undefined;
+  if (current && typeof current.setItem === 'function') continue;
+
+  const fromWindow =
+    typeof window !== 'undefined'
+      ? ((window as unknown as Record<string, unknown>)[name] as Storage | undefined)
+      : undefined;
+
+  Object.defineProperty(globalThis, name, {
+    value: fromWindow && typeof fromWindow.setItem === 'function' ? fromWindow : createMemoryStorage(),
+    configurable: true,
+    writable: true,
+  });
+}
+
 if (typeof window !== 'undefined') {
   if (!window.matchMedia) {
     window.matchMedia = (query: string) =>

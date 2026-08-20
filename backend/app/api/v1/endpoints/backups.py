@@ -618,7 +618,21 @@ async def list_backups(
     org_id = _org_id(current_user)
     # validate an explicit site_id against the caller's per-user grant.
     assert_can_access_site(current_user, site_id, detail="Site not found")
-    result = await BackupService(session).list_backups(
+    # Site-limited callers must not see sibling-site backups. Push the grant
+    # into the QUERY rather than filtering the page afterwards.
+    #
+    # The previous version paginated in SQL and then filtered those 20 rows in
+    # Python, overwriting total/pages with the post-filter counts. If the newest
+    # 20 backups belonged to a site the caller was not granted, they were shown
+    # "No backups" and a total of 0 while their own site's backups sat on page
+    # 2 -- the rows were not hidden so much as never reached. Filtering in SQL
+    # also makes the pagination arithmetic honest again.
+    grants = (
+        list(current_user.accessible_site_ids)
+        if getattr(current_user, "is_site_limited", False)
+        else None
+    )
+    return await BackupService(session).list_backups(
         site_id=site_id,
         backup_type=backup_type,
         status=status_filter,
@@ -627,16 +641,8 @@ async def list_backups(
         page=page,
         per_page=per_page,
         organization_id=org_id,
+        accessible_site_ids=grants,
     )
-    # Site-limited callers who omit site_id must not see sibling-site backups.
-    # Narrow the page to granted sites and reflect the filtered count (no-op for
-    # super_admin / org_admin, whose is_site_limited is False).
-    if getattr(current_user, "is_site_limited", False):
-        scoped = _scope_rows_to_grants(current_user, result.get("items", []))
-        result["items"] = scoped
-        result["total"] = len(scoped)
-        result["pages"] = 1 if scoped else 0
-    return result
 
 
 @router.get("/{backup_id}", response_model=BackupResponse)

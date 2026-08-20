@@ -846,11 +846,9 @@ export default function SwitchesPage() {
     vlan_mode: 'access',
     native_vlan: 1,
     tagged_vlans: [] as number[],
-    voice_vlan: undefined as number | undefined,
     poe_enabled: true,
     poe_mode: 'auto',
     poe_limit: 30,
-    poe_priority: 'low' as string,
     flow_control: false,
     mtu: 1500,
     stp_enabled: true,
@@ -882,7 +880,6 @@ export default function SwitchesPage() {
       vlan_mode: p.vlan_config?.mode || 'access',
       native_vlan: p.vlan_config?.native_vlan || 1,
       tagged_vlans: p.vlan_config?.tagged_vlans || [],
-      voice_vlan: p.vlan_config?.voice_vlan,
       poe_enabled: p.poe_config?.enabled || false,
       poe_status: p.status?.poe_status,
       poe_power_draw: p.status?.poe_power_draw,
@@ -954,11 +951,9 @@ export default function SwitchesPage() {
       vlan_mode: port.vlan_mode,
       native_vlan: port.native_vlan,
       tagged_vlans: port.tagged_vlans,
-      voice_vlan: port.voice_vlan,
       poe_enabled: port.poe_enabled,
       poe_mode: 'auto',
       poe_limit: 30,
-      poe_priority: 'low',
       flow_control: false,
       mtu: 1500,
       stp_enabled: true,
@@ -988,13 +983,11 @@ export default function SwitchesPage() {
           mode: portForm.vlan_mode,
           native_vlan: portForm.native_vlan,
           tagged_vlans: portForm.tagged_vlans,
-          voice_vlan: portForm.voice_vlan,
         },
         poe_config: {
           enabled: portForm.poe_enabled,
           mode: portForm.poe_mode,
           power_limit: portForm.poe_limit,
-          priority: portForm.poe_priority === 'critical' ? 3 : portForm.poe_priority === 'high' ? 2 : portForm.poe_priority === 'medium' ? 1 : 0,
         },
         stp_config: {
           enabled: portForm.stp_enabled,
@@ -1004,9 +997,12 @@ export default function SwitchesPage() {
         },
         flow_control: portForm.flow_control,
         mtu: portForm.mtu,
+        // Only send mac_limit when port security is actually on. The dialog
+        // hides the field when the toggle is off but kept sending its value,
+        // and the backend applied it regardless.
         security_config: {
           enabled: portForm.security_enabled,
-          mac_limit: portForm.mac_limit,
+          ...(portForm.security_enabled ? { mac_limit: portForm.mac_limit } : {}),
         },
       });
 
@@ -1570,17 +1566,6 @@ export default function SwitchesPage() {
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <Label>{t('SwitchesPage.portDialog.voiceVlan')}</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={4094}
-                    placeholder={t('SwitchesPage.portDialog.optional')}
-                    value={portForm.voice_vlan || ''}
-                    onChange={(e) => setPortForm({ ...portForm, voice_vlan: e.target.value ? Number(e.target.value) : undefined })}
-                  />
-                </div>
               </TabsContent>
 
               <TabsContent value="poe" className="space-y-4">
@@ -1624,24 +1609,6 @@ export default function SwitchesPage() {
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>{t('SwitchesPage.portDialog.priority')}</Label>
-                      <Select
-                        value={portForm.poe_priority}
-                        onValueChange={(v) => setPortForm({ ...portForm, poe_priority: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="low">{t('SwitchesPage.portDialog.priorityLow')}</SelectItem>
-                          <SelectItem value="medium">{t('SwitchesPage.portDialog.priorityMedium')}</SelectItem>
-                          <SelectItem value="high">{t('SwitchesPage.portDialog.priorityHigh')}</SelectItem>
-                          <SelectItem value="critical">{t('SwitchesPage.portDialog.priorityCritical')}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">{t('SwitchesPage.portDialog.priorityHint')}</p>
-                    </div>
                   </>
                 )}
               </TabsContent>

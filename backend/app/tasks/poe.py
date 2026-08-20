@@ -140,6 +140,7 @@ def evaluate_poe_schedules(self) -> dict[str, Any]:
                             continue
                         try:
                             from app.api.v1.endpoints.poe import _decrypt_if_needed
+                            from app.core.adapter_result import raise_for_adapter_result
                             from app.services.adapter_factory import get_adapter
 
                             ctrl = device.controller
@@ -165,11 +166,34 @@ def evaluate_poe_schedules(self) -> dict[str, Any]:
                             async with adapter:
                                 for port_num in schedule.port_numbers or []:
                                     config = {"poe": {"enable": poe_enabled}}
-                                    await adapter.configure_switch_port(
+                                    port_result = await adapter.configure_switch_port(
                                         device.mac_address,
                                         port_num,
                                         config,
                                     )
+                                    # CONV2-001, the scheduled path. A refused
+                                    # write comes back as AdapterResult(success=
+                                    # False) and does NOT raise, so discarding it
+                                    # set any_device_succeeded=True on a switch
+                                    # that was never touched.
+                                    #
+                                    # That is worse here than on the interactive
+                                    # path, because the success also writes
+                                    # ``last_action``, and the guard at the top
+                                    # of this loop skips any schedule whose
+                                    # last_action already equals the desired one.
+                                    # So a failed 22:00 power-off was recorded as
+                                    # done, never retried for the rest of the
+                                    # window, and the PoE Schedules card showed a
+                                    # fresh "last action" timestamp. The cameras
+                                    # and APs the operator scheduled down stayed
+                                    # powered all night with FreeSDN reporting
+                                    # success.
+                                    #
+                                    # Both interactive PoE endpoints already call
+                                    # raise_for_adapter_result for exactly this;
+                                    # the scheduled one was the miss.
+                                    raise_for_adapter_result(port_result)
                             any_device_succeeded = True
                         except Exception as e:
                             logger.warning(
