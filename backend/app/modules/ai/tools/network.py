@@ -13,7 +13,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import String, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.site_access import site_scope_filter
@@ -33,6 +33,7 @@ async def _get_devices(
     status: str | None = None,
     type: str | None = None,
     site_id: str | None = None,
+    search: str | None = None,
     limit: int = 20,
     **kwargs,
 ) -> dict[str, Any]:
@@ -65,6 +66,30 @@ async def _get_devices(
             q = q.where(Device.site_id == UUID(site_id))
         except ValueError:
             return {"error": f"Invalid site_id format: {site_id}", "devices": []}
+    if search:
+        # The assistant could filter by status, type and site, and by nothing
+        # a human actually arrives with. An operator reading a log has a MAC or
+        # an IP; a colleague on the phone has a name. Neither could be turned
+        # into an answer: get_device_detail demands a UUID, and get_devices
+        # returned the first 50 devices in the estate and left the model to
+        # guess. On anything past 50 devices it could not even do that.
+        #
+        # MAC is normalised because it arrives punctuated a different way every
+        # time -- aa:bb:cc, AA-BB-CC, aabbcc -- and the column stores one form.
+        term = search.strip()
+        like = f"%{term.lower()}%"
+        mac_digits = "".join(c for c in term.lower() if c.isalnum())
+        clauses = [
+            func.lower(Device.name).like(like),
+            func.lower(func.cast(Device.ip_address, String)).like(like),
+        ]
+        if mac_digits:
+            clauses.append(
+                func.lower(func.replace(func.replace(Device.mac_address, ":", ""), "-", "")).like(
+                    f"%{mac_digits}%"
+                )
+            )
+        q = q.where(or_(*clauses))
     q = q.limit(min(limit, 50))
     result = await db.execute(q)
     devices = result.scalars().all()
@@ -245,7 +270,13 @@ async def _get_sites(user: Any, db: AsyncSession, limit: int = 20, **kwargs) -> 
 register_tool(
     AITool(
         name="get_devices",
-        description="List network devices managed by FreeSDN. Optionally filter by status (online/offline), type (switch/access_point/camera/phone), or site.",
+        description=(
+            "List or SEARCH network devices managed by FreeSDN. Use 'search' to find a "
+            "device by name, IP address or MAC address when you do not have its UUID -- "
+            "this is the tool to reach for when a user mentions a device by any of those. "
+            "Optionally filter by status (online/offline), type "
+            "(switch/access_point/camera/phone), or site."
+        ),
         parameters={
             "type": "object",
             "properties": {
@@ -259,6 +290,14 @@ register_tool(
                     "description": "Filter by device type (switch, access_point, camera, phone, router)",
                 },
                 "site_id": {"type": "string", "description": "Filter by site UUID"},
+                "search": {
+                    "type": "string",
+                    "description": (
+                        "Find devices whose name, IP address or MAC contains this. "
+                        "MAC punctuation is ignored, so 'aa:bb:cc', 'AA-BB-CC' and "
+                        "'aabbcc' all match."
+                    ),
+                },
                 "limit": {
                     "type": "integer",
                     "default": 20,

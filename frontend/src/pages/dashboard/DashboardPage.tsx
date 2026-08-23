@@ -703,9 +703,16 @@ export default function DashboardPage() {
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {allSites.map((site) => {
-                const onlineRatio = site.device_count > 0 ? site.online_device_count / site.device_count : 0;
+                // `online_device_count` can be absent. Dividing by it yields NaN,
+                // and NaN fails BOTH `>= 1` and `>= 0.5`, so the old chain fell
+                // through to 'critical' -- a site with no reported count was
+                // painted red as if every device were down. Unknown is not
+                // critical; say unknown.
+                const onlineCount = site.online_device_count;
+                const hasCount = typeof onlineCount === 'number' && Number.isFinite(onlineCount);
+                const onlineRatio = hasCount && site.device_count > 0 ? onlineCount / site.device_count : NaN;
                 const status =
-                  site.device_count === 0
+                  site.device_count === 0 || !hasCount
                     ? 'unknown'
                     : onlineRatio >= 1
                       ? 'healthy'

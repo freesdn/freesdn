@@ -147,6 +147,11 @@ class FabricRegistry:
             logger.debug("Fabric: plugin bridge unavailable: %s", exc)
             return ops, events
 
+        # Deliberately NO handler on these Operations. A plugin operation is
+        # projected into the catalogue so it can be DISCOVERED; it is executed
+        # by the plugin's own per-organization runtime, because a single
+        # process-wide handler would belong to whichever org started the plugin
+        # first. See the tier gate in services/automation.py.
         for act in automation_bridge.get_plugin_actions():
             try:
                 op = Operation(

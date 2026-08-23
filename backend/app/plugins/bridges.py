@@ -106,10 +106,12 @@ class PluginAutomationBridge:
         params_schema: dict[str, Any],
     ) -> None:
         """
-        Register a plugin function as an automation action.
+        Publish a plugin function to the Fabric catalogue as an action.
 
-        When an automation rule uses this action type, the handler
-        is called with the action params and execution context.
+        NOT to the automation engine. This docstring used to say "when an
+        automation rule uses this action type, the handler is called with the
+        action params and execution context", which no rule could do -- see the
+        note at the end of this method for why, and what to use instead.
         """
         if not _TYPE_NAME_PATTERN.match(action_type):
             raise ValueError(f"Invalid action_type: '{action_type}'")
@@ -137,23 +139,32 @@ class PluginAutomationBridge:
             }
         )
 
-        # Register the handler with the automation engine if available
-        try:
-            from app.services.automation import automation_engine
-
-            if hasattr(automation_engine, "_action_handlers"):
-                # Only register if no other plugin owns this key
-                if full_type not in automation_engine._action_handlers:
-                    automation_engine._action_handlers[full_type] = handler  # type: ignore[index]
-                else:
-                    logger.warning(
-                        "Action handler '%s' already registered, skipping for plugin %s",
-                        full_type,
-                        plugin_id,
-                    )
-        except Exception as exc:
-            logger.debug("Could not register action handler with engine: %s", exc)
-
+        # DELIBERATELY NOT registered into the automation engine.
+        #
+        # This used to write ``automation_engine._action_handlers[full_type] =
+        # handler``, and that write was dead in a way that actively broke
+        # things. The engine looks handlers up by ``action.action_type``, which
+        # ``Action.from_dict`` builds with ``ActionType(...)`` -- a closed
+        # StrEnum. ``ActionType("plugin.x.y")`` raises, so a rule can never NAME
+        # the key, so the handler could never be reached.
+        #
+        # What it did do: put a plain ``str`` into a dict typed
+        # ``dict[ActionType, ...]``. ``implemented_action_types()`` returns that
+        # dict's keys, and the rule-create endpoint formats them with
+        # ``t.value`` when rejecting an unsupported action -- which raised
+        # AttributeError on the str, turning a helpful 422 into a 500. Installing
+        # any plugin that registered one action broke that error path for every
+        # rule in the process.
+        #
+        # And it was a loaded gun. If ``ActionType`` ever grew a ``_missing_``,
+        # or the lookup moved to raw strings, this entry would instantly become
+        # a REACHABLE cross-tenant execution path: one handler, captured from
+        # whichever organization started the plugin first, callable by a rule in
+        # any other. That is the same tenancy hazard the Fabric tier gate exists
+        # to prevent (see ``services/automation.py``).
+        #
+        # The action still reaches the Fabric catalogue through
+        # ``get_plugin_actions()`` above, which is the discovery path that works.
         logger.info("Plugin %s registered action: %s", plugin_id, full_type)
 
     def unregister_plugin(self, plugin_id: str) -> None:
@@ -161,16 +172,9 @@ class PluginAutomationBridge:
         # Clean up triggers
         self._plugin_triggers.pop(plugin_id, None)
 
-        # Clean up actions and their engine registrations
+        # Nothing to unwind in the automation engine: registration never puts
+        # anything there. See the note in register_plugin_action.
         actions = self._plugin_actions.pop(plugin_id, [])
-        for action in actions:
-            try:
-                from app.services.automation import automation_engine
-
-                if hasattr(automation_engine, "_action_handlers"):
-                    automation_engine._action_handlers.pop(action["type"], None)
-            except (ImportError, AttributeError, KeyError):
-                pass
 
         if actions:
             logger.info("Unregistered %d actions for plugin %s", len(actions), plugin_id)
@@ -250,11 +254,56 @@ class PluginAIBridge:
         original_handler = tool.handler
 
         async def wrapped_handler(**kwargs: Any) -> dict[str, Any]:
+            # Supervised like every other entry into plugin code. An AI tool is
+            # the least predictable of them -- it runs on whatever an assistant
+            # decided to call after reading a sentence a user typed -- and it
+            # had no timeout at all before this.
+            # Bind the caller into the request-scoped context for the duration
+            # of the tool call.
+            #
+            # A plugin AI tool handler is invoked with the caller's RAW user and
+            # session -- it is not routed through the org-scoped SDK the rest of
+            # a plugin uses -- so tenancy was entirely the author's problem, and
+            # the first plugin written against it (ai-ops-tools) got it wrong:
+            # it filtered on ``user.site_ids``, an attribute that does not
+            # exist, so a site-limited caller saw the whole organization.
+            #
+            # Binding here means the SDK works correctly INSIDE a tool handler:
+            # ``site_ids_for_request()`` returns the caller's grants,
+            # ``assert_site_access_for_request()`` enforces them, and
+            # intersects the plugin's authority with the caller's. An author who
+            # uses ``self.ctx`` now gets the right answer by default instead of
+            # having to know it is not the default.
+            from app.core.site_access import current_user_var
+            from app.plugins.sdk import bind_request_caller, reset_request_caller
+            from app.plugins.supervision import PluginQuarantined, supervisor
+
+            caller = kwargs.get("user")
+            caller_token = bind_request_caller(caller) if caller is not None else None
+            site_token = current_user_var.set(caller) if caller is not None else None
+
             try:
-                result: dict[str, Any] = await original_handler(**kwargs)
+                async with supervisor.guard(plugin_id, "ai_tool"):
+                    result: dict[str, Any] = await original_handler(**kwargs)
+            except PluginQuarantined as exc:
+                # Tell the assistant plainly. A generic internal error would
+                # invite it to retry, which is the one thing that must not
+                # happen to a plugin already failing.
+                return {"error": str(exc), "retryable": False}
+            except TimeoutError:
+                logger.warning("Plugin tool %s timed out", prefixed_name)
+                return {"error": f"Plugin tool {prefixed_name} timed out"}
             except Exception:
                 logger.exception("Plugin tool %s failed", prefixed_name)
                 return {"error": f"Plugin tool {prefixed_name} encountered an internal error"}
+            finally:
+                # Reset in a finally, not after the call: an exception that
+                # escaped would otherwise leave the caller bound in a context
+                # that outlives the request and leak it into the next one.
+                if caller_token is not None:
+                    reset_request_caller(caller_token)
+                if site_token is not None:
+                    current_user_var.reset(site_token)
             # Bound the success-path return so a plugin can't emit an unbounded blob.
             try:
                 import json as _json

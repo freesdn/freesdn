@@ -41,42 +41,79 @@ router = APIRouter()
 # Supported integration types + template presets
 # ============================================================================
 
+# An integration is a THIN WRAPPER OVER A WEBHOOK. The webhook has four fields --
+# name, url, event_types, secret -- and posts FreeSDN's own JSON with HMAC
+# headers. There is no auth field, no custom headers and no payload templating.
+#
+# That is fine for anything that accepts an arbitrary JSON body (a generic
+# endpoint, an n8n webhook trigger, a Make.com scenario). It CANNOT work for a
+# vendor API that needs its own credentials and its own payload shape: there is
+# nowhere to put a Jira token, so the request cannot even authenticate.
+#
+# Three entries here used to promise exactly that -- "Open Jira issues for
+# FreeSDN alerts and device events" -- and configuring one produced a webhook
+# that failed silently against every delivery. ``requires_plugin`` marks them,
+# names the plugin that really does the job, and the UI refuses to pretend
+# otherwise. Slack and Teams are listed too and would fail here for the same
+# reason, but they genuinely work through Notifications, so they point there
+# instead of being marked unavailable.
 INTEGRATION_TYPES = {
     "n8n": {
         "label": "n8n",
         "description": "Send FreeSDN events to an n8n workflow via webhook trigger.",
-        "default_events": ["device.status.changed", "device.offline", "alert.created"],
+        "default_events": ["device.status.changed", "alert.fired"],
         "setup_docs_url": "https://docs.freesdn.org/integrations/n8n",
         "icon": "Workflow",
     },
     "slack": {
         "label": "Slack",
-        "description": "Post FreeSDN notifications to a Slack channel.",
-        "default_events": ["alert.created", "alert.escalated", "device.offline"],
+        "description": (
+            "Sends the raw FreeSDN event payload, which Slack rejects. Use "
+            "Settings -> Notifications for Slack, which formats the message properly."
+        ),
+        "use_instead": "notifications",
+        "default_events": ["alert.fired", "device.status.changed"],
         "icon": "MessageSquare",
     },
     "teams": {
         "label": "Microsoft Teams",
-        "description": "Send FreeSDN alerts to a Teams channel.",
-        "default_events": ["alert.created", "alert.escalated"],
+        "description": (
+            "Sends the raw FreeSDN event payload, which Teams rejects. Use "
+            "Settings -> Notifications for Teams, which formats the message properly."
+        ),
+        "use_instead": "notifications",
+        "default_events": ["alert.fired"],
         "icon": "MessageSquare",
     },
     "pagerduty": {
         "label": "PagerDuty",
-        "description": "Create and resolve PagerDuty incidents from FreeSDN alerts.",
-        "default_events": ["alert.created", "alert.resolved"],
+        "description": (
+            "Creating and resolving incidents needs a PagerDuty routing key and its "
+            "Events API payload, neither of which a webhook can carry. Install the "
+            "PagerDuty plugin."
+        ),
+        "requires_plugin": "pagerduty-incidents",
+        "default_events": ["alert.fired", "alert.resolved"],
         "icon": "Bell",
     },
     "jira": {
         "label": "Jira",
-        "description": "Open Jira issues for FreeSDN alerts and device events.",
-        "default_events": ["alert.created"],
+        "description": (
+            "Opening issues needs Jira credentials and its own issue payload, neither "
+            "of which a webhook can carry. Install the Jira plugin."
+        ),
+        "requires_plugin": "jira-tickets",
+        "default_events": ["alert.fired"],
         "icon": "TicketCheck",
     },
     "servicenow": {
         "label": "ServiceNow",
-        "description": "Create ServiceNow incidents from FreeSDN critical alerts.",
-        "default_events": ["alert.created"],
+        "description": (
+            "Creating incidents needs ServiceNow credentials and its Table API payload, "
+            "neither of which a webhook can carry. Install the ServiceNow plugin."
+        ),
+        "requires_plugin": "servicenow-incidents",
+        "default_events": ["alert.fired"],
         "icon": "TicketCheck",
     },
     "webhook": {
@@ -87,39 +124,68 @@ INTEGRATION_TYPES = {
     },
 }
 
+# Only names the platform ACTUALLY publishes.
+#
+# This list used to offer eighteen events that nothing has ever emitted, and
+# omitted the one that matters most. The worst of it was the default: every
+# integration type defaulted to ``alert.created``, which events.py explicitly
+# records as never published ("nothing has ever published it. The alert
+# lifecycle publishes alert.fired"). So an operator could create an integration,
+# accept the defaults, see it listed as enabled, and receive nothing, for ever,
+# with no error anywhere -- and ``alert.fired`` was not on the menu to pick
+# instead.
+#
+# Verified against app/core/events.py (EventType) plus the literal names passed
+# to publish()/emit() across the app. If you add an event here, check that it is
+# published: a name in this list is a promise the UI makes on the platform's
+# behalf.
 EVENT_CATEGORIES = {
     "Device Events": [
         "device.status.changed",
-        "device.offline",
-        "device.online",
         "device.discovered",
-        "device.config.changed",
+        "device.adopted",
+        "device.updated",
+    ],
+    "Service Events": [
+        "sla.breach.created",
+        "sla.breach.resolved",
+        "camera.status.offline",
+        "camera.status.online",
     ],
     "Alert Events": [
-        "alert.created",
+        "alert.fired",
         "alert.resolved",
-        "alert.escalated",
-        "alert.acknowledged",
-    ],
-    "Backup Events": [
-        "backup.started",
-        "backup.complete",
-        "backup.failed",
     ],
     "Controller Events": [
-        "controller.connected",
-        "controller.disconnected",
-        "controller.sync.complete",
+        "controller.sync.started",
+        "controller.sync.completed",
         "controller.sync.failed",
-    ],
-    "Security Events": [
-        "security.anomaly",
-        "audit.login_failed",
-        "security.ip_blocked",
     ],
     "Discovery Events": [
         "discovery.started",
-        "discovery.complete",
+        "discovery.completed",
+        "discovery.failed",
+    ],
+    "Adoption Events": [
+        "adoption.started",
+        "adoption.completed",
+        "adoption.failed",
+    ],
+    "Network Events": [
+        "network.vlan.created",
+        "network.vlan.updated",
+        "network.vlan.deleted",
+        "network.wifi.created",
+        "network.wifi.updated",
+        "network.wifi.deleted",
+    ],
+    "VPN Events": [
+        "vpn.connection.down",
+        "vpn.connection.degraded",
+        "vpn.connection.restored",
+    ],
+    "Security Events": [
+        "security.alert",
     ],
 }
 
@@ -365,35 +431,35 @@ async def list_integration_templates(user: Any = Depends(get_current_active_user
             "name": "n8n Device Monitor",
             "integration_type": "n8n",
             "description": "Send device status changes to an n8n workflow",
-            "default_events": ["device.status.changed", "device.offline", "device.online"],
+            "default_events": ["device.status.changed"],
         },
         {
             "id": "slack-critical-alerts",
             "name": "Slack Critical Alerts",
             "integration_type": "slack",
             "description": "Post critical and escalated alerts to a Slack channel",
-            "default_events": ["alert.created", "alert.escalated"],
+            "default_events": ["alert.fired"],
         },
         {
             "id": "pagerduty-incidents",
             "name": "PagerDuty Incident Bridge",
             "integration_type": "pagerduty",
             "description": "Create and auto-resolve PagerDuty incidents from FreeSDN alerts",
-            "default_events": ["alert.created", "alert.resolved"],
+            "default_events": ["alert.fired", "alert.resolved"],
         },
         {
             "id": "security-event-stream",
             "name": "Security Event Stream",
             "integration_type": "webhook",
             "description": "Stream all security events to a SIEM or log aggregator",
-            "default_events": ["security.anomaly", "audit.login_failed", "security.ip_blocked"],
+            "default_events": [],
         },
         {
             "id": "backup-status",
             "name": "Backup Status Notifications",
             "integration_type": "slack",
             "description": "Get notified on backup success and failure",
-            "default_events": ["backup.complete", "backup.failed"],
+            "default_events": [],
         },
     ]
     return {"templates": templates}

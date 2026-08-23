@@ -817,7 +817,8 @@
       "enable": "启用",
       "disable": "禁用",
       "update": "更新",
-      "uninstall": "卸载"
+      "uninstall": "卸载",
+      "close": "关闭"
     },
     "install": {
       "title": "安装插件",
@@ -830,7 +831,11 @@
       "selectedFileAria": "已选择文件：{{name}}",
       "selectFileAria": "点击选择插件 ZIP 文件",
       "selectFilePrompt": "点击选择插件 ZIP 文件",
-      "urlPlaceholder": "https://example.com/plugin.zip"
+      "urlPlaceholder": "https://example.com/plugin.zip",
+      "restartRequired": {
+        "title": "已安装。重启 API 以完成。",
+        "body": "此版本更改了它的 HTTP 端点。其余部分已切换到新版本，但在 API 重启之前，这些端点仍会提供旧版本。"
+      }
     },
     "capabilities": {
       "permissions_one": "{{count}} 个权限",
@@ -844,7 +849,9 @@
     "row": {
       "selectAria": "选择 {{name}}",
       "by": "作者",
-      "homepage": "主页"
+      "homepage": "主页",
+      "updateAvailable": "v{{version}} 可用",
+      "updateTo": "将 {{from}} 更新到 {{to}}"
     },
     "status": {
       "installed": "已安装",
@@ -867,6 +874,10 @@
       "errors": {
         "title": "错误",
         "description": "需要处理"
+      },
+      "updates": {
+        "title": "更新",
+        "description": "有新版本可用"
       }
     },
     "searchPlaceholder": "按名称或描述搜索插件…",
@@ -878,13 +889,43 @@
     "confirmBulkUninstall": "卸载 {{count}} 个插件？",
     "uninstallDialog": {
       "title": "卸载插件？",
-      "description": "这将调用插件的卸载钩子并删除所有插件文件。插件设置可能仍保留在数据库中。"
+      "description": "这将调用插件的卸载钩子并删除其所有文件。其已保存的设置（包括任何凭据）会保留，以便重新安装时继续使用。",
+      "purgeLabel": "同时删除此插件的设置和凭据",
+      "purgeHint": "适用于所有组织，而不仅是你的组织。当你确实不再需要该插件时选择此项，而非排查问题时。"
     },
     "errors": {
       "installFailed": "安装失败",
       "toggleFailed": "切换失败",
       "uninstallFailed": "卸载失败",
-      "loadFailed": "加载插件失败"
+      "loadFailed": "加载插件失败",
+      "updateFailed": "无法更新插件"
+    },
+    "schedules": {
+      "title": "计划任务",
+      "everyHours": "每 {{count}} 小时",
+      "everyMinutes": "每 {{count}} 分钟",
+      "everySeconds": "每 {{count}} 秒",
+      "inFuture": "{{value}}{{unit}} 后",
+      "inPast": "{{value}}{{unit}} 前",
+      "nextRun": "下次",
+      "lastRun": "上次",
+      "neverRun": "尚未运行",
+      "runsThisWorker": "{{runs}} 次运行，{{failures}} 次失败（本 worker）",
+      "toggleAria": "启用或禁用 {{name}} 计划任务"
+    },
+    "supervision": {
+      "title": "监管",
+      "reset": "解除隔离"
+    },
+    "settings": {
+      "title": "设置",
+      "loading": "正在加载设置…",
+      "save": "保存设置",
+      "saveFailed": "无法保存设置",
+      "savedOk": "已保存。",
+      "checkTitle": "已保存，但有一项需要确认",
+      "secretConfigured": "已配置。输入以替换。",
+      "secretEmpty": "未设置"
     }
   },
   "SSOSettingsPage": {

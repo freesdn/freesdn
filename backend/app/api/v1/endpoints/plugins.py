@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import logging
 from typing import Annotated, Any
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -28,6 +29,11 @@ from app.core.dependencies import (
 )
 from app.db import get_session
 from app.models.plugins import InstalledPlugin, PluginOrganizationState, PluginSetting
+from app.plugins.capabilities import (
+    CAPABILITIES,
+    MUTATING_CAPABILITIES,
+    known_codes,
+)
 from app.plugins.loader import PluginLoadError, plugin_loader
 from app.plugins.public_auth import (
     PLUGIN_PUBLIC_NONCE_HEADER,
@@ -150,6 +156,11 @@ class PluginDetail(PluginSummary):
     plugin_dir: str
     manifest_cache: dict[str, Any]
     installed_from: str | None
+    #: Set by the install and upgrade paths. True only when the new version
+    #: changed its HTTP handlers, which an in-place code swap cannot rewrite.
+    #: Absent on a plain read, where the question does not arise.
+    restart_required: bool | None = None
+    note: str | None = None
 
 
 class PluginInstallFromUrl(BaseModel):
@@ -183,6 +194,32 @@ class PluginHealthResponse(BaseModel):
     is_active: bool
     organization_id: str | None = None
     details: dict[str, Any] = Field(default_factory=dict)
+
+
+class PluginScheduleInfo(BaseModel):
+    """One declared schedule and what has actually become of it.
+
+    ``last_run`` and ``next_run_at`` are the point. A schedule an operator can
+    see declared but cannot see RUNNING is indistinguishable from one that is
+    quietly failing, and unattended work that fails quietly is the whole reason
+    supervision exists.
+    """
+
+    name: str
+    method: str
+    interval_seconds: int
+    description: str = ""
+    enabled: bool
+    next_run_at: float | None = None
+    last_run: dict[str, Any] | None = None
+    #: Counters from THIS worker only. Under multiple workers the true totals
+    #: are higher; ``last_run`` is shared through Redis and is not affected.
+    runs_this_worker: int = 0
+    failures_this_worker: int = 0
+
+
+class PluginScheduleUpdate(BaseModel):
+    enabled: bool
 
 
 class PluginPublicRouteInfo(BaseModel):
@@ -356,20 +393,100 @@ async def _start_plugin_for_org(
     organization_id: Any,
     session: AsyncSession,
     app: Any | None = None,
+    replace_routes: bool = False,
 ) -> None:
     if plugin_id not in plugin_loader.get_loaded():
         await plugin_loader.load_plugin(plugin_id, session)
 
     if app is not None:
-        plugin_loader.register_plugin_routes(app, plugin_id)
+        # ``replace_routes`` is what makes an upgrade take effect without a
+        # restart. Without it the handlers stay bound to the PREVIOUS template
+        # object: new code on disk, new version in the UI, old behaviour on the
+        # endpoint, and nothing anywhere saying so.
+        plugin_loader.register_plugin_routes(app, plugin_id, replace=replace_routes)
 
     await plugin_loader.start_for_org(plugin_id, organization_id, session)
+
+
+def _with_reload_note(record: Any) -> Any:
+    """Attach the reload verdict to a record on its way out.
+
+    Set on the object rather than returned separately so it flows through
+    ``response_model=PluginDetail`` unchanged. The record is a live ORM row, so
+    these are plain attributes pydantic reads, never columns it writes back.
+    """
+    info = _reload_note(record.plugin_id)
+    record.restart_required = info["restart_required"]
+    record.note = info.get("note")
+    return record
+
+
+def _reload_note(plugin_id: str) -> dict[str, Any]:
+    """Whether this plugin is fully live, in the response the operator reads.
+
+    An upgrade now reloads METHOD bodies in place, so the ordinary case needs no
+    restart. It cannot rewrite the plugin's HTTP handlers -- ``get_router``
+    builds those once at mount time -- so a version that changed ``get_router``
+    is serving new methods behind old endpoints, and says so.
+
+    Reported on every path that installs or upgrades. Previously only the
+    marketplace path said anything, so the same situation was legible or silent
+    depending on which button an operator pressed.
+    """
+    needs_restart = plugin_loader.restart_required(plugin_id)
+    out: dict[str, Any] = {"restart_required": needs_restart}
+    if needs_restart:
+        out["note"] = (
+            "This version changed its HTTP endpoints. Its methods are already "
+            "live, but the routes keep serving the previous handlers until the "
+            "API restarts."
+        )
+    return out
+
+
+async def _validate_plugin_config(plugin_id: str, organization_id: Any) -> str | None:
+    """Ask the plugin whether its settings actually work.
+
+    Advisory by design. The settings are already saved when this runs: an
+    operator half-way through configuring a plugin must not be blocked by a
+    remote that happens to be down, and a plugin whose validator is wrong must
+    not be able to lock its own configuration.
+
+    Supervised like any other call into plugin code, and bounded -- a validator
+    that hangs would hang the settings form.
+    """
+    runtime = plugin_loader.get_active_for_org(plugin_id, organization_id)
+    if runtime is None:
+        return None
+    validate = getattr(runtime, "async_validate_config", None)
+    if validate is None:
+        return None
+
+    from app.plugins.sdk import plugin_session_scope
+    from app.plugins.supervision import PluginNotReady, PluginQuarantined, supervisor
+
+    try:
+        async with plugin_session_scope(), supervisor.guard(plugin_id, "lifecycle", timeout=15.0):
+            result = await validate()
+        return str(result)[:300] if result else None
+    except PluginNotReady as exc:
+        # Worth reporting and NOT worth treating as a bad configuration: the
+        # settings may be perfect and the remote merely down.
+        return f"Could not check: {exc.reason}"
+    except PluginQuarantined:
+        return None
+    except TimeoutError:
+        return "Could not check: the plugin's validator timed out"
+    except Exception as exc:  # noqa: BLE001 - a broken validator must not break saving
+        logger.warning("Plugin %s validator raised: %s", plugin_id, exc)
+        return None
 
 
 async def _start_plugin_everywhere(
     plugin_id: str,
     session: AsyncSession,
     app: Any | None = None,
+    replace_routes: bool = False,
 ) -> None:
     disabled_org_ids = await _get_disabled_org_ids(session, plugin_id)
     started_orgs: list[Any] = []
@@ -377,7 +494,7 @@ async def _start_plugin_everywhere(
         for org_id in await _get_active_org_ids(session):
             if org_id in disabled_org_ids:
                 continue
-            await _start_plugin_for_org(plugin_id, org_id, session, app)
+            await _start_plugin_for_org(plugin_id, org_id, session, app, replace_routes)
             started_orgs.append(org_id)
     except Exception:
         for org_id in started_orgs:
@@ -481,6 +598,93 @@ async def _download_plugin_archive(url: str) -> bytes:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+class CapabilityInfo(BaseModel):
+    """One entry in the platform's capability vocabulary."""
+
+    code: str
+    summary: str
+    core_permissions: list[str]
+    mutating: bool
+
+
+class PluginSupervisionResponse(BaseModel):
+    """Fleet-wide supervision state."""
+
+    quarantined: list[str]
+    plugins: dict[str, Any]
+
+
+@router.get("/supervision", response_model=PluginSupervisionResponse)
+async def get_plugin_supervision(
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+) -> PluginSupervisionResponse:
+    """Error rate, latency and quarantine state for every plugin at once.
+
+    The per-plugin health endpoint answers "is THIS plugin ok". This answers the
+    question an operator actually has during an incident: which of them is
+    misbehaving. Before supervision existed there was no way to ask either --
+    plugin failures were logged without naming the plugin.
+
+    Declared above ``/{plugin_id}`` because FastAPI matches in definition order
+    and would otherwise read "supervision" as a plugin id.
+    """
+    _require_org_admin(current_user)
+    from app.plugins.supervision import supervisor
+
+    return PluginSupervisionResponse(
+        quarantined=supervisor.quarantined_plugins(),
+        plugins=supervisor.snapshot(),
+    )
+
+
+@router.post("/{plugin_id}/supervision/reset", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_plugin_supervision(
+    plugin_id: str,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+) -> None:
+    """Clear a plugin's error budget and lift its quarantine immediately.
+
+    For the operator who has fixed the cause -- restored the upstream the plugin
+    was calling, corrected its settings -- and does not want to wait out a
+    cooldown that doubles each time. Without this the only remedies were waiting
+    or restarting the API.
+    """
+    _require_org_admin(current_user)
+    from app.plugins.supervision import supervisor
+
+    supervisor.reset(plugin_id)
+    logger.info("Supervision state reset for plugin %s by %s", plugin_id, current_user.id)
+
+
+@router.get("/capabilities", response_model=list[CapabilityInfo])
+async def list_capabilities(
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+) -> list[CapabilityInfo]:
+    """The capability vocabulary a plugin manifest may declare.
+
+    The consent dialog needs this because a manifest's ``name`` and
+    ``description`` for a permission are written by the PLUGIN AUTHOR. A plugin
+    can label ``devices.stage`` as "Read Alerts" and the operator approving the
+    install would read the author's wording, not what the code actually grants.
+    Rendering the platform's own summary, keyed by code, is what makes the
+    consent dialog mean something.
+
+    Declared above ``/{plugin_id}`` deliberately: FastAPI matches in definition
+    order, so a route registered after the path parameter would be shadowed and
+    "capabilities" would be read as a plugin id.
+    """
+    _require_org_admin(current_user)
+    return [
+        CapabilityInfo(
+            code=capability.code,
+            summary=capability.summary,
+            core_permissions=sorted(capability.core_permissions),
+            mutating=capability.code in MUTATING_CAPABILITIES,
+        )
+        for capability in (CAPABILITIES[code] for code in known_codes())
+    ]
+
+
 @router.get("", response_model=list[PluginDetail])
 async def list_plugins(
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
@@ -543,10 +747,13 @@ async def install_plugin(
         )
         await _start_plugin_everywhere(record.plugin_id, session, request.app)
         await _audit_plugin_install(session, current_user, record, source="upload")
-        return record
+        return _with_reload_note(record)
     except PluginLoadError as exc:
+        # Name the reason. The endpoint requires an unscoped super admin, so
+        # there is no audience here that should not see a plugin diagnostic --
+        # and the person who can fix it is the person reading the response.
         logger.error("Plugin install failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=400, detail="Plugin installation failed")
+        raise HTTPException(status_code=400, detail=f"Plugin installation failed: {exc}")
     except HTTPException:
         raise
     except Exception as exc:
@@ -603,10 +810,10 @@ async def install_plugin_from_url(
         )
         await _start_plugin_everywhere(record.plugin_id, session, request.app)
         await _audit_plugin_install(session, current_user, record, source=f"url:{body.url}")
-        return record
+        return _with_reload_note(record)
     except PluginLoadError as exc:
         logger.error("Plugin install-url failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=400, detail="Plugin installation failed")
+        raise HTTPException(status_code=400, detail=f"Plugin installation failed: {exc}")
     except HTTPException:
         raise
     except Exception as exc:
@@ -619,8 +826,30 @@ async def uninstall_plugin(
     plugin_id: str,
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    purge_settings: Annotated[
+        bool,
+        Query(
+            description=(
+                "Also delete this plugin's stored settings for every organization, "
+                "including any encrypted credentials. Off by default so an accidental "
+                "uninstall does not lose a working configuration."
+            )
+        ),
+    ] = False,
 ) -> None:
-    """Uninstall a plugin (calls on_uninstall hook then removes files)."""
+    """Uninstall a plugin (calls on_uninstall hook then removes files).
+
+    Settings are KEPT by default and a reinstall picks them back up, which is
+    what makes uninstall-reinstall a safe troubleshooting step. The cost is that
+    a credential outlives the plugin that used it, and the uninstall dialog used
+    to say only that settings "may remain" -- vague about something that always
+    happens, and silent about the part that matters, which is the token.
+
+    ``purge_settings=true`` removes them. Kept as a choice rather than made the
+    default because the two reasons to uninstall want opposite behaviour: fixing
+    a misbehaving plugin wants the configuration back, and removing a plugin you
+    are done with wants the credential gone.
+    """
     _require_plugin_platform_admin(current_user)
     # Capture plugin details BEFORE uninstall (the loader may delete the row).
     pre_result = await session.execute(
@@ -634,6 +863,22 @@ async def uninstall_plugin(
     except PluginLoadError as exc:
         logger.error("Plugin uninstall failed for %s: %s", plugin_id, exc, exc_info=True)
         raise HTTPException(status_code=404, detail="Plugin not found")
+    purged = 0
+    if purge_settings:
+        # Every organization's settings, not just the caller's: this is a
+        # PLATFORM uninstall, the files are gone for everyone, and leaving one
+        # tenant's credentials behind because a different tenant's admin pressed
+        # the button would be the worst of both answers.
+        result = await session.execute(
+            delete(PluginSetting).where(PluginSetting.plugin_id == plugin_id)
+        )
+        purged = result.rowcount or 0
+        await session.execute(
+            delete(PluginOrganizationState).where(PluginOrganizationState.plugin_id == plugin_id)
+        )
+        await session.commit()
+        logger.info("Purged %d stored setting(s) for uninstalled plugin %s", purged, plugin_id)
+
     # audit lifecycle operation
     await _audit_plugin_lifecycle(
         session,
@@ -642,6 +887,7 @@ async def uninstall_plugin(
         plugin_id=plugin_id,
         plugin_name=pre_name,
         version=pre_version,
+        extra={"purged_settings": purged if purge_settings else None},
     )
 
 
@@ -829,7 +1075,7 @@ async def upgrade_plugin(
             db=session,
             installed_by_id=current_user.id,
         )
-        await _start_plugin_everywhere(plugin_id, session, request.app)
+        await _start_plugin_everywhere(plugin_id, session, request.app, replace_routes=True)
         # audit lifecycle operation
         await _audit_plugin_lifecycle(
             session,
@@ -840,10 +1086,10 @@ async def upgrade_plugin(
             version=record.version,
             extra={"previous_version": pre_version},
         )
-        return record
+        return _with_reload_note(record)
     except PluginLoadError as exc:
         logger.error("Plugin upgrade failed for %s: %s", plugin_id, exc, exc_info=True)
-        raise HTTPException(status_code=400, detail="Plugin upgrade failed")
+        raise HTTPException(status_code=400, detail=f"Plugin upgrade failed: {exc}")
     except HTTPException:
         raise
     except Exception as exc:
@@ -885,8 +1131,79 @@ async def get_plugin_settings(
             PluginSetting.organization_id == current_user.organization_id,
         )
     )
-    settings = {row.key: row.value for row in result.scalars().all()}
+    raw = {row.key: row.value for row in result.scalars().all()}
+
+    # Never return a stored secret, and never return the ciphertext either --
+    # handing back "fernet:gAAAA..." would put it in logs and browser history
+    # for no benefit. A declared-secret key reports only whether it is set, so
+    # the UI can show "configured" without ever holding the value.
+    secret_keys = await _secret_setting_keys(session, plugin_id)
+    settings: dict[str, Any] = {}
+    for key, value in raw.items():
+        if key.endswith(":encrypted"):
+            continue  # the twin below reports it
+        if key.startswith("__"):
+            # Platform-internal state, not configuration. A plugin's own
+            # bookkeeping shared this table with the operator's settings and was
+            # rendered in the settings form as an editable field, which invites
+            # someone to "fix" a value the plugin depends on. The ``__`` prefix
+            # is reserved; see PUT below, which refuses to write one.
+            continue
+        if key in secret_keys:
+            configured = bool(raw.get(f"{key}:encrypted")) or bool(value)
+            settings[key] = SECRET_MASK if configured else ""
+        else:
+            settings[key] = value
+    # A secret whose plaintext twin was already blanked still needs an entry.
+    for key in secret_keys:
+        if key not in settings:
+            settings[key] = SECRET_MASK if raw.get(f"{key}:encrypted") else ""
     return {"settings": settings}
+
+
+#: What GET reports in place of a stored secret, and what PUT reads back as
+#: "leave this one alone". Defined once because the two ends have to agree: if
+#: GET masks with one string and PUT recognises another, a round-trip stores the
+#: mask AS the credential.
+SECRET_MASK = "***"
+
+
+async def _secret_setting_keys(session: AsyncSession, plugin_id: str) -> set[str]:
+    """Setting keys the plugin declared as secret in its manifest.
+
+    A plugin marks a field secret with ``"secret": true`` (or the JSON Schema
+    idiom ``"format": "password"``) in its ``settings_schema``:
+
+        settings_schema:
+          properties:
+            api_token:
+              type: string
+              secret: true
+
+    Reads the CACHED manifest rather than the file, so this cannot be influenced
+    by anything on disk after install, and returns an empty set on any doubt --
+    which degrades to the previous plaintext behaviour rather than to a
+    corrupted setting.
+    """
+    cached = (
+        await session.execute(
+            select(InstalledPlugin.manifest_cache).where(InstalledPlugin.plugin_id == plugin_id)
+        )
+    ).scalar_one_or_none()
+    if not isinstance(cached, dict):
+        return set()
+    schema = cached.get("settings_schema")
+    if not isinstance(schema, dict):
+        return set()
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return set()
+    return {
+        key
+        for key, spec in properties.items()
+        if isinstance(spec, dict)
+        and (spec.get("secret") is True or str(spec.get("format", "")).lower() == "password")
+    }
 
 
 @router.put("/{plugin_id}/settings")
@@ -909,21 +1226,101 @@ async def update_plugin_settings(
     # ON CONFLICT ... DO UPDATE collapses insert/update into one statement.
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+    # Which fields the plugin declared as secret. A credential typed into the
+    # settings UI used to land in plugin_settings as PLAINTEXT and stay there:
+    # the SDK had set_secret/get_secret, which keep a value encrypted under a
+    # separate ``<key>:encrypted`` entry, but nothing connected them to the form
+    # the operator actually fills in. Every credential-bearing plugin therefore
+    # had to migrate the value itself on first read, and until it did the token
+    # sat readable to anyone with settings access.
+    reserved = sorted(k for k in body.settings if k.startswith("__"))
+    if reserved:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Keys beginning with '__' are reserved for platform state and cannot be "
+                f"set as configuration: {', '.join(reserved)}"
+            ),
+        )
+
+    secret_keys = await _secret_setting_keys(session, plugin_id)
+    stored: dict[str, Any] = {}
+
     for key, value in body.settings.items():
+        target_key, target_value = key, value
+
+        # A secret submitted as the MASK means "I did not touch this one".
+        #
+        # GET reports a configured secret as ``***`` and never the value, so the
+        # most natural thing any client does -- read the settings, change one
+        # field, write them back -- used to send ``***`` for every untouched
+        # credential, and this endpoint encrypted that literal AS the
+        # credential. The real token was destroyed silently: the plugin then
+        # authenticated with ``***`` and failed, while the UI went on reporting
+        # the field as configured. Reproduced end to end before fixing:
+        #
+        #   PUT {"zabbix_token": "REAL-SECRET-TOKEN-123"}  -> stored, encrypted
+        #   GET                                            -> {"zabbix_token": "***"}
+        #   PUT (same body, one unrelated field edited)    -> 200
+        #   decrypt(stored)                                -> '***'
+        #
+        # Skipping it entirely is deliberate: it leaves whatever is already
+        # there untouched, including nothing. Storing the mask is never the
+        # right outcome, and an operator who genuinely wants a credential of
+        # three asterisks is a case worth losing to keep every other one safe.
+        if key in secret_keys and value == SECRET_MASK:
+            stored[key] = SECRET_MASK
+            continue
+
+        if key in secret_keys and isinstance(value, str) and value:
+            from app.core.security_utils import encrypt_webhook_secret
+
+            target_key = f"{key}:encrypted"
+            target_value = encrypt_webhook_secret(value)
+            # Blank the plaintext twin so a value written before this existed,
+            # or by an older client, does not linger next to the encrypted one.
+            await session.execute(
+                pg_insert(PluginSetting)
+                .values(
+                    plugin_id=plugin_id,
+                    organization_id=current_user.organization_id,
+                    key=key,
+                    value="",
+                )
+                .on_conflict_do_update(
+                    index_elements=["plugin_id", "organization_id", "key"],
+                    set_={"value": ""},
+                )
+            )
+            stored[key] = SECRET_MASK
+        else:
+            stored[key] = value
+
         stmt = pg_insert(PluginSetting).values(
             plugin_id=plugin_id,
             organization_id=current_user.organization_id,
-            key=key,
-            value=value,
+            key=target_key,
+            value=target_value,
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=["plugin_id", "organization_id", "key"],
-            set_={"value": value},
+            set_={"value": target_value},
         )
         await session.execute(stmt)
 
     await session.commit()
-    return {"settings": body.settings}
+
+    # Ask the plugin whether what was just saved actually works. Advisory: the
+    # commit above already happened, and this only adds a warning the operator
+    # would otherwise have had to wait for a schedule to discover.
+    warning = await _validate_plugin_config(plugin_id, current_user.organization_id)
+
+    # Never echo a secret back, not even the one just sent. It would land in
+    # request logs and browser history for no benefit.
+    result: dict[str, Any] = {"settings": stored}
+    if warning:
+        result["warning"] = warning
+    return result
 
 
 @router.get("/{plugin_id}/health", response_model=PluginHealthResponse)
@@ -955,8 +1352,31 @@ async def get_plugin_health(
             detail="Plugin is not active for this organization",
         )
 
-    details = await runtime.health_check()
+    # The plugin's OWN answer, supervised: health_check is plugin-authored code
+    # like any other, and a health check that hangs is a health check that takes
+    # the endpoint down with it.
+    from app.plugins.supervision import supervisor
+
+    try:
+        async with supervisor.guard(plugin_id, "lifecycle", timeout=10.0, record_only=True):
+            details = await runtime.health_check()
+    except Exception as exc:
+        # Covers a quarantined plugin, a timeout and anything the plugin raises.
+        # A health endpoint that 500s because the thing it reports on is broken
+        # is the least useful possible behaviour.
+        details = {"status": "unhealthy", "error": f"{type(exc).__name__}: {exc}"[:300]}
     normalized_details = details if isinstance(details, dict) else {"result": details}
+
+    # What SUPERVISION knows, which is the part the plugin cannot self-report:
+    # its error rate, its latency, and whether the platform has stopped calling
+    # it. A plugin quarantined for failing every event will happily answer
+    # "status: ok" to its own health check.
+    supervision = supervisor.snapshot(plugin_id)
+    normalized_details["supervision"] = supervision
+    if supervision.get("state") == "quarantined":
+        normalized_details["status"] = "quarantined"
+    elif supervision.get("state") == "degraded" and normalized_details.get("status") == "ok":
+        normalized_details["status"] = "degraded"
     runtime_org_id = (
         str(runtime.ctx.organization_id)
         if runtime.ctx is not None
@@ -970,6 +1390,133 @@ async def get_plugin_health(
         organization_id=runtime_org_id,
         details=normalized_details,
     )
+
+
+async def _schedule_infos(
+    plugin_id: str,
+    organization_id: UUID,
+    session: AsyncSession,
+) -> list[PluginScheduleInfo]:
+    from app.models.plugins import PluginSetting
+    from app.plugins.scheduler import DISABLED_SETTING_PREFIX, plugin_scheduler
+
+    runtime = plugin_loader.get_active_for_org(plugin_id, organization_id)
+    if runtime is None:
+        return []
+    manifest = getattr(runtime, "_plugin_manifest_data", None)
+    schedules = list(getattr(manifest, "schedules", None) or [])
+    if not schedules:
+        return []
+
+    # One query for every toggle rather than one per schedule.
+    rows = await session.execute(
+        select(PluginSetting.key, PluginSetting.value).where(
+            PluginSetting.plugin_id == plugin_id,
+            PluginSetting.organization_id == organization_id,
+            PluginSetting.key.startswith(DISABLED_SETTING_PREFIX),
+        )
+    )
+    # Absent is NOT the same as enabled: a schedule shipping
+    # ``enabled_by_default: false`` has no row until an operator decides.
+    toggles = {key[len(DISABLED_SETTING_PREFIX) :]: value for key, value in rows.all()}
+
+    stats = plugin_scheduler.stats(plugin_id, organization_id)
+    infos: list[PluginScheduleInfo] = []
+    for sched in schedules:
+        stat = stats.get(sched.name, {})
+        enabled = not toggles[sched.name] if sched.name in toggles else sched.enabled_by_default
+        infos.append(
+            PluginScheduleInfo(
+                name=sched.name,
+                method=sched.method,
+                interval_seconds=sched.interval_seconds,
+                description=sched.description,
+                enabled=enabled,
+                next_run_at=(
+                    plugin_scheduler.next_run_at(plugin_id, organization_id, sched)
+                    if enabled
+                    else None
+                ),
+                last_run=await plugin_scheduler.last_run(plugin_id, organization_id, sched.name),
+                runs_this_worker=int(stat.get("runs", 0)),
+                failures_this_worker=int(stat.get("failures", 0)),
+            )
+        )
+    return infos
+
+
+@router.get("/{plugin_id}/schedules", response_model=list[PluginScheduleInfo])
+async def list_plugin_schedules(
+    plugin_id: str,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> list[PluginScheduleInfo]:
+    """What this plugin runs unattended, and whether it is actually running."""
+    _require_org_admin(current_user)
+    await _verify_plugin_installed(session, plugin_id)
+    if not current_user.organization_id:
+        return []
+    return await _schedule_infos(plugin_id, current_user.organization_id, session)
+
+
+@router.put("/{plugin_id}/schedules/{name}", response_model=PluginScheduleInfo)
+async def set_plugin_schedule_enabled(
+    plugin_id: str,
+    name: str,
+    body: PluginScheduleUpdate,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> PluginScheduleInfo:
+    """Turn one schedule on or off for this organization.
+
+    Per organization, not per plugin: on a shared appliance one tenant wanting
+    a quiet inventory sync must not stop another's drift scan. Stored under the
+    reserved ``__`` settings prefix, so it never appears in -- or is clobbered
+    by -- the operator's configuration form.
+    """
+    from app.models.plugins import PluginSetting
+    from app.plugins.scheduler import DISABLED_SETTING_PREFIX
+
+    _require_org_admin(current_user)
+    await _verify_plugin_installed(session, plugin_id)
+    org_id = current_user.organization_id
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Organization required")
+
+    runtime = plugin_loader.get_active_for_org(plugin_id, org_id)
+    manifest = getattr(runtime, "_plugin_manifest_data", None) if runtime else None
+    known = {s.name for s in (getattr(manifest, "schedules", None) or [])}
+    if name not in known:
+        # 404 rather than silently storing a toggle for a schedule that does not
+        # exist -- which would read as success and change nothing forever.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Plugin '{plugin_id}' declares no schedule named '{name}'",
+        )
+
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    key = f"{DISABLED_SETTING_PREFIX}{name}"
+    value = "" if body.enabled else "1"
+    stmt = pg_insert(PluginSetting).values(
+        plugin_id=plugin_id,
+        organization_id=org_id,
+        key=key,
+        value=value,
+    )
+    await session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["plugin_id", "organization_id", "key"],
+            set_={"value": value},
+        )
+    )
+    await session.commit()
+
+    infos = await _schedule_infos(plugin_id, org_id, session)
+    for info in infos:
+        if info.name == name:
+            return info
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
 
 
 @router.get("/{plugin_id}/public-auth", response_model=PluginPublicAuthStatus)

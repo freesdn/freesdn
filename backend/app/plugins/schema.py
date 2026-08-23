@@ -31,9 +31,32 @@ class PluginDependency(BaseModel):
 
 
 class PluginPermission(BaseModel):
+    """One capability a plugin asks for, shown in the install consent dialog.
+
+    ``code`` used to be any string at all. A manifest could declare
+    ``firewall.admin`` or ``superuser`` and it rendered to the operator as a
+    real permission while enforcing nothing, and a typo like ``device.read``
+    installed cleanly then failed at first use. Both are now rejected here,
+    before anything is installed, against the one vocabulary the SDK enforces.
+    """
+
     code: str
     name: str
     description: str = ""
+
+    @field_validator("code")
+    @classmethod
+    def _validate_code(cls, v: str) -> str:
+        from app.plugins.capabilities import is_known, known_codes
+
+        if not is_known(v):
+            raise ValueError(
+                f"Unknown plugin capability {v!r}. FreeSDN enforces a fixed "
+                f"vocabulary, because a declared permission the platform does "
+                f"not enforce is consent theatre. Valid codes: "
+                f"{', '.join(known_codes())}"
+            )
+        return v
 
 
 class PluginNavItem(BaseModel):
@@ -72,6 +95,52 @@ class PluginPublicRoute(BaseModel):
                 f"public route methods must be one of {sorted(allowed)}; got {invalid}"
             )
         return normalized
+
+
+class PluginSchedule(BaseModel):
+    """A method the platform runs on a timer, per organization.
+
+    This is a meaningful thing for an operator to consent to: a scheduled
+    plugin acts with **no caller bound**, so the confused-deputy check
+    has nobody to intersect against and the plugin runs on its own declared
+    capabilities. That is the documented design for lifecycle hooks and event
+    handlers, and it applies here too -- which is why schedules are declared in
+    the manifest, next to the permissions, rather than registered quietly from
+    code at runtime.
+
+    Interval only. Cron expressions are not supported, and a half-built cron
+    parser with unclear timezone semantics would be worse than saying so: a
+    schedule an operator misreads is a schedule that runs at the wrong time and
+    looks correct.
+    """
+
+    #: Unique within the plugin. Appears in health output and log lines, so it
+    #: should read as what the run does: ``drift_scan``, not ``job1``.
+    name: str = Field(pattern=r"^[a-z0-9][a-z0-9_]{0,62}[a-z0-9]$")
+    #: Name of an async method on the plugin class, called with no arguments.
+    method: str
+    #: The floor exists because a schedule is unattended. A plugin that declares
+    #: 5 seconds and scans every device is a self-inflicted denial of service
+    #: that nobody is watching, on an appliance whose owner may be asleep.
+    interval_seconds: int = Field(ge=60, le=86_400)
+    #: Shown to the operator. Written for someone deciding whether they want
+    #: this running unattended on their network.
+    description: str = Field(default="", max_length=500)
+    #: Whether the schedule runs unless an operator turns it off, or waits to be
+    #: turned on. Default off is the safer shape for anything that writes.
+    enabled_by_default: bool = True
+
+    @field_validator("method")
+    @classmethod
+    def _validate_method(cls, v: str) -> str:
+        if not v.isidentifier():
+            raise ValueError("method must be a valid Python identifier")
+        if v.startswith("_"):
+            raise ValueError(
+                "method must not start with an underscore -- a schedule is a "
+                "public entry point, not an internal helper"
+            )
+        return v
 
 
 class PluginManifest(BaseModel):
@@ -138,8 +207,21 @@ class PluginManifest(BaseModel):
     public_routes: list[PluginPublicRoute] = []
 
     event_subscriptions: list[str] = Field(default=[])
+    #: JSON Schema for the plugin's settings, with one FreeSDN extension: a
+    #: property may carry ``secret: true`` (or the JSON Schema idiom
+    #: ``format: password``) to have the platform encrypt it on write and never
+    #: return it on read.
+    #:
+    #: Without it, a credential typed into the settings UI was stored as
+    #: plaintext in plugin_settings. The SDK had set_secret/get_secret, but
+    #: nothing connected them to the form an operator actually fills in, so
+    #: every credential-bearing plugin had to migrate the value itself on first
+    #: read -- and until it did, the token sat readable.
     settings_schema: dict[str, Any] | None = None
     python_dependencies: list[str] = Field(default=[], max_length=50)
+    #: Methods the platform runs on a timer, per organization. Capped because
+    #: every entry costs a Redis round trip per tick per active organization.
+    schedules: list[PluginSchedule] = Field(default=[], max_length=10)
 
     @field_validator("id")
     @classmethod
@@ -197,6 +279,28 @@ class PluginManifest(BaseModel):
                 f"api_prefix '/{first_segment}' is reserved by a native module / core namespace"
             )
         return v
+
+    @model_validator(mode="after")
+    def _validate_schedules(self) -> PluginManifest:
+        """Names must be unique, and no schedule may target a lifecycle hook.
+
+        Duplicate names would collide on the Redis claim key, so two schedules
+        declared 15 minutes apart would silently become one. And letting a
+        schedule call ``on_start`` re-runs a plugin's initialisation on a timer
+        against a runtime that is already started -- a subtle way to duplicate
+        every registration the hook performs.
+        """
+        seen: set[str] = set()
+        for sched in self.schedules:
+            if sched.name in seen:
+                raise ValueError(f"duplicate schedule name {sched.name!r}")
+            seen.add(sched.name)
+            if sched.method in {"on_start", "on_stop", "on_event", "get_router"}:
+                raise ValueError(
+                    f"schedule {sched.name!r} targets the lifecycle hook "
+                    f"{sched.method!r}; schedules must call a method of their own"
+                )
+        return self
 
     @model_validator(mode="after")
     def _validate_event_subscriptions(self) -> PluginManifest:

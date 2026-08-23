@@ -169,6 +169,8 @@
       "unknownFailure": "未知失败",
       "finalAttempt": "最后一次尝试：{{time}}",
       "replayed": "已重放：{{time}}"
-    }
+    },
+    "needsPlugin": "需要插件",
+    "useNotifications": "使用通知"
   }
 }

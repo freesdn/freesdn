@@ -14,6 +14,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
+  ArrowUpCircle,
   Download,
   Star,
   Shield,
@@ -35,7 +36,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { isUpdateAvailable } from '@/lib/plugin-version';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
@@ -84,6 +86,12 @@ interface PluginDetail {
   is_verified: boolean;
   is_featured: boolean;
 }
+
+/** Collapse runs of whitespace so a folded YAML block and its single-line
+ *  rendering compare equal. A description that arrives with a trailing newline
+ *  would otherwise never match its own summary. */
+const normalizeText = (value: string | null | undefined): string =>
+  (value ?? '').replace(/\s+/g, ' ').trim();
 
 interface InstalledPlugin {
   plugin_id: string;
@@ -136,10 +144,30 @@ export default function PluginDetailPage() {
     ? installedPlugins.find((p) => p.plugin_id === plugin.plugin_id)
     : undefined;
 
+  const [restartNote, setRestartNote] = useState<string | null>(null);
+
   const installMutation = useMutation({
     mutationFn: () => api.post(`/marketplace/plugins/${slug}/install`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['plugins'] }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['plugins'] });
+      setRestartNote(res?.data?.restart_required ? (res.data.note ?? null) : null);
+    },
   });
+
+  const upgradeMutation = useMutation({
+    mutationFn: () => api.post(`/marketplace/plugins/${slug}/upgrade`),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['plugins'] });
+      setRestartNote(res?.data?.restart_required ? (res.data.note ?? null) : null);
+    },
+  });
+
+  // An installed plugin the catalogue has moved past. Without this the page
+  // showed "Installed v1.1.0" next to a catalogue entry reading v1.2.0 and
+  // offered no way to close the gap.
+  const updateAvailable =
+    installedPlugin !== undefined &&
+    isUpdateAvailable(installedPlugin?.version, plugin?.latest_version);
 
   const submitReviewMutation = useMutation({
     mutationFn: () =>
@@ -192,12 +220,48 @@ export default function PluginDetailPage() {
           </button>
         }
         actions={
-          installedPlugin ? (
+          installedPlugin && !updateAvailable ? (
             <Button variant="outline" disabled>
               <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
               {t('PluginDetailPage.installedWithVersion', { version: installedPlugin.version })}
             </Button>
-          ) : !isSuperuser ? null : (
+          ) : !isSuperuser ? null : updateAvailable && installedPlugin && plugin ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button disabled={upgradeMutation.isPending}>
+                  {upgradeMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <ArrowUpCircle className="mr-2 h-4 w-4" />
+                  )}
+                  {t('MarketplacePage.card.updateTo', { version: plugin.latest_version })}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>{t('MarketplacePage.updateDialog.title')}</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {t('MarketplacePage.updateDialog.body', {
+                      name: plugin.name,
+                      from: installedPlugin.version,
+                      to: plugin.latest_version,
+                    })}
+                    <br />
+                    <br />
+                    {t('MarketplacePage.updateDialog.warning')}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>
+                    {t('PluginDetailPage.installDialog.cancel')}
+                  </AlertDialogCancel>
+                  <AlertDialogAction onClick={() => upgradeMutation.mutate()}>
+                    {t('MarketplacePage.updateDialog.confirm')}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : (
             // NOTE: wrap the install action in an AlertDialog so
             // the operator must explicitly acknowledge the supply-chain
             // risk before third-party code is downloaded and executed
@@ -257,6 +321,14 @@ export default function PluginDetailPage() {
             </Badge>
           )}
           <Badge variant="secondary">{plugin.category}</Badge>
+          {/* tags are fetched and typed but were never rendered here. The
+              marketplace card shows them, so their absence on the detail page
+              read as the plugin simply not having any. */}
+          {plugin.tags?.map((tag) => (
+            <Badge key={tag} variant="outline" className="font-normal">
+              {tag}
+            </Badge>
+          ))}
         </div>
         <div className="flex items-center gap-4 text-sm">
           <span>{t('PluginDetailPage.by')}{' '}
@@ -280,20 +352,36 @@ export default function PluginDetailPage() {
         </div>
       </div>
 
-      {installMutation.isError && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>            {(installMutation.error as any)?.response?.data?.detail || t('PluginDetailPage.installFailed')}
+      {restartNote !== null && (
+        <Alert>
+          <AlertTitle>{t('PluginDetailPage.restartRequired.title')}</AlertTitle>
+          <AlertDescription>
+            {restartNote || t('PluginDetailPage.restartRequired.body')}
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Description */}
-      {plugin.description && (
-        <div className="prose dark:prose-invert max-w-none">
-          <pre className="whitespace-pre-wrap font-sans text-sm">{plugin.description}</pre>
-        </div>
+      {(installMutation.isError || upgradeMutation.isError) && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>            {(installMutation.error as any)?.response?.data?.detail ||
+              (upgradeMutation.error as any)?.response?.data?.detail ||
+              t('PluginDetailPage.installFailed')}
+          </AlertDescription>
+        </Alert>
       )}
+
+      {/* Description.
+          Suppressed when it says nothing the header subtitle did not: a
+          catalogue-built short_description is the opening of the description,
+          so the page printed the same sentence twice, once under the title and
+          again immediately below it. */}
+      {plugin.description &&
+        normalizeText(plugin.description) !== normalizeText(plugin.short_description) && (
+          <div className="prose dark:prose-invert max-w-none">
+            <pre className="whitespace-pre-wrap font-sans text-sm">{plugin.description}</pre>
+          </div>
+        )}
 
       {/* Screenshots */}
       {plugin.screenshots.length > 0 && (

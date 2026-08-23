@@ -61,11 +61,29 @@ x-backend-env: &backend-env
   # /metrics scraping in prod/staging; unset → the endpoint is not served.
   ENABLE_METRICS: ${ENABLE_METRICS:-true}
   METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:-}
-  # Marketplace catalog signing gate: pin the publisher key to require a
-  # signed catalog; or MARKETPLACE_ALLOW_UNSIGNED=1 for a trusted private registry.
+  # Marketplace catalog signing gate. The publisher key is pinned by
+  # default, so signature verification is ON out of the box: an unsigned or
+  # tampered catalog is refused rather than ingested.
+  #
+  # registry.freesdn.org is live and serves the signed catalogue built by
+  # registry/build.py. It previously named this host while nothing was attached
+  # to it, so the shipped default made every first-run sync fail; the URL is the
+  # same now because the registry behind it actually exists.
+  #
+  # Running your own registry: build it with registry/build.py --generate-key,
+  # host registry/public/ anywhere, and override both values below with your
+  # own URL and public key. Nothing in the protocol is specific to ours.
   MARKETPLACE_REGISTRY_URL: ${MARKETPLACE_REGISTRY_URL:-https://registry.freesdn.org/plugins.json}
-  MARKETPLACE_PUBLISHER_PUBLIC_KEY: ${MARKETPLACE_PUBLISHER_PUBLIC_KEY:-}
+  MARKETPLACE_PUBLISHER_PUBLIC_KEY: ${MARKETPLACE_PUBLISHER_PUBLIC_KEY:-580c30040c2eec36902d4ea9e778ee12cac270011703e9e9f8f7c617158711d5}
   MARKETPLACE_ALLOW_UNSIGNED: ${MARKETPLACE_ALLOW_UNSIGNED:-}
+  # Hosts a PLUGIN's outbound HTTP may reach even when they are private/LAN.
+  # Empty means public destinations only, which rules out most of what a
+  # self-hosted operator would integrate with: their NetBox, Gotify, Grafana or
+  # Home Assistant all live on their own network. Same contract as
+  # FABRIC_WEBHOOK_ALLOWED_HOSTS: deploy-owner controlled, still DNS-pinned and
+  # TLS-verified, cloud metadata never reachable.
+  # Example: PLUGIN_HTTP_ALLOWED_HOSTS=netbox.lan,10.0.0.50
+  PLUGIN_HTTP_ALLOWED_HOSTS: ${PLUGIN_HTTP_ALLOWED_HOSTS:-}
   # NetBird daemon address. In the sidecar topology the daemon runs in the `vpn`
   # container and the api/worker drive it via the `netbird` CLI over the SHARED
   # network namespace — so a tcp address (not the default unix socket, which the
@@ -305,6 +323,14 @@ services:
       - evidence_data:/data/evidence
       - agent_releases:/data/agent-releases
       - proxmox_uploads:/data/proxmox-uploads
+      # Installed plugin packages (PLUGIN_DIR, default /data/plugins). Every
+      # other /data path here has a named volume and this one did not, so plugin
+      # files lived on the container's own layer: any `compose up -d` after an
+      # image update wiped every installed plugin while the database still
+      # reported them installed and active. The routes were simply gone and
+      # nothing said so. The worker and scheduler mount it too, because a task
+      # that touches a plugin package needs the same files the api unpacked.
+      - plugin_data:/data/plugins
     depends_on:
       postgres: {condition: service_healthy}
       logdb: {condition: service_healthy}
@@ -345,6 +371,7 @@ services:
     volumes:
       - agent_releases:/data/agent-releases
       - proxmox_uploads:/data/proxmox-uploads
+      - plugin_data:/data/plugins
     depends_on:
       postgres: {condition: service_healthy}
       logdb: {condition: service_healthy}
@@ -390,6 +417,7 @@ services:
     volumes:
       - agent_releases:/data/agent-releases
       - proxmox_uploads:/data/proxmox-uploads
+      - plugin_data:/data/plugins
     depends_on:
       postgres: {condition: service_healthy}
       logdb: {condition: service_healthy}
@@ -948,6 +976,7 @@ volumes:
   fabric_artifacts:
   agent_releases:
   proxmox_uploads:
+  plugin_data:
   tailscale_state:
   tailscale_run:      # tailscaled control socket, shared vpn <-> api/worker
   netbird_state:      # netbird daemon state

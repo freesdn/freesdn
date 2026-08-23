@@ -21,6 +21,7 @@ import {
   Package,
   AlertCircle,
   RefreshCw,
+  ArrowUpCircle,
 } from 'lucide-react';
 
 import { api } from '@/lib/api';
@@ -37,7 +38,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { isUpdateAvailable } from '@/lib/plugin-version';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 // Gate marketplace installs behind an explicit AlertDialog confirmation,
@@ -90,21 +92,25 @@ interface BrowseResponse {
 interface InstalledPlugin {
   plugin_id: string;
   status: string;
+  version: string;
 }
 
 // NOTE: Radix Select forbids empty-string SelectItem values, so we use
 // 'all' as a sentinel and translate to undefined at the API boundary.
 const ALL_CATEGORIES = 'all';
-const CATEGORIES = [
-  { value: ALL_CATEGORIES, labelKey: 'categories.all' },
-  { value: 'monitoring', labelKey: 'categories.monitoring' },
-  { value: 'security', labelKey: 'categories.security' },
-  { value: 'automation', labelKey: 'categories.automation' },
-  { value: 'integration', labelKey: 'categories.integration' },
-  { value: 'analytics', labelKey: 'categories.analytics' },
-  { value: 'device', labelKey: 'categories.device' },
-  { value: 'reporting', labelKey: 'categories.reporting' },
-];
+
+// The category list comes from the catalogue, not from here.
+//
+// It used to be this hard-coded array, and it had drifted badly: it offered
+// automation, analytics, device and reporting -- which NO published plugin uses,
+// so each was a filter guaranteed to return nothing -- while omitting compliance
+// and utility, which shipped plugins do use, making those plugins unfilterable.
+// /marketplace/plugins/categories has always returned the real ones with counts
+// and had no caller.
+interface CategoryCount {
+  category: string;
+  count: number;
+}
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,20 +134,27 @@ function StarRating({ rating, count }: { rating: number; count: number }) {
 
 function PluginCard({
   plugin,
-  isInstalled,
+  installedVersion,
   onInstall,
+  onUpgrade,
   installing,
   canInstall,
 }: {
   plugin: MarketplacePlugin;
-  isInstalled: boolean;
+  // The version this instance has, or null when it is not installed. A boolean
+  // could only say "installed", which is why a plugin with a newer version in
+  // the catalogue sat here reading "Installed" for ever with no way to update.
+  installedVersion: string | null;
   onInstall: () => void;
+  onUpgrade: () => void;
   installing: boolean;
   // Install hard-gates on is_superuser server-side (403 otherwise); only
   // render the control for superusers. Browse stays visible to everyone.
   canInstall: boolean;
 }) {
   const { t } = useTranslation('marketplace');
+  const isInstalled = installedVersion !== null;
+  const updateAvailable = isUpdateAvailable(installedVersion, plugin.latest_version);
   return (
     <Card className="transition-shadow hover:shadow-md">
       <CardContent noOffset className="flex flex-col p-4">
@@ -191,12 +204,50 @@ function PluginCard({
             </div>
           </div>
 
-          {isInstalled ? (
+          {isInstalled && !updateAvailable ? (
             <Button size="sm" variant="outline" disabled>
               <CheckCircle className="mr-1.5 h-3.5 w-3.5 text-green-600" />
               {t('MarketplacePage.card.installed')}
             </Button>
-          ) : !canInstall ? null : (
+          ) : !canInstall ? null : updateAvailable ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button size="sm" disabled={installing}>
+                  {installing ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ArrowUpCircle className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {t('MarketplacePage.card.updateTo', { version: plugin.latest_version })}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {t('MarketplacePage.updateDialog.title')}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {t('MarketplacePage.updateDialog.body', {
+                      name: plugin.name,
+                      from: installedVersion,
+                      to: plugin.latest_version,
+                    })}
+                    <br />
+                    <br />
+                    {t('MarketplacePage.updateDialog.warning')}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>
+                    {t('PluginDetailPage.installDialog.cancel')}
+                  </AlertDialogCancel>
+                  <AlertDialogAction onClick={onUpgrade}>
+                    {t('MarketplacePage.updateDialog.confirm')}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button size="sm" disabled={installing}>
@@ -261,6 +312,7 @@ export default function MarketplacePage() {
   const [sort, setSort] = useState('downloads');
   const [page, setPage] = useState(1);
   const [installingSlug, setInstallingSlug] = useState<string | null>(null);
+  const [restartNote, setRestartNote] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery<BrowseResponse>({
     queryKey: ['marketplace-plugins', search, category, sort, page],
@@ -278,27 +330,58 @@ export default function MarketplacePage() {
         .then((r) => r.data),
   });
 
+  const { data: categoryData } = useQuery<{ categories: CategoryCount[] }>({
+    queryKey: ['marketplace-categories'],
+    queryFn: () => api.get('/marketplace/plugins/categories').then((r) => r.data),
+    staleTime: 60_000,
+  });
+
   const { data: installed = [] } = useQuery<InstalledPlugin[]>({
     queryKey: ['plugins'],
     queryFn: () => api.get('/plugins').then((r) => r.data),
   });
 
-  const installedSet = new Set(installed.map((p) => p.plugin_id));
+  // plugin_id -> installed version. A Set could only answer "is it installed",
+  // which is exactly why an outdated plugin read "Installed" for ever.
+  const installedVersions = new Map(installed.map((p) => [p.plugin_id, p.version]));
 
   const installMutation = useMutation({
     mutationFn: (slug: string) =>
       api.post(`/marketplace/plugins/${slug}/install`).then((r) => r.data),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['plugins'] });
       queryClient.invalidateQueries({ queryKey: ['marketplace-plugins'] });
       setInstallingSlug(null);
+      // An install that landed but left the plugin's endpoints on the previous
+      // version is a success the operator still needs to act on. Reported, not
+      // swallowed into the green path.
+      setRestartNote(data?.restart_required ? (data.note ?? null) : null);
     },
     onError: () => setInstallingSlug(null),
   });
 
   const handleInstall = (slug: string) => {
     setInstallingSlug(slug);
+    setRestartNote(null);
     installMutation.mutate(slug);
+  };
+
+  const upgradeMutation = useMutation({
+    mutationFn: (slug: string) =>
+      api.post(`/marketplace/plugins/${slug}/upgrade`).then((r) => r.data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['plugins'] });
+      queryClient.invalidateQueries({ queryKey: ['marketplace-plugins'] });
+      setInstallingSlug(null);
+      setRestartNote(data?.restart_required ? (data.note ?? null) : null);
+    },
+    onError: () => setInstallingSlug(null),
+  });
+
+  const handleUpgrade = (slug: string) => {
+    setInstallingSlug(slug);
+    setRestartNote(null);
+    upgradeMutation.mutate(slug);
   };
 
   const syncMutation = useMutation({
@@ -347,13 +430,24 @@ export default function MarketplacePage() {
             <SelectValue placeholder={t('MarketplacePage.categories.all')} />
           </SelectTrigger>
           <SelectContent>
-            {CATEGORIES.map((c) => (
-              <SelectItem key={c.value} value={c.value}>{t(`MarketplacePage.${c.labelKey}`)}</SelectItem>
+            <SelectItem value={ALL_CATEGORIES}>
+              {t('MarketplacePage.categories.all')}
+            </SelectItem>
+            {(categoryData?.categories ?? []).map((c) => (
+              <SelectItem key={c.category} value={c.category}>
+                {/* Keep a translation when we have one and fall back to the
+                    catalogue's own name otherwise, so a category a registry
+                    invents next week is still selectable rather than missing. */}
+                {t(`MarketplacePage.categories.${c.category}`, { defaultValue: c.category })}
+                {' '}({c.count})
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger className="w-full sm:w-40">
+          {/* w-40 clipped the default label to "Most..." in EN and ES alike.
+              Match the category select's width so every option fits. */}
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -380,10 +474,21 @@ export default function MarketplacePage() {
         </Alert>
       )}
 
-      {installMutation.isError && (
+      {restartNote !== null && (
+        <Alert>
+          <AlertTitle>{t('MarketplacePage.restartRequired.title')}</AlertTitle>
+          <AlertDescription>
+            {restartNote || t('MarketplacePage.restartRequired.body')}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {(installMutation.isError || upgradeMutation.isError) && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>            {(installMutation.error as any)?.response?.data?.detail || t('MarketplacePage.errors.installFailed')}
+          <AlertDescription>            {(installMutation.error as any)?.response?.data?.detail ||
+              (upgradeMutation.error as any)?.response?.data?.detail ||
+              t('MarketplacePage.errors.installFailed')}
           </AlertDescription>
         </Alert>
       )}
@@ -409,8 +514,9 @@ export default function MarketplacePage() {
               <PluginCard
                 key={plugin.slug}
                 plugin={plugin}
-                isInstalled={installedSet.has(plugin.plugin_id)}
+                installedVersion={installedVersions.get(plugin.plugin_id) ?? null}
                 onInstall={() => handleInstall(plugin.slug)}
+                onUpgrade={() => handleUpgrade(plugin.slug)}
                 installing={installingSlug === plugin.slug}
                 canInstall={isSuperuser}
               />

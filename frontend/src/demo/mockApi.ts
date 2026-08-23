@@ -390,7 +390,7 @@ async function routeGet(path: string, config: InternalAxiosRequestConfig) {
   }
   if (path.startsWith('/controllers/')) return findById(controllers, path.split('/')[2]);
 
-  if (path === '/devices/stats/summary') return { total: devices.length, online: dashboardSummary.online_devices, offline: 0, warning: dashboardSummary.warning_devices, by_type: { switch: 1, access_point: 2, firewall: 1, camera: 1, phone: 1, hypervisor: 1, storage: 1 } };
+  if (path === '/devices/stats/summary') return { total: devices.length, online: dashboardSummary.devices_online, offline: 0, warning: dashboardSummary.devices_warning, by_type: { switch: 1, access_point: 2, firewall: 1, camera: 1, phone: 1, hypervisor: 1, storage: 1 } };
   if (/^\/devices\/[^/]+\/ports/.test(path)) return switchPorts(path.split('/')[2]);
   if (/^\/devices\/[^/]+\/capabilities$/.test(path)) return { device_id: path.split('/')[2], capabilities: ['reboot', 'locate', 'poe', 'status'], actions: [] };
   if (path === '/devices' || path === '/devices/') return paginated(devices);
@@ -432,7 +432,7 @@ async function routeGet(path: string, config: InternalAxiosRequestConfig) {
       controllers: { total: site.controller_count, connected: site.controller_count },
       firmware: { tracked: site.device_count, compliant: site.device_count - 1, compliance_pct: 96 },
     })),
-    summary: { total_sites: sites.length, total_devices: devices.length, total_online_devices: dashboardSummary.online_devices, total_phones: 22, total_alerts_open: 2, total_critical_open: 0, total_controllers: controllers.length, generated_at: new Date().toISOString() },
+    summary: { total_sites: sites.length, total_devices: devices.length, total_online_devices: dashboardSummary.devices_online, total_phones: 22, total_alerts_open: 2, total_critical_open: 0, total_controllers: controllers.length, generated_at: new Date().toISOString() },
   };
   if (path.startsWith('/analytics/')) return emptyList();
 

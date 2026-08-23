@@ -18,7 +18,9 @@
       "integration": "Integración",
       "analytics": "Analítica",
       "device": "Dispositivo",
-      "reporting": "Informes"
+      "reporting": "Informes",
+      "compliance": "Cumplimiento",
+      "utility": "Utilidad"
     },
     "sort": {
       "downloads": "Más descargados",
@@ -47,7 +49,18 @@
       "verifiedTooltip": "Complemento verificado",
       "byAuthor": "por {{author}}",
       "installed": "Instalado",
-      "install": "Instalar"
+      "install": "Instalar",
+      "updateTo": "Actualizar a v{{version}}"
+    },
+    "restartRequired": {
+      "title": "Instalado. Reinicia la API para terminar.",
+      "body": "Esta version cambio sus endpoints HTTP. Todo lo demas ya esta en la nueva version, pero esos endpoints seguiran sirviendo la anterior hasta que se reinicie la API."
+    },
+    "updateDialog": {
+      "title": "¿Actualizar este complemento?",
+      "body": "{{name}} se actualizara de v{{from}} a v{{to}}.",
+      "warning": "La nueva version es codigo de terceros y se ejecuta con todos los privilegios del backend, igual que la version que ya tienes. Se detiene, se reemplaza y se reinicia; se conservan sus ajustes y programaciones.",
+      "confirm": "Actualizar"
     }
   },
   "PluginDetailPage": {
@@ -76,6 +89,10 @@
     "writeReview": "Escribir una reseña",
     "reviewPlaceholder": "Comparte tu experiencia con este complemento...",
     "submitReview": "Enviar reseña",
-    "submitReviewFailed": "Error al enviar la reseña"
+    "submitReviewFailed": "Error al enviar la reseña",
+    "restartRequired": {
+      "title": "Instalado. Reinicia la API para terminar.",
+      "body": "Esta version cambio sus endpoints HTTP. Todo lo demas ya esta en la nueva version, pero esos endpoints seguiran sirviendo la anterior hasta que se reinicie la API."
+    }
   }
 }

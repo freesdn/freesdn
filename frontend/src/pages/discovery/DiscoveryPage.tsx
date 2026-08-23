@@ -318,8 +318,11 @@ export default function DiscoveryPage() {
             target: payload?.controller_name || t('DiscoveryPage.ws.devices'),
           }),
         );
-      } else if (eventType === 'discovery.progress') {
-        setControllerProgressMsg(payload?.message || t('DiscoveryPage.ws.inProgress'));
+        // No 'discovery.progress' branch: the backend never published that
+        // name. Controller discovery emits started -> completed/failed only,
+        // and per-scan progress arrives as 'discovery.scan_progress', handled
+        // below. The old branch read payload.message from an event that could
+        // not arrive, so the interim message was always the started text.
       } else if (eventType === 'discovery.completed') {
         setControllerDiscoveryStatus('completed');
         // Backend stats use snake_case per-controller keys (DiscoveryService

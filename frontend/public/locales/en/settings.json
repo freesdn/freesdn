@@ -844,7 +844,8 @@
       "enable": "Enable",
       "disable": "Disable",
       "update": "Update",
-      "uninstall": "Uninstall"
+      "uninstall": "Uninstall",
+      "close": "Close"
     },
     "install": {
       "title": "Install Plugin",
@@ -857,7 +858,11 @@
       "selectedFileAria": "Selected file: {{name}}",
       "selectFileAria": "Click to select a plugin ZIP file",
       "selectFilePrompt": "Click to select a plugin ZIP file",
-      "urlPlaceholder": "https://example.com/plugin.zip"
+      "urlPlaceholder": "https://example.com/plugin.zip",
+      "restartRequired": {
+        "title": "Installed. Restart the API to finish.",
+        "body": "This version changed its HTTP endpoints. Everything else is already on the new version, but those endpoints keep serving the previous one until the API restarts."
+      }
     },
     "capabilities": {
       "permissions_one": "{{count}} permission",
@@ -871,7 +876,9 @@
     "row": {
       "selectAria": "Select {{name}}",
       "by": "By",
-      "homepage": "Homepage"
+      "homepage": "Homepage",
+      "updateAvailable": "v{{version}} available",
+      "updateTo": "Update {{from}} to {{to}}"
     },
     "status": {
       "installed": "installed",
@@ -894,6 +901,10 @@
       "errors": {
         "title": "Errors",
         "description": "Need attention"
+      },
+      "updates": {
+        "title": "Updates",
+        "description": "Newer version available"
       }
     },
     "searchPlaceholder": "Search plugins by name or description…",
@@ -905,13 +916,43 @@
     "confirmBulkUninstall": "Uninstall {{count}} plugin(s)?",
     "uninstallDialog": {
       "title": "Uninstall plugin?",
-      "description": "This will call the plugin's uninstall hook and remove all plugin files. Plugin settings may remain in the database."
+      "description": "This calls the plugin's uninstall hook and removes its files everywhere. Its stored settings, including any credentials, are kept so a reinstall picks up where you left off.",
+      "purgeLabel": "Also delete this plugin's settings and credentials",
+      "purgeHint": "For every organization, not just yours. Choose this when you are done with the plugin rather than troubleshooting it."
     },
     "errors": {
       "installFailed": "Install failed",
       "toggleFailed": "Toggle failed",
       "uninstallFailed": "Uninstall failed",
-      "loadFailed": "Failed to load plugins"
+      "loadFailed": "Failed to load plugins",
+      "updateFailed": "Could not update the plugin"
+    },
+    "schedules": {
+      "title": "Schedules",
+      "everyHours": "every {{count}}h",
+      "everyMinutes": "every {{count}} min",
+      "everySeconds": "every {{count}}s",
+      "inFuture": "in {{value}}{{unit}}",
+      "inPast": "{{value}}{{unit}} ago",
+      "nextRun": "next",
+      "lastRun": "last",
+      "neverRun": "has not run yet",
+      "runsThisWorker": "{{runs}} runs, {{failures}} failed (this worker)",
+      "toggleAria": "Enable or disable the {{name}} schedule"
+    },
+    "supervision": {
+      "title": "Supervision",
+      "reset": "Lift quarantine"
+    },
+    "settings": {
+      "title": "Settings",
+      "loading": "Loading settings...",
+      "save": "Save settings",
+      "saveFailed": "Could not save settings",
+      "savedOk": "Saved.",
+      "checkTitle": "Saved, with something to check",
+      "secretConfigured": "Configured. Type to replace it.",
+      "secretEmpty": "Not set"
     }
   },
   "SSOSettingsPage": {

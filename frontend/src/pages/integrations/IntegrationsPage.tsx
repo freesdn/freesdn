@@ -245,39 +245,60 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isOpen, onClose, onCreated })
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
-                  {types.map((t) => {
-                    const isSelected = field.value === t.id;
+                  {types.map((type) => {
+                    const isSelected = field.value === type.id;
+                    // An integration is a webhook: a URL, event types and an HMAC
+                    // secret. A vendor API needing its own credentials and payload
+                    // cannot be reached that way, so these types are marked
+                    // unavailable here and point at what actually does the job,
+                    // rather than letting someone configure one that fails on
+                    // every delivery with nothing on screen to say why.
+                    const unavailable = Boolean(type.requires_plugin || type.use_instead);
                     return (
                       <button
-                        key={t.id}
+                        key={type.id}
                         type="button"
+                        disabled={unavailable}
                         onClick={() => {
-                          field.onChange(t.id);
+                          if (unavailable) return;
+                          field.onChange(type.id);
                           // Pre-fill name + default events when a type is chosen.
                           if (!form.getValues('name')) {
-                            form.setValue('name', t.label);
+                            form.setValue('name', type.label);
                           }
-                          form.setValue('events', t.default_events ?? []);
+                          form.setValue('events', type.default_events ?? []);
                         }}
                         className={`flex items-start space-x-3 p-4 rounded-xl border text-left transition-all group ${
-                          isSelected
-                            ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                            : 'border-border hover:border-primary hover:bg-primary/5'
+                          unavailable
+                            ? 'border-border opacity-60 cursor-not-allowed'
+                            : isSelected
+                              ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                              : 'border-border hover:border-primary hover:bg-primary/5'
                         }`}
                       >
                         <div
                           className={`rounded-lg p-2 flex-shrink-0 ${
-                            TYPE_COLORS[t.id] ?? TYPE_COLORS.webhook
+                            TYPE_COLORS[type.id] ?? TYPE_COLORS.webhook
                           }`}
                         >
-                          {TYPE_ICONS[t.id] ?? <Globe className="h-6 w-6" />}
+                          {TYPE_ICONS[type.id] ?? <Globe className="h-6 w-6" />}
                         </div>
                         <div>
-                          <p className="font-medium text-foreground group-hover:text-primary text-sm">
-                            {t.label}
+                          <p className="font-medium text-foreground text-sm">
+                            {type.label}
+                            {type.requires_plugin && (
+                              <span className="ml-2 rounded border border-warning px-1.5 py-0.5 text-[10px] font-normal text-warning align-middle">
+                                {t('IntegrationsPage.needsPlugin')}
+                              </span>
+                            )}
+                            {type.use_instead && (
+                              <span className="ml-2 rounded border border-border px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground align-middle">
+                                {t('IntegrationsPage.useNotifications')}
+                              </span>
+                            )}
                           </p>
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                            {t.description}
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {type.description}
                           </p>
                         </div>
                       </button>

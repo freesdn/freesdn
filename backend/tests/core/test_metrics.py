@@ -9,6 +9,7 @@ The live /metrics endpoint is covered by integration tests that boot the
 full FastAPI app with a test client — the pure-unit tests here do not
 require a database or Redis.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -28,7 +29,9 @@ def test_custom_metrics_registered() -> None:
         celery_tasks_total,
         device_count,
         device_sync_total,
+        plugin_operation_duration,
         plugin_operations_total,
+        plugin_quarantined,
         rate_limit_hits,
         system_info,
         websocket_connections,
@@ -40,7 +43,12 @@ def test_custom_metrics_registered() -> None:
     celery_tasks_total.labels(task="app.tasks.sync.test", status="success").inc()
     auth_events_total.labels(event_type="login", status="success").inc()
     rate_limit_hits.labels(endpoint="/api/v1/auth/login").inc()
-    plugin_operations_total.labels(operation="install", status="success").inc()
+    # plugin_id is a label now, and its absence was the point: this counter was
+    # declared with ["operation", "status"] and incremented from NOWHERE, so
+    # "which plugin is failing" had no answer. Supervision increments it per
+    # plugin, per operation kind, per outcome.
+    plugin_operations_total.labels(plugin_id="notify-hub", operation="event", status="ok").inc()
+    plugin_operation_duration.labels(plugin_id="notify-hub", operation="event").observe(0.02)
 
     # Gauges — .set()/.labels().set() must work.
     # the "site" label was dropped from device_count and
@@ -49,6 +57,7 @@ def test_custom_metrics_registered() -> None:
     device_count.labels(type="switch", status="online").set(5)
     celery_queue_depth.labels(queue="default").set(0)
     websocket_connections.set(0)
+    plugin_quarantined.labels(plugin_id="notify-hub").set(0)
 
     # Histograms — .observe() must work.
     adapter_request_duration.labels(adapter="omada", method="get_devices").observe(0.123)
@@ -79,18 +88,18 @@ def test_metrics_exposed_on_default_registry() -> None:
     # format). Gauge names are preserved verbatim. Histograms expose the
     # base name (buckets/sum/count become samples on that family).
     expected = {
-        "freesdn_devices_total",                      # Gauge — name preserved
-        "freesdn_device_sync",                        # Counter → strips _total
-        "freesdn_adapter_request_duration_seconds",   # Histogram
-        "freesdn_adapter_errors",                     # Counter → strips _total
-        "freesdn_celery_queue_depth",                 # Gauge
-        "freesdn_celery_tasks",                       # Counter → strips _total
-        "freesdn_celery_task_duration_seconds",       # Histogram
-        "freesdn_websocket_connections",              # Gauge
-        "freesdn_auth_events",                        # Counter → strips _total
-        "freesdn_rate_limit_hits",                    # Counter → strips _total
-        "freesdn_plugin_operations",                  # Counter → strips _total
-        "freesdn",                                    # Info
+        "freesdn_devices_total",  # Gauge — name preserved
+        "freesdn_device_sync",  # Counter → strips _total
+        "freesdn_adapter_request_duration_seconds",  # Histogram
+        "freesdn_adapter_errors",  # Counter → strips _total
+        "freesdn_celery_queue_depth",  # Gauge
+        "freesdn_celery_tasks",  # Counter → strips _total
+        "freesdn_celery_task_duration_seconds",  # Histogram
+        "freesdn_websocket_connections",  # Gauge
+        "freesdn_auth_events",  # Counter → strips _total
+        "freesdn_rate_limit_hits",  # Counter → strips _total
+        "freesdn_plugin_operations",  # Counter → strips _total
+        "freesdn",  # Info
     }
     missing = expected - metric_names
     assert not missing, f"Missing metrics on default registry: {missing}"

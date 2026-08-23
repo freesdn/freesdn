@@ -817,7 +817,8 @@
       "enable": "Activar",
       "disable": "Desactivar",
       "update": "Actualizar",
-      "uninstall": "Desinstalar"
+      "uninstall": "Desinstalar",
+      "close": "Cerrar"
     },
     "install": {
       "title": "Instalar complemento",
@@ -830,7 +831,11 @@
       "selectedFileAria": "Archivo seleccionado: {{name}}",
       "selectFileAria": "Haz clic para seleccionar un archivo ZIP del complemento",
       "selectFilePrompt": "Haz clic para seleccionar un archivo ZIP del complemento",
-      "urlPlaceholder": "https://example.com/plugin.zip"
+      "urlPlaceholder": "https://example.com/plugin.zip",
+      "restartRequired": {
+        "title": "Instalado. Reinicia la API para terminar.",
+        "body": "Esta version cambio sus endpoints HTTP. Todo lo demas ya esta en la nueva version, pero esos endpoints seguiran sirviendo la anterior hasta que se reinicie la API."
+      }
     },
     "capabilities": {
       "permissions_one": "{{count}} permiso",
@@ -844,7 +849,9 @@
     "row": {
       "selectAria": "Seleccionar {{name}}",
       "by": "Por",
-      "homepage": "Página principal"
+      "homepage": "Página principal",
+      "updateAvailable": "v{{version}} disponible",
+      "updateTo": "Actualizar {{from}} a {{to}}"
     },
     "status": {
       "installed": "instalado",
@@ -867,6 +874,10 @@
       "errors": {
         "title": "Errores",
         "description": "Requieren atención"
+      },
+      "updates": {
+        "title": "Actualizaciones",
+        "description": "Version mas reciente disponible"
       }
     },
     "searchPlaceholder": "Buscar complementos por nombre o descripción…",
@@ -878,13 +889,43 @@
     "confirmBulkUninstall": "¿Desinstalar {{count}} complemento(s)?",
     "uninstallDialog": {
       "title": "¿Desinstalar complemento?",
-      "description": "Esto ejecutará el gancho de desinstalación del complemento y eliminará todos sus archivos. La configuración del complemento puede permanecer en la base de datos."
+      "description": "Esto llama al hook de desinstalacion del complemento y elimina sus archivos en todas partes. Sus ajustes guardados, incluidas las credenciales, se conservan para que una reinstalacion retome donde lo dejaste.",
+      "purgeLabel": "Eliminar tambien los ajustes y credenciales de este complemento",
+      "purgeHint": "Para todas las organizaciones, no solo la tuya. Elige esto cuando hayas terminado con el complemento, no cuando estes diagnosticando un problema."
     },
     "errors": {
       "installFailed": "Error al instalar",
       "toggleFailed": "Error al cambiar el estado",
       "uninstallFailed": "Error al desinstalar",
-      "loadFailed": "Error al cargar los complementos"
+      "loadFailed": "Error al cargar los complementos",
+      "updateFailed": "No se pudo actualizar el complemento"
+    },
+    "schedules": {
+      "title": "Programaciones",
+      "everyHours": "cada {{count}} h",
+      "everyMinutes": "cada {{count}} min",
+      "everySeconds": "cada {{count}} s",
+      "inFuture": "en {{value}}{{unit}}",
+      "inPast": "hace {{value}}{{unit}}",
+      "nextRun": "siguiente",
+      "lastRun": "última",
+      "neverRun": "aún no se ha ejecutado",
+      "runsThisWorker": "{{runs}} ejecuciones, {{failures}} fallidas (este worker)",
+      "toggleAria": "Activar o desactivar la programación {{name}}"
+    },
+    "supervision": {
+      "title": "Supervisión",
+      "reset": "Levantar cuarentena"
+    },
+    "settings": {
+      "title": "Ajustes",
+      "loading": "Cargando ajustes...",
+      "save": "Guardar ajustes",
+      "saveFailed": "No se pudieron guardar los ajustes",
+      "savedOk": "Guardado.",
+      "checkTitle": "Guardado, con algo que revisar",
+      "secretConfigured": "Configurado. Escribe para reemplazarlo.",
+      "secretEmpty": "Sin configurar"
     }
   },
   "SSOSettingsPage": {

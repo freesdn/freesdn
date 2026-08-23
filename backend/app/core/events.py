@@ -714,34 +714,51 @@ def task_event(
 
 
 class EventType(StrEnum):
-    """Event type enum for backwards compatibility."""
+    """A convenience subset of event types. NOT the full catalogue.
+
+    Roughly 57 distinct event types are published across the service layer;
+    this enum names 17 of them, and it is the closest thing the codebase has to
+    a published list. That makes it a trap: a plugin author reads it as the
+    catalogue, subscribes to a name that appears here, and the subscription is
+    accepted and never fires. The shipped notify-hub example did exactly that
+    with ``alert.created``, which used to sit in this enum while the alert
+    lifecycle actually publishes ``alert.fired``.
+
+    If you are adding a subscription, grep the service layer for
+    ``event_type=`` rather than trusting this list to be complete.
+    """
 
     # Device events
     DEVICE_DISCOVERED = "device.discovered"
     DEVICE_UPDATED = "device.updated"
-    DEVICE_DELETED = "device.deleted"
+    # device.deleted is absent: nothing publishes it. delete_device() soft-
+    # deletes and emits nothing, so a subscriber would wait forever.
     DEVICE_STATUS_CHANGED = "device.status.changed"
 
     # Controller events
-    CONTROLLER_CONNECTED = "controller.connected"
-    CONTROLLER_DISCONNECTED = "controller.disconnected"
+    # controller.connected / controller.disconnected are absent: nothing has
+    # ever published them, and naming them here invites a dead subscription.
     CONTROLLER_SYNC_STARTED = "controller.sync.started"
     CONTROLLER_SYNC_COMPLETED = "controller.sync.completed"
     CONTROLLER_SYNC_FAILED = "controller.sync.failed"
 
     # Discovery events
     DISCOVERY_STARTED = "discovery.started"
-    DISCOVERY_PROGRESS = "discovery.progress"
+    # discovery.scan_progress, not discovery.progress. The value here was one
+    # word off what discovery_event("scan_progress", ...) actually publishes,
+    # and the DiscoveryPage handler for the wrong name never fired once.
+    DISCOVERY_PROGRESS = "discovery.scan_progress"
     DISCOVERY_COMPLETED = "discovery.completed"
     DISCOVERY_FAILED = "discovery.failed"
 
     # Alert events
-    ALERT_CREATED = "alert.created"
+    # ALERT_CREATED = "alert.created" is intentionally absent: nothing has ever
+    # published it. The alert lifecycle publishes alert.fired.
+    ALERT_FIRED = "alert.fired"
     ALERT_RESOLVED = "alert.resolved"
 
     # System events
-    SYSTEM_STARTUP = "system.startup"
-    SYSTEM_SHUTDOWN = "system.shutdown"
+    # system.startup / system.shutdown are absent for the same reason.
 
 
 # ===========================================

@@ -169,6 +169,8 @@
       "unknownFailure": "Unknown failure",
       "finalAttempt": "Final attempt: {{time}}",
       "replayed": "Replayed: {{time}}"
-    }
+    },
+    "needsPlugin": "Needs a plugin",
+    "useNotifications": "Use Notifications"
   }
 }

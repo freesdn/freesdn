@@ -14,7 +14,7 @@ import os
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -24,11 +24,16 @@ from app.core.dependencies import CurrentUser, get_current_active_user, is_unsco
 from app.core.security_utils import escape_like
 from app.db import get_session
 from app.models.marketplace import MarketplacePlugin, MarketplacePluginVersion, PluginReview
+from app.models.plugins import InstalledPlugin
 from app.services.audit import AuditAction, AuditService, ResourceType
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# registry.freesdn.org serves the signed catalogue produced by
+# registry/build.py. This default named the same host for a long time while
+# nothing was attached to it, so the very first sync on every deployment failed
+# and the marketplace stayed empty; keep the URL and the registry in step.
 MARKETPLACE_REGISTRY_URL = os.getenv(
     "MARKETPLACE_REGISTRY_URL",
     "https://registry.freesdn.org/plugins.json",
@@ -36,8 +41,11 @@ MARKETPLACE_REGISTRY_URL = os.getenv(
 
 # Pinned Ed25519 publisher public key (hex) used to verify a detached signature
 # over the canonicalised catalog before any DB write. The catalog is signed with
-# the matching private key by the publisher tooling. Empty by default → see the
-# posture in _verify_catalog_signature below.
+# the matching private key by registry/build.py in this repository.
+#
+# Empty HERE by default so a source checkout stays neutral, but the shipped
+# docker-compose.yml pins the real key, so a normal deployment verifies
+# signatures out of the box. See the posture in _verify_catalog_signature.
 MARKETPLACE_PUBLISHER_PUBLIC_KEY = os.getenv("MARKETPLACE_PUBLISHER_PUBLIC_KEY", "").strip()
 # Explicit, conscious opt-out (dev / fully-trusted private registries). When no
 # publisher key is pinned, sync is REFUSED unless this is set — the marketplace
@@ -161,6 +169,10 @@ _CATALOG_ALLOWED_FIELDS: frozenset[str] = frozenset(
         "banner_url",
         "slug",
         "plugin_id",
+        # Descriptive only: the loader reads real schedules from the
+        # installed manifest, so this cannot change what runs. Present so
+        # the marketplace can show that a plugin works unattended.
+        "schedules",
     }
 )
 
@@ -355,16 +367,13 @@ async def plugin_versions(
     return {"versions": versions}
 
 
-@router.post("/{slug}/install", status_code=status.HTTP_201_CREATED)
-async def install_from_marketplace(
-    slug: str,
-    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> dict[str, Any]:
-    """Install a plugin directly from the marketplace."""
-    if not is_unscoped_superuser(current_user):  # scope-aware
-        raise HTTPException(status_code=403, detail="Requires super admin role")
+async def _resolve_published(session: AsyncSession, slug: str) -> MarketplacePlugin:
+    """The catalogue entry for ``slug``, or a refusal that says which kind it is.
 
+    "Never heard of it" and "withdrawn" need opposite reactions from the
+    operator, and a flat 404 made a plugin the registry had deliberately pulled
+    look like a typo.
+    """
     result = await session.execute(
         select(MarketplacePlugin).where(
             MarketplacePlugin.slug == slug,
@@ -372,39 +381,74 @@ async def install_from_marketplace(
         )
     )
     plugin = result.scalar_one_or_none()
-    if not plugin:
-        raise HTTPException(status_code=404, detail="Plugin not found")
+    if plugin:
+        return plugin
 
-    # Delegate to plugin loader's URL install
+    withdrawn_row = await session.execute(
+        select(MarketplacePlugin.status).where(MarketplacePlugin.slug == slug)
+    )
+    if withdrawn_row.scalar_one_or_none() == "withdrawn":
+        raise HTTPException(
+            status_code=410,
+            detail=(
+                f"'{slug}' has been withdrawn from the registry and can no longer be "
+                "installed or updated. If you already have it installed it keeps "
+                "running, but it will not receive updates."
+            ),
+        )
+    raise HTTPException(status_code=404, detail="Plugin not found")
+
+
+async def _download_and_verify(plugin: MarketplacePlugin) -> bytes:
+    """Fetch the archive the catalogue points at and prove it is the one it named.
+
+    Streaming and DNS-rebinding-safe. This used to call ``safe_http_request``,
+    which buffers the whole body and only then checks ``len(raw) > 50 MB`` -- so
+    a hostile or compromised download_url had already consumed the memory before
+    the check ran. The loader's downloader caps the running total during chunked
+    reads and aborts at 50 MB without buffering the full body.
+
+    The checksum is the only thing standing between a signed catalogue entry and
+    arbitrary code: the signature proves the catalogue is authentic, and this
+    proves the bytes are the ones it vouched for.
+    """
+    import hashlib
+
+    from app.api.v1.endpoints.plugins import _download_plugin_archive
+
+    try:
+        raw = await _download_plugin_archive(plugin.download_url)
+    except HTTPException:
+        raise
+    except ValueError as ssrf_exc:
+        raise HTTPException(status_code=400, detail=f"Unsafe download URL: {ssrf_exc}")
+
+    actual_hash = hashlib.sha256(raw).hexdigest()
+    if actual_hash != plugin.checksum_sha256:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Checksum mismatch: expected {plugin.checksum_sha256}, got {actual_hash}",
+        )
+    return raw
+
+
+@router.post("/{slug}/install", status_code=status.HTTP_201_CREATED)
+async def install_from_marketplace(
+    slug: str,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """Install a plugin directly from the marketplace."""
+    if not is_unscoped_superuser(current_user):  # scope-aware
+        raise HTTPException(status_code=403, detail="Requires super admin role")
+
+    plugin = await _resolve_published(session, slug)
+
     from app.plugins.loader import PluginLoadError, plugin_loader
 
     try:
-        # NOTE: previously this endpoint called ``safe_http_request``
-        # which buffers the whole body and then checked ``len(raw) > 50 MB``
-        # — meaning a hostile or compromised download_url could already
-        # have consumed ~unbounded memory before the check ran (in theory
-        # bounded by httpx defaults, in practice trivially DoS-able). We
-        # now reuse the streaming, DNS-rebinding-safe downloader from
-        # ``plugins.loader``: it caps the running total during chunked
-        # reads and aborts at 50 MB without buffering the full body.
-        from app.api.v1.endpoints.plugins import _download_plugin_archive
-
-        try:
-            raw = await _download_plugin_archive(plugin.download_url)
-        except HTTPException:
-            raise
-        except ValueError as ssrf_exc:
-            raise HTTPException(status_code=400, detail=f"Unsafe download URL: {ssrf_exc}")
-
-        # Verify checksum
-        import hashlib
-
-        actual_hash = hashlib.sha256(raw).hexdigest()
-        if actual_hash != plugin.checksum_sha256:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Checksum mismatch: expected {plugin.checksum_sha256}, got {actual_hash}",
-            )
+        raw = await _download_and_verify(plugin)
 
         record = await plugin_loader.install_plugin(
             source=raw,
@@ -412,6 +456,16 @@ async def install_from_marketplace(
             installed_by_id=current_user.id,
             source_url=f"marketplace:{slug}",
         )
+
+        # START it. Installing wrote the files and the database row and stopped
+        # there: no per-organisation runtime was created and no routes were
+        # mounted, so a plugin installed from the marketplace did nothing at all
+        # until the next API restart -- while the button reported success and
+        # the plugin list showed it installed. The upload path had always called
+        # this; the marketplace path, which is the one in the UI, never did.
+        from app.api.v1.endpoints.plugins import _start_plugin_everywhere
+
+        await _start_plugin_everywhere(record.plugin_id, session, request.app)
 
         # Audit trail for marketplace installs
         try:
@@ -442,15 +496,165 @@ async def install_from_marketplace(
         plugin.download_count += 1
         await session.commit()
 
-        return {"plugin_id": record.plugin_id, "version": record.version, "status": "installed"}
+        # Whether this install is fully live, answered the SAME way as every
+        # other install and upgrade path.
+        #
+        # This used to ask "are the plugin's routes mounted?", which was the
+        # right question before method bodies reloaded in place: back then any
+        # mounted plugin really did keep serving old handlers. It is now the
+        # wrong one -- it is true for essentially every install of an already
+        # mounted plugin -- so the marketplace demanded a restart that nothing
+        # needed, on almost every install, while the upload path (same install,
+        # different button) correctly said no restart was required. Reporting a
+        # restart nobody needs is how an operator learns to ignore the message
+        # that will one day matter.
+        from app.api.v1.endpoints.plugins import _reload_note
+
+        return {
+            "plugin_id": record.plugin_id,
+            "version": record.version,
+            "status": "installed",
+            **_reload_note(record.plugin_id),
+        }
     except PluginLoadError as exc:
+        # Surface the loader's own message. It is written for the person doing
+        # the install ("already installed, use upgrade", "requires FreeSDN X or
+        # newer", "checksum mismatch", "requirements.txt is missing --hash="),
+        # and every one of those is actionable. The flat
+        # "Marketplace plugin installation failed" made a version-floor refusal,
+        # a tampered archive and an unpinned dependency all look identical, with
+        # the real reason visible only in the container log.
+        #
+        # This endpoint already requires an UNSCOPED SUPER ADMIN, so there is no
+        # audience here that should not see a plugin diagnostic.
         logger.error("Marketplace plugin install failed for %s: %s", slug, exc, exc_info=True)
-        raise HTTPException(status_code=400, detail="Marketplace plugin installation failed")
+        raise HTTPException(status_code=400, detail=f"Plugin installation failed: {exc}") from exc
     except HTTPException:
         raise
     except Exception as exc:
         logger.error("Marketplace install failed for %s: %s", slug, exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Plugin installation failed")
+
+
+@router.post("/{slug}/upgrade")
+async def upgrade_from_marketplace(
+    slug: str,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """Update an installed plugin to the version the catalogue carries.
+
+    The missing half of the marketplace. You could install a plugin from the UI
+    and then never update it from the UI: the only upgrade path took an uploaded
+    ZIP, so keeping a plugin current meant going and finding the archive by hand
+    -- and pressing Install again just answered "already installed, use upgrade".
+    """
+    if not is_unscoped_superuser(current_user):
+        raise HTTPException(status_code=403, detail="Requires super admin role")
+
+    plugin = await _resolve_published(session, slug)
+
+    from app.plugins.loader import PluginLoadError, _version_tuple, plugin_loader
+
+    installed = (
+        await session.execute(
+            select(InstalledPlugin).where(InstalledPlugin.plugin_id == plugin.plugin_id)
+        )
+    ).scalar_one_or_none()
+    if installed is None or installed.status != "installed":
+        raise HTTPException(
+            status_code=404,
+            detail=f"'{slug}' is not installed. Install it first.",
+        )
+
+    from_version = installed.version
+    target = plugin.latest_version
+
+    # Refuse anything that is not forward motion, and say which it is. Both
+    # cases arrive here by pressing a button labelled "update", so silently
+    # reinstalling or silently rolling back would be the wrong answer to what
+    # the operator asked for.
+    current_t, target_t = _version_tuple(from_version or ""), _version_tuple(target or "")
+    if current_t and target_t:
+        if current_t == target_t:
+            raise HTTPException(
+                status_code=409,
+                detail=f"'{slug}' is already on {from_version}. Sync the registry if you "
+                "expected a newer version.",
+            )
+        if current_t > target_t:
+            raise HTTPException(
+                status_code=409,
+                detail=f"'{slug}' is installed at {from_version}, which is newer than the "
+                f"{target} the registry carries. Refusing to roll back; uninstall and "
+                "install if that is really what you want.",
+            )
+
+    try:
+        raw = await _download_and_verify(plugin)
+
+        # Stop first. upgrade_plugin replaces the files underneath a running
+        # plugin, and its per-organisation runtimes hold connections, event
+        # subscriptions and scheduler claims that belong to the old code.
+        await plugin_loader.stop_plugin_everywhere(plugin.plugin_id, session)
+        record = await plugin_loader.upgrade_plugin(
+            plugin_id=plugin.plugin_id,
+            source=raw,
+            db=session,
+            installed_by_id=current_user.id,
+        )
+        from app.api.v1.endpoints.plugins import _start_plugin_everywhere
+
+        await _start_plugin_everywhere(record.plugin_id, session, request.app, replace_routes=True)
+
+        try:
+            audit = AuditService(session)
+            await audit.log(
+                action=AuditAction.UPGRADE,
+                resource_type=ResourceType.PLUGIN,
+                resource_name=record.name,
+                actor_id=current_user.id,
+                actor_name=getattr(current_user, "full_name", None)
+                or getattr(current_user, "email", None),
+                actor_email=getattr(current_user, "email", None),
+                organization_id=getattr(current_user, "organization_id", None),
+                extra_metadata={
+                    "plugin_id": record.plugin_id,
+                    "plugin_version": record.version,
+                    "previous_version": from_version,
+                    "source": f"marketplace:{slug}",
+                    "checksum_sha256": plugin.checksum_sha256,
+                },
+                tags=["plugin", "supply-chain", "marketplace"],
+            )
+        except Exception:
+            logger.warning(
+                "Failed to create audit log for marketplace plugin upgrade: %s", slug, exc_info=True
+            )
+
+        await session.commit()
+
+        from app.api.v1.endpoints.plugins import _reload_note
+
+        return {
+            "plugin_id": record.plugin_id,
+            "version": record.version,
+            "previous_version": from_version,
+            "status": "upgraded",
+            **_reload_note(record.plugin_id),
+        }
+    except PluginLoadError as exc:
+        # The loader's own message names the reason -- a version floor, a
+        # tampered archive, an unpinned dependency -- and every one is
+        # actionable by the unscoped super admin this endpoint already requires.
+        logger.error("Marketplace plugin upgrade failed for %s: %s", slug, exc, exc_info=True)
+        raise HTTPException(status_code=400, detail=f"Plugin upgrade failed: {exc}") from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Marketplace upgrade failed for %s: %s", slug, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Plugin upgrade failed") from exc
 
 
 @router.get("/{slug}/reviews")
@@ -684,17 +888,28 @@ async def sync_marketplace(
         raise HTTPException(status_code=403, detail="Requires super_admin role")
 
     synced = 0
+
+    # FETCH and VERIFY are separated deliberately, because they need opposite
+    # failure behaviour and a single try/except cannot give both.
+    #
+    # These two arms used to share one `except HTTPException: raise`, added so a
+    # SIGNATURE failure could not silently fall back to the seed. It also caught
+    # the FETCH failure, which is supposed to fall back -- and the SSRF guard
+    # reports an unreachable registry as an HTTPException. The default registry
+    # was registry.freesdn.org, which has never resolved, so every sync on every
+    # deployment raised 400 and the bundled seed was unreachable: the
+    # marketplace was permanently empty and nothing said why. The default now
+    # points at a live registry, but an air-gapped or offline install still
+    # depends on this split behaving correctly.
+    #
+    #   fetch fails      -> fall back to the first-party bundled seed
+    #   signature fails  -> refuse outright, never fall back
+    catalog: dict[str, Any] | None = None
+    used_seed = False
     try:
         # NOTE: hardened fetch — HTTPS-only, 5MB streamed cap,
         # DNS-rebinding-safe, no redirects.
         catalog = await _fetch_registry_catalog(MARKETPLACE_REGISTRY_URL)
-        # authenticate the remote catalog (pinned-key Ed25519 signature)
-        # BEFORE any ingest. Raises 403 on unsigned/invalid per the configured
-        # posture. A signature failure must NOT silently fall back to the local
-        # seed, so this runs inside the try and re-raises via the HTTPException arm.
-        _verify_catalog_signature(catalog)
-    except HTTPException:
-        raise
     except Exception as exc:
         logger.warning("Remote registry fetch failed: %s. Trying seed file...", exc)
         import json
@@ -705,12 +920,20 @@ async def sync_marketplace(
         seed_path = Path(__file__).parent.parent.parent.parent / "data" / "marketplace_seed.json"
         if seed_path.exists():
             catalog = json.loads(seed_path.read_text())
+            used_seed = True
         else:
             raise HTTPException(
                 status_code=503, detail="Remote registry unavailable and no seed file found"
-            )
+            ) from exc
 
-    skipped = 0
+    if not used_seed:
+        # authenticate the REMOTE catalog (pinned-key Ed25519 signature)
+        # before any ingest. Raises 403 on unsigned/invalid per the configured
+        # posture, and that refusal must never degrade to the seed.
+        _verify_catalog_signature(catalog or {})
+
+    skipped_entries: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
     for entry in catalog.get("plugins", []):
         if not isinstance(entry, dict) or "plugin_id" not in entry:
             continue
@@ -739,6 +962,14 @@ async def sync_marketplace(
                     for k, v in sanitized.items():
                         if hasattr(row, k):
                             setattr(row, k, v)
+                    # A plugin the registry had withdrawn and has now listed
+                    # again is published again. ``status`` is deliberately
+                    # stripped by _sanitize_catalog_entry (the feed must never
+                    # set its own trust fields), so nothing above restores it
+                    # and a re-listed plugin would otherwise stay invisible for
+                    # ever with no way back short of editing the database.
+                    if row.status == "withdrawn":
+                        row.status = "published"
                 else:
                     row = MarketplacePlugin(
                         **{k: v for k, v in sanitized.items() if hasattr(MarketplacePlugin, k)},
@@ -746,17 +977,79 @@ async def sync_marketplace(
                     session.add(row)
                 await session.flush()
         except IntegrityError:
-            skipped += 1
-            logger.warning(
-                "Skipping marketplace catalog entry %r: integrity error (e.g. slug collision)",
-                sanitized.get("plugin_id"),
-            )
+            # Name the conflict. A bare count told an operator that something
+            # was dropped and nothing about what or why, and the usual cause is
+            # a slug already held by a DIFFERENT plugin_id -- which makes the
+            # skip PERMANENT, not transient. That is worth surfacing: sync will
+            # report the same entry every run and the plugin will never appear.
+            pid = str(sanitized.get("plugin_id", "?"))
+            slug = sanitized.get("slug")
+            reason = "integrity error"
+            if slug:
+                holder = await session.execute(
+                    select(MarketplacePlugin.plugin_id).where(MarketplacePlugin.slug == slug)
+                )
+                other = holder.scalar_one_or_none()
+                if other and other != sanitized.get("plugin_id"):
+                    reason = f"slug {slug!r} is already held by {other!r}"
+            skipped_entries.append({"plugin_id": pid, "reason": reason})
+            logger.warning("Skipping marketplace catalog entry %r: %s", pid, reason)
             continue
+        seen_ids.add(str(sanitized["plugin_id"]))
         synced += 1
 
+    # DE-LIST what the registry no longer carries.
+    #
+    # The loop above only ever upserts, so a plugin that the registry DROPS --
+    # retired, renamed, or pulled because it turned out to be harmful -- stayed
+    # listed and installable for ever on every deployment that had synced it
+    # once. Withdrawal was the only lever the project had over a bad plugin and
+    # it did nothing for the people who already had the catalogue.
+    #
+    # De-list, do NOT delete: reviews, download counts and history are worth
+    # keeping, "withdrawn" is a state an operator may need to see, and a hard
+    # delete would take the row out from under anyone mid-page.
+    #
+    # And do NOT touch an installed copy. Uninstalling somebody's running
+    # integration because an upstream index changed would be a remote actor
+    # stopping production work; the registry decides what is on offer, the
+    # operator decides what runs. Withdrawal makes it un-installable and
+    # un-browsable, and leaves what is already there alone.
+    #
+    # Only ever from the REMOTE, signature-verified catalogue. The bundled seed
+    # is a fallback for an unreachable registry, not an authority on what has
+    # been withdrawn -- reconciling against it would let one failed fetch
+    # de-list every plugin of a private registry that was merely unreachable.
+    withdrawn: list[str] = []
+    if not used_seed and seen_ids:
+        stale = await session.execute(
+            select(MarketplacePlugin).where(
+                MarketplacePlugin.status == "published",
+                MarketplacePlugin.plugin_id.notin_(seen_ids),
+            )
+        )
+        for row in stale.scalars().all():
+            row.status = "withdrawn"
+            withdrawn.append(row.plugin_id)
+            logger.info(
+                "Marketplace plugin %r is no longer in the registry catalog; withdrawing it "
+                "from the marketplace. Installed copies are left running.",
+                row.plugin_id,
+            )
+
     await session.commit()
+    skipped = len(skipped_entries)
+    message = f"Synced {synced} plugins from registry ({skipped} skipped)"
+    if skipped_entries:
+        detail = "; ".join(f"{e['plugin_id']}: {e['reason']}" for e in skipped_entries)
+        message = f"{message}. Skipped: {detail}"
+    if withdrawn:
+        message = f"{message}. Withdrawn (no longer in the registry): {', '.join(withdrawn)}"
     return {
         "synced": synced,
         "skipped": skipped,
-        "message": f"Synced {synced} plugins from registry ({skipped} skipped)",
+        "skipped_entries": skipped_entries,
+        "withdrawn": withdrawn,
+        "used_seed": used_seed,
+        "message": message,
     }

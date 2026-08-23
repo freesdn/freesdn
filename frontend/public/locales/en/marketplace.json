@@ -18,7 +18,9 @@
       "integration": "Integration",
       "analytics": "Analytics",
       "device": "Device",
-      "reporting": "Reporting"
+      "reporting": "Reporting",
+      "compliance": "Compliance",
+      "utility": "Utility"
     },
     "sort": {
       "downloads": "Most Downloaded",
@@ -47,7 +49,18 @@
       "verifiedTooltip": "Verified plugin",
       "byAuthor": "by {{author}}",
       "installed": "Installed",
-      "install": "Install"
+      "install": "Install",
+      "updateTo": "Update to v{{version}}"
+    },
+    "restartRequired": {
+      "title": "Installed. Restart the API to finish.",
+      "body": "This version changed its HTTP endpoints. Everything else is already on the new version, but those endpoints keep serving the previous one until the API restarts."
+    },
+    "updateDialog": {
+      "title": "Update this plugin?",
+      "body": "{{name}} will be updated from v{{from}} to v{{to}}.",
+      "warning": "The new version is third-party code and runs with full backend privileges, exactly like the version you have. It is stopped, replaced and restarted; its settings and schedules are kept.",
+      "confirm": "Update"
     }
   },
   "PluginDetailPage": {
@@ -76,6 +89,10 @@
     "writeReview": "Write a Review",
     "reviewPlaceholder": "Share your experience with this plugin...",
     "submitReview": "Submit Review",
-    "submitReviewFailed": "Failed to submit review"
+    "submitReviewFailed": "Failed to submit review",
+    "restartRequired": {
+      "title": "Installed. Restart the API to finish.",
+      "body": "This version changed its HTTP endpoints. Everything else is already on the new version, but those endpoints keep serving the previous one until the API restarts."
+    }
   }
 }

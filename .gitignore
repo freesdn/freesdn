@@ -262,6 +262,18 @@ secrets/*
 data/
 backend/data/
 
+# backend/app/data is SOURCE, not runtime state. The broad `data/` rule above
+# swallowed it, so app/data/marketplace_seed.json -- the offline catalogue the
+# marketplace falls back to when the registry is unreachable -- was never
+# committed. Every fresh clone and every release flatten shipped without it, and
+# the fallback answered 503 "no seed file found" on exactly the air-gapped
+# installs it exists for.
+#
+# A negation cannot re-include a file under an EXCLUDED DIRECTORY (git never
+# descends into it), so the directory has to be un-excluded first.
+!backend/app/data/
+!backend/app/data/**
+
 # PostgreSQL
 *.sql.gz
 *.dump

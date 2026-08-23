@@ -1356,6 +1356,14 @@ export interface IntegrationType {
   default_events: string[];
   icon: string;
   setup_docs_url?: string;
+  /**
+   * This type needs its own credentials and payload shape, which a webhook
+   * cannot carry. Names the plugin that actually does the job; the picker
+   * offers the type but will not let you create one.
+   */
+  requires_plugin?: string;
+  /** Works, but through a different subsystem (currently always Notifications). */
+  use_instead?: string;
 }
 
 export interface IntegrationTemplate {

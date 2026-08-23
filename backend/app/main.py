@@ -321,12 +321,39 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                             )
             if loaded_plugins:
                 logger.info("Loaded %d third-party plugins", len(loaded_plugins))
+            if plugin_loader.missing_on_disk:
+                logger.error(
+                    "%d plugin(s) are active in the database but absent from disk and will "
+                    "not run: %s. Their routes are gone and their event handlers are dead "
+                    "while the UI still shows them enabled.",
+                    len(plugin_loader.missing_on_disk),
+                    ", ".join(plugin_loader.missing_on_disk),
+                )
+        # A plugin the database calls active but whose files are missing is a
+        # degraded subsystem, not a healthy one. This was reported healthy, so a
+        # restart that lost PLUGIN_DIR looked like a clean boot and the only
+        # symptom was 404s on the plugin's own routes.
         SUBSYSTEM_STATUS["plugins"] = (
-            "degraded" if loaded_plugins and plugin_start_failures else "healthy"
+            "degraded"
+            if plugin_loader.missing_on_disk or (loaded_plugins and plugin_start_failures)
+            else "healthy"
         )
     except Exception as exc:
         SUBSYSTEM_STATUS["plugins"] = "degraded"
         logger.warning("Plugin loading failed: %s", exc, exc_info=True)
+
+    # Run manifest-declared plugin schedules. Its own subsystem rather than part
+    # of "plugins": a scheduler that failed to start leaves every plugin looking
+    # perfectly healthy while nothing periodic runs, which is the failure mode
+    # an operator is least likely to notice on their own.
+    try:
+        from app.plugins.scheduler import plugin_scheduler
+
+        await plugin_scheduler.start()
+        SUBSYSTEM_STATUS["plugin_scheduler"] = "healthy"
+    except Exception as exc:
+        SUBSYSTEM_STATUS["plugin_scheduler"] = "degraded"
+        logger.warning("Plugin scheduler failed to start: %s", exc, exc_info=True)
 
     # Sync module-managed devices (NVRs, phones, firewalls) into core devices
     # table AND create firmware status records so Device Inventory, Topology,
@@ -405,6 +432,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     yield
 
     # Shutdown
+    # Stop the scheduler FIRST, before plugins are stopped below. The other
+    # order lets a run that is already in flight call into a runtime whose
+    # on_stop has torn down its context, so the last thing in the log before a
+    # clean shutdown is a plugin crash.
+    try:
+        from app.plugins.scheduler import plugin_scheduler
+
+        await plugin_scheduler.stop()
+    except Exception:
+        logger.debug("Error stopping the plugin scheduler", exc_info=True)
+
     # Stop the HLS reaper and kill any sessions still alive so a redeploy leaves
     # no orphan ffmpeg subprocesses behind.
     try:

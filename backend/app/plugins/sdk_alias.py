@@ -35,10 +35,14 @@ def install_freesdn_sdk_alias() -> None:
         DeviceSDK,
         EventSDK,
         FreeSDNPlugin,
+        MetricsSDK,
         PluginContext,
+        PluginCoordinator,
         PluginHTTPClient,
         PluginSettingsSDK,
+        SiteSDK,
     )
+    from app.plugins.supervision import PluginNotReady
 
     pkg = types.ModuleType("freesdn_sdk")
     pkg.FreeSDNPlugin = FreeSDNPlugin
@@ -48,6 +52,13 @@ def install_freesdn_sdk_alias() -> None:
     pkg.EventSDK = EventSDK
     pkg.PluginSettingsSDK = PluginSettingsSDK
     pkg.PluginHTTPClient = PluginHTTPClient
+    pkg.SiteSDK = SiteSDK
+    pkg.MetricsSDK = MetricsSDK
+    pkg.PluginCoordinator = PluginCoordinator
+    # The one a plugin RAISES rather than calls. Exported here so an author can
+    # write `raise PluginNotReady("NetBox unreachable")` without importing from
+    # app.* -- which they cannot do, and should not have to.
+    pkg.PluginNotReady = PluginNotReady
 
     # Best-effort extras that live elsewhere in core; never fail the alias if a
     # symbol is unavailable — the load-critical surface is the classes above.

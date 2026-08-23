@@ -61,7 +61,7 @@ def get_anthropic_tool_definitions() -> list[dict[str, Any]]:
 # Import tool modules to auto-register their tools
 def load_tools() -> None:
     """Trigger import of all tool modules so they register themselves."""
-    from app.modules.ai.tools import diagnostics, network  # noqa: F401
+    from app.modules.ai.tools import diagnostics, estate, network  # noqa: F401
 
     # Extended tools (graceful import — these depend on optional modules)
     try:

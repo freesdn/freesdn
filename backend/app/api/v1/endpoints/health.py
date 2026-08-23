@@ -322,6 +322,26 @@ async def _collect_components(session: AsyncSession) -> dict[str, ComponentHealt
                 status=HealthStatus.DEGRADED,
                 details={"reason": "failed during startup"},
             )
+
+    # SUBSYSTEM_STATUS is a STARTUP snapshot -- it answers "did this come up",
+    # not "is it working now". A plugin that starts cleanly and then fails every
+    # event afterwards left the subsystem reading healthy forever. Supervision
+    # knows the current answer, so ask it.
+    try:
+        from app.plugins.supervision import supervisor
+
+        quarantined = supervisor.quarantined_plugins()
+        if quarantined:
+            components["plugins"] = ComponentHealth(
+                status=HealthStatus.DEGRADED,
+                details={
+                    "reason": "plugin(s) quarantined after repeated failures",
+                    "quarantined": quarantined,
+                },
+            )
+    except Exception:  # pragma: no cover - health must never fail on its own probe
+        pass  # a probe failure must not turn a health check into a 500
+
     return components
 
 

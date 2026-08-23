@@ -203,11 +203,36 @@ rate_limit_hits: Counter = Counter(
     ["endpoint"],
 )
 
-# Plugin lifecycle events (install / uninstall / enable / disable × outcome).
+# ── Plugin supervision ──────────────────────────────────────────────────────
+#
+# This counter existed with ["operation", "status"] and was incremented from
+# NOWHERE: declared, scraped, always zero. There was no plugin observability of
+# any kind, so "which plugin is failing" had no answer short of reading logs
+# that did not name the plugin either.
+#
+# ``plugin_id`` is now a label, which is the whole point -- attribution. The
+# cardinality is bounded by how many plugins an operator installs, and
+# ``operation`` is deliberately a small fixed vocabulary (event / route /
+# ai_tool / lifecycle) rather than, say, a route path.
 plugin_operations_total: Counter = Counter(
     "freesdn_plugin_operations_total",
-    "Plugin lifecycle events by operation and outcome",
-    ["operation", "status"],
+    "Calls into plugin-authored code by plugin, operation kind and outcome",
+    ["plugin_id", "operation", "status"],
+)
+
+plugin_operation_duration: Histogram = Histogram(
+    "freesdn_plugin_operation_duration_seconds",
+    "Time spent inside plugin-authored code",
+    ["plugin_id", "operation"],
+    # Plugin work is I/O bound and usually fast; the long buckets exist to make
+    # a plugin approaching its timeout visible before it starts tripping.
+    buckets=(0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0),
+)
+
+plugin_quarantined: Gauge = Gauge(
+    "freesdn_plugin_quarantined",
+    "1 while a plugin is quarantined by the supervisor after repeated failures",
+    ["plugin_id"],
 )
 
 # One-shot build / environment info, set once during setup_metrics().

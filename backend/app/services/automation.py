@@ -16,6 +16,7 @@ Features:
 
 import asyncio
 import contextlib
+import hashlib
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -433,6 +434,52 @@ return 0
 """
 
 
+async def _system_alert_rule_id(db: Any, org_id: Any) -> Any:
+    """The system AlertRule that owns automation-generated alerts.
+
+    ``Alert.rule_id`` is NOT NULL because an alert normally belongs to the
+    alert rule that raised it. An automation rule is a different thing entirely,
+    so there is no natural rule to point at -- and omitting it makes the insert
+    fail outright, which is what ``alert.create`` did.
+
+    One system rule per organization, created on first use, mirroring what
+    ``PluginSettingsSDK``'s sibling does for plugin-generated alerts.
+    """
+    from sqlalchemy import select
+
+    from app.models.alert_rules import AlertRule
+
+    rule_name = "__automation_alerts"
+    existing = await db.execute(
+        select(AlertRule.id).where(
+            AlertRule.organization_id == org_id,
+            AlertRule.name == rule_name,
+            AlertRule.is_system.is_(True),
+            # A soft-deleted system rule must not be reused: alerts would hang
+            # off a row the rest of the platform treats as gone. Recreating is
+            # safe -- the name carries no unique constraint.
+            AlertRule.alive(),
+        )
+    )
+    rule_id = existing.scalar_one_or_none()
+    if rule_id:
+        return rule_id
+
+    rule = AlertRule(
+        organization_id=org_id,
+        name=rule_name,
+        description="System rule owning alerts raised by the automation engine.",
+        rule_type="custom",
+        status="active",
+        severity="warning",
+        is_system=True,
+        conditions={},
+    )
+    db.add(rule)
+    await db.flush()
+    return rule.id
+
+
 class AutomationEngine:
     """
     Rule-based automation engine.
@@ -533,10 +580,40 @@ class AutomationEngine:
                 # over context meant a rule in org A could ``alert.
                 # create`` into org B with a forged ``organization_id``.
                 org_id = context.get("organization_id")
+                if not org_id:
+                    return {"success": False, "error": "no organization context"}
+
+                # ``Alert.rule_id`` is NOT NULL: an alert belongs to the
+                # ALERT rule that raised it, which an AUTOMATION rule is not.
+                # This handler omitted it, so every ``alert.create`` action
+                # ever written died on the constraint -- the action has never
+                # worked. The plugin SDK solved the same problem by attaching a
+                # system AlertRule, so do the same rather than invent a second
+                # answer.
+                rule_id = await _system_alert_rule_id(db, org_id)
+
+                severity = params.get("severity", "warning")
+                title = params.get("title", "Automation Alert")
+
+                # ``fingerprint`` is NOT NULL too -- a second constraint this
+                # handler never satisfied. Two independent NOT NULL violations
+                # is as close to proof as it gets that ``alert.create`` had
+                # never once run successfully.
+                #
+                # It is the alert dedup key, so derive it from what identifies
+                # THIS alert rather than filling it with a random value: two
+                # firings of the same rule with the same title should collapse
+                # onto one alert, which is the behaviour the column exists for.
+                fingerprint = hashlib.sha256(
+                    f"automation:{rule_id}:{title}:{severity}".encode()
+                ).hexdigest()[:64]
+
                 alert = Alert(
                     organization_id=org_id,
-                    severity=params.get("severity", "warning"),
-                    title=params.get("title", "Automation Alert"),
+                    rule_id=rule_id,
+                    fingerprint=fingerprint,
+                    severity=severity,
+                    title=title,
                     message=params.get("message", "Alert created by automation engine"),
                     device_id=context.get("device_id"),
                     site_id=context.get("site_id"),
@@ -545,7 +622,7 @@ class AutomationEngine:
                 db.add(alert)
                 await db.commit()
                 await db.refresh(alert)
-                return {"alert_id": str(alert.id)}
+                return {"success": True, "alert_id": str(alert.id)}
 
         async def _handle_alert_resolve(params: dict[str, Any]) -> dict[str, Any]:
             from app.db import async_session_factory
@@ -723,6 +800,25 @@ class AutomationEngine:
             op = fabric_registry.get_operation(str(operation_id))
             if op is None:
                 return {"success": False, "error": f"unknown operation: {operation_id}"}
+            # NATIVE ONLY, and this is not an oversight. A plugin operation is
+            # a CATALOGUE PROJECTION: the registry advertises it so rules and
+            # the assistant can see it exists, and it is executed by the
+            # plugin's own per-(plugin, organization) runtime -- its REST routes
+            # and event handlers -- never by the shared registry.
+            #
+            # The reason is tenancy. A plugin has ONE runtime instance PER
+            # ORGANIZATION, but the Fabric registry is process-wide and holds
+            # one Operation per id. A handler captured at registration time
+            # belongs to whichever organization started the plugin first, so
+            # invoking it from a rule in a DIFFERENT organization would run one
+            # tenant's plugin instance against another tenant's context.
+            #
+            # I removed this gate once, believing it was incomplete wiring, and
+            # immediately produced exactly that: a rule in org A ran a handler
+            # bound to org B's runtime. The gate is the fix, not the problem.
+            # Reaching a plugin from a rule needs a per-org handler lookup that
+            # does not exist yet; until it does, use the plugin's own event
+            # subscription (plugin -> rule works fine) or its REST route.
             if op.tier is not OperationTier.NATIVE:
                 return {"success": False, "error": "operation is not native"}
 
@@ -864,7 +960,22 @@ class AutomationEngine:
         action_type: ActionType,
         handler: Callable[..., Awaitable[Any]],
     ) -> None:
-        """Register an action handler (safe to call sync during init)."""
+        """Register an action handler (safe to call sync during init).
+
+        The key must be a real ``ActionType``. A plain string looks like it
+        works -- the dict accepts it and ``implemented_action_types()`` happily
+        returns it -- but no rule can ever name it (``Action.from_dict`` coerces
+        through the enum), and the rule-create endpoint formats this set with
+        ``t.value``, so one str key turns its 422 into a 500. The plugin bridge
+        used to do exactly that; refuse it here so the next caller finds out
+        immediately instead of via a broken error path.
+        """
+        if not isinstance(action_type, ActionType):
+            raise TypeError(
+                f"action_type must be an ActionType, got {type(action_type).__name__}: "
+                f"{action_type!r}. Plugin actions are not registered here -- they are "
+                "projected into the Fabric catalogue instead."
+            )
         self._action_handlers[action_type] = handler
         logger.debug("Registered action handler: %s", action_type)
 
@@ -908,11 +1019,37 @@ class AutomationEngine:
 
             duration = (datetime.now(UTC) - start_time).total_seconds() * 1000
 
+            # A handler signals failure two ways: by RAISING, or by RETURNING
+            # ``{"success": False, "error": ...}``. Only the first was honoured,
+            # so every graceful failure was recorded as a successful action:
+            #
+            #   camera.ptz            the camera refused the move
+            #   camera.snapshot       the capture failed
+            #   camera.motion_detection / camera.reboot   likewise
+            #   fabric.operation      unknown op, no org context, non-native op,
+            #                         or the rule author having lost the
+            #                         permission the op requires
+            #
+            # All eight of those paths return a failure dict, and the rule
+            # history showed green for every one. An operator reading that
+            # history has no way to know the action did nothing -- which is
+            # strictly worse than a visible error, because it removes the
+            # signal that something needs looking at.
+            succeeded = True
+            error: str | None = None
+            if isinstance(output, dict) and output.get("success") is False:
+                succeeded = False
+                error = str(output.get("error") or "action reported failure")
+                logger.warning(
+                    "Automation action %s reported failure: %s", action.action_type, error
+                )
+
             return ActionResult(
-                success=True,
+                success=succeeded,
                 action_type=action.action_type,
                 execution_time_ms=duration,
                 output=output,
+                error=error,
             )
         except Exception as e:
             logger.error("Action execution failed: %s - %s", action.action_type, e)

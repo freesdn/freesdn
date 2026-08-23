@@ -24543,6 +24543,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/marketplace/plugins/{slug}/upgrade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upgrade From Marketplace
+         * @description Update an installed plugin to the version the catalogue carries.
+         *
+         *     The missing half of the marketplace. You could install a plugin from the UI
+         *     and then never update it from the UI: the only upgrade path took an uploaded
+         *     ZIP, so keeping a plugin current meant going and finding the archive by hand
+         *     -- and pressing Install again just answered "already installed, use upgrade".
+         */
+        post: operations["upgrade_from_marketplace_api_v1_marketplace_plugins__slug__upgrade_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/marketplace/plugins/{slug}/versions": {
         parameters: {
             query?: never;
@@ -26310,6 +26335,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plugins/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Capabilities
+         * @description The capability vocabulary a plugin manifest may declare.
+         *
+         *     The consent dialog needs this because a manifest's ``name`` and
+         *     ``description`` for a permission are written by the PLUGIN AUTHOR. A plugin
+         *     can label ``devices.stage`` as "Read Alerts" and the operator approving the
+         *     install would read the author's wording, not what the code actually grants.
+         *     Rendering the platform's own summary, keyed by code, is what makes the
+         *     consent dialog mean something.
+         *
+         *     Declared above ``/{plugin_id}`` deliberately: FastAPI matches in definition
+         *     order, so a route registered after the path parameter would be shadowed and
+         *     "capabilities" would be read as a plugin id.
+         */
+        get: operations["list_capabilities_api_v1_plugins_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plugins/install": {
         parameters: {
             query?: never;
@@ -26350,6 +26406,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plugins/supervision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Plugin Supervision
+         * @description Error rate, latency and quarantine state for every plugin at once.
+         *
+         *     The per-plugin health endpoint answers "is THIS plugin ok". This answers the
+         *     question an operator actually has during an incident: which of them is
+         *     misbehaving. Before supervision existed there was no way to ask either --
+         *     plugin failures were logged without naming the plugin.
+         *
+         *     Declared above ``/{plugin_id}`` because FastAPI matches in definition order
+         *     and would otherwise read "supervision" as a plugin id.
+         */
+        get: operations["get_plugin_supervision_api_v1_plugins_supervision_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plugins/{plugin_id}": {
         parameters: {
             query?: never;
@@ -26367,6 +26451,17 @@ export interface paths {
         /**
          * Uninstall Plugin
          * @description Uninstall a plugin (calls on_uninstall hook then removes files).
+         *
+         *     Settings are KEPT by default and a reinstall picks them back up, which is
+         *     what makes uninstall-reinstall a safe troubleshooting step. The cost is that
+         *     a credential outlives the plugin that used it, and the uninstall dialog used
+         *     to say only that settings "may remain" -- vague about something that always
+         *     happens, and silent about the part that matters, which is the token.
+         *
+         *     ``purge_settings=true`` removes them. Kept as a choice rather than made the
+         *     default because the two reasons to uninstall want opposite behaviour: fixing
+         *     a misbehaving plugin wants the configuration back, and removing a plugin you
+         *     are done with wants the credential gone.
          */
         delete: operations["uninstall_plugin_api_v1_plugins__plugin_id__delete"];
         options?: never;
@@ -26474,6 +26569,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plugins/{plugin_id}/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Plugin Schedules
+         * @description What this plugin runs unattended, and whether it is actually running.
+         */
+        get: operations["list_plugin_schedules_api_v1_plugins__plugin_id__schedules_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/{plugin_id}/schedules/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Plugin Schedule Enabled
+         * @description Turn one schedule on or off for this organization.
+         *
+         *     Per organization, not per plugin: on a shared appliance one tenant wanting
+         *     a quiet inventory sync must not stop another's drift scan. Stored under the
+         *     reserved ``__`` settings prefix, so it never appears in -- or is clobbered
+         *     by -- the operator's configuration form.
+         */
+        put: operations["set_plugin_schedule_enabled_api_v1_plugins__plugin_id__schedules__name__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plugins/{plugin_id}/settings": {
         parameters: {
             query?: never;
@@ -26492,6 +26632,31 @@ export interface paths {
          */
         put: operations["update_plugin_settings_api_v1_plugins__plugin_id__settings_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/{plugin_id}/supervision/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Plugin Supervision
+         * @description Clear a plugin's error budget and lift its quarantine immediately.
+         *
+         *     For the operator who has fixed the cause -- restored the upstream the plugin
+         *     was calling, corrected its settings -- and does not want to wait out a
+         *     cooldown that doubles each time. Without this the only remedies were waiting
+         *     or restarting the API.
+         */
+        post: operations["reset_plugin_supervision_api_v1_plugins__plugin_id__supervision_reset_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -37377,6 +37542,20 @@ export interface components {
             purpose?: string | null;
             /** Subnet */
             subnet?: string | null;
+        };
+        /**
+         * CapabilityInfo
+         * @description One entry in the platform's capability vocabulary.
+         */
+        CapabilityInfo: {
+            /** Code */
+            code: string;
+            /** Core Permissions */
+            core_permissions: string[];
+            /** Mutating */
+            mutating: boolean;
+            /** Summary */
+            summary: string;
         };
         /**
          * CapabilityMaturitySchema
@@ -49546,10 +49725,14 @@ export interface components {
             };
             /** Name */
             name: string;
+            /** Note */
+            note?: string | null;
             /** Plugin Dir */
             plugin_dir: string;
             /** Plugin Id */
             plugin_id: string;
+            /** Restart Required */
+            restart_required?: boolean | null;
             /** Status */
             status: string;
             /** Version */
@@ -49612,6 +49795,51 @@ export interface components {
             /** Path */
             path: string;
         };
+        /**
+         * PluginScheduleInfo
+         * @description One declared schedule and what has actually become of it.
+         *
+         *     ``last_run`` and ``next_run_at`` are the point. A schedule an operator can
+         *     see declared but cannot see RUNNING is indistinguishable from one that is
+         *     quietly failing, and unattended work that fails quietly is the whole reason
+         *     supervision exists.
+         */
+        PluginScheduleInfo: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Failures This Worker
+             * @default 0
+             */
+            failures_this_worker: number;
+            /** Interval Seconds */
+            interval_seconds: number;
+            /** Last Run */
+            last_run?: {
+                [key: string]: unknown;
+            } | null;
+            /** Method */
+            method: string;
+            /** Name */
+            name: string;
+            /** Next Run At */
+            next_run_at?: number | null;
+            /**
+             * Runs This Worker
+             * @default 0
+             */
+            runs_this_worker: number;
+        };
+        /** PluginScheduleUpdate */
+        PluginScheduleUpdate: {
+            /** Enabled */
+            enabled: boolean;
+        };
         /** PluginSettingsUpdate */
         PluginSettingsUpdate: {
             /** Settings */
@@ -49635,6 +49863,18 @@ export interface components {
             status: string;
             /** Version */
             version: string;
+        };
+        /**
+         * PluginSupervisionResponse
+         * @description Fleet-wide supervision state.
+         */
+        PluginSupervisionResponse: {
+            /** Plugins */
+            plugins: {
+                [key: string]: unknown;
+            };
+            /** Quarantined */
+            quarantined: string[];
         };
         /** PoEBulkUpdateIn */
         PoEBulkUpdateIn: {
@@ -108534,6 +108774,39 @@ export interface operations {
             };
         };
     };
+    upgrade_from_marketplace_api_v1_marketplace_plugins__slug__upgrade_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     plugin_versions_api_v1_marketplace_plugins__slug__versions_get: {
         parameters: {
             query?: never;
@@ -111902,6 +112175,26 @@ export interface operations {
             };
         };
     };
+    list_capabilities_api_v1_plugins_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityInfo"][];
+                };
+            };
+        };
+    };
     install_plugin_api_v1_plugins_install_post: {
         parameters: {
             query?: never;
@@ -111968,6 +112261,26 @@ export interface operations {
             };
         };
     };
+    get_plugin_supervision_api_v1_plugins_supervision_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginSupervisionResponse"];
+                };
+            };
+        };
+    };
     get_plugin_api_v1_plugins__plugin_id__get: {
         parameters: {
             query?: never;
@@ -112001,7 +112314,10 @@ export interface operations {
     };
     uninstall_plugin_api_v1_plugins__plugin_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Also delete this plugin's stored settings for every organization, including any encrypted credentials. Off by default so an accidental uninstall does not lose a working configuration. */
+                purge_settings?: boolean;
+            };
             header?: never;
             path: {
                 plugin_id: string;
@@ -112183,6 +112499,73 @@ export interface operations {
             };
         };
     };
+    list_plugin_schedules_api_v1_plugins__plugin_id__schedules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginScheduleInfo"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_plugin_schedule_enabled_api_v1_plugins__plugin_id__schedules__name__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginScheduleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginScheduleInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_plugin_settings_api_v1_plugins__plugin_id__settings_get: {
         parameters: {
             query?: never;
@@ -112241,6 +112624,35 @@ export interface operations {
                         [key: string]: unknown;
                     };
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_plugin_supervision_api_v1_plugins__plugin_id__supervision_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

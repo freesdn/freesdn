@@ -61,26 +61,50 @@ def collect_device_metrics(self) -> dict[str, Any]:
         collected = 0
         errors = 0
 
-        # Read device list from primary DB
+        from app.models.core import Site
+
+        # Read device list from primary DB, joined to Site for the organization.
+        #
+        # ORGANIZATION_ID IS THE POINT OF THIS JOIN. Metrics were written with
+        # site_id and device_id but organization_id NULL, and the analytics
+        # query endpoint hard-codes ``filters["organization_id"] = str(org)``
+        # for tenant isolation. So the filter was correct and matched nothing:
+        # 25,720 rows in the hypertable and ``/analytics/metrics/query``
+        # returned ``data_points: []`` for every operator, always. Confirmed
+        # against the live instance before this was changed. Device carries no
+        # organization_id of its own; it reaches one through its Site.
+        #
+        # The soft-delete filters are the same class of bug one level down: a
+        # deleted device kept producing status points forever, and a deleted
+        # site's devices were still collected under an organization that no
+        # longer lists them.
+        def _devices_with(status: Any) -> Any:
+            return (
+                select(Device.id, Device.site_id, Site.organization_id)
+                .join(Site, Device.site_id == Site.id)
+                .where(
+                    Device.status == status,
+                    Device.alive(),
+                    Site.alive(),
+                )
+            )
+
         async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                select(Device).where(Device.status == DeviceStatus.ONLINE)
-            )
-            online_devices = [(d.id, d.site_id) for d in result.scalars().all()]
-            result_offline = await session.execute(
-                select(Device).where(Device.status == DeviceStatus.OFFLINE)
-            )
-            offline_devices = [(d.id, d.site_id) for d in result_offline.scalars().all()]
+            result = await session.execute(_devices_with(DeviceStatus.ONLINE))
+            online_devices = list(result.all())
+            result_offline = await session.execute(_devices_with(DeviceStatus.OFFLINE))
+            offline_devices = list(result_offline.all())
 
         # Write metrics to LogDB (time-series database)
         async with _get_logdb()() as logdb:
-            for device_id, site_id in online_devices:
+            for device_id, site_id, organization_id in online_devices:
                 try:
                     await svc.record_metric(
                         logdb,
                         metric_name="device.status",
                         value=1.0,
                         labels={"device_id": str(device_id), "site_id": str(site_id)},
+                        organization_id=organization_id,
                         site_id=site_id,
                         device_id=device_id,
                     )
@@ -89,13 +113,14 @@ def collect_device_metrics(self) -> dict[str, Any]:
                     logger.debug("Error collecting metrics for device %s: %s", device_id, e)
                     errors += 1
 
-            for device_id, site_id in offline_devices:
+            for device_id, site_id, organization_id in offline_devices:
                 with contextlib.suppress(SQLAlchemyError):
                     await svc.record_metric(
                         logdb,
                         metric_name="device.status",
                         value=0.0,
                         labels={"device_id": str(device_id), "site_id": str(site_id)},
+                        organization_id=organization_id,
                         site_id=site_id,
                         device_id=device_id,
                     )

@@ -35,7 +35,9 @@ from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile, status
 
+from app import __version__ as CORE_VERSION
 from app.core.config import settings
+from app.core.middleware import invalidate_route_cache
 from app.plugins.schema import PluginManifest
 from app.plugins.sdk import (
     FreeSDNPlugin,
@@ -44,6 +46,7 @@ from app.plugins.sdk import (
     reset_request_caller,
     reset_request_plugin_runtime,
 )
+from app.plugins.supervision import PluginNotReady, supervisor
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,6 +64,111 @@ class PluginLoadError(Exception):
     """Raised when a plugin fails to load."""
 
 
+def _version_tuple(value: str) -> tuple[int, ...] | None:
+    """Parse a dotted version into comparable ints, or None if it is not one.
+
+    Tolerant on purpose: a trailing suffix like "1.2.0-beta" compares on its
+    numeric head. Returns None for anything with no leading number at all,
+    which the caller treats as "cannot judge" rather than "incompatible".
+    """
+    parts: list[int] = []
+    for chunk in str(value).strip().split("."):
+        digits = ""
+        for ch in chunk:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts) or None
+
+
+def _check_core_compatibility(manifest: PluginManifest) -> None:
+    """Refuse a plugin that declares it needs a newer core than this one.
+
+    install_plugin has advertised "Check FreeSDN core version compatibility" as
+    step 2 since it was written, and never did it: min_core_version was parsed
+    into the manifest schema and then read by nobody. A plugin declaring
+    min_core_version 99.0.0 installed cleanly on core 26.08.2, and the operator
+    found out when it failed at runtime against an API that did not exist yet.
+
+    Fails OPEN on an unparseable version. This is a compatibility hint from the
+    author, not a security control, and refusing to install a working plugin
+    because its metadata has an unusual version string would trade a real
+    failure for a cosmetic one.
+    """
+    required_raw = getattr(manifest, "min_core_version", None)
+    if not required_raw:
+        return
+    required = _version_tuple(required_raw)
+    current = _version_tuple(CORE_VERSION)
+    if required is None or current is None:
+        logger.warning(
+            "Plugin %s declares min_core_version=%r which cannot be compared "
+            "against core %r; allowing the install.",
+            manifest.id,
+            required_raw,
+            CORE_VERSION,
+        )
+        return
+    # Compare on the shorter length so 26.8 and 26.8.2 do not disagree.
+    width = min(len(required), len(current))
+    if current[:width] < required[:width]:
+        raise PluginLoadError(
+            f"Plugin '{manifest.id}' requires FreeSDN {required_raw} or newer, "
+            f"but this instance is {CORE_VERSION}."
+        )
+
+
+async def _read_plugin_source(source: Any) -> bytes:
+    """Return the archive bytes for a plugin install, from bytes or an upload.
+
+    Test for BYTES, not for UploadFile.
+
+    ``isinstance(source, UploadFile)`` looks correct and is not. FastAPI's
+    UploadFile is a SUBCLASS of starlette's, and the multipart parser hands the
+    endpoint a ``starlette.datastructures.UploadFile`` -- so an isinstance check
+    against the fastapi child is always False. Every uploaded archive therefore
+    skipped the streaming read, fell through to the raw object, and died on
+    ``len(raw)`` with "object of type 'UploadFile' has no len()". Plugin install
+    by upload, the primary install path, returned 500 for every file.
+
+    Duck-typing on the bytes side is the durable fix: anything that is not
+    already bytes is treated as an async file-like, which covers both UploadFile
+    classes and any future replacement.
+    """
+    if isinstance(source, bytes | bytearray):
+        raw = bytes(source)
+        if len(raw) > MAX_ZIP_SIZE:
+            raise PluginLoadError(
+                f"Plugin archive too large ({len(raw)} bytes). "
+                f"Maximum size is {MAX_ZIP_SIZE // (1024 * 1024)} MB."
+            )
+        return raw
+
+    if not hasattr(source, "read"):
+        raise PluginLoadError(f"Unsupported plugin source type: {type(source).__name__}")
+
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await source.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        # Checked per chunk so an oversized upload is refused while it streams,
+        # rather than after the whole thing is already in memory.
+        if total > MAX_ZIP_SIZE:
+            raise PluginLoadError(
+                f"Plugin archive too large ({total} bytes). "
+                f"Maximum size is {MAX_ZIP_SIZE // (1024 * 1024)} MB."
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 class PluginLoader:
     """Manages the lifecycle of third-party FreeSDN plugins."""
 
@@ -71,6 +179,24 @@ class PluginLoader:
         # Track sys.path entries added per plugin for cleanup
         self._plugin_paths: dict[str, list[str]] = {}
         self._registered_routes: set[str] = set()
+        #: plugin_id -> the (path, method) shape mounted for it, so an
+        #: upgrade can tell a code change from a route-table change.
+        self._route_shape: dict[str, frozenset[tuple[str, str]]] = {}
+        #: plugins whose mounted route TABLE no longer matches their code.
+        #: Method bodies reload in place; paths do not.
+        self._restart_required: set[str] = set()
+        #: plugin_id -> get_router source as it was when mounted.
+        self._router_source: dict[str, str | None] = {}
+        #: plugin_id -> the template object its MOUNTED routes are closed over,
+        #: kept across an uninstall. FastAPI cannot unmount a route, so after an
+        #: uninstall the handlers are still in the app and still bound to that
+        #: object; dropping the only reference to it left a REINSTALL unable to
+        #: reach the thing it had to update.
+        self._orphaned_template: dict[str, FreeSDNPlugin] = {}
+        # Populated by load_all_plugins(): plugin_ids the DB reports as active
+        # whose package is not on disk. Read by the lifespan to degrade the
+        # subsystem rather than let them look healthy while doing nothing.
+        self.missing_on_disk: list[str] = []
         # NOTE: per-plugin lifecycle mutex. Install / upgrade /
         # uninstall / enable / disable for the same plugin_id must NOT
         # interleave — concurrent ZIP extraction into the same dir, or a
@@ -143,29 +269,7 @@ class PluginLoader:
         """
         from app.models.plugins import InstalledPlugin
 
-        if isinstance(source, UploadFile):
-            chunks: list[bytes] = []
-            total = 0
-            while True:
-                chunk = await source.read(1024 * 1024)
-                if not chunk:
-                    break
-                total += len(chunk)
-                if total > MAX_ZIP_SIZE:
-                    raise PluginLoadError(
-                        f"Plugin archive too large ({total} bytes). "
-                        f"Maximum size is {MAX_ZIP_SIZE // (1024 * 1024)} MB."
-                    )
-                chunks.append(chunk)
-            raw = b"".join(chunks)
-        else:
-            raw = source
-
-        if len(raw) > MAX_ZIP_SIZE:
-            raise PluginLoadError(
-                f"Plugin archive too large ({len(raw)} bytes). "
-                f"Maximum size is {MAX_ZIP_SIZE // (1024 * 1024)} MB."
-            )
+        raw = await _read_plugin_source(source)
 
         import tempfile
 
@@ -208,6 +312,7 @@ class PluginLoader:
                 raise PluginLoadError("No plugin.yaml found in ZIP archive")
 
             manifest = PluginManifest.from_yaml(str(manifest_path))
+            _check_core_compatibility(manifest)
             plugin_dest = PLUGIN_DIR / manifest.id
 
             # NOTE: serialise lifecycle operations from this point
@@ -252,9 +357,37 @@ class PluginLoader:
                 self._plugin_paths[manifest.id] = added_paths
                 self._plugin_classes[manifest.id] = plugin_cls
 
+                # Reinstalling over a plugin whose routes are already mounted:
+                # let the EXISTING template adopt the new code, so the handlers
+                # closed over it start running the upgrade immediately. Records
+                # whether a restart is still needed for a changed route table.
+                self._restart_required.discard(manifest.id)
+                if manifest.id in self._registered_routes:
+                    # The object the mounted handlers are closed over. Normally
+                    # that is the live template; after an uninstall ``_loaded``
+                    # no longer has it, because uninstall drops the entry while
+                    # DELIBERATELY keeping ``_registered_routes`` (FastAPI cannot
+                    # unmount, and forgetting would mount a second copy of every
+                    # route). Reading ``_loaded`` directly therefore raised
+                    # KeyError and turned every install-uninstall-reinstall into
+                    # a 500 -- for any plugin that had ever served a request.
+                    bound = self.mounted_template(manifest.id)
+                    if bound is None:
+                        # Routes are mounted and nothing here can reach what they
+                        # point at. Say so rather than report a live upgrade.
+                        self._restart_required.add(manifest.id)
+                    else:
+                        self._loaded[manifest.id] = bound
+                        if not self.adopt_new_code(manifest.id, plugin_instance):
+                            self._restart_required.add(manifest.id)
+                        # Keep serving the object the routes point at.
+                        plugin_instance = self._loaded[manifest.id]
+                    self._orphaned_template.pop(manifest.id, None)
+
                 # Call on_install lifecycle hook
                 try:
-                    await plugin_instance.on_install(db)
+                    async with supervisor.guard(manifest.id, "lifecycle", record_only=True):
+                        await plugin_instance.on_install(db)
                 except Exception as exc:
                     logger.warning("Plugin %s on_install raised: %s", manifest.id, exc)
 
@@ -313,13 +446,32 @@ class PluginLoader:
             plugin_instance = self._loaded.get(plugin_id)
             if plugin_instance:
                 try:
-                    await plugin_instance.on_uninstall(db)
+                    async with supervisor.guard(plugin_id, "lifecycle", record_only=True):
+                        await plugin_instance.on_uninstall(db)
                 except Exception as exc:
                     logger.warning("Plugin %s on_uninstall raised: %s", plugin_id, exc)
 
+                if plugin_id in self._registered_routes:
+                    # Its handlers are still mounted and still closed over this
+                    # object, so a later reinstall has to be able to update it.
+                    self._orphaned_template[plugin_id] = plugin_instance
                 del self._loaded[plugin_id]
                 self._plugin_classes.pop(plugin_id, None)
-                self._registered_routes.discard(plugin_id)
+                # A reinstall deserves a clean slate: carrying a quarantine
+                # across an uninstall would keep punishing the replacement for
+                # what its predecessor did.
+                supervisor.reset(plugin_id)
+                # NOT discarded. FastAPI cannot unmount a route, so after an
+                # uninstall the plugin's routes are still in the app; forgetting
+                # that made a REINSTALL mount a SECOND copy of every one of
+                # them. FastAPI serves the first match, which is the ORIGINAL
+                # handler, so the reinstalled plugin kept running its old code
+                # while the UI showed the new version -- and each cycle grew the
+                # route table permanently.
+                #
+                # Leaving the entry is safe: plugin_route_guard already answers
+                # 410 for a plugin that is not active for the caller's
+                # organization, which is exactly what an uninstalled one is.
 
             # Clean up sys.path entries added for this plugin
             for p in self._plugin_paths.pop(plugin_id, []):
@@ -392,7 +544,8 @@ class PluginLoader:
         plugin_instance = self._loaded.get(plugin_id)
         if plugin_instance:
             try:
-                await plugin_instance.on_upgrade(from_version, db)
+                async with supervisor.guard(plugin_id, "lifecycle", record_only=True):
+                    await plugin_instance.on_upgrade(from_version, db)
             except Exception as exc:
                 logger.warning("Plugin %s on_upgrade raised: %s", plugin_id, exc)
 
@@ -415,10 +568,23 @@ class PluginLoader:
         records = result.scalars().all()
 
         loaded = []
+        # Plugins the database says are installed and active but whose files are
+        # not on disk. That is not a warning-and-carry-on situation: the routes
+        # are gone, on_event never fires, and the UI still shows the plugin as
+        # running. The lifespan reads this to degrade the subsystem so /health
+        # says so out loud.
+        self.missing_on_disk = []
         for record in records:
             plugin_dir = Path(record.plugin_dir)
             if not plugin_dir.exists():
-                logger.warning("Plugin dir missing for %s: %s", record.plugin_id, plugin_dir)
+                logger.warning(
+                    "Plugin %s is active in the database but its files are missing at %s. "
+                    "It will NOT run. This is what an ephemeral PLUGIN_DIR looks like after "
+                    "a container is recreated; check that /data/plugins is on a named volume.",
+                    record.plugin_id,
+                    plugin_dir,
+                )
+                self.missing_on_disk.append(record.plugin_id)
                 continue
             try:
                 manifest = PluginManifest.from_yaml(str(plugin_dir / "plugin.yaml"))
@@ -437,8 +603,42 @@ class PluginLoader:
 
         return loaded
 
-    def register_plugin_routes(self, app: FastAPI, plugin_id: str) -> None:
-        """Register a loaded plugin's API routes into the running FastAPI app."""
+    def restart_required(self, plugin_id: str) -> bool:
+        """Does this plugin need an API restart to serve its current code?
+
+        False for the ordinary case now that code reloads in place. True only
+        when the new version changed its route table, because paths were fixed
+        when the router was mounted.
+        """
+        return plugin_id in self._restart_required
+
+    def mounted_template(self, plugin_id: str) -> FreeSDNPlugin | None:
+        """The object this plugin's MOUNTED route handlers are closed over.
+
+        Normally the live template. After an uninstall it is the orphan: the
+        handlers are still in the app -- FastAPI cannot unmount a route -- and
+        still bound to the object that was loaded then, while ``_loaded`` has
+        dropped it. A reinstall has to update THAT object, so it must be able to
+        find it; reading ``_loaded`` directly raised KeyError and made every
+        install-uninstall-reinstall cycle a 500 for any plugin that had ever
+        served a request.
+
+        None means the routes are mounted and nothing here can reach what they
+        point at, which is the one case that genuinely needs a restart.
+        """
+        return self._loaded.get(plugin_id) or self._orphaned_template.get(plugin_id)
+
+    def register_plugin_routes(
+        self, app: FastAPI, plugin_id: str, *, replace: bool = False
+    ) -> None:
+        """Mount a loaded plugin's API routes into the running FastAPI app.
+
+        ``replace`` is accepted and deliberately does nothing to the route
+        TABLE -- see :meth:`adopt_new_code`, which is what actually makes an
+        upgrade take effect.
+        """
+        if plugin_id in self._registered_routes and not replace:
+            return
         if plugin_id in self._registered_routes:
             return
         plugin = self._loaded.get(plugin_id)
@@ -447,6 +647,7 @@ class PluginLoader:
         router = plugin.get_router()
         if router.routes:
             prefix = self.get_route_prefix(plugin_id)
+            _supervise_router(router, plugin_id)
             app.include_router(
                 router,
                 prefix=prefix,
@@ -454,10 +655,125 @@ class PluginLoader:
                 dependencies=[Depends(self._build_route_guard(plugin_id))],
             )
             self._registered_routes.add(plugin_id)
+            self._route_shape[plugin_id] = _route_shape(router)
+            # Captured NOW, while the old file is still on disk. Reading it
+            # later is too late: an upgrade replaces plugin.py at the same
+            # path, so inspect.getsource on the OLD class returns the NEW
+            # file and every comparison says "unchanged".
+            self._router_source[plugin_id] = _source_of(plugin.__class__.get_router)
+            # The trailing-slash normalizer caches the route table on first
+            # request and would never see these. Without this, a plugin
+            # installed into a running instance answers /my-plugin/ and 404s on
+            # /my-plugin -- and the scaffold's own nav_items path is the bare
+            # form, so the first thing an author clicks after installing is the
+            # one spelling that fails.
+            invalidate_route_cache()
             logger.info("Registered routes for plugin %s at %s", plugin_id, prefix)
 
+    def adopt_new_code(self, plugin_id: str, new_instance: FreeSDNPlugin) -> bool:
+        """Make already-mounted routes run the NEW version's code.
+
+        A plugin's REST handlers are closures over the TEMPLATE instance built
+        when the plugin was first loaded. Reinstalling or upgrading replaced the
+        files and built a new template, but the mounted closures still pointed
+        at the old object: new code on disk, new version in the UI, old
+        behaviour on every endpoint. The only advertised remedy was "restart the
+        API", which on an appliance means dropping every other plugin, every
+        websocket and every in-flight request to pick up a one-line fix.
+
+        The fix is to let the EXISTING object adopt the new class, rather than
+        trying to re-point the routes at a new object. Rebinding ``__class__``
+        keeps the identity every closure already captured while sending method
+        lookup to the new code, so the handlers are running the upgrade the
+        moment this returns.
+
+        Route removal was the other candidate and was rejected on purpose:
+        fastapi wraps every ``include_router`` in an opaque ``_IncludedRouter``
+        whose children are not reachable as ``.routes``, so unmounting means
+        reaching into internals that this codebase has already been bitten by
+        once across a version bump.
+
+        Returns True when the reload is COMPLETE. It is not complete when the
+        new version changed its route table: paths and methods were fixed at
+        mount time, so an added, removed or renamed endpoint still needs a
+        restart. Callers report that rather than leave it to be discovered.
+        """
+        old = self._loaded.get(plugin_id)
+        if old is None or old is new_instance:
+            return True
+
+        # What reloads and what does not, measured rather than assumed:
+        #
+        #   METHOD bodies reload. Verified live -- a settings method changed to
+        #   return 777 and then 888 was picked up on the next request each time,
+        #   with no restart.
+        #
+        #   ROUTE HANDLER bodies do NOT. ``get_router`` builds its handlers as
+        #   closures once, at mount time, and rebinding the class does not
+        #   rewrite a function object that already exists.
+        #
+        # So the question that decides whether a restart is still needed is
+        # narrow and answerable: did ``get_router`` itself change? Comparing its
+        # source is exact for that, and it subsumes a changed route table.
+        mounted_source = self._router_source.get(plugin_id)
+        changed_routes = _get_router_changed(mounted_source, new_instance.__class__)
+
+        try:
+            old.__class__ = new_instance.__class__
+            # Carry the new instance's freshly-initialised state across, then
+            # restore the bindings the running object owns: ctx and event
+            # subscriptions belong to THIS object's lifecycle, and replacing
+            # them would orphan live subscriptions.
+            ctx = getattr(old, "_ctx", None)
+            subs = getattr(old, "_event_subscription_ids", None)
+            old.__dict__.update(
+                {k: v for k, v in new_instance.__dict__.items() if not k.startswith("_ctx")}
+            )
+            if ctx is not None:
+                old._ctx = ctx
+            if subs is not None:
+                old._event_subscription_ids = subs
+        except TypeError:
+            # Incompatible layout (a plugin using __slots__, say). Nothing is
+            # broken; the reload just did not happen.
+            logger.warning(
+                "Plugin %s could not adopt new code in place; a restart is required",
+                plugin_id,
+            )
+            return False
+
+        if not changed_routes:
+            # Handlers are equivalent, so what is mounted now matches this
+            # version. Refresh the baseline or the next upgrade compares
+            # against a version nobody is running.
+            self._router_source[plugin_id] = _source_of(new_instance.__class__.get_router)
+        logger.info("Plugin %s adopted new code without a restart", plugin_id)
+        if changed_routes:
+            logger.info(
+                "Plugin %s changed get_router(); its HTTP handlers still need a restart",
+                plugin_id,
+            )
+            return False
+        return True
+
+    def routes_changed(self, plugin_id: str, plugin: FreeSDNPlugin) -> bool:
+        """Would this version need a restart to serve its route table?"""
+        before = self._route_shape.get(plugin_id)
+        if before is None:
+            return False
+        try:
+            return _route_shape(plugin.get_router()) != before
+        except Exception:  # noqa: BLE001
+            return True
+
     def unregister_plugin_routes(self, plugin_id: str) -> None:
-        """FastAPI route removal is restart-only; keep an explicit no-op stub."""
+        """FastAPI route removal is restart-only; keep an explicit no-op stub.
+
+        Removing routes would mean walking into ``_IncludedRouter``, whose
+        children fastapi does not expose. :meth:`adopt_new_code` reloads the
+        code behind the existing routes instead, which covers everything except
+        a changed route TABLE.
+        """
         logger.debug("Plugin route unregistration requested for %s (restart required)", plugin_id)
 
     async def load_plugin(self, plugin_id: str, db: AsyncSession) -> FreeSDNPlugin:
@@ -468,7 +784,12 @@ class PluginLoader:
 
         plugin_dir = Path(record.plugin_dir)
         if not plugin_dir.exists():
-            raise PluginLoadError(f"Plugin directory missing for '{plugin_id}': {plugin_dir}")
+            # Deliberately no absolute path: this is the one PluginLoadError
+            # that carried one, and these messages are surfaced to the caller.
+            logger.error("Plugin directory missing for %s: %s", plugin_id, plugin_dir)
+            raise PluginLoadError(
+                f"Plugin files for '{plugin_id}' are missing on disk. Reinstall the plugin."
+            )
 
         manifest = PluginManifest.from_yaml(str(plugin_dir / "plugin.yaml"))
         # Serialize the load + registry mutation under the per-plugin lifecycle
@@ -655,6 +976,27 @@ class PluginLoader:
             session: Any = Depends(get_session),
             current_user: Any = Depends(get_current_user_optional),
         ) -> Any:
+            # Refuse a quarantined plugin's routes before doing any work. Its
+            # handlers are the code that got it quarantined; running them again
+            # on every request is exactly what the budget exists to stop. 503
+            # with Retry-After, because this is temporary by construction and a
+            # caller should know when to come back.
+            from app.plugins.supervision import PluginState, supervisor
+
+            health = supervisor.health(plugin_id)
+            if health.state is PluginState.QUARANTINED:
+                import time as _time
+
+                retry_after = max(1, int(health.quarantined_until - _time.monotonic()))
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=(
+                        f"Plugin '{plugin_id}' is temporarily quarantined after repeated "
+                        f"failures ({health.quarantine_reason or 'unknown'})."
+                    ),
+                    headers={"Retry-After": str(retry_after)},
+                )
+
             runtime: FreeSDNPlugin | None = None
             if current_user and getattr(current_user, "organization_id", None):
                 runtime = self.get_active_for_org(plugin_id, current_user.organization_id)
@@ -714,7 +1056,17 @@ class PluginLoader:
 
             site_token = current_user_var.set(current_user) if current_user else None
             try:
-                yield
+                # Its own session for the duration of the request. Every SDK
+                # object used to share the one captured at on_start, so two
+                # overlapping calls into a plugin raced on a single asyncpg
+                # connection and one failed with "concurrent operations are not
+                # permitted". Not the REQUEST's session: the SDK commits its own
+                # writes, and committing the request's would land a half-finished
+                # request transaction.
+                from app.plugins.sdk import plugin_session_scope
+
+                async with plugin_session_scope():
+                    yield
             finally:
                 reset_request_plugin_runtime(token)
                 if caller_token is not None:
@@ -726,6 +1078,111 @@ class PluginLoader:
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────
+
+
+def _source_of(func: Any) -> str | None:
+    """The source of a function, read fresh from disk.
+
+    ``linecache`` memoises by filename and a plugin upgrade replaces the file at
+    the same path, so without invalidating it ``getsource`` happily returns the
+    previous version's lines.
+    """
+    import inspect
+    import linecache
+
+    try:
+        path = inspect.getsourcefile(func)
+        if path:
+            linecache.checkcache(path)
+        return inspect.getsource(func)
+    except (OSError, TypeError):
+        return None
+
+
+def _get_router_changed(mounted_source: str | None, new_cls: type) -> bool:
+    """Did the plugin's ``get_router`` change since its routes were mounted?
+
+    The one thing an in-place code swap cannot fix. Rebinding ``__class__``
+    redirects method lookup on the existing object, so methods reload; the route
+    handlers are function objects ``get_router`` already produced, and those
+    keep running whatever they were compiled from.
+
+    Compared against source captured at MOUNT time, not against the old class:
+    an upgrade overwrites plugin.py at the same path, so reading the old class's
+    source afterwards returns the new file and every comparison reports
+    "unchanged" -- which is exactly the under-report that would tell an operator
+    no restart was needed while their endpoints served old handlers.
+
+    Unknown source counts as changed. Over-reporting a restart is recoverable;
+    under-reporting it means running old code believing you upgraded.
+    """
+    if mounted_source is None:
+        return True
+    new_source = _source_of(new_cls.get_router)
+    if new_source is None:
+        return True
+    return mounted_source != new_source
+
+
+def _route_shape(router: Any) -> frozenset[tuple[str, str]]:
+    """The (path, method) pairs a router exposes.
+
+    Compared before and after an upgrade to answer one question: did the route
+    TABLE change? Method bodies reload in place; paths were fixed when the
+    router was mounted, so a new or renamed endpoint is the one case that still
+    needs a restart.
+    """
+    shape: set[tuple[str, str]] = set()
+    for route in getattr(router, "routes", []) or []:
+        path = str(getattr(route, "path", "") or "")
+        for method in sorted(getattr(route, "methods", None) or []):
+            shape.add((path, str(method)))
+    return frozenset(shape)
+
+
+def _supervise_router(router: Any, plugin_id: str) -> None:
+    """Route every plugin endpoint through the supervisor.
+
+    Wrapping happens BEFORE ``include_router`` on purpose: FastAPI builds each
+    route's dependant by inspecting the endpoint's signature, and
+    ``functools.wraps`` sets ``__wrapped__`` so ``inspect.signature`` follows
+    through to the original. Wrapping afterwards would leave the dependant
+    pointing at the unwrapped callable and the supervision would simply not run.
+
+    The route guard already REFUSES a quarantined plugin before any work. This
+    is the other half: it observes the OUTCOME, so route failures count toward
+    the same budget as event failures. Without it a plugin could 500 on every
+    request indefinitely and never be quarantined, because nothing was counting.
+    """
+    import functools
+
+    for route in getattr(router, "routes", []):
+        endpoint = getattr(route, "endpoint", None)
+        if endpoint is None or getattr(endpoint, "__freesdn_supervised__", False):
+            continue
+
+        @functools.wraps(endpoint)
+        async def supervised(*args: Any, __endpoint: Any = endpoint, **kwargs: Any) -> Any:
+            try:
+                async with supervisor.guard(plugin_id, "route"):
+                    return await __endpoint(*args, **kwargs)
+            except PluginNotReady as exc:
+                # 503, not 500. The platform did not break -- the thing this
+                # plugin talks to is unavailable, and a caller told "internal
+                # server error" goes looking for a bug in FreeSDN. Retry-After
+                # carries the supervisor's own backoff, so a client that honours
+                # it stops asking at exactly the rate the platform intends.
+                retry = supervisor.health(plugin_id).retry_after
+                headers = {"Retry-After": str(int(retry))} if retry else None
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Plugin '{plugin_id}' is waiting on a dependency: {exc.reason}",
+                    headers=headers,
+                ) from exc
+
+        supervised.__freesdn_supervised__ = True  # type: ignore[attr-defined]
+        route.endpoint = supervised
+
 
 plugin_loader = PluginLoader()
 
@@ -886,6 +1343,7 @@ def _load_plugin_class(
     """
     from app.plugins.sandbox import (
         PluginSecurityError,
+        explain_missing_name,
         plugin_import_guard,
         restrict_plugin_builtins,
     )
@@ -901,7 +1359,13 @@ def _load_plugin_class(
             f"Entry point '{manifest.entry_point}' escapes plugin directory"
         ) from exc
     if not entry_path.exists():
-        raise PluginLoadError(f"Entry point '{manifest.entry_point}' not found in {plugin_dir}")
+        # The manifest name is the author's own string and is the actionable
+        # half; the absolute server path is not, and these messages now reach an
+        # API response rather than only a log.
+        logger.error("Entry point %r not found for plugin in %s", manifest.entry_point, plugin_dir)
+        raise PluginLoadError(
+            f"Entry point '{manifest.entry_point}' is not present in the plugin package"
+        )
 
     # Add plugin venv site-packages to sys.path if it exists
     # Append (not insert) to avoid shadowing core application modules
@@ -938,6 +1402,10 @@ def _load_plugin_class(
             spec.loader.exec_module(mod)
     except PluginSecurityError:
         raise  # Re-raise security violations as-is
+    except NameError as exc:
+        raise PluginLoadError(
+            explain_missing_name(exc, manifest.id) or f"Failed to load plugin {manifest.id}: {exc}"
+        ) from exc
     except Exception as exc:
         raise PluginLoadError(f"Failed to load plugin {manifest.id}: {exc}") from exc
 
@@ -947,7 +1415,19 @@ def _load_plugin_class(
     if not issubclass(cls, FreeSDNPlugin):
         raise PluginLoadError(f"Class '{manifest.class_name}' must extend FreeSDNPlugin")
 
-    instance = cls()
+    # Constructing the instance runs the plugin's __init__, which is plugin code
+    # under the same restricted builtins as the module body -- and was NOT
+    # covered by the handling above, so a withheld builtin used in __init__
+    # surfaced as a bare "name 'type' is not defined" from an install endpoint.
+    try:
+        instance = cls()
+    except NameError as exc:
+        raise PluginLoadError(
+            explain_missing_name(exc, manifest.id)
+            or f"Failed to construct {manifest.class_name}: {exc}"
+        ) from exc
+    except Exception as exc:
+        raise PluginLoadError(f"Failed to construct {manifest.class_name}: {exc}") from exc
     instance._plugin_dir = plugin_dir
     instance._plugin_manifest_data = manifest
     return instance, cls, added_paths

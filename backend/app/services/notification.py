@@ -870,13 +870,17 @@ class WebhookProvider(NotificationProvider):
                 ).hexdigest()
                 headers["X-Signature"] = f"sha256={signature}"
 
-            # DNS-rebinding-safe request
+            # DNS-rebinding-safe request. The allowlist is the same
+            # deploy-owner setting the push providers use: an internal webhook
+            # receiver was unreachable here too, which is the pre-existing half
+            # of the problem ntfy and Gotify made obvious.
             response = await safe_http_request(
                 "POST",
                 self.url,
                 content=body,
                 headers=headers,
                 timeout=30.0,
+                allow_hosts=_notification_allowed_hosts(),
             )
             response.raise_for_status()
 
@@ -938,6 +942,233 @@ class WebhookProvider(NotificationProvider):
         if code in (401, 403):
             return False, f"Webhook rejected the request (HTTP {code}) — check the URL secret"
         return False, f"Webhook returned HTTP {code}"
+
+
+def _notification_allowed_hosts() -> frozenset[str]:
+    """Hosts the deploy owner has declared reachable for notifications.
+
+    Read per call rather than cached at import: an operator who adds their
+    Gotify host should not have to restart the API to use it.
+    """
+    from app.core.config import settings as _settings
+
+    return frozenset(
+        h.strip() for h in (_settings.NOTIFICATION_ALLOWED_HOSTS or "").split(",") if h.strip()
+    )
+
+
+class _PushProvider(NotificationProvider):
+    """Shared plumbing for the small push services.
+
+    Discord, ntfy and Gotify are all "POST JSON at a URL" services that differ
+    only in payload shape and where the credential goes. They were previously
+    reachable only through the notify-hub plugin, which had to bypass the
+    notification system entirely: ``_providers`` is keyed by channel and every
+    dispatcher goes through it, so a plugin doing its own HTTP POST is invisible
+    to alert rules, SLA policies, agent schedules, delivery history, retries and
+    per-user preferences.
+
+    They ride the WEBHOOK channel with distinct ``provider_type`` values, the
+    same way SMTP and Gmail OAuth both ride EMAIL. That means no change to the
+    channel enum, and everything that already dispatches picks them up for free.
+    """
+
+    channel = NotificationChannel.WEBHOOK
+
+    #: Ceiling on the body these services will accept. Each truncates or
+    #: rejects differently and none of them say so clearly, so a long alert
+    #: message is trimmed here rather than silently mangled downstream.
+    MAX_BODY = 1800
+
+    def _trim(self, text: str) -> str:
+        text = text or ""
+        return text if len(text) <= self.MAX_BODY else text[: self.MAX_BODY - 1] + "\u2026"
+
+    async def _post(
+        self,
+        url: str,
+        body: dict[str, Any],
+        headers: dict[str, str] | None = None,
+    ) -> DeliveryResult:
+        try:
+            # safe_http_request, not a raw client: these URLs are
+            # operator-supplied and a notification provider is a perfect SSRF
+            # pivot -- it takes a URL from config and posts to it on a schedule.
+            #
+            # NOTIFICATION_ALLOWED_HOSTS is what makes a SELF-HOSTED ntfy or
+            # Gotify reachable at all. Without it the guard refuses every
+            # private address, and these two are self-hosted by default.
+            response = await safe_http_request(
+                "POST",
+                url,
+                content=json.dumps(body),
+                headers={"Content-Type": "application/json", **(headers or {})},
+                timeout=30.0,
+                allow_hosts=_notification_allowed_hosts(),
+            )
+            response.raise_for_status()
+            return DeliveryResult(
+                success=True,
+                channel=self.channel,
+                status=DeliveryStatus.SENT,
+                message_id=str(uuid4()),
+                provider_response={"status_code": response.status_code},
+                provider=self.provider_type,
+            )
+        except ValueError as e:
+            logger.warning("%s URL blocked (SSRF): %s", self.provider_type, e)
+            return DeliveryResult(
+                success=False,
+                channel=self.channel,
+                status=DeliveryStatus.FAILED,
+                error=f"URL blocked (SSRF): {e}",
+                provider=self.provider_type,
+            )
+        except Exception as e:
+            logger.error("%s delivery failed: %s", self.provider_type, e)
+            return DeliveryResult(
+                success=False,
+                channel=self.channel,
+                status=DeliveryStatus.FAILED,
+                error=str(e),
+                provider=self.provider_type,
+            )
+
+
+class DiscordProvider(_PushProvider):
+    """Discord incoming webhook."""
+
+    provider_type = "discord_webhook"
+
+    #: Discord's own limits. An embed description over 4096 or a title over 256
+    #: is a 400, not a truncation, so the message never arrives at all.
+    MAX_BODY = 4000
+
+    _COLOURS = {
+        "info": 0x3B82F6,
+        "warning": 0xF59E0B,
+        "error": 0xEF4444,
+        "critical": 0xDC2626,
+    }
+
+    def __init__(self, config: dict[str, Any]):
+        super().__init__(config)
+        self.url = config.get("webhook_url") or config.get("url")
+        self.username = config.get("username") or "FreeSDN"
+
+    async def send(self, recipient: str, payload: NotificationPayload) -> DeliveryResult:
+        severity = str((payload.data or {}).get("severity", "info")).lower()
+        embed: dict[str, Any] = {
+            "title": (payload.title or "")[:256],
+            "description": self._trim(payload.body),
+            "color": self._COLOURS.get(severity, self._COLOURS["info"]),
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        if payload.action_url:
+            embed["url"] = payload.action_url
+        # An embed carries the colour band that makes severity readable at a
+        # glance in a busy channel; content would be a wall of grey text.
+        return await self._post(
+            recipient or self.url,
+            {"username": self.username, "embeds": [embed]},
+        )
+
+    async def verify(self) -> tuple[bool, str]:
+        if not self.url:
+            return False, "webhook_url is required"
+        if "discord.com/api/webhooks/" not in self.url and "discordapp.com" not in self.url:
+            return False, "does not look like a Discord webhook URL"
+        return True, "Discord webhook configured"
+
+
+class NtfyProvider(_PushProvider):
+    """ntfy.sh, or a self-hosted ntfy server."""
+
+    provider_type = "ntfy"
+
+    #: ntfy priority is 1-5; FreeSDN severity is four names.
+    _PRIORITY = {"info": 3, "warning": 4, "error": 4, "critical": 5}
+    _TAGS = {
+        "info": ["information_source"],
+        "warning": ["warning"],
+        "error": ["rotating_light"],
+        "critical": ["rotating_light", "sos"],
+    }
+
+    def __init__(self, config: dict[str, Any]):
+        super().__init__(config)
+        # Self-hosting is the norm for ntfy, so the server is configurable and
+        # defaults to the public one rather than being hardcoded to it.
+        self.server = str(config.get("server") or "https://ntfy.sh").rstrip("/")
+        self.topic = config.get("topic")
+        self.token = config.get("token")
+
+    async def send(self, recipient: str, payload: NotificationPayload) -> DeliveryResult:
+        severity = str((payload.data or {}).get("severity", "info")).lower()
+        topic = recipient or self.topic
+        body: dict[str, Any] = {
+            "topic": topic,
+            "title": (payload.title or "")[:250],
+            "message": self._trim(payload.body),
+            "priority": self._PRIORITY.get(severity, 3),
+            "tags": self._TAGS.get(severity, []),
+        }
+        if payload.action_url:
+            body["actions"] = [
+                {
+                    "action": "view",
+                    "label": payload.action_text or "Open",
+                    "url": payload.action_url,
+                }
+            ]
+        headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
+        return await self._post(self.server, body, headers)
+
+    async def verify(self) -> tuple[bool, str]:
+        if not self.topic:
+            return False, "topic is required"
+        if not self.server.startswith(("http://", "https://")):
+            return False, "server must be an http(s) URL"
+        return True, f"ntfy topic {self.topic} on {self.server}"
+
+
+class GotifyProvider(_PushProvider):
+    """Gotify, self-hosted push."""
+
+    provider_type = "gotify"
+
+    #: Gotify priority is an open integer; 0-10 is the conventional band and 8+
+    #: is what most clients treat as "make a noise".
+    _PRIORITY = {"info": 2, "warning": 5, "error": 8, "critical": 10}
+
+    def __init__(self, config: dict[str, Any]):
+        super().__init__(config)
+        self.server = str(config.get("server") or "").rstrip("/")
+        self.token = config.get("token")
+
+    async def send(self, recipient: str, payload: NotificationPayload) -> DeliveryResult:
+        severity = str((payload.data or {}).get("severity", "info")).lower()
+        body = {
+            "title": (payload.title or "")[:100],
+            "message": self._trim(payload.body),
+            "priority": self._PRIORITY.get(severity, 5),
+        }
+        # Token in the header, not the query string: a URL with the token in it
+        # lands in access logs, proxies and error reports.
+        return await self._post(
+            f"{self.server}/message",
+            body,
+            {"X-Gotify-Key": str(self.token or "")},
+        )
+
+    async def verify(self) -> tuple[bool, str]:
+        if not self.server:
+            return False, "server is required"
+        if not self.token:
+            return False, "token is required"
+        if not self.server.startswith(("http://", "https://")):
+            return False, "server must be an http(s) URL"
+        return True, f"Gotify at {self.server}"
 
 
 class TeamsProvider(NotificationProvider):
@@ -2594,6 +2825,63 @@ class NotificationService:
             },
         },
         {
+            "type": "discord_webhook",
+            "name": "Discord",
+            "channel": "webhook",
+            "icon": "message-circle",
+            "config_schema": {
+                "webhook_url": {
+                    "type": "string",
+                    "label": "Webhook URL",
+                    "required": True,
+                    "placeholder": "https://discord.com/api/webhooks/...",
+                },
+                "username": {
+                    "type": "string",
+                    "label": "Display Name",
+                    "required": False,
+                    "default": "FreeSDN",
+                },
+            },
+        },
+        {
+            "type": "ntfy",
+            "name": "ntfy",
+            "channel": "webhook",
+            "icon": "bell",
+            "config_schema": {
+                "server": {
+                    "type": "string",
+                    "label": "Server URL",
+                    "required": False,
+                    "default": "https://ntfy.sh",
+                    "placeholder": "https://ntfy.example.com",
+                },
+                "topic": {
+                    "type": "string",
+                    "label": "Topic",
+                    "required": True,
+                    "placeholder": "freesdn-alerts",
+                },
+                "token": {"type": "password", "label": "Access Token", "required": False},
+            },
+        },
+        {
+            "type": "gotify",
+            "name": "Gotify",
+            "channel": "webhook",
+            "icon": "bell-ring",
+            "config_schema": {
+                "server": {
+                    "type": "string",
+                    "label": "Server URL",
+                    "required": True,
+                    "placeholder": "https://gotify.example.com",
+                },
+                "token": {"type": "password", "label": "Application Token", "required": True},
+            },
+        },
+        {
             "type": "generic_webhook",
             "name": "Generic Webhook",
             "channel": "webhook",
@@ -3287,6 +3575,9 @@ class NotificationService:
             "slack_webhook": SlackProvider,
             "teams_webhook": TeamsProvider,
             "generic_webhook": WebhookProvider,
+            "discord_webhook": DiscordProvider,
+            "ntfy": NtfyProvider,
+            "gotify": GotifyProvider,
             "twilio_sms": TwilioSMSProvider,
             "twilio_whatsapp": TwilioWhatsAppProvider,
             "mailgun": MailgunProvider,

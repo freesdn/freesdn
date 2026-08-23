@@ -66,7 +66,12 @@ SATISFYING_TOKENS = (
     "scope_to_org(",
 )
 
-SCAN_DIRS = ("api", "services", "tasks", "modules", "core")
+# ``plugins`` was missing until 2026-08-22, so the SDK that third-party plugin
+# code queries through was the one directory this guard never looked at. Every
+# DeviceSDK and SiteSDK query returned soft-deleted rows: on the dev estate, 24
+# of 40 devices, and 48 of 59 alerts raised in six hours were about devices the
+# operator had deleted.
+SCAN_DIRS = ("api", "services", "tasks", "modules", "core", "plugins")
 
 _APP = Path(__file__).resolve().parent.parent / "app"
 _BASELINE = Path(__file__).resolve().parent / "soft_delete_guard_baseline.txt"

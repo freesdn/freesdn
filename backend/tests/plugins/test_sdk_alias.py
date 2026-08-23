@@ -8,6 +8,7 @@ real ``app.plugins.sdk`` impls, so the SAME plugin code loads and subclasses
 the real BaseModule-backed base (and thus passes the loader's issubclass
 check). These tests pin that contract.
 """
+
 from __future__ import annotations
 
 import sys

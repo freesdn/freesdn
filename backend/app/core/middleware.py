@@ -1050,6 +1050,25 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
         return response
 
 
+# Bumped whenever routes are added to a RUNNING app, which today means plugin
+# installation. TrailingSlashNormalizeMiddleware builds its path cache lazily on
+# the first request and then never rebuilds it, so routes mounted afterwards are
+# invisible to it: a freshly installed plugin answered /my-plugin/ but 404'd on
+# /my-plugin until the next process restart, which looks exactly like a broken
+# plugin. An int is enough -- the middleware compares the epoch it built at
+# against this one and rebuilds when they differ.
+_ROUTE_EPOCH = 0
+
+
+def invalidate_route_cache() -> None:
+    """Tell the trailing-slash normalizer that the route table has changed.
+
+    Call this after mounting routes on an app that is already serving.
+    """
+    global _ROUTE_EPOCH
+    _ROUTE_EPOCH += 1
+
+
 class TrailingSlashNormalizeMiddleware(BaseHTTPMiddleware):
     """Make trailing-slash spelling client-irrelevant.
 
@@ -1083,10 +1102,12 @@ class TrailingSlashNormalizeMiddleware(BaseHTTPMiddleware):
         # at __init__ time when the middleware is constructed.
         self._slash_paths: set[str] | None = None  # exact paths ending in /
         self._no_slash_paths: set[str] | None = None  # exact paths NOT ending in /
+        self._built_epoch: int = -1  # epoch the caches above were built at
 
     def _ensure_route_caches(self, scope_app: Any) -> None:
-        if self._slash_paths is not None:
+        if self._slash_paths is not None and self._built_epoch == _ROUTE_EPOCH:
             return
+        built_at = _ROUTE_EPOCH  # read once, so a bump mid-build is not lost
         slash: set[str] = set()
         no_slash: set[str] = set()
         try:
@@ -1099,6 +1120,11 @@ class TrailingSlashNormalizeMiddleware(BaseHTTPMiddleware):
             # schema stays correct across versions. Only static (param-less) paths
             # matter here — dynamic routes are matched by Starlette's regex anyway.
             # Generated once per process, then cached on the instance.
+            if self._built_epoch != -1:
+                # Rebuild: fastapi memoises the schema on app.openapi_schema, so
+                # without dropping it the "fresh" read returns the same paths we
+                # already have and the rebuild achieves nothing.
+                scope_app.openapi_schema = None
             for path in scope_app.openapi().get("paths", {}) or {}:
                 if not isinstance(path, str) or "{" in path:
                     continue
@@ -1112,6 +1138,7 @@ class TrailingSlashNormalizeMiddleware(BaseHTTPMiddleware):
             pass
         self._slash_paths = slash
         self._no_slash_paths = no_slash
+        self._built_epoch = built_at
 
     async def dispatch(self, request: Request, call_next):
         path = request.scope.get("path", "")

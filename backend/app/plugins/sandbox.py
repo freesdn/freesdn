@@ -327,6 +327,55 @@ _SAFE_BUILTINS: frozenset[str] = frozenset(
 )
 
 
+def explain_missing_name(exc: NameError, plugin_id: str) -> str | None:
+    """Turn ``name 'type' is not defined`` into something actionable.
+
+    A plugin runs with a restricted ``__builtins__``. When it reaches for one
+    that is withheld, Python raises a plain ``NameError`` naming it, and that
+    is all an author sees -- at INSTALL time, from an API response, about a
+    builtin that exists in every other Python file they have ever written.
+    ``type(exc).__name__`` is a universal idiom and produces exactly this.
+
+    Returns a replacement message, or None if the name is not a builtin we
+    withhold (a genuine typo, which the original message already describes
+    perfectly well).
+    """
+    import builtins as _builtins
+
+    name = getattr(exc, "name", None)
+    if not name:
+        # Older tracebacks do not carry .name; recover it from the text.
+        text = str(exc)
+        if text.startswith("name '") and "' is not defined" in text:
+            name = text.split("'", 2)[1]
+    if not name or name in _SAFE_BUILTINS or not hasattr(_builtins, name):
+        return None
+
+    hint = _BUILTIN_ALTERNATIVES.get(name)
+    return (
+        f"Plugin '{plugin_id}' used the Python builtin '{name}', which plugins "
+        f"do not get. Plugins run with a restricted set of builtins: no dynamic "
+        f"code (eval/exec/compile), no dynamic class creation (type/object), no "
+        f"scope or attribute mutation (globals/vars/setattr)." + (f" {hint}" if hint else "")
+    )
+
+
+#: Where an obvious, equivalent alternative exists, name it. An author who hits
+#: this is usually one edit away and does not need to go reading the policy.
+_BUILTIN_ALTERNATIVES: dict[str, str] = {
+    "type": (
+        "For an exception's class name use exc.__class__.__name__; for a type "
+        "check use isinstance()."
+    ),
+    "object": "Subclass FreeSDNPlugin, or use a dataclass for plain state.",
+    "setattr": "Assign the attribute directly, or hold state in a dict.",
+    "vars": "Use an explicit dict rather than reading an object's namespace.",
+    "globals": "Hold module state in a module-level name, not through globals().",
+    "eval": "There is no supported way to evaluate a string in a plugin.",
+    "exec": "There is no supported way to execute a string in a plugin.",
+}
+
+
 class _PluginImportBlocker(importlib.abc.MetaPathFinder):
     """
     MetaPath finder that refuses imports of OS/process/network modules

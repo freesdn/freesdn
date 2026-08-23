@@ -430,6 +430,41 @@ class Settings(BaseSettings):
     # Example: "n8n.example.net,10.0.0.50"
     FABRIC_WEBHOOK_ALLOWED_HOSTS: str = ""
 
+    # Plugin outbound-HTTP trusted destinations. Exactly the same contract as
+    # FABRIC_WEBHOOK_ALLOWED_HOSTS above, for exactly the same reason, applied
+    # to ``ctx.http`` in the plugin SDK.
+    #
+    # Without this a plugin could only ever reach the PUBLIC internet, which is
+    # close to useless for a self-hosted infrastructure controller: NetBox,
+    # Gotify, Grafana, Home Assistant and Uptime Kuma all live on the
+    # operator's own network -- netbox-sync can reach the public NetBox demo and
+    # not the NetBox in the next rack.
+    #
+    # Deploy-owner controlled and NOT reachable from per-org or operator input,
+    # so a plugin cannot widen its own reach. Entries are still DNS-pinned and
+    # TLS-verified by the SSRF guard, and cloud-metadata endpoints are never
+    # reachable regardless. Empty (default) = public destinations only.
+    # Example: "netbox.lan,10.0.0.50,gotify.internal"
+    PLUGIN_HTTP_ALLOWED_HOSTS: str = ""
+
+    # Notification destinations the deploy owner trusts. Same contract again,
+    # applied to outbound notification providers -- the generic webhook, and the
+    # push services (Discord / ntfy / Gotify).
+    #
+    # This one is load-bearing rather than convenient. Every notification
+    # provider posts through the SSRF guard with no allowlist, so a webhook to
+    # anything on the operator's own network is refused. That was tolerable
+    # while the webhook targets were Slack and Teams, which are public. It stops
+    # being tolerable for ntfy and Gotify: both are self-hosted by default, and
+    # a self-hosted push server that FreeSDN cannot reach is not a notification
+    # channel at all.
+    #
+    # Deploy-owner controlled, not reachable from per-org or operator input.
+    # Entries are still DNS-pinned and TLS-verified, and cloud-metadata
+    # endpoints stay unreachable regardless of what is listed here.
+    # Example: "gotify.internal,ntfy.lan,10.0.0.50"
+    NOTIFICATION_ALLOWED_HOSTS: str = ""
+
     # Optional shared secret for signing outbound ``fabric.webhook`` bodies. When
     # set, every fabric.webhook POST carries ``X-Fabric-Signature: sha256=<hmac>``
     # over the exact request body, so the receiver (n8n/Zapier/…) can verify the

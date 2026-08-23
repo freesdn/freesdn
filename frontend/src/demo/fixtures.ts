@@ -55,6 +55,7 @@ export const sites = [
     organization_id: demoIds.org,
     is_active: true,
     device_count: 42,
+    online_device_count: 38,
     controller_count: 4,
     subnets: [{ cidr: '10.10.0.0/16' }, { cidr: '10.10.40.0/24' }],
     status: 'healthy',
@@ -71,6 +72,7 @@ export const sites = [
     organization_id: demoIds.org,
     is_active: true,
     device_count: 19,
+    online_device_count: 19,
     controller_count: 2,
     subnets: [{ cidr: '10.30.0.0/16' }],
     status: 'warning',
@@ -87,6 +89,7 @@ export const sites = [
     organization_id: demoIds.org,
     is_active: true,
     device_count: 31,
+    online_device_count: 29,
     controller_count: 3,
     subnets: [{ cidr: '10.20.0.0/16' }],
     status: 'healthy',
@@ -178,10 +181,15 @@ export const moduleNavItems = [
 ];
 
 export const dashboardSummary = {
+  // Field names MUST match backend DashboardSummaryResponse
+  // (app/schemas/analytics.py): devices_online / devices_offline /
+  // devices_warning. They were online_devices / offline_devices /
+  // warning_devices here, which no consumer reads, so the demo dashboard
+  // rendered "0/8 Online" with seven of eight devices up.
   total_devices: devices.length,
-  online_devices: devices.filter((d) => d.status === 'online').length,
-  offline_devices: 0,
-  warning_devices: devices.filter((d) => d.status === 'warning').length,
+  devices_online: devices.filter((d) => d.status === 'online').length,
+  devices_offline: 0,
+  devices_warning: devices.filter((d) => d.status === 'warning').length,
   total_sites: sites.length,
   total_controllers: controllers.length,
   active_alerts: alerts.filter((a) => a.status === 'active').length,
@@ -199,9 +207,9 @@ export const enterpriseAnalytics = {
   total_sites: sites.length,
   device_counts: {
     total: devices.length,
-    online: dashboardSummary.online_devices,
-    offline: dashboardSummary.offline_devices,
-    warning: dashboardSummary.warning_devices,
+    online: dashboardSummary.devices_online,
+    offline: dashboardSummary.devices_offline,
+    warning: dashboardSummary.devices_warning,
   },
   fleet: {
     total: devices.length,

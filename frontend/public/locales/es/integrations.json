@@ -169,6 +169,8 @@
       "unknownFailure": "Fallo desconocido",
       "finalAttempt": "Último intento: {{time}}",
       "replayed": "Reintentado: {{time}}"
-    }
+    },
+    "needsPlugin": "Requiere un complemento",
+    "useNotifications": "Usa Notificaciones"
   }
 }
