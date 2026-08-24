@@ -16,7 +16,6 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.discovered_hosts import (

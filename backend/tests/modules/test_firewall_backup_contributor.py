@@ -66,37 +66,37 @@ def test_protocol() -> None:
 
 
 def _dev(site, **kw):
-    base = dict(
-        id=uuid4(), site_id=site, controller_id=None, name="FW-1",
-        description=None, device_type="firewall", ip_address="10.0.0.1",
-        port=443, vendor="opnsense", model="DEC740", firmware_version="24.1",
-        serial_number="S1", supports_ids=True, supports_vpn=True,
-        default_policy="deny", settings={"tz": "UTC"},
-    )
+    base = {
+        "id": uuid4(), "site_id": site, "controller_id": None, "name": "FW-1",
+        "description": None, "device_type": "firewall", "ip_address": "10.0.0.1",
+        "port": 443, "vendor": "opnsense", "model": "DEC740", "firmware_version": "24.1",
+        "serial_number": "S1", "supports_ids": True, "supports_vpn": True,
+        "default_policy": "deny", "settings": {"tz": "UTC"},
+    }
     base.update(kw)
     return SimpleNamespace(**base)
 
 
 def _rule(dev_id, **kw):
-    base = dict(
-        id=uuid4(), device_id=dev_id, name="Allow HTTP", description=None,
-        rule_order=100, source_address="any", source_port=None,
-        source_zone="wan", dest_address="10.0.0.0/24", dest_port="80",
-        dest_zone="lan", protocol="tcp", action="allow", log_enabled=True,
-        is_enabled=True,
-    )
+    base = {
+        "id": uuid4(), "device_id": dev_id, "name": "Allow HTTP", "description": None,
+        "rule_order": 100, "source_address": "any", "source_port": None,
+        "source_zone": "wan", "dest_address": "10.0.0.0/24", "dest_port": "80",
+        "dest_zone": "lan", "protocol": "tcp", "action": "allow", "log_enabled": True,
+        "is_enabled": True,
+    }
     base.update(kw)
     return SimpleNamespace(**base)
 
 
 def _gw(org, **kw):
-    base = dict(
-        id=uuid4(), org_id=org, site_id=None, device_id=None,
-        name="OPN-Conn", description=None, vendor="opnsense",
-        host="fw.example.com", port=443, verify_ssl=False,
-        sync_enabled=True, sync_interval_seconds=300, capabilities=["rules"],
-        settings={"poll": 30},
-    )
+    base = {
+        "id": uuid4(), "org_id": org, "site_id": None, "device_id": None,
+        "name": "OPN-Conn", "description": None, "vendor": "opnsense",
+        "host": "fw.example.com", "port": 443, "verify_ssl": False,
+        "sync_enabled": True, "sync_interval_seconds": 300, "capabilities": ["rules"],
+        "settings": {"poll": 30},
+    }
     base.update(kw)
     return SimpleNamespace(**base)
 

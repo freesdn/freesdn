@@ -73,6 +73,10 @@ from app.services.remote_agent import (
 
 logger = logging.getLogger(__name__)
 
+#: How long the agent may take on a task dispatched through this endpoint.
+#: Bounded because the value reaches asyncio.wait_for on the agent side.
+_TASK_DISPATCH_TIMEOUT_SECONDS = 300
+
 router = APIRouter()
 
 
@@ -634,6 +638,73 @@ async def create_task(
     )
 
     await session.commit()
+
+    # DISPATCH IT. This endpoint used to INSERT the row and stop, which is the
+    # same bug POST /discovery/agent-scan had and had fixed: the only consumer
+    # of a PENDING AgentTask is GET /agents/{id}/tasks/pending, documented as
+    # "called by the agent process to poll for work" -- and the shipped agent
+    # never calls it. It wires ws_client.on_command straight to its
+    # TaskExecutor and receives work exclusively over the socket. There is no
+    # poller and there never was.
+    #
+    # So a task created here sat at PENDING for ever. Confirmed against a live
+    # daemon: POST /agents/{id}/tasks -> 200, and the task was still "pending"
+    # thirty-six seconds later with the agent connected and heartbeating.
+    from app.models.agents import AgentTaskStatus
+    from app.services.remote_agent import AgentCommand, AgentCommandType
+
+    registry = await get_agent_registry(session)
+    connection = registry.get_connection_for_site(agent.site_id)
+    if connection is None or connection.info.agent_id != str(agent.id):
+        # Left PENDING deliberately rather than failed: the agent may reconnect,
+        # and a scheduled_at task is not late yet. The caller is told plainly
+        # rather than being handed a task id that will never move.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Agent has no active WebSocket connection (DB status: {agent.status}); "
+                "the task was recorded but cannot be delivered"
+            ),
+        )
+
+    try:
+        command_type = AgentCommandType(str(task.task_type))
+    except ValueError:
+        # An AgentTaskType with no AgentCommandType twin. The two vocabularies
+        # overlap but are not identical, and sending a name the agent has no
+        # handler for only earns an "Unknown command type" report.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Task type {str(task.task_type)!r} cannot be dispatched to an agent",
+        )
+
+    # Register BEFORE sending. This is what makes the agent's action_result and
+    # scan_progress reports mirror back into the agent_tasks row -- without it
+    # the command runs on the agent and the task sits at PENDING for ever, which
+    # is indistinguishable from never having been dispatched at all.
+    registry.register_interactive_task(str(task.id))
+    try:
+        await connection.send_command(
+            AgentCommand(
+                id=str(task.id),
+                type=command_type,
+                payload=data.task_data or {},
+                priority=data.priority,
+                timeout_seconds=float(_TASK_DISPATCH_TIMEOUT_SECONDS),
+            ),
+            wait_result=False,
+        )
+    except Exception as exc:
+        registry.unregister_interactive_task(str(task.id))
+        task.status = AgentTaskStatus.FAILED
+        task.error_message = f"Could not deliver to agent: {exc}"
+        await session.commit()
+        logger.warning("Task %s could not be delivered to agent %s: %s", task.id, agent_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not deliver the task to the agent: {exc}",
+        ) from exc
+
     return TaskResponse.model_validate(task)
 
 

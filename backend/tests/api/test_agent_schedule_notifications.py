@@ -21,16 +21,16 @@ import pytest
 
 def _make_schedule(**overrides):
     """Build a SimpleNamespace that quacks like AgentSchedule for the helper."""
-    base = dict(
-        id=uuid4(),
-        name="test-sched",
-        cron="0 * * * *",
-        site_id=uuid4(),
-        organization_id=uuid4(),
-        notification_channels={"email": {"to": ["op@example.test"]}},
-        notify_on_failure=False,
-        notify_on_new_devices=0,
-    )
+    base = {
+        "id": uuid4(),
+        "name": "test-sched",
+        "cron": "0 * * * *",
+        "site_id": uuid4(),
+        "organization_id": uuid4(),
+        "notification_channels": {"email": {"to": ["op@example.test"]}},
+        "notify_on_failure": False,
+        "notify_on_new_devices": 0,
+    }
     base.update(overrides)
     return SimpleNamespace(**base)
 

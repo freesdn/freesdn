@@ -135,7 +135,7 @@ async def test_ok_when_dry_run_completes(patched) -> None:
     _patch_session(monkeypatch, [org], {org.id: backup})
 
     fake_job = SimpleNamespace(id=uuid4(), status="completed")
-    svc = _patch_service(monkeypatch, restore_side_effect=lambda **kw: fake_job)
+    svc = _patch_service(monkeypatch, restore_side_effect=lambda **_kw: fake_job)
 
     # AsyncMock with a return value via side_effect=callable doesn't await;
     # use return_value for the happy path instead.

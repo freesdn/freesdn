@@ -481,3 +481,253 @@ class TrueNASAdapter(BaseAdapter):
             err = status.get("error") or status.get("exception") or state
             raise AdapterError(f"TrueNAS upload job {job_id} did not succeed: {err}")
         return {"job_id": job_id, "path": dest, "size": len(blob), "state": state}
+
+    # ------------------------------------------------------------------
+    # Data plane — TrueNAS as a backup destination
+    # ------------------------------------------------------------------
+    #
+    # These deliberately do NOT carry the ``force`` gate that ``upload_file``
+    # does, and the distinction is the whole point rather than a shortcut.
+    #
+    # ``upload_file`` is reached from the Fabric staged-apply path: an
+    # automation or a connection decides to write to an appliance, and the
+    # operator has not necessarily seen it. The dual gate exists so that class
+    # of write cannot happen unreviewed.
+    #
+    # These are reached only when an operator has explicitly created a
+    # StorageLocation pointing at this appliance and a dataset -- the same act
+    # of authorisation as configuring an S3 bucket or an SFTP host, which no
+    # one routes through device staging either. Nothing here mutates appliance
+    # CONFIGURATION; they read, size, write and remove files inside a dataset
+    # the operator nominated.
+    #
+    # Keeping them separate is what preserves the invariant. ``force=True``
+    # still arrives at ``upload_file`` from exactly one place, and a test
+    # asserts it.
+
+    async def put_data_file(
+        self, *, dataset_path: str, filename: str, blob: bytes
+    ) -> dict[str, Any]:
+        """Write a backup artifact into an operator-nominated dataset."""
+        return await self._data_plane_write(dataset_path, filename, blob)
+
+    async def get_data_file(self, *, dataset_path: str, filename: str) -> bytes:
+        """Read a backup artifact back. The half that makes this a destination."""
+        api = self._require_ws()
+        return await api.download_blob(self._safe_join(dataset_path, filename))
+
+    async def stat_data_file(self, *, dataset_path: str, filename: str) -> dict[str, Any] | None:
+        """Size and metadata, or None when it is not there."""
+        api = self._require_ws()
+        return await api.stat_path(self._safe_join(dataset_path, filename))
+
+    async def delete_data_file(self, *, dataset_path: str, filename: str) -> bool:
+        """Remove an artifact. False when there was nothing to remove."""
+        api = self._require_ws()
+        return await api.unlink_path(self._safe_join(dataset_path, filename))
+
+    def _require_ws(self) -> Any:
+        """The data plane is WS-only, and says so rather than half-working.
+
+        ``filesystem.get`` / ``stat`` / ``unlink`` are middleware calls that the
+        retired REST v2.0 surface never exposed the same way. A legacy box
+        (<=24.10 / CORE 13.x) can still be MONITORED over REST -- it just
+        cannot be a backup destination, and an operator needs that as a clear
+        refusal at configuration time rather than a restore that fails later.
+        """
+        if self._transport != "ws" or self._api is None:
+            raise AdapterError(
+                "TrueNAS backup storage requires the WS JSON-RPC API (SCALE 25.04+); "
+                "this appliance answered on the legacy REST surface"
+            )
+        return self._api
+
+    @staticmethod
+    def _safe_join(dataset_path: str, filename: str) -> str:
+        """Join and validate, with the same rules the staged upload uses.
+
+        Backup filenames are generated, not typed -- but they are built from a
+        backup id and a date prefix, and "generated" is exactly what people say
+        about the input right before it turns out to be operator-controlled
+        somewhere upstream.
+        """
+        from app.services.adapter_truenas_storage import (
+            _validate_dataset_path,
+            _validate_filename,
+        )
+
+        base = _validate_dataset_path(dataset_path)
+        # A date prefix is a path, not a name: validate each segment, then the
+        # leaf as a filename.
+        *dirs, leaf = filename.split("/")
+        for segment in dirs:
+            if not segment or segment in (".", "..") or "\\" in segment:
+                raise AdapterError(f"TrueNAS: unsafe path segment {segment!r}")
+        return f"{base.rstrip('/')}/{'/'.join([*dirs, _validate_filename(leaf)])}"
+
+    async def ensure_data_dir(self, *, dataset_path: str, subdir: str) -> bool:
+        """Create the date-prefixed directory a backup lands in."""
+        api = self._require_ws()
+        from app.services.adapter_truenas_storage import _validate_dataset_path
+
+        base = _validate_dataset_path(dataset_path).rstrip("/")
+        created = False
+        parts = [p for p in subdir.split("/") if p]
+        for i in range(len(parts)):
+            segment = "/".join(parts[: i + 1])
+            if any(p in (".", "..") for p in parts):
+                raise AdapterError(f"TrueNAS: unsafe directory {subdir!r}")
+            created = await api.mkdir_path(f"{base}/{segment}") or created
+        return created
+
+    async def ensure_backup_dataset(self, *, base_dataset_path: str, backup_id: str) -> str:
+        """Create the per-backup child dataset and return its ZFS name.
+
+        Each backup gets its own dataset so it can be pruned by destroying the
+        dataset -- the TrueNAS middleware has no file-delete, but
+        ``pool.dataset.delete`` exists. Verified live on 26.0.
+
+        Returns the ZFS name (``s4_hdd/freesdn_test/<id>``); the file goes into
+        its auto-mount at ``/mnt/<that>``.
+        """
+        api = self._require_ws()
+        child = self._backup_child_name(base_dataset_path, backup_id)
+        from app.adapters.truenas.client import TrueNASAPIError
+
+        try:
+            await api.create_dataset(child, comments="FreeSDN backup")
+        except TrueNASAPIError as exc:
+            # Re-running a backup with the same id finds the dataset already
+            # there, which is fine -- the file inside is overwritten by put.
+            if "already exists" not in str(exc).lower():
+                raise
+        return child
+
+    async def remove_backup_dataset(self, *, base_dataset_path: str, backup_id: str) -> bool:
+        """Destroy one backup's dataset. The only recursive delete in the code.
+
+        The name is rebuilt from the SAME validated base + a single-token id, so
+        it can only ever name a direct child of the operator-nominated backup
+        dataset. ``pool.dataset.delete`` on a pool root would destroy everything,
+        so the guard in :meth:`_backup_child_name` is the safety boundary.
+        """
+        api = self._require_ws()
+        child = self._backup_child_name(base_dataset_path, backup_id)
+        return await api.delete_dataset(child, recursive=True, force=True)
+
+    @staticmethod
+    def _backup_child_name(base_dataset_path: str, backup_id: str) -> str:
+        """``<zfs-base>/<safe-id>``, refusing anything that could escape the base.
+
+        The single most dangerous string in the storage code: it feeds a
+        recursive dataset delete. Every failure mode here is catastrophic, so
+        the checks are deliberately strict and paranoid.
+        """
+        base = base_dataset_path.strip()
+        # Accept both the mount form (/mnt/pool/ds) and the ZFS form (pool/ds).
+        if base.startswith("/mnt/"):
+            base = base[len("/mnt/") :]
+        base = base.strip("/")
+        if not base or "/" not in base:
+            # A ZFS name with no "/" is a pool ROOT. Refusing it is what stops a
+            # recursive delete ever reaching an entire pool.
+            raise AdapterError(f"TrueNAS backup base must be a dataset under a pool, got {base!r}")
+        if ".." in base.split("/"):
+            raise AdapterError(f"TrueNAS backup base has an unsafe segment: {base!r}")
+
+        token = "".join(c for c in str(backup_id) if c.isalnum() or c in "-_")
+        if not token:
+            raise AdapterError(f"backup id yields no safe dataset segment: {backup_id!r}")
+        return f"{base}/{token}"
+
+    def backup_mount_path(self, *, base_dataset_path: str, backup_id: str, filename: str) -> str:
+        """Absolute mount path a backup file lives at, inside its own dataset."""
+        child = self._backup_child_name(base_dataset_path, backup_id)
+        leaf = self._safe_join_leaf(filename)
+        return f"/mnt/{child}/{leaf}"
+
+    @staticmethod
+    def _safe_join_leaf(filename: str) -> str:
+        from app.services.adapter_truenas_storage import _validate_filename
+
+        *dirs, leaf = filename.split("/")
+        for segment in dirs:
+            if not segment or segment in (".", "..") or "\\" in segment:
+                raise AdapterError(f"TrueNAS: unsafe path segment {segment!r}")
+        return "/".join([*dirs, _validate_filename(leaf)])
+
+    async def _data_plane_write(
+        self, dataset_path: str, filename: str, blob: bytes
+    ) -> dict[str, Any]:
+        api = self._require_ws()
+        dest = self._safe_join(dataset_path, filename)
+        job_id = await api.upload_blob(dest_path=dest, blob=blob)
+        job = await api.job_wait(job_id)
+        state = str(job.get("state", "")).upper()
+        if state != "SUCCESS":
+            raise AdapterError(f"TrueNAS write to {dest} ended {state}: {job.get('error')}")
+        return {"path": dest, "job_id": job_id, "size": len(blob)}
+
+    # ------------------------------------------------------------------
+    # Management writes — staged, dual-gated, config not data
+    # ------------------------------------------------------------------
+    #
+    # These DO carry the force gate. They change appliance configuration, which
+    # is exactly what the staged-write chokepoint exists to hold: an operator
+    # reviews the pending change and applies it. That is the opposite of the
+    # data-plane methods above, and the line between them is "does this alter
+    # what the appliance IS, or does it put a file in a dataset the operator
+    # already nominated".
+
+    async def create_dataset(
+        self, *, name: str, comments: str | None = None, force: bool = False
+    ) -> dict[str, Any]:
+        """Create a filesystem dataset (``tank/backups``, pool-relative)."""
+        self._require_gate(force)
+        api = self._require_ws()
+        row = await api.create_dataset(name, comments=comments)
+        return {"dataset": row.get("id") or name, "created": True}
+
+    async def create_snapshot(
+        self, *, dataset: str, name: str, recursive: bool = False, force: bool = False
+    ) -> dict[str, Any]:
+        """Take a snapshot. Additive: it creates a restore point, destroys nothing."""
+        self._require_gate(force)
+        api = self._require_ws()
+        row = await api.create_snapshot(dataset, name, recursive=recursive)
+        return {"snapshot": row.get("id") or f"{dataset}@{name}", "created": True}
+
+    async def delete_snapshot(self, *, snapshot_id: str, force: bool = False) -> dict[str, Any]:
+        """Delete one snapshot by ``dataset@name``.
+
+        Destroys a restore point, which is why it is staged like any other
+        config change rather than exposed as a convenience.
+        """
+        self._require_gate(force)
+        api = self._require_ws()
+        await api.delete_snapshot(snapshot_id)
+        return {"snapshot": snapshot_id, "deleted": True}
+
+    async def start_scrub(self, *, pool_name: str, force: bool = False) -> dict[str, Any]:
+        """Queue a scrub on ``pool_name``.
+
+        Returns as soon as it is queued. A scrub runs for hours and the Storage
+        dashboard already shows scrub state per pool, so progress belongs there
+        rather than in a request held open.
+        """
+        self._require_gate(force)
+        api = self._require_ws()
+        job_id = await api.start_scrub(pool_name)
+        return {"pool": pool_name, "scrub_started": True, "job_id": job_id}
+
+    @staticmethod
+    def _require_gate(force: bool) -> None:
+        """One spelling of the refusal, so all four cannot drift apart.
+
+        ``upload_file`` grew its own copy of this check first; a second, third
+        and fourth hand-written copy is how one of them eventually ends up
+        missing, and the missing one is not discovered until something writes
+        to an appliance nobody approved.
+        """
+        if not force:
+            raise AdapterError("TrueNAS write refused: staging force-gate not set")

@@ -25,8 +25,10 @@ Auth: ``auth.login_ex`` with the ``API_KEY_PLAIN`` mechanism — the
 login-enabled. On 25.x the ``root`` account is disabled by default, so
 operators use a key owned by ``truenas_admin``.
 
-Writes are NOT implemented (read-only adapter v1) — same scope as the
-REST client.
+Writes ARE implemented over this transport (the REST client stays read-only):
+staged config writes (snapshot create/delete, dataset create, scrub) behind the
+dual gate, and a backup data plane (blob put/get, dataset-per-backup for
+retention). All validated live on 26.0. The REST fallback remains read-only.
 """
 
 from __future__ import annotations
@@ -62,13 +64,23 @@ from app.adapters.truenas.constants import (
     WS_METHOD_ALERTS,
     WS_METHOD_CLOUDSYNC,
     WS_METHOD_CORE_GET_JOBS,
+    WS_METHOD_DATASET_CREATE,
+    WS_METHOD_DATASET_DELETE,
     WS_METHOD_DATASETS,
     WS_METHOD_DISK_TEMPS,
     WS_METHOD_DISKS,
+    WS_METHOD_FILESYSTEM_GET,
+    WS_METHOD_FILESYSTEM_MKDIR,
     WS_METHOD_FILESYSTEM_PUT,
+    WS_METHOD_FILESYSTEM_STAT,
     WS_METHOD_POOLS,
     WS_METHOD_REPLICATION,
+    WS_METHOD_SCRUB_RUN,
     WS_METHOD_SERVICES,
+    WS_METHOD_SNAPSHOT_CREATE,
+    WS_METHOD_SNAPSHOT_CREATE_LEGACY,
+    WS_METHOD_SNAPSHOT_DELETE,
+    WS_METHOD_SNAPSHOT_DELETE_LEGACY,
     WS_METHOD_SNAPSHOT_TASKS,
     WS_METHOD_SNAPSHOTS,
     WS_METHOD_SNAPSHOTS_LEGACY,
@@ -300,10 +312,15 @@ class TrueNASWSClient:
                 raise AdapterAuthenticationError(
                     f"TrueNAS WS {method}: not authenticated",
                 )
+            # Surface the nested reason, not just the generic top-level
+            # message: 26.0 reports "Method call error" for everything and puts
+            # the real cause ("[ENOENT] Path ... not found") under data.reason.
+            reason = data.get("reason") or err.get("message") or errname or str(err)
             raise TrueNASAPIError(
-                f"TrueNAS WS {method} error: {err.get('message') or errname or err}",
+                f"TrueNAS WS {method} error: {str(reason).strip()}",
                 status_code=int(err.get("code") or 0),
                 body=str(data)[:512],
+                errname=str(errname or ""),
             )
         return msg.get("result")
 
@@ -488,6 +505,195 @@ class TrueNASWSClient:
             return int(job_id)
         except (TypeError, ValueError) as exc:
             raise TrueNASAPIError(f"TrueNAS /_upload did not return a job id: {body!r}") from exc
+
+    # ------------------------------------------------------------------
+    # Data plane — reading back, sizing, removing
+    # ------------------------------------------------------------------
+
+    async def stat_path(self, path: str) -> dict[str, Any] | None:
+        """``filesystem.stat``, or None when the path is not there.
+
+        A missing path is an ANSWER, not a failure -- "does this backup
+        already exist" is asked far more often than not, and raising would make
+        the caller wrap every existence check in a try. Genuine faults (auth,
+        transport, a malformed reply) still raise.
+        """
+        try:
+            row = await self._call(WS_METHOD_FILESYSTEM_STAT, [path])
+        except TrueNASAPIError as exc:
+            text = str(exc).lower()
+            if "enoent" in text or "no such file" in text or "not found" in text:
+                return None
+            raise
+        return row if isinstance(row, dict) else None
+
+    async def unlink_path(self, path: str) -> None:
+        """There is no file-delete in the TrueNAS middleware, on any version.
+
+        Discovered live against 26.0.0-BETA.3: filesystem.unlink / .remove /
+        .rmdir / .move / .rename are all absent. The plugin exposes put, get,
+        stat, mkdir, listdir, chown and setperm -- it is a permission/ACL and
+        config-file surface, not a general file manager. ``pool.dataset.delete``
+        exists but destroys a whole dataset, not a file.
+
+        This method existed because an earlier version GUESSED filesystem.unlink
+        from memory, and it failed on the first real appliance with "Method does
+        not exist". It now says so up front rather than calling a phantom.
+        """
+        raise TrueNASAPIError(
+            "TrueNAS middleware exposes no file-delete method; a backup file "
+            "cannot be removed through this transport (verified on 26.0)"
+        )
+
+    async def mkdir_path(self, path: str) -> bool:
+        """``filesystem.mkdir``, tolerating a directory that already exists.
+
+        Backups are laid out under a date prefix, so the first write of each
+        day creates a directory and every later one finds it there.
+        """
+        try:
+            await self._call(
+                WS_METHOD_FILESYSTEM_MKDIR,
+                [{"path": path, "options": {"mode": "755", "raise_chmod_error": False}}],
+            )
+        except TrueNASAPIError as exc:
+            if getattr(exc, "errname", "") == "EEXIST":
+                return False
+            raise
+        return True
+
+    async def download_blob(self, path: str) -> bytes:
+        """Read a file back off the appliance via the ``/_download`` channel.
+
+        The mirror of :meth:`upload_blob` and the reason it exists: a
+        destination you cannot restore from is not a backup, it is a copy you
+        find out is unusable on the worst possible day.
+
+        Same two-channel shape as upload -- ``core.download`` creates the job
+        and hands back a one-shot URL on the same TLS listener, which is then
+        fetched over HTTPS. The WS socket cannot carry the bytes.
+        """
+        import httpx
+
+        if self.api_key and any(c in self.api_key for c in ("\r", "\n", "\x00")):
+            raise AdapterAuthenticationError("TrueNAS API key contains illegal control characters")
+
+        job_id, url = await self._begin_download(path)
+
+        tls_port = 443 if self.port in (80, 0) else self.port
+        base = f"https://{self.host}:{tls_port}"
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        try:
+            async with httpx.AsyncClient(
+                base_url=base, verify=self.verify_ssl, timeout=UPLOAD_POST_TIMEOUT_SEC
+            ) as client:
+                resp = await client.get(url, headers=headers)
+                resp.raise_for_status()
+                return resp.content
+        except httpx.HTTPStatusError as exc:
+            raise TrueNASAPIError(
+                f"TrueNAS download rejected: {exc.response.status_code}",
+                status_code=exc.response.status_code,
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise AdapterConnectionError(f"TrueNAS download failed: {exc}") from exc
+        finally:
+            # The job is transient; nothing to clean up, but the id is kept in
+            # the log so a stuck download can be found on the appliance.
+            logger.debug("TrueNAS download job %s for %s", job_id, path)
+
+    async def _begin_download(self, path: str) -> tuple[int, str]:
+        """Create the download job. Returns ``(job_id, one-shot url)``."""
+        result = await self._call(
+            "core.download", [WS_METHOD_FILESYSTEM_GET, [path], path.rsplit("/", 1)[-1]]
+        )
+        if not isinstance(result, list) or len(result) != 2:
+            raise TrueNASAPIError(f"TrueNAS core.download returned {result!r}")
+        job_id, url = result
+        return int(job_id), str(url)
+
+    # ------------------------------------------------------------------
+    # Management writes — reached only through the staged dual gate
+    # ------------------------------------------------------------------
+
+    async def _call_with_legacy(self, method: str, legacy: str, params: list[Any]) -> Any:
+        """Call ``method``, retrying under its pre-25.x name on METHOD_NOT_FOUND.
+
+        The same shape ``list_snapshots`` already uses. Worth having for writes
+        too: a build that answers reads under the modern names can still expose
+        the write under the old one, and the failure mode without this is an
+        operator's staged snapshot failing at apply time with a JSON-RPC error
+        that names a method they have never heard of.
+        """
+        try:
+            return await self._call(method, params)
+        except TrueNASAPIError as exc:
+            if getattr(exc, "status_code", 0) == _JSONRPC_METHOD_NOT_FOUND:
+                return await self._call(legacy, params)
+            raise
+
+    async def delete_dataset(
+        self, name: str, *, recursive: bool = True, force: bool = True
+    ) -> bool:
+        """``pool.dataset.delete`` -- destroys a dataset and (recursive) its data.
+
+        This is how a backup is pruned: each backup is its own child dataset, so
+        deleting the dataset reclaims its space. Verified live on 26.0: returns
+        True immediately.
+
+        Caller-supplied ``name`` is NOT trusted here -- ``pool.dataset.delete``
+        on a pool root would destroy everything. The adapter validates the name
+        against the configured base before this is ever reached, and this call
+        is only wired to the backup data plane.
+        """
+        result = await self._call(
+            WS_METHOD_DATASET_DELETE, [name, {"recursive": recursive, "force": force}]
+        )
+        return bool(result)
+
+    async def create_dataset(self, name: str, *, comments: str | None = None) -> dict[str, Any]:
+        """Create a filesystem dataset. ``name`` is pool-relative (``tank/backups``)."""
+        spec: dict[str, Any] = {"name": name, "type": "FILESYSTEM"}
+        if comments:
+            spec["comments"] = comments
+        row = await self._call(WS_METHOD_DATASET_CREATE, [spec])
+        if not isinstance(row, dict):
+            raise TrueNASAPIError(f"{WS_METHOD_DATASET_CREATE} returned {row!r}")
+        return row
+
+    async def create_snapshot(
+        self, dataset: str, name: str, *, recursive: bool = False
+    ) -> dict[str, Any]:
+        """Take a snapshot of ``dataset``."""
+        spec = {"dataset": dataset, "name": name, "recursive": recursive}
+        row = await self._call_with_legacy(
+            WS_METHOD_SNAPSHOT_CREATE, WS_METHOD_SNAPSHOT_CREATE_LEGACY, [spec]
+        )
+        if not isinstance(row, dict):
+            raise TrueNASAPIError(f"{WS_METHOD_SNAPSHOT_CREATE} returned {row!r}")
+        return row
+
+    async def delete_snapshot(self, snapshot_id: str) -> bool:
+        """Delete one snapshot by its full ``dataset@name`` id."""
+        await self._call_with_legacy(
+            WS_METHOD_SNAPSHOT_DELETE, WS_METHOD_SNAPSHOT_DELETE_LEGACY, [snapshot_id]
+        )
+        return True
+
+    async def start_scrub(self, pool_name: str) -> int:
+        """Start a scrub. Returns the job id.
+
+        A scrub is a job, so this returns as soon as it is queued -- the
+        dashboard already surfaces scrub state, which is where progress belongs.
+        Waiting here would hold the apply request open for hours.
+        """
+        job_id = await self._call(WS_METHOD_SCRUB_RUN, [pool_name])
+        try:
+            return int(job_id)
+        except (TypeError, ValueError):
+            # Some builds return null for a queued scrub; the job is running
+            # either way and the caller only reports "started".
+            return 0
 
 
 def _flatten_datasets(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:

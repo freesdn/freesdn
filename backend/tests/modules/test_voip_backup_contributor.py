@@ -36,7 +36,6 @@ from app.services.backup_contributors import (
     ContributorPayload,
 )
 
-
 # ── fake async session ──────────────────────────────────────────────────
 
 
@@ -44,7 +43,7 @@ class _Result:
     def __init__(self, rows: list[Any]) -> None:
         self._rows = rows
 
-    def scalars(self) -> "_Result":
+    def scalars(self) -> _Result:
         return self
 
     def all(self) -> list[Any]:
@@ -133,49 +132,49 @@ def test_satisfies_protocol() -> None:
 
 
 def _pbx_row(**kw):
-    base = dict(
-        id=uuid4(), site_id=uuid4(), name="HQ PBX", description=None,
-        pbx_type="freepbx", ip_address="10.0.0.5", api_port=443, sip_port=5060,
-        is_active=True, api_client_id="client-abc",
-        tls_verify_disabled_acknowledged=False,
-        settings={"timezone": "UTC", "web_password": "SHOULD-NOT-EXPORT"},
-    )
+    base = {
+        "id": uuid4(), "site_id": uuid4(), "name": "HQ PBX", "description": None,
+        "pbx_type": "freepbx", "ip_address": "10.0.0.5", "api_port": 443, "sip_port": 5060,
+        "is_active": True, "api_client_id": "client-abc",
+        "tls_verify_disabled_acknowledged": False,
+        "settings": {"timezone": "UTC", "web_password": "SHOULD-NOT-EXPORT"},
+    }
     base.update(kw)
     return SimpleNamespace(**base)
 
 
 def _ext_row(pbx_id, **kw):
-    base = dict(
-        id=uuid4(), pbx_id=pbx_id, user_id=None,
-        extension_number="1001", display_name="Reception",
-        caller_id_name="Front Desk", caller_id_number="1001",
-        voicemail_enabled=True, is_active=True,
-        settings={"vm_email": "a@x.test"},
-    )
+    base = {
+        "id": uuid4(), "pbx_id": pbx_id, "user_id": None,
+        "extension_number": "1001", "display_name": "Reception",
+        "caller_id_name": "Front Desk", "caller_id_number": "1001",
+        "voicemail_enabled": True, "is_active": True,
+        "settings": {"vm_email": "a@x.test"},
+    }
     base.update(kw)
     return SimpleNamespace(**base)
 
 
 def _rg_row(pbx_id, **kw):
-    base = dict(
-        id=uuid4(), pbx_id=pbx_id, name="Support", description=None,
-        group_number="600", ring_strategy="ringall", ring_time=20,
-        members=["ext1", "ext2"], is_active=True, settings={},
-    )
+    base = {
+        "id": uuid4(), "pbx_id": pbx_id, "name": "Support", "description": None,
+        "group_number": "600", "ring_strategy": "ringall", "ring_time": 20,
+        "members": ["ext1", "ext2"], "is_active": True, "settings": {},
+    }
     base.update(kw)
     return SimpleNamespace(**base)
 
 
 def _ct_row(**kw):
-    base = dict(
-        id=uuid4(), site_id=uuid4(), name="GRP26xx", description=None,
-        vendor="grandstream", model_pattern="GRP26*", is_default=True,
-        sip_settings={"transport": "tls"}, network_settings={"vlan_id": 10},
-        provisioning_settings={"server_url": "https://prov"},
-        feature_settings={"timezone": "UTC", "admin_password": "LEAK"},
-        line_key_settings=[{"index": 1, "label": "L1"}],
-        raw_overrides={}, firmware_version="1.0.5.2",
-    )
+    base = {
+        "id": uuid4(), "site_id": uuid4(), "name": "GRP26xx", "description": None,
+        "vendor": "grandstream", "model_pattern": "GRP26*", "is_default": True,
+        "sip_settings": {"transport": "tls"}, "network_settings": {"vlan_id": 10},
+        "provisioning_settings": {"server_url": "https://prov"},
+        "feature_settings": {"timezone": "UTC", "admin_password": "LEAK"},
+        "line_key_settings": [{"index": 1, "label": "L1"}],
+        "raw_overrides": {}, "firmware_version": "1.0.5.2",
+    }
     base.update(kw)
     return SimpleNamespace(**base)
 
@@ -415,7 +414,6 @@ class TestRestore:
     async def test_restore_existing_skipped_without_overwrite(self) -> None:
         """A PBX whose id already exists is skipped when
         overwrite_existing is False (the default)."""
-        from app.modules.voip.models import PBX
 
         org = uuid4()
         site = uuid4()
@@ -444,7 +442,6 @@ class TestRestore:
 
     @pytest.mark.asyncio
     async def test_restore_overwrite_updates_existing(self) -> None:
-        from app.modules.voip.models import PBX
 
         org = uuid4()
         site = uuid4()

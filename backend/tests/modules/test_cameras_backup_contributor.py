@@ -73,32 +73,32 @@ def test_protocol() -> None:
 
 
 def _nvr(org, site, **kw):
-    base = dict(
-        id=uuid4(), site_id=site, controller_id=None, organization_id=org,
-        name="NVR-1", description=None, ip_address="10.0.0.9", port=80,
-        mac_address=None, vendor="hikvision", model="DS-7608",
-        firmware_version="4.0", serial_number="SN1", device_type="hikvision",
-        username="admin", external_device_id="EXT1", channel_count=8,
-        settings={"tz": "UTC", "password": "LEAK"},
-    )
+    base = {
+        "id": uuid4(), "site_id": site, "controller_id": None, "organization_id": org,
+        "name": "NVR-1", "description": None, "ip_address": "10.0.0.9", "port": 80,
+        "mac_address": None, "vendor": "hikvision", "model": "DS-7608",
+        "firmware_version": "4.0", "serial_number": "SN1", "device_type": "hikvision",
+        "username": "admin", "external_device_id": "EXT1", "channel_count": 8,
+        "settings": {"tz": "UTC", "password": "LEAK"},
+    }
     base.update(kw)
     return SimpleNamespace(**base)
 
 
 def _cam(org, site, **kw):
-    base = dict(
-        id=uuid4(), site_id=site, nvr_id=None, controller_id=None,
-        organization_id=org, channel_id=1, name="Lobby", description=None,
-        camera_type="ip_camera", ip_address="10.0.0.20", port=554,
-        mac_address=None, vendor="hikvision", model="DS-2CD",
-        firmware_version="5.0", serial_number="C1",
-        rtsp_main_stream="rtsp://main", rtsp_sub_stream=None, snapshot_url=None,
-        device_type="hikvision", username="admin",
-        has_ptz=False, has_audio=True, has_two_way_audio=False, has_ir=True,
-        resolution_width=1920, resolution_height=1080,
-        motion_detection_enabled=True, location="Lobby", floor="1",
-        settings={"codec": "h265", "rtsp_password": "LEAK"},
-    )
+    base = {
+        "id": uuid4(), "site_id": site, "nvr_id": None, "controller_id": None,
+        "organization_id": org, "channel_id": 1, "name": "Lobby", "description": None,
+        "camera_type": "ip_camera", "ip_address": "10.0.0.20", "port": 554,
+        "mac_address": None, "vendor": "hikvision", "model": "DS-2CD",
+        "firmware_version": "5.0", "serial_number": "C1",
+        "rtsp_main_stream": "rtsp://main", "rtsp_sub_stream": None, "snapshot_url": None,
+        "device_type": "hikvision", "username": "admin",
+        "has_ptz": False, "has_audio": True, "has_two_way_audio": False, "has_ir": True,
+        "resolution_width": 1920, "resolution_height": 1080,
+        "motion_detection_enabled": True, "location": "Lobby", "floor": "1",
+        "settings": {"codec": "h265", "rtsp_password": "LEAK"},
+    }
     base.update(kw)
     return SimpleNamespace(**base)
 

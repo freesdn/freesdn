@@ -51,8 +51,15 @@ class TestSummarizeHealth:
         assert s["critical_alerts"] == 1 and s["status"] == "warning" and s["max_temp_c"] == 45.0
 
 
-def _ctrl():
-    return SimpleNamespace(id=uuid.uuid4(), name="S4")
+def _ctrl(controller_type: str = "truenas"):
+    """A Controller stand-in.
+
+    ``controller_type`` is not optional on the real model, and leaving it off
+    here meant the double could not represent the thing the events now carry --
+    the sweep covers more than one vendor, so "storage.appliance.unreachable"
+    without a vendor makes an operator open the UI to find out which box.
+    """
+    return SimpleNamespace(id=uuid.uuid4(), name="S4", controller_type=controller_type)
 
 
 def _types(evs) -> set[str]:
@@ -109,3 +116,23 @@ class TestTransitions:
         evs = _transitions({"reachable": True, "degraded_pools": []}, _summary(degraded=["tank"]), True, _ctrl(), org)
         e = evs[0]
         assert str(e.organization_id) == str(org) and e.source == "storage"
+
+
+def test_every_event_names_its_vendor():
+    """
+    The sweep is multi-vendor now. An event that says an appliance is
+    unreachable, without saying what kind, sends the operator to the UI to
+    work out which box and which credentials.
+    """
+    events = _transitions({}, None, False, _ctrl("proxmox"), uuid.uuid4())
+
+    assert events
+    for ev in events:
+        assert ev.payload["vendor"] == "proxmox"
+
+
+def test_the_unreachable_detail_is_not_hardcoded_to_one_vendor():
+    events = _transitions({}, None, False, _ctrl("proxmox"), uuid.uuid4())
+
+    assert "TrueNAS" not in events[0].payload["detail"]
+    assert "proxmox" in events[0].payload["detail"]

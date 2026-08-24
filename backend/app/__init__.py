@@ -13,5 +13,5 @@ FreeSDN - Unified Network Management Platform
 # else derives from these: ``settings.APP_VERSION`` / ``settings.APP_LICENSE``
 # read them, and a config test asserts ``pyproject.toml`` matches ``__version__``
 # so the packaging version and the runtime version can never silently drift.
-__version__ = "26.08.3"
+__version__ = "26.08.4"
 __license__ = "AGPL-3.0-only"

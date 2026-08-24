@@ -34,13 +34,16 @@ from fastapi import HTTPException
 from app.adapters.base import AdapterResult
 from app.services.adapter_openwrt_dhcp import (
     _APPLY as DHCP_APPLY,
+)
+from app.services.adapter_openwrt_dhcp import (
     GatewayOpenWrtDhcpService,
 )
 from app.services.adapter_openwrt_firewall import (
     _APPLY as FW_APPLY,
+)
+from app.services.adapter_openwrt_firewall import (
     GatewayOpenWrtFirewallService,
 )
-
 
 # ─── Shared fixtures ───────────────────────────────────────────────
 

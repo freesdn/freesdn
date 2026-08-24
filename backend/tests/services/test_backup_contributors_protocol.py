@@ -19,22 +19,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
 from app.services.backup_contributors import (
     BackupArchive,
-    BackupContributor,
     BackupContributorRegistry,
-    BackupManifest,
-    ContributorEntry,
     ContributorPayload,
     CyclicDependencyError,
     DuplicateContributorError,
     InvalidSchemaVersion,
-    MigratingContributor,
     RestoreResult,
     UnknownDependencyError,
     describe_mismatch,
@@ -45,7 +40,6 @@ from app.services.backup_contributors import (
     reset_registry_for_tests,
     wrap_legacy_v1_as_archive,
 )
-
 
 # ── Test helpers ────────────────────────────────────────────────────────
 

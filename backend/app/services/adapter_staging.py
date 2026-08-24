@@ -347,10 +347,33 @@ async def _publish_change_event(
 _PATH_TRAVERSAL_RE = re.compile(r"\.\.|/|\\")
 
 
+_ZFS_ID_ALLOWED = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]*$")
+
+
+def _validate_structured_zfs_id(value: str) -> None:
+    """Validate a ZFS snapshot id (``dataset/path@name``).
+
+    A snapshot id legitimately contains ``/`` (the dataset path) and exactly one
+    ``@``, so the generic URL-path guard's blanket ``/`` rejection is a false
+    positive. This permits that structure while still refusing genuine traversal
+    -- ``..``, backslashes, and control characters. The storage service re-runs
+    its own strict ``_validate_snapshot_id`` when the change is applied.
+    """
+    if ".." in value or "\\" in value or not _ZFS_ID_ALLOWED.match(value):
+        raise HTTPException(400, detail=f"snapshot_id is not a valid dataset@name id: {value!r}")
+
+
 def _validate_url_path_payload_keys(payload: dict[str, Any]) -> None:
     from app.adapters.validation import validate_id, validate_mac
 
     mac_keys = {"mac", "switch_mac", "device_mac", "ap_mac"}
+    # Keys whose value has a legitimate STRUCTURE that contains "/" -- a ZFS
+    # snapshot id is ``dataset/path@name``. The generic ``*_id`` fallback below
+    # would reject the "/" as traversal, but these never flow into a URL path
+    # (storage stages to JSON-RPC params, not f-string URLs), and the storage
+    # service applies its own strict ZFS validator at apply time. Real traversal
+    # (``..``, ``\``) is still refused here.
+    structured_path_keys = {"snapshot_id"}
     id_keys = {
         "wlan_id",
         "ssid_id",
@@ -385,6 +408,8 @@ def _validate_url_path_payload_keys(payload: dict[str, Any]) -> None:
         validator: Any = None
         if key in mac_keys:
             validator = validate_mac
+        elif key in structured_path_keys:
+            validator = _validate_structured_zfs_id  # allows / and @, blocks .. and \
         elif key in id_keys or key == "device_mac":
             validator = lambda v, _k=key: validate_id(v, label=_k)  # noqa: E731
 

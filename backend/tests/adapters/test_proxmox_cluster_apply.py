@@ -14,6 +14,8 @@ from fastapi import HTTPException
 from app.adapters.base import AdapterResult
 from app.services.adapter_proxmox_cluster import (
     _APPLY as APPLY,
+)
+from app.services.adapter_proxmox_cluster import (
     GatewayProxmoxClusterService,
 )
 

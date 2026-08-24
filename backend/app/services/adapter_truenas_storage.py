@@ -40,7 +40,71 @@ from app.services.adapter_base import GatewayServiceBase
 
 _APPLY: dict[tuple[str, str], str] = {
     ("storage.store_blob", "create"): "upload_file",
+    # Management writes. Every one is a CONFIGURATION change to the appliance,
+    # so it belongs behind the same dual gate as any device mutation -- unlike
+    # the backup data plane, which puts files in a dataset the operator has
+    # already nominated and does not alter what the appliance is.
+    ("storage.dataset", "create"): "create_dataset",
+    ("storage.snapshot", "create"): "create_snapshot",
+    ("storage.snapshot", "delete"): "delete_snapshot",
+    ("storage.scrub", "start"): "start_scrub",
 }
+
+# Deliberately not here: snapshot ROLLBACK and dataset DELETE. Both destroy
+# data irreversibly, and "it was staged" is not sufficient design for an
+# operation whose blast radius is an entire dataset. They want a per-action
+# confirmation and a dry run that names what would be lost; shipping them as
+# ordinary staged writes would be the wrong shape, and an operator would
+# reasonably assume the review step told them more than it did.
+_WITHHELD_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
+    {("storage.snapshot", "rollback"), ("storage.dataset", "delete")}
+)
+
+_ZFS_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
+
+
+def _validate_zfs_path(value: str, *, field: str, max_segments: int = 8) -> str:
+    """A pool-relative dataset path like ``tank/backups/nightly``.
+
+    Not the same grammar as a /mnt filesystem path: ZFS names have their own
+    character set and no leading slash. Validated here rather than trusting the
+    appliance to reject it, because a name that survives is a dataset an
+    operator did not ask for.
+    """
+    v = (value or "").strip()
+    if not v or len(v) > _MAX_PATH:
+        raise HTTPException(400, detail=f"{field} is required")
+    # A leading slash is REFUSED rather than stripped. Stripping looks
+    # forgiving and is the opposite: the likeliest reason someone types one is
+    # that they pasted the mountpoint they can see on the Storage page, and
+    # "/mnt/tank/backups" quietly normalised to "mnt/tank/backups" creates a
+    # dataset called mnt at the top of the pool. Say what the field wants.
+    if v.startswith("/"):
+        raise HTTPException(
+            400,
+            detail=(
+                f"{field} is a pool-relative ZFS name, not a mount path: "
+                f"use 'tank/backups', not {value!r}"
+            ),
+        )
+    v = v.rstrip("/")
+    segments = v.split("/")
+    if len(segments) > max_segments or any(not _ZFS_NAME_RE.match(seg) for seg in segments):
+        raise HTTPException(400, detail=f"{field} has an unsafe segment: {value!r}")
+    return v
+
+
+def _validate_snapshot_id(value: str) -> str:
+    """``dataset@name`` — exactly one ``@``, both halves valid."""
+    v = (value or "").strip()
+    if v.count("@") != 1:
+        raise HTTPException(400, detail=f"snapshot_id must be dataset@name: {value!r}")
+    dataset, _, name = v.partition("@")
+    _validate_zfs_path(dataset, field="snapshot dataset")
+    if not _ZFS_NAME_RE.match(name):
+        raise HTTPException(400, detail=f"snapshot name is unsafe: {name!r}")
+    return v
+
 
 # Defensive payload validation (the adapter re-validates as a backstop). Paths
 # must be under /mnt with safe segments; filenames carry no separators.
@@ -93,6 +157,57 @@ async def build_truenas_adapter(ctrl: Controller) -> TrueNASAdapter:
     return adapter
 
 
+async def _apply_management(adapter: TrueNASAdapter, change: Any, payload: dict[str, Any]) -> Any:
+    """Apply one staged management write.
+
+    ``force=True`` is passed here and only here for these features -- this
+    function is reachable exclusively from ``build_applier``, which the
+    staged-apply path calls after the dual gate has been satisfied.
+    """
+    key = (change.feature, change.operation)
+    if key in _WITHHELD_OPERATIONS:
+        raise HTTPException(
+            400,
+            detail=(
+                f"{change.feature}/{change.operation} is not offered: it destroys data "
+                "irreversibly and needs a confirmation flow this release does not have"
+            ),
+        )
+
+    if key == ("storage.dataset", "create"):
+        return await adapter.create_dataset(
+            name=_validate_zfs_path(str(payload.get("name", "")), field="name"),
+            comments=(str(payload["comments"]) if payload.get("comments") else None),
+            force=True,
+        )
+
+    if key == ("storage.snapshot", "create"):
+        return await adapter.create_snapshot(
+            dataset=_validate_zfs_path(str(payload.get("dataset", "")), field="dataset"),
+            name=_validate_zfs_path(str(payload.get("name", "")), field="name", max_segments=1),
+            recursive=bool(payload.get("recursive", False)),
+            force=True,
+        )
+
+    if key == ("storage.snapshot", "delete"):
+        return await adapter.delete_snapshot(
+            snapshot_id=_validate_snapshot_id(str(payload.get("snapshot_id", ""))),
+            force=True,
+        )
+
+    if key == ("storage.scrub", "start"):
+        return await adapter.start_scrub(
+            pool_name=_validate_zfs_path(
+                str(payload.get("pool", "")), field="pool", max_segments=1
+            ),
+            force=True,
+        )
+
+    raise HTTPException(
+        400, detail=f"no applier for feature={change.feature!r} operation={change.operation!r}"
+    )
+
+
 class GatewayTrueNASStorageService(GatewayServiceBase):
     """Staged blob writes to TrueNAS datasets."""
 
@@ -116,6 +231,13 @@ class GatewayTrueNASStorageService(GatewayServiceBase):
                         detail=f"no applier for feature={c.feature!r} operation={c.operation!r}",
                     )
                 payload = c.payload or {}
+
+                # Management writes take a different shape from the blob
+                # upload and must not fall through to the artifact handling
+                # below, which would reject them for carrying no blob.
+                if c.feature != "storage.store_blob":
+                    return await _apply_management(adapter, c, payload)
+
                 dataset_path = _validate_dataset_path(str(payload.get("dataset_path", "")))
                 filename = _validate_filename(str(payload.get("filename", "")))
 

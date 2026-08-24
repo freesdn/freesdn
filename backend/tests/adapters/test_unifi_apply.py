@@ -34,6 +34,8 @@ from fastapi import HTTPException
 
 from app.services.adapter_unifi_devices import (
     _APPLY as DEVICES_APPLY,
+)
+from app.services.adapter_unifi_devices import (
     GatewayUniFiDevicesService,
 )
 

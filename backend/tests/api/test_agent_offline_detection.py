@@ -10,7 +10,7 @@ exercise its query patterns via direct SQL.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
@@ -113,7 +113,6 @@ class TestOfflineDetection:
         self, db_session: AsyncSession, agent_in_lab
     ) -> None:
         """If offline_notified_at is set, the task should NOT dispatch again."""
-        from app.models.agents import RemoteAgent
 
         now = datetime.now(UTC)
         # Configure for alerts + already-notified flag set
@@ -134,7 +133,6 @@ class TestOfflineDetection:
     async def test_dispatch_runs_when_channels_set_and_not_notified(
         self, db_session: AsyncSession, agent_in_lab
     ) -> None:
-        from app.models.agents import RemoteAgent
 
         agent_in_lab.notification_channels = {"email": {"to": ["op@example.com"]}}
         agent_in_lab.offline_notified_at = None
@@ -151,7 +149,6 @@ class TestOfflineDetection:
         self, db_session: AsyncSession, agent_in_lab
     ) -> None:
         """Empty notification_channels means "no alerts for this agent"."""
-        from app.models.agents import RemoteAgent
 
         agent_in_lab.notification_channels = {}
         agent_in_lab.offline_notified_at = None

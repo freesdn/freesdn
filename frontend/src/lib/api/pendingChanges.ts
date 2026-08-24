@@ -174,7 +174,8 @@ export type GatewayVendor =
   | 'openwrt'
   | 'unifi'
   | 'freepbx'
-  | 'proxmox';
+  | 'proxmox'
+  | 'storage';
 
 function domainsForVendor(vendor: GatewayVendor): readonly string[] {
   switch (vendor) {
@@ -192,8 +193,16 @@ function domainsForVendor(vendor: GatewayVendor): readonly string[] {
       return FREEPBX_DOMAINS;
     case 'proxmox':
       return PROXMOX_DOMAINS;
+    case 'storage':
+      // TrueNAS stages every op (snapshot/dataset/scrub) through ONE route,
+      // ``/gateway-storage/{id}/changes`` -- no per-domain suffix like the
+      // gateway vendors. The single sentinel keeps the list non-empty so the
+      // batched fast path runs; the fanout special-cases the URL below.
+      return STORAGE_DOMAINS;
   }
 }
+
+const STORAGE_DOMAINS = ['zfs'] as const;
 
 function vendorPrefix(vendor: GatewayVendor): string {
   switch (vendor) {
@@ -211,6 +220,8 @@ function vendorPrefix(vendor: GatewayVendor): string {
       return 'gateway-freepbx';
     case 'proxmox':
       return 'gateway-proxmox';
+    case 'storage':
+      return 'gateway-storage';
   }
 }
 
@@ -286,7 +297,13 @@ async function _listChangesByDomainFanout(
   const results = await Promise.allSettled(
     domains.map((domain) =>
       api.get<PendingChangeResponse[]>(
-        `/${prefix}-${enc(domain)}/${enc(gatewayId)}/changes`,
+        // Storage mounts one suffix-less route; every gateway vendor mounts
+        // ``{prefix}-{domain}``. Building the storage URL the gateway way would
+        // 404 -- this is the fallback path, so correctness here matters even
+        // though the batched fast path usually wins.
+        vendor === 'storage'
+          ? `/${prefix}/${enc(gatewayId)}/changes`
+          : `/${prefix}-${enc(domain)}/${enc(gatewayId)}/changes`,
         { params: queryParams },
       ),
     ),
@@ -377,6 +394,33 @@ export function stagePbxChange(p: StagePbxChangeParams) {
       target_id: p.targetId ?? null,
       notes: p.notes ?? null,
     },
+    { params: { operation: p.operation } },
+  );
+}
+
+export interface StageStorageChangeParams {
+  /** TrueNAS controller id. */
+  controllerId: string;
+  /** Dotted feature, e.g. ``storage.snapshot`` / ``storage.dataset`` / ``storage.scrub``. */
+  feature: 'storage.snapshot' | 'storage.dataset' | 'storage.scrub';
+  operation: 'create' | 'delete' | 'start';
+  /** Op payload pushed on apply (dataset name, snapshot id, pool, ...). */
+  payload?: Record<string, unknown>;
+  /** Free-text change note. */
+  notes?: string | null;
+}
+
+/**
+ * Stage a storage write. Records a pending row -- never touches the appliance.
+ * The operator applies it later via the Pending Changes drawer (which rides the
+ * ADAPTER_READ_ONLY + force dual-gate). Rollback and dataset-delete are refused
+ * server-side: they destroy data and need a confirmation flow this release does
+ * not have.
+ */
+export function stageStorageChange(p: StageStorageChangeParams) {
+  return api.post<PendingChangeResponse>(
+    `/gateway-storage/${enc(p.controllerId)}/changes/${enc(p.feature)}`,
+    { payload: p.payload ?? {}, target_id: null, notes: p.notes ?? null },
     { params: { operation: p.operation } },
   );
 }

@@ -198,7 +198,7 @@ def mock_client(
 def adapter(mock_client: MagicMock) -> OmadaAdapter:
     """
     A fully wired OmadaAdapter with a mocked client.
-    
+
     Connect is pre-called so the adapter is in 'connected' state.
     """
     adpt = OmadaAdapter("10.0.0.1", "admin", "secret")

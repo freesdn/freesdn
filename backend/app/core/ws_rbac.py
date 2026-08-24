@@ -27,6 +27,14 @@ SUBSCRIPTION_PERMISSIONS: dict[str, str | None] = {
     "pbx.": "device:read",  # PBX sync progress + state events
     "camera.": "device:read",  # camera events / health updates
     "nvr.": "device:read",  # NVR-level events (reboot, status)
+    # Observability. The collector now publishes syslog/trap events, and
+    # without an entry here they fell through to the default-deny at the bottom
+    # -- fail-closed, but it also meant the only subscriber who could ever see
+    # them was a super_admin on the "*" firehose, so the feature was invisible
+    # to exactly the operators it is for. Mapped to the SAME permission that
+    # already gates reading these logs over REST, so this grants nobody
+    # anything they could not already read.
+    "collector.": "collector.logs.read",
     "audit.": "audit:read",  # restricted
     "security.": "audit:read",  # restricted
     "settings.": "settings:read",  # restricted

@@ -9,8 +9,6 @@ size cap, JSON parsing — without a live appliance.
 """
 from __future__ import annotations
 
-import json
-
 import httpx
 import pytest
 
@@ -23,8 +21,6 @@ from app.adapters.exceptions import (
 from app.adapters.truenas.client import TrueNASAPIError, TrueNASClient
 from app.adapters.truenas.constants import (
     EP_AUTH_CHECK,
-    EP_POOL,
-    EP_SYSTEM_INFO,
     MAX_RESPONSE_BYTES,
 )
 
@@ -84,7 +80,7 @@ class TestProbeAuth:
     @pytest.mark.asyncio
     async def test_500_raises_connection_error(self) -> None:
         c = _make_client()
-        _mount_transport(c, lambda r: httpx.Response(503))
+        _mount_transport(c, lambda _r: httpx.Response(503))
         with pytest.raises(AdapterConnectionError):
             await c._probe_auth()
 
@@ -113,7 +109,7 @@ class TestProbeAuth:
     @pytest.mark.asyncio
     async def test_200_passes(self) -> None:
         c = _make_client()
-        _mount_transport(c, lambda r: httpx.Response(200, json={"state": "READY"}))
+        _mount_transport(c, lambda _r: httpx.Response(200, json={"state": "READY"}))
         await c._probe_auth()  # no raise
 
 
@@ -125,21 +121,21 @@ class TestGetJsonErrors:
     @pytest.mark.asyncio
     async def test_404_raises_not_found(self) -> None:
         c = _make_client()
-        _mount_transport(c, lambda r: httpx.Response(404, json={"detail": "no"}))
+        _mount_transport(c, lambda _r: httpx.Response(404, json={"detail": "no"}))
         with pytest.raises(AdapterNotFoundError):
             await c._get_json("/api/v2.0/missing")
 
     @pytest.mark.asyncio
     async def test_403_raises_auth_error(self) -> None:
         c = _make_client()
-        _mount_transport(c, lambda r: httpx.Response(403))
+        _mount_transport(c, lambda _r: httpx.Response(403))
         with pytest.raises(AdapterAuthenticationError):
             await c._get_json("/api/v2.0/pool")
 
     @pytest.mark.asyncio
     async def test_500_raises_api_error_with_body(self) -> None:
         c = _make_client()
-        _mount_transport(c, lambda r: httpx.Response(500, text="boom"))
+        _mount_transport(c, lambda _r: httpx.Response(500, text="boom"))
         with pytest.raises(TrueNASAPIError) as e:
             await c._get_json("/api/v2.0/pool")
         assert e.value.status_code == 500
@@ -148,14 +144,14 @@ class TestGetJsonErrors:
     @pytest.mark.asyncio
     async def test_non_2xx_other_raises(self) -> None:
         c = _make_client()
-        _mount_transport(c, lambda r: httpx.Response(418, text="teapot"))
+        _mount_transport(c, lambda _r: httpx.Response(418, text="teapot"))
         with pytest.raises(TrueNASAPIError):
             await c._get_json("/api/v2.0/pool")
 
     @pytest.mark.asyncio
     async def test_non_json_body_raises(self) -> None:
         c = _make_client()
-        _mount_transport(c, lambda r: httpx.Response(200, text="<html>nope</html>"))
+        _mount_transport(c, lambda _r: httpx.Response(200, text="<html>nope</html>"))
         with pytest.raises(TrueNASAPIError) as e:
             await c._get_json("/api/v2.0/pool")
         assert "non-JSON" in str(e.value)
@@ -173,7 +169,7 @@ class TestGetJsonErrors:
         # via the client's _get_json — easier path is to feed a body
         # larger than 50 MB. We construct one programmatically.
         oversized = b"x" * (MAX_RESPONSE_BYTES + 100)
-        _mount_transport(c, lambda r: httpx.Response(
+        _mount_transport(c, lambda _r: httpx.Response(
             200, content=oversized, headers={"content-type": "application/json"},
         ))
         with pytest.raises(TrueNASAPIError) as e:
@@ -190,7 +186,7 @@ class TestReadMethods:
     async def test_get_system_info_returns_dict(self) -> None:
         c = _make_client()
         payload = {"version": "TrueNAS-SCALE-23.10.2", "hostname": "nas01"}
-        _mount_transport(c, lambda r: httpx.Response(200, json=payload))
+        _mount_transport(c, lambda _r: httpx.Response(200, json=payload))
         out = await c.get_system_info()
         assert out["version"] == "TrueNAS-SCALE-23.10.2"
 
@@ -199,7 +195,7 @@ class TestReadMethods:
         """If TrueNAS ever returns a list here, refuse loudly — the FE
         and parser both assume an object."""
         c = _make_client()
-        _mount_transport(c, lambda r: httpx.Response(200, json=["bad"]))
+        _mount_transport(c, lambda _r: httpx.Response(200, json=["bad"]))
         with pytest.raises(TrueNASAPIError):
             await c.get_system_info()
 
@@ -207,14 +203,14 @@ class TestReadMethods:
     async def test_list_pools_returns_list(self) -> None:
         c = _make_client()
         payload = [{"name": "tank", "status": "ONLINE"}]
-        _mount_transport(c, lambda r: httpx.Response(200, json=payload))
+        _mount_transport(c, lambda _r: httpx.Response(200, json=payload))
         out = await c.list_pools()
         assert out[0]["name"] == "tank"
 
     @pytest.mark.asyncio
     async def test_list_pools_rejects_non_list(self) -> None:
         c = _make_client()
-        _mount_transport(c, lambda r: httpx.Response(200, json={"oops": True}))
+        _mount_transport(c, lambda _r: httpx.Response(200, json={"oops": True}))
         with pytest.raises(TrueNASAPIError):
             await c.list_pools()
 

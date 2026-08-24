@@ -20,13 +20,12 @@ from __future__ import annotations
 
 from typing import Any
 from unittest.mock import MagicMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
 from app.services.backup_contributors import (
     BackupArchive,
-    BackupContributor,
     BackupManifest,
     ContributorEntry,
     ContributorPayload,
@@ -34,7 +33,6 @@ from app.services.backup_contributors import (
     get_registry,
     reset_registry_for_tests,
 )
-
 
 # ── helpers ──────────────────────────────────────────────────────────
 

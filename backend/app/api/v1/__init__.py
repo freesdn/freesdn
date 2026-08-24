@@ -83,6 +83,7 @@ from app.api.v1.endpoints import (
     adapter_proxmox_snapshot,
     adapter_proxmox_storage,
     adapter_proxmox_vm,
+    adapter_truenas_storage,
     adapter_unifi_clients,
     adapter_unifi_devices,
     adapter_unifi_dns,
@@ -218,6 +219,7 @@ api_router.include_router(agent_detail.router, prefix="/agents", tags=["Agent De
 api_router.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
 api_router.include_router(vpn.router, prefix="/vpn", tags=["VPN"])
 api_router.include_router(adapter_omada_vpn.router, tags=["Gateway VPN"])
+api_router.include_router(adapter_truenas_storage.router)
 api_router.include_router(
     adapter_omada_firmware.router,
     tags=["Gateway Firmware"],

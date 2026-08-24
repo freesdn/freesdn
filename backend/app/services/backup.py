@@ -17,6 +17,7 @@ File format (.fsdn):
 from __future__ import annotations
 
 import base64
+import contextlib
 import ftplib
 import gzip
 import hashlib
@@ -31,6 +32,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
+from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -276,6 +278,15 @@ def _ssrf_validate_storage_cfg(storage_type: str, cfg: dict[str, Any]) -> None:
         host = cfg.get("host")
         if host:
             resolve_and_pin_host(host, allow_private=False)
+    elif st == "truenas":
+        # Nothing to validate, and that is the point: this type accepts no
+        # address at all. It names a controller that was vetted when it was
+        # registered, so there is no operator-supplied hostname for an SSRF
+        # check to bite on. Spelled out because an empty branch here would
+        # otherwise read as an oversight -- and because the ftp/sftp rule above
+        # (allow_private=False) would refuse every real NAS, which live on
+        # private LANs.
+        return
 
 
 # =============================================================================
@@ -283,8 +294,23 @@ def _ssrf_validate_storage_cfg(storage_type: str, cfg: dict[str, Any]) -> None:
 # =============================================================================
 
 
+class StorageDeleteUnsupported(Exception):
+    """A destination that cannot remove a stored file.
+
+    Not every backend can. TrueNAS via its middleware writes, reads, sizes and
+    stats a file but has no delete method on any version (verified live on
+    26.0.0-BETA.3) -- so a backup written there stays until it is pruned on the
+    appliance. A DISTINCT type lets the retention path tell "this destination
+    never prunes" apart from "this delete failed", and refuse to orphan.
+    """
+
+
 class BackupStorageBackend(ABC):
     """Abstract base for all backup storage backends."""
+
+    #: Whether this backend can remove a stored file. All but TrueNAS can;
+    #: the retention path reads this to decide whether pruning is possible.
+    SUPPORTS_DELETE: bool = True
 
     @abstractmethod
     async def save(self, backup_id: str, data: bytes, filename: str) -> str:
@@ -979,6 +1005,177 @@ class WebDAVStorageBackend(BackupStorageBackend):
 # =============================================================================
 
 
+class TrueNASStorageBackend(BackupStorageBackend):
+    """Store backups on a TrueNAS appliance FreeSDN already manages.
+
+    The gap this closes: FreeSDN could show an operator their NAS in detail --
+    pool health, disk SMART, scrub state, snapshot coverage -- and then offer
+    them Dropbox and Google Drive as backup destinations. Not the appliance in
+    the same rack that it already holds working credentials for.
+
+    **Configured by controller, not by host.** Every other remote backend takes
+    a hostname and its own credentials. This one takes a ``controller_id``: the
+    appliance is already registered, already authenticated, and already
+    org-scoped, so asking the operator to retype its address and API key would
+    duplicate a secret for no benefit and create a second thing to rotate.
+
+    It also sidesteps a real conflict. ``_ssrf_validate_storage_cfg`` pins
+    ftp/sftp hosts with ``allow_private=False``, because an operator-supplied
+    hostname is an SSRF vector. A NAS lives on a private LAN, so that rule
+    would refuse every legitimate TrueNAS. Referencing a controller means the
+    destination was vetted when it was added, and no new address is accepted
+    here at all.
+
+    WS-only, by refusal rather than by silence: a legacy appliance answering on
+    REST can still be monitored, but cannot be a backup destination, and the
+    operator learns that when they configure it instead of when they restore.
+    """
+
+    def __init__(self, config: dict[str, Any]):
+        raw_id = config.get("controller_id")
+        if not raw_id:
+            raise ValueError("TrueNAS backup storage requires a controller_id")
+        try:
+            self.controller_id = UUID(str(raw_id))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"controller_id is not a UUID: {raw_id!r}") from exc
+
+        self.dataset_path = str(config.get("dataset_path") or "").strip()
+        if not self.dataset_path:
+            raise ValueError("TrueNAS backup storage requires a dataset_path")
+
+        # Threaded through by _resolve_storage, which has already checked that
+        # the StorageLocation belongs to the caller's org. Without it the
+        # controller lookup below would accept ANY controller id an operator
+        # could put in a config blob -- org A backing up into org B's
+        # appliance, using org B's stored credentials. That is the same defect
+        # V3 found on storage_location_id itself.
+        self._organization_id = config.get("_organization_id")
+
+    async def _adapter(self) -> Any:
+        from sqlalchemy import select
+
+        from app.db.session import AsyncSessionLocal
+        from app.models.core import Controller
+        from app.services.adapter_truenas_storage import build_truenas_adapter
+
+        async with AsyncSessionLocal() as db:
+            # Not db.get(): that ignores soft deletes, so an appliance the
+            # operator removed would keep serving as a backup destination --
+            # writing to a box that is gone from the UI, or failing nightly
+            # with an error that names a controller nobody can find any more.
+            # The soft-delete guard caught this one.
+            ctrl = (
+                await db.execute(
+                    select(Controller).where(
+                        Controller.id == self.controller_id,
+                        Controller.deleted_at.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            if ctrl is None:
+                raise ValueError(f"TrueNAS controller {self.controller_id} not found")
+            if self._organization_id is not None and str(ctrl.organization_id) != str(
+                self._organization_id
+            ):
+                # Fail closed and say nothing about the other org's controller.
+                raise ValueError(f"TrueNAS controller {self.controller_id} not found")
+            return await build_truenas_adapter(ctrl)
+
+    #: Delete works again -- via ``pool.dataset.delete``, not a file unlink.
+    #: The middleware has no file-delete on any version (verified live on
+    #: 26.0.0-BETA.3), so each backup is its own child dataset and pruning a
+    #: backup destroys its dataset. Validated end-to-end against a real box.
+    SUPPORTS_DELETE = True
+
+    def _child_mount(self, backup_id: str) -> str:
+        """``/mnt/<base>/<safe-id>`` -- the auto-mount of this backup's dataset."""
+        base = self.dataset_path
+        if not base.startswith("/mnt/"):
+            base = "/mnt/" + base.strip("/")
+        token = "".join(c for c in str(backup_id) if c.isalnum() or c in "-_")
+        if not token:
+            raise ValueError(f"backup id yields no safe dataset segment: {backup_id!r}")
+        return f"{base.rstrip('/')}/{token}"
+
+    def _split_key(self, key: str) -> tuple[str, str]:
+        """A storage key is ``<safe-id>/<filename>``. Returns (id, filename)."""
+        segment, _, filename = key.partition("/")
+        if not segment or not filename:
+            raise ValueError(f"malformed TrueNAS storage key: {key!r}")
+        return segment, filename
+
+    async def save(self, backup_id: str, data: bytes, filename: str) -> str:
+        # One dataset per backup, so it can be pruned by destroying the dataset.
+        token = "".join(c for c in str(backup_id) if c.isalnum() or c in "-_")
+        key = f"{token}/{filename}"
+        adapter = await self._adapter()
+        try:
+            await adapter.ensure_backup_dataset(
+                base_dataset_path=self.dataset_path, backup_id=backup_id
+            )
+            await adapter.put_data_file(
+                dataset_path=self._child_mount(backup_id), filename=filename, blob=data
+            )
+        finally:
+            with contextlib.suppress(Exception):
+                await adapter.disconnect()
+        return key
+
+    async def load(self, path: str) -> bytes:
+        backup_id, filename = self._split_key(path)
+        adapter = await self._adapter()
+        try:
+            return await adapter.get_data_file(
+                dataset_path=self._child_mount(backup_id), filename=filename
+            )
+        finally:
+            with contextlib.suppress(Exception):
+                await adapter.disconnect()
+
+    async def delete(self, path: str) -> bool:
+        # Destroys the backup's dataset -- the only recursive delete in the
+        # storage code. The adapter rebuilds the target name from the validated
+        # base plus a single sanitised id token, so it can never escape the
+        # operator-nominated backup dataset.
+        backup_id, _ = self._split_key(path)
+        adapter = await self._adapter()
+        try:
+            return await adapter.remove_backup_dataset(
+                base_dataset_path=self.dataset_path, backup_id=backup_id
+            )
+        finally:
+            with contextlib.suppress(Exception):
+                await adapter.disconnect()
+
+    async def exists(self, path: str) -> bool:
+        backup_id, filename = self._split_key(path)
+        adapter = await self._adapter()
+        try:
+            return (
+                await adapter.stat_data_file(
+                    dataset_path=self._child_mount(backup_id), filename=filename
+                )
+            ) is not None
+        finally:
+            with contextlib.suppress(Exception):
+                await adapter.disconnect()
+
+    async def get_size(self, path: str) -> int:
+        backup_id, filename = self._split_key(path)
+        adapter = await self._adapter()
+        try:
+            row = await adapter.stat_data_file(
+                dataset_path=self._child_mount(backup_id), filename=filename
+            )
+        finally:
+            with contextlib.suppress(Exception):
+                await adapter.disconnect()
+        if not row:
+            return 0
+        return int(row.get("size") or 0)
+
+
 def get_storage_backend(storage_type: str, config: dict[str, Any]) -> BackupStorageBackend:
     """Factory to create a storage backend instance."""
     backends = {
@@ -990,6 +1187,7 @@ def get_storage_backend(storage_type: str, config: dict[str, Any]) -> BackupStor
         "google_drive": GoogleDriveStorageBackend,
         "dropbox": DropboxStorageBackend,
         "webdav": WebDAVStorageBackend,
+        "truenas": TrueNASStorageBackend,
     }
     cls = backends.get(storage_type)
     if not cls:
@@ -1258,6 +1456,38 @@ SUPPORTED_STORAGE_TYPES = [
                 "required": False,
                 "default": "/freesdn-backups",
                 "placeholder": "/freesdn-backups",
+            },
+        ],
+    },
+    {
+        "id": "truenas",
+        "name": "TrueNAS (managed appliance)",
+        "description": (
+            "Store backups on a TrueNAS appliance FreeSDN already manages. Uses the "
+            "controller's existing credentials -- nothing to retype, nothing extra to "
+            "rotate. Requires SCALE 25.04+ (the WS JSON-RPC API). Each backup is "
+            "stored as its own child dataset under the path you choose, so "
+            "retention prunes it by destroying that dataset -- clean, and you get "
+            "per-backup ZFS visibility as a side effect."
+        ),
+        "supports_delete": True,
+        "icon": "Server",
+        "fields": [
+            {
+                "name": "controller_id",
+                "type": "controller",
+                "controller_type": "truenas",
+                "label": "TrueNAS Appliance",
+                "required": True,
+                "placeholder": "Select a managed TrueNAS",
+            },
+            {
+                "name": "dataset_path",
+                "type": "text",
+                "label": "Dataset Path",
+                "required": True,
+                "default": "/mnt/tank/freesdn-backups",
+                "placeholder": "/mnt/tank/freesdn-backups",
             },
         ],
     },
@@ -1712,6 +1942,12 @@ class BackupService:
                         "Failed to decrypt storage credentials for location %s",
                         loc.id,
                     )
+            # The org is threaded into the backend config because a TrueNAS
+            # destination names a CONTROLLER, and that id is caller-supplied
+            # like storage_location_id was. Without it, org A could point a
+            # backup at org B's appliance and write through org B's stored
+            # credentials -- the same defect V3 closed one level up.
+            config["_organization_id"] = str(loc.organization_id)
             return get_storage_backend(loc.storage_type, config), loc.id
 
         # Default local
@@ -3312,7 +3548,34 @@ class BackupService:
                 backend, _ = await self._resolve_storage(
                     backup.storage_type, backup.storage_location_id
                 )
+                if not getattr(backend, "SUPPORTS_DELETE", True):
+                    # A destination that cannot prune -- TrueNAS via the
+                    # middleware. Removing the FreeSDN record while the file
+                    # stays on the appliance is an orphan, and doing it in a
+                    # debug log is how a NAS silently fills. Surface it loudly
+                    # and keep the record so the file is still accounted for.
+                    logger.warning(
+                        "Backup %s is on a %s destination that cannot auto-delete; "
+                        "the file at %s remains on the appliance. Prune it there, "
+                        "or set a ZFS retention policy on the dataset.",
+                        backup_id,
+                        backup.storage_type,
+                        backup.storage_path,
+                    )
+                    raise StorageDeleteUnsupported(backup.storage_type)
                 await backend.delete(backup.storage_path)
+            except StorageDeleteUnsupported:
+                # Deliberately NOT deleting the record: the file is still there,
+                # and a record pointing at it is better than a silent orphan.
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"This backup is stored on a {backup.storage_type} appliance, "
+                        "which FreeSDN cannot prune through its API. Remove the file "
+                        "on the appliance (or set a ZFS retention policy); the backup "
+                        "record is kept so the file is not orphaned."
+                    ),
+                )
             except Exception as e:
                 logger.warning("Failed to delete storage for backup %s: %s", backup_id, e)
 

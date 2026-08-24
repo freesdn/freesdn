@@ -271,9 +271,21 @@ class TestVlanService:
             subnet_mask="255.255.255.0",
         )
 
-        # Verify add was called
         assert mock_session.add.called
         assert mock_session.commit.called
+
+        # The returned VLAN must carry what was asked for. Asserting only that
+        # add() and commit() ran leaves every argument unchecked: create()
+        # could drop dhcp_start on the floor and this still passed.
+        assert vlan.vlan_id == 100
+        assert vlan.name == "Test VLAN"
+        assert vlan.description == "Test description"
+        assert vlan.dhcp_enabled is True
+        assert vlan.dhcp_start == "192.168.100.100"
+        assert vlan.dhcp_end == "192.168.100.200"
+        assert vlan.gateway == "192.168.100.1"
+        assert vlan.subnet_mask == "255.255.255.0"
+        assert mock_session.add.call_args[0][0] is vlan
 
     @pytest.mark.asyncio
     async def test_create_vlan_duplicate(self, mock_session, org_id, sample_vlan):
@@ -307,6 +319,13 @@ class TestVlanService:
         )
 
         assert mock_session.commit.called
+
+        # update() only applies fields in _VLAN_MUTABLE_FIELDS, so committing
+        # proves nothing about whether anything changed. Drop "name" from that
+        # whitelist and the old assertion alone still passed.
+        assert updated is sample_vlan
+        assert updated.name == "Updated VLAN"
+        assert updated.description == "Updated description"
 
     @pytest.mark.asyncio
     async def test_delete_vlan_success(self, mock_session, org_id, sample_vlan):

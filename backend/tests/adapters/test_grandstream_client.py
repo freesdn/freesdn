@@ -10,7 +10,6 @@ against a stub aiohttp server. Live integration is exercised by the
 from __future__ import annotations
 
 import hashlib
-import json
 
 import pytest
 
@@ -23,7 +22,6 @@ from app.adapters.grandstream.exceptions import (
     GrandstreamAuthError,
     GrandstreamConnectionError,
 )
-
 
 # ────────────────────────────────────────────────────────────────────
 # Hash function used in the challenge-response auth

@@ -3,11 +3,12 @@
 /**
  * FreeSDN - Storage Page
  *
- * Single-pane read-only dashboard for storage appliances (TrueNAS).
+ * Single-pane dashboard for storage appliances (TrueNAS).
  * Surfaces live ZFS pool health + capacity + redundancy + scrub, active
- * alerts, per-disk SMART temperature/status/errors, sharing services, and
- * data-protection coverage, proxied via GET /controllers/{id}/storage.
- * No writes.
+ * alerts, per-disk SMART temperature/status/errors, sharing services,
+ * data-protection coverage, and snapshots (GET /controllers/{id}/storage),
+ * and stages writes -- snapshot, dataset create, scrub, snapshot delete --
+ * through the Pending Changes dual gate, WS-only (SCALE 25.04+).
  */
 
 import { useMemo, useState } from 'react';
@@ -30,6 +31,10 @@ import {
   Activity,
   Share2,
   Layers,
+  Camera,
+  Trash2,
+  Play,
+  Info,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -44,9 +49,17 @@ import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { PageHeader } from '@/components/layout';
 import { useSiteStore } from '@/stores/siteStore';
 import { controllersApi } from '@/lib/api';
-import type { StorageInventory, StoragePool, StorageDisk } from '@/lib/api';
+import type { StorageInventory, StoragePool, StorageDisk, StorageDataset, StorageSnapshot } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { AddTrueNASDialog } from './AddTrueNASDialog';
+import {
+  SnapshotDatasetDialog,
+  CreateDatasetDialog,
+  ScrubPoolDialog,
+  DeleteSnapshotDialog,
+} from './StorageWriteActions';
+import { PendingChangesBadge } from '@/components/gateways/PendingChangesBadge';
+import { PendingChangesDrawer } from '@/components/gateways/PendingChangesDrawer';
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 function formatBytes(n: number, decimals = 1): string {
@@ -124,6 +137,7 @@ export default function StoragePage() {
   const selectedSiteId = useSiteStore((s) => s.selectedSiteId);
   const [addOpen, setAddOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pendingOpen, setPendingOpen] = useState(false);
 
   const {
     data: devicesResp,
@@ -164,11 +178,21 @@ export default function StoragePage() {
       <PageHeader
         icon={HardDrive}
         title="Storage"
-        subtitle="ZFS pool health, capacity, redundancy, disk temps and alerts across your storage appliances, read-only."
+        subtitle="ZFS pool health, capacity, redundancy, disk temps, alerts and snapshots across your storage appliances, with staged writes."
         actions={
-          <Button onClick={() => setAddOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" /> Add TrueNAS Storage
-          </Button>
+          <div className="flex items-center gap-2">
+            {activeId && (
+              <PendingChangesBadge
+                vendor="storage"
+                gatewayId={activeId}
+                open={pendingOpen}
+                onOpenChange={setPendingOpen}
+              />
+            )}
+            <Button onClick={() => setAddOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Add TrueNAS Storage
+            </Button>
+          </div>
         }
         onRefresh={() => {
           refetchDevices();
@@ -224,19 +248,53 @@ export default function StoragePage() {
           ) : invIsError ? (
             <ErrorState message={invErrorDetail} onRetry={() => refetchInv()} />
           ) : inv ? (
-            <StorageDashboard inv={inv} />
+            <StorageDashboard inv={inv} controllerId={activeId!} onStaged={() => setPendingOpen(true)} />
           ) : null}
         </>
       )}
 
       <AddTrueNASDialog open={addOpen} onOpenChange={setAddOpen} />
+      {activeId && (
+        <PendingChangesDrawer
+          open={pendingOpen}
+          onOpenChange={setPendingOpen}
+          vendor="storage"
+          gatewayId={activeId}
+          gatewayName={devices.find((d) => d.id === activeId)?.name ?? 'storage'}
+          onApplied={() => {
+            if (activeId) refetchInv();
+          }}
+        />
+      )}
     </div>
   );
 }
 
 // ─── dashboard ─────────────────────────────────────────────────────────────
-function StorageDashboard({ inv }: { inv: StorageInventory }) {
+function StorageDashboard({
+  inv,
+  controllerId,
+  onStaged,
+}: {
+  inv: StorageInventory;
+  controllerId: string;
+  onStaged: () => void;
+}) {
   const health = HEALTH_META[inv.health.status] ?? HEALTH_META.ok;
+
+  // Writes are WS-only. On a legacy REST appliance the actions are disabled
+  // with a reason rather than hidden, so an operator is not left wondering.
+  const canWrite = inv.transport === 'ws';
+  const writeDisabledReason = canWrite
+    ? undefined
+    : 'Writes need the WS JSON-RPC API (TrueNAS SCALE 25.04+). This appliance answered on the legacy REST surface.';
+
+  // One piece of dialog state; only one storage action is ever open at a time.
+  const [snapshotTarget, setSnapshotTarget] = useState<StorageDataset | null>(null);
+  const [createDatasetPool, setCreateDatasetPool] = useState<string | null>(null);
+  const [scrubTarget, setScrubTarget] = useState<StoragePool | null>(null);
+  const [deleteSnap, setDeleteSnap] = useState<StorageSnapshot | null>(null);
+  const primaryPool = inv.pools[0]?.name ?? 'tank';
 
   const totalSize = inv.pools.reduce((a, p) => a + p.size, 0);
   const totalUsed = inv.pools.reduce((a, p) => a + p.allocated, 0);
@@ -353,9 +411,33 @@ function StorageDashboard({ inv }: { inv: StorageInventory }) {
       <StatsGrid stats={stats} columns={4} />
 
       {/* Pools */}
-      <Section icon={Database} title="Pools" badge={`${inv.pools.length}`}>
+      <Section
+        icon={Database}
+        title="Pools"
+        badge={`${inv.pools.length}`}
+        action={
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!canWrite}
+            title={writeDisabledReason}
+            onClick={() => setCreateDatasetPool(primaryPool)}
+          >
+            <Layers className="mr-2 h-4 w-4" /> New dataset
+          </Button>
+        }
+      >
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          {inv.pools.map((p) => <PoolCard key={p.name} pool={p} />)}
+          {inv.pools.map((p) => (
+            <PoolCard
+              key={p.name}
+              pool={p}
+              canWrite={canWrite}
+              writeDisabledReason={writeDisabledReason}
+              onScrub={() => setScrubTarget(p)}
+              onNewDataset={() => setCreateDatasetPool(p.name)}
+            />
+          ))}
         </div>
       </Section>
 
@@ -402,17 +484,78 @@ function StorageDashboard({ inv }: { inv: StorageInventory }) {
       <Section
         icon={Layers}
         title="Datasets"
-        badge={`${inv.datasets.length} · ${inv.snapshot_count} snapshot${inv.snapshot_count === 1 ? '' : 's'}`}
+        badge={`${inv.datasets.length}`}
       >
         <DataTable
           data={inv.datasets}
-          columns={datasetColumns}
+          columns={datasetColumnsWithActions(canWrite, writeDisabledReason, (d) => setSnapshotTarget(d))}
           getRowId={(d) => d.id}
           searchable
           paginated={inv.datasets.length > 25}
           emptyState={<div className="py-10 text-center text-sm text-muted-foreground">No datasets.</div>}
         />
       </Section>
+
+      {/* Snapshots */}
+      <Section
+        icon={Camera}
+        title="Snapshots"
+        badge={
+          inv.snapshot_count > inv.snapshots.length
+            ? `${inv.snapshots.length} of ${inv.snapshot_count}`
+            : `${inv.snapshot_count}`
+        }
+      >
+        {inv.snapshot_count > inv.snapshots.length && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-info/30 bg-info/10 px-3 py-2 text-xs text-info">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            Showing the {inv.snapshots.length} most recent of {inv.snapshot_count}. Search the
+            appliance for older ones.
+          </div>
+        )}
+        <DataTable
+          data={inv.snapshots}
+          columns={snapshotColumns(canWrite, writeDisabledReason, (s) => setDeleteSnap(s))}
+          getRowId={(sn) => sn.id}
+          searchable
+          paginated={inv.snapshots.length > 25}
+          emptyState={
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              No snapshots yet. Take one from the Datasets table above.
+            </div>
+          }
+        />
+      </Section>
+
+      {/* Write action dialogs — all stage, none touch the appliance directly */}
+      <SnapshotDatasetDialog
+        controllerId={controllerId}
+        dataset={snapshotTarget}
+        open={!!snapshotTarget}
+        onOpenChange={(o) => !o && setSnapshotTarget(null)}
+        onStaged={() => { setSnapshotTarget(null); onStaged(); }}
+      />
+      <CreateDatasetDialog
+        controllerId={controllerId}
+        poolName={createDatasetPool ?? primaryPool}
+        open={!!createDatasetPool}
+        onOpenChange={(o) => !o && setCreateDatasetPool(null)}
+        onStaged={() => { setCreateDatasetPool(null); onStaged(); }}
+      />
+      <ScrubPoolDialog
+        controllerId={controllerId}
+        pool={scrubTarget}
+        open={!!scrubTarget}
+        onOpenChange={(o) => !o && setScrubTarget(null)}
+        onStaged={() => { setScrubTarget(null); onStaged(); }}
+      />
+      <DeleteSnapshotDialog
+        controllerId={controllerId}
+        snapshot={deleteSnap}
+        open={!!deleteSnap}
+        onOpenChange={(o) => !o && setDeleteSnap(null)}
+        onStaged={() => { setDeleteSnap(null); onStaged(); }}
+      />
     </div>
   );
 }
@@ -490,8 +633,6 @@ const diskColumns: DataTableColumn<StorageDisk>[] = [
   },
 ];
 
-type StorageDataset = StorageInventory['datasets'][number];
-
 const datasetColumns: DataTableColumn<StorageDataset>[] = [
   {
     id: 'id',
@@ -545,6 +686,88 @@ const datasetColumns: DataTableColumn<StorageDataset>[] = [
   },
 ];
 
+/** Datasets table with a trailing Snapshot action column. */
+function datasetColumnsWithActions(
+  canWrite: boolean,
+  disabledReason: string | undefined,
+  onSnapshot: (d: StorageDataset) => void,
+): DataTableColumn<StorageDataset>[] {
+  return [
+    ...datasetColumns,
+    {
+      id: 'actions',
+      header: '',
+      sortable: false,
+      className: 'w-[120px] text-right',
+      cell: (d) => (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={!canWrite}
+          title={disabledReason}
+          onClick={() => onSnapshot(d)}
+        >
+          <Camera className="mr-1.5 h-3.5 w-3.5" /> Snapshot
+        </Button>
+      ),
+    },
+  ];
+}
+
+/** Snapshots table with a trailing Delete action. */
+function snapshotColumns(
+  canWrite: boolean,
+  disabledReason: string | undefined,
+  onDelete: (s: StorageSnapshot) => void,
+): DataTableColumn<StorageSnapshot>[] {
+  return [
+    {
+      id: 'id',
+      header: 'Snapshot',
+      accessorFn: (sn) => sn.id,
+      cell: (sn) => <span className="font-mono text-xs">{sn.id}</span>,
+    },
+    {
+      id: 'dataset',
+      header: 'Dataset',
+      accessorFn: (sn) => sn.dataset,
+      cell: (sn) => <span className="font-mono text-xs text-muted-foreground">{sn.dataset}</span>,
+    },
+    {
+      id: 'used',
+      header: 'Referenced',
+      accessorFn: (sn) => sn.used_bytes,
+      className: 'text-right tabular-nums',
+      headerClassName: 'text-right',
+      cell: (sn) => (sn.used_bytes > 0 ? formatBytes(sn.used_bytes) : <span className="text-muted-foreground">-</span>),
+    },
+    {
+      id: 'created',
+      header: 'Created',
+      accessorFn: (sn) => sn.created_at ?? '',
+      cell: (sn) => <span className="text-xs text-muted-foreground">{sn.created_at ?? '-'}</span>,
+    },
+    {
+      id: 'actions',
+      header: '',
+      sortable: false,
+      className: 'w-[110px] text-right',
+      cell: (sn) => (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+          disabled={!canWrite}
+          title={disabledReason}
+          onClick={() => onDelete(sn)}
+        >
+          <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
+        </Button>
+      ),
+    },
+  ];
+}
+
 // ─── small building blocks ───────────────────────────────────────────────
 function Fact({ Icon, label, value }: { Icon: LucideIcon; label: string; value: string }) {
   return (
@@ -558,24 +781,52 @@ function Fact({ Icon, label, value }: { Icon: LucideIcon; label: string; value: 
   );
 }
 
-function Section({ icon: Icon, title, badge, children }: { icon: LucideIcon; title: string; badge?: string; children: React.ReactNode }) {
+function Section({
+  icon: Icon,
+  title,
+  badge,
+  action,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  badge?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold flex items-center gap-2">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        {title}
-        {badge && (
-          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">{badge}</span>
-        )}
-      </h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          {title}
+          {badge && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">{badge}</span>
+          )}
+        </h3>
+        {action}
+      </div>
       {children}
     </div>
   );
 }
 
-function PoolCard({ pool: p }: { pool: StoragePool }) {
+function PoolCard({
+  pool: p,
+  canWrite,
+  writeDisabledReason,
+  onScrub,
+  onNewDataset,
+}: {
+  pool: StoragePool;
+  canWrite: boolean;
+  writeDisabledReason?: string;
+  onScrub: () => void;
+  onNewDataset: () => void;
+}) {
   const scrub = p.scrub;
   const scrubClean = scrub && (scrub.errors ?? 0) === 0 && scrub.state === 'FINISHED';
+  const scrubbing = scrub?.state === 'SCANNING';
   return (
     <Card className="h-full transition-shadow hover:shadow-md">
       <CardContent className="p-4 flex h-full flex-col gap-3">
@@ -617,6 +868,28 @@ function PoolCard({ pool: p }: { pool: StoragePool }) {
           ) : (
             <span className="text-muted-foreground">No scrub history</span>
           )}
+        </div>
+
+        <div className="flex items-center gap-2 pt-0.5">
+          <Button
+            size="sm"
+            variant="outline"
+            className="flex-1"
+            disabled={!canWrite || scrubbing}
+            title={!canWrite ? writeDisabledReason : scrubbing ? 'A scrub is already running' : undefined}
+            onClick={onScrub}
+          >
+            <Play className="mr-1.5 h-3.5 w-3.5" /> {scrubbing ? 'Scrubbing…' : 'Scrub'}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!canWrite}
+            title={writeDisabledReason}
+            onClick={onNewDataset}
+          >
+            <Layers className="mr-1.5 h-3.5 w-3.5" /> Dataset
+          </Button>
         </div>
       </CardContent>
     </Card>

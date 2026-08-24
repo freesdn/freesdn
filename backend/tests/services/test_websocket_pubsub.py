@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -27,7 +27,6 @@ from app.services.websocket_pubsub import (
     WSCrossInstanceBus,
     reset_ws_pubsub_for_tests,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -287,5 +286,5 @@ async def _wait(predicate, *, timeout: float, interval: float = 0.02) -> None:
             await asyncio.sleep(interval)
     try:
         await asyncio.wait_for(_poll(), timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         pass

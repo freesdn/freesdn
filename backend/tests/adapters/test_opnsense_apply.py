@@ -32,6 +32,8 @@ from fastapi import HTTPException
 
 from app.services.adapter_opnsense_firewall import (
     _APPLY as FW_APPLY,
+)
+from app.services.adapter_opnsense_firewall import (
     GatewayOpnsenseFirewallService,
 )
 

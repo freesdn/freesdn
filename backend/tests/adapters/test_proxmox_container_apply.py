@@ -20,6 +20,8 @@ from fastapi import HTTPException
 from app.adapters.base import AdapterResult
 from app.services.adapter_proxmox_container import (
     _APPLY as APPLY,
+)
+from app.services.adapter_proxmox_container import (
     GatewayProxmoxContainerService,
 )
 

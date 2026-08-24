@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import { PageHeader } from '@/components/layout';
 import { CapabilityMaturityBadge } from '@/components/ui/capability-maturity-badge';
@@ -20,11 +21,14 @@ import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/comp
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { automationApi, AutomationRule, AutomationExecution, getApiErrorMessage } from '@/lib/api';
+import { automationApi, integrationsApi, AutomationRule, AutomationExecution, getApiErrorMessage } from '@/lib/api';
+import type { EventCategory } from '@/lib/api';
 import { Zap, Plus, History } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useToast } from '@/hooks/use-toast';
@@ -32,12 +36,14 @@ import { useToast } from '@/hooks/use-toast';
 // --------------- Trigger / Action type metadata ---------------
 // `labelKey` is a suffix translated at the render site via
 // t(`AutomationPage.triggerTypes.${value}`) / t(`AutomationPage.actionTypes.${labelKey}`).
+// Only the two the engine actually drives. schedule / threshold / webhook are
+// members of the TriggerType enum with no driver behind them: the backend's
+// IMPLEMENTED_TRIGGER_TYPES excludes them and POST /automation/rules refuses
+// them outright, so offering them here meant picking one, filling in the form
+// and getting a 400 -- or, worse, believing a rule had been created.
 const TRIGGER_TYPES = [
   { value: 'event', labelKey: 'event' },
-  { value: 'schedule', labelKey: 'schedule' },
-  { value: 'threshold', labelKey: 'threshold' },
   { value: 'manual', labelKey: 'manual' },
-  { value: 'webhook', labelKey: 'webhook' },
 ] as const;
 
 const ACTION_TYPE_OPTIONS = [
@@ -257,20 +263,34 @@ const ExecutionRow: React.FC<ExecutionRowProps> = ({ execution }) => {
 
 // --------------- Create Rule Modal ---------------
 
-const createRuleSchema = z.object({
-  name: z.string().min(1, 'Rule name is required'),
-  description: z.string(),
-  trigger_type: z.string().min(1),
-  action_type: z.string().min(1),
-  priority: z.coerce.number().int().min(0).max(1000),
-  cooldown_seconds: z.coerce.number().int().min(0),
-});
+const createRuleSchema = z
+  .object({
+    name: z.string().min(1, 'Rule name is required'),
+    description: z.string(),
+    trigger_type: z.string().min(1),
+    // Which event fires the rule. There was no field for this at all, so the
+    // form posted an empty trigger_config -- and the engine read a missing
+    // event_pattern as "*", meaning every rule created here fired on EVERY
+    // event in the organisation. An operator writing "notify me when a device
+    // goes offline" was notified about controller syncs, discovery runs and
+    // every alert. The backend now refuses a pattern-less event rule; this is
+    // the field that lets one be written.
+    event_pattern: z.string(),
+    action_type: z.string().min(1),
+    priority: z.coerce.number().int().min(0).max(1000),
+    cooldown_seconds: z.coerce.number().int().min(0),
+  })
+  .refine((v) => v.trigger_type !== 'event' || v.event_pattern.trim().length > 0, {
+    message: 'Choose the event that triggers this rule',
+    path: ['event_pattern'],
+  });
 type CreateRuleFormValues = z.infer<typeof createRuleSchema>;
 
 const createRuleDefaults: CreateRuleFormValues = {
   name: '',
   description: '',
   trigger_type: 'event',
+  event_pattern: '',
   action_type: 'notify.in_app',
   priority: 0,
   cooldown_seconds: 60,
@@ -288,6 +308,17 @@ interface RuleFormModalProps {
 // Unified create/edit dialog. ``FormDialog`` re-seeds ``defaultValues`` every
 // time it opens, so switching ``rule`` reliably prefills the edit form.
 const RuleFormModal: React.FC<RuleFormModalProps> = ({ isOpen, onClose, onSubmit, rule }) => {
+  // The event list comes from the backend, not a hardcoded array. That is what
+  // makes a newly published event -- collector.syslog.received, say -- appear
+  // here without anyone remembering to add it, which is the same registry the
+  // Integrations page and the webhook validator read.
+  const { data: eventCategories = [] } = useQuery<EventCategory[]>({
+    queryKey: ['event-categories'],
+    queryFn: async () => (await integrationsApi.getEventCategories()).data.categories,
+    staleTime: 5 * 60 * 1000,
+    enabled: isOpen,
+  });
+
   const { t } = useTranslation('automation');
   const isEdit = !!rule;
   const defaultValues: CreateRuleFormValues = rule
@@ -295,6 +326,11 @@ const RuleFormModal: React.FC<RuleFormModalProps> = ({ isOpen, onClose, onSubmit
         name: rule.name,
         description: rule.description || '',
         trigger_type: rule.trigger_type,
+        // Prefilled, or editing an existing rule would blank its pattern and
+        // the save would either be refused or narrow the rule to nothing.
+        event_pattern: String(
+          (rule.trigger_config as Record<string, unknown> | undefined)?.event_pattern ?? '',
+        ),
         action_type: rule.actions?.[0]?.action_type || 'notify.in_app',
         priority: rule.priority,
         cooldown_seconds: rule.cooldown_seconds,
@@ -334,7 +370,10 @@ const RuleFormModal: React.FC<RuleFormModalProps> = ({ isOpen, onClose, onSubmit
           name: values.name,
           description: values.description || undefined,
           trigger_type: values.trigger_type,
-          trigger_config: {},
+          trigger_config:
+            values.trigger_type === 'event'
+              ? { event_pattern: values.event_pattern.trim() }
+              : {},
           actions: [{ action_type: values.action_type, params: {} }],
           priority: values.priority,
           cooldown_seconds: values.cooldown_seconds,
@@ -394,6 +433,57 @@ const RuleFormModal: React.FC<RuleFormModalProps> = ({ isOpen, onClose, onSubmit
               </FormItem>
             )}
           />
+          {form.watch('trigger_type') === 'event' && (
+            <FormField
+              control={form.control}
+              name="event_pattern"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    {t('AutomationPage.createModal.fields.eventPattern.label', {
+                      defaultValue: 'Trigger event',
+                    })}
+                  </FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={t('AutomationPage.createModal.fields.eventPattern.placeholder', {
+                            defaultValue: 'Choose the event that fires this rule',
+                          })}
+                        />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {eventCategories.map((cat) => (
+                        <SelectGroup key={cat.name}>
+                          <SelectLabel>{cat.name}</SelectLabel>
+                          {cat.events.map((ev) => (
+                            <SelectItem key={ev} value={ev}>{ev}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                      {/* Deliberately last and spelled out. "*" is a valid
+                          pattern, and it used to be what you silently got. */}
+                      <SelectGroup>
+                        <SelectLabel>
+                          {t('AutomationPage.createModal.fields.eventPattern.advanced', {
+                            defaultValue: 'Advanced',
+                          })}
+                        </SelectLabel>
+                        <SelectItem value="*">
+                          {t('AutomationPage.createModal.fields.eventPattern.all', {
+                            defaultValue: '* — every event (high volume)',
+                          })}
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
           <FormField
             control={form.control}
             name="action_type"

@@ -40,13 +40,12 @@ import pytest
 
 from app.services.backup_contributors import (
     BackupContributor,
-    CoreBackupContributor,
     ContributorPayload,
+    CoreBackupContributor,
     RestoreResult,
     get_registry,
     reset_registry_for_tests,
 )
-
 
 # ── helpers ────────────────────────────────────────────────────────────
 

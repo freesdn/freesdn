@@ -14,7 +14,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -134,6 +134,30 @@ class AutomationRuleCreate(BaseModel):
     def _trigger_config_size(cls, v: dict[str, Any]) -> dict[str, Any]:
         return _validate_jsonb_size("trigger_config", v, _TRIGGER_CONFIG_MAX_BYTES) or v
 
+    @model_validator(mode="after")
+    def _event_rules_must_name_an_event(self) -> AutomationRuleCreate:
+        """An event rule that names no event is refused at creation.
+
+        It used to be accepted and then default to ``"*"`` when the engine
+        registered it, so it fired on EVERY event in the organisation. An
+        operator writing "notify me when a device goes offline" got
+        notifications for every controller sync, every discovery run and every
+        alert, with the cooldown as the only brake.
+
+        Refused here rather than only at registration, because a rule that is
+        created successfully and then never fires is its own confusing failure.
+        ``"*"`` remains valid -- it just has to be asked for.
+        """
+        if self.trigger_type == TriggerType.EVENT:
+            pattern = str((self.trigger_config or {}).get("event_pattern") or "").strip()
+            if not pattern:
+                raise ValueError(
+                    "an event-triggered rule requires trigger_config.event_pattern "
+                    "(for example 'device.status.changed', 'alert.*', or '*' for "
+                    "every event)"
+                )
+        return self
+
     @field_validator("conditions")
     @classmethod
     def _conditions_depth(cls, v: ConditionGroupSchema | None) -> ConditionGroupSchema | None:
@@ -172,6 +196,28 @@ class AutomationRuleUpdate(BaseModel):
         if depth > _MAX_CONDITION_DEPTH:
             raise ValueError(f"conditions nested too deeply: {depth} > {_MAX_CONDITION_DEPTH}")
         return v
+
+    @model_validator(mode="after")
+    def _event_update_must_name_an_event(self) -> AutomationRuleUpdate:
+        """The same rule as create, for the update path.
+
+        The firehose itself is already closed at registration -- the engine no
+        longer defaults a missing pattern to "*" -- so this is not a security
+        gap. But without it, an update could set an event rule's trigger_config
+        to one with no event_pattern, and the rule would go silently dead while
+        create refuses exactly that. A partial update that does not touch the
+        trigger is unaffected: this only fires when trigger_type is explicitly
+        "event" AND a trigger_config is supplied.
+        """
+        if self.trigger_type == TriggerType.EVENT and self.trigger_config is not None:
+            pattern = str((self.trigger_config or {}).get("event_pattern") or "").strip()
+            if not pattern:
+                raise ValueError(
+                    "an event-triggered rule requires trigger_config.event_pattern "
+                    "(for example 'device.status.changed', 'alert.*', or '*' for "
+                    "every event)"
+                )
+        return self
 
 
 class AutomationRuleResponse(BaseModel):

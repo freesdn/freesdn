@@ -345,6 +345,19 @@ def _required_apply_permission(feature: str) -> str:
     # is additional, not a substitute for the permission tier).
     if feature.startswith("firmware."):
         return "firmware:upgrade"
+    # Storage writes are storage-tier. WITHOUT this branch every ``storage.*``
+    # feature fell through to the ``network:write`` default at the bottom --
+    # wrong in both directions at once. A network operator could apply a
+    # snapshot delete or a scrub on someone's NAS, and the operator actually
+    # holding ``storage.write`` (which modules/storage/module.py declares and
+    # the Fabric ``storage.store_blob`` operation demands to STAGE) could not
+    # apply what they had just staged.
+    #
+    # Stage and apply have to demand the same tier. When they do not, the
+    # weaker of the two is the real gate, which is the same under-gate the
+    # ``overlay.`` and ``openwrt.`` branches above were added to close.
+    if feature.startswith("storage.") or feature.startswith("truenas.storage."):
+        return "storage.write"
     # All ``proxmox.*`` sub-features are hypervisor-tier — Proxmox
     # IS the hypervisor module. VM destroy / node shutdown / snapshot
     # rollback are the most catastrophic writes in the platform; we
@@ -966,6 +979,10 @@ async def list_pending_changes_by_gateway(
         # operators to use ("stage it via the staged adapter endpoints")
         # had no way to review or apply anything once staged.
         "proxmox": "proxmox.",
+        # Storage (TrueNAS) stages under ``storage.*`` (snapshot / dataset /
+        # scrub). Without this the Pending Changes drawer on the Storage page
+        # could not list what an operator staged.
+        "storage": "storage.",
     }
     vendor_lower = vendor.lower()
     if vendor_lower not in _VENDOR_PREFIX:

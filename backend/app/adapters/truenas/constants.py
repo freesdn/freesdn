@@ -74,6 +74,44 @@ WS_METHOD_CLOUDSYNC = "cloudsync.query"
 # against S4 / TrueNAS 26.0: ``filesystem.put`` is present with ``job=True``.)
 WS_METHOD_FILESYSTEM_PUT = "filesystem.put"
 WS_METHOD_CORE_GET_JOBS = "core.get_jobs"
+
+# ---------------------------------------------------------------------------
+# Data-plane surface (v3 — TrueNAS as a backup destination).
+# ---------------------------------------------------------------------------
+# A backup destination needs more than "put": it has to read a backup back,
+# check whether one is there, size it, and delete it when retention expires.
+# ``filesystem.put`` alone made the appliance write-only, which is the one
+# thing a backup target must never be -- a destination you cannot restore from
+# is not a backup, it is a copy you will discover is unusable on the worst day.
+#
+# ``filesystem.get`` is a job like put: it streams over HTTPS from
+# ``/_download`` after the job is created. ``filesystem.stat`` and
+# ``filesystem.unlink`` are ordinary WS calls.
+WS_METHOD_FILESYSTEM_GET = "filesystem.get"
+WS_METHOD_FILESYSTEM_STAT = "filesystem.stat"
+WS_METHOD_FILESYSTEM_UNLINK = "filesystem.unlink"
+WS_METHOD_FILESYSTEM_MKDIR = "filesystem.mkdir"
+DOWNLOAD_PATH = "/_download"
+
+# ---------------------------------------------------------------------------
+# Management surface (v4 — the writes an operator actually performs).
+# ---------------------------------------------------------------------------
+# Every one of these is a CONFIGURATION change to the appliance, so unlike the
+# data-plane methods above they go through stage_change and the dual gate.
+#
+# Deliberately absent: snapshot ROLLBACK and dataset DELETE. Both destroy data
+# irreversibly -- a rollback discards everything written since the snapshot --
+# and "we staged it first" is not sufficient design for an operation whose
+# blast radius is the whole dataset. They are worth adding with a per-action
+# confirmation and a dry-run that names what would be lost; shipping them as
+# ordinary staged writes would be the wrong shape.
+WS_METHOD_DATASET_CREATE = "pool.dataset.create"
+WS_METHOD_DATASET_DELETE = "pool.dataset.delete"
+WS_METHOD_SNAPSHOT_CREATE = "pool.snapshot.create"
+WS_METHOD_SNAPSHOT_CREATE_LEGACY = "zfs.snapshot.create"  # pre-25.x name
+WS_METHOD_SNAPSHOT_DELETE = "pool.snapshot.delete"
+WS_METHOD_SNAPSHOT_DELETE_LEGACY = "zfs.snapshot.delete"
+WS_METHOD_SCRUB_RUN = "pool.scrub.run"
 UPLOAD_PATH = "/_upload"
 # Job-completion polling (seconds). A snapshot JPEG is small, but the appliance
 # may be busy; cap the wait so a stuck job surfaces as a timeout, not a hang.

@@ -19,8 +19,6 @@ Covers the chapter's three backend invariants:
 
 from __future__ import annotations
 
-import pytest
-
 from app.api.v1.endpoints.discovery import (
     DRIVER_REGISTRY,
     _auto_pick_driver,
@@ -152,6 +150,7 @@ class TestDriverRegistryShape:
 class TestAdoptDeviceRequestSchema:
     def test_driver_id_optional(self) -> None:
         from uuid import uuid4
+
         from app.api.v1.endpoints.discovery import AdoptDeviceRequest
 
         req = AdoptDeviceRequest(
@@ -163,6 +162,7 @@ class TestAdoptDeviceRequestSchema:
 
     def test_driver_id_still_accepted_when_set(self) -> None:
         from uuid import uuid4
+
         from app.api.v1.endpoints.discovery import AdoptDeviceRequest
 
         req = AdoptDeviceRequest(

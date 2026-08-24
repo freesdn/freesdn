@@ -8,6 +8,64 @@ and the project uses [Calendar Versioning](https://calver.org/) (`YY.MM.PATCH`).
 FreeSDN is a Community Edition / Early Access project. Releases may contain
 breaking changes between versions - **back up your data before upgrading.**
 
+## [26.08.4] - 2026-08-24 - Storage you can write to, and observability that acts
+
+Storage was a very good pair of eyes with almost no hands, and the collector was
+a dead end. This release makes both do something. The whole storage write path
+was validated live, end to end, against a real TrueNAS 26.0 appliance -- not
+just mock-tested.
+
+### Added
+
+- **Back up to the TrueNAS you already monitor.** A new backup destination that
+  names a managed controller instead of asking you to retype its address and API
+  key. Each backup is stored as its own child dataset, so retention prunes it by
+  destroying that dataset -- clean, with per-backup ZFS visibility. Save,
+  restore and prune were all proven against the real appliance.
+- **Storage writes from the Storage page.** Take a snapshot, create a dataset,
+  start a scrub, delete a snapshot -- each staged through the same dual-gate
+  review-and-apply flow every other managed write uses, and disabled with a
+  clear reason on a legacy REST appliance that cannot do them. A Snapshots
+  section lists what is there.
+- **Observability can trigger automation.** The collector now publishes
+  `collector.syslog.received` / `collector.trap.received` onto the event bus
+  (severity-floored and rate-capped per source), so an automation rule can act
+  on a device's own logs -- the missing first link between "something happened
+  on the network" and "do something about it".
+- **Storage is a module, not the TrueNAS module.** Health rollups now span every
+  storage vendor through a provider registry; Proxmox node storage is the second
+  provider, read-only.
+- A capability-maturity record for storage, which had none -- rated honestly for
+  what is proven live versus staged-but-unfired.
+
+### Fixed
+
+- **An automation rule created in the UI fired on every event in the
+  organisation.** The rule form had no field for the trigger event, so it posted
+  an empty trigger and the engine matched everything -- amplified by the new
+  collector events. Event rules now require a named pattern (a picker in the
+  form), refused at both create and update; a rule that names none is reported
+  as not-firing rather than silently matching all.
+- **Applying a storage change asked for `network:write`.** Every `storage.*`
+  feature fell through to the network tier, so a network operator could apply a
+  snapshot delete while the operator holding `storage.write` could not apply
+  what they had staged. Now correctly storage-tiered.
+- The observability rate cap was per-worker (so the real cap was
+  worker-count x limit, and defeated at exactly that), and a UDP burst spawned an
+  unbounded task per packet with the allowlist checked only after the task was
+  created. The cap is now cluster-wide, and unauthorised floods are refused
+  before any work is scheduled.
+- `POST /agents/{id}/tasks` created a task and never delivered it.
+
+### Security
+
+- Every recursive dataset delete is rebuilt from a validated base plus one
+  sanitised id token, so it can only ever target a direct child of the
+  operator-nominated dataset -- never a pool root. Verified against every escape
+  attempt.
+- The staging path-traversal guard no longer false-rejects a ZFS snapshot id
+  (`dataset/path@name`), while still refusing genuine traversal.
+
 ## [26.08.1] - 2026-08-15 - Security and correctness
 
 A patch release. No new features, no schema changes, no migration required.

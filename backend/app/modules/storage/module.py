@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2024-2026 FreeSDN
-"""FreeSDN Storage Module — Fabric storage participant (TrueNAS).
+"""FreeSDN Storage Module — Fabric storage participant (multi-vendor).
 
 Declares the storage Operations the Fabric negotiator can wire:
 
@@ -18,7 +18,6 @@ No DB tables and no HTTP routes (live reads already live under
 surface, discovered by the FabricRegistry like any other module.
 """
 
-import contextlib
 import logging
 from typing import Any
 
@@ -54,16 +53,23 @@ async def _fabric_storage_health_handler(ctx: Any) -> Any:
     from app.core.fabric.execution import OperationResult
     from app.models.core import Controller, Site
     from app.modules.storage.health import summarize_health
-    from app.services.adapter_truenas_storage import build_truenas_adapter
+    from app.modules.storage.providers import (
+        read_controller_storage,
+        storage_controller_types,
+    )
 
     if ctx.db is None:
         return OperationResult.fail("storage.health requires a DB session", "NO_DB")
 
+    # Every registered storage vendor, not a hardcoded one. This filter WAS
+    # ``controller_type == "truenas"``, which is what made the storage module
+    # the TrueNAS module -- a second vendor could not be added without editing
+    # this query. See modules/storage/providers.py.
     q = (
         select(Controller)
         .join(Site, Controller.site_id == Site.id)
         .where(
-            Controller.controller_type == "truenas",
+            Controller.controller_type.in_(storage_controller_types()),
             Controller.deleted_at.is_(None),
             Site.organization_id == ctx.organization_id,
         )
@@ -80,26 +86,24 @@ async def _fabric_storage_health_handler(ctx: Any) -> Any:
     worst = "ok"
 
     for ctrl in controllers:
-        entry: dict[str, Any] = {"controller_id": str(ctrl.id), "name": ctrl.name}
-        try:
-            adapter = await build_truenas_adapter(ctrl)
-        except Exception as exc:  # noqa: BLE001 — surface per-appliance, keep going
-            entry.update({"status": "unreachable", "error": str(exc)[:200]})
+        entry: dict[str, Any] = {
+            "controller_id": str(ctrl.id),
+            "name": ctrl.name,
+            # Named per appliance so a mixed-vendor rollup is legible: "one of
+            # these is degraded" is not actionable without knowing which box.
+            "vendor": ctrl.controller_type,
+        }
+        reading = await read_controller_storage(ctrl)
+        if reading is None:
+            # Unreachable, or a controller type no provider claims. Reported
+            # rather than dropped -- an appliance silently missing from the
+            # rollup reads as an appliance with nothing wrong.
+            entry.update({"status": "unreachable"})
             appliances.append(entry)
             worst = _worse(worst, "error")
             continue
-        try:
-            pools = await adapter.get_pools()
-            alerts = await adapter.get_alerts()
-            temps = await adapter.get_disk_temperatures()
-        except Exception as exc:  # noqa: BLE001
-            entry.update({"status": "unreachable", "error": str(exc)[:200]})
-            worst = _worse(worst, "error")
-            appliances.append(entry)
-            continue
-        finally:
-            with contextlib.suppress(Exception):
-                await adapter.disconnect()
+
+        pools, alerts, temps = reading.pools, reading.alerts, reading.disk_temps
 
         # Shared rollup — the same summary the storage.poll_health monitor uses
         # to decide transitions, so the catalog read and the events agree.
@@ -132,7 +136,10 @@ class StorageModule(BaseModule):
             id="storage",
             name="Storage",
             version="1.0.0",
-            description="Storage appliance (TrueNAS) Fabric participant: health reads + staged blob writes",
+            description=(
+                "Storage Fabric participant: health reads across every registered "
+                "storage vendor, plus staged writes on TrueNAS appliances"
+            ),
             author="FreeSDN Team",
             license="AGPL-3.0-only",
             category=ModuleCategory.SYSTEM,
@@ -181,7 +188,10 @@ class StorageModule(BaseModule):
             Operation(
                 id="storage.health",
                 title="Storage health rollup",
-                description="Aggregate ZFS pool + alert health across the org's TrueNAS appliances.",
+                description=(
+                    "Aggregate pool/datastore health across the org's storage: "
+                    "ZFS pools and alerts on TrueNAS, per-node datastores on Proxmox."
+                ),
                 input_schema={
                     "type": "object",
                     "properties": {"controller_id": {"type": "string", "format": "uuid"}},

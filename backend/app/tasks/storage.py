@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2024-2026 FreeSDN
-"""FreeSDN — TrueNAS storage health monitor (Celery).
+"""FreeSDN — storage health monitor (Celery), across every registered vendor.
 
-Polls every active TrueNAS appliance on a schedule, rolls up its pool / alert /
+Polls every active storage controller on a schedule -- whatever
+``modules.storage.providers`` claims -- rolls up its pool / alert /
 temperature health, and emits ``storage.*`` Fabric events ONLY on state
 transitions (degraded↔healthy, capacity crossing the warn threshold, a new
 critical alert, appliance unreachable↔online). This is what makes "something
@@ -27,7 +28,6 @@ Enterprise-grade properties:
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 from typing import Any
 from uuid import UUID
@@ -69,7 +69,14 @@ def _transitions(
     """Diff the previous snapshot against the current reading → bus events."""
     from app.core.events import EventPriority
 
-    base = {"controller_id": str(ctrl.id), "controller_name": ctrl.name}
+    # The vendor rides on every storage event. These are now emitted for more
+    # than one kind of appliance, and "storage.appliance.unreachable" without
+    # it makes an operator open the UI to find out which box and what it is.
+    base = {
+        "controller_id": str(ctrl.id),
+        "controller_name": ctrl.name,
+        "vendor": ctrl.controller_type,
+    }
     events: list[Any] = []
     prev_reachable = bool(prev.get("reachable", True))
 
@@ -79,7 +86,7 @@ def _transitions(
                 _mk_event(
                     "storage.appliance.unreachable",
                     EventPriority.HIGH,
-                    {**base, "detail": "TrueNAS appliance is unreachable"},
+                    {**base, "detail": f"{ctrl.controller_type} storage is unreachable"},
                     org_id,
                 )
             )
@@ -152,7 +159,16 @@ async def _org_for_controller(session: Any, ctrl: Controller) -> UUID | None:
 
 
 async def _poll_storage_health() -> dict[str, Any]:
-    from app.services.adapter_truenas_storage import build_truenas_adapter
+    # Every registered storage vendor, not just TrueNAS. This task and the
+    # ``storage.health`` Fabric read are the same idea in two places, and when
+    # the Fabric side was generalised this one was left naming a vendor -- so
+    # Proxmox datastores appeared in an on-demand health read and were never
+    # monitored, never snapshotted, and never emitted a transition event. The
+    # two now share modules/storage/providers.py.
+    from app.modules.storage.providers import (
+        read_controller_storage,
+        storage_controller_types,
+    )
 
     polled = 0
     emitted = 0
@@ -163,7 +179,7 @@ async def _poll_storage_health() -> dict[str, Any]:
             (
                 await session.execute(
                     select(Controller).where(
-                        Controller.controller_type == "truenas",
+                        Controller.controller_type.in_(storage_controller_types()),
                         Controller.deleted_at.is_(None),
                         Controller.is_active.is_(True),
                         Controller.sync_enabled.is_(True),
@@ -187,24 +203,23 @@ async def _poll_storage_health() -> dict[str, Any]:
                 cfg.get("_fabric_storage_capacity_warn_pct", _DEFAULT_CAPACITY_WARN_PCT)
             )
 
-            reachable = True
             summary: dict[str, Any] | None = None
-            adapter = None
-            try:
-                adapter = await build_truenas_adapter(ctrl)
-                pools = await adapter.get_pools()
-                alerts = await adapter.get_alerts()
-                temps = await adapter.get_disk_temperatures()
-                summary = summarize_health(pools, alerts, temps, capacity_warn_pct=warn_pct)
-            except Exception as exc:  # noqa: BLE001 — one bad NAS must not abort the rest
-                reachable = False
-                logger.warning(
-                    "Storage poll: %s (%s) unhealthy/unreachable: %s", ctrl.name, ctrl.host, exc
+            # The provider owns connecting, reading and disconnecting, and
+            # returns None rather than raising -- one bad appliance must not
+            # abort the sweep for every other one.
+            reading = await read_controller_storage(ctrl)
+            reachable = reading is not None
+            if reading is not None:
+                summary = summarize_health(
+                    reading.pools,
+                    reading.alerts,
+                    reading.disk_temps,
+                    capacity_warn_pct=warn_pct,
                 )
-            finally:
-                if adapter is not None:
-                    with contextlib.suppress(Exception):
-                        await adapter.disconnect()
+            else:
+                logger.warning(
+                    "Storage poll: %s (%s) unreachable or unclaimed", ctrl.name, ctrl.host
+                )
 
             # Collect transition events (published after commit so a steady
             # state never re-fires, and a publish failure can't roll back).
@@ -230,7 +245,7 @@ async def _poll_storage_health() -> dict[str, Any]:
 
 @celery_app.task(bind=True, name="storage.poll_health", soft_time_limit=240, time_limit=300)
 def poll_health(self) -> dict[str, Any]:
-    """Periodic TrueNAS health poll → storage.* transition events."""
+    """Periodic storage health poll → storage.* transition events."""
     if not acquire_solo_lock("storage.poll_health", ttl_seconds=180):
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:

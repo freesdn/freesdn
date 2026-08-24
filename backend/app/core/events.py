@@ -742,6 +742,15 @@ class EventType(StrEnum):
     CONTROLLER_SYNC_COMPLETED = "controller.sync.completed"
     CONTROLLER_SYNC_FAILED = "controller.sync.failed"
 
+    # Observability events. The collector publishes these after storing a
+    # syslog message or SNMP trap, gated by severity and rate -- see
+    # modules/collector/services/events.py. They are named here because this
+    # enum is what a plugin author reads and what the offered-vs-published
+    # ratchet scans; an event published only through a dispatch table is a real
+    # event that looks like a phantom.
+    COLLECTOR_SYSLOG_RECEIVED = "collector.syslog.received"
+    COLLECTOR_TRAP_RECEIVED = "collector.trap.received"
+
     # Discovery events
     DISCOVERY_STARTED = "discovery.started"
     # discovery.scan_progress, not discovery.progress. The value here was one

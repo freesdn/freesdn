@@ -59,10 +59,15 @@ logger = logging.getLogger(__name__)
 class TrueNASAPIError(AdapterError):
     """Generic TrueNAS API failure (non-auth, non-network)."""
 
-    def __init__(self, message: str, status_code: int = 0, body: str = ""):
+    def __init__(self, message: str, status_code: int = 0, body: str = "", errname: str = ""):
         super().__init__(message)
         self.status_code = status_code
         self.body = body
+        # The TrueNAS middleware wraps the real cause under data.errname
+        # (ENOENT, EEXIST, ...) while the top-level message is a generic
+        # "Method call error". Callers that need to distinguish "not found"
+        # from a real failure match on this rather than scraping the string.
+        self.errname = errname
 
 
 class TrueNASClient:

@@ -95,6 +95,7 @@ class TestAutoAdoptGating:
         self, db_session: AsyncSession, site_without_auto_adopt
     ) -> None:
         from sqlalchemy import select
+
         from app.models.devices import Device
         from app.services.discovered_hosts import _maybe_auto_adopt_for_site
 
@@ -117,6 +118,7 @@ class TestAutoAdoptGating:
         self, db_session: AsyncSession, site_with_auto_adopt
     ) -> None:
         from sqlalchemy import select
+
         from app.models.devices import Device, DeviceStatus
         from app.services.discovered_hosts import _maybe_auto_adopt_for_site
 
@@ -270,13 +272,13 @@ class TestAgentObservationLiveness:
         self, db_session: AsyncSession, site_with_auto_adopt
     ) -> None:
         from datetime import UTC, datetime, timedelta
-        from sqlalchemy import select
+
         from app.models.devices import (
-            Device, DeviceStatus, DiscoveredHost,
+            Device,
+            DeviceStatus,
         )
         from app.services.discovered_hosts import (
             _touch_adopted_device_liveness,
-            upsert_discovered_host,
         )
 
         site = site_with_auto_adopt["site"]
@@ -313,9 +315,9 @@ class TestAgentObservationLiveness:
         """A device with a controller is the controller's responsibility
         — the agent-liveness path must NOT flip its status."""
         from datetime import UTC, datetime
-        from uuid import uuid4
-        from app.models.devices import Device, DeviceStatus
+
         from app.models.core import Controller
+        from app.models.devices import Device, DeviceStatus
         from app.services.discovered_hosts import _touch_adopted_device_liveness
 
         site = site_with_auto_adopt["site"]

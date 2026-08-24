@@ -30,6 +30,8 @@ from fastapi import HTTPException
 
 from app.services.adapter_pfsense_firewall import (
     _APPLY as FW_APPLY,
+)
+from app.services.adapter_pfsense_firewall import (
     GatewayPfsenseFirewallService,
 )
 

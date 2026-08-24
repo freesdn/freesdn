@@ -23,7 +23,6 @@ import pytest_asyncio
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
 # =============================================================================
 # Schema validation
 # =============================================================================
@@ -144,6 +143,7 @@ class TestUpdateInteractiveTaskHandler:
         self, db_session: AsyncSession, scan_task_fixture
     ) -> None:
         from sqlalchemy import select as _sel
+
         from app.models.agents import AgentTask
         from app.services.remote_agent import (
             AgentRegistryService,
@@ -184,6 +184,7 @@ class TestUpdateInteractiveTaskHandler:
         self, db_session: AsyncSession, scan_task_fixture
     ) -> None:
         from sqlalchemy import select as _sel
+
         from app.models.agents import AgentTask
         from app.services.remote_agent import (
             AgentRegistryService,
@@ -226,6 +227,7 @@ class TestUpdateInteractiveTaskHandler:
         self, db_session: AsyncSession, scan_task_fixture
     ) -> None:
         from sqlalchemy import select as _sel
+
         from app.models.agents import AgentTask
         from app.services.remote_agent import (
             AgentRegistryService,
@@ -260,6 +262,7 @@ class TestUpdateInteractiveTaskHandler:
         self, db_session: AsyncSession, scan_task_fixture
     ) -> None:
         from sqlalchemy import select as _sel
+
         from app.models.agents import AgentTask
         from app.services.remote_agent import (
             AgentRegistryService,
@@ -296,6 +299,7 @@ class TestUpdateInteractiveTaskHandler:
         """If a late scan_progress arrives after scan_result already
         marked the task completed, it must not roll the status back."""
         from sqlalchemy import select as _sel
+
         from app.models.agents import AgentTask
         from app.services.remote_agent import (
             AgentRegistryService,

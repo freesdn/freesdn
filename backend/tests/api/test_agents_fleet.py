@@ -156,6 +156,7 @@ class TestFleetOverviewAggregation:
         self, db_session: AsyncSession, fleet_fixture
     ) -> None:
         from sqlalchemy import Integer, func, select
+
         from app.models.agents import RemoteAgent
         from app.models.core import Site
 
@@ -175,6 +176,7 @@ class TestFleetOverviewAggregation:
         self, db_session: AsyncSession, fleet_fixture
     ) -> None:
         from sqlalchemy import Integer, func, select
+
         from app.models.agents import AgentSchedule, AgentScheduleRun
 
         cutoff = datetime.now(UTC) - timedelta(hours=24)
@@ -201,6 +203,7 @@ class TestFleetOverviewAggregation:
         self, db_session: AsyncSession, fleet_fixture
     ) -> None:
         from sqlalchemy import Integer, func, select
+
         from app.models.agents import AgentSchedule
 
         q = select(
@@ -219,6 +222,7 @@ class TestFleetOverviewAggregation:
         self, db_session: AsyncSession, fleet_fixture
     ) -> None:
         from sqlalchemy import Integer, func, select
+
         from app.models.devices import DiscoveredHost
 
         q = select(
@@ -241,6 +245,7 @@ class TestFleetOverviewAggregation:
     ) -> None:
         """Hosts in a foreign org must not appear in our org's totals."""
         from sqlalchemy import func, select
+
         from app.models.core import Organization
         from app.models.devices import DiscoveredHost
 

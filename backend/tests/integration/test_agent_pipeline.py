@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
@@ -103,6 +103,7 @@ class TestFullAgentPipeline:
         5. Fleet overview reflects: 1 schedule, 1 run, 3 discovered, 1 adopted
         """
         from sqlalchemy import select
+
         from app.models.agents import AgentSchedule, AgentScheduleRun
         from app.models.devices import DiscoveredHost
         from app.services.discovered_hosts import upsert_batch

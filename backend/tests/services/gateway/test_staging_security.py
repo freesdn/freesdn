@@ -691,3 +691,65 @@ class TestOpnsensePreflightAtApply:
         result = await svc.apply_change(change.id, force=True, confirmed=True, applier=applier)
         applier.assert_awaited_once()
         assert result.status == "applied"
+
+
+# ── snapshot_id: a structured id that legitimately contains "/" ──────────
+
+
+class TestSnapshotIdValidation:
+    """A ZFS snapshot id is ``dataset/path@name``.
+
+    Found live: the generic ``*_id`` path-traversal guard rejected the "/" in a
+    real snapshot id, so staging a snapshot DELETE from the Storage page failed
+    with "contains path-traversal characters" -- for a perfectly valid id. The
+    id never flows into a URL (storage stages to JSON-RPC params), and the
+    storage service applies its own strict validator at apply time, so the
+    blanket "/" rejection was a false positive.
+    """
+
+    def test_a_real_snapshot_id_is_accepted(self):
+        from app.services.adapter_staging import _validate_structured_zfs_id
+
+        # Must not raise.
+        _validate_structured_zfs_id("s4_hdd/freesdn_test@ui-live-test")
+        _validate_structured_zfs_id("tank/data/nested@daily-2026-08-24")
+        _validate_structured_zfs_id("tank@snap")
+
+    def test_traversal_in_a_snapshot_id_is_still_refused(self):
+        from fastapi import HTTPException
+
+        from app.services.adapter_staging import _validate_structured_zfs_id
+
+        for bad in ("../../etc/passwd@x", "tank/../evil@x", r"tank\win@x", "", "@leading"):
+            with pytest.raises(HTTPException):
+                _validate_structured_zfs_id(bad)
+
+    def test_the_payload_guard_lets_a_snapshot_id_through(self):
+        """
+        The end-to-end guard, not just the validator: the whole payload check
+        must accept a snapshot delete's payload. Before the fix this raised.
+        """
+        from app.services.adapter_staging import _validate_url_path_payload_keys
+
+        # Must not raise -- this is exactly what the storage delete stages.
+        _validate_url_path_payload_keys({"snapshot_id": "s4_hdd/freesdn_test@ui-live-test"})
+
+    def test_the_payload_guard_still_catches_a_traversing_snapshot_id(self):
+        from fastapi import HTTPException
+
+        from app.services.adapter_staging import _validate_url_path_payload_keys
+
+        with pytest.raises(HTTPException):
+            _validate_url_path_payload_keys({"snapshot_id": "../../../etc@x"})
+
+    def test_an_ordinary_id_still_rejects_a_slash(self):
+        """
+        The exemption is scoped to snapshot_id. A normal ``*_id`` that is
+        URL-path-bound must still refuse a slash.
+        """
+        from fastapi import HTTPException
+
+        from app.services.adapter_staging import _validate_url_path_payload_keys
+
+        with pytest.raises(HTTPException):
+            _validate_url_path_payload_keys({"rule_id": "a/b"})

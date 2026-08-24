@@ -23,6 +23,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
+#: Ceiling on datagrams being processed concurrently. Each one is an asyncio
+#: Task holding a parsed record and, briefly, a database session. Unbounded, a
+#: burst turns straight into memory: 20,000 packets measured as 20,000 pending
+#: tasks. UDP is lossy by contract, so shedding under overload is correct --
+#: what is not correct is shedding silently, which is why it is counted.
+_MAX_INFLIGHT = 2048
+
 
 def _task_error_handler(task: asyncio.Task) -> None:  # type: ignore[type-arg]
     if task.cancelled():
@@ -218,9 +225,17 @@ class _SNMPProtocol(asyncio.DatagramProtocol):
         pass
 
     def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
-        asyncio.create_task(self._receiver._handle(data, addr[0])).add_done_callback(
-            _task_error_handler
-        )
+        source_ip = addr[0]
+        # Admission BEFORE the task exists -- same reasoning as syslog, and it
+        # matters more here: BER decoding an unauthorised packet is strictly
+        # more expensive than discarding it, and the existing note on _handle
+        # already said the allowlist runs first "so an unauthorised source never
+        # consumes CPU on BER decoding". It did, one Task's worth, per packet.
+        if not self._receiver.admit(source_ip):
+            return
+        task = asyncio.create_task(self._receiver._handle(data, source_ip))
+        task.add_done_callback(_task_error_handler)
+        task.add_done_callback(self._receiver.release)
 
     def error_received(self, exc: Exception) -> None:
         logger.warning("SNMP UDP error: %s", exc)
@@ -235,12 +250,21 @@ class SNMPTrapReceiver:
         port: int = 162,
         session_factory: Callable[[], AsyncSession] | None = None,
         resolver: Any = None,
+        publisher: Any = None,
+        max_inflight: int = _MAX_INFLIGHT,
         allowlist: list[ipaddress._BaseNetwork] | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self._session_factory = session_factory
         self._resolver = resolver
+        # None disables publishing entirely, which is what the unit
+        # tests and any embedded use want; the manager supplies one.
+        self._publisher = publisher
+        self._inflight = 0
+        self._max_inflight = max_inflight
+        self._dropped_overload = 0
+        self._kind = "snmp_trap"
         self._allowlist = allowlist or []
         self._transport: asyncio.DatagramTransport | None = None
         # NOTE(C3): count packets rejected by allowlist for /status.
@@ -248,6 +272,48 @@ class SNMPTrapReceiver:
         # NOTE(C2): count rows dropped because source IP couldn't be
         # mapped to a known device → org.
         self._dropped_unknown_source: int = 0
+
+    def admit(self, source_ip: str) -> bool:
+        """Whether this datagram is worth spending a task on.
+
+        Two cheap synchronous checks, both of which used to happen INSIDE the
+        task -- so a flood cost one Task per packet before anything had decided
+        the packet was even wanted. Measured: a 20,000-packet burst created
+        20,000 pending tasks.
+
+        The allowlist first. UDP source addresses are trivially spoofable and
+        the port is open to anyone who can route to it, so the rejected case is
+        the one under an attacker's control and must be the cheapest.
+
+        Then a ceiling on work in flight. Dropping datagrams under overload is
+        the correct behaviour for UDP -- syslog is lossy by design and the
+        alternative is exhausting memory -- but it is counted, because a
+        collector quietly discarding half a fleet's logs looks exactly like a
+        fleet that went quiet.
+        """
+        from app.modules.collector.services.manager import ip_allowed
+
+        if not ip_allowed(source_ip, self._allowlist):
+            self._rejected_packets += 1
+            return False
+
+        if self._inflight >= self._max_inflight:
+            self._dropped_overload += 1
+            if self._dropped_overload % 1000 == 1:
+                logger.warning(
+                    "collector.%s.overload dropped=%d inflight=%d/%d",
+                    self._kind,
+                    self._dropped_overload,
+                    self._inflight,
+                    self._max_inflight,
+                )
+            return False
+
+        self._inflight += 1
+        return True
+
+    def release(self, _task: object = None) -> None:
+        self._inflight -= 1
 
     async def start(self) -> None:
         loop = asyncio.get_running_loop()
@@ -307,3 +373,8 @@ class SNMPTrapReceiver:
                     await db.commit()
             except Exception as exc:
                 logger.warning("Failed to persist SNMP trap: %s", exc)
+
+        # Onto the event bus after the commit, same contract as syslog: the
+        # stored trap is the product, publishing is best-effort on top of it.
+        if self._publisher is not None:
+            await self._publisher.publish("snmp_trap", parsed)

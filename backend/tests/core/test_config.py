@@ -54,10 +54,9 @@ def _make_settings(**overrides):
     }
     env.update(overrides)
 
-    # Patch env vars, then import fresh Settings each time
-    patched = {f"FREESDN_{k}" if not k.startswith("FREESDN_") else k: v for k, v in env.items()}
-    # Settings reads bare names (case_sensitive=False), not FREESDN_ prefix.
-    # Pydantic-settings reads the exact field names from env.
+    # No FREESDN_ prefixing here on purpose: Settings is case-insensitive and
+    # pydantic-settings reads the exact field names, so the bare dict is what
+    # it wants. A prefix-building comprehension used to sit here, unused.
     from app.core.config import Settings
 
     return Settings(**env)
@@ -77,7 +76,7 @@ class TestDefaults:
         s = _make_settings()
         # APP_VERSION derives from the single source of truth (app.__version__),
         # not a duplicated literal.
-        assert s.APP_VERSION == app.__version__
+        assert app.__version__ == s.APP_VERSION
 
     def test_app_license(self):
         import app
@@ -240,6 +239,10 @@ class TestSecretKeyValidator:
             s = _make_settings(SECRET_KEY="x" * 20, ENVIRONMENT="development")
             warning_msgs = [str(x.message) for x in w]
             assert any("shorter than 32" in m for m in warning_msgs)
+            # Warned about, and KEPT. Development only nudges; an empty key is
+            # what gets auto-generated (see test_generates_key_when_empty).
+            # Without this the test cannot tell the two behaviours apart.
+            assert s.SECRET_KEY == "x" * 20
 
     def test_accepts_strong_key(self):
         s = _make_settings(SECRET_KEY="a" * 64, ENVIRONMENT="production", LOGDB_URL="postgresql+asyncpg://test:test@localhost:5432/logdb_test", REDIS_PASSWORD="test-redis-pw")
@@ -339,10 +342,10 @@ class TestVersionSingleSource:
         )
 
     def test_pyproject_license_matches(self):
-        import app
-
         import tomllib
         from pathlib import Path
+
+        import app
 
         pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
         data = tomllib.loads(pyproject.read_text(encoding="utf-8"))

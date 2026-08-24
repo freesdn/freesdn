@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 @pytest_asyncio.fixture
 async def known_fixture(db_session: AsyncSession):
     from app.models.core import Controller, Organization, Site
-    from app.models.devices import Device, DeviceStatus
+    from app.models.devices import Device
 
     org = Organization(name=f"ke-{uuid4()}", slug=f"ke-{uuid4().hex[:8]}")
     db_session.add(org)

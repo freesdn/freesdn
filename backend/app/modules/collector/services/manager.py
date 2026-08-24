@@ -22,6 +22,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.modules.collector.services.events import CollectorEventPublisher
+
 logger = logging.getLogger(__name__)
 
 
@@ -141,6 +143,10 @@ class CollectorManager:
             raise ValueError("CollectorManager requires a session_factory")
         self._session_factory = session_factory
         self._resolver = SourceResolver(session_factory)
+        # One publisher shared by both receivers: the rate cap is per
+        # (org, device, app, severity), and a device that logs AND traps
+        # about the same fault should not get two separate budgets.
+        self._publisher = CollectorEventPublisher()
         self._snmp_receiver: Any | None = None
         self._syslog_receiver: Any | None = None
         self._netflow_receiver: Any | None = None
@@ -247,6 +253,7 @@ class CollectorManager:
             session_factory=self._session_factory,
             resolver=self._resolver,
             allowlist=allowlist,
+            publisher=self._publisher,
         )
         try:
             await receiver.start()
@@ -270,6 +277,7 @@ class CollectorManager:
             session_factory=self._session_factory,
             resolver=self._resolver,
             allowlist=allowlist,
+            publisher=self._publisher,
         )
         try:
             await receiver.start()

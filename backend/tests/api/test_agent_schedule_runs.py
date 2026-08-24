@@ -83,6 +83,7 @@ class TestScheduleRunsAssembly:
         self, db_session: AsyncSession, org_site_schedule
     ) -> None:
         from sqlalchemy import select
+
         from app.models.agents import AgentScheduleRun
 
         _, _, schedule_id = org_site_schedule
@@ -101,7 +102,7 @@ class TestScheduleRunsAssembly:
         ).scalars().all()
         assert len(rows) == 3
         # Newest first
-        for older, newer in zip(rows[1:], rows[:-1]):
+        for older, newer in zip(rows[1:], rows[:-1], strict=True):
             assert newer.started_at >= older.started_at
 
     @pytest.mark.asyncio
@@ -109,6 +110,7 @@ class TestScheduleRunsAssembly:
         self, db_session: AsyncSession, org_site_schedule
     ) -> None:
         from sqlalchemy import select
+
         from app.models.agents import AgentScheduleRun
 
         _, _, schedule_id = org_site_schedule
@@ -152,6 +154,7 @@ class TestScheduleLastFiredBookkeeping:
         having to mock the AgentReport plumbing.
         """
         from sqlalchemy import select
+
         from app.models.agents import AgentSchedule, AgentScheduleRun
 
         _, site_id, schedule_id = org_site_schedule

@@ -185,6 +185,14 @@ export interface StorageDataset {
   quota_bytes: number;
 }
 
+export interface StorageSnapshot {
+  id: string;          // dataset@name
+  name: string;
+  dataset: string;
+  created_at: string | null;
+  used_bytes: number;
+}
+
 export interface StorageInventory {
   controller_id: string;
   name: string;
@@ -212,6 +220,7 @@ export interface StorageInventory {
   disks: StorageDisk[];
   datasets: StorageDataset[];
   snapshot_count: number;
+  snapshots: StorageSnapshot[];
 }
 
 export const controllersApi = {

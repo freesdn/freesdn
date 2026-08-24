@@ -24,6 +24,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
+#: Ceiling on datagrams being processed concurrently. Each one is an asyncio
+#: Task holding a parsed record and, briefly, a database session. Unbounded, a
+#: burst turns straight into memory: 20,000 packets measured as 20,000 pending
+#: tasks. UDP is lossy by contract, so shedding under overload is correct --
+#: what is not correct is shedding silently, which is why it is counted.
+_MAX_INFLIGHT = 2048
+
 
 def _task_error_handler(task: asyncio.Task) -> None:  # type: ignore[type-arg]
     if task.cancelled():
@@ -126,12 +133,19 @@ class _SyslogProtocol(asyncio.DatagramProtocol):
     def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
         source_ip = addr[0]
         try:
+            # Admission BEFORE the task exists. The allowlist used to be checked
+            # inside _process, so an unauthorised flood -- and UDP source
+            # addresses are trivially spoofable -- still bought a Task per
+            # packet. The check is a pure function of the source IP, so there is
+            # no reason for it to cost a task.
+            if not self._receiver.admit(source_ip):
+                return
             # Truncate BEFORE decoding/parsing. Without this the parsers see
             # the full datagram (up to 65507 bytes).
             line = data[:_MAX_PARSE_BYTES].decode("utf-8", errors="replace").strip()
-            asyncio.create_task(self._receiver._process(line, source_ip)).add_done_callback(
-                _task_error_handler
-            )
+            task = asyncio.create_task(self._receiver._process(line, source_ip))
+            task.add_done_callback(_task_error_handler)
+            task.add_done_callback(self._receiver.release)
         except Exception as exc:
             logger.debug("Syslog datagram error from %s: %s", source_ip, exc)
 
@@ -148,12 +162,21 @@ class SyslogReceiver:
         port: int = 514,
         session_factory: Callable[[], AsyncSession] | None = None,
         resolver: Any = None,
+        publisher: Any = None,
+        max_inflight: int = _MAX_INFLIGHT,
         allowlist: list[ipaddress._BaseNetwork] | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self._session_factory = session_factory
         self._resolver = resolver
+        # None disables publishing entirely, which is what the unit
+        # tests and any embedded use want; the manager supplies one.
+        self._publisher = publisher
+        self._inflight = 0
+        self._max_inflight = max_inflight
+        self._dropped_overload = 0
+        self._kind = "syslog"
         self._allowlist = allowlist or []
         self._transport: asyncio.DatagramTransport | None = None
         # NOTE(C3): packets dropped by source-IP allowlist.
@@ -161,6 +184,48 @@ class SyslogReceiver:
         # NOTE(C2): rows dropped because source IP could not be mapped
         # to a known device → org.
         self._dropped_unknown_source: int = 0
+
+    def admit(self, source_ip: str) -> bool:
+        """Whether this datagram is worth spending a task on.
+
+        Two cheap synchronous checks, both of which used to happen INSIDE the
+        task -- so a flood cost one Task per packet before anything had decided
+        the packet was even wanted. Measured: a 20,000-packet burst created
+        20,000 pending tasks.
+
+        The allowlist first. UDP source addresses are trivially spoofable and
+        the port is open to anyone who can route to it, so the rejected case is
+        the one under an attacker's control and must be the cheapest.
+
+        Then a ceiling on work in flight. Dropping datagrams under overload is
+        the correct behaviour for UDP -- syslog is lossy by design and the
+        alternative is exhausting memory -- but it is counted, because a
+        collector quietly discarding half a fleet's logs looks exactly like a
+        fleet that went quiet.
+        """
+        from app.modules.collector.services.manager import ip_allowed
+
+        if not ip_allowed(source_ip, self._allowlist):
+            self._rejected_packets += 1
+            return False
+
+        if self._inflight >= self._max_inflight:
+            self._dropped_overload += 1
+            if self._dropped_overload % 1000 == 1:
+                logger.warning(
+                    "collector.%s.overload dropped=%d inflight=%d/%d",
+                    self._kind,
+                    self._dropped_overload,
+                    self._inflight,
+                    self._max_inflight,
+                )
+            return False
+
+        self._inflight += 1
+        return True
+
+    def release(self, _task: object = None) -> None:
+        self._inflight -= 1
 
     async def start(self) -> None:
         loop = asyncio.get_running_loop()
@@ -264,3 +329,10 @@ class SyslogReceiver:
                     await db.commit()
             except Exception as exc:
                 logger.warning("Failed to persist syslog: %s", exc)
+
+        # Onto the event bus, so an automation rule can act on this. Strictly
+        # after the commit: the stored log is the product, and a bus problem
+        # must never cost it. Publishing is gated by severity and rate inside
+        # the publisher -- see collector/services/events.py for why.
+        if self._publisher is not None:
+            await self._publisher.publish("syslog", parsed)

@@ -156,6 +156,16 @@ EVENT_CATEGORIES = {
         "alert.fired",
         "alert.resolved",
     ],
+    # Observability signals from the collector. Registered here because this
+    # dict is what the integrations UI offers, what the webhook validator
+    # accepts, and what a plugin manifest is checked against -- an event the
+    # collector publishes but nobody can name is one nobody can subscribe to.
+    # Only warning-and-above is published, and it is rate-capped per source;
+    # see modules/collector/services/events.py.
+    "Observability Events": [
+        "collector.syslog.received",
+        "collector.trap.received",
+    ],
     "Controller Events": [
         "controller.sync.started",
         "controller.sync.completed",

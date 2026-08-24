@@ -105,13 +105,32 @@ CAPABILITY_MATURITY: dict[str, CapabilityInfo] = {
         "Syslog ingest verified live end-to-end (external UDP → allowlist → "
         "source-IP→device resolution → parse → store) via the dedicated `collector` "
         "compose service. SNMP-trap and NetFlow share the same receiver/store path "
-        "(unit-tested; not yet fired live).",
+        "(unit-tested; not yet fired live). Syslog and traps now also publish "
+        "`collector.syslog.received` / `collector.trap.received` onto the event bus, "
+        "so an automation rule can act on them — severity-floored at warning and "
+        "rate-capped per source; still BETA because that bridge has not been fired "
+        "live against real gear.",
     ),
     "access_control": CapabilityInfo(
         _EXPERIMENTAL,
         "Physical access control",
         "Door/credential management works; physical door CONTROL refuses with 501 "
         "until a real door-controller adapter is added. Ships disabled by default.",
+    ),
+    "storage": CapabilityInfo(
+        _EXPERIMENTAL,
+        "Storage (TrueNAS)",
+        "Reads are live-validated against a real appliance and cover pools, "
+        "datasets, snapshots, disks, SMART, alerts and data-protection coverage. "
+        "Reads, health rollup, the force gate, and snapshot create/delete are "
+        "now VALIDATED LIVE against a real 26.0 appliance over Tailscale. Dataset "
+        "create and scrub start are staged and dual-gated but not yet fired live. "
+        "The backup destination is validated live end-to-end: save, restore, "
+        "verify and PRUNE. The middleware has no file-delete on any version, so "
+        "each backup is its own child dataset and retention destroys the dataset "
+        "-- proven against the real box, space reclaimed. Snapshot rollback and "
+        "dataset delete (the operator-facing staged ops) stay withheld pending a "
+        "confirmation flow that names what they destroy.",
     ),
     "vpn": CapabilityInfo(
         _EXPERIMENTAL,

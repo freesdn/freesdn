@@ -3170,4 +3170,20 @@ async def get_controller_storage(
             for d in datasets
         ],
         "snapshot_count": len(snapshots),
+        # The list itself, not just the count, so the Storage page can offer a
+        # per-snapshot delete (a staged, dual-gated write). Capped to keep the
+        # inventory response bounded on a box with thousands of snapshots; the
+        # count above is the true total.
+        "snapshots": [
+            {
+                "id": snap.id,
+                "name": snap.name or snap.snapshot_name,
+                "dataset": snap.dataset,
+                "created_at": snap.created_at,
+                "used_bytes": int(snap.properties.get("used", {}).get("parsed", 0) or 0)
+                if isinstance(snap.properties.get("used"), dict)
+                else 0,
+            }
+            for snap in snapshots[:500]
+        ],
     }

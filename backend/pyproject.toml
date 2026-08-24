@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "freesdn-backend"
-version = "26.08.3"
+version = "26.08.4"
 description = "FreeSDN - Unified Network Management Platform"
 license = "AGPL-3.0-only"
 authors = ["PyPV - Python Platform Ventures <contact@freesdn.org>"]
@@ -59,13 +59,13 @@ pyotp = ">=2.9.0"
 # SECURITY: cryptography 49.x is the current supported line (latest); 48.0.1+
 # rebuilt the wheels against a patched OpenSSL (GHSA-537c-gmf6-5ccf). The full
 # test suite (Fernet encrypt/decrypt round-trips) gates the major bump.
-cryptography = ">=49.0.0"
+cryptography = ">=50.0.0"   # floor is the PATCHED version: 49.0.0 is PYSEC-2026-3552
 # HTTP Client
 httpx = ">=0.28.1"
 # aiohttp 3.14.1: parser/limit and connection-reuse hardening batch
 # (GHSA-4m7w-qmgq-4wj5 TLS hostname reuse, GHSA-63hw-fmq6-xxg2 max_line_size,
 # plus 6 related low/medium fixes). Ships cp314 wheels.
-aiohttp = ">=3.14.1"
+aiohttp = ">=3.14.3"        # floor is the PATCHED version: <=3.14.2 is PYSEC-2026-3545/6/7
 # Utilities
 # python-multipart 0.0.31: querystring-parsing DoS + Content-Disposition/2231
 # parameter-smuggling fixes (GHSA-5rvq-cxj2-64vf, GHSA-vffw-93wf-4j4q, GHSA-v9pg-7xvm-68hf).

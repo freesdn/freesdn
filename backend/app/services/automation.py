@@ -491,6 +491,8 @@ class AutomationEngine:
         self._rules: dict[UUID, AutomationRule] = {}
         self._action_handlers: dict[ActionType, Callable[..., Awaitable[Any]]] = {}
         self._event_subscriptions: dict[str, list[UUID]] = {}
+        # rule_id -> name, for event rules that named no pattern
+        self._unsubscribed_rules: dict[UUID, str] = {}
         self._lock = asyncio.Lock()  # protects _rules, _action_handlers, _event_subscriptions
         self._running = False
         self._subscription_id: str | None = None  # event bus subscription handle
@@ -505,6 +507,16 @@ class AutomationEngine:
             register_llm_handlers(self)
         except Exception as e:
             logger.debug("LLM handlers not registered: %s", e)
+
+    @property
+    def unsubscribed_rules(self) -> dict[Any, str]:
+        """Event rules that name no pattern, so they fire on nothing.
+
+        Surfaced rather than only logged: "my rule does not fire" and "my rule
+        fires on everything" are the two failure modes here, and an operator
+        cannot tell either from the rule list.
+        """
+        return dict(self._unsubscribed_rules)
 
     def _register_builtin_handlers(self) -> None:
         """Register built-in action handlers for notifications and alerts."""
@@ -899,10 +911,36 @@ class AutomationEngine:
 
             # Subscribe to events if event-triggered
             if rule.trigger_type == TriggerType.EVENT:
-                event_pattern = rule.trigger_config.get("event_pattern", "*")
-                if event_pattern not in self._event_subscriptions:
-                    self._event_subscriptions[event_pattern] = []
-                self._event_subscriptions[event_pattern].append(rule.id)
+                event_pattern = str(rule.trigger_config.get("event_pattern") or "").strip()
+                if not event_pattern:
+                    # A rule that says "event" and names no event USED TO default
+                    # to "*", so it fired on every event in the organisation.
+                    # That is not a lenient default, it is the loudest possible
+                    # behaviour: an operator writing "notify me when a device
+                    # goes offline" got notifications for every controller sync,
+                    # every discovery run, every alert -- and, once the collector
+                    # began publishing, every warning-level syslog line from
+                    # every device, with a 60-second cooldown as the only brake.
+                    #
+                    # The UI has no field for the pattern and posts an empty
+                    # trigger_config, so EVERY event rule created through the web
+                    # interface was in this state.
+                    #
+                    # Refused rather than silently narrowed: the rule stays in the
+                    # database, does not fire, and says so. "*" is still a valid
+                    # pattern -- it just has to be asked for.
+                    logger.error(
+                        "Automation rule %s (%s) is event-triggered but names no "
+                        "event_pattern; it will NOT fire. Set trigger_config."
+                        "event_pattern (use '*' if you really mean every event).",
+                        rule.name,
+                        rule.id,
+                    )
+                    self._unsubscribed_rules[rule.id] = rule.name
+                else:
+                    if event_pattern not in self._event_subscriptions:
+                        self._event_subscriptions[event_pattern] = []
+                    self._event_subscriptions[event_pattern].append(rule.id)
 
         logger.info("Registered automation rule: %s (%s)", rule.name, rule.id)
 
@@ -918,6 +956,9 @@ class AutomationEngine:
             for _pattern, rule_ids in self._event_subscriptions.items():
                 if rule_id in rule_ids:
                     rule_ids.remove(rule_id)
+            # ...and the not-firing list, or a deleted rule keeps being reported
+            # as broken for the life of the process.
+            self._unsubscribed_rules.pop(rule_id, None)
 
         logger.info("Unregistered automation rule: %s", rule.name)
         return True
