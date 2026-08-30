@@ -7,7 +7,12 @@
  *   - All three cards render with empty / null data (lab CHR shape).
  *   - The EmptyState surfaces when no neighbors are discovered (a
  *     common state, must NOT crash @xyflow with empty arrays).
- *   - LLDP table populates when data arrives.
+ *   - LLDP table populates from the shape the backend ACTUALLY returns.
+ *     ``GET /lldp`` declares ``response_model=list[MikroTikLldpInterface]``
+ *     so the wire shape is a bare array. This file used to feed a
+ *     fabricated ``{items:[...]}`` envelope, which is why it stayed green
+ *     while the tab read ``.data.items`` off an Array (undefined) and
+ *     rendered an empty table on every real router.
  *   - isActive=false short-circuits all fetches.
  *
  * @xyflow/react requires a DOM environment with measured dimensions;
@@ -46,18 +51,8 @@ beforeEach(() => {
   mockLldp.mockReset();
 });
 
-const emptyList = {
-  data: {
-    controller_id: 'c1',
-    items: [],
-    fetched_at: '',
-    limit: 200,
-    offset: 0,
-    total: 0,
-  },
-};
-
-// Neighbors + discovery-settings now return BARE shapes (no envelope).
+// LLDP + neighbors + discovery-settings all return BARE shapes (no envelope).
+const emptyLldp = { data: [] };
 const emptyNeighbors = { data: [] };
 
 describe('MikroTikTopologyTab smoke', () => {
@@ -74,7 +69,7 @@ describe('MikroTikTopologyTab smoke', () => {
     mockSettings.mockResolvedValue({
       data: { protocol: 'lldp,cdp,mndp', 'discover-interface-list': 'all' },
     });
-    mockLldp.mockResolvedValue(emptyList);
+    mockLldp.mockResolvedValue(emptyLldp);
 
     renderWithProviders(<MikroTikTopologyTab controllerId="c1" isActive={true} />);
     await waitFor(() => expect(mockTopology).toHaveBeenCalledWith('c1'));
@@ -86,7 +81,13 @@ describe('MikroTikTopologyTab smoke', () => {
     expect(screen.getByText(/LLDP per-interface/i)).toBeInTheDocument();
   });
 
-  it('renders an LLDP row when interfaces report neighbors', async () => {
+  // MUTATION GUARD: reverting the read to ``lldpQuery.data?.data.items``
+  // yields undefined -> ``?? []`` -> the LLDP empty-state renders and
+  // 'upstream-sw' is never found, so this fails for the original reason.
+  // The chassis-id assertion pins the column swap: the backend schema is
+  // extra="forbid" and has no management-address, so the old column could
+  // only ever render "-".
+  it('renders an LLDP row from the bare array the backend returns', async () => {
     mockTopology.mockResolvedValue({
       data: {
         controller_id: 'c1',
@@ -100,29 +101,25 @@ describe('MikroTikTopologyTab smoke', () => {
       data: { protocol: 'lldp', 'discover-interface-list': 'all' },
     });
     mockLldp.mockResolvedValue({
-      data: {
-        controller_id: 'c1',
-        items: [
-          {
-            '.id': '*1',
-            interface: 'ether1',
-            'system-name': 'upstream-sw',
-            'port-id': 'Gi0/1',
-            'management-address': '10.0.0.1',
-          },
-        ],
-        fetched_at: '',
-        limit: 200,
-        offset: 0,
-        total: 1,
-      },
+      data: [
+        {
+          '.id': '*1',
+          interface: 'ether1',
+          'system-name': 'upstream-sw',
+          'port-id': 'Gi0/1',
+          'chassis-id': '00:0C:29:AA:BB:CC',
+        },
+      ],
     });
 
     renderWithProviders(<MikroTikTopologyTab controllerId="c1" isActive={true} />);
     await waitFor(() => expect(mockLldp).toHaveBeenCalled());
     expect(await screen.findByText('upstream-sw')).toBeInTheDocument();
     expect(screen.getByText('Gi0/1')).toBeInTheDocument();
-    expect(screen.getByText('10.0.0.1')).toBeInTheDocument();
+    expect(screen.getByText('00:0C:29:AA:BB:CC')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No LLDP neighbors/i),
+    ).not.toBeInTheDocument();
   });
 
   it('does not fetch when isActive=false', async () => {

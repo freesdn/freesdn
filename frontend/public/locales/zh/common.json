@@ -945,7 +945,8 @@
       "applyAll": "全部应用",
       "discard": "丢弃",
       "cancel": "取消",
-      "close": "关闭"
+      "close": "关闭",
+      "resolve": "标记为已解决"
     },
     "operations": {
       "create": "创建",
@@ -984,6 +985,12 @@
       "applying": {
         "aria": "正在应用",
         "heading": "应用中"
+      },
+      "reconciliation": {
+        "aria": "需要验证的更改",
+        "heading": "需要验证",
+        "description": "设备上的执行结果未知。请先检查设备，再重新暂存这些更改。",
+        "unknownOutcome": "结果未知：更改发送后应用过程被中断，设备可能已接受，也可能未接受。请先验证设备，再重新暂存。"
       },
       "failed": {
         "aria": "失败的更改",
@@ -1034,6 +1041,10 @@
         "title": "所有更改已应用",
         "description": "已将 {{count}} 项更改推送至 {{gatewayName}}。"
       }
+    },
+    "confirmResolve": {
+      "title": "将此更改标记为已解决？",
+      "body": "此更改可能已在设备上生效。请先检查设备再确认：此操作仅将其从队列中清除，不会撤销任何更改。"
     }
   },
   "CameraAccessPanel": {

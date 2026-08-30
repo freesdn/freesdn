@@ -933,6 +933,37 @@ async def get_current_user_optional(
         payload = await verify_token(token, token_type="access")
         if payload:
             user_id = payload.get("sub")
+            # SECURITY (completion): refuse ANY token carrying a
+            # narrowing scope on the shared REST path.
+            #
+            # cameras/api.py mints a scope="stream" token whose whole purpose is
+            # to be safe in a URL query string -- the frontend puts it in
+            # <img src=".../snapshot?token=JWT">, and also on /playback-frame and
+            # /stream/mjpeg. A URL lands in reverse-proxy access logs, browser
+            # history and Referer headers, which is exactly why that token is
+            # scoped and lives 60 seconds.
+            #
+            # But the narrowing was enforced by only two consumers: the camera
+            # media handler (which checks scope AND camera_id AND org) and the
+            # WebSocket, whose comment says it refuses any scope because "a
+            # future scope would otherwise inherit the same hole by default".
+            # It was never added HERE, the chokepoint the other ~1,800 REST
+            # routes go through -- so a leaked stream token authenticated the
+            # whole API with its owner's full role. Verified against the running
+            # stack: devices, sites, organizations and credentials all answered
+            # 200 to a scope="stream" bearer token.
+            #
+            # The legitimate consumers do not come through this dependency, so
+            # refusing here costs them nothing.
+            if payload.get("scope"):
+                logger.warning(
+                    "REST auth: refusing scope=%r token for user %s -- a narrowed "
+                    "token must not authenticate the general API",
+                    payload.get("scope"),
+                    user_id,
+                )
+                return None
+
             if user_id:
                 user = await _get_user_by_id(session, user_id)
                 if user and user.is_active:

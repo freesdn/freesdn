@@ -265,10 +265,12 @@ class TestDispatchRestore:
     def _archive(
         self, *, contributors: dict[str, dict[str, Any]],
         schema_by_id: dict[str, str] | None = None,
+        counts_by_id: dict[str, dict[str, int]] | None = None,
     ) -> BackupArchive:
         """Construct a synthetic BackupArchive for restore tests."""
         from datetime import UTC, datetime
         schemas = schema_by_id or {}
+        counts = counts_by_id or {}
         return BackupArchive(
             manifest=BackupManifest(
                 backup_id=str(uuid4()),
@@ -278,7 +280,7 @@ class TestDispatchRestore:
                     ContributorEntry(
                         id=cid,
                         schema_version=schemas.get(cid, "1.0.0"),
-                        counts={"_test": len(data)},
+                        counts=counts.get(cid, {"_test": len(data)}),
                     )
                     for cid, data in contributors.items()
                 ],
@@ -516,8 +518,9 @@ class TestDispatchRestore:
 
 
 class TestSelectiveRestore:
-    def _archive(self, *, contributors):
+    def _archive(self, *, contributors, counts_by_id=None):
         from datetime import UTC, datetime
+        counts = counts_by_id or {}
         return BackupArchive(
             manifest=BackupManifest(
                 backup_id=str(uuid4()),
@@ -525,7 +528,7 @@ class TestSelectiveRestore:
                 organization_id=str(uuid4()),
                 contributors=[
                     ContributorEntry(id=cid, schema_version="1.0.0",
-                                     counts={"_t": len(d)})
+                                     counts=counts.get(cid, {"_t": len(d)}))
                     for cid, d in contributors.items()
                 ],
             ),
@@ -618,3 +621,226 @@ class TestSelectiveRestore:
         assert by_id["core"]["status"] == "dry_run_ok"
         assert by_id["voip"]["status"] == "skipped"     # deselected
         assert by_id["cameras"]["status"] == "missing"  # selected but absent
+
+    # ── archive sections this instance cannot restore ────────────────
+    #
+    # The mirror of ``test_missing_section_reported_as_status_missing``.
+    # That one covers "registry has it, archive doesn't". The reverse --
+    # "archive has it, registry doesn't" -- was structurally invisible:
+    # the loop walks the LIVE registry and looks each id up in the
+    # manifest, so a section whose module is not loaded here was never
+    # visited, never counted and never named. Four modules of data could
+    # vanish behind total_errors: 0 and a green "completed" job.
+    #
+    # Reachable in normal operation: ModuleLoader.load_all_modules
+    # logs-and-continues on a module load failure, so a module that fails
+    # on_load() leaves the app degraded-but-running with its contributor
+    # gone from both backup and restore.
+
+    @pytest.mark.asyncio
+    async def test_archive_section_with_no_live_contributor_is_reported(
+        self, clean_registry, mock_session,
+    ) -> None:
+        """registry={core}, archive={core, voip} → voip must appear in the
+        report as a failure, not silently disappear.
+
+        Mutation caught: deleting the post-loop walk over
+        ``archive.manifest.contributors`` in
+        ``_dispatch_restore_via_contributors``. Before it, the report held
+        exactly ONE entry (core) and the summary was all zeros.
+        """
+        clean_registry.register(_FakeContributor(contributor_id="core"))
+
+        archive = self._archive(
+            contributors={"core": {}, "voip": {"extensions": [], "pbxes": []}},
+            counts_by_id={"voip": {"extensions": 48, "pbxes": 2}},
+        )
+        svc = _make_service(mock_session)
+
+        report = await svc._dispatch_restore_via_contributors(
+            archive,
+            organization_id=uuid4(),
+            dry_run=False,
+            restore_options={},
+        )
+
+        by_id = {c["contributor_id"]: c for c in report["contributors"]}
+        assert "voip" in by_id, "an unrestorable archive section vanished from the report"
+        assert by_id["voip"]["status"] == "error"
+        # The operator must be told WHICH records were left on the floor.
+        assert by_id["voip"]["errors"], "no reason recorded for the dropped section"
+        assert "voip" in by_id["voip"]["errors"][0]
+        assert "50" in by_id["voip"]["errors"][0]  # 48 extensions + 2 pbxes
+
+    @pytest.mark.asyncio
+    async def test_dropped_section_counts_into_the_summary(
+        self, clean_registry, mock_session,
+    ) -> None:
+        """The summary drives RestoreJob.items_failed and the UI's green
+        tick. A restore that dropped 50 records must not report
+        total_errors: 0 / contributors_failed: 0.
+
+        Mutation caught: appending the entry with status="missing" (which
+        contributors_failed does not count) or with empty ``skipped``.
+        """
+        clean_registry.register(_FakeContributor(contributor_id="core"))
+
+        archive = self._archive(
+            contributors={"core": {}, "voip": {}},
+            counts_by_id={"voip": {"extensions": 48, "pbxes": 2}},
+        )
+        svc = _make_service(mock_session)
+
+        report = await svc._dispatch_restore_via_contributors(
+            archive,
+            organization_id=uuid4(),
+            dry_run=False,
+            restore_options={},
+        )
+
+        summary = report["summary"]
+        assert summary["total_errors"] >= 1
+        assert summary["contributors_failed"] == 1
+        # RestoreJob.items_failed is fed from total_skipped.
+        assert summary["total_skipped"] == 50
+
+    @pytest.mark.asyncio
+    async def test_deselected_absent_contributor_stays_skipped(
+        self, clean_registry, mock_session,
+    ) -> None:
+        """An operator who deliberately deselected a module must not be
+        told it failed -- 'I chose not to restore voip' and 'this instance
+        cannot restore voip' are different facts.
+
+        Mutation caught: dropping the ``selected`` guard from the new
+        post-loop walk, which would flag every deselected section as an
+        error.
+        """
+        clean_registry.register(_FakeContributor(contributor_id="core"))
+
+        archive = self._archive(contributors={"core": {}, "voip": {}})
+        svc = _make_service(mock_session)
+
+        report = await svc._dispatch_restore_via_contributors(
+            archive,
+            organization_id=uuid4(),
+            dry_run=False,
+            restore_options={},
+            selected_contributors=["core"],
+        )
+
+        by_id = {c["contributor_id"]: c for c in report["contributors"]}
+        assert by_id["voip"]["status"] == "skipped"
+        assert report["summary"]["contributors_failed"] == 0
+
+
+# ── an incomplete archive must say so ─────────────────────────────────
+
+
+class TestCollectOmissionsAreRecorded:
+    @pytest.mark.asyncio
+    async def test_failed_collect_is_recorded_for_the_backup_row(
+        self, clean_registry, mock_session,
+    ) -> None:
+        """``_assemble_backup_archive`` deliberately keeps going when one
+        contributor's collect() raises -- one broken module must not block
+        a backup of the others. But the reason went only to the log, and
+        create_backup still marked the row COMPLETED, so a module that was
+        silently absent from the archive looked like a clean backup.
+
+        Mutation caught: dropping the ``self._collect_omissions.append``
+        in the except branch (the pre-fix state), which leaves the list
+        empty and create_backup with nothing to stamp on
+        Backup.error_message.
+        """
+        clean_registry.register(
+            _FakeContributor(
+                contributor_id="voip",
+                collect_raises=RuntimeError("PBX adapter timeout"),
+            )
+        )
+        clean_registry.register(_FakeContributor(contributor_id="core"))
+
+        svc = _make_service(mock_session)
+        archive = await svc._assemble_backup_archive(
+            backup_id=uuid4(),
+            organization_id=uuid4(),
+            options={},
+        )
+
+        assert [e.id for e in archive.manifest.contributors] == ["core"]
+        assert len(svc._collect_omissions) == 1
+        assert "voip" in svc._collect_omissions[0]
+        assert "PBX adapter timeout" in svc._collect_omissions[0]
+
+    @pytest.mark.asyncio
+    async def test_clean_collect_records_no_omission(
+        self, clean_registry, mock_session,
+    ) -> None:
+        """The flag must be per-run, not sticky: a healthy backup taken
+        after a broken one must not inherit its warning.
+
+        Mutation caught: initialising ``_collect_omissions`` only in
+        __init__ instead of resetting it at the top of every assemble.
+        """
+        clean_registry.register(_FakeContributor(contributor_id="core"))
+
+        svc = _make_service(mock_session)
+        svc._collect_omissions = ["voip (stale run)"]
+        await svc._assemble_backup_archive(
+            backup_id=uuid4(),
+            organization_id=uuid4(),
+            options={},
+        )
+        assert svc._collect_omissions == []
+
+    @pytest.mark.asyncio
+    async def test_create_backup_stamps_the_omission_on_the_row(
+        self, clean_registry,
+    ) -> None:
+        """The end the operator sees. Backup.error_message is rendered by the
+        catalog card, the list row and the history drawer regardless of status,
+        so an archive that is missing a module now says so there instead of
+        only in a log file.
+
+        Mutation caught: deleting the ``if self._collect_omissions:`` block in
+        create_backup -- the row would go back to COMPLETED with a blank
+        error_message while the voip section is absent from the archive.
+        """
+        from app.modules.backup.models import BackupStatus
+
+        clean_registry.register(
+            _FakeContributor(
+                contributor_id="voip",
+                collect_raises=RuntimeError("PBX adapter timeout"),
+            )
+        )
+        clean_registry.register(_FakeContributor(contributor_id="core"))
+
+        class _Backend:
+            async def save(self, backup_id, data, filename):
+                return f"/backups/{filename}"
+
+        class _Session:
+            def add(self, obj): pass
+            async def flush(self): pass
+            async def commit(self): pass
+            async def refresh(self, obj): pass
+
+        svc = _make_service(_Session())
+        svc._resolve_storage = lambda *_a, **_kw: _coro((_Backend(), None))
+
+        backup = await svc.create_backup(
+            name="nightly",
+            organization_id=uuid4(),
+            passphrase="a-long-enough-passphrase",
+        )
+
+        assert backup.status == BackupStatus.COMPLETED
+        assert backup.error_message
+        assert "voip" in backup.error_message
+        assert "NOT in this archive" in backup.error_message
+
+
+async def _coro(value):
+    return value

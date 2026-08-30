@@ -133,6 +133,11 @@ async def list_releases(
         q = q.where(
             (AgentRelease.organization_id == org_id) | (AgentRelease.organization_id.is_(None))
         )
+    # Normalise HERE. Rows are persisted lower-cased, and these are raw query
+    # parameters -- unlike the publish handler, this one has no normalised
+    # locals. A find-and-replace that removed the now-redundant ``.lower()``
+    # from the publish path stripped it here too, so ``?platform=Linux``
+    # compared "Linux" against the stored "linux" and returned nothing.
     if platform:
         q = q.where(AgentRelease.platform == platform.lower())
     if agent_type:
@@ -216,6 +221,16 @@ async def upload_release(
     if agent_type.lower() not in VALID_AGENT_TYPES:
         raise HTTPException(400, f"Invalid agent_type: {agent_type}")
 
+    # Normalise ONCE, here, and use these below for querying, SIGNING and
+    # persistence alike. Previously the manifest was signed with the raw values
+    # while the row stored ``.lower()`` ones, so an upload of "Linux"/"Daemon"
+    # produced a signature over bytes the update-check endpoint could never
+    # reproduce -- it rebuilds the manifest from the stored row. The agent then
+    # refused a perfectly legitimate update as a signature mismatch. Validation,
+    # signing and storage must all see the same string.
+    platform = platform.lower()
+    agent_type = agent_type.lower()
+
     # SECURITY: only super_admin may publish a GLOBAL
     # (organization_id IS NULL) release; every other admin's upload is forced to
     # their own organization, and the is_latest clear below is scoped to that
@@ -274,10 +289,22 @@ async def upload_release(
     # silently bypass the agent's signature-verification gate.
     # Only explicitly non-latest uploads (is_latest=False) may proceed
     # without a signature.
-    from app.services.release_signing import sign_digest
+    # Sign a MANIFEST, not the bare digest. A signature over the digest alone
+    # said nothing about which version/platform/agent-type/channel that digest
+    # belonged to, so a backend WITHOUT the private key could re-serve a genuine
+    # older release (with its genuine signature) as an update -- a rollback to a
+    # known-vulnerable build that verification could not detect.
+    from app.services.release_signing import build_release_manifest, sign_manifest
 
     try:
-        signature = sign_digest(checksum)
+        manifest = build_release_manifest(
+            digest_hex=checksum,
+            version=version,
+            platform=platform,
+            agent_type=agent_type,
+            channel="prerelease" if is_prerelease else "stable",
+        )
+        signature = sign_manifest(manifest)
     except Exception:
         logger.exception(
             "Release signing failed for upload version=%s platform=%s", version, platform
@@ -317,8 +344,8 @@ async def upload_release(
                 update(AgentRelease)
                 .where(
                     and_(
-                        AgentRelease.platform == platform.lower(),
-                        AgentRelease.agent_type == agent_type.lower(),
+                        AgentRelease.platform == platform,
+                        AgentRelease.agent_type == agent_type,
                         AgentRelease.is_latest,
                         org_bucket,
                     )
@@ -329,8 +356,8 @@ async def upload_release(
         release = AgentRelease(
             id=release_id,
             version=version,
-            platform=platform.lower(),
-            agent_type=agent_type.lower(),
+            platform=platform,
+            agent_type=agent_type,
             download_url=download_url,
             checksum_sha256=checksum,
             signature=signature,

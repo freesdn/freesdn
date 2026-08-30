@@ -105,8 +105,15 @@ def test_the_published_catalogue_verifies_against_its_own_signature():
 
     catalog = json.loads(path.read_text(encoding="utf-8"))
     signature = catalog.get("signature")
-    if not signature:  # pragma: no cover - unsigned local preview build
-        pytest.skip("catalogue is an unsigned local preview")
+    # NOT a skip. The catalogue is committed and is signed today, so an unsigned
+    # one means `build.py --unsigned` -- documented as "local preview only" --
+    # overwrote the real artefact. Skipping made the strongest signal of that
+    # mistake invisible, in the one test positioned to see it.
+    assert signature, (
+        "registry/public/plugins.json has no signature. `build.py --unsigned` "
+        "overwrites the committed catalogue; restore it from git and rebuild "
+        "with the publisher key."
+    )
 
     # The key the shipped compose pins. If the registry is ever re-keyed, this
     # and docker-compose.yml move together or deployments break.
@@ -176,3 +183,155 @@ def test_every_catalogue_entry_carries_a_checksum_and_a_download():
         assert int(checksum, 16) >= 0, f"{pid}: checksum is not hex"
         url = entry.get("download_url", "")
         assert url.startswith("https://"), f"{pid}: download_url is not https"
+
+
+# ---------------------------------------------------------------------------
+# The archives must reproduce from source, on any machine
+# ---------------------------------------------------------------------------
+#
+# The catalogue advertises a SHA-256 per plugin and `build.py` refuses to
+# republish a version whose bytes changed, because the archives are served under
+# `Cache-Control: immutable`. That guard is only as good as the packaging being
+# genuinely deterministic -- and it was not, in two ways that both depend on the
+# BUILD HOST rather than on the source:
+#
+#   * `zipfile.ZipInfo` sets `create_system` from `sys.platform` (0 on Windows,
+#     3 elsewhere), and build.py did not override it;
+#   * `path.read_bytes()` packages WORKTREE bytes, and with `core.autocrlf=true`
+#     and no `registry/.gitattributes` the worktree was CRLF while the blob was
+#     LF.
+#
+# So the 12 published archives were packaged from a mix, four of them stopped
+# reproducing, and `python build.py` exited 1 on a clean tree naming those four
+# -- the registry could not be rebuilt at all. Nothing caught it: the checksum
+# assertion below only ever checked the value was 64 hex characters.
+
+
+def _plugin_dirs():
+    for parent in pathlib.Path(__file__).resolve().parents:
+        candidate = parent / "registry" / "plugins"
+        if candidate.is_dir():
+            return sorted(d for d in candidate.iterdir() if (d / "plugin.yaml").is_file())
+    return []
+
+
+def test_packaging_is_deterministic_across_line_endings(tmp_path) -> None:
+    """The mechanism guard: a CRLF and an LF checkout must agree.
+
+    This is the one that has to pass on every commit. It fails if either pin is
+    removed -- the line-ending normalisation or `create_system` -- because both
+    make the digest depend on the machine rather than the source.
+    """
+    builder = _load_builder()
+    if builder is None:
+        pytest.skip("registry/ is absent in a backend-only checkout")
+    plugins = _plugin_dirs()
+    assert plugins, "no plugin directories found"
+
+    import shutil
+
+    for src in plugins:
+        digests = {}
+        for label, newline in (("crlf", b"\r\n"), ("lf", b"\n")):
+            work = tmp_path / label / src.name
+            work.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src, work)
+            for f in work.rglob("*"):
+                if f.is_file() and f.suffix in builder._TEXT_SUFFIXES:
+                    body = f.read_bytes().replace(b"\r\n", b"\n")
+                    if newline == b"\r\n":
+                        body = body.replace(b"\n", b"\r\n")
+                    f.write_bytes(body)
+            entry = builder.package_plugin(
+                work, "https://example.invalid/", tmp_path / label / "out"
+            )
+            digests[label] = entry["checksum_sha256"]
+
+        assert digests["crlf"] == digests["lf"], (
+            f"{src.name} hashes differently from a CRLF checkout than an LF one "
+            f"({digests['crlf'][:16]}... vs {digests['lf'][:16]}...). The published "
+            "checksum then depends on who ran the build, and clones cannot verify it."
+        )
+
+
+def test_archives_carry_a_host_independent_create_system(tmp_path) -> None:
+    """`create_system` must not follow the build host."""
+    import zipfile
+
+    builder = _load_builder()
+    if builder is None:
+        pytest.skip("registry/ is absent in a backend-only checkout")
+    plugins = _plugin_dirs()
+    assert plugins
+
+    builder.package_plugin(plugins[0], "https://example.invalid/", tmp_path)
+    archive = next(tmp_path.glob("*.zip"))
+    with zipfile.ZipFile(archive) as zf:
+        systems = {info.create_system for info in zf.infolist()}
+    assert systems == {3}, (
+        f"archive members carry create_system={systems}; it must be pinned to 3 "
+        "(Unix) or the same source hashes differently on Windows and Linux"
+    )
+
+
+def test_no_dotfile_or_symlink_reaches_a_signed_archive(tmp_path) -> None:
+    """Everything packaged is signed and served immutably.
+
+    A stray `.env` or key committed beside a plugin would be permanently
+    published and impossible to withdraw.
+    """
+    import zipfile
+
+    builder = _load_builder()
+    if builder is None:
+        pytest.skip("registry/ is absent in a backend-only checkout")
+
+    for src in _plugin_dirs():
+        builder.package_plugin(src, "https://example.invalid/", tmp_path)
+
+    for archive in tmp_path.glob("*.zip"):
+        with zipfile.ZipFile(archive) as zf:
+            names = zf.namelist()
+        leaked = [n for n in names if n.startswith(".") or "/." in n]
+        assert not leaked, f"{archive.name} packages dotfiles: {leaked}"
+
+
+@pytest.mark.xfail(
+    reason=(
+        "The 12 published archives predate the determinism fix: 8 were packaged "
+        "from a CRLF checkout, 4 from LF, and all 12 carry create_system=0. "
+        "Reproducing them from source is therefore impossible by construction. "
+        "This goes green after the maintainer republishes the catalogue with the "
+        "publisher key (see docs/agents/REGISTRY-REPUBLISH.md); remove this "
+        "marker then."
+    ),
+    strict=False,
+)
+def test_the_published_catalogue_reproduces_from_source(tmp_path) -> None:
+    """The end-state guard: every advertised checksum must be re-derivable.
+
+    Once this passes, a plugin's published bytes can be verified by anyone from
+    the source in this repo -- which is the whole point of publishing a checksum.
+    """
+    builder = _load_builder()
+    if builder is None:
+        pytest.skip("registry/ is absent in a backend-only checkout")
+    path = _catalog_path()
+    if path is None:
+        pytest.skip("registry/public/plugins.json has not been built")
+
+    catalog = json.loads(path.read_text(encoding="utf-8"))
+    published = {p["plugin_id"]: p["checksum_sha256"] for p in catalog["plugins"]}
+
+    mismatched = []
+    for src in _plugin_dirs():
+        entry = builder.package_plugin(src, "https://example.invalid/", tmp_path)
+        pid = entry["plugin_id"]
+        if pid in published and published[pid] != entry["checksum_sha256"]:
+            mismatched.append(pid)
+
+    assert not mismatched, (
+        f"these plugins no longer reproduce their published checksum: {mismatched}. "
+        "Either the source changed without a version bump, or packaging stopped "
+        "being deterministic."
+    )

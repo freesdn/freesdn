@@ -101,6 +101,7 @@ import { EmptyState, NoResultsState } from '@/components/ui/empty-state';
 import { StatsGrid } from '@/components/ui/stats-grid';
 import { PageHeader } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
+import { escapeCell } from '@/lib/csv';
 
 // =============================================================================
 // Types
@@ -1160,10 +1161,10 @@ export default function VoIPPage() {
   const exportCallLogsCsv = useCallback(() => {
     if (callLogs.length === 0) return;
     const headers = ['direction', 'from', 'to', 'status', 'duration_seconds', 'start_time'];
-    const escape = (v: unknown) => {
-      const s = v == null ? '' : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const escape = (v: unknown) => escapeCell(v);
     const rows = callLogs.map((log) => [
       log.direction,
       log.caller_name || log.caller_number,

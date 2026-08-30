@@ -119,6 +119,36 @@ _CONFIG_MUTABLE_FIELDS = frozenset(
 )
 
 
+# ── Severity vocabulary ─────────────────────────────────────────────────────
+#
+# SyslogReceiver stores the RFC 5424 name from SEVERITY_NAMES, and severity 6
+# is spelled "informational" there. The Log Explorer's dropdown, this
+# endpoint's own OpenAPI description, and the conventional syslog shorthand all
+# say "info" -- which, against an exact-equality predicate, matched no stored
+# row ever. Filtering to Info returned an empty table and a total of 0 over a
+# store that may hold millions of informational rows, and looked exactly like
+# "no informational logs were received".
+#
+# Normalising here rather than only renaming the dropdown value keeps existing
+# saved filters, bookmarked URLs and any API client that read the old
+# description working. Maps alias -> stored value; anything not listed is
+# passed through unchanged so an unknown severity still returns nothing rather
+# than silently widening the filter.
+_SEVERITY_ALIASES = {
+    "info": "informational",
+    "warn": "warning",
+    "err": "error",
+    "crit": "critical",
+    "emerg": "emergency",
+    "panic": "emergency",  # BSD spelling of severity 0
+}
+
+
+def _canonical_severity(value: str) -> str:
+    """Map a caller-supplied severity onto the name the receivers store."""
+    return _SEVERITY_ALIASES.get(value.strip().lower(), value)
+
+
 def _org_id(user: CurrentUser) -> UUID:
     """Extract organization_id, raising 400 if missing."""
     oid: UUID | None = getattr(user, "organization_id", None)
@@ -162,7 +192,12 @@ async def search_logs(
     session: Annotated[AsyncSession, Depends(get_session)],
     source_type: str | None = Query(None, description="snmp_trap | syslog"),
     severity: str | None = Query(
-        None, description="emergency|alert|critical|error|warning|notice|info|debug"
+        None,
+        description=(
+            "emergency|alert|critical|error|warning|notice|informational|debug "
+            "(the RFC 5424 names the receivers store; the shorthands info/warn/"
+            "err/crit/emerg/panic are accepted as aliases)"
+        ),
     ),
     device_id: UUID | None = Query(None),
     start_time: str | None = Query(None, description="ISO-8601 start time"),
@@ -186,7 +221,7 @@ async def search_logs(
     if source_type:
         conditions.append(CollectorLog.source_type == source_type)
     if severity:
-        conditions.append(CollectorLog.severity == severity)
+        conditions.append(CollectorLog.severity == _canonical_severity(severity))
     if device_id:
         conditions.append(CollectorLog.device_id == device_id)
     if q:
@@ -688,9 +723,17 @@ async def update_config(
 async def collector_status(
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
 ) -> dict[str, Any]:
-    """Return running status of each collector service."""
+    """Return running status of each collector service.
+
+    ``events`` carries the event-publisher counters. Without them a
+    collector-triggered automation rule that never fires is indistinguishable
+    from a device that never spoke: the severity floor (default ``warning``)
+    and the per-source rate cap both drop messages, and only the rate cap logs
+    anything, at INFO, inside the collector container.
+    """
     _require_permission(current_user, "collector.config")
 
     from app.modules.collector.services.manager import get_collector_manager
 
-    return {"services": get_collector_manager().status()}
+    manager = get_collector_manager()
+    return {"services": manager.status(), "events": manager.event_stats()}

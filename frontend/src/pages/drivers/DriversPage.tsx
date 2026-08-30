@@ -56,6 +56,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { discoveryApi, type Driver } from '@/lib/api';
 import { safeExternalUrl } from '@/lib/utils';
+import { escapeCell } from '@/lib/csv';
 
 type DeviceTypeFilter = 'all' | 'switch' | 'router' | 'camera' | 'access_point' | 'nvr';
 
@@ -150,7 +151,9 @@ export default function DriversPage() {
   const exportToCsv = (rows: Driver[]) => {
     if (rows.length === 0) return;
     const headers = ['id', 'name', 'vendor', 'version', 'device_types', 'capabilities'];
-    const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy lacked.
+    const escape = (v: unknown) => escapeCell(v);
     const csv = [
       headers.join(','),
       ...rows.map((d) =>

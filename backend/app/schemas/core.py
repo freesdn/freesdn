@@ -72,10 +72,39 @@ class BrowserAuthResponse(BaseSchema):
     in the JSON body is unnecessary and exposes them to JavaScript (XSS risk).
     This schema intentionally omits ``access_token`` and ``refresh_token`` so
     the JSON body carries no bearer-usable secrets.
+
+    A ``response_model`` is a WHITELIST: FastAPI validates the endpoint's
+    return value against it and drops every key this class does not declare,
+    silently and with a 200. So an endpoint cannot signal anything from here
+    that is not a field above -- the frontend read
+    ``data.force_password_change`` for three releases and got ``undefined``
+    every time, because nothing declared it. Add the field before you send it.
     """
 
     token_type: str = "bearer"
     expires_in: int = Field(description="Access token lifetime in seconds")
+
+
+class MfaChallengeResponse(BaseSchema):
+    """The OTHER 200 shape of ``POST /auth/login``: MFA is required.
+
+    ``/auth/login`` was declared ``response_model=BrowserAuthResponse`` when the
+    raw tokens were taken out of the body, but its MFA branch returns
+    ``{"require_mfa": True, "mfa_token": ...}`` -- which has none of that
+    model's required ``expires_in``. FastAPI validates the return value against
+    the response model, so that branch raised ResponseValidationError and every
+    MFA-enabled user got a 500 from /auth/login instead of a challenge, unable
+    to sign in at all. It went unnoticed because every test calls the ``login``
+    coroutine directly, and calling the function bypasses the response model.
+
+    Declared as a separate model rather than as optional fields on
+    ``BrowserAuthResponse`` so neither shape can be returned half-filled: the
+    success body must carry ``expires_in``, the challenge body must carry a
+    token, and ``/auth/refresh`` and ``/auth/login/mfa`` keep the narrow model.
+    """
+
+    require_mfa: bool = Field(description="True when the credentials were correct but MFA is due")
+    mfa_token: str = Field(description="Short-lived mfa_pending JWT to submit to /auth/login/mfa")
 
 
 class TokenPayload(BaseSchema):
@@ -214,7 +243,16 @@ class MfaLoginRequest(BaseSchema):
     # JWT mfa_pending tokens are ~300-500 bytes; cap at 2048 to
     # reject obviously-malformed submissions before JWT parsing.
     mfa_token: str = Field(min_length=20, max_length=2048)
-    code: str = Field(min_length=6, max_length=8)  # 6 for TOTP, 8 for backup
+    # 6 for a TOTP digit code, 10 for a recovery code.
+    #
+    # This was max_length=8 with the comment "8 for backup", but
+    # /auth/mfa/setup mints recovery codes as secrets.token_hex(5).upper()
+    # (auth.py:1832), which is TEN hex characters -- and the stored hashes are
+    # hashes of that ten-character string. So every recovery code this system
+    # has ever issued was rejected by request validation with a 422 before any
+    # verification ran: the one mechanism that gets an operator back in after
+    # losing their authenticator could not be redeemed at all.
+    code: str = Field(min_length=6, max_length=10)
 
 
 class ProfileUpdateRequest(BaseSchema):

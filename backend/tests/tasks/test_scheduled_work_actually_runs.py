@@ -390,15 +390,33 @@ async def test_a_vpn_event_reaches_the_redis_channel() -> None:
     """
     from app.core.events import EventBus
 
+    # A bus in WORKER STATE: connect() was never called, so _redis is None.
+    #
+    # This test used to assign `bus._redis = _Redis()` before publishing, which
+    # fabricated the one precondition that is false in a Celery worker. It
+    # therefore asserted "the fanout works given a Redis client" -- never in
+    # doubt -- and could not fail for the actual reason, which is that nothing
+    # in the Celery bootstrap ever assigns one. connect() is called from exactly
+    # one place in the tree: app/main.py's lifespan. So every event a scheduled
+    # task published was dropped, publish() reported success, and this test
+    # stayed green throughout.
     bus = EventBus()
+    assert bus._redis is None, "this test is only meaningful on an unconnected bus"
+
     published: list[tuple[str, str]] = []
 
-    class _Redis:
-        async def publish(self, channel, message):
+    class _SyncRedis:
+        def publish(self, channel, message):
             published.append((channel, message))
 
-    bus._redis = _Redis()
-    await bus.publish(Event(event_type="vpn.tunnel.down", category="vpn", payload={"t": 1}))
+    import app.core.redis_client as _rc
+
+    original = _rc.get_sync_redis
+    _rc.get_sync_redis = lambda *_a, **_k: _SyncRedis()
+    try:
+        await bus.publish(Event(event_type="vpn.tunnel.down", category="vpn", payload={"t": 1}))
+    finally:
+        _rc.get_sync_redis = original
 
     assert published, "the VPN event never reached Redis, so no other worker sees it"
     assert published[0][0].startswith("freesdn:events:vpn:")

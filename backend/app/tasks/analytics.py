@@ -231,6 +231,14 @@ def check_metric_thresholds(self) -> dict[str, Any]:
                                     "title": f"{defn.display_name} threshold exceeded: {value:.1f} {operator} {threshold_val}",
                                     "metric_name": defn.name,
                                     "metric_value": {"value": value, "threshold": threshold_val},
+                                    # Attribute the alert to the tenant whose
+                                    # reading breached. Omitting these left
+                                    # organization_id NULL, and every reader
+                                    # filters on it, so the alert was created
+                                    # and then invisible to everyone.
+                                    "organization_id": latest.get("organization_id"),
+                                    "site_id": latest.get("site_id"),
+                                    "device_id": latest.get("device_id"),
                                 },
                             )
                             alerts_created += 1

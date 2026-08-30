@@ -299,7 +299,49 @@ class Negotiator:
         if event_type == "fabric.connection.changed":
             return runs
 
-        for conn in self._connections.values():
+        # Iterate a snapshot of the IDs and re-resolve each one, rather than the
+        # live ``.values()`` view. Two separate reasons, and the second is why
+        # this is an id snapshot and not ``list(self._connections.values())``:
+        #
+        # 1. CRASH. The body below awaits four times (:_claim_event, _cooldown_ok,
+        #    _run, _run_recorder), and _run alone holds the loop for a DB session
+        #    plus adapter HTTP. Every mutator -- runtime.handle_connection_changed
+        #    and the fabric endpoints' _sync_engine / delete_connection -- runs on
+        #    this same event loop with no lock, so a create or delete landing in
+        #    one of those windows made the FOR statement itself raise
+        #    "RuntimeError: dictionary changed size during iteration". That is
+        #    raised by the iterator, not the body, so the per-connection
+        #    try/except below could never catch it: the whole fan-out died and
+        #    every remaining matching Connection silently lost the event, while
+        #    dispatch_stats still reported it handled.
+        #
+        # 2. DELETE SEMANTICS. A values() snapshot freezes the set when the event
+        #    arrives, so a Connection the operator deleted while the chain was
+        #    mid-flight would still run -- staged device writes, webhooks and
+        #    notifications on behalf of a wire that no longer exists. Worse, it
+        #    could not even be audited: delete_connection commits the row
+        #    deletion BEFORE calling remove_connection, and ConnectionRun.
+        #    connection_id is a NOT NULL FK, so the run record insert fails. A
+        #    side effect with no run record is exactly what this module refuses
+        #    to do elsewhere. Re-resolving costs one dict lookup and makes both
+        #    delete and disable mean "stop firing on this worker, for
+        #    Connections this loop has not yet CLAIMED". Narrower than it
+        #    first reads, and both counterexamples were reproduced: a
+        #    Connection deleted after its own _claim_event runs to
+        #    completion, and on a multi-worker cluster this skip leaves the
+        #    claim free, so a peer that has not reached it yet still fires
+        #    it. Neither is a regression -- this is still strictly better
+        #    than both alternatives -- but the guarantee is not "never fires".
+        #
+        # The skip lands BEFORE _claim_event on purpose: the Redis at-most-once
+        # key is never burned, so a peer worker that has not reached this
+        # Connection yet can still run it. Do NOT add a post-await liveness
+        # re-check -- that burns the claim and then skips, losing the event
+        # cluster-wide.
+        for _conn_id in list(self._connections):
+            conn = self._connections.get(_conn_id)
+            if conn is None:
+                continue  # deleted or disabled while this event was in flight
             if not conn.enabled:
                 continue
             # Fail-closed org scoping: never cross tenants.

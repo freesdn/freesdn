@@ -34,10 +34,12 @@ the existing HTTPS-only download URL + SHA-256 mandatory check.
 from __future__ import annotations
 
 import base64
+import json
 import logging
 import os
 import threading
 from pathlib import Path
+from typing import Any
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
@@ -159,6 +161,129 @@ def verify_digest(digest_hex: str, signature_b64: str) -> bool:
         pub.verify(sig_der, digest_bytes, ec.ECDSA(hashes.SHA256()))
         return True
     except (InvalidSignature, ValueError, Exception):
+        return False
+
+
+#: Manifest format version. Bump when a field is added or its meaning changes,
+#: so an agent can refuse a manifest it does not fully understand rather than
+#: silently ignoring a field that carries security meaning.
+RELEASE_MANIFEST_VERSION = 1
+
+#: Fields bound by the signature, in canonical order.
+_MANIFEST_FIELDS = ("agent_type", "channel", "digest", "platform", "v", "version")
+
+
+def parse_agent_version(raw: str) -> tuple[int, ...]:
+    """Parse a dotted agent version into a comparable tuple.
+
+    This MUST stay byte-for-byte equivalent to the agent's
+    ``UpdaterService._parse_version``. The two sides independently decide
+    "is this newer", and when they disagree the update either loops
+    (backend offers, agent refuses, agent re-downloads next poll) or is
+    silently suppressed (backend refuses, agent would have accepted).
+
+    Grammar, deliberately forgiving in the same way the agent is:
+      * an optional leading ``v``/``V`` is ignored;
+      * each dot-separated chunk contributes its leading digits, and parsing
+        stops at the first chunk with no leading digit (so ``2.0.0-beta``
+        reads as ``(2,)`` after trailing-zero normalisation, not an error);
+      * INSIGNIFICANT TRAILING ZEROS are stripped, so ``1.0.0.0`` == ``1.0``;
+      * at least one component is kept, so ``1.0.0`` does not normalise to ().
+
+    An unparseable value yields ``()``, which compares lower than any real
+    version -- it can never look newer.
+    """
+    parts: list[int] = []
+    for chunk in str(raw or "").strip().lstrip("vV").split("."):
+        piece = ""
+        for ch in chunk:
+            if ch.isdigit():
+                piece += ch
+            else:
+                break
+        if piece == "":
+            break
+        parts.append(int(piece))
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
+
+
+def build_release_manifest(
+    *,
+    digest_hex: str,
+    version: str,
+    platform: str,
+    agent_type: str,
+    channel: str,
+) -> dict[str, Any]:
+    """Assemble the release manifest that the signature will cover.
+
+    Signing the bare digest was not enough. A backend that does NOT hold the
+    private key could take a genuine older release -- its binary, its checksum
+    and its stored signature -- and offer it as an update, optionally relabelled
+    with an invented higher version, because nothing in the signed object said
+    which version, platform, agent type or channel that digest belonged to.
+    Verification passed and the agent installed a known-vulnerable build.
+
+    Binding the metadata to the digest makes that impossible: the agent compares
+    the SIGNED version against what it is running, not an unsigned envelope
+    field.
+    """
+    if not digest_hex or len(digest_hex) != 64:
+        raise ValueError("digest must be a hex-encoded SHA-256 (64 chars)")
+    for name, value in (
+        ("version", version),
+        ("platform", platform),
+        ("agent_type", agent_type),
+        ("channel", channel),
+    ):
+        if not value or not str(value).strip():
+            raise ValueError(f"{name} is required and must be non-empty")
+    return {
+        "v": RELEASE_MANIFEST_VERSION,
+        "digest": digest_hex.lower(),
+        "version": str(version),
+        "platform": str(platform),
+        "agent_type": str(agent_type),
+        "channel": str(channel),
+    }
+
+
+def canonical_manifest_bytes(manifest: dict[str, Any]) -> bytes:
+    """Serialise a manifest to the exact bytes that are signed and verified.
+
+    Canonical form: sorted keys, no insignificant whitespace, UTF-8. Both sides
+    MUST derive the bytes this way -- signing one serialisation and verifying
+    another is the classic way a signature scheme silently stops meaning
+    anything.
+    """
+    missing = [f for f in _MANIFEST_FIELDS if f not in manifest]
+    if missing:
+        raise ValueError(f"manifest is missing required field(s): {', '.join(missing)}")
+    subset = {k: manifest[k] for k in _MANIFEST_FIELDS}
+    return json.dumps(subset, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def sign_manifest(manifest: dict[str, Any]) -> str:
+    """Sign a release manifest. Returns base64 ASN.1 DER."""
+    priv, _ = _load_or_generate()
+    payload = canonical_manifest_bytes(manifest)
+    sig = priv.sign(payload, ec.ECDSA(hashes.SHA256()))
+    return base64.b64encode(sig).decode("ascii")
+
+
+def verify_manifest(manifest: dict[str, Any], signature_b64: str) -> bool:
+    """Verify a manifest signature. Never raises for a bad signature."""
+    _, pub_bytes = _load_or_generate()
+    try:
+        pub = serialization.load_pem_public_key(pub_bytes)
+        if not isinstance(pub, ec.EllipticCurvePublicKey):
+            return False
+        payload = canonical_manifest_bytes(manifest)
+        pub.verify(base64.b64decode(signature_b64), payload, ec.ECDSA(hashes.SHA256()))
+        return True
+    except Exception:
         return False
 
 

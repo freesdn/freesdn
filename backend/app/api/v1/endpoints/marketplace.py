@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import CurrentUser, get_current_active_user, is_unscoped_superuser
+from app.core.query import MAX_PAGE
 from app.core.security_utils import escape_like
 from app.db import get_session
 from app.models.marketplace import MarketplacePlugin, MarketplacePluginVersion, PluginReview
@@ -250,7 +251,12 @@ async def browse_plugins(
     q: str | None = Query(None, max_length=128, description="Search query"),
     category: str | None = Query(None, max_length=64, description="Filter by category"),
     sort: str = Query("downloads", enum=["downloads", "rating", "newest", "name"]),
-    page: int = Query(1, ge=1),
+    # ``le=MAX_PAGE``: this route takes no auth dependency, so an
+    # unauthenticated caller could pass a 24-digit page, overflow the int64
+    # bound to ``OFFSET $n::BIGINT`` and turn every request into a 500 plus a
+    # full SQL statement in the log. Bound it at the edge, not just in the
+    # DataError handler.
+    page: int = Query(1, ge=1, le=MAX_PAGE),
     per_page: int = Query(20, ge=1, le=100),
 ) -> dict[str, Any]:
     """Browse marketplace plugins with optional filtering and sorting."""
@@ -661,7 +667,8 @@ async def upgrade_from_marketplace(
 async def list_reviews(
     slug: str,
     session: Annotated[AsyncSession, Depends(get_session)],
-    page: int = Query(1, ge=1),
+    # Also unauthenticated - same int64 OFFSET overflow as browse_plugins.
+    page: int = Query(1, ge=1, le=MAX_PAGE),
     per_page: int = Query(10, ge=1, le=50),
 ) -> dict[str, Any]:
     """List reviews for a plugin."""

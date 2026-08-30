@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from typing import Any
 from uuid import UUID
 
@@ -71,20 +72,25 @@ def _start_artifact_sweep() -> None:
 
 
 async def stop_fabric_runtime() -> None:
-    """Cancel background Fabric tasks (artifact sweep + in-flight chains) at shutdown."""
-    global _sweep_task
+    """Cancel background Fabric tasks (artifact sweep + chain workers) at shutdown."""
+    global _sweep_task, _chain_queue, _chain_loop
     task = _sweep_task
     _sweep_task = None
     if task is not None and not task.done():
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await task
-    # Cancel any detached Connection-chain tasks still running.
-    for chain in list(_chain_tasks):
-        chain.cancel()
+    # Tear down the Connection-chain worker pool and drop its backlog.
+    for worker in list(_chain_workers):
+        with contextlib.suppress(Exception):
+            worker.cancel()
+    for worker in list(_chain_workers):
+        # A worker from an already-closed loop cannot be awaited: suppress and move on.
         with contextlib.suppress(asyncio.CancelledError, Exception):
-            await chain
-    _chain_tasks.clear()
+            await worker
+    _chain_workers.clear()
+    _chain_queue = None
+    _chain_loop = None
 
 
 async def fabric_permission_checker(actor_id: UUID | None, permission: str, org_id: UUID) -> bool:
@@ -152,50 +158,158 @@ async def prime_negotiator() -> int:
     return len(negotiator.list_connections())
 
 
-# In-flight Connection-chain tasks, kept referenced so the event loop can't GC a
-# detached task mid-run (asyncio holds only a weak reference to bare tasks).
-_chain_tasks: set[asyncio.Task[Any]] = set()
-# Bound concurrent chain EXECUTION (each chain opens a DB session) so an event
-# burst can't saturate the connection pool. Tasks beyond the limit park on the
-# semaphore before opening any session — cheap.
+# ── Connection-chain dispatch: a bounded worker pool ──────────────────────
+# The bus subscriber must not run a chain INLINE (the bus wraps each subscriber
+# in a 10s wait_for, which would cancel a multi-step chain mid-run), so the work
+# is handed off. It used to be handed off as ``asyncio.create_task`` PER EVENT,
+# with a semaphore the task acquired only AFTER it existed. That capped
+# concurrent EXECUTION at 16 but placed no bound on ADMISSION: a Connection
+# subscribed to a high-rate event (or to the '*' firehose) retained one live
+# task, coroutine frame and event object per event. Measured on the real
+# dispatcher with a blocked handler: 1000 events in -> 1000 tasks retained, 16
+# actually running. The old comment called the parked tasks "cheap"; at 1000:16
+# they are not.
+#
+# So: a FIXED pool of long-lived workers draining a BOUNDED queue. Steady-state
+# task count is constant (_MAX_CONCURRENT_CHAINS) no matter the event rate, and
+# the backlog is capped at _CHAIN_QUEUE_MAXSIZE plain event references — no
+# task, no coroutine frame, no DB session per queued event.
+#
+# OVERLOAD POLICY: DROP-NEWEST, COUNTED, LOGGED.
+# When the backlog is full the incoming event is refused and counted rather than
+# queued. Blocking the producer is not an option — back-pressure would land in
+# the bus's 10s subscriber budget and stall publishing for every other
+# subscriber — and growing without bound is the bug being fixed. Coalescing was
+# considered and rejected: the dispatcher only knows "some Connection matches",
+# not which one, so it has no key to coalesce on. A drop is therefore VISIBLE,
+# never silent: it increments ``_chain_stats["dropped"]``, which
+# ``dispatch_stats()`` exposes and a rate-limited WARNING reports with the
+# running total.
 _MAX_CONCURRENT_CHAINS = 16
-_chain_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_CHAINS)
+# The backlog bound is set by STALENESS, not by memory: a queued entry is one
+# reference to an event the bus already holds, so 512 of them cost nothing,
+# but at the pessimistic drain rate of this pool a chain admitted at the tail
+# of a full queue starts roughly a minute after its trigger and would act on
+# stale device state. Shedding beats acting late.
+_CHAIN_QUEUE_MAXSIZE = 512
+
+_chain_queue: asyncio.Queue[Any] | None = None
+_chain_workers: set[asyncio.Task[None]] = set()
+# The loop the pool is bound to. asyncio primitives are not portable across
+# loops, so if we ever wake up on a different one (tests, a re-entered lifespan)
+# the pool is rebuilt rather than silently parking on a dead queue.
+_chain_loop: asyncio.AbstractEventLoop | None = None
+
+# admitted: accepted onto the backlog. dropped: refused, backlog full.
+# handled: a worker ran the chain to completion (success OR error).
+# admitted + dropped == every event that passed would_handle; once drained,
+# handled == admitted. No event leaves the dispatcher uncounted.
+_chain_stats: dict[str, int] = {"admitted": 0, "dropped": 0, "handled": 0}
+
+_DROP_LOG_INTERVAL_SECONDS = 60.0
+_last_drop_log = 0.0
 
 
-def _on_chain_done(task: asyncio.Task[Any]) -> None:
-    _chain_tasks.discard(task)
-    if not task.cancelled():
-        exc = task.exception()
-        if exc is not None:
-            logger.error("Fabric: connection-chain task crashed", exc_info=exc)
+def dispatch_stats() -> dict[str, int]:
+    """Snapshot of chain-dispatch accounting (admitted / dropped / handled).
+
+    ``dropped`` > 0 means Fabric shed load: events a Connection was wired to
+    never ran a chain. That is the deliberate overload policy, and this counter
+    (plus the WARNING in ``_note_chain_drop``) is how an operator sees it.
+    """
+    return {
+        **_chain_stats,
+        "queued": _chain_queue.qsize() if _chain_queue is not None else 0,
+        "workers": len(_chain_workers),
+        "capacity": _CHAIN_QUEUE_MAXSIZE,
+    }
+
+
+def _note_chain_drop(event: Any) -> None:
+    """Count a shed event and report it (rate-limited, with the running total)."""
+    global _last_drop_log
+    _chain_stats["dropped"] += 1
+    now = time.monotonic()
+    if now - _last_drop_log < _DROP_LOG_INTERVAL_SECONDS:
+        return
+    _last_drop_log = now
+    logger.warning(
+        "Fabric: connection-chain backlog full (%d queued / %d workers) — DROPPING "
+        "event %s; %d event(s) dropped in total. Chains are running slower than "
+        "events arrive: narrow the Connection's source_event, or raise "
+        "_MAX_CONCURRENT_CHAINS if the DB pool can take it.",
+        _chain_queue.qsize() if _chain_queue is not None else 0,
+        len(_chain_workers),
+        getattr(event, "event_type", "?"),
+        _chain_stats["dropped"],
+    )
+
+
+async def _chain_worker(queue: asyncio.Queue[Any]) -> None:
+    """Long-lived drainer: run one Connection chain at a time, forever.
+
+    Never exits on a chain failure. A worker that died on an exception would
+    permanently shrink the pool, so 16 bad events would leave Fabric inert.
+    """
+    from app.core.fabric.negotiator import negotiator
+
+    while True:
+        event = await queue.get()
+        try:
+            await negotiator.handle_event(event)
+            _chain_stats["handled"] += 1
+        except asyncio.CancelledError:
+            queue.task_done()
+            raise
+        except Exception:
+            _chain_stats["handled"] += 1
+            logger.error("Fabric: connection-chain crashed", exc_info=True)
+        queue.task_done()
+
+
+def _ensure_chain_workers() -> asyncio.Queue[Any]:
+    """Create (or repair) the bounded queue + fixed worker pool for this loop."""
+    global _chain_queue, _chain_loop
+    loop = asyncio.get_running_loop()
+    if _chain_queue is None or _chain_loop is not loop:
+        for stale in list(_chain_workers):
+            with contextlib.suppress(Exception):
+                stale.cancel()
+        _chain_workers.clear()
+        _chain_queue = asyncio.Queue(maxsize=_CHAIN_QUEUE_MAXSIZE)
+        _chain_loop = loop
+    queue = _chain_queue
+    for dead in [w for w in _chain_workers if w.done()]:
+        _chain_workers.discard(dead)
+    while len(_chain_workers) < _MAX_CONCURRENT_CHAINS:
+        _chain_workers.add(asyncio.create_task(_chain_worker(queue), name="fabric-chain-worker"))
+    return queue
 
 
 async def _dispatch_connections(event: Any) -> None:
-    """Bus subscriber that runs matching Connections in a DETACHED, bounded task.
+    """Bus subscriber that hands matching Connections to the bounded chain pool.
 
-    The bus wraps every subscriber in a 10s ``wait_for``; a multi-step Connection
-    chain (slow ops, staged writes) can exceed that and be cancelled mid-chain —
-    leaving partial side-effects and no run record. Detaching the work lets this
-    subscriber return immediately while the chain runs to completion under the
-    negotiator's own per-step fault isolation + run recorder.
+    Returns immediately: a chain can far exceed the bus's 10s subscriber budget,
+    and being cancelled mid-chain leaves partial side-effects and no run record.
 
-    Two guards keep a high-volume bus ('*' fan-out) from exhausting the DB pool:
-    a cheap ``would_handle`` pre-filter skips events no Connection is wired to
-    (the common case — no task, no session), and ``_chain_semaphore`` caps
-    concurrent chain execution.
+    Three guards keep a high-volume bus ('*' fan-out) from exhausting memory or
+    the DB pool: a cheap ``would_handle`` pre-filter skips events no Connection
+    is wired to (the common case — nothing queued, no session), the fixed pool
+    caps concurrent chain EXECUTION, and the bounded queue caps ADMISSION. See
+    the module comment above for the drop-newest overload policy.
     """
     from app.core.fabric.negotiator import negotiator
 
     if not negotiator.would_handle(event):
         return
 
-    async def _run() -> None:
-        async with _chain_semaphore:
-            await negotiator.handle_event(event)
-
-    task = asyncio.create_task(_run())
-    _chain_tasks.add(task)
-    task.add_done_callback(_on_chain_done)
+    queue = _ensure_chain_workers()
+    try:
+        queue.put_nowait(event)
+    except asyncio.QueueFull:
+        _note_chain_drop(event)
+        return
+    _chain_stats["admitted"] += 1
 
 
 async def handle_connection_changed(event: Any) -> None:
@@ -258,6 +372,9 @@ async def wire_and_start() -> int:
 
     # Start the periodic transient-artifact sweep + negotiator re-prime (in-process).
     _start_artifact_sweep()
+    # Bring the bounded chain-worker pool up now, so its size and the backlog
+    # bound are properties of boot rather than of whichever event arrives first.
+    _ensure_chain_workers()
 
     # P3 convergence: expose every native Fabric Operation as an AI-assistant
     # tool. Runs here (boot wiring, after ALL modules have loaded) rather than in

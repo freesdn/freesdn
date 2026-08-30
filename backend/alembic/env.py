@@ -55,10 +55,7 @@ def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
-        # target_metadata=None for the same reason as do_run_migrations():
-        # autogenerate is never run in offline/deployment mode, and passing
-        # Base.metadata triggers MappedColumn.type introspection under SA 2.0.
-        target_metadata=None,
+        target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -69,14 +66,30 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection: Connection) -> None:
     """Run migrations with the given connection."""
+    # Alembic reads target_metadata back out of the migration context when it
+    # builds an AutogenContext, so pinning it to None disabled `alembic
+    # revision --autogenerate` and `alembic check` entirely -- which is why four
+    # schema-changing commits (1e0abdb0, a5dd43f3, 934099b6, 67353ef0) each shipped
+    # zero migrations and nothing in the repo could say so. The comment that used to
+    # justify None claimed passing Base.metadata during `upgrade` raises
+    # "'MappedColumn' object has no attribute 'type'"; that does not reproduce on the
+    # pinned alembic 1.19 / SQLAlchemy 2.0 (`alembic upgrade head` and
+    # `compare_metadata()` both run clean against Base.metadata).
+    #
+    # It is not inert during `upgrade`, though: alembic takes its constraint naming
+    # convention from target_metadata (operations/schemaobj.py:192), so op.create_*
+    # directives now render Base's NAMING_CONVENTION instead of PostgreSQL defaults.
+    # That is the intended direction -- it makes a migration-built object match what
+    # create_all builds -- and the only migration on the chain with anonymous
+    # constructs is 005, whose create_table branch is unreachable because 001_initial
+    # already built fabric.* via create_all.
     context.configure(
         connection=connection,
-        # target_metadata is only required for `alembic revision --autogenerate`.
-        # Passing it during `upgrade head` causes Alembic to introspect every
-        # mapped column's .type attribute, which fails under SQLAlchemy 2.0
-        # mapped_column() with: 'MappedColumn' object has no attribute 'type'.
-        # Set to None so the runtime migration runner never touches model metadata.
-        target_metadata=None,
+        target_metadata=target_metadata,
+        # Retype drift (String(10) -> Boolean) is exactly what went unnoticed here,
+        # and alembic does not compare column types unless asked.
+        compare_type=True,
+        include_schemas=True,
     )
 
     with context.begin_transaction():

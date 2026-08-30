@@ -85,6 +85,12 @@ from app.core.metrics import (
 logger_auth = logging.getLogger("adapter.omada.auth")
 logger_http = logging.getLogger("adapter.omada.http")
 logger_cache = logging.getLogger("adapter.omada.cache")
+
+#: Methods safe to replay after an ambiguous transport failure. A mutation that
+#: may already have reached the controller is transmitted exactly once and its
+#: failure is surfaced, so the staged change becomes ``reconciliation_required``
+#: rather than being silently applied twice.
+_IDEMPOTENT_METHODS: frozenset[str] = frozenset({"GET", "HEAD"})
 logger_rate_limit = logging.getLogger("adapter.omada.rate_limit")
 
 # Mutating HTTP verbs. Omada was historically the ONE vendor whose client layer
@@ -614,6 +620,7 @@ class OmadaApiClient:
         json_data: dict[str, Any] | list[Any] | None = None,
         cache_ttl: int | None = None,
         retry: bool = True,
+        replay_safe: bool | None = None,
     ) -> dict[str, Any]:
         """
         Execute an authenticated Omada API request.
@@ -698,7 +705,37 @@ class OmadaApiClient:
             logger_cache.debug("cache miss", extra={"path": path})
 
         reauth_attempted = False
-        max_attempts = self.config.max_retries if retry else 1
+        # Retry only what is safe to replay. The per-call ``retry`` flag stays
+        # (a caller may still opt out of retrying a read), but it is no longer
+        # sufficient on its own: it defaults to True, so every POST/PATCH/DELETE
+        # inherited the full retry budget. A controller that accepted a reboot,
+        # a voucher batch, or a backup RESTORE and then failed to answer had that
+        # mutation re-sent. Same rule as proxmox/freepbx/unifi.
+        # The HTTP verb is a proxy for "is this safe to replay", not the answer.
+        # Omada exposes a few POST endpoints that GENERATE AND RETURN a config
+        # without changing state -- semantically reads -- and a verb-only rule
+        # silently cost them their retries. ``replay_safe=True`` lets such a call
+        # say so explicitly; ``export_site_template`` deliberately does NOT set it
+        # because it creates a stored template.
+        is_idempotent = (
+            replay_safe if replay_safe is not None else method_upper in _IDEMPOTENT_METHODS
+        )
+        # Two DIFFERENT jobs share this budget and must not be conflated:
+        #
+        #  * replaying an AMBIGUOUS TRANSPORT FAILURE -- only safe when the
+        #    request is idempotent, because the controller may already have
+        #    applied it. Gated below, at each transport handler.
+        #  * replaying after a DEFINITIVE REJECTION (401/403, or an
+        #    errorCode saying the session expired) -- always safe, including for
+        #    a mutation, because a rejected request was NOT applied. Collapsing
+        #    the budget to 1 for writes silently killed this: the re-auth branch
+        #    ends in ``continue``, which with one iteration exits the loop and
+        #    reports "Request exhausted retries" instead of re-authenticating.
+        #    A controller restart or idle session expiry broke every write.
+        #
+        # So the LOOP keeps room for one re-auth replay; the transport handlers
+        # break out for a non-idempotent request.
+        max_attempts = self.config.max_retries if (retry and is_idempotent) else 2
 
         for attempt in range(1, max_attempts + 1):
             allowed = await self._rate_limiter.acquire(timeout=self.config.timeout)
@@ -731,6 +768,9 @@ class OmadaApiClient:
                         headers=headers,
                     )
                 except httpx.TimeoutException as exc:
+                    if not is_idempotent:
+                        # The request may already have reached the controller.
+                        raise OmadaTimeoutError("Request timed out", adapter_id="omada") from exc
                     self._error_count += 1
                     if retry and attempt < max_attempts:
                         await self._retry_sleep(attempt, "timeout", path)
@@ -743,6 +783,8 @@ class OmadaApiClient:
                         pass
                     raise OmadaTimeoutError("Request timed out", adapter_id="omada") from exc
                 except httpx.HTTPError as exc:
+                    if not is_idempotent:
+                        raise OmadaConnectionError("Request failed", adapter_id="omada") from exc
                     self._error_count += 1
                     if retry and attempt < max_attempts:
                         await self._retry_sleep(attempt, "connection_error", path)
@@ -772,7 +814,11 @@ class OmadaApiClient:
             check_response_size(response)
             if response.status_code in RETRYABLE_HTTP_STATUS:
                 self._error_count += 1
-                if retry and attempt < max_attempts:
+                # A 502/503/504 is ambiguous for a MUTATION: the controller may
+                # have applied the change before the gateway gave up. Only replay
+                # an idempotent request here; the re-auth branch below handles the
+                # definitive-rejection case, which is safe to replay either way.
+                if retry and is_idempotent and attempt < max_attempts:
                     await self._retry_sleep(attempt, f"http_{response.status_code}", path)
                     continue
                 self._breaker.on_failure()
@@ -3078,6 +3124,8 @@ class OmadaApiClient:
         return await self._request(
             "POST",
             f"/sites/{site_id}/cmd/vpn/openVpn/users/{user_id}/exportConfig",
+            # Generates and returns a profile; changes nothing on the controller.
+            replay_safe=True,
         )
 
     async def get_openvpn_status(self, site_id: str) -> list[dict[str, Any]]:
@@ -3285,6 +3333,8 @@ class OmadaApiClient:
         return await self._request(
             "POST",
             f"/sites/{site_id}/cmd/vpn/wireguard/peers/{peer_id}/exportConfig",
+            # Generates and returns a config; changes nothing on the controller.
+            replay_safe=True,
         )
 
     async def get_wireguard_status(self, site_id: str) -> list[dict[str, Any]]:

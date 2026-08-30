@@ -111,6 +111,7 @@ def check_scheduled_upgrades(self) -> dict[str, Any]:
             schedules = (await session.execute(q)).scalars().all()
 
             triggered = 0
+            dispatch_ids: list[str] = []
             for schedule in schedules:
                 try:
                     from app.services.firmware import PersistentFirmwareService as svc
@@ -118,12 +119,24 @@ def check_scheduled_upgrades(self) -> dict[str, Any]:
                     job = await svc.run_schedule_now(session, schedule.id)
                     if job:
                         triggered += 1
-                        # Dispatch the upgrade task
-                        run_firmware_upgrade.delay(str(job.id))
+                        dispatch_ids.append(str(job.id))
                 except Exception as e:
                     logger.error("Failed to trigger schedule %s: %s", schedule.id, e)
 
+            # Commit BEFORE dispatching. ``run_schedule_now`` only flushes, so the
+            # job row is not visible to another connection yet -- a worker that
+            # picked the task up first would look up an id that does not exist and
+            # the upgrade would be silently skipped. The API siblings already
+            # commit first; this beat task was the one that did not.
             await session.commit()
+
+            for job_id in dispatch_ids:
+                try:
+                    run_firmware_upgrade.delay(job_id)
+                except Exception as e:
+                    # The row is committed; losing the dispatch leaves a job the
+                    # operator can retry, which is better than losing the row.
+                    logger.error("Failed to dispatch firmware upgrade %s: %s", job_id, e)
             return {"checked": len(schedules), "triggered": triggered}
 
     return asyncio.run(_run())

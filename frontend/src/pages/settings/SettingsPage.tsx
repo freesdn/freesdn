@@ -63,6 +63,7 @@ import { useUIStore, ACCENT_PRESETS } from '@/stores';
 import { useToast } from '@/hooks/use-toast';
 import { useToastHelpers } from '@/components/ui/toast';
 import { api, systemApi, getApiErrorMessage } from '@/lib/api';
+import { UserProfile } from '@/components/auth';
 
 // ---------------------------------------------------------------------------
 // Sidebar section / item types
@@ -95,6 +96,7 @@ function buildSettingsSections(t: TFunc): SettingsCategory[] {
     {
       category: t('SettingsPage.nav.categories.securityAccess'),
       items: [
+        { id: 'security', label: t('SettingsPage.nav.items.security'), icon: ShieldCheck },
         { id: 'access', label: t('SettingsPage.nav.items.access', 'Read-only / Write access'), icon: ShieldCheck },
         { id: 'sso', label: t('SettingsPage.nav.items.sso'), icon: KeyRound },
         { id: 'api-keys', label: t('SettingsPage.nav.items.apiKeys'), icon: Key },
@@ -119,7 +121,7 @@ function buildSettingsSections(t: TFunc): SettingsCategory[] {
   ];
 }
 
-const VALID_TABS = ['general', 'appearance', 'access', 'sso', 'api-keys', 'oauth2-apps', 'ai', 'notifications', 'modules', 'system', 'about'];
+const VALID_TABS = ['general', 'appearance', 'security', 'access', 'sso', 'api-keys', 'oauth2-apps', 'ai', 'notifications', 'modules', 'system', 'about'];
 
 // ---------------------------------------------------------------------------
 // Shared helper components
@@ -771,6 +773,19 @@ function SettingsContent({ tab }: { tab: string }) {
           </CardContent>
         </Card>
       );
+
+    // The account-security tab. TopBar's "Enable MFA" button has always
+    // navigated to /settings/security, 'security' was never in VALID_TABS, and
+    // currentTab silently fell back to 'general' -- so the button landed the
+    // operator on General settings with no MFA anywhere. The translations for
+    // this nav item already existed in en/es/zh; only the wiring was missing.
+    //
+    // UserProfile is the ONLY component in the tree that calls PATCH /auth/me,
+    // POST /auth/password and the three /auth/mfa/* endpoints, and nothing
+    // rendered it, so changing your own password and enrolling MFA were both
+    // unreachable from the shipped UI.
+    case 'security':
+      return <UserProfile />;
 
     case 'appearance':
       return (

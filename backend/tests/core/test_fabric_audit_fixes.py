@@ -6,10 +6,52 @@ redaction, and the negotiator's cluster-wide idempotency/cooldown guards."""
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
+import logging
 import uuid
 
 import pytest
+
+
+def _flood_event(i: int):
+    """A minimal bus-event stand-in the Fabric dispatcher accepts."""
+    return type(
+        "E", (), {"event_type": "x.y", "organization_id": None, "payload": {}, "id": str(i)}
+    )()
+
+
+class _Pool:
+    """Handle onto the module-global chain pool, with counter deltas.
+
+    ``_chain_stats`` is cumulative for the life of the process (that is the
+    point -- an operator reads running totals), so tests must diff rather than
+    read absolutes or they couple to execution order.
+    """
+
+    def __init__(self, runtime) -> None:  # noqa: ANN001
+        self.rt = runtime
+        self._base = dict(runtime._chain_stats)
+
+    def delta(self) -> dict[str, int]:
+        now = self.rt.dispatch_stats()
+        return {k: now[k] - self._base[k] for k in ("admitted", "dropped", "handled")}
+
+
+@pytest.fixture
+async def chain_pool():
+    """Give each test a torn-down pool, and tear it down again afterwards so no
+    worker outlives its event loop."""
+    from app.core.fabric import runtime
+
+    await runtime.stop_fabric_runtime()
+    runtime._last_drop_log = 0.0  # the drop WARNING is rate-limited; unmute it
+    pool = _Pool(runtime)
+    try:
+        yield pool
+    finally:
+        await runtime.stop_fabric_runtime()
+        runtime._last_drop_log = 0.0
 
 
 class TestSSRFNeverBypassable:
@@ -319,36 +361,46 @@ class TestNegotiatorClusterGuards:
         assert "c1" not in n._last_fire
 
     async def test_detached_dispatch_runs_handle_event_off_the_bus_budget(
-        self, monkeypatch
+        self, chain_pool, monkeypatch
     ) -> None:
-        # The bus subscriber must run chains in a detached task (not inline under
-        # the bus's 10s wait_for), so a long chain can't be cancelled mid-run.
-        from app.core.fabric import runtime
+        # The bus subscriber must run chains off the bus's 10s wait_for (a long
+        # chain cancelled mid-run leaves partial side-effects and no run record),
+        # so _dispatch_connections hands off and returns without awaiting it.
         from app.core.fabric.negotiator import negotiator
 
+        rt = chain_pool.rt
         seen: dict[str, str | None] = {}
+        started = asyncio.Event()
+        release = asyncio.Event()
 
         async def _fake_handle(ev):  # noqa: ANN001
+            started.set()
+            await release.wait()
             seen["called"] = getattr(ev, "event_type", None)
             return []
 
         monkeypatch.setattr(negotiator, "handle_event", _fake_handle)
         # The dispatcher pre-filters via would_handle (skips events no Connection
-        # matches); force it true so this test exercises the detach path itself.
+        # matches); force it true so this test exercises the hand-off itself.
         monkeypatch.setattr(negotiator, "would_handle", lambda _ev: True)
-        ev = type(
-            "E", (), {"event_type": "x.y", "organization_id": None, "payload": {}, "id": "e"}
-        )()
-        await runtime._dispatch_connections(ev)  # returns immediately
-        for t in list(runtime._chain_tasks):  # drain the detached task
-            await t
-        assert seen.get("called") == "x.y"
 
-    async def test_dispatch_skips_events_no_connection_matches(self, monkeypatch) -> None:
-        # would_handle=False → no task spawned, no DB session opened (pool guard).
-        from app.core.fabric import runtime
+        await rt._dispatch_connections(_flood_event(0))
+        # DETACHED: the dispatcher returned while the chain is still blocked.
+        await asyncio.wait_for(started.wait(), 2)
+        assert "called" not in seen
+        release.set()
+        await asyncio.wait_for(rt._chain_queue.join(), 2)
+        assert seen.get("called") == "x.y"
+        assert chain_pool.delta()["handled"] == 1
+
+    async def test_dispatch_skips_events_no_connection_matches(
+        self, chain_pool, monkeypatch
+    ) -> None:
+        # would_handle=False → nothing admitted, no worker pool spun up, no DB
+        # session opened (the pool guard for a '*' firehose of unwired events).
         from app.core.fabric.negotiator import negotiator
 
+        rt = chain_pool.rt
         called = {"n": 0}
 
         async def _fake_handle(_ev):  # noqa: ANN001
@@ -356,9 +408,11 @@ class TestNegotiatorClusterGuards:
 
         monkeypatch.setattr(negotiator, "handle_event", _fake_handle)
         monkeypatch.setattr(negotiator, "would_handle", lambda _ev: False)
-        before = len(runtime._chain_tasks)
-        await runtime._dispatch_connections(type("E", (), {"event_type": "x.y"})())
-        assert called["n"] == 0 and len(runtime._chain_tasks) == before
+        for i in range(50):
+            await rt._dispatch_connections(_flood_event(i))
+        assert called["n"] == 0
+        assert rt._chain_queue is None  # not even a queue was created
+        assert chain_pool.delta() == {"admitted": 0, "dropped": 0, "handled": 0}
 
     async def test_control_event_never_fires_a_connection(self) -> None:
         # Even a connection wired to the "*" firehose must not fire on the
@@ -380,3 +434,175 @@ class TestNegotiatorClusterGuards:
             },
         )()
         assert await n.handle_event(ev) == []
+
+
+class TestChainDispatchIsAdmissionBounded:
+    """F-05: Fabric capped chain EXECUTION but not ADMISSION.
+
+    The dispatcher used to ``asyncio.create_task`` per matching event and only
+    then have the task park on a semaphore, so a Connection wired to a high-rate
+    event (or to '*') retained one live task + coroutine frame + event graph per
+    event. Executed against the real dispatcher with a blocked handler, 1000
+    events in produced 1000 retained tasks and 16 running ones.
+
+    It is now a fixed pool of long-lived workers draining a bounded queue, with
+    an explicit drop-newest overload policy that is counted and logged.
+    """
+
+    async def test_a_flood_does_not_retain_a_task_per_event(self, chain_pool, monkeypatch) -> None:
+        """Mutation caught: going back to create_task-per-event. The live-task
+        delta then tracks the event count (~1000) instead of the pool size, and
+        admitted/dropped stop accounting for the flood."""
+        from app.core.fabric.negotiator import negotiator
+
+        rt = chain_pool.rt
+        release = asyncio.Event()
+        live = {"now": 0, "peak": 0}
+
+        async def _blocked(_ev):  # noqa: ANN001
+            live["now"] += 1
+            live["peak"] = max(live["peak"], live["now"])
+            await release.wait()
+            live["now"] -= 1
+            return []
+
+        monkeypatch.setattr(negotiator, "handle_event", _blocked)
+        monkeypatch.setattr(negotiator, "would_handle", lambda _ev: True)
+
+        n_events = 1000
+        tasks_before = len(asyncio.all_tasks())
+        try:
+            for i in range(n_events):
+                await rt._dispatch_connections(_flood_event(i))
+            await asyncio.sleep(0.05)  # let every worker pick up and block
+
+            # THE finding, measured the way the reviewer measured it and without
+            # reference to the implementation: live asyncio tasks must not scale
+            # with the event count.
+            task_growth = len(asyncio.all_tasks()) - tasks_before
+            assert task_growth <= rt._MAX_CONCURRENT_CHAINS + 2, (
+                f"{n_events} events grew the task set by {task_growth}"
+            )
+
+            stats = rt.dispatch_stats()
+            assert stats["workers"] == rt._MAX_CONCURRENT_CHAINS
+            assert stats["queued"] <= rt._CHAIN_QUEUE_MAXSIZE
+            assert live["peak"] <= rt._MAX_CONCURRENT_CHAINS  # execution still capped
+
+            d = chain_pool.delta()
+            # Nothing vanishes uncounted: every event that passed would_handle is
+            # either admitted or recorded as shed.
+            assert d["admitted"] + d["dropped"] == n_events
+            assert d["admitted"] <= rt._CHAIN_QUEUE_MAXSIZE + rt._MAX_CONCURRENT_CHAINS
+            assert d["dropped"] > 0  # overload happened, and it is on the record
+        finally:
+            release.set()
+
+    async def test_overload_is_logged_not_silent(self, chain_pool, monkeypatch, caplog) -> None:
+        """The reviewer asked for overload to be VISIBLE. Mutation caught:
+        deleting the WARNING in _note_chain_drop (or letting the rate-limiter
+        swallow the first drop of a burst)."""
+        from app.core.fabric.negotiator import negotiator
+
+        rt = chain_pool.rt
+        monkeypatch.setattr(rt, "_CHAIN_QUEUE_MAXSIZE", 4)  # read when the pool is built
+        release = asyncio.Event()
+
+        async def _blocked(_ev):  # noqa: ANN001
+            await release.wait()
+            return []
+
+        monkeypatch.setattr(negotiator, "handle_event", _blocked)
+        monkeypatch.setattr(negotiator, "would_handle", lambda _ev: True)
+
+        try:
+            with caplog.at_level(logging.WARNING, logger="app.core.fabric.runtime"):
+                for i in range(60):
+                    await rt._dispatch_connections(_flood_event(i))
+            assert chain_pool.delta()["dropped"] > 0
+            drops = [r for r in caplog.records if "DROPPING" in r.getMessage()]
+            assert drops, "load shedding must be reported, not silent"
+            assert "backlog full" in drops[0].getMessage()
+        finally:
+            release.set()
+
+    async def test_a_crashing_chain_does_not_kill_its_worker(self, chain_pool, monkeypatch) -> None:
+        """New invariant of the pool design: with per-event tasks a crash cost
+        one task; with long-lived workers an unhandled exception would retire a
+        worker permanently and 16 bad events would leave Fabric inert.
+
+        Mutation caught: dropping the ``except Exception`` from _chain_worker.
+        The worker then dies mid-item, its queue entry is never marked done, and
+        both the join() below and the liveness assertion fail."""
+        from app.core.fabric.negotiator import negotiator
+
+        rt = chain_pool.rt
+        seen: list[str] = []
+
+        async def _handle(ev):  # noqa: ANN001
+            seen.append(ev.id)
+            if ev.id == "0":
+                raise RuntimeError("step blew up")
+            return []
+
+        monkeypatch.setattr(negotiator, "handle_event", _handle)
+        monkeypatch.setattr(negotiator, "would_handle", lambda _ev: True)
+
+        await rt._dispatch_connections(_flood_event(0))  # crashes
+        await asyncio.wait_for(rt._chain_queue.join(), 2)
+        workers = set(rt._chain_workers)
+        assert all(not w.done() for w in workers), "a crashed chain retired its worker"
+
+        await rt._dispatch_connections(_flood_event(1))  # still served
+        await asyncio.wait_for(rt._chain_queue.join(), 2)
+        assert seen == ["0", "1"]
+        assert set(rt._chain_workers) == workers  # same pool, not a rebuilt one
+        assert chain_pool.delta()["handled"] == 2  # a crash counts as handled
+
+    async def test_shutdown_tears_the_pool_down_and_is_idempotent(
+        self, chain_pool, monkeypatch
+    ) -> None:
+        """Mutation caught: leaving the workers running in stop_fabric_runtime --
+        they would outlive the loop and be destroyed pending."""
+        from app.core.fabric.negotiator import negotiator
+
+        rt = chain_pool.rt
+        release = asyncio.Event()
+
+        async def _blocked(_ev):  # noqa: ANN001
+            await release.wait()
+            return []
+
+        monkeypatch.setattr(negotiator, "handle_event", _blocked)
+        monkeypatch.setattr(negotiator, "would_handle", lambda _ev: True)
+
+        for i in range(5):
+            await rt._dispatch_connections(_flood_event(i))
+        await asyncio.sleep(0.05)
+        workers = list(rt._chain_workers)
+        assert workers and rt._chain_queue is not None
+
+        await rt.stop_fabric_runtime()
+        assert rt._chain_workers == set()
+        assert rt._chain_queue is None
+        assert all(w.done() for w in workers)
+        await rt.stop_fabric_runtime()  # idempotent
+        release.set()
+
+    async def test_pool_rebuilds_when_the_event_loop_changes(self, chain_pool) -> None:
+        """The pool holds loop-bound asyncio objects. If a stale pool from a dead
+        loop were reused, put_nowait would queue onto a queue nobody drains and
+        every event would silently stall.
+
+        Mutation caught: dropping the ``_chain_loop is not loop`` arm of
+        _ensure_chain_workers."""
+        rt = chain_pool.rt
+        rt._ensure_chain_workers()
+        stale_workers = set(rt._chain_workers)
+        stale_queue = rt._chain_queue
+        # Pretend the pool was built on a different loop, without cleaning up.
+        rt._chain_loop = None
+        rt._ensure_chain_workers()
+        assert rt._chain_queue is not stale_queue
+        assert set(rt._chain_workers).isdisjoint(stale_workers)
+        assert len(rt._chain_workers) == rt._MAX_CONCURRENT_CHAINS

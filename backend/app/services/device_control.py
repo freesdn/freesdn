@@ -364,8 +364,19 @@ class DeviceControlService:
                 duration = params.get("duration", 30)
                 return await adapter.locate_device(device_id, duration)
             case ActionType.FACTORY_RESET:
-                confirm = params.get("confirm", False)
-                if not confirm:
+                # `if not params.get("confirm")` was a truthiness check, so the
+                # STRING "false" -- which is what a JSON client sends when it
+                # serialises a boolean badly, and what an attacker sends on
+                # purpose -- passed the gate and factory-reset the device. The
+                # branch is currently unreachable (nothing outside this module
+                # names ActionType.FACTORY_RESET, and the two entry points taking
+                # a caller-supplied ActionType have no external callers), so this
+                # is a landmine rather than a live bypass. It is still the most
+                # destructive operation here, and it should not be armed the day
+                # someone wires it up.
+                from app.services.adapter_preflight_common import affirmative
+
+                if not affirmative(params.get("confirm")):
                     return AdapterResult(success=False, error="Factory reset requires confirmation")
                 return await adapter.factory_reset(device_id)
 

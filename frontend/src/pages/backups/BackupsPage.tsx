@@ -80,7 +80,7 @@ import { api, getApiErrorMessage, backupApi } from '@/lib/api';
 import type { BackupManifestPreview } from '@/lib/api';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
-import { useNotificationsStore } from '@/stores';
+import { useToast } from '@/hooks/use-toast';
 
 interface Backup {
   id: string;
@@ -419,7 +419,7 @@ function getNextCronRun(t: TFn, cronExpression: string | null | undefined): stri
 export default function BackupsPage() {
   const { t } = useTranslation('backup');
   const queryClient = useQueryClient();
-  const { addNotification } = useNotificationsStore();
+  const { toast } = useToast();
   // Build the zod schema with localized validation messages. Memoized on t
   // so it only rebuilds when the active language changes.
   const backupFormSchema = useMemo(() => buildBackupFormSchema(t), [t]);
@@ -545,17 +545,16 @@ export default function BackupsPage() {
       queryClient.invalidateQueries({ queryKey: ['backups'] });
       queryClient.invalidateQueries({ queryKey: ['backup-stats'] });
       setIsDialogOpen(false);
-      addNotification({
-        type: 'success',
+      toast({
         title: t('BackupsPage.toasts.backupStarted.title'),
-        message: t('BackupsPage.toasts.backupStarted.message'),
+        description: t('BackupsPage.toasts.backupStarted.message'),
       });
     },
     onError: (error: any) => {
-      addNotification({
-        type: 'error',
+      toast({
         title: t('BackupsPage.toasts.error'),
-        message: getApiErrorMessage(error, t('BackupsPage.toasts.createBackupFailed')),
+        description: getApiErrorMessage(error, t('BackupsPage.toasts.createBackupFailed')),
+        variant: 'destructive',
       });
     },
   });
@@ -569,17 +568,16 @@ export default function BackupsPage() {
       queryClient.invalidateQueries({ queryKey: ['backups'] });
       queryClient.invalidateQueries({ queryKey: ['backup-stats'] });
       setDeleteConfirmId(null);
-      addNotification({
-        type: 'success',
+      toast({
         title: t('BackupsPage.toasts.backupDeleted.title'),
-        message: t('BackupsPage.toasts.backupDeleted.message'),
+        description: t('BackupsPage.toasts.backupDeleted.message'),
       });
     },
     onError: (error: any) => {
-      addNotification({
-        type: 'error',
+      toast({
         title: t('BackupsPage.toasts.error'),
-        message: getApiErrorMessage(error, t('BackupsPage.toasts.deleteBackupFailed')),
+        description: getApiErrorMessage(error, t('BackupsPage.toasts.deleteBackupFailed')),
+        variant: 'destructive',
       });
     },
   });
@@ -592,17 +590,16 @@ export default function BackupsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['backup-schedules'] });
-      addNotification({
-        type: 'success',
+      toast({
         title: t('BackupsPage.toasts.scheduleUpdated.title'),
-        message: t('BackupsPage.toasts.scheduleToggled.message'),
+        description: t('BackupsPage.toasts.scheduleToggled.message'),
       });
     },
     onError: (error: any) => {
-      addNotification({
-        type: 'error',
+      toast({
         title: t('BackupsPage.toasts.error'),
-        message: getApiErrorMessage(error, t('BackupsPage.toasts.toggleScheduleFailed')),
+        description: getApiErrorMessage(error, t('BackupsPage.toasts.toggleScheduleFailed')),
+        variant: 'destructive',
       });
     },
   });
@@ -622,10 +619,9 @@ export default function BackupsPage() {
         // closed the dialog with a toast and discarded the report).
         setDryRunResult((data.dry_run_report as DryRunReport) ?? null);
         queryClient.invalidateQueries({ queryKey: ['backups'] });
-        addNotification({
-          type: 'success',
+        toast({
           title: t('BackupsPage.toasts.dryRunComplete.title'),
-          message: t('BackupsPage.toasts.dryRunComplete.message'),
+          description: t('BackupsPage.toasts.dryRunComplete.message'),
         });
         return;
       }
@@ -633,17 +629,16 @@ export default function BackupsPage() {
       setRestoreConfirmText('');
       setDryRunResult(null);
       queryClient.invalidateQueries({ queryKey: ['backups'] });
-      addNotification({
-        type: 'success',
+      toast({
         title: t('BackupsPage.toasts.restoreStarted.title'),
-        message: t('BackupsPage.toasts.restoreStarted.message'),
+        description: t('BackupsPage.toasts.restoreStarted.message'),
       });
     },
     onError: (error: any) => {
-      addNotification({
-        type: 'error',
+      toast({
         title: t('BackupsPage.toasts.error'),
-        message: getApiErrorMessage(error, t('BackupsPage.toasts.restoreFailed')),
+        description: getApiErrorMessage(error, t('BackupsPage.toasts.restoreFailed')),
+        variant: 'destructive',
       });
     },
   });
@@ -722,17 +717,16 @@ export default function BackupsPage() {
       queryClient.invalidateQueries({ queryKey: ['backup-schedules'] });
       setIsScheduleDialogOpen(false);
       setScheduleFormData(defaultScheduleFormData);
-      addNotification({
-        type: 'success',
+      toast({
         title: t('BackupsPage.toasts.scheduleCreated.title'),
-        message: t('BackupsPage.toasts.scheduleCreated.message'),
+        description: t('BackupsPage.toasts.scheduleCreated.message'),
       });
     },
     onError: (error: any) => {
-      addNotification({
-        type: 'error',
+      toast({
         title: t('BackupsPage.toasts.error'),
-        message: getApiErrorMessage(error, t('BackupsPage.toasts.createScheduleFailed')),
+        description: getApiErrorMessage(error, t('BackupsPage.toasts.createScheduleFailed')),
+        variant: 'destructive',
       });
     },
   });
@@ -748,17 +742,16 @@ export default function BackupsPage() {
       setIsScheduleDialogOpen(false);
       setEditingSchedule(null);
       setScheduleFormData(defaultScheduleFormData);
-      addNotification({
-        type: 'success',
+      toast({
         title: t('BackupsPage.toasts.scheduleUpdated.title'),
-        message: t('BackupsPage.toasts.scheduleUpdated.message'),
+        description: t('BackupsPage.toasts.scheduleUpdated.message'),
       });
     },
     onError: (error: any) => {
-      addNotification({
-        type: 'error',
+      toast({
         title: t('BackupsPage.toasts.error'),
-        message: getApiErrorMessage(error, t('BackupsPage.toasts.updateScheduleFailed')),
+        description: getApiErrorMessage(error, t('BackupsPage.toasts.updateScheduleFailed')),
+        variant: 'destructive',
       });
     },
   });
@@ -771,17 +764,16 @@ export default function BackupsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['backup-schedules'] });
       setDeleteScheduleId(null);
-      addNotification({
-        type: 'success',
+      toast({
         title: t('BackupsPage.toasts.scheduleDeleted.title'),
-        message: t('BackupsPage.toasts.scheduleDeleted.message'),
+        description: t('BackupsPage.toasts.scheduleDeleted.message'),
       });
     },
     onError: (error: any) => {
-      addNotification({
-        type: 'error',
+      toast({
         title: t('BackupsPage.toasts.error'),
-        message: getApiErrorMessage(error, t('BackupsPage.toasts.deleteScheduleFailed')),
+        description: getApiErrorMessage(error, t('BackupsPage.toasts.deleteScheduleFailed')),
+        variant: 'destructive',
       });
     },
   });
@@ -810,10 +802,10 @@ export default function BackupsPage() {
       window.URL.revokeObjectURL(url);
     },
     onError: (error: any) => {
-      addNotification({
-        type: 'error',
+      toast({
         title: t('BackupsPage.toasts.downloadFailed.title'),
-        message: getApiErrorMessage(error, t('BackupsPage.toasts.downloadBackupFailed')),
+        description: getApiErrorMessage(error, t('BackupsPage.toasts.downloadBackupFailed')),
+        variant: 'destructive',
       });
     },
   });
@@ -929,17 +921,16 @@ export default function BackupsPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
       
-      addNotification({
-        type: 'success',
+      toast({
         title: t('BackupsPage.toasts.exportComplete.title'),
-        message: t('BackupsPage.toasts.exportComplete.message'),
+        description: t('BackupsPage.toasts.exportComplete.message'),
       });
     } catch (error: unknown) {
       console.error('Export failed:', error);
-      addNotification({
-        type: 'error',
+      toast({
         title: t('BackupsPage.toasts.exportFailed.title'),
-        message: getApiErrorMessage(error, t('BackupsPage.toasts.exportConfigFailed')),
+        description: getApiErrorMessage(error, t('BackupsPage.toasts.exportConfigFailed')),
+        variant: 'destructive',
       });
     } finally {
       setIsExporting(false);
@@ -968,10 +959,10 @@ export default function BackupsPage() {
           setShowImportDialog(true);
         } catch (error: unknown) {
           console.error('Import preview failed:', error);
-          addNotification({
-            type: 'error',
+          toast({
             title: t('BackupsPage.toasts.importFailed.title'),
-            message: getApiErrorMessage(error, t('BackupsPage.toasts.readImportFailed')),
+            description: getApiErrorMessage(error, t('BackupsPage.toasts.readImportFailed')),
+            variant: 'destructive',
           });
           setImportFile(null);
         } finally {
@@ -995,10 +986,9 @@ export default function BackupsPage() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       
-      addNotification({
-        type: 'success',
+      toast({
         title: t('BackupsPage.toasts.importComplete.title'),
-        message: t('BackupsPage.toasts.importComplete.message'),
+        description: t('BackupsPage.toasts.importComplete.message'),
       });
 
       setShowImportDialog(false);
@@ -1009,10 +999,10 @@ export default function BackupsPage() {
       queryClient.invalidateQueries();
     } catch (error: unknown) {
       console.error('Import failed:', error);
-      addNotification({
-        type: 'error',
+      toast({
         title: t('BackupsPage.toasts.importFailed.title'),
-        message: getApiErrorMessage(error, t('BackupsPage.toasts.importConfigFailed')),
+        description: getApiErrorMessage(error, t('BackupsPage.toasts.importConfigFailed')),
+        variant: 'destructive',
       });
     } finally {
       setIsImporting(false);

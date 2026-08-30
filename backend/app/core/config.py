@@ -361,10 +361,25 @@ class Settings(BaseSettings):
         self.CORS_ORIGINS = cleaned
 
         if is_production and not self.CORS_ORIGINS:
-            _logging.getLogger(__name__).error(
-                "SECURITY: No CORS origins configured for %s! "
-                "API will reject all cross-origin requests. "
-                "Set FREESDN_CORS_ORIGINS to your production domain.",
+            # INFO, not ERROR. This is the CORRECT state for the shipped
+            # topology: install.sh brings up the bundled Caddy edge, which
+            # serves the SPA and proxies /api on ONE origin, so no cross-origin
+            # grant is needed and refusing them all is the hardened posture we
+            # want. Logging it as a SECURITY error meant every healthy default
+            # install reported an error at boot -- alarming to a first-time
+            # operator and noise in any log-based alerting.
+            #
+            # It was written when the frontend was served separately (8df73c22,
+            # the cookie-auth work), where the grant really was required. The
+            # deployment changed and this line did not. Anyone who does split
+            # the UI onto another domain finds out immediately and visibly --
+            # their browser blocks the calls -- so this line is not their only
+            # signal, and it is not worth an error on everyone else's install.
+            _logging.getLogger(__name__).info(
+                "No CORS origins configured for %s: cross-origin browser "
+                "requests will be refused. Expected for a single-origin "
+                "deployment behind the bundled edge. If you serve the UI from a "
+                "different domain, set FREESDN_CORS_ORIGINS to it.",
                 self.ENVIRONMENT,
             )
 
@@ -590,6 +605,29 @@ class Settings(BaseSettings):
     # private/loopback/link-local base_url hosts (resolving hostnames too) UNLESS
     # an operator who genuinely runs a local/LAN Ollama opts in here.
     AI_OLLAMA_ALLOW_PRIVATE_HOSTS: bool = False
+
+    # Extra hostnames an operator may point an AI provider base_url at, CSV.
+    #
+    # This was read with ``getattr(settings, "AI_PROVIDER_PROXY_HOSTS", None)``
+    # but never DECLARED, and ``model_config`` sets ``extra="ignore"`` -- so
+    # setting the variable did nothing at all, getattr always returned None, and
+    # the escape hatch was inert. The 400 body at modules/ai/api.py:199 tells the
+    # operator to set exactly this variable, and both the AI-assistant docs page
+    # and the configuration reference document it, so the fix is to make the
+    # variable real rather than to correct three places to say it does not work.
+    AI_PROVIDER_PROXY_HOSTS: str = ""
+
+    # Two more knobs the code reaches for with getattr() but never declared, so
+    # extra="ignore" discarded them and the operator's value never applied.
+    # Neither is documented, and both have working fallbacks, so nothing was
+    # broken -- but each was unsettable, which is not what the call site intends.
+    #
+    # FRONTEND_URL builds the password-reset link; empty keeps the existing
+    # fallback to CORS_ORIGINS[0] then http://localhost:3000.
+    FRONTEND_URL: str = ""
+    # UniFi refuses RFC1918 controller hosts when this is false. It defaulted to
+    # True at the call site, so the guard could never be switched ON.
+    ALLOW_PRIVATE_CONTROLLER_HOSTS: bool = True
 
     # Sandbox directory the Proxmox storage-upload applier may read from.
     # Stops a malicious staging payload from setting ``file_path`` to

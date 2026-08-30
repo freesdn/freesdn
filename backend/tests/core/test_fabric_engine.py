@@ -833,3 +833,105 @@ class TestLiveVertical:
         big = "A" * (_MAX_RENDERED_STR + 500)
         out = resolve_template("{{trigger.s}}", {"trigger": {"s": big}})
         assert isinstance(out, str) and len(out) == _MAX_RENDERED_STR
+
+
+class TestNegotiatorConcurrentEdits:
+    """Editing Connections while an event is fanning out must not lose deliveries.
+
+    ``handle_event`` used to iterate the LIVE ``self._connections.values()`` view
+    across four awaits (``_claim_event``, ``_cooldown_ok``, ``_run``,
+    ``_run_recorder``), and ``_run`` alone holds the loop for a DB session plus
+    adapter HTTP. Every mutator -- ``runtime.handle_connection_changed`` and the
+    fabric endpoints' ``_sync_engine`` / ``delete_connection`` -- runs on that same
+    event loop with no lock, so an operator creating or deleting a Connection
+    mid-flight made the ``for`` statement itself raise
+    ``RuntimeError: dictionary changed size during iteration``.
+
+    That is raised by the ITERATOR, so the per-connection ``try/except`` inside the
+    body could not catch it: the whole fan-out died, every remaining matching
+    Connection silently lost the event, and ``dispatch_stats()`` still counted it
+    handled. Reported by an external review; reproduced end-to-end through the real
+    chain worker, where deleting one of five Connections delivered only one.
+    """
+
+    @staticmethod
+    def _op(handler):
+        return Operation(
+            id="x.read",
+            title="read",
+            produces=(),
+            handler=handler,
+            tier=OperationTier.NATIVE,
+            provider_id="x",
+        )
+
+    @staticmethod
+    def _conn(cid):
+        return Connection(
+            id=cid,
+            organization_id=ORG,
+            name=cid,
+            source_event="a.evt",
+            steps=[ConnectionStep("x.read")],
+        )
+
+    @pytest.mark.asyncio
+    async def test_creating_a_connection_mid_fanout_does_not_drop_the_rest(self) -> None:
+        """Fails on the pre-fix code with RuntimeError, delivering only c1."""
+        fired: list[str] = []
+        neg = None
+
+        async def handler(ctx):
+            fired.append(ctx.connection_id if hasattr(ctx, "connection_id") else "?")
+            # Mutate on the FIRST delivery only, from inside a real await window --
+            # exactly what runtime.handle_connection_changed does on this loop.
+            if len(fired) == 1:
+                neg.add_connection(TestNegotiatorConcurrentEdits._conn("c-new"))
+            return OperationResult.ok(output={})
+
+        neg = Negotiator(
+            registry=_FakeRegistry([self._op(handler)]),
+            permission_checker=None,
+            session_factory=lambda: None,
+        )
+        for cid in ("c1", "c2", "c3"):
+            neg.add_connection(self._conn(cid))
+
+        runs = await neg.handle_event(_Event("a.evt", {}, ORG))
+
+        # All three ORIGINAL connections must still have been delivered to.
+        assert len(runs) == 3, f"expected all 3 original connections to run, got {len(runs)}"
+        assert {r["connection_id"] for r in runs} == {"c1", "c2", "c3"}
+
+    @pytest.mark.asyncio
+    async def test_deleting_a_connection_mid_fanout_stops_it_firing(self) -> None:
+        """Pins the id-snapshot choice over ``list(self._connections.values())``.
+
+        Both fix the crash; only re-resolving the id stops a Connection deleted
+        mid-flight from still running its chain. That matters because
+        ``delete_connection`` commits the row deletion BEFORE calling
+        ``remove_connection`` and ``ConnectionRun.connection_id`` is a NOT NULL FK,
+        so such a run performs its side effects and then cannot be audited.
+        """
+        fired: list[str] = []
+        neg = None
+
+        async def handler(ctx):
+            fired.append("hit")
+            if len(fired) == 1:
+                neg.remove_connection("c3")  # not reached yet
+            return OperationResult.ok(output={})
+
+        neg = Negotiator(
+            registry=_FakeRegistry([self._op(handler)]),
+            permission_checker=None,
+            session_factory=lambda: None,
+        )
+        for cid in ("c1", "c2", "c3"):
+            neg.add_connection(self._conn(cid))
+
+        runs = await neg.handle_event(_Event("a.evt", {}, ORG))
+
+        ran = {r["connection_id"] for r in runs}
+        assert "c3" not in ran, "a Connection deleted mid-fanout must not still fire"
+        assert ran == {"c1", "c2"}

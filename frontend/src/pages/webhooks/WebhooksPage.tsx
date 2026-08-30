@@ -65,6 +65,7 @@ import {
   Download,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { escapeCell } from '@/lib/csv';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
@@ -515,10 +516,10 @@ export default function WebhooksPage() {
     const rows = webhooks;
     if (rows.length === 0) return;
     const headers = ['name', 'url', 'enabled', 'event_types', 'success_count', 'failure_count', 'last_triggered'];
-    const escape = (v: unknown) => {
-      const s = v == null ? '' : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const escape = (v: unknown) => escapeCell(v);
     const lines = [
       headers.join(','),
       ...rows.map((w) =>

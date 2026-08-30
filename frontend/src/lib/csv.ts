@@ -21,7 +21,15 @@ export function escapeCell(v: unknown): string {
   // Sheets and can execute (DDE / data exfil). Our exports carry untrusted,
   // device-reported data (channel/SMART names, etc.), so prefix a single quote
   // to force text, the displayed value is unchanged.
-  if (/^[=+\-@\t\r]/.test(s)) {
+  // ...but a NEGATIVE NUMBER is not a formula. Prefixing one turns the cell into
+  // text, so a signal_strength of -67 dBm exported as '-67 and could no longer be
+  // sorted, filtered or charted. This surfaced when 18 pages were routed onto this
+  // helper: their own escapers had no guard, so numbers had always come through.
+  // A bare numeric literal cannot execute -- a formula needs an operator or
+  // function after the sign ("-1+1", "-CMD()"), neither of which matches the
+  // numeric pattern. Exempt strict numerics only.
+  const isPlainNumber = /^-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(s);
+  if (!isPlainNumber && /^[=+\-@\t\r]/.test(s)) {
     s = `'${s}`;
   }
   // Quote if the cell contains a comma, quote, CR or LF (RFC 4180).

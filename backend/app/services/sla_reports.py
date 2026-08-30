@@ -15,7 +15,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,17 @@ from app.models.sla import (
 logger = logging.getLogger(__name__)
 
 REPORTS_BASE_DIR = os.environ.get("SLA_REPORTS_DIR", "/data/sla_reports")
+
+
+class SLAReportRenderError(RuntimeError):
+    """The report data was computed but could not be written to disk.
+
+    Raised instead of swallowing the storage error. A swallowed render failure
+    leaves ``SLAReport.file_path`` NULL, and the download endpoint treats a NULL
+    file_path as "no file was requested" and returns the raw ``report_data``
+    JSON with a 200 — so a caller that asked for CSV silently receives JSON and
+    nothing anywhere says the render failed. See ``generate_report`` step 6.
+    """
 
 
 class SLAReportGenerator:
@@ -64,7 +75,12 @@ class SLAReportGenerator:
           2. Gather breaches within the period.
           3. Gather compliance snapshots within the period.
           4. Compute summary metrics.
-          5. Persist the report record.
+          5. Build the report record.
+          6. Render it to disk, then persist the record.
+
+        Raises ``SLAReportRenderError`` if the render fails: nothing is written
+        to the session, so a storage failure cannot leave a downloadable-looking
+        report behind that serves JSON in place of the format it advertises.
 
         Parameters
         ----------
@@ -214,13 +230,17 @@ class SLAReportGenerator:
             "compliance": compliance_summary,
         }
 
-        # 5. Persist
+        # 5. Build the row (persisted at step 6, only if the render succeeds)
         if not title:
             start_str = period_start.strftime("%Y-%m-%d")
             end_str = period_end.strftime("%Y-%m-%d")
             title = f"SLA Report {start_str} to {end_str}"
 
         report = SLAReport(
+            # Assigned here rather than by the column default at INSERT, because
+            # step 6 renders the file NAMED after this id and must run before the
+            # row exists — see below.
+            id=uuid4(),
             organization_id=org_id,
             title=title,
             period_start=period_start,
@@ -230,19 +250,26 @@ class SLAReportGenerator:
             generated_by=generated_by,
             generated_at=datetime.now(UTC),
         )
+
+        # 6. Render to file (CSV or text-based report) BEFORE the row is added.
+        #
+        # This used to be `db.add()` + `flush()` and then a render wrapped in
+        # `except Exception: logger.exception(...)`. Any storage failure at the
+        # sink — a full disk, a read-only volume, a root-owned mountpoint — was
+        # swallowed, so the row was committed with file_path NULL and the
+        # download endpoint's `if report.file_path:` branch fell through to
+        # `return {... "report_data": ...}`: a request for `format="csv"` got
+        # application/json with a 200 and no error anywhere. Worse in
+        # `generate_scheduled`, which catches per schedule and continues: the
+        # already-flushed row rode the caller's commit into the catalogue as a
+        # finished report that can never be downloaded as the format it claims.
+        #
+        # Rendering first means a failed render adds nothing to the session, so
+        # neither caller can publish a phantom report, and the error reaches the
+        # operator instead of the log.
+        await self._render_to_file(report, report_data)
         self.db.add(report)
         await self.db.flush()
-
-        # 6. Render to file (CSV or text-based report)
-        try:
-            await self._render_to_file(report, report_data)
-            await self.db.flush()
-        except Exception:
-            logger.exception(
-                "Failed to render report %s to file — report data is still "
-                "available in the database",
-                report.id,
-            )
 
         logger.info(
             "Generated SLA report '%s' (%s) for org %s — %d policies, %d breaches",
@@ -259,26 +286,44 @@ class SLAReportGenerator:
     # ──────────────────────────────────────────────────────────────────────
 
     async def _render_to_file(self, report: SLAReport, report_data: dict[str, Any]) -> None:
-        """Render report data to a file (CSV or text-based PDF alternative)."""
+        """Render report data to a file (CSV or text-based PDF alternative).
+
+        Raises ``SLAReportRenderError`` on any storage failure. The bare OSError
+        the standard library raises here says only "[Errno 30] Read-only file
+        system"; wrapping it names the report, the format and the sink, which is
+        what an operator needs to fix the mount.
+        """
         base = Path(REPORTS_BASE_DIR)
-        base.mkdir(parents=True, exist_ok=True)
-
         org_dir = base / str(report.organization_id)
-        org_dir.mkdir(parents=True, exist_ok=True)
-
         filename = f"sla_report_{report.id}"
+        filepath = org_dir / (f"{filename}.csv" if report.format == "csv" else f"{filename}.txt")
 
-        if report.format == "csv":
-            filepath = org_dir / f"{filename}.csv"
-            self._write_csv(filepath, report_data)
-        else:
-            # Text-based report (PDF placeholder — can be upgraded to
-            # weasyprint or similar later without changing the public API)
-            filepath = org_dir / f"{filename}.txt"
-            self._write_text_report(filepath, report_data)
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+            org_dir.mkdir(parents=True, exist_ok=True)
 
-        report.file_path = str(filepath)
-        report.file_size = filepath.stat().st_size
+            if report.format == "csv":
+                self._write_csv(filepath, report_data)
+            else:
+                # Text-based report (PDF placeholder — can be upgraded to
+                # weasyprint or similar later without changing the public API)
+                self._write_text_report(filepath, report_data)
+
+            report.file_path = str(filepath)
+            report.file_size = filepath.stat().st_size
+        except OSError as exc:
+            # A write that died part-way (ENOSPC is the common one) leaves a
+            # truncated file under an id no row will ever reference, on a disk
+            # that is by definition already short. Best-effort sweep; never let
+            # the cleanup mask the real error.
+            try:
+                filepath.unlink(missing_ok=True)
+            except OSError:
+                logger.debug("could not remove partial SLA render %s", filepath)
+            raise SLAReportRenderError(
+                f"could not write the {report.format} render of SLA report "
+                f"{report.id} to {filepath}: {exc}"
+            ) from exc
 
     def _write_csv(self, filepath: Path, data: dict[str, Any]) -> None:
         """Write SLA report data as CSV."""
@@ -587,6 +632,11 @@ class SLAReportGenerator:
                 schedule.last_generated_at = now
                 schedule.next_run_at = self._compute_next_run(schedule, now)
             except Exception:
+                # Safe to continue: ``generate_report`` renders BEFORE it adds
+                # the row, so a failed schedule has queued nothing for the
+                # caller's commit. ``next_run_at`` is deliberately left where it
+                # was, so the schedule stays due and retries once the operator
+                # fixes the sink, rather than skipping a period in silence.
                 logger.exception("Failed to generate scheduled report %s", schedule.id)
                 continue
 

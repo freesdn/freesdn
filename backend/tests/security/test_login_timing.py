@@ -20,14 +20,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-_AUTH_FILE = (
-    Path(__file__).resolve().parents[2]
-    / "app"
-    / "api"
-    / "v1"
-    / "endpoints"
-    / "auth.py"
-)
+_AUTH_FILE = Path(__file__).resolve().parents[2] / "app" / "api" / "v1" / "endpoints" / "auth.py"
 
 
 def _auth_source() -> str:
@@ -165,19 +158,48 @@ def test_locked_account_branch_normalizes_timing() -> None:
 
 
 def test_dummy_hash_runtime_is_argon2() -> None:
-    """Smoke-test: when dependencies are available, the cached dummy hash
-    really is an Argon2 hash string.  Skips gracefully when the import
-    chain can't be satisfied (e.g. stripped CI smoke env).
+    """The dummy hash must cost the same CPU as a real one, in the RUNTIME.
+
+    This is the only test in this file that executes anything; the rest read the
+    auth module's source with regexes. It skipped silently from 2026-05-25 until
+    2026-08-26, because it imported ``pwd_context`` and the passlib ->
+    argon2-cffi migration (5098e3c1) removed that symbol. The handler caught the
+    ImportError and skipped with "app.core.security not importable in this env",
+    which blamed the environment for a rename -- so the one runtime assertion
+    guarding the timing-attack mitigation was dead for three months and the
+    suite stayed green.
+
+    It no longer skips. If the symbols move again, this fails and names them.
     """
-    try:
-        from app.core.security import pwd_context
-    except Exception:  # pragma: no cover - depends on env
-        import pytest
+    from app.api.v1.endpoints.auth import _get_dummy_hash
 
-        pytest.skip("app.core.security not importable in this env")
+    dummy = _get_dummy_hash()
+    assert dummy.startswith("$argon2id$"), (
+        f"the dummy hash must be Argon2id, got {dummy[:24]!r}. Verifying against "
+        "a cheaper hash is faster than verifying a real one, which is exactly "
+        "the latency difference that lets an attacker enumerate valid accounts."
+    )
 
-    # Generate once via the same code path the helper uses.
-    dummy = pwd_context.hash("this-is-a-dummy-password-not-a-real-credential")
-    assert dummy.startswith("$argon2"), (
-        f"pwd_context.hash() should produce Argon2 hashes, got: {dummy[:20]!r}"
+
+def test_dummy_hash_parameters_match_a_real_hash() -> None:
+    """Same algorithm is not enough: the COST parameters must match too.
+
+    ``m=65536,t=3,p=4`` is what makes verification take a measurable amount of
+    time. A dummy hash with the same algorithm but lower parameters still
+    returns faster than a real verification, and the enumeration oracle is back.
+    Nothing else in this file compares the two.
+    """
+    from app.api.v1.endpoints.auth import _get_dummy_hash
+    from app.core.security import get_password_hash
+
+    dummy = _get_dummy_hash()
+    real = get_password_hash("a-real-password-for-comparison")
+
+    d_parts = dummy.split("$")
+    r_parts = real.split("$")
+    assert d_parts[1] == r_parts[1], f"algorithm differs: dummy={d_parts[1]!r} real={r_parts[1]!r}"
+    assert d_parts[3] == r_parts[3], (
+        f"cost parameters differ: dummy={d_parts[3]!r} real={r_parts[3]!r}. "
+        "Verification against the dummy would return faster than a real one, "
+        "restoring the timing oracle this mitigation exists to close."
     )

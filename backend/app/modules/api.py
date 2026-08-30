@@ -134,6 +134,79 @@ async def get_module_states(
     return states
 
 
+# NOTE ON ORDER: this block MUST stay above @router.get("/{module_id}").
+# FastAPI matches routes in REGISTRATION order, so a literal single-segment
+# path declared after that catch-all is unreachable: GET /api/v1/modules/events
+# was answered by get_module (module_id="events") with 404 "Module 'events' not
+# found" -- byte-for-byte what a genuinely unknown module returns, which is why
+# it read as normal. It sat in the OpenAPI schema the whole time and had three
+# rounds of org-scoping hardening applied to it
+# without ever being reachable. Pinned by
+# tests/api/test_no_route_is_shadowed.py.
+# ==========================================
+# Module Events
+# ==========================================
+
+
+@router.get(
+    "/events",
+    response_model=ModuleEventsResponse,
+    summary="Get module events",
+)
+async def get_module_events(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    organization_id: UUID | None = Query(None),
+    module_id: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> ModuleEventsResponse:
+    """
+    Get module event history.
+
+    Useful for auditing module changes.
+    """
+    # SECURITY: this endpoint lacked org scoping — a regular user
+    # could omit organization_id (filter skipped → ALL orgs' events) or pass a
+    # victim org's id, leaking cross-tenant module-config events (incl. actor +
+    # old/new settings). Force the caller's own org; only super_admin may query
+    # another org or all orgs. Mirrors every sibling endpoint's _verify_org_access.
+    if is_unscoped_superuser(current_user):  # scope-aware
+        effective_org = organization_id  # may be None → all orgs, by design
+    else:
+        if organization_id is not None:
+            _verify_org_access(current_user, organization_id)
+        # a scoped super_admin key (organization_id None) must NOT fall
+        # through to all-orgs. org_scope_or_platform returns the caller's own org
+        # and raises 403 for a scoped/no-org principal (fail closed).
+        effective_org = org_scope_or_platform(current_user)
+
+    service = ModuleService(db)
+    events = await service.get_module_events(
+        organization_id=effective_org,
+        module_id=module_id,
+        limit=limit,
+        offset=offset,
+    )
+
+    return ModuleEventsResponse(
+        events=[
+            ModuleEventRead(
+                id=str(e.id),
+                organization_id=str(e.organization_id) if e.organization_id else None,
+                module_id=e.module_id,
+                event_type=e.event_type,
+                timestamp=e.timestamp,
+                user_id=str(e.user_id) if e.user_id else None,
+                details=e.details,
+                error_message=e.error_message,
+            )
+            for e in events
+        ],
+        total=len(events),
+    )
+
+
 @router.get(
     "/{module_id}",
     response_model=ModuleManifestResponse,
@@ -480,68 +553,4 @@ async def set_feature_flag(
         feature_key=flag.feature_key,
         is_enabled=flag.is_enabled,
         value=flag.value,
-    )
-
-
-# ==========================================
-# Module Events
-# ==========================================
-
-
-@router.get(
-    "/events",
-    response_model=ModuleEventsResponse,
-    summary="Get module events",
-)
-async def get_module_events(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
-    organization_id: UUID | None = Query(None),
-    module_id: str | None = Query(None),
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
-) -> ModuleEventsResponse:
-    """
-    Get module event history.
-
-    Useful for auditing module changes.
-    """
-    # SECURITY: this endpoint lacked org scoping — a regular user
-    # could omit organization_id (filter skipped → ALL orgs' events) or pass a
-    # victim org's id, leaking cross-tenant module-config events (incl. actor +
-    # old/new settings). Force the caller's own org; only super_admin may query
-    # another org or all orgs. Mirrors every sibling endpoint's _verify_org_access.
-    if is_unscoped_superuser(current_user):  # scope-aware
-        effective_org = organization_id  # may be None → all orgs, by design
-    else:
-        if organization_id is not None:
-            _verify_org_access(current_user, organization_id)
-        # a scoped super_admin key (organization_id None) must NOT fall
-        # through to all-orgs. org_scope_or_platform returns the caller's own org
-        # and raises 403 for a scoped/no-org principal (fail closed).
-        effective_org = org_scope_or_platform(current_user)
-
-    service = ModuleService(db)
-    events = await service.get_module_events(
-        organization_id=effective_org,
-        module_id=module_id,
-        limit=limit,
-        offset=offset,
-    )
-
-    return ModuleEventsResponse(
-        events=[
-            ModuleEventRead(
-                id=str(e.id),
-                organization_id=str(e.organization_id) if e.organization_id else None,
-                module_id=e.module_id,
-                event_type=e.event_type,
-                timestamp=e.timestamp,
-                user_id=str(e.user_id) if e.user_id else None,
-                details=e.details,
-                error_message=e.error_message,
-            )
-            for e in events
-        ],
-        total=len(events),
     )

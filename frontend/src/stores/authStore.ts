@@ -112,17 +112,15 @@ interface AuthState {
   error: string | null;
   mfaPending: boolean;
   mfaToken: string | null;
-  forcePasswordChange: boolean;
 
   // Actions
-  login: (credentials: LoginCredentials) => Promise<{ success: boolean; mfaRequired?: boolean; forcePasswordChange?: boolean }>;
+  login: (credentials: LoginCredentials) => Promise<{ success: boolean; mfaRequired?: boolean }>;
   verifyMfa: (data: MfaVerifyData) => Promise<boolean>;
   register: (data: RegisterData) => Promise<boolean>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<boolean>;
   fetchCurrentUser: () => Promise<void>;
   clearError: () => void;
-  clearForcePasswordChange: () => void;
   loginWithSSO: (accessToken?: string, refreshToken?: string, user?: User | null) => Promise<void>;
   // Set MFA pending state from an external flow (e.g. SSO callback that
   // returned require_mfa instead of an access token). The LoginPage's
@@ -149,7 +147,6 @@ export const useAuthStore = create<AuthState>()(
         error: null,
         mfaPending: false,
         mfaToken: null,
-        forcePasswordChange: false,
 
         // Login action
         login: async (credentials: LoginCredentials) => {
@@ -158,7 +155,6 @@ export const useAuthStore = create<AuthState>()(
             state.error = null;
             state.mfaPending = false;
             state.mfaToken = null;
-            state.forcePasswordChange = false;
           });
 
           try {
@@ -180,14 +176,21 @@ export const useAuthStore = create<AuthState>()(
               return { success: true, mfaRequired: true };
             }
 
-            const forcePasswordChange = data.force_password_change || false;
+            // NOTE: this used to also read `data.force_password_change` and
+            // drive a `/change-password` redirect guard. Nothing could ever set
+            // it: /auth/login declares response_model=BrowserAuthResponse, a
+            // response_model is a whitelist that DROPS undeclared keys, and no
+            // backend code or User column produced the flag in the first place.
+            // So the guard read `undefined` on every login in every release.
+            // Removed rather than half-wired -- forcing a password change needs
+            // a User column, a migration and an admin path to set it, and until
+            // those exist a store field here only makes rotation look enforced.
 
             // Cookies are set automatically by the backend response.
             // We only need to track auth state in the store.
             set((state) => {
               state.isAuthenticated = true;
               state.isLoading = false;
-              state.forcePasswordChange = forcePasswordChange;
             });
 
             // Fetch user profile if not included in login response
@@ -208,7 +211,7 @@ export const useAuthStore = create<AuthState>()(
               });
             }
 
-            return { success: true, forcePasswordChange };
+            return { success: true };
           } catch (error: unknown) {
             const axiosErr = error as AxiosError<{ detail?: string; error?: { message?: string } }>;
             if (import.meta.env.DEV) {
@@ -407,13 +410,6 @@ export const useAuthStore = create<AuthState>()(
         clearError: () => {
           set((state) => {
             state.error = null;
-          });
-        },
-
-        // Clear force password change flag (after successful password change)
-        clearForcePasswordChange: () => {
-          set((state) => {
-            state.forcePasswordChange = false;
           });
         },
 

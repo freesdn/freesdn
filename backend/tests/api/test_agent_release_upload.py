@@ -151,7 +151,7 @@ class TestSigningFailureOnUpload:
     async def test_signing_failure_on_latest_raises_500_and_does_not_persist(
         self, tmp_path, monkeypatch
     ) -> None:
-        """When sign_digest raises and is_latest=True (the default), the upload
+        """When sign_manifest raises and is_latest=True (the default), the upload
         endpoint must return HTTP 500 and leave no release row in the DB and no
         binary file on disk.
         """
@@ -161,7 +161,7 @@ class TestSigningFailureOnUpload:
 
         binary_content = b"fake-agent-binary"
         with patch(
-            "app.services.release_signing.sign_digest",
+            "app.services.release_signing.sign_manifest",
             side_effect=RuntimeError("signing key unavailable"),
         ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
@@ -201,7 +201,7 @@ class TestSigningFailureOnUpload:
 
         binary_content = b"fake-agent-binary-test"
         with patch(
-            "app.services.release_signing.sign_digest",
+            "app.services.release_signing.sign_manifest",
             side_effect=RuntimeError("signing key unavailable"),
         ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:

@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_db
 from app.core.dependencies import CurrentUser, require_permissions
+from app.core.query import MAX_PAGE
 from app.core.site_access import assert_can_access_site
 from app.models.core import Site
 from app.models.devices import Device
@@ -369,7 +370,14 @@ async def list_alerts(
     rule_id: UUID | None = None,
     site_id: UUID | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    # ``le=MAX_PAGE``: this value goes straight to ``.offset(offset)`` and
+    # is bound as ``OFFSET $n::BIGINT``; asyncpg raises DataError while
+    # ENCODING anything past int64, so an unbounded offset reached the
+    # driver and relied on the shared DBAPIError->400 floor in
+    # app/core/middleware.py to avoid a 500. MAX_PAGE is defined as the
+    # largest OFFSET-producing value that stays well inside int64, which is
+    # exactly what a raw offset is. See docs/agents/PAGINATION-BOUNDS.md.
+    offset: int = Query(0, ge=0, le=MAX_PAGE),
     db: AsyncSession = Depends(get_db),
     user: CurrentUser = Depends(require_permissions("alert:read")),
 ) -> Any:

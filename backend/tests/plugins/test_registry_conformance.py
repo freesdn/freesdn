@@ -394,3 +394,95 @@ def test_this_file_is_import_safe_without_the_registry():
 
     assert "if root is None:" in src, "a missing registry would raise at import time"
     assert "return []" in src
+
+
+# ---------------------------------------------------------------------------
+# A plugin may only gate on severities the platform actually emits
+# ---------------------------------------------------------------------------
+#
+# AlertSDK validates severity against {"info", "warning", "error", "critical"}.
+# Three incident plugins ranked on ["critical", "high", "medium", "low", "info"],
+# a vocabulary FreeSDN never produces. Only "critical" and "info" overlapped, so
+# every "warning" and "error" alert fell into the unknown-severity branch of
+# _meets_floor -- which fails OPEN. A PagerDuty integration configured to page
+# only for criticals therefore paged for every warning in the estate, and the
+# operator could not fix it, because the manifest's own enum offered values the
+# platform never emits.
+#
+# config-drift-guard and new-device-watch already used the right vocabulary,
+# so this assertion was true for them before it was written.
+
+
+def _severity_vocabulary() -> set[str]:
+    from app.plugins.sdk import AlertSDK
+
+    return set(AlertSDK._VALID_SEVERITIES)
+
+
+def test_no_plugin_ranks_on_a_severity_the_platform_never_emits() -> None:
+    """Fails before the fix on high/medium/low in three plugins."""
+    import ast
+
+    valid = _severity_vocabulary()
+    offenders: list[str] = []
+
+    for d in _plugin_dirs():
+        path = d / "plugin.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            if not any("SEVERIT" in n.upper() for n in names):
+                continue
+            if not isinstance(node.value, (ast.List, ast.Tuple, ast.Set)):
+                continue
+            values = {
+                e.value.lower()
+                for e in node.value.elts
+                if isinstance(e, ast.Constant) and isinstance(e.value, str)
+            }
+            unknown = values - valid
+            if unknown:
+                offenders.append(
+                    f"{path.parent.name}/plugin.py:{node.lineno} {names[0]} "
+                    f"contains {sorted(unknown)}, which AlertSDK never emits"
+                )
+
+    assert not offenders, (
+        "these plugins rank alerts on severities the platform does not produce, "
+        "so their severity filter admits everything:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_no_manifest_offers_a_severity_the_platform_never_emits() -> None:
+    """The UI must not offer a setting value that cannot match anything."""
+    import yaml as _yaml
+
+    valid = _severity_vocabulary()
+    offenders: list[str] = []
+
+    for d in _plugin_dirs():
+        path = d / "plugin.py"
+        manifest_path = d / "plugin.yaml"
+        if not manifest_path.is_file():
+            continue
+        manifest = _yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+        schema = (manifest.get("config_schema") or manifest.get("settings") or {})
+        if not isinstance(schema, dict):
+            continue
+        for key, spec in schema.items():
+            if not isinstance(spec, dict) or "severity" not in key.lower():
+                continue
+            values = {str(v).lower() for v in (spec.get("enum") or [])}
+            unknown = values - valid
+            if unknown:
+                offenders.append(
+                    f"{path.parent.name}/plugin.yaml {key} offers {sorted(unknown)}"
+                )
+
+    assert not offenders, (
+        "these manifests offer severity values the platform never emits, so the "
+        "operator can select a filter that silently matches nothing:\n  "
+        + "\n  ".join(offenders)
+    )

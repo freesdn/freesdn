@@ -22,7 +22,40 @@ x-sentinel-env: &sentinel-env
   CELERY_BROKER_URL: "sentinel://:${REDIS_PASSWORD}@redis-sentinel-1:26379;sentinel://:${REDIS_PASSWORD}@redis-sentinel-2:26379;sentinel://:${REDIS_PASSWORD}@redis-sentinel-3:26379/1"
   CELERY_RESULT_BACKEND: "sentinel://:${REDIS_PASSWORD}@redis-sentinel-1:26379;sentinel://:${REDIS_PASSWORD}@redis-sentinel-2:26379;sentinel://:${REDIS_PASSWORD}@redis-sentinel-3:26379/2"
 
+# HA data-tier nodes are BUILT from the same apt-get-upgrade wrappers the base
+# stack uses (docker/Dockerfile.{postgres,valkey}), so the standby and the
+# replica ship the same current OS patches as the primary. Anchors are per-file,
+# so these mirror the base compose's definitions.
+x-postgres-build: &postgres-build
+  context: ./docker
+  dockerfile: Dockerfile.postgres
+  args:
+    POSTGRES_VERSION: ${POSTGRES_VERSION:-18.6-trixie}
+x-valkey-build: &valkey-build
+  context: ./docker
+  dockerfile: Dockerfile.valkey
+  args:
+    VALKEY_VERSION: ${VALKEY_VERSION:-8.1.9-trixie}
+
 services:
+  # ── The PRIMARY needs a replication role before a standby can stream ───────
+  # Only the HA overlay runs a standby, so only the HA overlay creates this.
+  # Without it `postgres-standby` fails every pg_basebackup with "no pg_hba.conf
+  # entry for replication connection ... user \"repl\"" and restart-loops
+  # forever: nothing in the base compose or scripts/init-db.sql ever created the
+  # role, and the official image's generated pg_hba covers `all` databases but
+  # not the `replication` pseudo-database.
+  #
+  # Runs only on a FRESH postgres volume, like every /docker-entrypoint-initdb.d
+  # script. Enabling --ha over an existing install needs the manual invocation in
+  # the script's header.
+  postgres:
+    environment:
+      REPL_USER: ${POSTGRES_REPL_USER:-repl}
+      REPL_PASSWORD: ${POSTGRES_REPL_PASSWORD}
+    volumes:
+      - ./docker/postgres/init-replication.sh:/docker-entrypoint-initdb.d/20-init-replication.sh:ro
+
   # ── Backend services consume Sentinel in HA (env merges with the base) ──────
   api:
     environment: *sentinel-env
@@ -34,18 +67,39 @@ services:
     environment: *sentinel-env
   flower:
     environment: *sentinel-env
+  # collector was missing here. It runs the same backend image and gets its
+  # client from app/core/redis_client.py, whose sentinel_addrs() reads
+  # REDIS_SENTINELS and - finding it empty - falls back to a DIRECT connection
+  # to the `redis` service name. After Sentinel promotes redis-replica, `redis`
+  # is a read-only replica, so the collector's rate-limit INCR and its event
+  # publishes fail with READONLY and never recover, while every other service
+  # follows the new master. Nothing reports it: the receivers keep accepting
+  # datagrams and the heartbeat file keeps being touched, so the container stays
+  # healthy and SNMP-trap/syslog/NetFlow ingest simply stops reaching the bus.
+  # (The `vpn` sidecar is deliberately NOT here - it execs
+  # vpn-sidecar-entrypoint.sh and never opens a Redis client.)
+  collector:
+    environment: *sentinel-env
 
   # ── Valkey replica - Sentinel's promotion target ───────────────────────────
   # Replicates the base `redis` master. On a master failure Sentinel promotes
   # this node; the app (master_for) re-resolves and follows it.
   redis-replica:
-    image: valkey/valkey:${VALKEY_VERSION:-8.1.9-trixie}
+    build: *valkey-build
     container_name: freesdn-redis-replica
     restart: unless-stopped
     init: true
     depends_on:
       redis:
         condition: service_healthy
+    # The healthcheck below expands $$REDIS_PASSWORD INSIDE the container, so the
+    # variable has to exist there. It did not, so valkey-cli authenticated with an
+    # empty password and the replica sat permanently `unhealthy` --
+    # "AUTH failed: WRONGPASS" -- while replicating perfectly happily. The primary
+    # `redis` service has carried this same block all along
+    # (docker-compose.yml:203); only the replica was missing it.
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     command: >-
       valkey-server
       --replicaof redis 6379
@@ -65,7 +119,7 @@ services:
 
   # ── PostgreSQL standby (streaming replica of the primary) ───────────────────
   postgres-standby:
-    image: postgres:${POSTGRES_VERSION:-18.4-trixie}
+    build: *postgres-build
     container_name: freesdn-postgres-standby
     restart: unless-stopped
     init: true
@@ -102,7 +156,7 @@ services:
   # names rather than ephemeral IPs. requirepass lets the app's Sentinel client
   # AUTH to the sentinels.
   redis-sentinel-1: &sentinel
-    image: valkey/valkey:${VALKEY_VERSION:-8.1.9-trixie}
+    build: *valkey-build
     container_name: freesdn-redis-sentinel-1
     restart: unless-stopped
     init: true
@@ -157,7 +211,7 @@ services:
 
   # ── nginx round-robin LB across the two API replicas ────────────────────────
   ha-lb:
-    image: nginx:1.31.3-alpine
+    image: nginx:1.31.4-alpine
     container_name: freesdn-ha-lb
     restart: unless-stopped
     depends_on:

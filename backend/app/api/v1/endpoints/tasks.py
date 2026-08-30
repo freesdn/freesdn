@@ -143,6 +143,48 @@ MANUALLY_TRIGGERABLE_TASKS: dict[str, dict[str, Any]] = {
 }
 
 
+def _task_accepts_organization_id(task: Any) -> bool:
+    """True when ``task``'s signature can receive an ``organization_id`` kwarg.
+
+    The manual-trigger endpoint scopes a run to the caller's organization, but
+    the allowlisted jobs are global scheduled sweeps that take no arguments.
+    Passing the kwarg to those raises ``TypeError`` inside the worker before the
+    body runs, so the trigger silently did nothing. Check before injecting.
+    """
+    import inspect
+
+    run = getattr(task, "run", task)
+    try:
+        params = inspect.signature(run).parameters
+    except (TypeError, ValueError):  # pragma: no cover - builtin/exotic callable
+        return False
+    if "organization_id" in params:
+        return True
+    return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+
+def build_task_kwargs(
+    task: Any, caller_kwargs: dict[str, Any], organization_id: Any
+) -> dict[str, Any]:
+    """Build the kwargs the manual-trigger endpoint dispatches with.
+
+    Extracted so a test can pin the ACTUAL behaviour rather than re-deriving it:
+    a test that called ``_task_accepts_organization_id`` itself would keep
+    passing if the endpoint stopped consulting it.
+
+    Tenant safety is preserved: where the task takes an organization scope it is
+    forced to the caller's org, overwriting anything supplied. Where it does not,
+    the kwarg is stripped -- both so the worker does not raise ``TypeError``
+    before the body runs, and so a caller cannot smuggle it in.
+    """
+    kwargs = dict(caller_kwargs)
+    if _task_accepts_organization_id(task):
+        kwargs["organization_id"] = str(organization_id)
+    else:
+        kwargs.pop("organization_id", None)
+    return kwargs
+
+
 # ===========================================
 # Tenant helpers
 # ===========================================
@@ -491,11 +533,18 @@ async def trigger_task(
         )
 
     task_kwargs = dict(request.kwargs)
-    # Enforce tenant safety: the task always runs under the CALLER's org,
-    # overwriting any caller-supplied organization_id. This honors the endpoint's
-    # documented contract so the guarantee already holds the moment a
-    # future triggerable task sets allow_kwargs=True.
-    task_kwargs["organization_id"] = str(organization_id)
+    # Enforce tenant safety: where a task DOES take an organization scope, it always
+    # runs under the CALLER's org, overwriting anything the caller supplied (audit
+    # #13). That guarantee is kept below.
+    #
+    # But it must only be injected into tasks whose signature accepts it. Every
+    # entry in MANUALLY_TRIGGERABLE_TASKS today is a global scheduled sweep with a
+    # zero-argument signature, so injecting it unconditionally meant the worker
+    # raised ``TypeError: unexpected keyword argument 'organization_id'`` before
+    # entering the task body -- for all 17 entries. The endpoint returned "queued"
+    # and nothing ever ran. Ownership for audit/progress is tracked separately
+    # (``set_progress`` below), which is where it belongs.
+    task_kwargs = build_task_kwargs(task, task_kwargs, organization_id)
 
     # Submit task
     options = {"queue": expected_queue}

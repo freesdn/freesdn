@@ -81,6 +81,7 @@ class ModuleLoader:
         self.modules_path = modules_path or Path(__file__).parent
         self._discovered: dict[str, type[BaseModule]] = {}
         self._load_order: list[str] = []
+        self._event_subscription_ids: list[str] = []
 
     def discover_modules(self) -> list[str]:
         """
@@ -330,6 +331,71 @@ class ModuleLoader:
             self.registry.unregister(module_id)
             logger.info("Unloaded module: %s", module_id)
 
+    def subscribe_event_handlers(self) -> list[str]:
+        """Subscribe every loaded module's ``get_event_handlers()`` map on the
+        global EventBus, and return the new subscription ids.
+
+        ``BaseModule.get_event_handlers()`` shipped with zero callers, so the
+        maps the modules return were never registered on the bus. Concretely:
+        deleting a VLAN in the network module raised no gateway drift event,
+        and a finished ``gateway.sync.completed`` never scheduled the drift
+        check its publisher's own comment promises ("Emit sync-complete event
+        so drift detection can run", gateway/services/sync_service.py).
+
+        Called from :meth:`register_routes` rather than :meth:`load_all_modules`
+        deliberately. ``load_all_modules`` also runs in every Celery worker
+        (``celery_app.on_worker_ready``) and inside the device-sync task
+        (``app/tasks/sync.py::_ensure_modules_loaded``). Subscribing there would
+        put a second copy of every handler in a second process, and
+        ``EventBus.publish`` dispatches locally *and* fans out over Redis to the
+        API process -- so ``gateway.sync.completed``, which is published from a
+        Celery task, would run its handler twice and queue two
+        ``gateway.check_site_drift`` jobs per sync. ``register_routes`` runs
+        only where a FastAPI app exists, which is the process every other
+        EventBus subscriber (WS forwarder, automation engine, Fabric runtime)
+        already lives in.
+        """
+        from app.core.events import get_event_bus
+
+        bus = get_event_bus()
+        # Identity guard: a second loader in the same process (the OpenAPI
+        # export script builds its own) must not double-register the same
+        # module-level handler function against the same pattern.
+        registered = {
+            (pattern, id(sub.handler))
+            for pattern, subs in bus._subscriptions.items()
+            for sub in subs
+        }
+
+        subscription_ids: list[str] = []
+        for module in self.registry.modules.values():
+            try:
+                handlers = module.get_event_handlers()
+            except Exception as e:
+                logger.error(
+                    "Failed to collect event handlers for %s: %s",
+                    module.id,
+                    e,
+                    exc_info=True,
+                )
+                continue
+
+            for pattern, handler in handlers.items():
+                if (pattern, id(handler)) in registered:
+                    continue
+                sub_id = bus.subscribe(pattern, handler)
+                registered.add((pattern, id(handler)))
+                subscription_ids.append(str(sub_id))
+                logger.info(
+                    "Module %s subscribed %s to %s",
+                    module.id,
+                    getattr(handler, "__name__", repr(handler)),
+                    pattern,
+                )
+
+        self._event_subscription_ids.extend(subscription_ids)
+        return subscription_ids
+
     def register_routes(
         self,
         app: FastAPI,
@@ -341,10 +407,16 @@ class ModuleLoader:
         Each module's routes are mounted at:
         {prefix}/{module_id}/
 
+        Also subscribes each module's event handlers on the EventBus -- see
+        :meth:`subscribe_event_handlers` for why that is tied to this
+        (API-process-only) call and not to ``load_all_modules``.
+
         Args:
             app: FastAPI application
             prefix: API prefix (default: /api/v1)
         """
+        self.subscribe_event_handlers()
+
         for module in self.registry.modules.values():
             try:
                 router = module.get_router()

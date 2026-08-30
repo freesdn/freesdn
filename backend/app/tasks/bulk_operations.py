@@ -115,7 +115,17 @@ async def _resolve_device_ids(db: AsyncSession, target: dict[str, Any], org_id: 
             .join(DeviceTag, DeviceTag.device_id == Device.id)
             .join(Site, Device.site_id == Site.id)
             .where(
-                DeviceTag.tag == tag,
+                # Tags are persisted ``.strip().lower()`` (enterprise.py, the
+                # tag-assignment handler), but this is the operator's raw input.
+                # A bulk op scoped to "Production" matched no rows and reported a
+                # successful zero-device operation. Same class as the release
+                # filter: a raw parameter compared against a normalised column.
+                #
+                # Both comparison sites must normalise identically -- this one
+                # picks the devices, and _resolve_bulk_target_site_ids picks the
+                # sites the permission check runs against. Normalising only one
+                # would authorise against a different set than it executes on.
+                DeviceTag.tag == (tag or "").strip().lower(),
                 Site.organization_id == org_id,
                 *conditions,
             )
@@ -413,7 +423,9 @@ async def _execute_on_device(
     start = time.monotonic()
     try:
         result = await db.execute(
-            select(Device).options(selectinload(Device.site)).where(Device.id == device_id)
+            select(Device)
+            .options(selectinload(Device.site), selectinload(Device.controller))
+            .where(Device.id == device_id)
         )
         device = result.scalar_one_or_none()
         if not device:
@@ -490,12 +502,85 @@ async def _execute_on_device(
 # ==========================================================================
 
 
+def _adapter_for_device(device: Device) -> Any:
+    """Build a configured adapter from ``device``'s controller row.
+
+    These three operations previously did ``from app.adapters import
+    adapter_factory`` -- a name that has never existed in this codebase. The
+    ImportError was swallowed by the broad ``except Exception`` in
+    ``_execute_on_device``, so every bulk operation recorded every device as
+    "failed" and the job completed FAILED having touched nothing. A
+    ``# type: ignore[attr-defined]`` on each import is what kept mypy from
+    saying so.
+
+    ``build_adapter_for_controller`` is the sanctioned form (it decrypts the
+    stored secrets and handles cloud-mode Omada); it is SYNCHRONOUS and takes
+    the Controller ROW, not the Device -- both of which the old call got wrong.
+    """
+    from app.services.adapter_factory import build_adapter_for_controller
+
+    ctrl = getattr(device, "controller", None)
+    if ctrl is None:
+        raise RuntimeError(
+            f"device {device.id} has no controller; it cannot be reached for a bulk operation"
+        )
+    return build_adapter_for_controller(ctrl)
+
+
+def _raise_if_adapter_failed(result: Any, device: Device, operation: str) -> None:
+    """Turn a non-throwing ``AdapterResult(success=False)`` into a failure.
+
+    Adapters report failure two ways -- a raised exception AND a returned result
+    whose ``success`` is False (that is why ``raise_for_adapter_result`` exists).
+    The bulk executors ignored the return value entirely, so once the calls were
+    fixed a device that REFUSED the operation would still have been recorded as
+    a success for the whole job.
+    """
+    if result is None:
+        return
+    if getattr(result, "success", True):
+        return
+    reason = getattr(result, "message", None) or getattr(result, "error", None) or "no reason given"
+    raise RuntimeError(f"{operation} refused by device {device.id}: {reason}")
+
+
+def _require_adapter_capability(adapter: Any, device: Device, *methods: str) -> None:
+    """Fail with an honest message when this vendor's adapter cannot do it.
+
+    ``diff_config`` / ``push_full_config`` are implemented by a single adapter
+    today. Without this check the operator gets an AttributeError recorded as a
+    device failure, which reads like the device rejected the change rather than
+    like FreeSDN not supporting it for that vendor.
+    """
+    # hasattr() is not the right question. BaseAdapter defines these methods and
+    # returns AdapterResult.fail(error_code="NOT_SUPPORTED"), so an adapter that
+    # never overrode them still answers hasattr() with True. The capability check
+    # passed, the base placeholder ran, and the operator saw a DEVICE failure for
+    # something FreeSDN simply does not implement for that vendor.
+    #
+    # Today no adapter overrides push_full_config or diff_config at all, so bulk
+    # push_config cannot apply drift anywhere; reboot_device is overridden by six.
+    # Compare against the base to tell a real implementation from the placeholder.
+    from app.adapters.base import BaseAdapter
+
+    def _is_real(name: str) -> bool:
+        impl = getattr(type(adapter), name, None)
+        if impl is None:
+            return False
+        return impl is not getattr(BaseAdapter, name, None)
+
+    missing = [m for m in methods if not _is_real(m)]
+    if missing:
+        raise NotImplementedError(
+            f"the {getattr(device, 'model', None) or 'device'} adapter does not support "
+            f"this bulk operation (missing: {', '.join(missing)})"
+        )
+
+
 async def _push_config_to_device(
     db: AsyncSession, device: Device, config: dict[str, Any] | None
 ) -> None:
     """Push resolved config to a single device via its adapter."""
-    from app.adapters import adapter_factory  # type: ignore[attr-defined]
-
     resolver = TemplateResolver(db)
     desired = await resolver.resolve(device)
 
@@ -505,14 +590,31 @@ async def _push_config_to_device(
 
         desired = deep_merge(desired, config)
 
-    adapter = await adapter_factory(device)
+    adapter = _adapter_for_device(device)
     async with adapter:
-        running = await adapter.get_running_config()
-        normalized_desired = adapter.normalize_config(desired)
-        diff = adapter.diff_config(running, normalized_desired)
+        _require_adapter_capability(
+            adapter,
+            device,
+            "get_running_config",
+            "normalize_config",
+            "diff_config",
+            "push_full_config",
+        )
+        # Every call here was wrong against BaseAdapter; the import repair only
+        # got far enough for them to start failing instead of ImportError-ing:
+        #   get_running_config(device_id)       -- was called with no argument
+        #   normalize_config(config)            -- is async; was not awaited
+        #   diff_config(desired, running)       -- args reversed, and unawaited
+        #   push_full_config(device_id, config) -- was called without the device id
+        # Mirrors the working contract in services/enterprise.py.
+        device_ref = device.external_id or device.mac_address
+        running = await adapter.get_running_config(device_ref)
+        normalized_desired = await adapter.normalize_config(desired)
+        diff = await adapter.diff_config(normalized_desired, running)
 
         if diff:
-            await adapter.push_full_config(normalized_desired)
+            result = await adapter.push_full_config(device_ref, normalized_desired)
+            _raise_if_adapter_failed(result, device, "push_config")
             logger.info("Config pushed to device %s (%d changes)", device.id, len(diff))
         else:
             logger.info("Device %s already compliant", device.id)
@@ -520,33 +622,49 @@ async def _push_config_to_device(
 
 async def _reboot_device(device: Device) -> None:
     """Reboot a device via its adapter."""
-    from app.adapters import adapter_factory  # type: ignore[attr-defined]
-
-    adapter = await adapter_factory(device)
+    adapter = _adapter_for_device(device)
     async with adapter:
-        if hasattr(adapter, "reboot"):
-            await adapter.reboot()
-            logger.info("Reboot sent to device %s", device.id)
-        else:
-            raise NotImplementedError(f"Adapter for {device.model} does not support reboot")
+        # The interface is ``reboot_device(device_id)``. This probed for a bare
+        # ``reboot()``, which no adapter the factory returns implements, so every
+        # bulk reboot raised NotImplementedError and was recorded as a device
+        # failure -- the operation could never succeed.
+        _require_adapter_capability(adapter, device, "reboot_device")
+        result = await adapter.reboot_device(device.external_id or device.mac_address)
+        _raise_if_adapter_failed(result, device, "reboot")
+        logger.info("Reboot sent to device %s", device.id)
 
 
 async def _firmware_update_device(device: Device, config: dict[str, Any] | None) -> None:
     """Trigger firmware update on a device via its adapter."""
-    from app.adapters import adapter_factory  # type: ignore[attr-defined]
-
+    # No firmware_url REQUIREMENT. It is a leftover from the old
+    # ``firmware_update(url, version)`` call shape, which was not the interface;
+    # ``BaseAdapter.upgrade_firmware(device_id)`` takes only the device and
+    # installs whatever version the controller has selected. Meanwhile the
+    # shipped UI renders the config textarea for push_config ONLY, so a firmware
+    # job created from the UI arrives with config=None and used to die on this
+    # line before touching an adapter -- the operation could not be run from the
+    # product at all.
+    #
+    # The values are still accepted and logged when an API caller supplies them,
+    # so the operator's intent is recorded even though the adapter contract
+    # cannot honour a specific artifact today.
     firmware_url = (config or {}).get("firmware_url")
     firmware_version = (config or {}).get("firmware_version")
 
-    if not firmware_url:
-        raise ValueError("firmware_url is required for firmware_update operation")
-
-    adapter = await adapter_factory(device)
+    adapter = _adapter_for_device(device)
     async with adapter:
-        if hasattr(adapter, "firmware_update"):
-            await adapter.firmware_update(firmware_url, firmware_version)
-            logger.info("Firmware update triggered for device %s", device.id)
-        else:
-            raise NotImplementedError(
-                f"Adapter for {device.model} does not support firmware updates"
-            )
+        # The interface is ``upgrade_firmware(device_id)``. This called
+        # ``firmware_update(url, version)`` -- a name only OPNsense exposes,
+        # and there it takes no positional arguments, so the call raised
+        # TypeError. The URL/version belong to the firmware service, not to
+        # this layer; they are logged for the operator and the adapter is
+        # asked to upgrade the device it manages.
+        _require_adapter_capability(adapter, device, "upgrade_firmware")
+        result = await adapter.upgrade_firmware(device.external_id or device.mac_address)
+        _raise_if_adapter_failed(result, device, "firmware_update")
+        logger.info(
+            "Firmware update triggered for device %s (requested %s / %s)",
+            device.id,
+            firmware_version or "latest",
+            firmware_url,
+        )

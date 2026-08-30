@@ -16,7 +16,17 @@ def payload_confirmed(payload: dict[str, Any] | None) -> bool:
     JSON client might send. Everything else (``False``, ``"false"``, ``""``, ``0``,
     ``None``, arbitrary strings) is treated as NOT confirmed.
     """
-    v = (payload or {}).get("confirmed")
+    return affirmative((payload or {}).get("confirmed"))
+
+
+def affirmative(v: Any) -> bool:
+    """The strict rule above, over a single value.
+
+    Split out so a caller whose flag is spelled differently -- ``device_control``
+    uses ``confirm`` rather than ``confirmed`` -- shares this implementation
+    instead of writing a second, weaker copy of it. That is exactly how the
+    ``bool("false") is True`` bypass ends up in a codebase twice.
+    """
     if isinstance(v, bool):
         return v
     if isinstance(v, str):

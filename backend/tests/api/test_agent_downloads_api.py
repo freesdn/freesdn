@@ -365,6 +365,9 @@ class TestUpdatesCheck:
             "checksum_sha256": "",
             "release_notes": "",
             "signature": "",
+            # The signed release manifest binding digest+version+platform+
+            # agent_type+channel. Empty when there is no update to offer.
+            "manifest": {},
         }
 
     @pytest.mark.asyncio
@@ -396,6 +399,75 @@ class TestUpdatesCheck:
         agent = _agent()
         rel = _release(version="0.9.0")
         session = _FakeSession(releases=[rel], agents=[agent])
+        app = app_factory(session)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            r = await c.get(
+                "/api/v1/agents/updates/check?current_version=1.0.0&platform=windows",
+                headers={"X-Agent-ID": str(agent.id), "X-Agent-Key": "test-key"},
+            )
+        assert r.status_code == 200
+        assert r.json()["update_available"] is False
+
+    # -----------------------------------------------------------------
+    # Version grammar, asserted at the ENDPOINT (F-05)
+    # -----------------------------------------------------------------
+    #
+    # ``test_version_parity.py`` pins ``parse_agent_version`` against the
+    # agent's table, which proves the two PARSERS agree. It does not prove
+    # this endpoint uses it: the bug was never in a helper, it was here, in a
+    # raw-tuple comparison. Rip the call out and swap in ``tuple(int(x) for x
+    # in v.split("."))`` and every parity test still passes while the field
+    # behaviour regresses. These drive the real endpoint over HTTP instead.
+
+    @pytest.mark.asyncio
+    async def test_a_trailing_zero_release_is_not_an_update(self, app_factory) -> None:
+        """The perpetual-reinstall loop, at its only production site.
+
+        Raw tuples make (1,0,0,0) > (1,0,0), so the backend advertised an
+        update the agent then rejected as not-newer -- after downloading the
+        binary. That repeated every poll interval, forever.
+        """
+        agent = _agent()
+        session = _FakeSession(releases=[_release(version="1.0.0.0")], agents=[agent])
+        app = app_factory(session)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            r = await c.get(
+                "/api/v1/agents/updates/check?current_version=1.0.0&platform=windows",
+                headers={"X-Agent-ID": str(agent.id), "X-Agent-Key": "test-key"},
+            )
+        assert r.status_code == 200
+        assert r.json()["update_available"] is False, (
+            "1.0.0.0 is not newer than 1.0.0. Advertising it makes every agent "
+            "re-download the binary on every poll and never install it."
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_v_prefixed_release_is_still_offered(self, app_factory) -> None:
+        """The other direction, equally silent.
+
+        The release schema permits a leading ``v``. int() raised on it, the old
+        code substituted (0, 0, 0), and a genuinely newer release was never
+        offered to anyone -- with nothing logged.
+        """
+        agent = _agent()
+        session = _FakeSession(releases=[_release(version="v2.0.0")], agents=[agent])
+        app = app_factory(session)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            r = await c.get(
+                "/api/v1/agents/updates/check?current_version=1.0.0&platform=windows",
+                headers={"X-Agent-ID": str(agent.id), "X-Agent-Key": "test-key"},
+            )
+        assert r.status_code == 200
+        assert r.json()["update_available"] is True, (
+            "v2.0.0 is newer than 1.0.0; the leading v is valid per the release "
+            "schema and must not silently suppress the offer"
+        )
+
+    @pytest.mark.asyncio
+    async def test_an_unparseable_release_version_is_never_offered(self, app_factory) -> None:
+        """Fail closed: a mislabelled row must not flash the fleet."""
+        agent = _agent()
+        session = _FakeSession(releases=[_release(version="latest")], agents=[agent])
         app = app_factory(session)
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
             r = await c.get(
@@ -485,7 +557,7 @@ class TestPublishRelease:
         """a signing failure during publish must fail closed.
 
         The endpoint always sets is_latest=True for published releases.
-        When sign_digest raises, the release must NOT be created and the
+        When sign_manifest raises, the release must NOT be created and the
         session must be rolled back (restoring the previously-demoted
         latest release row) so agents continue to receive the last
         known-good signed update.
@@ -503,7 +575,7 @@ class TestPublishRelease:
             "is_prerelease": False,
         }
         with patch(
-            "app.services.release_signing.sign_digest",
+            "app.services.release_signing.sign_manifest",
             side_effect=RuntimeError("signing key unavailable"),
         ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:

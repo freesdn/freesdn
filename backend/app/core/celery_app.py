@@ -51,7 +51,20 @@ task_queues = (
     Queue("discovery", discovery_exchange, routing_key="discovery"),
     # Sync queue for device state synchronization
     Queue("sync", sync_exchange, routing_key="sync"),
-    # Priority queue for time-sensitive tasks
+    # Priority queue for time-sensitive tasks.
+    #
+    # NOTHING IS ROUTED HERE TODAY. It is declared, and every tier's
+    # WORKER_QUEUES subscribes to it, but no task declares queue="priority",
+    # no beat entry names it, and no apply_async passes it -- so the
+    # subscription can never deliver. The one rule that claimed to fill it
+    # ("app.tasks.*.high_priority_*") matched zero of the 112 registered task
+    # names and was removed rather than left looking wired; see task_routes.
+    # Kept as the escape hatch it now honestly is: a caller that needs the
+    # quick lane ahead of a saturated "default" passes queue="priority" on
+    # apply_async explicitly. Do not delete without also stripping it from
+    # WORKER_QUEUES in .env.{lite,pro,max}.example and the compose default at
+    # docker-compose.yml:426, or workers will subscribe to a queue that no
+    # longer exists in task_queues.
     Queue("priority", priority_exchange, routing_key="priority"),
     # Metrics queue for metrics collection
     Queue("metrics", default_exchange, routing_key="metrics"),
@@ -192,13 +205,21 @@ celery_app.conf.update(
     task_default_exchange="default",
     task_default_routing_key="default",
     # Task routing
+    # Every glob here is matched against the task's REGISTERED NAME, not its
+    # module path. A task that passes an explicit name= to its decorator is
+    # therefore invisible to a module-path glob -- which is how
+    # "app.tasks.analytics.*" matched nothing for as long as it shipped: all
+    # four analytics tasks register as "analytics.<func>". They fell through to
+    # task_default_queue ("default"), the quick lane, instead of the metrics
+    # I/O lane the rule intended. Only their beat entries' explicit
+    # options={"queue": "metrics"} kept that from being visible.
+    # test_every_task_route_glob_matches_a_registered_task pins this.
     task_routes={
         "app.tasks.discovery.*": {"queue": "discovery"},
         "app.tasks.sync.*": {"queue": "sync"},
         "app.tasks.metrics.*": {"queue": "metrics"},
-        "app.tasks.analytics.*": {"queue": "metrics"},
+        "analytics.*": {"queue": "metrics"},
         "vpn.*": {"queue": "sync"},
-        "app.tasks.*.high_priority_*": {"queue": "priority"},
         "cameras.*": {"queue": "metrics"},
         "gateway.*": {"queue": "sync"},
     },
@@ -223,6 +244,9 @@ celery_app.conf.update(
         "app.tasks.alert_rules.evaluate_all_alert_rules": {"rate_limit": "3/m"},
         "app.tasks.correlation.correlate_all_events": {"rate_limit": "2/m"},
         "gateway.sync_all_gateways": {"rate_limit": "2/m"},
+        # Newly beat-scheduled (voip-phone-health-check); one adapter session
+        # per managed phone, so it belongs with the other fleet-wide pollers.
+        "voip.health_check": {"rate_limit": "1/m"},
     },
     # Beat scheduler configuration
     beat_scheduler="celery.beat:PersistentScheduler",
@@ -278,6 +302,31 @@ celery_app.conf.update(
         "cleanup-task-progress": {
             "task": "app.tasks.maintenance.cleanup_stale_progress",
             "schedule": crontab(minute=0),
+            "options": {"queue": "default"},
+        },
+        # Reap dead user/SSO session rows - daily at 2:45 AM.
+        #
+        # ``cleanup_orphan_sessions`` was registered and never sent: no beat
+        # entry, no MANUALLY_TRIGGERABLE_TASKS entry, no .delay/.apply_async
+        # anywhere, so nothing in the tree ever deleted from
+        # core.user_sessions or core.sso_sessions. Rows accumulated from first
+        # login onward (135 on the dev DB going back to 2026-06-16, 0 pruned),
+        # which both grows the table forever and makes GET /auth/sessions list
+        # a user's whole login history as if every row were a live device.
+        #
+        # "default" because it is the only queue every tier's WORKER_QUEUES
+        # consumes (.env.max/.pro subscribe to default,priority only) - a
+        # maintenance sweep on "sync" would never run on pro or max.
+        #
+        # Safe to schedule only because the predicate now refuses to delete a
+        # revoked row while its refresh token is still inside its window;
+        # deleting one un-revokes it, since a missing row reads as "not
+        # revoked". tests/security/test_session_reaper_predicate.py is the
+        # ratchet for that, tests/tasks/test_beat_session_reaper.py for this
+        # entry.
+        "cleanup-orphan-sessions": {
+            "task": "app.tasks.maintenance.cleanup_orphan_sessions",
+            "schedule": crontab(hour=2, minute=45),
             "options": {"queue": "default"},
         },
         # Sweep stale ``applying`` rows in adapter_pending_changes - every
@@ -673,6 +722,31 @@ celery_app.conf.update(
             "task": "overlay.poll_health",
             "schedule": crontab(minute="*/2"),
             "options": {"queue": "metrics"},
+        },
+        # VoIP: poll every managed phone and write back status, SIP registration,
+        # uptime and CPU/memory - every 5 minutes, the cadence its own docstring
+        # states ("Should be run by Celery beat every 5 minutes").
+        #
+        # It was registered and never scheduled, and no voip API route runs the
+        # equivalent work, so phone rows only ever refreshed on a manual
+        # sync/discovery. This is the one of the eight unscheduled voip tasks
+        # that PERSISTS what it collects (update_phone + commit); the others
+        # either need per-entity arguments or discard their result, so a beat
+        # entry for them would add load without adding a refresh.
+        #
+        # "default" matches the other fleet health pollers here
+        # (check-agent-health, radius-check-health) and is the one queue every
+        # tier's WORKER_QUEUES consumes -- "sync" is a separate worker-io
+        # service behind the optional io-worker compose profile.
+        #
+        # expires=240 (< the 300s interval): the poll opens one adapter session
+        # per phone, so on a large fleet a run can outlast its own interval. A
+        # message that has not started by the time the next one is due is stale
+        # inventory, and dropping it is better than compounding the backlog.
+        "voip-phone-health-check": {
+            "task": "voip.health_check",
+            "schedule": crontab(minute="*/5"),
+            "options": {"queue": "default", "expires": 240},
         },
     },
 )

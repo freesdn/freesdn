@@ -67,6 +67,57 @@ def _change(feature, operation):
     return SimpleNamespace(feature=feature, operation=operation)
 
 
+class _BlobRefusingAdapter(_RecordingAdapter):
+    """A recording adapter that also stands in for the blob upload.
+
+    ``upload_file`` raises rather than records: a management change that leaks
+    into the blob branch must be a loud failure here, not a silent extra row in
+    ``calls``. ``disconnect`` is real so the applier's ``finally`` does not
+    record a call of its own.
+    """
+
+    async def upload_file(self, **kwargs):
+        raise AssertionError(f"a management change reached the blob upload: {kwargs}")
+
+    async def disconnect(self):
+        return None
+
+
+_SNAPSHOT_PAYLOAD = {"dataset": "tank/data", "name": "nightly"}
+
+
+def _blob_change(feature, operation, payload):
+    """A change shaped the way the staged-apply dispatcher hands one to build_applier."""
+    import uuid
+
+    return SimpleNamespace(
+        feature=feature,
+        operation=operation,
+        payload=payload,
+        target_id=None,
+        controller_id=uuid.uuid4(),
+        organization_id=uuid.uuid4(),
+    )
+
+
+def _blobless_service():
+    """``GatewayTrueNASStorageService`` wired to a recording adapter, no appliance."""
+    from app.services.adapter_truenas_storage import GatewayTrueNASStorageService
+
+    adapter = _BlobRefusingAdapter()
+    svc = GatewayTrueNASStorageService(db=None)
+
+    async def _get_controller(_cid, _org):
+        return object()  # unused: the builder below ignores the controller
+
+    async def _build(_ctrl):
+        return adapter
+
+    svc._get_controller = _get_controller
+    svc._get_truenas_adapter = _build
+    return svc, adapter
+
+
 # ── the surface exists and is routed ────────────────────────────
 
 
@@ -297,21 +348,36 @@ async def test_an_unroutable_feature_is_refused():
     assert exc.value.status_code == 400
 
 
-async def test_a_management_change_never_looks_for_a_blob():
+@pytest.mark.parametrize(
+    ("feature", "operation", "payload", "expect"),
+    [
+        ("storage.snapshot", "create", _SNAPSHOT_PAYLOAD, "create_snapshot"),
+        ("truenas.storage.snapshot", "create", _SNAPSHOT_PAYLOAD, "create_snapshot"),
+        ("storage.dataset", "create", {"name": "tank/backups"}, "create_dataset"),
+        ("truenas.storage.scrub", "start", {"pool": "tank"}, "start_scrub"),
+    ],
+)
+async def test_a_management_change_never_looks_for_a_blob(feature, operation, payload, expect):
     """
     The blob path demands an ``_artifact`` and 409s without one. A management
     change carries no blob, so falling through to it would reject every
     snapshot an operator staged -- with an error about a missing upload.
+
+    Asserted through ``build_applier`` -- the real entry point -- rather than by
+    grepping the source of the branch that does the routing. The grep version
+    pinned the literal ``c.feature != "storage.store_blob"``, which made the
+    fix for the aliased-blob dead end (``truenas.storage.store_blob`` routed
+    into ``_apply_management`` and 400d there) unlandable without deleting the
+    assertion. This form fails for the same reason the grep did -- inverting or
+    dropping the branch sends a snapshot into the blob path -- and lets the
+    branch key on whatever string is correct.
     """
-    import inspect
+    svc, adapter = _blobless_service()
+    change = _blob_change(feature, operation, payload)
 
-    from app.services.adapter_truenas_storage import GatewayTrueNASStorageService
+    await svc.build_applier(change)(change)
 
-    src = inspect.getsource(GatewayTrueNASStorageService.build_applier)
-    body = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("#"))
-
-    assert 'if c.feature != "storage.store_blob":' in body
-    assert body.index('c.feature != "storage.store_blob"') < body.index("_artifact")
+    assert [name for name, _ in adapter.calls] == [expect]
 
 
 # ── the permission tier ─────────────────────────────────────────

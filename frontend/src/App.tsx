@@ -3,7 +3,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense, useEffect } from 'react';
 import { useAuthStore, useInitAuth } from '@/stores/authStore';
-import { useNotificationsStore, useWebSocketStore, useUIStore } from '@/stores';
+import { useWebSocketStore, useUIStore } from '@/stores';
 import { useUIPaletteStore } from '@/stores/sidebarStore';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useGlobalShortcuts } from '@/hooks/useGlobalShortcuts';
@@ -111,7 +111,6 @@ import { useModulesInit } from '@/hooks/useModules';
 import { renderModuleRoutes } from '@/modules/ModuleRoutes';
 
 function App() {
-  const { addNotification } = useNotificationsStore();
   const setConnectionStatus = useWebSocketStore((state) => state.setConnectionStatus);
   const { isAuthenticated, _isHydrated, _isAuthInitialized } = useAuthStore();
   const { initAuth } = useInitAuth();
@@ -167,29 +166,21 @@ function App() {
   // Status changes go directly to the zustand store via onStatusChange
   // callback · no React state in App, so reconnection cycles don't
   // re-render the entire component tree.
+  //
+  // NOTE: this used to carry an onMessage handler that pushed
+  // "Device online" / "Discovery Complete" entries into
+  // useNotificationsStore. It was dead twice over. (1) The store had a
+  // writer and no reader anywhere in the tree, the bell in TopBar renders
+  // the server-side ['in-app-notifications'] query instead. (2) The
+  // production WS forwarder wraps every bus event as {type:'event'}, so
+  // the flat 'device_status_change' / 'discovery_complete' types it
+  // switched on are never emitted, exactly like the legacy camera_event
+  // cases removed from useWebSocket.handleMessage for the same reason.
+  // The live equivalents are device.status.changed / discovery.completed,
+  // already routed to invalidateQueries in that hook.
   useWebSocket({
     enabled: _isAuthInitialized && isAuthenticated,
     onStatusChange: setConnectionStatus,
-    onMessage: (message) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = message.data as Record<string, any> | undefined;
-      switch (message.type) {
-        case 'device_status_change':
-          addNotification({
-            type: data?.status === 'online' ? 'success' : 'warning',
-            title: `Device ${data?.status}`,
-            message: `${data?.name} is now ${data?.status}`,
-          });
-          break;
-        case 'discovery_complete':
-          addNotification({
-            type: 'info',
-            title: 'Discovery Complete',
-            message: `Found ${data?.device_count} devices`,
-          });
-          break;
-      }
-    },
   });
 
   return (

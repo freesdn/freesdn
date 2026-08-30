@@ -74,6 +74,7 @@ import { sitesApi, api } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { escapeCell } from '@/lib/csv';
 
 /* ============================================================
    Types
@@ -461,10 +462,10 @@ export default function SitesPage() {
       t('SitesPage.stats.online.title'),
       t('SitesPage.columns.updated'),
     ];
-    const esc = (v: unknown) => {
-      const s = v == null ? '' : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const esc = (v: unknown) => escapeCell(v);
     const lines = rows.map((s) =>
       [
         s.name,

@@ -21,6 +21,19 @@ from app.core.security_utils import escape_like
 
 logger = logging.getLogger(__name__)
 
+#: Upper bound for the ``page`` query parameter on list endpoints.
+#:
+#: This is not a UI preference. ``(page - 1) * per_page`` is bound into SQL as
+#: ``OFFSET $n::BIGINT``; asyncpg rejects anything above 2**63-1 with
+#: ``DataError: value out of int64 range`` while it is *binding* the parameter,
+#: which no handler catches, so an unauthenticated
+#: ``GET /api/v1/marketplace/plugins?page=<24 digits>`` returned HTTP 500 and
+#: wrote a full SQL statement plus stack trace to the log on every request.
+#: 1,000,000 pages against the 1,000-row ``per_page`` ceiling used anywhere in
+#: this codebase is an offset of 1e9 - nine orders of magnitude inside int64 -
+#: while still being far past any list a human paginates through.
+MAX_PAGE = 1_000_000
+
 # Safe default allowlist that contains ONLY non-sensitive columns.
 # Use this when a caller needs the most common sortable fields without
 # authoring a bespoke allowlist. NEVER include password/secret columns.
@@ -334,7 +347,10 @@ class QueryBuilder[T]:
 
     def paginate(self, page: int = 1, per_page: int = 20) -> "QueryBuilder[T]":
         """Set pagination parameters."""
-        self._page = max(1, page)
+        # Clamped at both ends: ``max(1, ...)`` keeps OFFSET non-negative and
+        # ``min(MAX_PAGE, ...)`` keeps it inside int64 so asyncpg cannot raise
+        # DataError while binding ``OFFSET $n::BIGINT``. See MAX_PAGE.
+        self._page = min(MAX_PAGE, max(1, page))
         self._per_page = min(100, max(1, per_page))
         return self
 
@@ -366,7 +382,7 @@ class QueryBuilder[T]:
 
 
 def pagination_params(
-    page: int = Query(1, ge=1, description="Page number"),
+    page: int = Query(1, ge=1, le=MAX_PAGE, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
 ) -> dict[str, int]:
     """FastAPI dependency for pagination parameters."""

@@ -126,3 +126,120 @@ class TestConnectionRateLimiter:
 
         time.sleep(0.08)
         assert rl.check() is True
+
+
+class _Principal:
+    """Minimal duck-typed principal with the real wildcard semantics.
+
+    ``user_can_subscribe`` only needs ``is_superuser`` + ``has_permission``.
+    The matching rules are copied from ``CurrentUser.has_permission``
+    (app/core/dependencies.py:628) because the point of
+    ``test_every_mapped_permission_is_granted_to_some_role`` below is to catch
+    a MISSPELLED permission -- e.g. ``backup:view`` instead of ``backup.view``
+    -- and a stub that answers "yes" to a set membership test would miss the
+    dot/colon confusion entirely.
+    """
+
+    def __init__(self, permissions: set[str], is_superuser: bool = False) -> None:
+        self.permissions = permissions
+        self.is_superuser = is_superuser
+
+    def has_permission(self, permission: str) -> bool:
+        if self.is_superuser or "*" in self.permissions:
+            return True
+        if permission in self.permissions:
+            return True
+        colon = permission.split(":")
+        if len(colon) == 2 and f"{colon[0]}:*" in self.permissions:
+            return True
+        dot = permission.split(".")
+        if len(dot) == 2 and f"{dot[0]}.*" in self.permissions:
+            return True
+        return False
+
+
+#: The families that were published, routed by the frontend, and denied by the
+#: default-deny at the bottom of ``user_can_subscribe`` because they had no
+#: entry in the map. Pattern -> the permission that gates the same data at REST.
+_NEWLY_MAPPED = {
+    "gateway.distribution.completed": "gateway.view",
+    "fabric.connection.changed": "event:read",
+    "backup.validation.failed": "backup.view",
+    "overlay.peer.online": "vpn:read",
+    "omada.event.controller_unreachable": "controller:read",
+    "network.vlan.created": "device:read",
+}
+
+
+class TestPreviouslyUnmappedFamilies:
+    """Each of these was ``subscription_denied`` for every non-super_admin."""
+
+    def test_holder_of_the_rest_permission_may_subscribe(self) -> None:
+        """Mutation this catches: deleting any of the six new map entries.
+
+        Without the entry the pattern reaches ``# Unknown pattern — default
+        deny`` and this is False no matter what the principal holds.
+        """
+        for pattern, perm in _NEWLY_MAPPED.items():
+            assert _user_can_subscribe(_Principal({perm}), pattern) is True, pattern
+
+    def test_wildcard_form_is_permitted_too(self) -> None:
+        """The frontend subscribes with ``<family>.*``, not a literal type."""
+        for pattern, perm in _NEWLY_MAPPED.items():
+            family = pattern.split(".")[0] + ".*"
+            assert _user_can_subscribe(_Principal({perm}), family) is True, family
+
+    def test_principal_without_the_permission_is_still_denied(self) -> None:
+        """Mutation this catches: mapping a family to ``event:read`` (which
+        every role including ``guest`` holds) as a shortcut, which would widen
+        the stream past its REST gate."""
+        for pattern, perm in _NEWLY_MAPPED.items():
+            if perm == "event:read":
+                continue  # deliberately auth-only at REST; see the map comment
+            assert _user_can_subscribe(_Principal({"site:read"}), pattern) is False, pattern
+
+    def test_notification_family_stays_denied(self) -> None:
+        """``notification.created`` carries another user's notification body.
+
+        ``_should_receive`` enforces per-user targeting only for site-LIMITED
+        connections, so mapping this prefix would broadcast every member's
+        in-app notifications to every other member of the org. It must stay
+        unmapped until ``_should_receive`` grows a ``payload.user_id`` check.
+        """
+        assert "notification." not in SUBSCRIPTION_PERMISSIONS
+        assert _user_can_subscribe(_Principal({"*"}), "notification.*") is False
+
+    def test_no_prefix_shadows_another(self) -> None:
+        """``user_can_subscribe`` returns on the FIRST matching prefix.
+
+        Mutation this catches: adding e.g. ``"net."`` ahead of ``"network."``,
+        which would silently re-gate the whole network family on the wrong
+        permission depending on dict insertion order.
+        """
+        prefixes = list(SUBSCRIPTION_PERMISSIONS)
+        shadowed = [(a, b) for a in prefixes for b in prefixes if a != b and b.startswith(a)]
+        assert not shadowed, f"prefix collision makes the map order-dependent: {shadowed}"
+
+    def test_every_mapped_permission_is_granted_to_some_role(self) -> None:
+        """A typo'd permission fails closed and looks exactly like a denial.
+
+        Mutation this catches: ``"backup.": "backup:view"`` (colon instead of
+        dot) or ``"gateway.": "gateway:view"`` -- both parse fine, both make
+        the prefix unsubscribable for every non-super_admin, and nothing else
+        in the suite would notice.
+        """
+        from app.core.dependencies import DEFAULT_ROLE_PERMISSIONS
+
+        holders = {role: _Principal(set(perms)) for role, perms in DEFAULT_ROLE_PERMISSIONS.items()}
+        orphans = [
+            f"{prefix} -> {perm}"
+            for prefix, perm in SUBSCRIPTION_PERMISSIONS.items()
+            if perm is not None
+            and not any(
+                p.has_permission(perm) for role, p in holders.items() if role != "super_admin"
+            )
+        ]
+        assert not orphans, (
+            "these subscription permissions are held by no role, so the prefix "
+            f"is dead for everyone but a super_admin: {orphans}"
+        )

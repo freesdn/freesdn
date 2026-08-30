@@ -169,6 +169,20 @@ api.interceptors.response.use(
         isAuthenticated: false,
       });
 
+      // Drop ALL cached query data, exactly as the explicit logout path does
+      // (authStore.logout). Query keys are not principal-scoped, so leaving the
+      // cache behind means the next user on a shared browser is served the
+      // previous user's device lists / connections / run payloads until each
+      // query refetches. Session expiry ends a session just as much as pressing
+      // Log out does, and this path was the only one that skipped the clear.
+      // Lazy import avoids a circular dependency at module load.
+      try {
+        const { queryClient } = await import('@/lib/queryClient');
+        queryClient.clear();
+      } catch {
+        // Ignore - cache clear is best-effort
+      }
+
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;

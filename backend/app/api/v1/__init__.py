@@ -445,6 +445,16 @@ api_router.include_router(
 api_router.include_router(security.router, prefix="/security", tags=["Security"])
 api_router.include_router(data.router, prefix="/data", tags=["Data Import/Export"])
 api_router.include_router(firmware.router, prefix="/firmware", tags=["Firmware"])
+# ORDER MATTERS: this MUST be included before the /webhooks router below.
+# Starlette matches in registration order, and webhooks.router owns
+# /webhooks/{webhook_id} -- so with this line after it, every request for
+# /api/v1/webhooks/templates was answered by get_webhook with
+# webhook_id="templates" and rejected as 422 "Input should be a valid UUID".
+# The 422 names path.webhook_id, which is the only visible tell; the endpoint
+# itself was never reached. Pinned by tests/api/test_no_route_is_shadowed.py.
+api_router.include_router(
+    webhook_templates.router, prefix="/webhooks/templates", tags=["Webhook Templates"]
+)
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 api_router.include_router(sso.router, prefix="/auth/sso", tags=["SSO"])
 api_router.include_router(switches.router, prefix="/switches", tags=["Switches"])
@@ -459,9 +469,6 @@ api_router.include_router(sla.router, prefix="/sla", tags=["SLA Monitoring"])
 api_router.include_router(topology.router, prefix="/topology", tags=["Topology"])
 api_router.include_router(alert_rules.router, prefix="/alert-rules", tags=["Alert Rules"])
 api_router.include_router(plugins.router, prefix="/plugins", tags=["Plugins"])
-api_router.include_router(
-    webhook_templates.router, prefix="/webhooks/templates", tags=["Webhook Templates"]
-)
 api_router.include_router(integrations.router, prefix="/integrations", tags=["Integrations"])
 api_router.include_router(marketplace.router, prefix="/marketplace/plugins", tags=["Marketplace"])
 api_router.include_router(ztp.router, prefix="/ztp", tags=["ZTP & Provisioning"])

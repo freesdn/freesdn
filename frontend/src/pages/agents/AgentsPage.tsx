@@ -73,6 +73,7 @@ import {
 import { agentFleetApi } from '@/lib/api/agents';
 import { FleetActivityPanel } from '@/components/agent/FleetActivityPanel';
 import { useToast } from '@/hooks/use-toast';
+import { escapeCell } from '@/lib/csv';
 
 const AGENT_STATUS_VARIANT: Record<string, StatusVariant> = {
   online: 'connected',
@@ -454,10 +455,10 @@ export default function AgentsPage() {
   // search/status/type filters). No backend round-trip.
   const handleExport = () => {
     const headers = ['id', 'name', 'agent_type', 'status', 'is_approved', 'site_name', 'last_ip', 'last_heartbeat'];
-    const escape = (v: unknown) => {
-      const s = v == null ? '' : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const escape = (v: unknown) => escapeCell(v);
     const rows = agents.map((a) => [
       a.id,
       a.name,

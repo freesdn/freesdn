@@ -652,7 +652,15 @@ class ReconciliationService:
     async def _get_controller_vlans(self, controller_id: UUID) -> list[dict]:
         """Get VLANs from a controller via the network module."""
         from app.models.core import Controller
-        from app.models.network import VLAN
+
+        # ``app.models.network`` has never existed -- the network module's VLAN
+        # model is ``Network`` in app/modules/network/models.py (table
+        # network.vlans). The old import raised ModuleNotFoundError on the
+        # first line of this method, and the caller at :399 catches Exception
+        # and records status="error", so every CONTROLLER limb in a
+        # reconciliation preview reported an adapter error instead of its
+        # VLANs. Only device limbs (which take the branch above) ever worked.
+        from app.modules.network.models import Network as VLAN
 
         ctrl = await self.db.get(Controller, controller_id)
         if ctrl is None:

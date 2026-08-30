@@ -180,6 +180,98 @@ CONTROLLERLESS_FEATURE_PREFIXES: tuple[str, ...] = ("overlay.",)
 # realistic legitimate backlog (apply or discard to make room).
 _MAX_PENDING_PER_ORG = 2000
 
+#: Terminal-ish state for a change whose apply outcome is UNKNOWN -- the row was
+#: left in ``applying`` past the TTL (typically a worker killed between the
+#: device write and the terminal commit). Distinct from ``failed``, which
+#: asserts the controller rejected the change. A row in this state is refused by
+#: the apply guard and by unforced discard; the operator resolves it with
+#: ``discard(force=True)`` after verifying the device, or a future sweep
+#: reconciles it with a controller read-back.
+STATUS_RECONCILIATION_REQUIRED = "reconciliation_required"
+
+
+#: Transport failures that happen AFTER the request is on the wire. The device
+#: may have applied the change even though we never saw the response, so the
+#: outcome is UNKNOWN and the row must not claim the controller rejected it.
+_UNKNOWN_OUTCOME_EXC_NAMES = frozenset(
+    {
+        # httpx
+        "ReadTimeout",
+        "WriteTimeout",
+        "ReadError",
+        "WriteError",
+        "RemoteProtocolError",
+        # aiohttp. ``SocketTimeoutError`` is the read-phase SUBCLASS of
+        # ``ServerTimeoutError``; the MRO walk below catches it via the base, but
+        # it is named here too so the intent is readable.
+        "ServerTimeoutError",
+        "SocketTimeoutError",
+        "ServerDisconnectedError",
+        "ClientPayloadError",
+        # stdlib / asyncio
+        "TimeoutError",
+        "ConnectionResetError",
+        "IncompleteReadError",
+    }
+)
+
+#: Connect-phase and pre-flight failures: the request never reached the device,
+#: so recording ``failed`` IS a true statement.
+_NEVER_SENT_EXC_NAMES = frozenset(
+    {
+        "ConnectError",
+        "ConnectTimeout",
+        # httpx: waiting to acquire a connection from the LOCAL pool. Nothing has
+        # been sent, so this is a true failure, not an unknown outcome.
+        "PoolTimeout",
+        "InvalidURL",
+        "UnsupportedProtocol",
+        "ClientConnectorError",
+        # aiohttp's connection-phase timeout subclass.
+        "ConnectionTimeoutError",
+        "AdapterReadOnlyError",
+    }
+)
+
+
+def outcome_is_unknown(exc: BaseException) -> bool:
+    """True when ``exc`` leaves it genuinely unknown whether the device applied
+    the change.
+
+    ``failed`` is a positive assertion that the controller rejected the write
+    (see the lifecycle on :class:`AdapterPendingChange`). A read timeout or a
+    connection reset mid-response is not that: the request was already on the
+    wire, so the device may have applied it and only the acknowledgement was
+    lost. Those rows belong in ``reconciliation_required``.
+
+    Walks the ``__cause__`` / ``__context__`` chain because adapters wrap
+    transport errors in vendor-specific exception types. A connect-phase
+    failure anywhere in the chain wins: nothing was sent, so ``failed`` is
+    honest.
+
+    Defaults to False. An unrecognised exception is usually a vendor API error
+    (the device answered and said no) or a local logic error, and both are
+    correctly ``failed``; only the transport-ambiguous set above is escalated,
+    so the common case keeps its precise label.
+    """
+    seen: set[int] = set()
+    chain: list[BaseException] = []
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        chain.append(cur)
+        cur = cur.__cause__ or cur.__context__
+
+    # Match against each exception's whole MRO, not just its concrete class name.
+    # These taxonomies are inheritance-based: aiohttp's ``SocketTimeoutError`` (a
+    # read-phase failure) is a SUBCLASS of ``ServerTimeoutError``, so exact-name
+    # matching classified it as a definite failure and invited the operator to
+    # re-run a write the device may already have applied.
+    names = {cls.__name__ for e in chain for cls in type(e).__mro__}
+    if names & _NEVER_SENT_EXC_NAMES:
+        return False
+    return bool(names & _UNKNOWN_OUTCOME_EXC_NAMES)
+
 
 def _event_priority_for(feature: str, fallback: str = "normal") -> str:
     """Pick the right event priority based on the feature's blast radius."""
@@ -453,7 +545,8 @@ class AdapterStagingService:
     """Centralised staging + apply for managed-controller writes."""
 
     # Maximum time a row may remain in ``applying`` before opportunistic
-    # callers flip it to ``failed``. A successful apply finishes in well
+    # callers move it to ``reconciliation_required``. A successful apply
+    # finishes in well
     # under this window even on slow controllers; anything that's been
     # in ``applying`` longer almost certainly hit a worker crash or a
     # network timeout that wasn't trapped.
@@ -465,13 +558,31 @@ class AdapterStagingService:
     # ── Mode detection ──────────────────────────────────────────────────
 
     async def _recover_stale_applying(self, organization_id: UUID | None = None) -> int:
-        """Auto-flip rows stuck in ``applying`` longer than the TTL to
-        ``failed`` so they don't poison the queue forever.
+        """Move rows stuck in ``applying`` past the TTL to
+        ``reconciliation_required`` so they don't poison the queue forever.
 
-        Returns the number of rows recovered. Best-effort: any DB error
-        is swallowed because this is a maintenance hook attached to
-        normal queue traffic, not an authoritative cleanup. A future
-        scheduled task can replace this with a stricter sweep.
+        NOT ``failed``. ``failed`` means "the controller rejected it" (see the
+        lifecycle in :class:`AdapterPendingChange`), and that is precisely what
+        we do NOT know here. ``apply_change`` commits ``applying`` *before*
+        calling the remote applier, so a row that never reached a terminal state
+        may have been: never sent, sent and rejected, or **sent and accepted**
+        with the process dying before the terminal commit. The in-process error
+        paths already make a best-effort second commit of ``applied`` when the
+        device write demonstrably happened; what lands here is the residue —
+        chiefly a worker killed mid-apply, where no ``except`` block ever ran.
+
+        Calling that ``failed`` invites the operator to re-stage a
+        non-idempotent create/delete/reboot that already took effect on the
+        device. ``reconciliation_required`` says the honest thing: the outcome
+        is unknown and the device must be checked. Both the apply and (unforced)
+        discard guards refuse any non-``pending`` status, so such a row cannot
+        be re-applied by the ordinary path; ``discard(force=True)`` is the
+        operator's escape hatch once they have verified the device.
+
+        Returns the number of rows moved. Best-effort: any DB error is swallowed
+        because this is a maintenance hook attached to normal queue traffic, not
+        an authoritative cleanup. A future scheduled task can replace this with a
+        stricter sweep that performs an actual controller read-back.
         """
         cutoff = datetime.now(UTC) - timedelta(seconds=self.APPLYING_TTL_SECONDS)
         stmt = (
@@ -481,8 +592,12 @@ class AdapterStagingService:
                 AdapterPendingChange.updated_at < cutoff,
             )
             .values(
-                status="failed",
-                failure_reason="auto-recovered from stale 'applying' state",
+                status=STATUS_RECONCILIATION_REQUIRED,
+                failure_reason=(
+                    "apply timed out in the 'applying' state: the outcome on the "
+                    "controller is UNKNOWN. Verify the device before re-staging - "
+                    "the change may already have been applied."
+                ),
             )
         )
         if organization_id is not None:
@@ -752,7 +867,9 @@ class AdapterStagingService:
         # mutation. Same 404 shape as the org check above. No-op for
         # super_admin / org_admin / grant-less users and in system context.
         assert_site_access_for_request(change.site_id, detail="pending change not found")
-        allowed = ("pending",) if not force else ("pending", "applying")
+        allowed = (
+            ("pending",) if not force else ("pending", "applying", STATUS_RECONCILIATION_REQUIRED)
+        )
         if change.status not in allowed:
             raise HTTPException(
                 409,
@@ -1193,8 +1310,21 @@ class AdapterStagingService:
                 change.feature,
             )
             short = type(exc).__name__
-            change.status = "failed"
-            change.failure_reason = short
+            # A transport failure AFTER the request was sent (read timeout,
+            # connection reset mid-response) does NOT mean the controller
+            # rejected the change -- the device may have applied it and only the
+            # acknowledgement was lost. Recording ``failed`` there asserts more
+            # than we know and invites the operator to re-run a non-idempotent
+            # write. Connect-phase failures and vendor rejections stay ``failed``.
+            unknown = outcome_is_unknown(exc)
+            change.status = STATUS_RECONCILIATION_REQUIRED if unknown else "failed"
+            change.failure_reason = (
+                f"{short}: the request reached the controller but no response was "
+                "received, so the outcome is UNKNOWN. Verify the device before "
+                "re-staging - the change may already have been applied."
+                if unknown
+                else short
+            )
             change.updated_by = actor_id
             # Terminal failure: prune the durable blob this write referenced.
             await self._cleanup_durable_artifact(change)
@@ -1205,11 +1335,16 @@ class AdapterStagingService:
                 event_type="controller.change.failed",
                 priority="high",
                 actor_id=actor_id,
-                extra={"failure_reason": short},
+                extra={"failure_reason": change.failure_reason},
             )
             raise HTTPException(
                 502,
-                detail=f"controller rejected the change ({short})",
+                detail=(
+                    f"the controller did not answer ({short}); the change may or may "
+                    "not have been applied - verify the device"
+                    if unknown
+                    else f"controller rejected the change ({short})"
+                ),
             ) from exc
 
         try:

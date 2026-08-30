@@ -64,17 +64,33 @@ def test_websocket_rejects_missing_origin() -> None:
 
 @pytest.mark.xfail(
     reason=(
-        "Pre-existing test-infra flake (not a product bug): the sync TestClient's app "
-        "lifespan binds a global async singleton (event bus) to a stale event loop "
-        "across tests, raising 'Future attached to a different loop' here. The "
-        "Origin-rejection LOGIC is deterministically covered by test_origin_helper_unit "
-        "('https://evil.com' -> not allowed). TODO: reset global async singletons "
-        "per-test in conftest, then drop this xfail."
+        "TestClient lifespan binds a global async singleton to a stale event "
+        "loop inside the CI container. The security property is covered "
+        "deterministically by test_validate_ws_origin_* below."
     ),
     strict=False,
 )
 def test_websocket_rejects_evil_origin() -> None:
-    """Browser WS endpoint must reject unknown origins."""
+    """Browser WS endpoint must reject unknown origins.
+
+    Still xfail, but for an accurate reason now, and no longer load-bearing.
+
+    The old marker justified itself by saying "the Origin-rejection LOGIC is
+    deterministically covered by test_origin_helper_unit". That was FALSE:
+    that unit test exercises ``_is_origin_allowed`` only, while
+    ``_validate_ws_origin`` short-circuits on ``_is_same_origin`` BEFORE it ever
+    consults the allowlist -- so weakening the short-circuit, which is the shape
+    a suffix or wildcard match would take, left this whole file green.
+
+    That gap is now genuinely closed by the ``test_validate_ws_origin_*`` tests
+    below, which drive the real function with no TestClient at all -- including
+    a sibling-host case that catches the substring match a loosened
+    ``_is_same_origin`` would become. This end-to-end case stays marked because the
+    flake it documents is real and environment-dependent: it passes on a Windows
+    host and fails inside the CI container, where the sync TestClient's lifespan
+    binds a global async singleton to a stale event loop. It is kept as a
+    smoke test; the security property itself is asserted deterministically below.
+    """
     with _client() as client:
         with pytest.raises(WebSocketDisconnect):
             with client.websocket_connect(
@@ -103,3 +119,112 @@ def test_websocket_accepts_allowed_origin() -> None:
                 ws.close()
     except Exception:
         pytest.skip("WebSocket handshake test environment not available")
+
+
+# ---------------------------------------------------------------------------
+# _validate_ws_origin itself, with no TestClient.
+#
+# test_origin_helper_unit covers the pure allowlist helper. It cannot see the
+# gate: _validate_ws_origin returns True from _is_same_origin BEFORE it ever
+# reaches the allowlist, so a weakened short-circuit is invisible to it. These
+# drive the gate directly against a stand-in socket -- no app lifespan, no event
+# loop singletons, so nothing here can flake the way the xfail above claimed.
+# ---------------------------------------------------------------------------
+
+
+class _StubWebSocket:
+    """Minimal stand-in: the gate only reads headers and may close the socket."""
+
+    def __init__(self, **headers: str) -> None:
+        self.headers = headers
+        self.close_calls: list[tuple[int, str]] = []
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        self.close_calls.append((code, reason))
+
+
+async def test_validate_ws_origin_rejects_a_cross_site_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The CSWSH case: attacker page, our host, origin not in the allowlist.
+
+    Mutation this catches (and which the xfailed end-to-end test did not):
+    making _is_same_origin true for any present Origin, e.g.
+    ``bool(origin) or <real check>``. test_origin_helper_unit stays green under
+    that mutation because the helper it tests is untouched.
+    """
+    from app.api.v1.endpoints import websocket as ws_mod
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "CORS_ORIGINS", ["https://app.example.com"])
+    sock = _StubWebSocket(origin="https://evil.attacker.com", host="app.example.com")
+
+    assert await ws_mod._validate_ws_origin(sock) is False
+    assert sock.close_calls == [(1008, "Origin not allowed")]
+
+
+async def test_validate_ws_origin_rejects_a_missing_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An absent Origin must not fall through the same-origin short-circuit."""
+    from app.api.v1.endpoints import websocket as ws_mod
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "CORS_ORIGINS", ["https://app.example.com"])
+    sock = _StubWebSocket(host="app.example.com")
+
+    assert await ws_mod._validate_ws_origin(sock) is False
+    assert sock.close_calls == [(1008, "Origin not allowed")]
+
+
+async def test_validate_ws_origin_allows_the_deployment_host_itself(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same-origin is allowed with an EMPTY allowlist -- that is the whole point.
+
+    Realtime must work on any deploy host without the operator also listing it
+    in CORS_ORIGINS. Asserting it against an empty allowlist is what proves the
+    short-circuit is doing the work, rather than the allowlist quietly matching.
+    Mutation this catches: deleting the _is_same_origin branch, which would
+    break realtime on every deployment whose host is not in CORS_ORIGINS.
+    """
+    from app.api.v1.endpoints import websocket as ws_mod
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "CORS_ORIGINS", [])
+    sock = _StubWebSocket(origin="https://app.example.com", host="app.example.com")
+
+    assert await ws_mod._validate_ws_origin(sock) is True
+    assert sock.close_calls == []
+
+
+async def test_validate_ws_origin_allows_a_listed_cross_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The gate must not be a blanket refusal: the dev SPA on another port works."""
+    from app.api.v1.endpoints import websocket as ws_mod
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "CORS_ORIGINS", ["http://localhost:5173"])
+    sock = _StubWebSocket(origin="http://localhost:5173", host="localhost:8000")
+
+    assert await ws_mod._validate_ws_origin(sock) is True
+    assert sock.close_calls == []
+
+
+async def test_validate_ws_origin_does_not_treat_a_sibling_host_as_same_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``evil-app.example.com`` must not read as same-origin for ``app.example.com``.
+
+    Mutation this catches: relaxing _is_same_origin's netloc equality to an
+    ``endswith``/``in`` containment test, the classic origin-check regression.
+    """
+    from app.api.v1.endpoints import websocket as ws_mod
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "CORS_ORIGINS", [])
+    for evil_host in ("https://evil-app.example.com", "https://app.example.com.evil.net"):
+        sock = _StubWebSocket(origin=evil_host, host="app.example.com")
+        assert await ws_mod._validate_ws_origin(sock) is False, evil_host
+        assert sock.close_calls == [(1008, "Origin not allowed")]

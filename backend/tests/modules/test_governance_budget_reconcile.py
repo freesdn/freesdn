@@ -49,9 +49,14 @@ def _patch_governance(monkeypatch, svc: LLMGovernanceService) -> AsyncMock:
     return rollback
 
 
-def _patch_provider(monkeypatch, *, usage, raises: bool = False) -> None:
+def _patch_provider(monkeypatch, *, usage, raises: bool = False) -> SimpleNamespace:
     """Point ``AIChatService._get_provider`` at a fake provider whose ``chat``
-    either returns a response carrying ``usage`` or raises."""
+    either returns a response carrying ``usage`` or raises.
+
+    The fake carries ``close`` because ``_get_provider``'s contract (H1) requires
+    every caller to release the underlying httpx client; returning the fake lets
+    a test assert that ``execute_structured`` honours it.
+    """
     import app.modules.ai.service as service_mod
 
     if raises:
@@ -59,12 +64,13 @@ def _patch_provider(monkeypatch, *, usage, raises: bool = False) -> None:
     else:
         response = SimpleNamespace(content="ok", usage=usage, model="test-model")
         chat = AsyncMock(return_value=response)
-    fake_provider = SimpleNamespace(chat=chat)
+    fake_provider = SimpleNamespace(chat=chat, close=AsyncMock())
     monkeypatch.setattr(
         service_mod.AIChatService,
         "_get_provider",
         AsyncMock(return_value=fake_provider),
     )
+    return fake_provider
 
 
 @pytest.mark.asyncio
@@ -112,3 +118,82 @@ async def test_failure_releases_full_reservation(monkeypatch) -> None:
     # Nothing was spent -> no DB usage recorded, full reservation released.
     svc.record_token_usage.assert_not_awaited()
     rollback.assert_awaited_once_with(org_id, 6)
+
+
+# ---------------------------------------------------------------------------
+# Provider-lifecycle regression (F-04)
+# ---------------------------------------------------------------------------
+#
+# ``AIChatService._get_provider`` returns a provider holding a live
+# ``httpx.AsyncClient``; its docstring states callers MUST use ``async with`` or
+# call ``await provider.close()`` (H1). ``execute_structured`` acquired one on
+# every LLM_CLASSIFY / LLM_EXTRACT / LLM_SUMMARIZE automation action and never
+# released it, so a rule firing on a busy event stream leaked a connection pool
+# per execution until sockets/file descriptors ran out.
+#
+# The close now sits in a ``finally`` that spans the provider call AND the
+# audit-log / token-accounting work after it, so these three tests pin every
+# exit path: success, provider failure, and a failure raised AFTER chat
+# succeeded (the path a naive ``close()``-at-the-end fix would still leak).
+
+
+@pytest.mark.asyncio
+async def test_provider_closed_on_success(monkeypatch) -> None:
+    svc = LLMGovernanceService()
+    _patch_governance(monkeypatch, svc)
+    usage = SimpleNamespace(prompt_tokens=10, completion_tokens=5)
+    provider = _patch_provider(monkeypatch, usage=usage)
+
+    await svc.execute_structured(
+        MagicMock(),
+        org_id=uuid4(),
+        operation=LLMOperation.CLASSIFY,
+        input_data={"text": "one two three"},
+        provider_id="openai",
+    )
+
+    provider.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_provider_closed_when_chat_raises(monkeypatch) -> None:
+    svc = LLMGovernanceService()
+    _patch_governance(monkeypatch, svc)
+    provider = _patch_provider(monkeypatch, usage=None, raises=True)
+
+    with pytest.raises(RuntimeError):
+        await svc.execute_structured(
+            MagicMock(),
+            org_id=uuid4(),
+            operation=LLMOperation.CLASSIFY,
+            input_data={"text": "one two three"},
+            provider_id="openai",
+        )
+
+    provider.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_provider_closed_when_post_chat_bookkeeping_raises(monkeypatch) -> None:
+    """The chat succeeded but audit logging blew up.
+
+    This is the case a ``close()`` placed just before ``return`` would miss:
+    the exception propagates from between the provider call and the return, so
+    only a ``finally`` spanning the bookkeeping releases the transport.
+    """
+    svc = LLMGovernanceService()
+    _patch_governance(monkeypatch, svc)
+    usage = SimpleNamespace(prompt_tokens=10, completion_tokens=5)
+    provider = _patch_provider(monkeypatch, usage=usage)
+    monkeypatch.setattr(svc, "log_call", AsyncMock(side_effect=RuntimeError("audit sink down")))
+
+    with pytest.raises(RuntimeError, match="audit sink down"):
+        await svc.execute_structured(
+            MagicMock(),
+            org_id=uuid4(),
+            operation=LLMOperation.CLASSIFY,
+            input_data={"text": "one two three"},
+            provider_id="openai",
+        )
+
+    provider.close.assert_awaited_once()

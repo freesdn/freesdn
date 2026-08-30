@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
+import anyio.to_thread
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -138,6 +139,22 @@ class BackupEncryption:
     PBKDF2_ITERATIONS = 600_000
     # Historical value used by archives written before the v2 format.
     _PBKDF2_ITERATIONS_LEGACY_V1 = 100_000
+    # Ceiling on the iteration count a v2 key_id is allowed to DECLARE.
+    #
+    # The count is read out of the archive's own header, and on
+    # ``POST /setup/restore`` that header is an UNAUTHENTICATED upload (the
+    # endpoint is gated only by "no super_admin exists yet", is CSRF-exempt,
+    # and the passphrase is a form field the uploader also supplies). Without
+    # a ceiling, a ~100-byte file declaring ``v2:999999999:AAAA`` made PBKDF2
+    # grind for minutes of straight CPU inside the async handler — past
+    # GUNICORN_TIMEOUT, so the arbiter SIGKILLed the worker and took every
+    # other in-flight request with it. int() has no upper bound, so the cost
+    # was whatever integer the uploader typed.
+    #
+    # 2,000,000 keeps headroom for a future bump past 600k (and keeps the
+    # already-written 1.2M archives in tests/services/test_backup_encryption.py
+    # readable) while capping one derive at a fraction of a second.
+    _PBKDF2_ITERATIONS_MAX = 2_000_000
 
     def __init__(self, master_key: str | None = None):
         from app.core.config import settings
@@ -172,6 +189,18 @@ class BackupEncryption:
                 iterations = int(parts[1])
             except ValueError as exc:
                 raise ValueError(f"v2 key_id has non-numeric iteration count: {key_id!r}") from exc
+            # Reject before the KDF runs — see _PBKDF2_ITERATIONS_MAX. The
+            # declared count is attacker-controlled on the unauthenticated
+            # first-install restore, and every check that runs before this one
+            # (checksum, "secrets", "encrypted", the passphrase) is supplied by
+            # the same uploader, so this parser is the only chokepoint.
+            lo = BackupEncryption._PBKDF2_ITERATIONS_LEGACY_V1
+            hi = BackupEncryption._PBKDF2_ITERATIONS_MAX
+            if not lo <= iterations <= hi:
+                raise ValueError(
+                    f"v2 key_id declares an unsupported iteration count "
+                    f"({iterations}); accepted range is {lo:,}-{hi:,}"
+                )
             return iterations, parts[2]
         # Legacy: bare base64-salt.
         return BackupEncryption._PBKDF2_ITERATIONS_LEGACY_V1, key_id
@@ -1554,6 +1583,10 @@ class BackupService:
         # collection / restoration. Without it, collect_backup_data refuses
         # to run (fail-closed) because it would otherwise leak every org.
         self.org_id: UUID | None = None
+        # Contributors dropped by the last _assemble_backup_archive because
+        # their collect() raised — surfaced on Backup.error_message so an
+        # incomplete archive is not presented to the operator as a clean one.
+        self._collect_omissions: list[str] = []
         # Ensure the contributor registry is populated. Idempotent —
         # subsequent instances re-enter ``_ensure_contributors_registered``
         # but it short-circuits on the class-level guard. This pattern
@@ -1627,6 +1660,12 @@ class BackupService:
         registry = get_registry()
         manifest_entries: list[ContributorEntry] = []
         contributor_data: dict[str, dict[str, Any]] = {}
+        # Contributors whose collect() blew up. Read by create_backup, which
+        # stamps them onto Backup.error_message: omitting a module from the
+        # archive while marking the row COMPLETED and logging the reason to a
+        # file nobody reads is how a broken module produces a backup that
+        # reports success and quietly has no VoIP/camera/firewall data in it.
+        self._collect_omissions = []
 
         for contrib in registry.topological_order():
             try:
@@ -1635,11 +1674,12 @@ class BackupService:
                     organization_id,
                     options,
                 )
-            except Exception:
+            except Exception as exc:
                 logger.exception(
                     "contributor %s collect() raised; omitting from backup",
                     contrib.contributor_id,
                 )
+                self._collect_omissions.append(f"{contrib.contributor_id} ({exc!s:.120})")
                 continue
 
             contributor_data[contrib.contributor_id] = payload.data
@@ -1820,6 +1860,50 @@ class BackupService:
                 )
 
             results.append(result)
+
+        # Archive sections this instance has NO contributor for.
+        #
+        # The loop above walks the LIVE registry and looks each id up in the
+        # manifest, so it can only ever see the "registry has it, archive
+        # doesn't" direction (status="missing"). The reverse was invisible: an
+        # archive section whose module isn't loaded here was never visited,
+        # never counted and never named. That is reachable in normal
+        # operation — ModuleLoader.load_all_modules deliberately logs-and-
+        # continues on a module load failure, so a module that fails on_load()
+        # leaves the app "degraded but running" and its contributor silently
+        # gone. The operator rebuilt from a .fsdnvault, lost their VoIP
+        # extensions / cameras / firewall rules, and got total_errors: 0,
+        # contributors_failed: 0 and a green "completed" job.
+        #
+        # preview_backup_manifest already computes exactly this check
+        # (restorable=False, "is the module installed?"); the restore path
+        # never got it, and restore_fresh_instance_from_vault — the documented
+        # bare-metal recovery — runs no preview at all.
+        #
+        # Reported as status="error" rather than a new status string so the
+        # counts below, the RestoreJob's items_failed, and the UI's existing
+        # per-contributor renderer all treat it as the failure it is. The
+        # per-resource counts ride in ``skipped`` so ``total_skipped`` (→
+        # RestoreJob.items_failed) reflects the records left on the floor.
+        live_ids = {c.contributor_id for c in registry.topological_order()}
+        for entry in archive.manifest.contributors:
+            if entry.id in live_ids:
+                continue
+            if selected is not None and entry.id not in selected:
+                results.append(RestoreResult(contributor_id=entry.id, status="skipped"))
+                continue
+            results.append(
+                RestoreResult(
+                    contributor_id=entry.id,
+                    status="error",
+                    skipped=dict(entry.counts),
+                    errors=[
+                        f"no '{entry.id}' contributor registered in this instance "
+                        f"(is the module installed?) — its "
+                        f"{sum(entry.counts.values())} record(s) were NOT restored"
+                    ],
+                )
+            )
 
         # Aggregate the per-module results into the existing operator-
         # visible report shape so callers (validate_restore, the UI's
@@ -2027,6 +2111,7 @@ class BackupService:
             Device,
             Site,
             User,
+            UserSiteAccess,
         )
 
         org_id = organization_id or self.org_id
@@ -2247,6 +2332,47 @@ class BackupService:
                     ),
                 }
                 for u in users
+            ]
+
+            # --- Per-user site grants ---
+            #
+            # These were never collected, and the fail-open in
+            # CurrentUser.is_site_limited turned that omission into a privilege
+            # ESCALATION on restore: the property is `bool(self._accessible_site_ids)`,
+            # so a user restored with ZERO grants is not "site-limited" at all,
+            # can_access_site() returns True for every site in the org, and the
+            # per-grant access_level cap ('read') is gone with it. A technician
+            # who was a site_admin with read-only access to one site came back
+            # from the documented bare-metal recovery as an unrestricted
+            # site_admin over every site — with the job reporting "completed".
+            # (Fail-open is correct for an UPGRADE, where nobody has grants yet;
+            # it is wrong for a restore, which is supposed to reproduce state.)
+            #
+            # Scoped through site_id -> Site.organization_id (the row has no
+            # organization_id of its own), and joined to User as well so a grant
+            # can only ride along when BOTH ends live in this org.
+            grant_q = (
+                select(UserSiteAccess)
+                .join(Site, UserSiteAccess.site_id == Site.id)
+                .join(User, UserSiteAccess.user_id == User.id)
+                .where(
+                    Site.organization_id == org_id,
+                    Site.deleted_at.is_(None),
+                    User.organization_id == org_id,
+                    User.deleted_at.is_(None),
+                )
+            )
+            if site_id:
+                grant_q = grant_q.where(UserSiteAccess.site_id == site_id)
+            grant_result = await self.db.execute(grant_q)
+            data["user_site_access"] = [
+                {
+                    "id": str(g.id),
+                    "user_id": str(g.user_id),
+                    "site_id": str(g.site_id),
+                    "access_level": g.access_level,
+                }
+                for g in grant_result.scalars().all()
             ]
 
         # --- Automation rules ---
@@ -2519,6 +2645,17 @@ class BackupService:
             backup.progress = 100
             if loc_id:
                 backup.storage_location_id = loc_id
+            # A contributor whose collect() raised is omitted from the archive
+            # (deliberately — one broken module must not block a backup of the
+            # others), but the row was still marked COMPLETED with the reason
+            # only in the log. Put it where the operator looks: the catalog and
+            # the detail drawer both render Backup.error_message in destructive
+            # styling regardless of status, so an incomplete archive now says so.
+            if self._collect_omissions:
+                backup.error_message = (
+                    "Incomplete backup — these modules failed to collect and are "
+                    "NOT in this archive: " + "; ".join(self._collect_omissions)
+                )[:2000]
 
             await self.db.commit()
             await self.db.refresh(backup)
@@ -2627,7 +2764,54 @@ class BackupService:
                 ),
             }
 
-        data = config.get("data", config)
+        # v2 archives ({manifest, contributors:{core:{sites,...}}}) are what
+        # create_backup has written since the contributor chapter landed, but
+        # this reader was still coded against the pre-v2 {data:{sites,...}}
+        # envelope. On a v2 archive ``config.get("data", config)`` returns the
+        # ENVELOPE, every ``data.get(<resource>)`` is [], and the endpoint
+        # answered `success: true` with an empty summary and all-null metadata
+        # — the UI never checks `success`, so the operator got a preview reading
+        # "Sites 0 / Devices 0" and then a green "Import complete" toast having
+        # imported nothing at all.
+        from app.services.backup_contributors import BackupArchive, is_legacy_v1_payload
+
+        meta: dict[str, Any]
+        if is_legacy_v1_payload(config):
+            data = config.get("data", config)
+            meta = {
+                "version": config.get("version"),
+                "schema_version": config.get("schema_version"),
+                "created_at": config.get("created_at"),
+                # ``freesdn_version`` is the key written by collect_backup_data()
+                # at export time (see _settings.APP_VERSION). Surface it as
+                # ``product_version`` so the import-preview UI can show which
+                # FreeSDN build produced the archive.
+                "product_version": config.get("freesdn_version"),
+            }
+        else:
+            try:
+                archive = BackupArchive.model_validate(config)
+            except Exception as e:
+                return {
+                    "success": False,
+                    "dry_run": dry_run,
+                    "message": f"Unrecognized .fsdn archive layout: {e}",
+                }
+            # Each contributor section IS its flat resource dict; only ``core``
+            # holds the sites/controllers/devices/users this importer handles.
+            # Module sections (voip, cameras, firewall, vpn) are NOT imported
+            # here — import is a config-merge tool, not a restore.
+            core = archive.contributors.get("core") or {}
+            data = core.get("data", core) if isinstance(core, dict) else {}
+            created_at = archive.manifest.created_at
+            meta = {
+                "version": archive.manifest.format_version,
+                "schema_version": archive.manifest.manifest_version,
+                "created_at": created_at.isoformat() if created_at else None,
+                "product_version": archive.manifest.source_version,
+            }
+        if not isinstance(data, dict):
+            data = {}
         summary: dict[str, Any] = {}
 
         # NOTE C4/H3: Organization is intentionally NOT in the import map —
@@ -2736,16 +2920,7 @@ class BackupService:
             "message": "Dry run complete — no changes applied"
             if dry_run
             else "Import completed successfully",
-            "metadata": {
-                "version": config.get("version"),
-                "schema_version": config.get("schema_version"),
-                "created_at": config.get("created_at"),
-                # ``freesdn_version`` is the key written by collect_backup_data()
-                # at export time (see _settings.APP_VERSION). Surface it as
-                # ``product_version`` so the import-preview UI can show which
-                # FreeSDN build produced the archive.
-                "product_version": config.get("freesdn_version"),
-            },
+            "metadata": meta,
         }
 
     def _parse_fsdn_file(self, raw: bytes) -> dict[str, Any]:
@@ -3008,7 +3183,25 @@ class BackupService:
                         raise ValueError(
                             "this is a secure (full) backup — a passphrase is required to restore it"
                         )
-                    payload = BackupEncryption(master_key=passphrase).decrypt(payload, key_id)
+                    # A wrong passphrase surfaces as ``cryptography.fernet
+                    # .InvalidToken``, whose ``str()`` is the EMPTY STRING. Left
+                    # unwrapped it escaped the endpoint's ``except ValueError``
+                    # as an unhandled 500 and wrote a blank RestoreJob
+                    # .error_message, so a one-character typo during a recovery
+                    # read as "the file is corrupt / the server is broken".
+                    # restore_fresh_instance_from_vault already wraps the
+                    # identical call; the live-instance path never got it.
+                    try:
+                        payload = BackupEncryption(master_key=passphrase).decrypt(payload, key_id)
+                    except ValueError:
+                        # _parse_key_id's own diagnostics (malformed key_id,
+                        # out-of-range iteration count) name a real defect in the
+                        # FILE — do not mask them as a passphrase mistake.
+                        raise
+                    except Exception as exc:
+                        raise ValueError(
+                            "could not decrypt this backup — wrong passphrase?"
+                        ) from exc
                 else:
                     payload = self.encryption.decrypt(payload, key_id)
 
@@ -3187,8 +3380,21 @@ class BackupService:
                 raise ValueError("encrypted file is missing its key descriptor — cannot restore")
             if not passphrase:
                 raise ValueError("a passphrase is required to restore a secure backup")
+            # PBKDF2 is a synchronous CPU burn and this handler is
+            # unauthenticated (only "no super_admin exists yet" gates it), so a
+            # derive run inline stalls the whole event loop — /health, the setup
+            # wizard and the frontend all stop being served for its duration.
+            # _PBKDF2_ITERATIONS_MAX caps how long that can be; running it on a
+            # worker thread keeps even a legitimate 600k derive off the loop.
             try:
-                payload = BackupEncryption(master_key=passphrase).decrypt(payload, key_id)
+                payload = await anyio.to_thread.run_sync(
+                    BackupEncryption(master_key=passphrase).decrypt, payload, key_id
+                )
+            except ValueError:
+                # Malformed / out-of-range key_id: _parse_key_id's message names
+                # the actual problem with the file. Reporting it as a passphrase
+                # mistake would send the operator chasing the wrong thing.
+                raise
             except Exception as exc:
                 raise ValueError("could not decrypt — wrong passphrase?") from exc
         if header.get("compressed"):
@@ -3268,6 +3474,33 @@ class BackupService:
         await self.db.flush()
         return {"organization_id": str(org_id), "result": result}
 
+    async def _restorable_ids(self, model_cls: Any, payload_records: list[Any]) -> set[str]:
+        """Ids of ``model_cls`` rows a restore may reference as a foreign key.
+
+        The union of (a) the ids this restore is about to create — records in
+        the payload that the H4 cross-org check will accept — and (b) the ids
+        already present in ``self.org_id``. Used to validate ``user_site_access``,
+        whose FKs cannot be checked by the generic org filter because the table
+        has no organization_id of its own.
+
+        Deliberately NOT filtered on ``deleted_at``: the question here is
+        whether the foreign key will RESOLVE at flush time, and a soft-deleted
+        row is still a row. Filtering it out would refuse a legitimate grant
+        and, worse, report it as a cross-tenant rejection.
+        """
+        ids = {
+            str(r["id"])
+            for r in payload_records
+            if isinstance(r, dict)
+            and r.get("id")
+            and (not r.get("organization_id") or str(r["organization_id"]) == str(self.org_id))
+        }
+        rows = await self.db.execute(
+            select(model_cls.id).where(model_cls.organization_id == self.org_id)
+        )
+        ids |= {str(i) for i in rows.scalars().all()}
+        return ids
+
     async def _restore_data(
         self,
         data: dict[str, Any],
@@ -3289,7 +3522,7 @@ class BackupService:
         """
         # NOTE C4/H3: Organization is intentionally excluded from the restore
         # map. A restore must NEVER create or modify Organization rows.
-        from app.models import Controller, Credential, Device, Site, User
+        from app.models import Controller, Credential, Device, Site, User, UserSiteAccess
         from app.models.automation import AutomationRuleRecord
 
         if self.org_id is None:
@@ -3300,6 +3533,32 @@ class BackupService:
         # payload anyway). A VAULT restore (include_secrets) intentionally restores them
         # so old logins survive — controller ``config`` secrets are RE-ENCRYPTED under
         # THIS instance's key in the loop below before they touch the DB.
+        #: Columns a NON-SECRET (.fsdn config-only) restore must never write.
+        #:
+        #: A config-only export deliberately emits credential rows with every
+        #: secret column set to literal None, so device foreign keys still
+        #: resolve -- see _cred_secret() and the test at
+        #: tests/services/test_backup_credential_vault.py:174-182, which states
+        #: the intent as "only the secrets are withheld".
+        #:
+        #: The overwrite branch below does setattr(existing, k, v) for every key
+        #: not blocked here. So restoring yesterday's config snapshot with
+        #: "Overwrite existing" wrote those Nones straight over the live
+        #: ciphertext: SSH private keys, API keys, tokens, certificates and SNMP
+        #: communities for every credential in the org, with the job reporting
+        #: credentials: {updated: N} and completing green. The operator's next
+        #: device poll fails everywhere and the secrets are unrecoverable.
+        #:
+        #: Every MODULE contributor already guards exactly this -- firewall
+        #: passes {"credentials"}, voip {"voicemail_pin"}, cameras and network
+        #: their own sets -- but the core restore, which owns the credentials
+        #: table itself, did not. Blocking by column NAME across every table is
+        #: the correct conservative rule here: in a no-secrets restore, a secret
+        #: column carries None by construction, so it must never be written.
+        #: Reuses the module-level CREDENTIAL_SECRET_FIELDS rather than a second
+        #: copy, so a secret column added to the model is blocked here the moment
+        #: it is added there. test_every_secret_column_is_covered already pins
+        #: that list against the model.
         _BLOCKED_FIELDS = (
             {"id", "organization_id"}
             if include_secrets
@@ -3311,6 +3570,7 @@ class BackupService:
                 "is_superuser",
                 "mfa_secret",
                 "organization_id",
+                *CREDENTIAL_SECRET_FIELDS,
             }
         )
 
@@ -3331,6 +3591,27 @@ class BackupService:
             restore_map.append(("devices", Device))
         if restore_users:
             restore_map.append(("users", User))
+            # AFTER users: a grant's user_id references the row restored above.
+            # Gated on restore_users for the same reason — restoring grants for
+            # users that were not restored would either dangle or, worse, apply
+            # one org's access model to another instance's accounts.
+            restore_map.append(("user_site_access", UserSiteAccess))
+
+        # Site ids / user ids a restored ``user_site_access`` row may legally
+        # point at: the ones this restore itself is creating PLUS the ones
+        # already live in this org. UserSiteAccess has no organization_id
+        # column, so the generic H4 cross-org reject below cannot see a grant
+        # aimed at another org's site — and a dangling FK would not fail the
+        # row, it would fail the whole flush and roll back the entire core
+        # section. Computed from the payload as well as the DB so the check
+        # gives the same answer in a dry run (nothing written yet) as in the
+        # real run that follows it.
+        grant_targets: dict[str, set[str]] | None = None
+        if restore_users and data.get("user_site_access"):
+            grant_targets = {
+                "site_id": await self._restorable_ids(Site, data.get("sites") or []),
+                "user_id": await self._restorable_ids(User, data.get("users") or []),
+            }
 
         for key, model_cls in restore_map:
             records = data.get(key, [])
@@ -3381,12 +3662,38 @@ class BackupService:
                     skipped += 1
                     continue
 
+                # Site grants carry no organization_id, so the check above is
+                # blind to them — see ``grant_targets``. Both FK ends must
+                # resolve inside this org or the row is refused.
+                if grant_targets is not None and model_cls is UserSiteAccess:
+                    if any(
+                        str(record.get(fk) or "") not in allowed
+                        for fk, allowed in grant_targets.items()
+                    ):
+                        rejected_org += 1
+                        skipped += 1
+                        continue
+
                 pk = record.get("id")
                 if not pk:
                     skipped += 1
                     continue
 
                 existing = await self.db.get(model_cls, pk)
+                if existing is None and model_cls is UserSiteAccess:
+                    # ix_user_site_access_user_site is UNIQUE on (user_id,
+                    # site_id). A grant re-created by hand after the backup has
+                    # the same pair under a DIFFERENT id, so inserting the
+                    # archived row raises at flush — and that takes the whole
+                    # core section down with it, not just this record. Match on
+                    # the unique key as well as the pk.
+                    dup = await self.db.execute(
+                        select(UserSiteAccess).where(
+                            UserSiteAccess.user_id == record.get("user_id"),
+                            UserSiteAccess.site_id == record.get("site_id"),
+                        )
+                    )
+                    existing = dup.scalars().first()
                 if existing:
                     # H4: never touch a row owned by a different org.
                     existing_org = getattr(existing, "organization_id", None)

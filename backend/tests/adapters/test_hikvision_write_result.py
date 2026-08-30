@@ -43,7 +43,6 @@ No live device is contacted anywhere in this file.
 from __future__ import annotations
 
 import inspect
-import re
 from types import SimpleNamespace
 
 import pytest
@@ -157,13 +156,63 @@ def test_no_write_site_still_derives_success_from_the_status_code_alone() -> Non
     by copy-pasting a neighbour would reintroduce it silently, so fail the
     build on the idiom itself rather than trusting review to catch it.
     """
+    # The original form of this ratchet matched the literal idiom
+    # ``ok = <resp>.status_code == 200``. Three WRITE sites decided success with
+    # the same logic written differently -- ``if response.status_code == 200:``
+    # and ``return {"success": response.status_code == 200}`` -- and sailed past
+    # it (set_auto_tracking, close_two_way_audio, send_audio_data). Match on the
+    # BEHAVIOUR instead: any method that issues a mutating ISAPI verb and then
+    # compares a status_code to 200 is deciding a write from the status line.
+    #
+    # Read paths are deliberately exempt: for a GET, a 200 IS the answer. Six
+    # sites rely on that legitimately (test_connection, get_snapshot,
+    # get_channels, _get_device_utc_offset, download_video_clip, _probe).
+    import ast
+
     from app.adapters.hikvision import adapter as hik
 
     src = inspect.getsource(hik)
-    offenders = re.findall(r"ok = \w+\.status_code == 200", src)
+    tree = ast.parse(src)
+    base = hik.__dict__.get("__ast_line_offset__", 0)  # noqa: F841 - clarity only
+
+    MUTATING = {"PUT", "POST", "DELETE", "PATCH"}
+
+    #: Methods that use a mutating VERB to perform a READ. ISAPI's video-export
+    #: API takes a POST body describing the time range and streams footage back,
+    #: so ``status_code != 200`` there is an ordinary read guard, not a
+    #: write-success decision. Exempt by name, with the reason, rather than
+    #: weakening the check for everything.
+    READ_VIA_MUTATING_VERB = {"stream_video_clip"}
+
+    offenders: list[str] = []
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+            continue
+        body_src = ast.get_source_segment(src, node) or ""
+        issues_write = any(f'"{verb}"' in body_src or f"'{verb}'" in body_src for verb in MUTATING)
+        if not issues_write:
+            continue
+        if node.name in READ_VIA_MUTATING_VERB:
+            continue
+        if "_isapi_write_result" in body_src:
+            continue  # already routed through the canonical parser
+        for sub in ast.walk(node):
+            if not isinstance(sub, ast.Compare):
+                continue
+            left = sub.left
+            if not (isinstance(left, ast.Attribute) and left.attr == "status_code"):
+                continue
+            comparators = sub.comparators
+            if comparators and isinstance(comparators[0], ast.Constant) and comparators[0].value == 200:
+                offenders.append(f"{node.name} (line {sub.lineno} of the module source)")
+                break
+
     assert not offenders, (
-        f"{len(offenders)} write site(s) decide success from the status code alone; "
-        "route them through _isapi_write_result()"
+        "These mutating ISAPI method(s) decide success from the status code alone. "
+        "A Hikvision device answers a REFUSED write with HTTP 200 and puts the "
+        "refusal in the body, so route them through _isapi_write_result():\n  "
+        + "\n  ".join(offenders)
     )
 
 

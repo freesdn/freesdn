@@ -8,6 +8,7 @@ Request/Response schemas for agent release management and downloads.
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -123,10 +124,18 @@ class AgentUpdateCheckResponse(BaseSchema):
     download_url: str = ""
     checksum_sha256: str = ""
     release_notes: str = ""
-    # ECDSA-P256 signature of the SHA-256 (base64 ASN.1 DER). Empty on
-    # legacy releases that pre-date the signing chapter — agent treats
-    # empty as "skip signature verify" for backward compat.
+    # ECDSA-P256 signature (base64 ASN.1 DER) over the canonical bytes of
+    # ``manifest`` below -- NOT over the bare digest. Signing only the digest
+    # left the signature saying nothing about which version/platform/agent-type
+    # that binary was, so a backend without the private key could re-serve a
+    # genuine OLDER release with its genuine signature as an "update".
     signature: str = ""
+    #: The signed release manifest. The agent MUST verify the signature over
+    #: this object's canonical form and then check its fields against itself
+    #: (running version, own platform, own agent type) and against the SHA-256
+    #: of the bytes it actually downloaded. A self-consistent manifest is not
+    #: enough on its own -- that is precisely what a replayed old release has.
+    manifest: dict[str, Any] = Field(default_factory=dict)
 
 
 # =============================================================================

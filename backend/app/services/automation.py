@@ -1523,6 +1523,46 @@ class AutomationService:
         self.db: AsyncSession = db
         self.engine = engine or AutomationEngine()
 
+    @staticmethod
+    def _rule_from_record(rec: Any) -> AutomationRule:
+        """Convert a persisted ``AutomationRuleRecord`` into an engine ``AutomationRule``.
+
+        THE SINGLE conversion. There used to be two hand-written copies -- one in
+        ``get_rule`` and one in ``_load_rules_from_db`` -- and they drifted: the
+        hydration copy omitted ``created_by``. Startup calls ``_load_rules_from_db``
+        (main.py), so after every restart every rule was resurrected with no author,
+        ``_execute_rule`` put ``actor_id=None`` in the action context, and
+        ``_handle_fabric_operation`` re-checked the author permission with
+        ``fabric_permission_checker(None, ...)`` -- which fails closed. Every
+        permission-bearing fabric.operation rule silently reported "rule author no
+        longer holds the required permission" and did nothing, until an admin
+        happened to open the rule in the UI (``get_rule`` warms the engine with the
+        good copy, incidentally repairing that one object). Keep this the only
+        record -> rule conversion; ``tests/services/test_automation_hydration.py``
+        pins the two entry points to identical output.
+        """
+        return AutomationRule(
+            id=rec.id,
+            name=rec.name,
+            description=rec.description,
+            organization_id=rec.organization_id,
+            trigger_type=TriggerType(rec.trigger_type),
+            trigger_config=rec.trigger_config or {},
+            conditions=ConditionGroup.from_dict(rec.conditions) if rec.conditions else None,
+            actions=[Action.from_dict(a) for a in (rec.actions or [])],
+            status=RuleStatus(rec.status),
+            priority=rec.priority,
+            cooldown_seconds=rec.cooldown_seconds,
+            max_triggers_per_hour=rec.max_triggers_per_hour,
+            created_at=rec.created_at,
+            updated_at=rec.updated_at,
+            last_triggered=rec.last_triggered,
+            trigger_count=rec.trigger_count,
+            # The rule AUTHOR. Dropping this here is what broke fabric rules on
+            # restart -- see the docstring. Any new field belongs here too.
+            created_by=rec.created_by,
+        )
+
     async def _load_rules_from_db(self, organization_id: UUID | None = None) -> None:
         """Load rules from database into the in-memory engine."""
         from sqlalchemy import and_, select
@@ -1539,25 +1579,7 @@ class AutomationService:
 
         for rec in records:
             if rec.id not in self.engine._rules:
-                rule = AutomationRule(
-                    id=rec.id,
-                    name=rec.name,
-                    description=rec.description,
-                    organization_id=rec.organization_id,
-                    trigger_type=TriggerType(rec.trigger_type),
-                    trigger_config=rec.trigger_config or {},
-                    conditions=ConditionGroup.from_dict(rec.conditions) if rec.conditions else None,
-                    actions=[Action.from_dict(a) for a in (rec.actions or [])],
-                    status=RuleStatus(rec.status),
-                    priority=rec.priority,
-                    cooldown_seconds=rec.cooldown_seconds,
-                    max_triggers_per_hour=rec.max_triggers_per_hour,
-                    created_at=rec.created_at,
-                    updated_at=rec.updated_at,
-                    last_triggered=rec.last_triggered,
-                    trigger_count=rec.trigger_count,
-                )
-                await self.engine.register_rule(rule)
+                await self.engine.register_rule(self._rule_from_record(rec))
 
     async def create_rule(
         self,
@@ -1633,25 +1655,7 @@ class AutomationService:
         if not rec:
             return None
 
-        rule = AutomationRule(
-            id=rec.id,
-            name=rec.name,
-            description=rec.description,
-            organization_id=rec.organization_id,
-            trigger_type=TriggerType(rec.trigger_type),
-            trigger_config=rec.trigger_config or {},
-            conditions=ConditionGroup.from_dict(rec.conditions) if rec.conditions else None,
-            actions=[Action.from_dict(a) for a in (rec.actions or [])],
-            status=RuleStatus(rec.status),
-            priority=rec.priority,
-            cooldown_seconds=rec.cooldown_seconds,
-            max_triggers_per_hour=rec.max_triggers_per_hour,
-            created_at=rec.created_at,
-            updated_at=rec.updated_at,
-            last_triggered=rec.last_triggered,
-            trigger_count=rec.trigger_count,
-            created_by=rec.created_by,
-        )
+        rule = self._rule_from_record(rec)
         await self.engine.register_rule(rule)
         return rule
 

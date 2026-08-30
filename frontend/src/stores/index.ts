@@ -282,72 +282,12 @@ export const useWebSocketStore = create<WebSocketState>()(
   )
 );
 
-// Notifications Store
-interface Notification {
-  id: string;
-  type: 'info' | 'success' | 'warning' | 'error';
-  title: string;
-  message?: string;
-  timestamp: Date;
-  read: boolean;
-}
-
-interface NotificationsState {
-  notifications: Notification[];
-  unreadCount: number;
-  
-  addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
-  markAsRead: (id: string) => void;
-  markAllAsRead: () => void;
-  removeNotification: (id: string) => void;
-  clearAll: () => void;
-}
-
-export const useNotificationsStore = create<NotificationsState>()(
-  devtools(
-    immer((set, _get) => ({
-      notifications: [],
-      unreadCount: 0,
-      
-      addNotification: (notification) => set((state) => {
-        const newNotification: Notification = {
-          ...notification,
-          id: crypto.randomUUID(),
-          timestamp: new Date(),
-          read: false,
-        };
-        state.notifications.unshift(newNotification);
-        state.unreadCount = state.notifications.filter((n: Notification) => !n.read).length;
-        
-        // Keep only last 100 notifications
-        if (state.notifications.length > 100) {
-          state.notifications = state.notifications.slice(0, 100);
-        }
-      }),
-      
-      markAsRead: (id) => set((state) => {
-        const notification = state.notifications.find((n: Notification) => n.id === id);
-        if (notification) {
-          notification.read = true;
-          state.unreadCount = state.notifications.filter((n: Notification) => !n.read).length;
-        }
-      }),
-      
-      markAllAsRead: () => set((state) => {
-        state.notifications.forEach((n: Notification) => n.read = true);
-        state.unreadCount = 0;
-      }),
-      
-      removeNotification: (id) => set((state) => {
-        state.notifications = state.notifications.filter((n: Notification) => n.id !== id);
-        state.unreadCount = state.notifications.filter((n: Notification) => !n.read).length;
-      }),
-      
-      clearAll: () => set((state) => {
-        state.notifications = [];
-        state.unreadCount = 0;
-      }),
-    })),
-    { name: 'notifications-store' }
-  )
-);
+// NOTE: the client-side notifications store that used to live here was removed.
+// It had an addNotification writer and notifications/unreadCount readers, but
+// NOTHING in the tree ever read it: the bell in TopBar renders the server-side
+// ['in-app-notifications'] / ['notification-unread-count'] queries instead. Its
+// four callers (BackupsPage, CredentialsPage, StorageLocationsPage, App) pushed
+// 38 success/error messages into it that no renderer ever showed, so a rejected
+// credential save looked identical to a successful one -- and because those
+// mutations defined onError at all, they also opted OUT of the global
+// error-toast safety net in lib/queryClient.ts. They now use useToast().

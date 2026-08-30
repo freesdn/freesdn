@@ -12,6 +12,7 @@ task management, WebSocket connections, and cleanup utilities.
 
 import asyncio
 import hashlib
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
@@ -63,11 +64,13 @@ from app.schemas.agents import (
     TaskUpdate,
 )
 from app.schemas.core import MessageResponse, PaginatedResponse
+from app.services.adapter_preflight_common import payload_confirmed
 from app.services.remote_agent import (
     AgentCommand,
     AgentCommandType,
     AgentNotFoundError,
     AgentRegistryService,
+    AgentReportType,
     PersistentAgentService,
 )
 
@@ -285,10 +288,26 @@ async def register_agent(
     ws_base = base.replace("https://", "wss://").replace("http://", "ws://")
     ws_url = f"{ws_base}{settings.API_V1_PREFIX}/agents/ws/{agent.id}"
 
+    # Hand the agent the release-signing key fingerprint to PIN. Registration is
+    # the right moment: it is already authenticated and operator-approved,
+    # whereas fetching the key from the update feed on first contact proves
+    # nothing -- a compromised backend would simply serve its own key alongside
+    # its own binary and signature.
+    try:
+        import hashlib as _hashlib
+
+        from app.services.release_signing import public_key_pem
+
+        _release_key_fp = _hashlib.sha256(public_key_pem()).hexdigest()
+    except Exception:  # noqa: BLE001 - registration must not fail on this
+        logger.exception("Could not derive the release-signing key fingerprint")
+        _release_key_fp = ""
+
     return AgentRegisterResponse(
         agent_id=str(agent.id),
         agent_key=api_key,
         websocket_url=ws_url,
+        release_key_sha256=_release_key_fp,
         instructions=(
             f"Set these environment variables on the agent:\n"
             f"  FREESDN_AGENT_ID={agent.id}\n"
@@ -617,8 +636,15 @@ async def create_task(
     # explicit confirmation token, mirroring the staged-write confirmed=true
     # idiom. Without this a single agent:write call queues a live config push
     # / credential rotation / agent self-update with no second factor.
-    if str(data.task_type) in _CONFIRM_REQUIRED_TASK_TYPES and not bool(
-        (data.task_data or {}).get("confirmed")
+    #
+    # payload_confirmed(), NOT bool(): every non-empty string is truthy in
+    # Python, so bool("false") is True. task_data is an untyped dict[str, Any],
+    # so an automation or integration layer that stringifies booleans sent an
+    # explicit DECLINE as {"confirmed": "false"} and this gate PASSED it --
+    # the task was created, committed and dispatched over the agent socket with
+    # no second check downstream. "no", "off", "0" and "FALSE" did the same.
+    if str(data.task_type) in _CONFIRM_REQUIRED_TASK_TYPES and not payload_confirmed(
+        data.task_data
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1246,6 +1272,281 @@ async def get_agent_registry(db: AsyncSession) -> AgentRegistryService:
         return _agent_registry
 
 
+# =============================================================================
+# Listener reports (syslog / SNMP trap / DHCP)
+# =============================================================================
+#
+# The agent's SNMP-trap, syslog and DHCP listeners report over this socket as
+# ``device_event`` and ``log`` (freesdn_agent/listeners/{snmp_trap,syslog,
+# dhcp_watcher}.py), and nothing was ever subscribed to either type.
+# ``AgentConnection._handle_report`` looked up
+# ``self._report_handlers[report.type]``, got an empty list, and returned --
+# after the agent had already parsed the datagram and counted it as reported.
+# So enabling enable_snmp_traps / enable_syslog / enable_dhcp_watcher bound
+# privileged UDP 162/514 on the edge, produced a healthy-looking "reported"
+# counter on the agent, and stored nothing at all. This is the same drop-on-
+# the-floor bug already fixed for SCAN_RESULT and TOPOLOGY_UPDATE in
+# ``AgentRegistryService.register_connection``; two of the seven report types
+# were missed.
+#
+# Syslog and SNMP traps land in the collector's log store, which is the surface
+# the Log Explorer already reads. DHCP sightings land in devices.discovered_hosts
+# via the same ``upsert_batch`` the agent's scan results use.
+#
+# One row per report, one session per row -- the same shape the collector's own
+# UDP receivers use. The agent rate-limits syslog to 100 reports/second before
+# it sends (listeners/base.py::RateLimiter), which bounds this; if that ceiling
+# is ever raised, batch here first.
+
+#: Per-line bound on an agent-forwarded log message. ``CollectorLog.message`` is
+#: Text, so this is an abuse bound rather than a column limit; it matches the
+#: 8 KB RFC 5424 ceiling the agent itself enforces before reporting.
+_MAX_AGENT_LOG_MESSAGE = 8192
+
+#: The agent's parser spells RFC 5424 severity 6 "info"
+#: (freesdn_agent/listeners/syslog.py::SEVERITIES); the collector's own
+#: receiver stores "informational" (SEVERITY_NAMES in
+#: app/modules/collector/services/syslog.py) and ``GET /collector/logs``
+#: filters with exact equality. Storing the agent's spelling verbatim would
+#: put agent-forwarded lines in a bucket no severity filter can select.
+_AGENT_SEVERITY_TO_STORED = {"info": "informational"}
+
+#: Shared source-IP → device resolver (the collector's, with its own TTL cache),
+#: built lazily so importing this module does not need a DB.
+_agent_source_resolver: Any = None
+
+
+def _clip(value: Any, limit: int) -> str | None:
+    """A wire value as a string that fits its column, or None if empty."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text[:limit] if text else None
+
+
+async def _resolve_report_device(
+    source_ip: str | None,
+    organization_id: UUID | None,
+) -> UUID | None:
+    """Best-effort ``source_ip`` → ``Device.id`` for an agent-forwarded record."""
+    global _agent_source_resolver
+    if not source_ip or organization_id is None:
+        return None
+    try:
+        from app.db import async_session_factory
+        from app.modules.collector.services.manager import SourceResolver
+
+        if _agent_source_resolver is None:
+            _agent_source_resolver = SourceResolver(async_session_factory)
+        resolved = await _agent_source_resolver.resolve(source_ip)
+    except Exception:
+        logger.debug("Device resolution failed for %s", source_ip, exc_info=True)
+        return None
+    if resolved is None:
+        return None
+    resolved_org, device_id = resolved
+    # Only stamp the device when it belongs to the reporting agent's own org.
+    # An agent forwards whatever any host on its LAN sends it, and RFC1918
+    # addresses collide freely across orgs on a multi-org install.
+    return device_id if resolved_org == organization_id else None
+
+
+def _unmapped(payload: dict[str, Any], mapped: set[str]) -> str | None:
+    """The payload fields we did not give a column, as compact JSON."""
+    extra = {k: v for k, v in payload.items() if k not in mapped}
+    if not extra:
+        return None
+    try:
+        return json.dumps(extra, default=str)[:2000]
+    except (TypeError, ValueError):
+        return None
+
+
+def _make_log_report_handler(organization_id: UUID | None) -> Any:
+    """Persist agent ``log`` reports (syslog) into collector.collector_logs."""
+
+    async def _handle(report: Any) -> None:
+        payload = report.payload or {}
+        if organization_id is None:
+            # ``GET /collector/logs`` filters on
+            # ``CollectorLog.organization_id == caller org``, so an org-less row
+            # is a write no operator can ever read back. Drop it loudly rather
+            # than growing an invisible table. (Same policy as the collector's
+            # own receivers, which drop sources they cannot tenant-tag.)
+            logger.warning(
+                "Agent %s log report has no resolvable organization — dropping",
+                report.agent_id,
+            )
+            return
+        source_ip = _clip(payload.get("source_ip"), 45)
+        message = _clip(payload.get("message"), _MAX_AGENT_LOG_MESSAGE)
+        if not source_ip or not message:
+            # Both columns are NOT NULL, and a record with no source cannot be
+            # correlated to a device either. The shipped agent always sets both.
+            logger.warning(
+                "Agent %s log report has no source_ip/message — dropping",
+                report.agent_id,
+            )
+            return
+
+        severity = (_clip(payload.get("severity"), 20) or "").lower() or None
+        severity = _AGENT_SEVERITY_TO_STORED.get(severity, severity)
+        device_id = await _resolve_report_device(source_ip, organization_id)
+
+        from app.db import async_session_factory
+        from app.modules.collector.models import CollectorLog
+
+        async with async_session_factory() as db:
+            db.add(
+                CollectorLog(
+                    source_type="syslog",
+                    source_ip=source_ip,
+                    organization_id=organization_id,
+                    device_id=device_id,
+                    facility=_clip(payload.get("facility"), 20),
+                    severity=severity,
+                    hostname=_clip(payload.get("hostname"), 255),
+                    app_name=_clip(payload.get("app_name"), 100),
+                    message=message,
+                    # Receive time, not the agent's clock: the Log Explorer
+                    # defaults to the last hour, and a skewed edge clock would
+                    # file the line outside every default time window. The
+                    # agent's own stamp is preserved in raw_data.
+                    timestamp=datetime.now(UTC),
+                    raw_data=_unmapped(
+                        payload,
+                        {"source_ip", "message", "severity", "facility", "hostname", "app_name"},
+                    ),
+                )
+            )
+            await db.commit()
+
+    return _handle
+
+
+def _make_device_event_handler(
+    site_id: UUID,
+    organization_id: UUID | None,
+    agent_uuid: UUID,
+) -> Any:
+    """Persist agent ``device_event`` reports (SNMP traps, DHCP sightings)."""
+
+    async def _handle(report: Any) -> None:
+        payload = report.payload or {}
+        event_type = str(payload.get("event_type") or "")
+
+        if event_type == "snmp_trap":
+            await _store_snmp_trap(payload, organization_id, report.agent_id)
+        elif event_type == "dhcp_discovery":
+            await _store_dhcp_sighting(payload, site_id, organization_id, agent_uuid)
+        else:
+            # Named rather than silently dropped: a new agent listener that
+            # invents a device_event shape should show up in the log, not
+            # vanish the way the whole report type used to.
+            logger.warning(
+                "Agent %s sent device_event of unknown type %r — dropping",
+                report.agent_id,
+                event_type,
+            )
+
+    return _handle
+
+
+async def _store_snmp_trap(
+    payload: dict[str, Any],
+    organization_id: UUID | None,
+    agent_id: str | None,
+) -> None:
+    if organization_id is None:
+        # Unreadable once stored — see the note in _make_log_report_handler.
+        logger.warning("Agent %s SNMP trap has no resolvable organization — dropping", agent_id)
+        return
+
+    source_ip = _clip(payload.get("source_ip"), 45)
+    if not source_ip:
+        logger.warning("Agent %s SNMP trap has no source_ip — dropping", agent_id)
+        return
+
+    version = _clip(payload.get("snmp_version"), 8) or "?"
+    # v2c carries the trap identity in snmpTrapOID.0; v1 splits it across the
+    # generic/specific pair.
+    trap_type = _clip(payload.get("trap_oid"), 50)
+    if not trap_type and payload.get("generic_trap") is not None:
+        trap_type = _clip(
+            f"generic:{payload.get('generic_trap')}/specific:{payload.get('specific_trap')}",
+            50,
+        )
+
+    variables = payload.get("variables")
+    device_id = await _resolve_report_device(source_ip, organization_id)
+
+    from app.db import async_session_factory
+    from app.modules.collector.models import CollectorLog
+
+    async with async_session_factory() as db:
+        db.add(
+            CollectorLog(
+                source_type="snmp_trap",
+                source_ip=source_ip,
+                organization_id=organization_id,
+                device_id=device_id,
+                enterprise_oid=_clip(payload.get("enterprise"), 200),
+                trap_type=trap_type,
+                varbinds=variables if isinstance(variables, dict | list) else None,
+                # The community string is a device credential and /collector/logs
+                # returns this message to any collector.logs.read holder. The
+                # agent never sends it (only its length), and this must not start
+                # reconstructing it.
+                message=f"SNMP {version} trap from {source_ip} (community=<redacted>)",
+                timestamp=datetime.now(UTC),
+                raw_data=_unmapped(
+                    payload,
+                    {"source_ip", "variables", "enterprise", "trap_oid", "event_type"},
+                ),
+            )
+        )
+        await db.commit()
+
+
+async def _store_dhcp_sighting(
+    payload: dict[str, Any],
+    site_id: UUID,
+    organization_id: UUID | None,
+    agent_uuid: UUID,
+) -> None:
+    if organization_id is None:
+        logger.warning("DHCP sighting for site %s has no organization — dropping", site_id)
+        return
+
+    ip_address = _clip(payload.get("requested_ip"), 45)
+    if not ip_address:
+        # upsert_batch skips rows without an IP anyway; a DHCPDISCOVER before
+        # the server has offered an address genuinely has none yet.
+        return
+
+    host = {
+        "ip_address": ip_address,
+        "mac_address": _clip(payload.get("mac_address"), 32),
+        "hostname": _clip(payload.get("hostname"), 255),
+        "discovered_via": ["dhcp"],
+    }
+
+    from app.db import async_session_factory
+    from app.services.discovered_hosts import upsert_batch
+
+    async with async_session_factory() as db:
+        summary = await upsert_batch(
+            db,
+            site_id=site_id,
+            organization_id=organization_id,
+            discovered_by_agent_id=agent_uuid,
+            hosts=[host],
+        )
+        # upsert_batch deliberately does not commit — it is built for batches.
+        await db.commit()
+        logger.debug("DHCP sighting %s persisted: %s", ip_address, summary)
+
+
 @router.websocket("/ws/{agent_id}")
 async def agent_websocket(
     websocket: WebSocket,
@@ -1360,6 +1661,24 @@ async def agent_websocket(
             site_id=site_id,
             site_name=agent.site.name if agent.site else agent.name,
             websocket=websocket,
+        )
+
+        # Subscribe the two report types that had no handler at all — see the
+        # "Listener reports" section above. Resolved once per connection so a
+        # chatty syslog stream does not re-query the site for every line.
+        # alive() matters here: an agent whose site has been soft-deleted must
+        # not resolve an organization for report ingestion, or its syslog and
+        # SNMP-trap lines would keep landing under a site the operator removed.
+        report_org_id = await session.scalar(
+            select(Site.organization_id).where(Site.id == agent.site_id, Site.alive())
+        )
+        connection.add_report_handler(
+            AgentReportType.LOG,
+            _make_log_report_handler(report_org_id),
+        )
+        connection.add_report_handler(
+            AgentReportType.DEVICE_EVENT,
+            _make_device_event_handler(agent.site_id, report_org_id, agent.id),
         )
 
         await svc.update_agent(

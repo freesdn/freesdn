@@ -123,7 +123,8 @@ class OperationExecutor:
         # MUST belong to the Connection's org. controller_id can be templated
         # from an untrusted event payload, so we never stage a controller the
         # org doesn't own (mirrors the universal _get_controller org guard).
-        if not await _controller_in_org(ctx.db, controller_id, ctx.organization_id):
+        controller = await _controller_in_org(ctx.db, controller_id, ctx.organization_id)
+        if not controller:
             return OperationResult.fail(
                 "controller_id does not belong to this organization", "CROSS_TENANT_TARGET"
             )
@@ -139,6 +140,67 @@ class OperationExecutor:
                 return OperationResult.fail(
                     "site_id does not belong to this organization", "CROSS_TENANT_TARGET"
                 )
+
+        # ── F-02: controller/site coherence + the caller's per-user site grant ──
+        #
+        # The two guards above prove the controller is in the org and the site is
+        # in the org — INDEPENDENTLY. Neither proves they have anything to do with
+        # each other, and neither consults ``ctx.accessible_site_ids``. That left a
+        # site-grant escalation: a site_admin granted only Site A could invoke a
+        # write with controller_id = a controller that lives in Site B and
+        # site_id = their own Site A. ``AdapterStagingService.stage_change``'s
+        # contextvar guard sees Site A and passes; the row lands with
+        # controller_id=B, site_id=A. At apply time the site-grant assert reads the
+        # stored Site A and, BECAUSE site_id is non-NULL, the controller-site
+        # fallback in ``adapter_omada_vpn.apply_change`` is skipped — so the applier
+        # drives controller B on a Site A grant.
+        #
+        # Two independent checks close it:
+        #
+        #   (1) a supplied site_id must be a site the controller actually SERVES;
+        #   (2) a site-limited caller must hold a grant for the controller's own
+        #       site AND for the supplied site.
+        #
+        # (2) mirrors what every non-Fabric stage path already enforces: they go
+        # through ``GatewayServiceBase.stage_change`` → ``_resolve_controller_or_
+        # gateway``, which asserts the grant on ``ctrl.site_id``. The Fabric calls
+        # ``AdapterStagingService.stage_change`` directly and so skipped it. And the
+        # grant has to be read from ``ctx.accessible_site_ids`` rather than the
+        # request contextvar, because the negotiator + automation paths have no
+        # request principal at all — that contextvar is unset there, so the staging
+        # chokepoint's own guard no-ops for exactly the unattended paths.
+        #
+        # NOTE — deliberately NOT "staged site_id := controller.site_id". One
+        # physical controller legitimately fronts SEVERAL FreeSDN sites through
+        # ``Controller.site_mappings`` ({omada_site_id: freesdn_site_uuid}); the
+        # Omada bulk applier resolves the Omada-side site from ``change.site_id``
+        # (services/adapter_omada_bulk.py:73). Forcing the controller's own site
+        # would silently retarget every multi-site Omada write. "Served by" is the
+        # honest invariant, not "equal to".
+        grants = ctx.accessible_site_ids
+        if site_id is not None or grants is not None:
+            own_site = _as_uuid(getattr(controller, "site_id", None))
+            if own_site is None:
+                # Fail CLOSED. Both checks below are relative to the controller's
+                # own site; if we cannot resolve it we cannot prove either, and a
+                # write is not the place to assume.
+                return OperationResult.fail(
+                    "could not resolve the target controller's site", "SITE_UNRESOLVED"
+                )
+            if site_id is not None and site_id not in _sites_served_by(controller):
+                return OperationResult.fail(
+                    "site_id is not a site served by controller_id", "CROSS_SITE_TARGET"
+                )
+            if grants is not None:
+                if own_site not in grants:
+                    return OperationResult.fail(
+                        "controller_id is outside this caller's granted sites",
+                        "SITE_NOT_GRANTED",
+                    )
+                if site_id is not None and site_id not in grants:
+                    return OperationResult.fail(
+                        "site_id is outside this caller's granted sites", "SITE_NOT_GRANTED"
+                    )
 
         # Staging op verb. update/delete dispatch by target_id, so it must be
         # extracted, strictly validated, and passed as the dedicated argument
@@ -345,20 +407,65 @@ class OperationExecutor:
         return OperationResult.ok(output=raw)
 
 
-async def _controller_in_org(db: object, controller_id: UUID, organization_id: UUID) -> bool:
-    """True iff the controller exists and belongs to the org (Controller→Site join)."""
+def _as_uuid(value: object) -> UUID | None:
+    """Best-effort UUID coercion; ``None`` when the value is not one."""
+    if isinstance(value, UUID):
+        return value
+    if value is None:
+        return None
+    try:
+        return UUID(str(value))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _sites_served_by(controller: object) -> set[UUID]:
+    """Every FreeSDN site the controller may legitimately carry a write for.
+
+    That is its OWN ``site_id`` plus every FreeSDN site id in
+    ``Controller.site_mappings`` (``{omada_site_id: freesdn_site_uuid}``). One
+    physical controller can front SEVERAL FreeSDN sites — that is exactly what
+    ``site_mappings`` is for, and the Omada bulk applier resolves the Omada-side
+    site from the staged ``site_id`` through it — so ``site_id !=
+    controller.site_id`` is legitimate and must NOT be rejected outright. What is
+    not legitimate is a ``site_id`` the controller has no relationship with at
+    all: that is the pair that turns the apply-time site-grant check into a
+    check on a site the write will never touch.
+    """
+    served: set[UUID] = set()
+    own = _as_uuid(getattr(controller, "site_id", None))
+    if own is not None:
+        served.add(own)
+    mappings = getattr(controller, "site_mappings", None) or {}
+    if isinstance(mappings, dict):
+        for mapped in mappings.values():
+            parsed = _as_uuid(mapped)
+            if parsed is not None:
+                served.add(parsed)
+    return served
+
+
+async def _controller_in_org(db: object, controller_id: UUID, organization_id: UUID) -> object:
+    """The org-owned ``Controller`` row for ``controller_id``, else ``None``.
+
+    Returns the ROW (not a bool) because the write plane needs the controller's
+    own ``site_id`` + ``site_mappings`` to prove the staged ``site_id`` and the
+    caller's site grant relate to the same controller — see the F-02 block in
+    ``_execute_native_write``. Callers must test it for truthiness, never for
+    ``is not None``: the existing executor tests stub this helper with a plain
+    ``True``/``False`` and both must keep meaning what they meant.
+    """
     from sqlalchemy import select
 
     from app.models.core import Controller, Site
 
-    row = (
+    return (
         await db.execute(  # type: ignore[attr-defined]
-            select(Controller.id)
+            select(Controller)
             .join(Site, Controller.site_id == Site.id)
             .where(Controller.id == controller_id, Site.organization_id == organization_id)
         )
     ).scalar_one_or_none()
-    return row is not None
 
 
 async def _site_in_org(db: object, site_id: UUID, organization_id: UUID) -> bool:

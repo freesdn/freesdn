@@ -81,6 +81,7 @@ import { ErrorState } from '@/components/ui/empty-state';
 import { SearchBar } from '@/components/ui/search-bar';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { devicesApi, deviceControlApi, getApiErrorMessage } from '@/lib/api';
+import { escapeCell } from '@/lib/csv';
 
 
 /* ============================================================
@@ -500,10 +501,10 @@ export default function DevicesPage() {
       ['client_count', (d) => d.client_count],
       ['last_seen', (d) => d.last_seen],
     ];
-    const escape = (v: string | number | null): string => {
-      const s = v == null ? '' : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const escape = (v: string | number | null): string => escapeCell(v);
     const header = cols.map(([h]) => h).join(',');
     const body = rows.map((d) => cols.map(([, fn]) => escape(fn(d))).join(',')).join('\n');
     const blob = new Blob([`${header}\n${body}`], { type: 'text/csv;charset=utf-8;' });

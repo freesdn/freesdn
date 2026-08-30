@@ -37,6 +37,10 @@ MAX_TOOL_ITERATIONS = 5
 #: from blowing the context window and racking up cost (H6).
 MAX_TOOL_RESULT_CHARS = 4096
 
+#: How many stored messages of a conversation are replayed to the provider.
+#: Applied to the NEWEST messages -- see ``_drop_orphaned_tool_prefix``.
+HISTORY_MESSAGE_LIMIT = 50
+
 #: Provider IDs that send data over the public internet to a third-party.
 #: For these we strip IPs/MACs/credentials before transmission (H3). The
 #: ``ollama`` provider runs locally, so for ``local_only`` policy we keep
@@ -107,6 +111,28 @@ def _redact_messages_for_cloud(messages: list[dict[str, Any]]) -> list[dict[str,
             copy["content"] = _redact_pii(content)
         redacted.append(copy)
     return redacted
+
+
+def _drop_orphaned_tool_prefix(history: list[Any]) -> list[Any]:
+    """Drop leading ``tool`` messages whose originating assistant turn fell
+    outside the history window.
+
+    A provider rejects a ``tool`` message that is not preceded by the
+    ``assistant`` message carrying the matching ``tool_calls``. Because the
+    window is a flat count of the newest N rows, its boundary can land in the
+    middle of a tool exchange -- one turn may persist an assistant tool-call
+    plus several tool results -- leaving the results at the head with their
+    call gone. Trimming the orphaned head is the conservative repair: it loses
+    one already-completed tool exchange rather than emitting a payload the
+    provider will refuse.
+    """
+    start = 0
+    for msg in history:
+        if getattr(msg, "role", None) == "tool":
+            start += 1
+        else:
+            break
+    return history[start:] if start else history
 
 
 def _truncate_tool_result(payload: str) -> str:
@@ -266,13 +292,28 @@ class AIChatService:
             await db.flush()  # Get conversation.id
 
         # ── Load history ──────────────────────────────────────────────────────
+        # Keep the NEWEST 50 messages. This must be ordered DESC + limited, then
+        # reversed: ``ORDER BY created_at ASC LIMIT 50`` returns the OLDEST 50,
+        # which silently dropped the most recent turns (including the user's
+        # previous question) once a conversation passed the cap, so the model
+        # answered from stale context.
+        #
+        # NO ``id`` TIE-BREAK: ``AIMessage.id`` defaults to ``uuid4`` -- random,
+        # not time-ordered -- so adding it as a secondary sort does not make
+        # same-timestamp rows deterministic, it SCRAMBLES them, which can put a
+        # tool result ahead of the assistant tool_calls that produced it. That is
+        # the very sequence ``_drop_orphaned_tool_prefix`` exists to protect.
+        # Ordering on ``created_at`` alone leaves intra-turn ties unspecified,
+        # which is what the original query did and is strictly better than random.
+        # A real fix needs a monotonic per-conversation ordinal column; there
+        # isn't one today.
         history_result = await db.execute(
             select(AIMessage)
             .where(AIMessage.conversation_id == conversation.id)
-            .order_by(AIMessage.created_at.asc())
-            .limit(50)  # Keep last 50 messages for context
+            .order_by(AIMessage.created_at.desc())
+            .limit(HISTORY_MESSAGE_LIMIT)
         )
-        history = history_result.scalars().all()
+        history = _drop_orphaned_tool_prefix(list(reversed(history_result.scalars().all())))
 
         # Build messages list
         messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]

@@ -442,6 +442,12 @@ class BulkOperationCreate(BaseModel):
     target: BulkTarget
     config: dict[str, Any] | None = None
     rollout: RolloutStrategy | None = None
+    confirm: bool = Field(
+        False,
+        description=(
+            "Required for firmware_update. A fleet flash is irreversible and can brick devices."
+        ),
+    )
 
     @field_validator("config")
     @classmethod

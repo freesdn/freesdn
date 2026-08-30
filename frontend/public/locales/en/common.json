@@ -1011,7 +1011,8 @@
       "applyAll": "Apply all",
       "discard": "Discard",
       "cancel": "Cancel",
-      "close": "Close"
+      "close": "Close",
+      "resolve": "Mark as resolved"
     },
     "operations": {
       "create": "create",
@@ -1050,6 +1051,12 @@
       "applying": {
         "aria": "Currently applying",
         "heading": "Applying"
+      },
+      "reconciliation": {
+        "aria": "Changes needing verification",
+        "heading": "Needs verification",
+        "description": "The outcome on the device is unknown. Check the device before re-staging these changes.",
+        "unknownOutcome": "Outcome unknown: the apply was interrupted after the change was sent, so the device may or may not have accepted it. Verify the device before re-staging."
       },
       "failed": {
         "aria": "Failed changes",
@@ -1100,6 +1107,10 @@
         "title": "All changes applied",
         "description": "{{count}} change(s) pushed to {{gatewayName}}."
       }
+    },
+    "confirmResolve": {
+      "title": "Mark this change as resolved?",
+      "body": "This change may already be live on the device. Confirm only after you have checked the device: this clears it from the queue and does not undo anything."
     }
   },
   "CameraAccessPanel": {

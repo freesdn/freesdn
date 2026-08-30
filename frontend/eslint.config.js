@@ -17,7 +17,13 @@ import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
-export default tseslint.config({ ignores: ['dist'] }, {
+// ``storybook-static`` is build output (gitignored, like ``dist``). Without it
+// here, anyone who has run ``build-storybook`` gets 13 "Definition for rule X
+// was not found" errors from the bundled vendor JS and ``npm run lint`` fails
+// locally for a reason that has nothing to do with their change -- which is how
+// people learn to ignore lint output. CI never saw it because CI does not build
+// Storybook.
+export default tseslint.config({ ignores: ['dist', 'storybook-static'] }, {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],
     languageOptions: {

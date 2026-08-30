@@ -101,6 +101,14 @@ const SEVERITY_COLORS: Record<string, string> = {
   error: 'bg-orange-500 text-white',
   warning: 'bg-yellow-500 text-black',
   notice: 'bg-blue-500 text-white',
+  // Both spellings on purpose. The receivers store the RFC 5424 name
+  // ('informational' -- SEVERITY_NAMES in
+  // backend/app/modules/collector/services/syslog.py), while the filter
+  // dropdown, the API description and every syslog shorthand say 'info'.
+  // Keyed on 'info' alone, every stored row fell through to the default
+  // below and rendered as an un-tokenized light-grey pill in a dark-mode
+  // -default UI -- the single most common severity in the table.
+  informational: 'bg-blue-400 text-white',
   info: 'bg-blue-400 text-white',
   debug: 'bg-gray-400 text-white',
 };

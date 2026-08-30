@@ -49,6 +49,10 @@ __all__ = [
 # SECURITY: re-validate WebSocket sessions every 5 minutes
 _WS_REVALIDATION_INTERVAL_SECONDS = 300
 
+#: Upper bound on the site filter a client may request in one frame.
+#: Bounds both the IN (...) clause and the work done per message.
+_MAX_FILTER_SITE_IDS = 200
+
 
 # ===========================================
 # Origin Validation (CSWSH Protection)
@@ -764,8 +768,23 @@ async def handle_message(
         )
 
     elif msg_type == WSMessageType.SET_FILTERS:
-        site_ids = message.get("site_ids", [])
-        # Validate site_ids: only allow sites belonging to the user's organization
+        raw_site_ids = message.get("site_ids", [])
+        # Coerce BEFORE the query. ``site_ids`` is raw client input and used to
+        # go straight into ``Site.id.in_(...)``, so a non-UUID string or a nested
+        # object raised while SQLAlchemy adapted the value. The receive loop
+        # around ``handle_message`` catches only TimeoutError and
+        # JSONDecodeError, so that exception escaped and dropped the connection
+        # -- a client could disconnect itself with one malformed frame. Keep only
+        # well-formed UUIDs and bound the list.
+        site_ids: list[str] = []
+        if isinstance(raw_site_ids, list):
+            for candidate in raw_site_ids[:_MAX_FILTER_SITE_IDS]:
+                if not isinstance(candidate, str):
+                    continue
+                try:
+                    site_ids.append(str(uuid.UUID(candidate)))
+                except (ValueError, AttributeError, TypeError):
+                    continue
         if site_ids:
             info = manager._connections.get(connection_id)
             if info and info.organization_id:

@@ -416,6 +416,71 @@ def _required_apply_role(feature: str) -> str | None:
     return None
 
 
+async def _assert_controller_serves_site(
+    session: AsyncSession,
+    controller_id: UUID,
+    organization_id: UUID,
+    site_id: UUID,
+) -> None:
+    """Refuse a staged row whose ``site_id`` the stored controller does not serve.
+
+    F-02. Every site-grant check on this endpoint keys on ``change.site_id``:
+    ``assert_can_access_site`` above, and ``AdapterStagingService.get`` /
+    ``apply_change`` through the request contextvar. The controller-site fallback
+    a few lines down only runs when ``change.site_id`` is NULL. So a row carrying
+    controller_id=<a controller in Site B> and site_id=<Site A> passes every one
+    of them on a Site A grant, and the applier then drives the Site B controller.
+    Assert the pair is coherent so such a row — however it was written, including
+    before this guard existed — cannot be applied.
+
+    Deliberately NOT ``_resolve_controller_or_gateway``: that asserts the caller's
+    grant on the controller's OWN site, which would break the legitimate case this
+    guard is built around — one Omada controller fronting several FreeSDN sites
+    through ``site_mappings``, where an operator granted only the mapped site
+    applies a ``bulk.*`` change for it. "Served by" is the invariant; "equal to"
+    is not.
+
+    404, never 403 — an existence oracle on a sibling site's staged rows is the
+    same leak the surrounding guards already avoid.
+
+    A staged ``controller_id`` is always a ``core.controllers`` row (the column's
+    FK, and gateway ids are auto-paired into one before staging), so a row that
+    does not resolve here is not a shape we accept: fail closed.
+    """
+    from fastapi import HTTPException
+    from sqlalchemy import select
+
+    from app.models.core import Controller, Site
+
+    ctrl = (
+        await session.execute(
+            select(Controller)
+            .join(Site, Controller.site_id == Site.id)
+            .where(
+                Controller.id == controller_id,
+                Site.organization_id == organization_id,
+                # alive() on BOTH: a soft-deleted controller must not serve
+                # anything, and a soft-deleted site must not vouch for one. The
+                # 404 below is then the honest answer -- the operator removed
+                # this gear, so a change staged against it is not applicable.
+                Controller.alive(),
+                Site.alive(),
+            )
+        )
+    ).scalar_one_or_none()
+    if ctrl is None:
+        raise HTTPException(404, detail="pending change not found")
+
+    served: set[UUID] = {ctrl.site_id} if ctrl.site_id is not None else set()
+    for mapped in (ctrl.site_mappings or {}).values():
+        try:
+            served.add(UUID(str(mapped)))
+        except (ValueError, TypeError, AttributeError):
+            continue
+    if site_id not in served:
+        raise HTTPException(404, detail="pending change not found")
+
+
 def _service_for_feature(feature: str, session: AsyncSession) -> GatewayServiceBase:
     """Pick the right gateway service based on the change's feature key.
 
@@ -1137,6 +1202,18 @@ async def apply_change(
 
         await GatewayServiceBase(session)._resolve_controller_or_gateway(
             change.controller_id, user.organization_id
+        )
+    elif change.site_id is not None and change.controller_id is not None:
+        # F-02. The assert above proved the caller holds ``change.site_id``. It did
+        # NOT prove the write will land there: the applier drives
+        # ``change.controller_id``, and nothing until now checked that the stored
+        # controller has anything to do with the stored site. Because site_id is
+        # non-NULL the controller-grant fallback right above is skipped, so a row
+        # written as controller_id=<a Site B controller>, site_id=<Site A> applies
+        # on a Site A grant. Assert the pair is coherent — this also disarms any
+        # such row already sitting in the queue from before the executor was fixed.
+        await _assert_controller_serves_site(
+            session, change.controller_id, user.organization_id, change.site_id
         )
     # Controllerless overlay.* writes carry BOTH site_id and controller_id NULL, so
     # neither the site-grant assert above nor the controller-grant fallback fires —

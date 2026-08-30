@@ -181,6 +181,22 @@ class AuthService:
     """
     Authentication service for user login/logout and session management.
 
+    **NOT WIRED.** Nothing in ``app/`` constructs this class; every /auth route
+    is served by ``app/api/v1/endpoints/auth.py``, mounted in
+    ``app/api/v1/__init__.py``. The only references outside this module are the
+    re-export in ``app.services`` -- which makes it LOOK like the intended entry
+    point -- and its own test file. Treat it as a refactor target, not as the
+    implementation: if you wire it up, diff it against the endpoints first.
+    ``tests/services/test_auth_service_security.py`` exercises this class only,
+    so names like ``test_refresh_tokens_rejects_stale_token_version`` read as
+    coverage of the live login path and are not.
+
+    ``refresh_tokens`` used to omit three controls the live ``/auth/refresh``
+    enforces -- the atomic rotation claim, the per-device revocation check, and
+    the remember-me window -- so adopting it would have silently regressed all
+    three behind a green suite. They are implemented here now; keep them in step
+    with ``app/api/v1/endpoints/auth.py`` if either side changes.
+
     Features:
     - Email/password authentication
     - JWT access and refresh tokens
@@ -439,6 +455,10 @@ class AuthService:
         Raises:
             TokenExpiredError: Token has expired
             TokenInvalidError: Token is invalid
+
+        Kept deliberately in step with ``/auth/refresh`` in
+        ``app/api/v1/endpoints/auth.py`` -- see the class docstring. The three
+        controls below are the ones this method used to be missing.
         """
         payload = await decode_token(refresh_token)
         if not payload:
@@ -450,6 +470,19 @@ class AuthService:
         user_id = payload.get("sub")
         if not user_id:
             raise TokenInvalidError()
+
+        # Parity 1/3: consume the old jti ATOMICALLY (SET NX) rather than with a
+        # plain blacklist write. A plain write lets two concurrent requests
+        # presenting the SAME refresh token both pass the check and both mint a
+        # pair, orphaning a per-device session row and defeating targeted
+        # revocation for it. Exactly one caller wins the claim.
+        old_jti = payload.get("jti")
+        old_exp = payload.get("exp")
+        if old_jti and old_exp:
+            from app.core.token_blacklist import claim_token_jti
+
+            if not await claim_token_jti(old_jti, old_exp):
+                raise TokenInvalidError()
 
         # Get user
         result = await self.db.execute(
@@ -467,12 +500,21 @@ class AuthService:
         if payload.get("tv", 0) != current_tv:
             raise TokenInvalidError()
 
-        old_jti = payload.get("jti")
-        old_exp = payload.get("exp")
-        if old_jti and old_exp:
-            from app.core.token_blacklist import blacklist_token
+        # Parity 2/3: honour per-device revocation. ``token_version`` only
+        # covers account-wide events (password change, logout-all); without
+        # this check ``DELETE /auth/sessions/{id}`` and per-device /logout do
+        # nothing, because the revoked device just refreshes itself back.
+        if old_jti:
+            from app.models import UserSession
 
-            await blacklist_token(old_jti, old_exp)
+            sess = await self.db.execute(
+                select(UserSession.revoked_at, UserSession.is_revoked).where(
+                    UserSession.refresh_jti == str(old_jti)
+                )
+            )
+            sess_row = sess.first()
+            if sess_row is not None and (sess_row[0] is not None or bool(sess_row[1])):
+                raise TokenInvalidError()
 
         # Create new tokens
         extra_claims = {
@@ -485,7 +527,22 @@ class AuthService:
             extra_claims=extra_claims,
             token_version=current_tv,
         )
-        new_refresh = create_refresh_token(subject=str(user.id), token_version=current_tv)
+        # Parity 3/3: carry the remember-me claim across rotation. Dropping it
+        # silently shrinks a 30-day session to the 14-day default on the first
+        # refresh, logging the user out mid-window.
+        remember_me = bool(payload.get("rmb", False))
+        new_refresh = create_refresh_token(
+            subject=str(user.id),
+            token_version=current_tv,
+            expires_delta=timedelta(
+                days=(
+                    settings.REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS
+                    if remember_me
+                    else settings.REFRESH_TOKEN_EXPIRE_DAYS
+                )
+            ),
+            extra_claims={"rmb": True} if remember_me else None,
+        )
 
         return TokenPair(
             access_token=new_access,

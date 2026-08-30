@@ -648,6 +648,18 @@ class HikvisionAdapter(BaseAdapter):
         httpx.PoolTimeout,
     )
 
+    #: Connect-phase failures mean the request never left us, so replaying one is
+    #: always safe regardless of method.
+    _NEVER_SENT_EXCEPTIONS = (
+        httpx.ConnectError,
+        httpx.ConnectTimeout,
+        httpx.PoolTimeout,
+    )
+
+    #: Methods whose replay is harmless even when the request MAY have reached
+    #: the camera (i.e. after a ReadTimeout).
+    _IDEMPOTENT_METHODS: frozenset[str] = frozenset({"GET", "HEAD"})
+
     async def _request(
         self,
         method: str,
@@ -694,6 +706,20 @@ class HikvisionAdapter(BaseAdapter):
             except self._RETRYABLE_EXCEPTIONS as exc:
                 last_exc = exc
                 self._breaker.record_failure()
+                # A ReadTimeout on a MUTATION is ambiguous: the request is
+                # already on the wire, so the camera may have applied it and only
+                # the response was lost. Replaying it can reboot a camera twice
+                # or re-apply a config write. Connect-phase failures never left
+                # us, so those still retry for any method.
+                _never_sent = isinstance(exc, self._NEVER_SENT_EXCEPTIONS)
+                _replay_safe = _never_sent or method.upper() in self._IDEMPOTENT_METHODS
+                if not _replay_safe:
+                    # STOP. Not merely "skip the backoff" -- the earlier version of
+                    # this guard only wrapped the log and the sleep, so the `for`
+                    # advanced and re-sent the mutation anyway. It removed the
+                    # delay for exactly the dangerous case, making a double-reboot
+                    # faster rather than preventing it. The loop must be left.
+                    break
                 if attempt < retries:
                     logger.warning(
                         "Transient error on %s %s (attempt %d/%d): %s",
@@ -4600,19 +4626,31 @@ class HikvisionAdapter(BaseAdapter):
             response = await self._request(
                 "PUT", url, content=xml_data, timeout=httpx.Timeout(10.0)
             )
-            if response.status_code == 200:
+            # ISAPI answers a REFUSED write with HTTP 200 and puts the refusal
+            # in the body, so the status code alone cannot decide this. The
+            # camera write envelope (modules/cameras/config_write.py) requires
+            # the applier to RAISE on a device-reported failure; returning a
+            # success dict made it write a success audit row for a change the
+            # camera never made.
+            _res = _isapi_write_result(response, context="set_auto_tracking")
+            if _res.get("success"):
                 return {
                     "supported": True,
                     "enabled": enabled,
                     "track_duration_sec": duration,
                     "sensitivity": sensitivity,
                 }
-            return {
-                "supported": False,
-                "enabled": False,
-                "track_duration_sec": 30,
-                "sensitivity": 50,
-            }
+            raise AdapterError(
+                f"camera refused auto-tracking change: {_res.get('error') or 'unknown reason'}"
+            )
+        except AdapterError:
+            # A DEVICE-REPORTED refusal must propagate. The camera write envelope
+            # (modules/cameras/config_write.py) requires the applier to raise on
+            # a device-reported failure -- swallowing it here is what let a
+            # refused change be written to the audit log as a success. The
+            # blanket ``except Exception`` below used to catch this raise, so the
+            # fix that added it was inert.
+            raise
         except Exception:
             logger.exception("Failed to set auto-tracking")
             return {
@@ -4668,7 +4706,10 @@ class HikvisionAdapter(BaseAdapter):
         url = urljoin(self.base_url, f"/ISAPI/System/TwoWayAudio/channels/{channel}/close")
         try:
             response = await self._request("PUT", url, timeout=httpx.Timeout(10.0))
-            return {"success": response.status_code == 200}
+            # HTTP 200 is not success on ISAPI -- see _isapi_write_result.
+            return {
+                "success": _isapi_write_result(response, context="close_two_way_audio")["success"]
+            }
         except Exception:
             logger.exception("Failed to close two-way audio")
             return {"success": False}
@@ -4702,6 +4743,11 @@ class HikvisionAdapter(BaseAdapter):
                 headers={"Content-Type": "application/octet-stream"},
                 timeout=httpx.Timeout(5.0),
             )
-            return {"success": response.status_code == 200, "bytes_sent": len(audio_data)}
+            # HTTP 200 is not success on ISAPI -- see _isapi_write_result.
+            _res = _isapi_write_result(response, context="send_audio_data")
+            return {
+                "success": _res["success"],
+                "bytes_sent": len(audio_data) if _res["success"] else 0,
+            }
         except Exception:
             return {"success": False, "error": "Audio send failed"}

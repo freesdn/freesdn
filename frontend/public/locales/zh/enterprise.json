@@ -287,7 +287,8 @@
       "deviceIds": "设备 ID",
       "deviceIdsPlaceholder": "粘贴设备 UUID，每行一个或用逗号分隔",
       "deviceIdsHint": "输入设备 UUID，使用换行或逗号分隔（最多 500 个）。",
-      "configPayload": "配置负载（JSON）"
+      "configPayload": "配置负载（JSON）",
+      "confirmFirmware": "我明白此操作将刷写所有目标设备的固件且无法撤销。"
     },
     "operations": {
       "pushConfig": "推送配置",

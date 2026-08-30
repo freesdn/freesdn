@@ -468,11 +468,52 @@ class EventBus:
         # Always dispatch to local subscribers in the producing process.
         await self._dispatch_local(event)
 
+        org_scope = event.organization_id or "system"
+        channel = f"freesdn:events:{event.category.value}:{org_scope}"
+        body = json.dumps(event.to_dict())
+
         if self._redis:
-            org_scope = event.organization_id or "system"
-            channel = f"freesdn:events:{event.category.value}:{org_scope}"
-            await self._redis.publish(channel, json.dumps(event.to_dict()))
+            await self._redis.publish(channel, body)
             logger.debug("Published %s to Redis channel %s", event.event_type, channel)
+        else:
+            # NO ASYNC CLIENT: this is a Celery worker, beat, or any process that
+            # never ran the FastAPI lifespan.
+            #
+            # ``_redis`` is set only by ``connect()``, and ``connect()`` is called
+            # from exactly one place in the tree: app/main.py's lifespan. The
+            # Celery bootstrap never calls it. So in a worker this branch used to
+            # be `if self._redis:` and nothing else -- local dispatch had already
+            # run and returned, publish() reported success, and the event went
+            # nowhere. Every subscriber lives in the API process (the WebSocket
+            # forwarder, the Fabric negotiator, the automation engine), so an
+            # event raised by a scheduled task reached no one: Fabric health
+            # triggers never fired, and a device going offline never reached the
+            # UI. Nothing logged above DEBUG.
+            #
+            # Connecting an async client here is the wrong fix: every task body
+            # calls asyncio.run(), so a client bound to one loop breaks on the
+            # next task. app/modules/voip/tasks.py already hand-rolled this exact
+            # sync-publish workaround for one task and documented why; this
+            # generalises it so every producer gets it.
+            #
+            # Best effort: the work the event describes has already succeeded by
+            # the time we get here, so a publish failure must not fail the task.
+            try:
+                from app.core.redis_client import get_sync_redis
+
+                await asyncio.to_thread(lambda: get_sync_redis().publish(channel, body))
+                logger.debug(
+                    "Published %s to Redis channel %s (sync fallback)",
+                    event.event_type,
+                    channel,
+                )
+            except Exception:  # noqa: BLE001 - never fail a task over telemetry
+                logger.warning(
+                    "Could not publish %s to Redis from a non-lifespan process; "
+                    "subscribers in other processes will not see it",
+                    event.event_type,
+                    exc_info=True,
+                )
 
     async def subscribe_redis_for_org(self, organization_id: str) -> None:
         """Narrow the active Redis pattern subscription to a single org.

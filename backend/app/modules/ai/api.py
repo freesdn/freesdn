@@ -17,7 +17,12 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import CurrentUser, get_current_active_user, is_unscoped_org_admin
+from app.core.dependencies import (
+    CurrentUser,
+    get_current_active_user,
+    is_unscoped_org_admin,
+    require_permissions,
+)
 from app.db import get_session
 from app.modules.ai.models import AIConversation, AIMessage, AIProviderConfig, OrgLLMPolicy
 from app.modules.ai.service import AIChatService, _decrypt, _encrypt
@@ -404,7 +409,7 @@ async def chat(
 
 @router.get("/conversations", response_model=list[ConversationSummary])
 async def list_conversations(
-    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    current_user: Annotated[CurrentUser, Depends(require_permissions("ai.chat"))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
     """List conversations for the current user."""
@@ -434,7 +439,7 @@ async def list_conversations(
 @router.get("/conversations/{conversation_id}", response_model=ConversationDetail)
 async def get_conversation(
     conversation_id: UUID,
-    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    current_user: Annotated[CurrentUser, Depends(require_permissions("ai.chat"))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ConversationDetail:
     """Get a conversation with all its messages."""
@@ -481,7 +486,7 @@ async def get_conversation(
 @router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_conversation(
     conversation_id: UUID,
-    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    current_user: Annotated[CurrentUser, Depends(require_permissions("ai.chat"))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
     """Delete a conversation and all its messages."""

@@ -611,8 +611,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 # Global Exception Handler
 # ===========================================
 
+from asyncpg import exceptions as asyncpg_exc
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
+from sqlalchemy.exc import DataError as SADataError
+from sqlalchemy.exc import DBAPIError
 
 from app.adapters.exceptions import (
     AdapterAuthenticationError,
@@ -907,6 +910,77 @@ def setup_exception_handlers(app: FastAPI) -> None:
                     "code": 422,
                     "message": "Validation error",
                     "details": errors,
+                    "request_id": request_id,
+                }
+            },
+        )
+
+    # ── Driver-level DB errors ────────────────────────────────────────
+
+    def _is_client_value_error(exc: DBAPIError) -> bool:
+        """True when the database rejected a *value*, not the server's state.
+
+        ``sqlalchemy.exc.DataError`` is what you get from drivers that classify
+        SQLSTATE 22xxx themselves. asyncpg never gets that far for an
+        out-of-range bind: it raises ``asyncpg.exceptions.DataError`` while
+        *encoding* the parameter, before the statement is sent, so the dialect
+        wraps it in the generic ``AsyncAdapt_asyncpg_dbapi.Error`` and
+        SQLAlchemy classifies it as a bare ``DBAPIError``. Matching on
+        ``sqlalchemy.exc.DataError`` alone would therefore never fire against
+        this stack -- the original class survives only on ``orig.__cause__``.
+        """
+        if isinstance(exc, SADataError):
+            return True
+        cause = getattr(exc.orig, "__cause__", None)
+        return isinstance(cause, asyncpg_exc.DataError)
+
+    @app.exception_handler(DBAPIError)
+    async def dbapi_error_handler(request: Request, exc: DBAPIError) -> JSONResponse:
+        """Bad client value → 400; anything else the driver raises → 500.
+
+        No list endpoint bounds its ``page``/``offset``/``skip`` query param
+        (156 of them at last count), so ``(page - 1) * per_page`` above 2**63-1
+        reached asyncpg as ``OFFSET $n::BIGINT`` and fell through to the
+        generic 500 handler -- including on ``/api/v1/marketplace/plugins``,
+        which takes no auth dependency. Bounding the parameter is the real fix
+        and is being done route by route; this is the shared floor so the whole
+        class answers 4xx instead of 500 in the meantime.
+        """
+        request_id = getattr(request.state, "request_id", None)
+
+        if not _is_client_value_error(exc):
+            # Connection loss, deadlock, constraint violation: a genuine fault.
+            # Same body and same full-traceback log as before this handler
+            # existed, so nothing regresses for those.
+            logger.exception(f"Unhandled exception: {exc}", extra={"request_id": request_id})
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={
+                    "error": {
+                        "code": 500,
+                        "message": "Internal server error",
+                        "request_id": request_id,
+                    }
+                },
+            )
+
+        # One compact line, deliberately without the statement or a traceback:
+        # the 500 path logged the entire SELECT plus an asyncpg stack on every
+        # hit, which made an unauthenticated ``?page=<24 digits>`` a cheap
+        # log-amplification vector on a public route.
+        logger.warning(
+            "Rejected out-of-range or malformed value on %s: %s",
+            request.url.path,
+            type(getattr(exc.orig, "__cause__", None) or exc.orig).__name__,
+            extra={"request_id": request_id},
+        )
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "error": {
+                    "code": 400,
+                    "type": "invalid_value",
+                    "message": "A supplied value is out of range or invalid for this request.",
                     "request_id": request_id,
                 }
             },

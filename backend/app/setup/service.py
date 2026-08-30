@@ -64,6 +64,32 @@ logger = logging.getLogger(__name__)
 _SETUP_BOOTSTRAP_LOCK_KEY = 0x53455455
 
 
+#: Services that are Celery broker consumers rather than network servers. They
+#: are never dialled, so a DNS or TCP probe says nothing about their health --
+#: and returns a false negative whenever they share another container's network
+#: namespace, which the VPN overlay makes them do.
+_BROKER_CONSUMERS = frozenset({"worker", "worker-io"})
+
+
+async def _a_worker_is_consuming(timeout: float = 2.0) -> bool:
+    """True when at least one Celery worker answers a broker ping.
+
+    Blocking call, so it runs off the event loop. Any failure -- broker down,
+    no worker, an import problem -- is reported as not-consuming rather than
+    raised: this powers a setup-wizard status row, not a control path.
+    """
+    try:
+        import asyncio
+
+        from app.core.celery_app import celery_app
+
+        replies = await asyncio.to_thread(celery_app.control.ping, timeout=timeout)
+        return bool(replies)
+    except Exception:  # noqa: BLE001 - a status row must never break setup
+        logger.debug("Celery ping probe failed", exc_info=True)
+        return False
+
+
 class SetupService:
     """
     Setup wizard service — stateless, ORM-based.
@@ -1181,7 +1207,27 @@ class SetupService:
                     except (TimeoutError, OSError):
                         continue
                 else:
-                    # No exposed port — fall back to a DNS-resolution check.
+                    # No exposed port. A Celery worker is a BROKER CONSUMER: it
+                    # dials out to Redis and nothing ever dials it, so its
+                    # container name is not a liveness signal at all. Worse, it
+                    # is a false NEGATIVE under the VPN overlay -- a container
+                    # sharing another's network namespace has no endpoint of its
+                    # own, so Docker's embedded DNS never registers the name and
+                    # getaddrinfo fails for a perfectly healthy worker. That was
+                    # already true of `api` under that overlay, and putting the
+                    # workers in the sidecar namespace would have extended the
+                    # false alarm to them.
+                    #
+                    # Ask the broker instead: control.ping() answers the question
+                    # an operator is actually asking -- is a worker consuming?
+                    if cand_host in _BROKER_CONSUMERS:
+                        if await _a_worker_is_consuming():
+                            reachable = True
+                            host, port = cand_host, cand_port
+                            break
+                        continue
+
+                    # Anything else port-less: DNS is the only probe available.
                     try:
                         socket.getaddrinfo(cand_host, None)
                         reachable = True

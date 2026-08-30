@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import {
   Dialog,
@@ -104,6 +105,7 @@ export default function BulkOperationsPage() {
     stages: '[\n  { "percent": 10, "wait_minutes": 15 },\n  { "percent": 50, "wait_minutes": 30 },\n  { "percent": 100, "wait_minutes": 0 }\n]',
     failure_threshold: 5,
     rollback_on_failure: true,
+    confirm_firmware: false,
   });
 
   // Bulk operations are organization-scoped (the backend has no site
@@ -132,6 +134,10 @@ export default function BulkOperationsPage() {
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['enterprise', 'bulk-operations'] });
       setShowCreate(false);
+      // Never carry a firmware confirmation into the next job. The dialog
+      // closes but the form state survives, so without this the next bulk op
+      // opens with the fleet-flash box already ticked.
+      setForm(p => ({ ...p, confirm_firmware: false }));
       toast({
         title: t('BulkOperationsPage.toasts.queued.title'),
         description: t('BulkOperationsPage.toasts.queued.description', {
@@ -181,6 +187,9 @@ export default function BulkOperationsPage() {
 
     createMutation.mutate({
       operation: form.operation,
+      // the backend requires explicit confirmation for an
+      // irreversible fleet flash. Sent only for the operation that needs it.
+      confirm: form.operation === 'firmware_update' ? form.confirm_firmware : undefined,
       target: {
         scope: form.scope,
         scope_id: form.scope_id || undefined,
@@ -386,7 +395,7 @@ export default function BulkOperationsPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>{t('BulkOperationsPage.createDialog.operationType')}</Label>
-                <Select value={form.operation} onValueChange={v => setForm(p => ({ ...p, operation: v }))}>
+                <Select value={form.operation} onValueChange={v => setForm(p => ({ ...p, operation: v, confirm_firmware: false }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="push_config">{t('BulkOperationsPage.operations.pushConfig')}</SelectItem>
@@ -446,6 +455,20 @@ export default function BulkOperationsPage() {
                   spellCheck={false}
                 />
                 <p className="text-xs text-muted-foreground">{t('BulkOperationsPage.createDialog.deviceIdsHint')}</p>
+              </div>
+            )}
+
+            {form.operation === 'firmware_update' && (
+              <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+                <Checkbox
+                  id="confirm-firmware"
+                  checked={form.confirm_firmware}
+                  onCheckedChange={v => setForm(p => ({ ...p, confirm_firmware: v === true }))}
+                  className="mt-0.5"
+                />
+                <Label htmlFor="confirm-firmware" className="text-sm font-normal leading-snug cursor-pointer">
+                  {t('BulkOperationsPage.createDialog.confirmFirmware')}
+                </Label>
               </div>
             )}
 

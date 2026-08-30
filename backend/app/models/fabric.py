@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,7 +26,15 @@ class Connection(Base, UUIDMixin, AuditMixin):
     """An operator-authored Fabric wire."""
 
     __tablename__ = "connections"
-    __table_args__ = ({"schema": "fabric"},)
+    # The composite is declared here, not only in migration 005, because a FRESH
+    # install never runs that migration -- scripts/migrate.py detects an empty
+    # database and takes the create_all + stamp path. Names match 005 exactly so
+    # the two bring-up paths converge on one schema (tests/deploy/
+    # test_fresh_and_migrated_schemas_match.py).
+    __table_args__ = (
+        Index("ix_fabric_conn_org_enabled", "organization_id", "enabled"),
+        {"schema": "fabric"},
+    )
 
     organization_id: Mapped[UUID] = mapped_column(
         ForeignKey("core.organizations.id", ondelete="CASCADE"), nullable=False, index=True
@@ -53,7 +61,11 @@ class ConnectionRun(Base, UUIDMixin, TimestampMixin):
     """Audit record of a single Connection firing."""
 
     __tablename__ = "connection_runs"
-    __table_args__ = ({"schema": "fabric"},)
+    # Run history is read org-scoped and newest-first; see the note on Connection.
+    __table_args__ = (
+        Index("ix_fabric_run_org_time", "organization_id", "created_at"),
+        {"schema": "fabric"},
+    )
 
     connection_id: Mapped[UUID] = mapped_column(
         ForeignKey("fabric.connections.id", ondelete="CASCADE"), nullable=False, index=True

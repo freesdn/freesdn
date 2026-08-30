@@ -16,14 +16,26 @@ import type {
   PendingChangeResponse,
 } from './gatewayCommon';
 
+/**
+ * Feature codes the staging applier actually routes.
+ *
+ * These MUST match the `_APPLY` keys in
+ * `app/services/adapter_omada_switch_advanced.py` verbatim. A code that
+ * is not a key stages fine (the endpoint only checks the `switch.`
+ * prefix) and then raises 400 `no applier for ...` at apply time, i.e.
+ * it fails only after an operator has queued and confirmed the change.
+ * Three codes were wrong: `switch.mirror`, `switch.port.jumbo` and
+ * `switch.voice_vlan` are `switch.mirror_session`,
+ * `switch.per_port_jumbo` and `switch.voice_vlan_per_switch` server-side.
+ */
 export type SwitchAdvancedFeature =
   | 'switch.sflow'
-  | 'switch.mirror'
+  | 'switch.mirror_session'
   | 'switch.lldp_med'
   | 'switch.qinq'
-  | 'switch.port.jumbo'
+  | 'switch.per_port_jumbo'
   | 'switch.poe_budget'
-  | 'switch.voice_vlan'
+  | 'switch.voice_vlan_per_switch'
   | 'switch.mstp';
 
 export type PerSwitchConfig =
@@ -57,13 +69,25 @@ export const gatewaySwitchAdvancedApi = {
       `${prefix(controllerId, siteId)}/switches/${switchMac}/mirror-sessions`,
     ),
 
+  /**
+   * Per-port jumbo-frame override.
+   *
+   * The route is `.../switches/{mac}/ports/{port_id}/jumbo-frame`. This
+   * used to build `.../switches/{mac}/per-port-jumbo`, a path the backend
+   * has never served, and it omitted `portId` entirely, so the first
+   * caller to wire it up would have got a 404 in production. The repo's
+   * `scripts/check_api_contract.py` could not catch it: its call regex
+   * only matches path literals that start with `/`, and every function
+   * here opens with the `${prefix(...)}` template hole.
+   */
   getPerPortJumbo: (
     controllerId: string,
     siteId: string,
     switchMac: string,
+    portId: number,
   ) =>
     api.get(
-      `${prefix(controllerId, siteId)}/switches/${switchMac}/per-port-jumbo`,
+      `${prefix(controllerId, siteId)}/switches/${switchMac}/ports/${portId}/jumbo-frame`,
     ),
 
   stage: (

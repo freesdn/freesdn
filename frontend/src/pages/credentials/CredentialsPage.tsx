@@ -67,7 +67,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { credentialsApi, getApiErrorMessage, type Credential, type CreateCredentialRequest } from '@/lib/api';
-import { useNotificationsStore } from '@/stores';
+import { useToast } from '@/hooks/use-toast';
 
 // Mirrors backend CredentialType (app/models/core.py): every value the API
 // can return must have a label + render branch here, otherwise the edit
@@ -239,7 +239,7 @@ function toApiPayload(values: CredentialFormValues, mode: 'create' | 'edit'): Pa
 export default function CredentialsPage() {
   const { t } = useTranslation('credentials');
   const queryClient = useQueryClient();
-  const { addNotification } = useNotificationsStore();
+  const { toast } = useToast();
   const TYPE_LABELS = buildTypeLabels(t);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -280,10 +280,10 @@ export default function CredentialsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['credentials'] });
       setCreateDialogOpen(false);
-      addNotification({ type: 'success', title: t('CredentialsPage.notifications.created.title'), message: t('CredentialsPage.notifications.created.message') });
+      toast({ title: t('CredentialsPage.notifications.created.title'), description: t('CredentialsPage.notifications.created.message') });
     },
     onError: () => {
-      addNotification({ type: 'error', title: t('CredentialsPage.notifications.error.title'), message: t('CredentialsPage.notifications.createError') });
+      toast({ title: t('CredentialsPage.notifications.error.title'), description: t('CredentialsPage.notifications.createError'), variant: 'destructive' });
     },
   });
 
@@ -296,10 +296,10 @@ export default function CredentialsPage() {
       queryClient.invalidateQueries({ queryKey: ['credentials'] });
       setEditDialogOpen(false);
       setSelectedCredential(null);
-      addNotification({ type: 'success', title: t('CredentialsPage.notifications.updated.title'), message: t('CredentialsPage.notifications.updated.message') });
+      toast({ title: t('CredentialsPage.notifications.updated.title'), description: t('CredentialsPage.notifications.updated.message') });
     },
     onError: () => {
-      addNotification({ type: 'error', title: t('CredentialsPage.notifications.error.title'), message: t('CredentialsPage.notifications.updateError') });
+      toast({ title: t('CredentialsPage.notifications.error.title'), description: t('CredentialsPage.notifications.updateError'), variant: 'destructive' });
     },
   });
 
@@ -311,10 +311,10 @@ export default function CredentialsPage() {
       queryClient.invalidateQueries({ queryKey: ['credentials'] });
       setDeleteDialogOpen(false);
       setSelectedCredential(null);
-      addNotification({ type: 'success', title: t('CredentialsPage.notifications.deleted.title'), message: t('CredentialsPage.notifications.deleted.message') });
+      toast({ title: t('CredentialsPage.notifications.deleted.title'), description: t('CredentialsPage.notifications.deleted.message') });
     },
     onError: () => {
-      addNotification({ type: 'error', title: t('CredentialsPage.notifications.error.title'), message: t('CredentialsPage.notifications.deleteError') });
+      toast({ title: t('CredentialsPage.notifications.error.title'), description: t('CredentialsPage.notifications.deleteError'), variant: 'destructive' });
     },
   });
 
@@ -325,18 +325,18 @@ export default function CredentialsPage() {
     },
     onSuccess: (data) => {
       if (data.success) {
-        addNotification({ type: 'success', title: t('CredentialsPage.notifications.testSuccess.title'), message: t('CredentialsPage.notifications.testSuccess.message') });
+        toast({ title: t('CredentialsPage.notifications.testSuccess.title'), description: t('CredentialsPage.notifications.testSuccess.message') });
       } else {
         // Backend returns the diagnostic under `message` (CredentialTestResponse).
-        addNotification({ type: 'error', title: t('CredentialsPage.notifications.testFailed.title'), message: data.message || t('CredentialsPage.notifications.testFailed.message') });
+        toast({ title: t('CredentialsPage.notifications.testFailed.title'), description: data.message || t('CredentialsPage.notifications.testFailed.message'), variant: 'destructive' });
       }
       setTestDialogOpen(false);
     },
     onError: (err) => {
-      addNotification({
-        type: 'error',
+      toast({
         title: t('CredentialsPage.notifications.testFailed.title'),
-        message: getApiErrorMessage(err, t('CredentialsPage.notifications.testFailed.message')),
+        description: getApiErrorMessage(err, t('CredentialsPage.notifications.testFailed.message')),
+        variant: 'destructive',
       });
       setTestDialogOpen(false);
     },
@@ -403,12 +403,12 @@ export default function CredentialsPage() {
     queryClient.invalidateQueries({ queryKey: ['credentials'] });
     setBulkDeleteOpen(false);
     setSelectedRows([]);
-    addNotification({
-      type: failed === 0 ? 'success' : 'error',
+    toast({
       title: failed === 0
         ? t('CredentialsPage.notifications.deleted.title')
         : t('CredentialsPage.notifications.error.title'),
-      message: `${t('CredentialsPage.actions.delete')}: ${ok} / ${results.length}`,
+      description: `${t('CredentialsPage.actions.delete')}: ${ok} / ${results.length}`,
+      variant: failed === 0 ? 'default' : 'destructive',
     });
   };
 

@@ -52,7 +52,21 @@ class AdapterPendingChange(Base, UUIDMixin, AuditMixin):
         ``applying``   — apply in-flight (atomic FOR UPDATE claim)
         ``applied``    — successfully pushed to the controller
         ``discarded``  — operator chose not to apply
-        ``failed``     — apply attempted but the controller rejected
+        ``failed``     — apply attempted and the controller REJECTED it
+        ``reconciliation_required``
+                       — the apply left ``applying`` without reaching a terminal
+                         state and the outcome on the controller is UNKNOWN
+
+    ``failed`` is a positive assertion that the device did not change. Do not
+    use it for "we lost track". ``apply_change`` commits ``applying`` before
+    invoking the remote applier, so if the worker dies between the device write
+    and the terminal commit, no ``except`` block runs and the row is stranded —
+    the write may well have succeeded. Those rows become
+    ``reconciliation_required`` (see
+    ``AdapterStagingService._recover_stale_applying``) so an operator is told to
+    verify the device rather than being invited to re-run a non-idempotent
+    create/delete/reboot. It is refused by the apply guard and by unforced
+    discard; ``discard(force=True)`` resolves it after manual verification.
     """
 
     __tablename__ = "adapter_pending_changes"
@@ -114,8 +128,14 @@ class AdapterPendingChange(Base, UUIDMixin, AuditMixin):
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
     # ── Lifecycle ───────────────────────────────────────────────────────
+    # 32, not 16: ``reconciliation_required`` is 23 characters. At String(16)
+    # every attempt to record it raised "value too long for type character
+    # varying(16)" on PostgreSQL, so the recovery paths could not persist and the
+    # row stayed ``applying`` forever -- the state machine was widened without
+    # widening its storage. Migration 007 widens deployed databases; this line
+    # covers a fresh create_all. Leave headroom for future states.
     status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="pending", server_default="pending"
+        String(32), nullable=False, default="pending", server_default="pending"
     )
     applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     applied_response: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

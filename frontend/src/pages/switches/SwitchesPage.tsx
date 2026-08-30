@@ -83,6 +83,7 @@ import type {
 import { StatsGrid } from '@/components/ui/stats-grid';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useDeviceCapabilities, useToast } from '@/hooks';
+import { escapeCell } from '@/lib/csv';
 import { SwitchClientsTab } from './tabs/SwitchClientsTab';
 import { ProfilesTab } from './tabs/ProfilesTab';
 import { LagsTab } from './tabs/LagsTab';
@@ -916,10 +917,10 @@ export default function SwitchesPage() {
       'site_name', 'status', 'total_ports', 'ports_up', 'ports_down',
       'poe_used', 'poe_budget', 'firmware_version', 'connected_clients',
     ];
-    const escape = (v: unknown) => {
-      const s = v == null ? '' : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const escape = (v: unknown) => escapeCell(v);
     const header = columns.join(',');
     const rows = switches.map((sw) => columns.map((c) => escape((sw as SwitchDevice)[c])).join(','));
     const csv = [header, ...rows].join('\n');

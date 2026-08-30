@@ -35,6 +35,48 @@ SUBSCRIPTION_PERMISSIONS: dict[str, str | None] = {
     # already gates reading these logs over REST, so this grants nobody
     # anything they could not already read.
     "collector.": "collector.logs.read",
+    # Same defect as ``collector.`` above, five more families deep. Each of
+    # these event types is published org-scoped by the backend and routed by
+    # the frontend's handleMessage, but none had an entry here, so every
+    # ``subscribe`` request for them fell through to the default-deny at the
+    # bottom of ``user_can_subscribe`` and the server answered
+    # ``subscription_denied``. The only principal who could ever receive them
+    # was a super_admin on the ``"*"`` firehose. Each maps to the permission
+    # that already gates the SAME data over REST, so this grants nobody
+    # anything they could not already fetch.
+    #
+    # Checked one family at a time that the PUBLISHER sets
+    # ``Event.organization_id``: ``ConnectionManager._should_receive`` drops
+    # any event without one (websocket.py:468), so a mapping on a family whose
+    # publisher leaves it None would be inert.
+    #   gateway.distribution.*  -> distribution_service.py:560   org set
+    #   fabric.connection.changed -> fabric.py:300               org set
+    #   backup.validation.failed -> tasks/backup.py:511          org set
+    #   overlay.*               -> overlay_monitor.py:70,
+    #                              overlay_discovery.py:205      org set
+    #   omada.event.*           -> omada_monitor.py:95           org set
+    "gateway.": "gateway.view",  # brain/limb sync + VLAN distribution lifecycle
+    "fabric.": "event:read",  # /fabric reads take no permission beyond auth
+    "backup.": "backup.view",  # scheduled restore-validation failures
+    "overlay.": "vpn:read",  # overlay mesh peers/status — same gate as vpn.
+    "omada.": "controller:read",  # controller reach transitions — as controller.
+    # ``network.`` is the one family in that group that is NOT deliverable yet,
+    # and the blocker is not here: modules/network/service.py builds its events
+    # through ``_emit()`` and none of its six call sites (lines 311/335/352/
+    # 473/497/514) pass ``organization_id``, so ``_network_event`` leaves
+    # ``Event.organization_id`` None and ``_should_receive`` drops it before
+    # any subscription is consulted. The mapping is correct and belongs here
+    # regardless -- without it, fixing those six emits would still deliver
+    # nothing and the next reader would look in the wrong file. Mirrors the
+    # REST gate: the whole network module is behind ``device:read``
+    # (modules/network/api.py:455).
+    "network.": "device:read",
+    # NOT mapped, deliberately: ``notification.``. Its events carry the whole
+    # in-app notification plus the target ``user_id`` (services/notification.py:
+    # 2356) and ``_should_receive`` enforces per-user targeting ONLY for
+    # site-limited connections (websocket.py:480-492). Permitting the prefix
+    # would hand every non-site-limited member of an org every other member's
+    # notifications. It needs a user_id check in ``_should_receive`` first.
     "audit.": "audit:read",  # restricted
     "security.": "audit:read",  # restricted
     "settings.": "settings:read",  # restricted

@@ -48,12 +48,15 @@ async def _on_network_vlan_created(event: Any) -> None:
 
     If the site has a brain assigned, auto-create a **MONITORED**
     canonical VLAN so it appears in the gateway dashboard.  The user
-    must explicitly switch it to MANAGED to trigger distribution.
+    must explicitly switch it to MANAGED to trigger distribution
+    (``drift_service`` only ever selects MANAGED rows, so a MONITORED
+    row carries no write authority).
     """
     payload = getattr(event, "payload", {})
     site_id = payload.get("site_id")
     vlan_id = payload.get("vlan_id")
     org_id = payload.get("organization_id")
+    vlan_uuid = payload.get("vlan_uuid")
 
     logger.info(
         "gateway: received network.vlan.created  vlan_id=%s site=%s",
@@ -61,13 +64,12 @@ async def _on_network_vlan_created(event: Any) -> None:
         site_id,
     )
 
-    if not all([site_id, vlan_id, org_id]):
+    if not site_id or vlan_id is None:
         return
 
     # Validate payload types before DB operations
     try:
         site_uuid = UUID(str(site_id))
-        org_uuid = UUID(str(org_id))
         vlan_num = int(vlan_id)
     except (ValueError, TypeError) as exc:
         logger.warning("Invalid vlan.created payload: %s", exc)
@@ -104,13 +106,52 @@ async def _on_network_vlan_created(event: Any) -> None:
             if existing.scalar_one_or_none():
                 return
 
-            # Require valid subnet and gateway_ip — skip if missing
+            # The only publisher of this event -- ``VlanService.create`` in
+            # app/modules/network/service.py -- emits exactly
+            # {vlan_id, vlan_uuid, name, site_id, dhcp_enabled}. It has never
+            # sent organization_id, subnet or gateway_ip, all three of which
+            # this handler used to read straight off the payload, so the guards
+            # rejected 100% of real events. organization_id is NOT NULL on
+            # CanonicalVLAN and is a property of the site; the L3 fields live
+            # on the VLAN row the event points at. Read both from the DB rather
+            # than trusting a payload that does not carry them.
+            name = payload.get("name") or ""
             subnet = payload.get("subnet") or ""
             gateway_ip = payload.get("gateway_ip") or ""
-            if not subnet or not gateway_ip:
+            if (not subnet or not gateway_ip or not name) and vlan_uuid:
+                from app.modules.network.models import Network as NetworkVlan
+
+                try:
+                    net = await session.get(NetworkVlan, UUID(str(vlan_uuid)))
+                except (ValueError, TypeError):
+                    net = None
+                if net is not None:
+                    subnet = subnet or net.cidr or net.subnet or ""
+                    gateway_ip = gateway_ip or net.gateway or ""
+                    name = name or net.name or ""
+
+            if not org_id:
+                from app.models.core import Site
+
+                site_row = await session.get(Site, site_uuid)
+                org_id = str(site_row.organization_id) if site_row is not None else ""
+            try:
+                org_uuid = UUID(str(org_id))
+            except (ValueError, TypeError):
+                logger.warning(
+                    "Cannot resolve organization for site %s -- no canonical VLAN created",
+                    site_uuid,
+                )
+                return
+
+            # Require valid subnet and gateway_ip — skip if missing.
+            # CanonicalVLAN.subnet is String(18) (an IPv4 CIDR at most) and
+            # gateway_ip is String(45); an over-long value raises DataError
+            # inside the except below, which would lose the whole event.
+            if not subnet or not gateway_ip or len(subnet) > 18 or len(gateway_ip) > 45:
                 logger.info(
                     "Skipping auto-create of canonical VLAN %s for site %s — "
-                    "missing subnet or gateway_ip",
+                    "missing or unusable subnet/gateway_ip",
                     vlan_num,
                     site_uuid,
                 )
@@ -125,7 +166,7 @@ async def _on_network_vlan_created(event: Any) -> None:
                 organization_id=org_uuid,
                 site_id=site_uuid,
                 vlan_id=vlan_num,
-                name=payload.get("name", f"VLAN {vlan_num}"),
+                name=(name or f"VLAN {vlan_num}")[:64],
                 subnet=subnet,
                 gateway_ip=gateway_ip,
                 management_state=ManagementState.MONITORED,
@@ -281,7 +322,20 @@ async def _on_device_status_changed(event: Any) -> None:
     """
     payload = getattr(event, "payload", {})
     device_id = payload.get("device_id")
-    status = payload.get("status")
+    # ``publish_device_event`` (app/core/events.py:819) builds the payload as
+    # {"device_id", "site_id", **kwargs}, and every publisher of this event
+    # type -- app/tasks/sync.py:123/152/316/444, the only four in the tree --
+    # passes the transition as ``data={"name", "old_status", "new_status"}``.
+    # This handler read a flat payload["status"] that no publisher has ever
+    # set, so the guard below rejected every event and the brain-offline
+    # alert could not fire even once the handler was subscribed. ``new_status``
+    # is a DeviceStatus StrEnum locally and a plain string after a Redis
+    # round-trip, hence the str()/lower() normalisation.
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        data = {}
+    raw_status = data.get("new_status", payload.get("status"))
+    status = str(raw_status).lower() if raw_status is not None else None
 
     logger.info(
         "gateway: received device.status.changed  device=%s status=%s",

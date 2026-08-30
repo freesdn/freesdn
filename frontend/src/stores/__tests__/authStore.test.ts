@@ -48,7 +48,6 @@ function resetStore() {
     error: null,
     mfaPending: false,
     mfaToken: null,
-    forcePasswordChange: false,
   });
   // Clear any persisted slice from localStorage.
   try {
@@ -67,14 +66,14 @@ describe('useAuthStore.login', () => {
 
   it('sets the user and isAuthenticated=true on a successful login', async () => {
     const user = makeUser({ email: 'alice@example.com' });
-    mockedPost.mockResolvedValueOnce({ data: { user, force_password_change: false } });
+    mockedPost.mockResolvedValueOnce({ data: { user } });
 
     const result = await useAuthStore.getState().login({
       login: 'alice@example.com',
       password: 'hunter2',
     });
 
-    expect(result).toEqual({ success: true, forcePasswordChange: false });
+    expect(result).toEqual({ success: true });
     const state = useAuthStore.getState();
     expect(state.isAuthenticated).toBe(true);
     expect(state.user?.email).toBe('alice@example.com');
@@ -116,7 +115,7 @@ describe('useAuthStore.login', () => {
   });
 
   it('fetches /auth/me when login response omits the user object', async () => {
-    mockedPost.mockResolvedValueOnce({ data: { force_password_change: false } });
+    mockedPost.mockResolvedValueOnce({ data: {} });
     const fetchedUser = makeUser({ email: 'fetched@example.com' });
     mockedGet.mockResolvedValueOnce({ data: fetchedUser });
 

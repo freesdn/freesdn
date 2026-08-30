@@ -12,11 +12,89 @@
 #   COMPOSE_PROFILES=vpn \
 #   docker compose --env-file .env.<tier> -f docker-compose.yml -f docker-compose.vpn.yml up -d
 #
-# `install.sh --vpn` wires both for you.
+# There is NO `install.sh --vpn`: install.sh's flag parser rejects any flag it
+# does not know (`*) err "unknown flag: $1"`), and it never appends this file.
+# Enabling the sidecar is the two-part manual command above -- BOTH parts, every
+# time. `-f docker-compose.vpn.yml` without COMPOSE_PROFILES=vpn leaves the `vpn`
+# service unstarted while api/worker/worker-io ask to join its namespace, and
+# COMPOSE_PROFILES=vpn without this file starts a sidecar nothing routes through.
 #
 # NOTE: the nginx escape-hatch edge (profile: nginx) hardcodes api:8000 and does
 # NOT read API_UPSTREAM, so the nginx edge + VPN sidecar combo needs the api on
 # the bridge or a manual nginx.conf change — use the default Caddy edge with VPN.
+#
+# ── Why the Celery workers are in here too ───────────────────────────────────
+# This overlay used to move ONLY `api`. That was wrong, and silently so.
+# Almost nothing that talks to a remote site runs in the api process:
+#
+#   * Every VPN task is beat-scheduled onto the `sync` queue
+#     (app/core/celery_app.py: task_routes "vpn.*" -> sync, plus explicit
+#     options={"queue": "sync"} on vpn-sync-connections / vpn-check-health /
+#     vpn-auto-reconnect / vpn-check-tunnel-health).
+#   * `sync` is consumed by `worker` in lite (WORKER_QUEUES=default,priority,
+#     discovery,sync,metrics) and by `worker-io` in pro/max
+#     (WORKER_IO_QUEUES=discovery,sync,metrics).
+#
+# So with only `api` in the sidecar namespace:
+#   - NETBIRD_DAEMON_ADDR=tcp://127.0.0.1:41731 resolved to the WORKER's own
+#     loopback, where no daemon listens;
+#   - /var/run/tailscale/tailscaled.sock and the OpenVPN/WireGuard runtime state
+#     were not mounted in the worker at all;
+#   - FREESDN_OPENVPN_SIDECAR / FREESDN_WIREGUARD_SIDECAR were unset there, so
+#     OpenVPNService/WireGuardService took their non-sidecar code path
+#     (they read os.environ directly: vpn_integration.py:1113 and :1585);
+#   - and routes installed inside the sidecar were invisible to every adapter,
+#     discovery, metrics and gateway task — all of which target remote-site
+#     addresses through those same tunnels.
+#
+# VPNManagerService.get_all_connections() logs-and-continues per provider, so
+# the result was a task that reported {"synced": 0, "errors": 0}: false success.
+#
+# We take option (a) — put the queue consumers in the sidecar namespace —
+# rather than option (b), a dedicated VPN-only worker on its own queue.
+# (b) only works if the set of tasks that need the tunnels can be enumerated,
+# and it cannot: `sync` also carries sync.check_controller_health,
+# app.tasks.sync.* and gateway.*, `discovery` carries the remote-subnet scans,
+# and `metrics`/`cameras.*` poll device IPs — every one of them reaches a
+# remote-site address through app/services/adapter_factory.get_adapter. Routing
+# "the VPN work" to a private queue would therefore have to route discovery,
+# sync and metrics there as well, i.e. reinvent `worker-io`; and in lite a single
+# `worker` consumes all five queues, so there is nothing to split off.
+#
+# NOT moved: `scheduler` (celery beat only enqueues, it never executes a task
+# body) and `collector` (a UDP listener that publishes host ports; moving it
+# would move those ports onto the vpn container).
+#
+# Consequence worth knowing: a container in another container's netns gets no
+# DNS name of its own, so `worker` (like `api` already) stops resolving on the
+# compose network while this overlay is active. Nothing routes to the workers —
+# they are broker consumers — but the setup wizard's cosmetic reachability probe
+# (app/setup/service.py:1158) resolves the names `api` and `worker`, and will
+# report both as unreachable under this overlay.
+#
+# tests/deploy/test_vpn_topology.py renders every tier with `docker compose
+# config` and fails if ANY service consuming a VPN-carrying queue is left outside
+# the namespace. It derives that queue set from the import graph + Celery's own
+# router rather than hardcoding "sync", which is what makes it notice
+# overlay.poll_health on `metrics`/`default`.
+
+# The VPN control channel between the app processes and the privileged sidecar:
+# the sidecar owns the daemons, the api and the Celery workers drive them over
+# these shared volumes plus the shared loopback. Anchored so the worker set
+# cannot drift away from the api set — that drift is the bug above.
+x-vpn-control-volumes: &vpn-control-volumes
+  - tailscale_run:/var/run/tailscale
+  - openvpn_config:/etc/openvpn
+  - vpn_run:/run/openvpn-client
+  - wireguard_config:/etc/wireguard
+  - wireguard_run:/run/wireguard
+
+x-vpn-sidecar-env: &vpn-sidecar-env
+  VPN_MODE: sidecar
+  # legacy flags the current code path still reads; resolved_vpn_mode also
+  # reconciles these. Kept until vpn_integration reads VPN_MODE directly.
+  FREESDN_OPENVPN_SIDECAR: "true"
+  FREESDN_WIREGUARD_SIDECAR: "true"
 
 services:
   api:
@@ -27,19 +105,35 @@ services:
       # merges with the base postgres/logdb/redis deps
       vpn:
         condition: service_healthy
-    environment:
-      VPN_MODE: sidecar
-      # legacy flags the current code path still reads; resolved_vpn_mode also
-      # reconciles these. Kept until vpn_integration reads VPN_MODE directly.
-      FREESDN_OPENVPN_SIDECAR: "true"
-      FREESDN_WIREGUARD_SIDECAR: "true"
-    volumes:
-      # the api↔sidecar control channel (appended to the base api volumes)
-      - tailscale_run:/var/run/tailscale
-      - openvpn_config:/etc/openvpn
-      - vpn_run:/run/openvpn-client
-      - wireguard_config:/etc/wireguard
-      - wireguard_run:/run/wireguard
+    environment: *vpn-sidecar-env
+    # the api↔sidecar control channel (appended to the base api volumes)
+    volumes: *vpn-control-volumes
+
+  # Runs VPN tasks in EVERY tier, not just lite. In lite WORKER_QUEUES is all
+  # five queues, so it is the only consumer there; in pro/max it still owns
+  # `default`, which carries vpn.purge_old_* , vpn.scan_vpn_certificates and a
+  # manually dispatched overlay.poll_health. Moving only `worker-io` would have
+  # left those stranded.
+  worker:
+    network_mode: "service:vpn"
+    depends_on:
+      # merges with the base postgres/logdb/redis/api deps
+      vpn:
+        condition: service_healthy
+    environment: *vpn-sidecar-env
+    volumes: *vpn-control-volumes
+
+  # The pro/max I/O lane: WORKER_IO_QUEUES=discovery,sync,metrics, i.e. the four
+  # beat-scheduled vpn.* health/reconnect tasks plus overlay.poll_health, plus
+  # every adapter/discovery/metrics call that targets a remote-site address.
+  # Guarded by the io-worker profile in the base, so this block is inert in lite.
+  worker-io:
+    network_mode: "service:vpn"
+    depends_on:
+      vpn:
+        condition: service_healthy
+    environment: *vpn-sidecar-env
+    volumes: *vpn-control-volumes
 
   edge:
     environment:

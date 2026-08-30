@@ -42,7 +42,7 @@ export function ProtectedRoute({
 }: ProtectedRouteProps) {
   const location = useLocation();
   const { t } = useTranslation('common');
-  const { isAuthenticated, isLoading, _isHydrated, _isAuthInitialized, hasAnyPermission, hasAllPermissions, forcePasswordChange } = useAuthStore();
+  const { isAuthenticated, isLoading, _isHydrated, _isAuthInitialized, hasAnyPermission, hasAllPermissions } = useAuthStore();
 
   // Wait for zustand hydration AND initAuth verification before making auth decisions.
   // This prevents the flash of dashboard → /login redirect when tokens are stale.
@@ -60,11 +60,6 @@ export function ProtectedRoute({
   // Redirect to login if not authenticated
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-  
-  // Redirect to password change if required
-  if (forcePasswordChange) {
-    return <Navigate to="/change-password" state={{ from: location }} replace />;
   }
   
   // Check permissions if required

@@ -132,6 +132,18 @@ async def _load_merged_config(db: Any) -> SimpleNamespace | None:
             merged.snmp_enabled = True
             merged.snmp_port = c.snmp_port
             merged.snmp_community = c.snmp_community
+        elif c.snmp_enabled and c.snmp_community != merged.snmp_community:
+            # One process, one UDP socket, one community. That was harmless
+            # while the community was inert; now that the receiver actually
+            # validates it, a second org's different community means that
+            # org's traps are dropped. Say so instead of letting it read as
+            # "the devices stopped sending".
+            logger.warning(
+                "collector.run: org %s configures a different SNMP community; the "
+                "shared listener validates against the first enabled org's value, "
+                "so traps carrying this org's community will be rejected",
+                c.organization_id,
+            )
         if c.syslog_enabled and not merged.syslog_enabled:
             merged.syslog_enabled = True
             merged.syslog_port = c.syslog_port

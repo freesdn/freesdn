@@ -60,6 +60,27 @@ _WITHHELD_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
     {("storage.snapshot", "rollback"), ("storage.dataset", "delete")}
 )
 
+
+def _canonical_feature(feature: str) -> str:
+    """Drop the optional vendor qualifier the stage endpoint also accepts.
+
+    ``validate_storage_operation`` accepts BOTH ``storage.*`` and the
+    vendor-qualified ``truenas.storage.*`` (its ``_PREFIXES``) and validates by
+    stripping ``truenas.`` before it looks ``_APPLY`` up -- but the row persists
+    carrying its ORIGINAL feature string. The applier used to look the same map
+    up with that raw string, so anything staged under the alias was accepted,
+    reviewed, approved and then failed apply with 400 "no applier", for every
+    retry, while the bare form of the identical change worked.
+
+    The apply dispatcher (``adapter_omada_vpn._service_for_feature``) and the
+    apply permission check both already route the alias, so the alias is meant
+    to work end to end; this is the one lookup that was left un-normalised.
+    ``tests/services/test_adapter_apply_signature_bind.py`` pins the endpoint's
+    ``_PREFIXES`` against this function so the two ends cannot drift again.
+    """
+    return feature.removeprefix("truenas.")
+
+
 _ZFS_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 
 
@@ -164,7 +185,7 @@ async def _apply_management(adapter: TrueNASAdapter, change: Any, payload: dict[
     function is reachable exclusively from ``build_applier``, which the
     staged-apply path calls after the dual gate has been satisfied.
     """
-    key = (change.feature, change.operation)
+    key = (_canonical_feature(change.feature), change.operation)
     if key in _WITHHELD_OPERATIONS:
         raise HTTPException(
             400,
@@ -224,7 +245,8 @@ class GatewayTrueNASStorageService(GatewayServiceBase):
             ctrl = await self._get_controller(c.controller_id, c.organization_id)
             adapter = await self._get_truenas_adapter(ctrl)
             try:
-                method_name = _APPLY.get((c.feature, c.operation))
+                feature = _canonical_feature(c.feature)
+                method_name = _APPLY.get((feature, c.operation))
                 if method_name is None:
                     raise HTTPException(
                         400,
@@ -235,7 +257,18 @@ class GatewayTrueNASStorageService(GatewayServiceBase):
                 # Management writes take a different shape from the blob
                 # upload and must not fall through to the artifact handling
                 # below, which would reject them for carrying no blob.
-                if c.feature != "storage.store_blob":
+                #
+                # Keys on the CANONICAL ``feature``, not the raw ``c.feature``.
+                # Keying on the raw string sent a blob staged under the
+                # vendor-qualified alias ``truenas.storage.store_blob`` -- which
+                # ``validate_storage_operation`` accepts at stage time and the apply
+                # dispatcher routes here -- into ``_apply_management``, where it
+                # matched none of the management keys and fell off the end with
+                # 400 "no applier", forever, for every retry. Every other feature
+                # normalises (``_canonical_feature`` above); this was the one branch
+                # that did not, so the alias worked end to end for datasets,
+                # snapshots and scrubs but was a dead end for blobs alone.
+                if feature != "storage.store_blob":
                     return await _apply_management(adapter, c, payload)
 
                 dataset_path = _validate_dataset_path(str(payload.get("dataset_path", "")))

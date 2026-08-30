@@ -12,8 +12,11 @@
  *   - Card 1: SNMP server config (enabled, trap-community, contact,
  *     location) · single edit dialog that stages
  *     ``mikrotik.security.snmp.settings``.
- *   - Sub-table 1: Trap targets (address / port / version / community) ·
- *     full CRUD via ``mikrotik.security.snmp.trap_target``.
+ *   - Sub-table 1: Trap targets · one HOST per row. RouterOS stores
+ *     ``trap-target`` as a comma-list on the ``/snmp`` singleton, so a
+ *     target has no row id and no per-target community / version / port,
+ *     those are singleton settings edited in the SNMP server card above.
+ *     Add + delete only, via ``mikrotik.security.snmp.trap_target``.
  *   - Sub-table 2: SNMPv3 users (name / auth-protocol / priv-protocol) ·
  *     full CRUD via ``mikrotik.security.snmp.v3_user``. Password fields
  *     are write-only, the table never shows a password column.
@@ -87,7 +90,6 @@ const V3_USERS_KEY = (cid: string) => ['mikrotik', cid, 'snmp-v3-users'];
 
 const AUTH_PROTOCOLS = ['MD5', 'SHA1', 'SHA256', 'SHA512'];
 const ENCRYPTION_PROTOCOLS = ['DES', 'AES', 'AES-192', 'AES-256'];
-const TRAP_VERSIONS = ['1', '2', '3'];
 
 type SettingsForm = {
   enabled: boolean;
@@ -97,11 +99,7 @@ type SettingsForm = {
 };
 
 type TrapForm = {
-  address: string;
-  port: string;
-  version: string;
-  community: string;
-  comment: string;
+  host: string;
 };
 
 type V3UserForm = {
@@ -122,11 +120,7 @@ const BLANK_SETTINGS: SettingsForm = {
 };
 
 const BLANK_TRAP: TrapForm = {
-  address: '',
-  port: '162',
-  version: '2',
-  community: '',
-  comment: '',
+  host: '',
 };
 
 const BLANK_V3_USER: V3UserForm = {
@@ -158,9 +152,6 @@ export function MikroTikSnmpTab({
   const [settingsForm, setSettingsForm] = useState<SettingsForm>(BLANK_SETTINGS);
 
   const [trapDialogOpen, setTrapDialogOpen] = useState(false);
-  const [editingTrap, setEditingTrap] = useState<MikroTikSnmpTrapTarget | null>(
-    null,
-  );
   const [trapForm, setTrapForm] = useState<TrapForm>(BLANK_TRAP);
   const [trapDeleteTarget, setTrapDeleteTarget] =
     useState<MikroTikSnmpTrapTarget | null>(null);
@@ -187,34 +178,15 @@ export function MikroTikSnmpTab({
     refetchInterval: 60_000,
   });
 
-  const traps = trapsQuery.data?.data.items ?? [];
+  // Backend returns a bare trap-target array (not an {items} envelope).
+  const traps = trapsQuery.data?.data ?? [];
   // Backend returns a bare SNMPv3-user array (not an {items} envelope).
   const v3Users = v3UsersQuery.data?.data ?? [];
 
-  // Seed the trap form whenever the dialog opens.
+  // Reset the trap form whenever the dialog opens.
   useEffect(() => {
-    if (trapDialogOpen && editingTrap) {
-      setTrapForm({
-        address: asStr(editingTrap.address) === '-' ? '' : asStr(editingTrap.address),
-        port:
-          asStr(editingTrap.port) === '-'
-            ? '162'
-            : asStr(editingTrap.port),
-        version:
-          asStr(editingTrap.version) === '-'
-            ? '2'
-            : asStr(editingTrap.version),
-        community:
-          asStr(editingTrap.community) === '-'
-            ? ''
-            : asStr(editingTrap.community),
-        comment:
-          asStr(editingTrap.comment) === '-' ? '' : asStr(editingTrap.comment),
-      });
-    } else if (trapDialogOpen && !editingTrap) {
-      setTrapForm(BLANK_TRAP);
-    }
-  }, [trapDialogOpen, editingTrap]);
+    if (trapDialogOpen) setTrapForm(BLANK_TRAP);
+  }, [trapDialogOpen]);
 
   // Seed the v3-user form whenever the dialog opens. PASSWORDS ARE
   // NEVER POPULATED ON EDIT, they're write-only and we cannot read
@@ -267,14 +239,10 @@ export function MikroTikSnmpTab({
   });
 
   const trapSaveMut = useMutation({
-    mutationFn: (vars: { id: string | null; payload: Record<string, unknown> }) =>
-      vars.id
-        ? mikrotikApi.updateSnmpTrapTarget(controllerId, vars.id, vars.payload)
-        : mikrotikApi.addSnmpTrapTarget(controllerId, vars.payload),
+    mutationFn: (host: string) => mikrotikApi.addSnmpTrapTarget(controllerId, host),
     onSuccess: () => {
       toast({ title: t('MikroTikSnmpTab.toasts.trapStaged') });
       setTrapDialogOpen(false);
-      setEditingTrap(null);
       queryClient.invalidateQueries({ queryKey: TRAPS_KEY(controllerId) });
     },
     onError: (err) =>
@@ -286,8 +254,9 @@ export function MikroTikSnmpTab({
   });
 
   const trapDeleteMut = useMutation({
-    mutationFn: (id: string) =>
-      mikrotikApi.removeSnmpTrapTarget(controllerId, id),
+    // Keyed by host: the applier removes the host from the comma-list.
+    mutationFn: (host: string) =>
+      mikrotikApi.removeSnmpTrapTarget(controllerId, host),
     onSuccess: () => {
       toast({ title: t('MikroTikSnmpTab.toasts.trapDeleteStaged') });
       setTrapDeleteTarget(null);
@@ -354,17 +323,7 @@ export function MikroTikSnmpTab({
   }
 
   function submitTrap() {
-    const payload: Record<string, unknown> = {
-      address: trapForm.address.trim(),
-      port: trapForm.port.trim(),
-      version: trapForm.version,
-    };
-    if (trapForm.community.trim()) payload.community = trapForm.community.trim();
-    if (trapForm.comment.trim()) payload.comment = trapForm.comment.trim();
-    trapSaveMut.mutate({
-      id: editingTrap?.['.id'] ?? null,
-      payload,
-    });
+    trapSaveMut.mutate(trapForm.host.trim());
   }
 
   function submitV3User() {
@@ -455,13 +414,7 @@ export function MikroTikSnmpTab({
                 {t('MikroTikSnmpTab.traps.description')}
               </CardDescription>
             </div>
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingTrap(null);
-                setTrapDialogOpen(true);
-              }}
-            >
+            <Button size="sm" onClick={() => setTrapDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-1" /> {t('MikroTikSnmpTab.actions.addTrap')}
             </Button>
           </div>
@@ -486,54 +439,25 @@ export function MikroTikSnmpTab({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{t('MikroTikSnmpTab.traps.columns.address')}</TableHead>
-                    <TableHead>{t('MikroTikSnmpTab.traps.columns.port')}</TableHead>
-                    <TableHead>{t('MikroTikSnmpTab.traps.columns.version')}</TableHead>
-                    <TableHead>{t('MikroTikSnmpTab.traps.columns.community')}</TableHead>
-                    <TableHead>{t('MikroTikSnmpTab.traps.columns.comment')}</TableHead>
+                    <TableHead>{t('MikroTikSnmpTab.traps.columns.host')}</TableHead>
                     <TableHead className="text-right">{t('MikroTikSnmpTab.traps.columns.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {traps.map((trap: MikroTikSnmpTrapTarget) => (
-                    <TableRow key={trap['.id'] ?? asStr(trap.address)}>
+                    <TableRow key={trap.host}>
                       <TableCell className="font-mono text-xs">
-                        {asStr(trap.address)}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {asStr(trap.port)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">v{asStr(trap.version)}</Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {asStr(trap.community)}
-                      </TableCell>
-                      <TableCell className="text-xs">
-                        {asStr(trap.comment)}
+                        {asStr(trap.host)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditingTrap(trap);
-                              setTrapDialogOpen(true);
-                            }}
-                          >
-                            <Pencil className="h-3 w-3 mr-1" aria-hidden="true" />
-                            {t('MikroTikSnmpTab.actions.edit')}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => setTrapDeleteTarget(trap)}
-                          >
-                            <Trash2 className="h-3 w-3 mr-1" aria-hidden="true" />
-                            {t('MikroTikSnmpTab.actions.delete')}
-                          </Button>
-                        </div>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => setTrapDeleteTarget(trap)}
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" aria-hidden="true" />
+                          {t('MikroTikSnmpTab.actions.delete')}
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -726,115 +650,45 @@ export function MikroTikSnmpTab({
         </DialogContent>
       </Dialog>
 
-      {/* Trap target dialog */}
+      {/* Trap target dialog · one host, RouterOS has no per-target row */}
       <Dialog
         open={trapDialogOpen}
         onOpenChange={(open) => {
-          if (!open) {
-            setTrapDialogOpen(false);
-            setEditingTrap(null);
-          }
+          if (!open) setTrapDialogOpen(false);
         }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {editingTrap
-                ? t('MikroTikSnmpTab.trapDialog.editTitle')
-                : t('MikroTikSnmpTab.trapDialog.addTitle')}
-            </DialogTitle>
+            <DialogTitle>{t('MikroTikSnmpTab.trapDialog.addTitle')}</DialogTitle>
             <DialogDescription>
               {t('MikroTikSnmpTab.trapDialog.description')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="mtk-trap-address">{t('MikroTikSnmpTab.trapDialog.address')}</Label>
+              <Label htmlFor="mtk-trap-host">{t('MikroTikSnmpTab.trapDialog.host')}</Label>
               <Input
-                id="mtk-trap-address"
-                value={trapForm.address}
+                id="mtk-trap-host"
+                value={trapForm.host}
                 onChange={(e) =>
-                  setTrapForm((f) => ({ ...f, address: e.target.value }))
+                  setTrapForm((f) => ({ ...f, host: e.target.value }))
                 }
                 placeholder="10.0.0.1"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="mtk-trap-port">{t('MikroTikSnmpTab.trapDialog.port')}</Label>
-                <Input
-                  id="mtk-trap-port"
-                  value={trapForm.port}
-                  onChange={(e) =>
-                    setTrapForm((f) => ({ ...f, port: e.target.value }))
-                  }
-                  placeholder="162"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="mtk-trap-version">{t('MikroTikSnmpTab.trapDialog.version')}</Label>
-                <Select
-                  value={trapForm.version}
-                  onValueChange={(v) =>
-                    setTrapForm((f) => ({ ...f, version: v }))
-                  }
-                >
-                  <SelectTrigger id="mtk-trap-version">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TRAP_VERSIONS.map((v) => (
-                      <SelectItem key={v} value={v}>
-                        v{v}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="mtk-trap-community">{t('MikroTikSnmpTab.trapDialog.community')}</Label>
-              <Input
-                id="mtk-trap-community"
-                value={trapForm.community}
-                onChange={(e) =>
-                  setTrapForm((f) => ({ ...f, community: e.target.value }))
-                }
-                placeholder="public"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="mtk-trap-comment">{t('MikroTikSnmpTab.trapDialog.comment')}</Label>
-              <Input
-                id="mtk-trap-comment"
-                value={trapForm.comment}
-                onChange={(e) =>
-                  setTrapForm((f) => ({ ...f, comment: e.target.value }))
-                }
-                placeholder={t('MikroTikSnmpTab.trapDialog.commentPlaceholder')}
-              />
-            </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setTrapDialogOpen(false);
-                setEditingTrap(null);
-              }}
-            >
+            <Button variant="outline" onClick={() => setTrapDialogOpen(false)}>
               {t('MikroTikSnmpTab.actions.cancel')}
             </Button>
             <Button
               onClick={submitTrap}
-              disabled={!trapForm.address.trim() || trapSaveMut.isPending}
+              disabled={!trapForm.host.trim() || trapSaveMut.isPending}
             >
               {trapSaveMut.isPending && (
                 <Loader2 className="h-4 w-4 animate-spin mr-1" />
               )}
-              {editingTrap
-                ? t('MikroTikSnmpTab.actions.stageUpdate')
-                : t('MikroTikSnmpTab.actions.stageCreate')}
+              {t('MikroTikSnmpTab.actions.stageCreate')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -853,7 +707,7 @@ export function MikroTikSnmpTab({
             <DialogDescription>
               {t('MikroTikSnmpTab.trapDelete.confirmPrefix')}{' '}
               <span className="font-mono">
-                {trapDeleteTarget ? asStr(trapDeleteTarget.address) : ''}
+                {trapDeleteTarget ? asStr(trapDeleteTarget.host) : ''}
               </span>
               {t('MikroTikSnmpTab.trapDelete.confirmSuffix')}
             </DialogDescription>
@@ -868,8 +722,7 @@ export function MikroTikSnmpTab({
             <Button
               variant="destructive"
               onClick={() =>
-                trapDeleteTarget?.['.id'] &&
-                trapDeleteMut.mutate(trapDeleteTarget['.id'])
+                trapDeleteTarget && trapDeleteMut.mutate(trapDeleteTarget.host)
               }
               disabled={trapDeleteMut.isPending}
             >

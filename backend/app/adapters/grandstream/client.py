@@ -92,6 +92,12 @@ from .models import (
 
 logger = logging.getLogger("freesdn.adapters.grandstream.client")
 
+#: Methods safe to replay after an ambiguous transport failure. A mutation that
+#: may already have reached the phone is transmitted exactly once; its failure is
+#: surfaced so the staged change becomes ``reconciliation_required`` rather than
+#: being silently applied twice.
+_IDEMPOTENT_METHODS: frozenset[str] = frozenset({"GET", "HEAD"})
+
 
 def _sha256_hex(value: str) -> str:
     """sjcl-compatible: hex-encoded SHA-256."""
@@ -452,17 +458,62 @@ class GrandstreamPhoneClient:
         if not self._session:
             raise GrandstreamConnectionError("Not connected to phone")
 
-        # Most endpoints rely on the cookie that aiohttp already carries.
-        # Only config_get / config_update need the explicit sid query.
-        query = dict(params or {})
-        if include_sid and self._sid:
-            query["sid"] = self._sid
+        # The SID must be read PER ATTEMPT, not once before the loop.
+        #
+        # A 401 triggers ``_login()``, which replaces ``self._sid`` -- but the URL
+        # and any sid-bearing body were built before the loop, so the retry
+        # re-sent the OLD session identifier. A phone that accepts only the new
+        # one answered 401 again, and the re-authentication this transport
+        # advertises never actually worked for config writes.
+        def _build_url() -> str:
+            query = dict(params or {})
+            # Most endpoints rely on the cookie aiohttp already carries. Only
+            # config_get / config_update need the explicit sid query.
+            if include_sid and self._sid:
+                query["sid"] = self._sid
+            qs = ("?" + urlencode(query)) if query else ""
+            return f"{self._base_url}{path}{qs}"
 
-        qs = ("?" + urlencode(query)) if query else ""
-        url = f"{self._base_url}{path}{qs}"
+        def _build_data() -> dict[str, Any] | None:
+            # ``_sys_operation`` puts the sid in the FORM BODY. Copy rather than
+            # mutating the caller's dict, and refresh the value each attempt.
+            if data is None:
+                return None
+            body = dict(data)
+            if "sid" in body:
+                body["sid"] = self._sid or ""
+            return body
+
+        url = _build_url()
+
+        # Retry only what is safe to replay.
+        #
+        # A phone commonly drops the connection AS IT BEGINS REBOOTING, and
+        # ``reboot()`` is written to read that drop as acknowledgement. But
+        # ``ServerDisconnectedError`` is an ``aiohttp.ClientError``, so the
+        # handler below used to catch it and RETRANSMIT before ``reboot()`` ever
+        # saw it -- sending a second REBOOT (or RESET, or make-call) to a device
+        # that had already accepted the first. Bounding the loop by method lets
+        # the drop propagate to the caller that knows how to interpret it.
+        #
+        # Same rule as proxmox/freepbx/unifi: GET/HEAD may be replayed, a
+        # mutation gets exactly one transmission and its failure is surfaced.
+        # Grandstream reads are GET; every mutation is POST/PUT.
+        is_idempotent = method.upper() in _IDEMPOTENT_METHODS
+        # Two jobs share this budget. Replaying an AMBIGUOUS TRANSPORT failure is
+        # only safe when idempotent (the phone may already have acted -- that is
+        # the whole point of this guard). Replaying after a DEFINITIVE 401 is
+        # safe for any method, because a rejected request was not acted on, and
+        # the handler below re-logs-in and retries exactly once. Collapsing the
+        # budget to 1 for writes killed that documented re-login and reported
+        # "exhausted retries" instead. Keep room for it; gate the transport path.
+        max_attempts = PHONE_MAX_RETRIES if is_idempotent else 2
 
         last_exc: Exception | None = None
-        for attempt in range(1, PHONE_MAX_RETRIES + 1):
+        for attempt in range(1, max_attempts + 1):
+            # Rebuild per attempt: a re-login between attempts changes self._sid.
+            url = _build_url()
+            body = _build_data()
             try:
                 if json_body is not None:
                     req = self._session.request(
@@ -475,7 +526,7 @@ class GrandstreamPhoneClient:
                     req = self._session.request(
                         method,
                         url,
-                        data=data,
+                        data=body,
                         headers=self._headers(),
                     )
                 async with req as resp:
@@ -506,7 +557,21 @@ class GrandstreamPhoneClient:
 
             except aiohttp.ClientError as exc:
                 last_exc = exc
-                if attempt < PHONE_MAX_RETRIES:
+                if not is_idempotent:
+                    # Never retransmit -- but do NOT erase the exception type
+                    # either. A phone acknowledges a reboot by DROPPING the
+                    # connection, and reboot()/factory_reset() are written to read
+                    # ServerDisconnectedError / ClientPayloadError as exactly that.
+                    # Wrapping it in GrandstreamConnectionError meant those handlers
+                    # never fired, so a phone that DID reboot was recorded as a
+                    # definite failure -- inviting the operator to send it again.
+                    #
+                    # Re-raise the original: callers that know how to interpret it
+                    # can, and the staged-write path sees the real transport error,
+                    # which outcome_is_unknown classifies as UNKNOWN rather than
+                    # failed. That is the honest answer.
+                    raise
+                if attempt < max_attempts:
                     await asyncio.sleep(1.0)
                     continue
                 raise GrandstreamConnectionError(f"Phone request failed: {exc}") from exc

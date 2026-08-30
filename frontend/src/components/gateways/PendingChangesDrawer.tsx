@@ -199,6 +199,17 @@ export function PendingChangesDrawer({
     () => changes.filter((c) => c.status === 'failed'),
     [changes],
   );
+  // ``reconciliation_required`` is NOT ``failed``. The backend moves a row
+  // here when it was stranded in ``applying`` past the TTL, typically a
+  // worker killed between the device write and the terminal commit. The
+  // controller may well have accepted the write. Without this filter the
+  // row matches no section and is invisible, which is worse than mislabelled:
+  // the operator re-stages a non-idempotent create/delete/reboot that already
+  // took effect.
+  const reconciliation = useMemo(
+    () => changes.filter((c) => c.status === 'reconciliation_required'),
+    [changes],
+  );
 
   // CRIT-2: "Apply all" is sequential
   // and treats a 200 from a reboot/firmware-install as success, but the
@@ -229,6 +240,7 @@ export function PendingChangesDrawer({
     : true;
 
   // ── Discard dialog state ────────────────────────────────────────────
+  const [resolveTarget, setResolveTarget] = useState<PendingChangeResponse | null>(null);
   const [discardTarget, setDiscardTarget] =
     useState<PendingChangeResponse | null>(null);
 
@@ -244,6 +256,7 @@ export function PendingChangesDrawer({
   // ── Recently-applied collapsibles ───────────────────────────────────
   const [appliedOpen, setAppliedOpen] = useState(false);
   const [failedOpen, setFailedOpen] = useState(true);
+  const [reconciliationOpen, setReconciliationOpen] = useState(true);
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({
@@ -292,7 +305,8 @@ export function PendingChangesDrawer({
   // ── Discard ────────────────────────────────────────────────────────
 
   const discardMutation = useMutation({
-    mutationFn: (changeId: string) => discardPendingChange(changeId),
+    mutationFn: ({ changeId, force }: { changeId: string; force?: boolean }) =>
+      discardPendingChange(changeId, force ? { force: true } : undefined),
     onSuccess: () => {
       toast({ title: t('PendingChangesDrawer.toasts.discarded.title') });
       invalidate();
@@ -356,7 +370,7 @@ export function PendingChangesDrawer({
 
   function renderChange(
     change: PendingChangeResponse,
-    kind: 'pending' | 'applied' | 'failed' | 'applying',
+    kind: 'pending' | 'applied' | 'failed' | 'applying' | 'reconciliation',
   ) {
     return (
       <li
@@ -432,6 +446,31 @@ export function PendingChangesDrawer({
           <p className="text-xs text-destructive">
             <ShieldAlert className="inline h-3 w-3 mr-1" />
             {change.failure_reason}
+          </p>
+        )}
+
+        {kind === 'reconciliation' && (
+          <div className="mt-2 flex justify-end">
+            {/* The operator's escape hatch. Without it a row whose outcome is
+                unknown sits in the drawer forever: the ordinary apply and
+                discard guards both refuse any non-``pending`` status, which is
+                exactly what stops a possibly-already-applied change being run
+                twice. Resolving forces the discard, so the copy makes clear it
+                is an acknowledgement, not an undo. */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setResolveTarget(change)}
+            >
+              {t('PendingChangesDrawer.actions.resolve')}
+            </Button>
+          </div>
+        )}
+        {kind === 'reconciliation' && (
+          <p className="text-xs text-warning">
+            <AlertTriangle className="inline h-3 w-3 mr-1" />
+            {change.failure_reason ||
+              t('PendingChangesDrawer.sections.reconciliation.unknownOutcome')}
           </p>
         )}
 
@@ -519,7 +558,10 @@ export function PendingChangesDrawer({
               <Loader2 className="h-4 w-4 animate-spin" />
               <span>{t('PendingChangesDrawer.loading')}</span>
             </div>
-          ) : pending.length === 0 && applied.length === 0 && failed.length === 0 ? (
+          ) : pending.length === 0 &&
+            applied.length === 0 &&
+            failed.length === 0 &&
+            reconciliation.length === 0 ? (
             <EmptyState
               icon={ClipboardList}
               title={t('PendingChangesDrawer.empty.title')}
@@ -581,6 +623,51 @@ export function PendingChangesDrawer({
                   <ul className="space-y-2">
                     {applying.map((c) => renderChange(c, 'applying'))}
                   </ul>
+                </section>
+              )}
+
+              {/* Needs verification (outcome unknown). Deliberately above
+                  Failed: it is the more urgent of the two because it is the
+                  only state that requires the operator to go look at the
+                  device. Warning treatment, not destructive, nothing is
+                  known to have gone wrong. */}
+              {reconciliation.length > 0 && (
+                <section
+                  aria-label={t('PendingChangesDrawer.sections.reconciliation.aria')}
+                >
+                  <header
+                    className="flex items-center gap-1 mb-2 cursor-pointer select-none"
+                    onClick={() => setReconciliationOpen((v) => !v)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setReconciliationOpen((v) => !v);
+                      }
+                    }}
+                  >
+                    {reconciliationOpen ? (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    )}
+                    <h3 className="text-sm font-semibold flex items-center gap-2 text-warning">
+                      <AlertTriangle className="h-4 w-4" />
+                      {t('PendingChangesDrawer.sections.reconciliation.heading')}
+                      <Badge variant="warning">{reconciliation.length}</Badge>
+                    </h3>
+                  </header>
+                  {reconciliationOpen && (
+                    <>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {t('PendingChangesDrawer.sections.reconciliation.description')}
+                      </p>
+                      <ul className="space-y-2">
+                        {reconciliation.map((c) => renderChange(c, 'reconciliation'))}
+                      </ul>
+                    </>
+                  )}
                 </section>
               )}
 
@@ -772,7 +859,7 @@ export function PendingChangesDrawer({
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (discardTarget) discardMutation.mutate(discardTarget.id);
+                if (discardTarget) discardMutation.mutate({ changeId: discardTarget.id });
               }}
               disabled={discardMutation.isPending}
             >
@@ -780,6 +867,54 @@ export function PendingChangesDrawer({
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
               ) : null}
               {t('PendingChangesDrawer.actions.discard')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Resolve (force-discard) confirmation ─────────────────────── */}
+      {/* Distinct from Discard on purpose: this row's change may ALREADY be
+          live on the device. Clearing it is an acknowledgement that the
+          operator has checked, not an undo -- so the copy says so and the
+          request carries force=true, which is what the backend guard requires
+          for a non-``pending`` row. */}
+      <AlertDialog
+        open={resolveTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setResolveTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('PendingChangesDrawer.confirmResolve.title')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('PendingChangesDrawer.confirmResolve.body')}{' '}
+              {resolveTarget && (
+                <code className="font-mono text-xs block mt-2">
+                  {resolveTarget.feature}
+                </code>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setResolveTarget(null)}>
+              {t('PendingChangesDrawer.actions.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (resolveTarget) {
+                  discardMutation.mutate({ changeId: resolveTarget.id, force: true });
+                  setResolveTarget(null);
+                }
+              }}
+              disabled={discardMutation.isPending}
+            >
+              {discardMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+              ) : null}
+              {t('PendingChangesDrawer.actions.resolve')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

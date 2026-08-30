@@ -439,14 +439,46 @@ async def check_for_updates(
     if not latest or latest.version == current_version:
         return AgentUpdateCheckResponse(update_available=False)
 
-    # Simple semver comparison
-    def parse_version(v: str) -> tuple[int, ...]:
-        try:
-            return tuple(int(p) for p in v.split("."))
-        except ValueError:
-            return (0, 0, 0)
+    from app.services.release_signing import parse_agent_version
 
-    if parse_version(latest.version) <= parse_version(current_version):
+    # Version ordering MUST match the agent's parser exactly. It did not, and the
+    # disagreement went both ways:
+    #
+    #   "1.0.0.0" vs "1.0.0" -- raw tuples make (1,0,0,0) > (1,0,0), so the
+    #       backend advertised an update the agent then rejected as not-newer.
+    #       The agent had already DOWNLOADED the binary by then, so it repeated
+    #       that download every poll interval, forever.
+    #   "v2.0.0"  -- the release schema permits the leading v; int() raised, the
+    #       old code substituted (0,0,0), and a genuinely newer release was never
+    #       offered at all.
+    #
+    # ``tests/api/test_version_parity.py`` pins both implementations against one
+    # shared vector table so they cannot drift apart again.
+    if parse_agent_version(latest.version) <= parse_agent_version(current_version):
+        return AgentUpdateCheckResponse(update_available=False)
+
+    # Rebuild the manifest the signature covers, from the stored row. The agent
+    # verifies the signature over this and then checks the fields against
+    # itself -- a self-consistent manifest is exactly what a replayed OLD
+    # release has, so the binding is only useful if the agent compares it to
+    # what it is running and what it downloaded.
+    from app.services.release_signing import build_release_manifest
+
+    try:
+        _manifest = build_release_manifest(
+            digest_hex=latest.checksum_sha256,
+            version=latest.version,
+            platform=latest.platform,
+            agent_type=latest.agent_type,
+            channel="prerelease" if latest.is_prerelease else "stable",
+        )
+    except ValueError:
+        # A row too incomplete to describe cannot be offered as a verified
+        # update; the agent fails closed on a missing manifest.
+        logger.warning(
+            "Release %s is not describable as a manifest — not offering it as an update",
+            latest.id,
+        )
         return AgentUpdateCheckResponse(update_available=False)
 
     return AgentUpdateCheckResponse(
@@ -456,6 +488,7 @@ async def check_for_updates(
         checksum_sha256=latest.checksum_sha256,
         release_notes=latest.release_notes,
         signature=latest.signature or "",
+        manifest=_manifest,
     )
 
 
@@ -485,6 +518,21 @@ async def publish_release(
     if data.agent_type.lower() not in VALID_AGENT_TYPES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid agent_type: {data.agent_type}")
 
+    # Normalise ONCE and use these for querying, SIGNING and persistence alike.
+    # Signing the raw case while storing the lower case produced a signature over
+    # bytes the update-check endpoint could never reproduce (it rebuilds the
+    # manifest from the stored row), so an upload of "Linux"/"Daemon" made the
+    # agent refuse a legitimate update as a signature mismatch.
+    _platform = data.platform.lower()
+    _agent_type = data.agent_type.lower()
+    # The checksum has the SAME seam. The schema accepts [a-fA-F0-9]{64}, and
+    # build_release_manifest lower-cases the digest before signing -- but the row
+    # persisted the caller's raw string, and the update-check endpoint serves that
+    # raw value. The agent compares it against hashlib.sha256().hexdigest(), which
+    # is lower-case, with ==. So an uppercase checksum published fine, signed
+    # fine, and then failed the agent's precheck forever.
+    _checksum = data.checksum_sha256.lower()
+
     # SECURITY: only super_admin may publish a GLOBAL
     # (organization_id IS NULL) release; every other admin's release is forced
     # to their own organization. This stops a tenant org_admin from publishing a
@@ -503,8 +551,8 @@ async def publish_release(
         update(AgentRelease)
         .where(
             and_(
-                AgentRelease.platform == data.platform.lower(),
-                AgentRelease.agent_type == data.agent_type.lower(),
+                AgentRelease.platform == _platform,
+                AgentRelease.agent_type == _agent_type,
                 AgentRelease.is_latest,
                 _release_org_bucket(release_org),
             )
@@ -521,10 +569,20 @@ async def publish_release(
     # silently bypasses the agent's signature-verification gate. Roll back the
     # is_latest demotion already executed above so the previous latest release is
     # restored before raising.
-    from app.services.release_signing import sign_digest
+    # Sign a MANIFEST, not the bare digest -- see agent_release_upload.py for
+    # why. Mirrors that path exactly so both publish routes produce signatures
+    # the agent can bind to a version/platform/agent-type/channel.
+    from app.services.release_signing import build_release_manifest, sign_manifest
 
     try:
-        _signature = sign_digest(data.checksum_sha256)
+        _manifest = build_release_manifest(
+            digest_hex=_checksum,
+            version=data.version,
+            platform=_platform,
+            agent_type=_agent_type,
+            channel="prerelease" if getattr(data, "is_prerelease", False) else "stable",
+        )
+        _signature = sign_manifest(_manifest)
     except Exception:
         logger.exception(
             "Release signing failed at publish version=%s platform=%s — rolling back is_latest demotion",
@@ -542,10 +600,10 @@ async def publish_release(
 
     release = AgentRelease(
         version=data.version,
-        platform=data.platform.lower(),
-        agent_type=data.agent_type.lower(),
+        platform=_platform,
+        agent_type=_agent_type,
         download_url=data.download_url,
-        checksum_sha256=data.checksum_sha256,
+        checksum_sha256=_checksum,
         file_size=data.file_size,
         release_notes=data.release_notes,
         min_backend_version=data.min_backend_version,

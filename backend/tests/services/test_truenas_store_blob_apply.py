@@ -111,6 +111,58 @@ class TestApplier:
         }
 
     @pytest.mark.asyncio
+    async def test_vendor_qualified_alias_uploads_too(self, monkeypatch, svc, fake_adapter) -> None:
+        """``truenas.storage.store_blob`` must reach ``upload_file``, not 400.
+
+        ``validate_storage_operation`` accepts the vendor-qualified form at stage
+        time and the apply dispatcher routes it here, but the blob branch keyed on
+        the RAW ``c.feature`` while every other feature was normalised first. A blob
+        staged under the alias was therefore accepted, reviewed, approved -- and then
+        fell through into ``_apply_management``, matched none of the management keys
+        and died with 400 "no applier", on every retry, with no way for the operator
+        to make it land.
+
+        Mutation this catches: reverting the branch to ``c.feature`` sends this
+        change into ``_apply_management`` and ``fake_adapter.uploaded`` stays None.
+        """
+
+        async def _get(token, org, *, expected_sha256=None):
+            return b"jpegbytes"
+
+        async def _del(token, org):
+            return None
+
+        monkeypatch.setattr(durable_store, "get", _get)
+        monkeypatch.setattr(durable_store, "delete", _del)
+
+        change = _Change(_good_payload(), feature="truenas.storage.store_blob")
+        res = await svc.build_applier(change)(change)
+
+        assert res["state"] == "SUCCESS"
+        assert fake_adapter.uploaded == {
+            "dataset_path": "/mnt/s4_hdd/freesdn",
+            "filename": "cam.jpg",
+            "size": 9,
+            "force": True,
+        }
+
+    @pytest.mark.asyncio
+    async def test_alias_blob_still_validates_its_destination(self, svc, fake_adapter) -> None:
+        """Routing the alias into the blob branch must not skip the path guard.
+
+        The blob branch is what rejects a ``dataset_path`` outside ``/mnt``; a fix
+        that reached ``upload_file`` without it would have widened a traversal
+        surface rather than closed a dead end.
+        """
+        payload = _good_payload()
+        payload["dataset_path"] = "/etc/passwd"
+        change = _Change(payload, feature="truenas.storage.store_blob")
+        with pytest.raises(HTTPException) as ei:
+            await svc.build_applier(change)(change)
+        assert ei.value.status_code == 400
+        assert fake_adapter.uploaded is None
+
+    @pytest.mark.asyncio
     async def test_missing_artifact_ref_rejected(self, svc, fake_adapter) -> None:
         change = _Change({"dataset_path": "/mnt/s4_hdd/freesdn", "filename": "x.jpg"})
         with pytest.raises(HTTPException) as ei:

@@ -32,6 +32,7 @@ from app.core.dependencies import (
     CurrentUser,
     require_permissions,
 )
+from app.core.query import MAX_PAGE
 from app.core.security_utils import escape_like
 from app.core.site_access import assert_can_access_site, site_scope_filter
 from app.core.tenancy import tenant_filter
@@ -585,7 +586,14 @@ async def list_switches(
     site_id: str | None = Query(None),
     status: str | None = Query(None),
     vendor: str | None = Query(None),
-    page: int = Query(1, ge=1),
+    # ``le=MAX_PAGE``: (page - 1) * per_page is bound into SQL as
+    # ``OFFSET $n::BIGINT`` and asyncpg raises DataError while ENCODING
+    # anything past int64, so an unbounded page reached the driver and
+    # relied on the shared DBAPIError->400 floor in app/core/middleware.py
+    # to avoid a 500. Bounding it here rejects at the edge with a 422 that
+    # names the field, and costs no round-trip. See docs/agents/
+    # PAGINATION-BOUNDS.md for the rest of the migration.
+    page: int = Query(1, ge=1, le=MAX_PAGE),
     per_page: int = Query(50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
     _user: Any = Depends(require_permissions("network:read")),

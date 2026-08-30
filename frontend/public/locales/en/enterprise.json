@@ -287,7 +287,8 @@
       "deviceIds": "Device IDs",
       "deviceIdsPlaceholder": "Paste device UUIDs, one per line or comma-separated",
       "deviceIdsHint": "Enter device UUIDs separated by new lines or commas (up to 500).",
-      "configPayload": "Config Payload (JSON)"
+      "configPayload": "Config Payload (JSON)",
+      "confirmFirmware": "I understand this flashes firmware on every targeted device and cannot be undone."
     },
     "operations": {
       "pushConfig": "Push Config",

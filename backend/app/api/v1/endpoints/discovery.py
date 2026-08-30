@@ -13,7 +13,10 @@ Endpoints for:
 """
 
 import asyncio
+import json
 import logging
+import time
+from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -67,16 +70,31 @@ router = APIRouter()
 
 
 # ===========================================
-# In-Memory Scan Store
+# Scan Store — process-local, mirrored to Redis
 # ===========================================
-# NOTE: This uses an in-memory dict intentionally. The default deployment is
-# single-worker, where in-memory storage is simpler and avoids a hard Redis
-# dependency.  For multi-worker deployments behind a load balancer, scan
-# requests could land on a different worker than the one running the scan.
-# To support that topology, replace this dict with a Redis-backed store
-# (e.g. redis HSET keyed by scan_id).  The tradeoff is acceptable for now
-# because discovery scans are infrequent, short-lived operations that are
-# typically initiated from a single admin session.
+# The note that used to sit here said the in-memory dict was fine because "the
+# default deployment is single-worker". That has not been true since
+# WEB_CONCURRENCY landed: docker-compose.yml ships `WEB_CONCURRENCY:-2` and
+# docker-entrypoint.sh defaults the same, so gunicorn pre-forks two workers
+# behind ONE Caddy upstream pool. `_active_scans` lives in whichever worker
+# accepted POST /scan; every follow-up (progress, results, latest, history,
+# cancel, delete) lands there only about half the time and 404s in the other.
+#
+# That is not a visible error to the operator. The frontend poller swallows a
+# 404 while polling, so what actually happens is: the progress bar stops, the
+# separate GET /scan/{id}/results after `status == completed` 404s too, polling
+# has already been torn down, `scanResults` stays null, and there is no retry
+# and no message. Discovery is how devices get adopted, so the scan simply has
+# to be run again.
+#
+# The scanner object and the asyncio task cannot be serialised, so they stay
+# local. Only what the read endpoints actually consume — the ScanProgress
+# snapshot and the accumulated hosts, both already JSON-shaped — is mirrored to
+# Redis, stamped with organization_id/owner_user_id so `_scan_visible_to` gates
+# a mirrored read exactly as it gates a local one.
+#
+# Redis is best-effort everywhere below: if it is unreachable every endpoint
+# degrades to precisely the old local-only behaviour rather than failing.
 
 import contextlib
 
@@ -97,6 +115,336 @@ _BG_TASKS: set["asyncio.Task[Any]"] = set()
 
 #: Maximum number of concurrent scans to prevent memory exhaustion
 _MAX_ACTIVE_SCANS = 20
+
+#: Redis keys for the cross-worker mirror.
+_SCAN_KEY = "freesdn:discovery:scan:{}"
+_SCAN_CANCEL_KEY = "freesdn:discovery:scan:{}:cancel"
+_SCAN_INDEX_KEY = "freesdn:discovery:scans"
+#: Deletion tombstone. A DELETE that lands on the worker which does NOT own the
+#: scan can only drop the mirror and then ask the owning worker to cancel --
+#: and an ordinary cancellation is *required* to publish a final snapshot (that
+#: is the only way "cancelled" ever leaves the owning process). Those two
+#: requirements contradict each other: the owning task's teardown republished
+#: the terminal snapshot and re-added the index entry, so the scan the operator
+#: deleted came straight back into history and sat there for the full TTL. The
+#: tombstone is what tells the two apart -- _mirror_scan will not publish over
+#: one, so "cancel" still gets its final snapshot and "delete" does not.
+_SCAN_TOMBSTONE_KEY = "freesdn:discovery:scan:{}:deleted"
+#: Long enough to adopt devices from a finished scan, short enough that a
+#: forgotten scan does not sit in Redis forever.
+_SCAN_TTL_S = 3600
+#: A /16 can legally expand to 262,144 targets. Rewriting a multi-megabyte
+#: value on every progress tick would cost more than the mirror is worth, so
+#: cap what is mirrored and SAY SO in the response errors list - an operator
+#: who silently saw a short device list would adopt the wrong set.
+_MIRROR_MAX_HOSTS = 2000
+#: Progress fires once per port-scan batch; on a large subnet that is hundreds
+#: of times. Non-terminal snapshots are throttled to this interval.
+_MIRROR_MIN_INTERVAL_S = 2.0
+#: How often the owning worker checks for a cancel issued on another worker.
+_CANCEL_POLL_INTERVAL_S = 2.0
+
+_TERMINAL_STATUSES = {"completed", "cancelled", "failed"}
+
+#: scan_id -> monotonic expiry. The same tombstone, process-locally, so the
+#: owning worker's own DELETE cannot lose the race against its task teardown
+#: while a Redis round trip is in flight -- and so the guard still holds when
+#: Redis is down.
+_deleted_scans: dict[str, float] = {}
+#: Bound on the above. Scan ids are uuid4 so an entry is never consulted again
+#: after its scan is gone; this only stops a long-lived worker growing the dict.
+_MAX_DELETED_TOMBSTONES = 1024
+
+
+def _remember_deleted(scan_id: str) -> None:
+    """Record locally that ``scan_id`` was deleted, so nothing republishes it."""
+    now = time.monotonic()
+    for expired in [sid for sid, exp in _deleted_scans.items() if exp <= now]:
+        _deleted_scans.pop(expired, None)
+    _deleted_scans[scan_id] = now + _SCAN_TTL_S
+    while len(_deleted_scans) > _MAX_DELETED_TOMBSTONES:
+        _deleted_scans.pop(next(iter(_deleted_scans)))
+
+
+def _locally_deleted(scan_id: str) -> bool:
+    expiry = _deleted_scans.get(scan_id)
+    if expiry is None:
+        return False
+    if expiry <= time.monotonic():
+        _deleted_scans.pop(scan_id, None)
+        return False
+    return True
+
+
+# One async client per event loop. get_async_redis() builds a fresh client (and
+# pool) per call, which would mean a new connect + AUTH on every progress tick
+# and every cancel poll.
+_scan_redis: Any = None
+_scan_redis_loop: asyncio.AbstractEventLoop | None = None
+
+
+async def _scan_store() -> Any:
+    """Return the mirror handle, or None when Redis is unusable.
+
+    Callers below bind this to ``store``, never ``client``: the staging
+    chokepoint ratchet (tests/security/test_staging_chokepoint_ratchet.py)
+    reads an awaited mutating method on a receiver named ``adapter`` or
+    ``client`` as a direct-to-device write, and ``store.set(...)`` on Redis is
+    not one. Renaming keeps the ratchet strict on this file rather than pinning
+    the whole of discovery.py as a known exception.
+    """
+    global _scan_redis, _scan_redis_loop
+    try:
+        loop = asyncio.get_running_loop()
+        if _scan_redis is None or _scan_redis_loop is not loop:
+            from app.core.redis_client import get_async_redis
+
+            _scan_redis = get_async_redis(
+                decode_responses=True, socket_timeout=2, socket_connect_timeout=2
+            )
+            _scan_redis_loop = loop
+        return _scan_redis
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("Discovery scan mirror unavailable: %s", exc)
+        return None
+
+
+def _progress_snapshot(prog: ScanProgress | None) -> dict[str, Any] | None:
+    """ScanProgress -> the exact field set ScanProgressSchema consumes."""
+    if prog is None:
+        return None
+    return {
+        "scan_id": prog.scan_id,
+        "status": prog.status.value if hasattr(prog.status, "value") else str(prog.status),
+        "total_hosts": prog.total_hosts,
+        "scanned_hosts": prog.scanned_hosts,
+        "discovered_hosts": prog.discovered_hosts,
+        "current_phase": prog.current_phase,
+        "phase_progress": prog.phase_progress,
+        "progress_pct": prog.progress_pct,
+        "hosts_found": list(prog.hosts_found),
+        "errors": list(prog.errors),
+        "elapsed_seconds": prog.elapsed_seconds,
+        "estimated_remaining_seconds": prog.estimated_remaining_seconds,
+        "started_at": prog.started_at.isoformat() if prog.started_at else None,
+    }
+
+
+def _snapshot(scan_id: str, entry: dict[str, Any], *, cap: int | None) -> dict[str, Any]:
+    """Render a live entry into the same plain-dict shape Redis stores.
+
+    Both read paths go through this, so a local read and a mirrored read of the
+    same scan cannot drift apart in shape.
+    """
+    scanner = entry.get("scanner")
+    hosts: list[DiscoveredHost] = entry.get("results", []) or []
+    kept = hosts if cap is None else hosts[:cap]
+    return {
+        "scan_id": scan_id,
+        "organization_id": entry.get("organization_id"),
+        "owner_user_id": entry.get("owner_user_id"),
+        "targets": list(scanner.config.targets) if scanner and scanner.config else [],
+        "progress": _progress_snapshot(entry.get("progress")),
+        "results": [h.to_dict() for h in kept],
+        "results_truncated": cap is not None and len(hosts) > cap,
+        "total_discovered": len(hosts),
+    }
+
+
+def _is_terminal(snap: dict[str, Any]) -> bool:
+    prog = snap.get("progress")
+    return bool(prog) and prog.get("status") in _TERMINAL_STATUSES
+
+
+async def _scan_is_deleted(store: Any, scan_id: str) -> bool:
+    """True when a DELETE has been issued for this scan, on any worker."""
+    if _locally_deleted(scan_id):
+        return True
+    if store is None:
+        return False
+    try:
+        return bool(await store.get(_SCAN_TOMBSTONE_KEY.format(scan_id)))
+    except Exception as exc:
+        # Fail OPEN: an unreadable tombstone must not stop a live scan being
+        # mirrored, which is the behaviour every read endpoint depends on.
+        logger.debug("Could not read deletion tombstone for scan %s: %s", scan_id, exc)
+        return False
+
+
+async def _unpublish(store: Any, scan_id: str) -> None:
+    """Drop the snapshot and index entry only.
+
+    Deliberately leaves the cancel flag alone: delete_scan raises that flag
+    *after* forgetting the mirror, so clearing it here would wipe the very
+    thing that stops the scan on the worker that owns it.
+    """
+    if store is None:
+        return
+    with contextlib.suppress(Exception):
+        await store.delete(_SCAN_KEY.format(scan_id))
+        await store.zrem(_SCAN_INDEX_KEY, scan_id)
+
+
+async def _mirror_scan(scan_id: str, entry: dict[str, Any], *, force: bool = False) -> None:
+    """Publish the scan readable state so any worker can serve it."""
+    if not scan_id or scan_id == "unknown":
+        return
+    if _locally_deleted(scan_id):
+        return
+    snap = _snapshot(scan_id, entry, cap=_MIRROR_MAX_HOSTS)
+    terminal = _is_terminal(snap)
+    now = time.monotonic()
+    if not force and not terminal and now < entry.get("_next_mirror", 0.0):
+        return
+    entry["_next_mirror"] = now + _MIRROR_MIN_INTERVAL_S
+
+    store = await _scan_store()
+    if store is None:
+        return
+    # A scan deleted on another worker must not be resurrected by the terminal
+    # publish its own cancellation triggers.
+    if await _scan_is_deleted(store, scan_id):
+        return
+    prog = snap.get("progress") or {}
+    started = prog.get("started_at")
+    try:
+        score = datetime.fromisoformat(started).timestamp() if started else time.time()
+    except ValueError:
+        score = time.time()
+    try:
+        # One key holds progress AND results, so a poller that reads
+        # "completed" can never race ahead of the hosts that go with it.
+        await store.set(_SCAN_KEY.format(scan_id), json.dumps(snap), ex=_SCAN_TTL_S)
+        await store.zadd(_SCAN_INDEX_KEY, {scan_id: score})
+        await store.expire(_SCAN_INDEX_KEY, _SCAN_TTL_S)
+    except Exception as exc:
+        logger.debug("Could not mirror discovery scan %s: %s", scan_id, exc)
+        return
+    # The check above cannot cover a DELETE that lands between it and the writes
+    # (three round trips of window). Re-read and undo, so the two orderings
+    # converge on "deleted" instead of on whichever request finished last.
+    if await _scan_is_deleted(store, scan_id):
+        await _unpublish(store, scan_id)
+
+
+async def _load_mirrored_scan(scan_id: str) -> dict[str, Any] | None:
+    """Read one mirrored scan, or None when absent/unreadable."""
+    store = await _scan_store()
+    if store is None:
+        return None
+    try:
+        raw = await store.get(_SCAN_KEY.format(scan_id))
+        return json.loads(raw) if raw else None
+    except Exception as exc:
+        logger.debug("Could not read mirrored discovery scan %s: %s", scan_id, exc)
+        return None
+
+
+async def _list_mirrored_scans(limit: int) -> list[dict[str, Any]]:
+    """Most-recent-first mirrored scans, pruning index entries that expired."""
+    store = await _scan_store()
+    if store is None:
+        return []
+    try:
+        scan_ids = await store.zrevrange(_SCAN_INDEX_KEY, 0, max(limit, 1) - 1)
+    except Exception as exc:
+        logger.debug("Could not list mirrored discovery scans: %s", exc)
+        return []
+    snaps: list[dict[str, Any]] = []
+    stale: list[str] = []
+    for scan_id in scan_ids:
+        snap = await _load_mirrored_scan(scan_id)
+        if snap is None:
+            stale.append(scan_id)
+            continue
+        snaps.append(snap)
+    if stale:
+        with contextlib.suppress(Exception):
+            await store.zrem(_SCAN_INDEX_KEY, *stale)
+    return snaps
+
+
+async def _resolve_scan(scan_id: str, current_user: Any) -> dict[str, Any] | None:
+    """Local entry first, mirrored snapshot second; None when not visible."""
+    entry = _active_scans.get(scan_id)
+    if entry is not None:
+        if not _scan_visible_to(entry, current_user):
+            return None
+        return _snapshot(scan_id, entry, cap=None)
+    snap = await _load_mirrored_scan(scan_id)
+    if snap is None or not _scan_visible_to(snap, current_user):
+        return None
+    return snap
+
+
+async def _request_remote_cancel(scan_id: str) -> None:
+    """Ask whichever worker owns the scan to stop it."""
+    store = await _scan_store()
+    if store is None:
+        return
+    with contextlib.suppress(Exception):
+        await store.set(_SCAN_CANCEL_KEY.format(scan_id), "1", ex=_SCAN_TTL_S)
+
+
+async def _forget_mirrored_scan(scan_id: str) -> None:
+    """Drop a scan from the mirror (delete_scan must not leave a ghost).
+
+    Writes the deletion tombstone FIRST. Removing the snapshot on its own is
+    not enough: the cancellation this delete goes on to request ends in a
+    forced ``_mirror_scan`` on the owning worker, which would publish the scan
+    straight back.
+    """
+    store = await _scan_store()
+    if store is None:
+        return
+    with contextlib.suppress(Exception):
+        await store.set(_SCAN_TOMBSTONE_KEY.format(scan_id), "1", ex=_SCAN_TTL_S)
+    with contextlib.suppress(Exception):
+        await store.delete(_SCAN_KEY.format(scan_id), _SCAN_CANCEL_KEY.format(scan_id))
+        await store.zrem(_SCAN_INDEX_KEY, scan_id)
+
+
+def _spawn_bg(coro: Any) -> None:
+    """Fire-and-forget with a strong ref (a bare create_task can be GC-killed)."""
+    task = asyncio.create_task(coro)
+    _BG_TASKS.add(task)
+    task.add_done_callback(_BG_TASKS.discard)
+    task.add_done_callback(_task_error_handler)
+
+
+async def _watch_for_remote_cancel(
+    scan_id: str, scanner: NetworkScanner, task: "asyncio.Task[Any]"
+) -> None:
+    """Honour a cancel that was issued on a different worker.
+
+    POST /scan/{id}/cancel can only touch the scanner object in the worker that
+    started the scan. When it lands on the other one it can do no more than set
+    a flag, so without this poll "cancel" is a silent no-op about half the time
+    and the scan runs to completion anyway.
+    """
+    key = _SCAN_CANCEL_KEY.format(scan_id)
+    while not task.done():
+        await asyncio.sleep(_CANCEL_POLL_INTERVAL_S)
+        store = await _scan_store()
+        if store is None:
+            continue
+        try:
+            flagged = await store.get(key)
+        except Exception:
+            continue
+        if flagged:
+            # Read the tombstone BEFORE cancelling. A DELETE issued on another
+            # worker is encoded as "forget the mirror, then ask for a cancel",
+            # and nothing else on this side would ever learn the scan is gone:
+            # it would keep being served out of _active_scans and keep showing
+            # up in this worker's half of the history.
+            if await _scan_is_deleted(store, scan_id):
+                _remember_deleted(scan_id)
+                _active_scans.pop(scan_id, None)
+            scanner.cancel()
+            if not task.done():
+                task.cancel()
+            return
 
 
 def _evict_completed_scans() -> None:
@@ -216,15 +564,39 @@ async def start_scan(
         try:
             async for host in scanner.scan(progress_callback=_on_progress):
                 scan_entry["results"].append(host)
+        except asyncio.CancelledError:
+            if scan_entry.get("progress"):
+                scan_entry["progress"].status = ScanStatus.CANCELLED
+            raise
         except Exception as e:
             logger.error("Scan failed: %s", e)
             if scan_entry.get("progress"):
                 scan_entry["progress"].status = ScanStatus.FAILED
                 scan_entry["progress"].errors.append(str(e))
+        finally:
+            # Unthrottled, and covers the failure and cancellation paths too:
+            # this is the write another worker's GET /results depends on, and
+            # a poller that has just seen "completed" asks for the hosts
+            # immediately.
+            #
+            # Spawned rather than awaited HERE specifically: this finally runs
+            # while the task is being torn down, and a second task.cancel()
+            # (cancel_scan and _watch_for_remote_cancel can each issue one)
+            # interrupts whatever the finally is awaiting -- confirmed against
+            # the interpreter, not assumed. Awaiting the mirror here would
+            # therefore drop the final snapshot, the one write the mirror
+            # exists for. The regression test pins that the snapshot IS
+            # published; it does not reproduce the double-cancel timing.
+            prog = scan_entry.get("progress")
+            if prog is not None:
+                _spawn_bg(_mirror_scan(prog.scan_id, scan_entry, force=True))
 
     def _on_progress(progress: ScanProgress):
         scan_entry["progress"] = progress
         _active_scans[progress.scan_id] = scan_entry
+        # Mirror for the OTHER gunicorn worker. Throttled inside _mirror_scan;
+        # scheduled rather than awaited because this callback is synchronous.
+        _spawn_bg(_mirror_scan(progress.scan_id, scan_entry))
         # Also try to broadcast via event bus
         try:
             from app.core.events import discovery_event, get_event_bus
@@ -266,6 +638,11 @@ async def start_scan(
         scan_entry["progress"] = scanner.progress
 
     _active_scans[scan_id] = scan_entry
+    # Publish immediately: the frontend starts polling progress the moment this
+    # response lands, and that first poll has an even chance of hitting the
+    # other worker.
+    await _mirror_scan(scan_id, scan_entry, force=True)
+    _spawn_bg(_watch_for_remote_cancel(scan_id, scanner, task))
 
     return ScanStartedResponse(
         scan_id=scan_id,
@@ -281,26 +658,11 @@ async def get_scan_progress(
     current_user: Annotated[CurrentUser, Depends(require_permissions("discovery:run"))],
 ) -> Any:
     """Get live progress of an active scan."""
-    entry = _active_scans.get(scan_id)
-    if not entry or not entry.get("progress") or not _scan_visible_to(entry, current_user):
+    snap = await _resolve_scan(scan_id, current_user)
+    if not snap or not snap.get("progress"):
         raise HTTPException(status_code=404, detail="Scan not found")
 
-    prog = entry["progress"]
-    return ScanProgressSchema(
-        scan_id=prog.scan_id,
-        status=prog.status.value if hasattr(prog.status, "value") else str(prog.status),
-        total_hosts=prog.total_hosts,
-        scanned_hosts=prog.scanned_hosts,
-        discovered_hosts=prog.discovered_hosts,
-        current_phase=prog.current_phase,
-        phase_progress=prog.phase_progress,
-        progress_pct=prog.progress_pct,
-        hosts_found=prog.hosts_found,
-        errors=prog.errors,
-        elapsed_seconds=prog.elapsed_seconds,
-        estimated_remaining_seconds=prog.estimated_remaining_seconds,
-        started_at=prog.started_at,
-    )
+    return ScanProgressSchema(**snap["progress"])
 
 
 @router.get("/scan/{scan_id}/results", response_model=ScanResultsSchema)
@@ -309,16 +671,19 @@ async def get_scan_results(
     current_user: Annotated[CurrentUser, Depends(require_permissions("discovery:run"))],
 ) -> Any:
     """Get results of a completed or in-progress scan."""
-    entry = _active_scans.get(scan_id)
-    if not entry or not _scan_visible_to(entry, current_user):
+    snap = await _resolve_scan(scan_id, current_user)
+    if snap is None:
         raise HTTPException(status_code=404, detail="Scan not found")
+    return _results_response(snap)
 
-    prog = entry.get("progress")
-    hosts: list[DiscoveredHost] = entry.get("results", [])
+
+def _results_response(snap: dict[str, Any]) -> ScanResultsSchema:
+    """Build the results payload from either a local or a mirrored snapshot."""
+    scan_id = snap["scan_id"]
+    prog = snap.get("progress")
 
     devices = []
-    for h in hosts:
-        d = h.to_dict()
+    for d in snap.get("results", []):
         devices.append(
             DiscoveredHostSchema(
                 ip_address=d["ip_address"],
@@ -340,18 +705,25 @@ async def get_scan_results(
             )
         )
 
+    errors = list(prog.get("errors", [])) if prog else []
+    total_discovered = snap.get("total_discovered", len(devices))
+    if snap.get("results_truncated"):
+        # Never let the operator adopt from a silently shortened list.
+        errors.append(
+            f"Only the first {len(devices)} of {total_discovered} discovered hosts are "
+            "available from this worker; re-run the scan against a narrower range."
+        )
+
     return ScanResultsSchema(
         scan_id=scan_id,
-        status=prog.status.value
-        if prog and hasattr(prog.status, "value")
-        else (str(prog.status) if prog else "unknown"),
-        started_at=prog.started_at if prog else None,
-        elapsed_seconds=prog.elapsed_seconds if prog else 0,
-        total_targets=prog.total_hosts if prog else 0,
-        total_discovered=len(devices),
+        status=prog.get("status", "unknown") if prog else "unknown",
+        started_at=prog.get("started_at") if prog else None,
+        elapsed_seconds=prog.get("elapsed_seconds", 0) if prog else 0,
+        total_targets=prog.get("total_hosts", 0) if prog else 0,
+        total_discovered=total_discovered,
         total_manageable=sum(1 for d in devices if d.is_manageable),
         devices=devices,
-        errors=prog.errors if prog else [],
+        errors=errors,
     )
 
 
@@ -360,26 +732,40 @@ async def get_latest_scan_results(
     current_user: Annotated[CurrentUser, Depends(require_permissions("discovery:run"))],
 ) -> Any:
     """Get results from the most recent scan."""
-    if not _active_scans:
+    # Both pools, not just this worker's: "latest" used to mean "latest among
+    # the scans that happen to live in whichever worker answered", so refreshing
+    # the page alternated between two different answers.
+    snaps = await _visible_scans(current_user, limit=_MAX_ACTIVE_SCANS)
+
+    latest: dict[str, Any] | None = None
+    latest_time: str | None = None
+    for snap in snaps:
+        prog = snap.get("progress") or {}
+        started = prog.get("started_at")
+        if started and (latest_time is None or started > latest_time):
+            latest_time = started
+            latest = snap
+
+    if latest is None:
         raise HTTPException(status_code=404, detail="No scans found")
 
-    # Find latest by started_at — but only among scans the caller's org
-    # owns, so "latest" never leaks another tenant's most-recent scan.
-    latest_id = None
-    latest_time = None
-    for sid, entry in _active_scans.items():
-        if not _scan_visible_to(entry, current_user):
-            continue
-        prog = entry.get("progress")
-        if prog and prog.started_at:
-            if latest_time is None or prog.started_at > latest_time:
-                latest_time = prog.started_at
-                latest_id = sid
+    return _results_response(latest)
 
-    if not latest_id:
-        raise HTTPException(status_code=404, detail="No scans found")
 
-    return await get_scan_results(latest_id, current_user)
+async def _visible_scans(current_user: Any, *, limit: int) -> list[dict[str, Any]]:
+    """Every scan the caller may see, from this worker AND the mirror.
+
+    Local wins on a tie: it is at least as fresh as the mirror and is never
+    truncated.
+    """
+    by_id: dict[str, dict[str, Any]] = {}
+    for snap in await _list_mirrored_scans(limit):
+        if _scan_visible_to(snap, current_user):
+            by_id[snap["scan_id"]] = snap
+    for scan_id, entry in _active_scans.items():
+        if _scan_visible_to(entry, current_user):
+            by_id[scan_id] = _snapshot(scan_id, entry, cap=None)
+    return list(by_id.values())
 
 
 @router.post("/scan/{scan_id}/cancel", response_model=MessageResponse)
@@ -389,17 +775,32 @@ async def cancel_scan(
 ) -> Any:
     """Cancel an active scan."""
     entry = _active_scans.get(scan_id)
-    if not entry or not _scan_visible_to(entry, current_user):
+    if entry is not None:
+        if not _scan_visible_to(entry, current_user):
+            raise HTTPException(status_code=404, detail="Scan not found")
+
+        scanner: NetworkScanner = entry["scanner"]
+        scanner.cancel()
+
+        task = entry.get("task")
+        if task and not task.done():
+            task.cancel()
+
+        # Also raise the flag, so the owning worker stops even if THIS worker
+        # only holds a stale entry for the same id.
+        await _request_remote_cancel(scan_id)
+        return MessageResponse(message=f"Scan {scan_id} cancelled")
+
+    # The scan is running in the other worker: its scanner object is out of
+    # reach from here, so raise the flag its _watch_for_remote_cancel poll
+    # reads. Before this, a cancel that landed on the wrong worker 404'd and
+    # the scan ran on regardless.
+    snap = await _load_mirrored_scan(scan_id)
+    if snap is None or not _scan_visible_to(snap, current_user):
         raise HTTPException(status_code=404, detail="Scan not found")
 
-    scanner: NetworkScanner = entry["scanner"]
-    scanner.cancel()
-
-    task = entry.get("task")
-    if task and not task.done():
-        task.cancel()
-
-    return MessageResponse(message=f"Scan {scan_id} cancelled")
+    await _request_remote_cancel(scan_id)
+    return MessageResponse(message=f"Scan {scan_id} cancellation requested")
 
 
 @router.delete("/scan/{scan_id}", response_model=MessageResponse)
@@ -412,13 +813,31 @@ async def delete_scan(
     # visibility check in get_scan_results / cancel_scan — without it a caller
     # could pop another org's scan out of the shared in-memory pool (IDOR).
     entry = _active_scans.get(scan_id)
-    if not entry or not _scan_visible_to(entry, current_user):
+    if entry is None:
+        snap = await _load_mirrored_scan(scan_id)
+        if snap is None or not _scan_visible_to(snap, current_user):
+            raise HTTPException(status_code=404, detail="Scan not found")
+        # Owned by the other worker: drop the mirror, or the scan reappears in
+        # history the moment it next publishes progress. Order matters --
+        # _forget_mirrored_scan clears the cancel key too, so raising the flag
+        # FIRST would delete the very thing that stops the running scan.
+        await _forget_mirrored_scan(scan_id)
+        await _request_remote_cancel(scan_id)
+        return MessageResponse(message=f"Scan {scan_id} deleted")
+
+    if not _scan_visible_to(entry, current_user):
         raise HTTPException(status_code=404, detail="Scan not found")
 
+    # Tombstone BEFORE task.cancel(): the cancelled task's `finally` publishes a
+    # forced terminal snapshot, and it gets to run as soon as this coroutine
+    # awaits anything -- so _forget_mirrored_scan below is already too late to
+    # be the only guard.
+    _remember_deleted(scan_id)
     _active_scans.pop(scan_id, None)
     task = entry.get("task")
     if task and not task.done():
         task.cancel()
+    await _forget_mirrored_scan(scan_id)
 
     return MessageResponse(message=f"Scan {scan_id} deleted")
 
@@ -1887,41 +2306,28 @@ async def list_scan_history(
     limit: int = Query(default=20, le=100),
 ) -> Any:
     """Get recent scan history."""
+    # Tenant isolation: the scan pool is shared across all orgs, so
+    # _visible_scans filters on _scan_visible_to BEFORE the limit slice - the
+    # cap has to count only scans the caller may see. It also merges this
+    # worker's entries with the mirror, because a list built from one worker's
+    # dict alternated between two different sets on every refresh.
+    snaps = await _visible_scans(current_user, limit=limit)
 
-    def _started_sort_key(item: tuple[str, dict[str, Any]]) -> str:
-        # started_at is not a top-level scan_entry key; it lives on the
-        # ScanProgress. Sort most-recent-first, oldest/pending last.
-        prog = item[1].get("progress")
-        return prog.started_at.isoformat() if prog and prog.started_at else ""
+    def _started_sort_key(snap: dict[str, Any]) -> str:
+        prog = snap.get("progress") or {}
+        return prog.get("started_at") or ""
 
-    # Tenant isolation: _active_scans is a process-global pool shared across
-    # all orgs. Sibling scan endpoints gate on _scan_visible_to; this list did
-    # not, leaking other tenants' scan ids/targets/status. Filter BEFORE the
-    # limit slice so the cap counts only scans the caller may see.
-    visible = [(sid, sd) for sid, sd in _active_scans.items() if _scan_visible_to(sd, current_user)]
     history = []
-    for scan_id, scan_data in sorted(
-        visible,
-        key=_started_sort_key,
-        reverse=True,
-    )[:limit]:
-        progress: ScanProgress = scan_data.get("progress")
-        results: list[DiscoveredHost] = scan_data.get("results", [])
-        # `started_at` / `targets` are NOT top-level keys on scan_entry — they
-        # live on the ScanProgress and the scanner's ScanConfig respectively.
-        # Reading scan_data.get("started_at"/"targets") always returned
-        # None/[] so the FE rendered empty timestamp + target cells.
-        started_at = progress.started_at.isoformat() if progress and progress.started_at else None
-        scanner = scan_data.get("scanner")
-        targets = list(scanner.config.targets) if scanner and scanner.config else []
+    for snap in sorted(snaps, key=_started_sort_key, reverse=True)[:limit]:
+        prog = snap.get("progress") or {}
         history.append(
             {
-                "scan_id": scan_id,
-                "status": progress.status.value if progress else "unknown",
-                "started_at": started_at,
-                "targets": targets,
-                "total_discovered": len(results),
-                "progress": progress.progress_pct if progress else 0,
+                "scan_id": snap["scan_id"],
+                "status": prog.get("status", "unknown"),
+                "started_at": prog.get("started_at"),
+                "targets": snap.get("targets", []),
+                "total_discovered": snap.get("total_discovered", 0),
+                "progress": prog.get("progress_pct", 0),
             }
         )
     return history

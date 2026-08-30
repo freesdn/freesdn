@@ -51,7 +51,19 @@ class GatewayVPNDetailResponse(BaseModel):
 # Pending change (staging) responses
 # ──────────────────────────────────────────────────────────────────────
 
-ChangeStatus = Literal["pending", "applying", "applied", "discarded", "failed"]
+# ``reconciliation_required`` is the honest terminal state for a row whose
+# apply outcome is UNKNOWN (worker killed between the device write and the
+# terminal commit). It is NOT ``failed`` -- see
+# ``AdapterStagingService._recover_stale_applying``. It must be in this
+# Literal or the response model rejects such a row and the listing 500s.
+ChangeStatus = Literal[
+    "pending",
+    "applying",
+    "applied",
+    "discarded",
+    "failed",
+    "reconciliation_required",
+]
 ChangeOperation = Literal["create", "update", "delete"]
 
 

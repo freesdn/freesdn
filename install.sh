@@ -224,25 +224,67 @@ ok "Stack started"
 
 # ── Health wait ──────────────────────────────────────────────────────────────
 # Read the edge host port from the env file (dev → check the api on 8000).
-get_env() { grep -E "^$1=" "$ENV_NAME" 2>/dev/null | tail -1 | cut -d= -f2- ; }
+# An ABSENT key is a NORMAL outcome here, and callers are expected to supply a
+# ${VAR:-default} fallback. (An earlier version of this comment claimed EVERY
+# caller already did; two did not -- they used `get_env X || echo D`, whose
+# branch this `|| true` makes unreachable. Both were converted to value
+# fallbacks. If you add a caller, use ${VAR:-default}, never `||`.)
+# But `grep` exits 1 when it matches nothing, `pipefail` propagates that through
+# the pipeline, and `set -e` then kills the script AT THE ASSIGNMENT, before any
+# fallback can run. That is not theoretical: .env.dev.example has no
+# CADDY_SITE_ADDRESS, so `./install.sh --dev` exited 1 after starting the
+# containers -- no health check, no completion instructions. Trailing `|| true`
+# makes "not found" mean empty, for every caller, which is what they all assume.
+get_env() { grep -E "^$1=" "$ENV_NAME" 2>/dev/null | tail -1 | cut -d= -f2- || true ; }
+SITE_ADDR="$(get_env CADDY_SITE_ADDRESS)"
+CURL_RESOLVE=()
+# Which URL actually serves the app depends on CADDY_SITE_ADDRESS, and probing
+# the wrong one is worse than not probing: Caddy 308s plain HTTP to HTTPS
+# whenever the site address is a HOSTNAME, and `curl -sf` returns 0 on a 308
+# (--fail only trips on >= 400). So the old fixed http://127.0.0.1:$EDGE_HTTP_PORT
+# probe reported "Healthy" on pro and max without ever reaching /health -- and a
+# bare 308 responder serving nothing at all passes it too. Verified both ways on
+# 2026-08-30.
 if $DEV; then
     HEALTH_PORT="$(get_env API_HOST_PORT)"; HEALTH_PORT="${HEALTH_PORT:-8000}"
-    HEALTH_PATH="/api/v1/health"
-else
+    URL_HEALTH="http://127.0.0.1:${HEALTH_PORT}/api/v1/health"
+    APP_URL="http://localhost:${HEALTH_PORT}"
+elif [[ -z "$SITE_ADDR" || "$SITE_ADDR" == :* ]]; then
+    # ":80" style -> plain HTTP on the mapped edge port (the lite default)
     HEALTH_PORT="$(get_env EDGE_HTTP_PORT)"; HEALTH_PORT="${HEALTH_PORT:-8080}"
-    HEALTH_PATH="/health"
+    URL_HEALTH="http://127.0.0.1:${HEALTH_PORT}/health"
+    APP_URL="http://localhost:${HEALTH_PORT}"
+else
+    # a hostname -> Caddy serves HTTPS there and redirects plain HTTP to it.
+    # --resolve so this works before public DNS exists; -k because the cert is
+    # either Caddy's internal CA (localhost) or not issued yet (a real domain).
+    # 8443, not 443: this fallback has to mirror what COMPOSE publishes, and
+    # docker-compose.yml:755 maps "${EDGE_HTTPS_PORT:-8443}:443". With the key
+    # absent, compose listens on 8443 while probing 443 finds nothing, so a
+    # perfectly healthy edge times the installer out after four minutes (exit 4).
+    # The shipped pro/max templates set it to 443 explicitly, so they are
+    # unaffected either way; this is the omitted-key path.
+    HEALTH_PORT="$(get_env EDGE_HTTPS_PORT)"; HEALTH_PORT="${HEALTH_PORT:-8443}"
+    URL_HEALTH="https://${SITE_ADDR}:${HEALTH_PORT}/health"
+    CURL_RESOLVE=(--resolve "${SITE_ADDR}:${HEALTH_PORT}:127.0.0.1")
+    if [[ "$HEALTH_PORT" == "443" ]]; then
+        APP_URL="https://${SITE_ADDR}"
+    else
+        APP_URL="https://${SITE_ADDR}:${HEALTH_PORT}"
+    fi
 fi
-URL_HEALTH="http://127.0.0.1:${HEALTH_PORT}${HEALTH_PATH}"
 
 hdr "Waiting for the edge to answer ($URL_HEALTH)"
 DEADLINE=$(( $(date +%s) + 240 ))
 while true; do
-    if curl -sf "$URL_HEALTH" >/dev/null 2>&1; then
+    # Require a real 200. See the note above on why `curl -sf` is not enough.
+    HEALTH_CODE="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10         ${CURL_RESOLVE[@]+"${CURL_RESOLVE[@]}"} "$URL_HEALTH" 2>/dev/null || echo 000)"
+    if [[ "$HEALTH_CODE" == "200" ]]; then
         ok "Healthy at $URL_HEALTH"
         break
     fi
     if (( $(date +%s) > DEADLINE )); then
-        err "Timed out waiting for $URL_HEALTH (4 min)"
+        err "Timed out waiting for $URL_HEALTH (4 min; last status: $HEALTH_CODE)"
         docker compose "${COMPOSE_ARGS[@]}" ps
         exit 4
     fi
@@ -253,13 +295,31 @@ echo
 # ── Final report ─────────────────────────────────────────────────────────────
 hdr "FreeSDN is up"
 if $DEV; then
-    echo "  Frontend (Vite): http://localhost:$(get_env FRONTEND_HOST_PORT || echo 5173)"
-    echo "  API:             http://localhost:$(get_env API_HOST_PORT || echo 8000)"
-elif [[ -n "$DOMAIN" ]]; then
-    echo "  URL:  https://$DOMAIN   (Caddy is obtaining the certificate now)"
+    # Value fallbacks, NOT `get_env ... || echo`: get_env now ends in `|| true`
+    # (so an absent key cannot kill the script under set -e), which means it
+    # always exits 0 and the `||` branch is dead. These two printed
+    # "http://localhost:" with no port when .env.dev omitted the keys. Reading
+    # into a variable also covers an explicitly EMPTY value, which `||` never did.
+    DEV_FE_PORT="$(get_env FRONTEND_HOST_PORT)"; DEV_FE_PORT="${DEV_FE_PORT:-5173}"
+    DEV_API_PORT="$(get_env API_HOST_PORT)"; DEV_API_PORT="${DEV_API_PORT:-8000}"
+    echo "  Frontend (Vite): http://localhost:${DEV_FE_PORT}"
+    echo "  API:             http://localhost:${DEV_API_PORT}"
 else
-    echo "  URL:  http://localhost:${HEALTH_PORT}"
-    echo "  (For HTTPS set CADDY_SITE_ADDRESS=localhost or your domain in $ENV_NAME and re-up.)"
+    # Print the URL that actually works. This used to print
+    # http://localhost:$HEALTH_PORT unconditionally, which on pro and max is a
+    # 308 to HTTPS -- and then advised setting CADDY_SITE_ADDRESS=localhost,
+    # which those tiers' env files already set.
+    echo "  URL:  $APP_URL"
+    if [[ -z "$SITE_ADDR" || "$SITE_ADDR" == :* ]]; then
+        echo "  (HTTP only. For HTTPS set CADDY_SITE_ADDRESS to localhost or your"
+        echo "   domain in $ENV_NAME and re-up.)"
+    elif [[ "$SITE_ADDR" == "localhost" ]]; then
+        echo "  (HTTPS via Caddy's internal CA, so your browser will warn until you"
+        echo "   trust it. Set your domain in $ENV_NAME for a public certificate.)"
+    else
+        echo "  (Caddy is obtaining the certificate now. This needs port 80 and 443"
+        echo "   reachable from the internet and DNS pointing here.)"
+    fi
 fi
 echo
 echo "  First-run wizard: open the URL above to create the admin user."

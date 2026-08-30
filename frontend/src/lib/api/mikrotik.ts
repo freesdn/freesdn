@@ -664,15 +664,25 @@ export interface MikroTikNeighborDiscoverySettings {
   [key: string]: unknown;
 }
 
-/** ``/interface/lldp/interface`` per-interface LLDP state. */
+/**
+ * ``/interface/lldp/interface`` per-interface LLDP state.
+ *
+ * The field list mirrors the backend ``MikroTikLldpInterface`` schema
+ * EXACTLY, that model is ``extra="forbid"`` and the route declares
+ * ``response_model``, so any key not listed here is dropped server-side
+ * and can never arrive. The interface used to declare
+ * ``management-address`` and ``capabilities``, which RouterOS does
+ * report but the schema does not pass through, so the Topology tab's
+ * "Mgmt address" column rendered "-" on every row forever.
+ */
 export interface MikroTikLldpInterface {
   '.id'?: string;
+  name?: string;
   interface?: string;
-  'system-name'?: string;
-  'port-id'?: string;
-  'management-address'?: string;
+  'mac-address'?: string;
   'chassis-id'?: string;
-  'capabilities'?: string;
+  'port-id'?: string;
+  'system-name'?: string;
   [key: string]: unknown;
 }
 
@@ -705,16 +715,21 @@ export interface MikroTikTopologyResponse {
 
 // ─── SNMP CRUD types ──────────────────────────────────────────
 
-/** ``/snmp/trap-target`` row, community + version + address. */
+/**
+ * One host from the SNMP ``trap-target`` comma-list.
+ *
+ * RouterOS has NO per-target row: ``trap-target`` is a single
+ * comma-separated string field on the ``/snmp`` singleton, and
+ * community / version / generators are singleton-wide settings edited in
+ * the SNMP server card. The backend therefore returns ``{host}`` and
+ * nothing else (``MikroTikSnmpTrapTarget`` is ``extra="forbid"`` with a
+ * single required ``host``). This interface previously invented
+ * ``.id`` / ``address`` / ``port`` / ``version`` / ``community`` /
+ * ``comment``, so every trap-target cell rendered "-" and the delete
+ * button, gated on the non-existent ``.id``, did nothing at all.
+ */
 export interface MikroTikSnmpTrapTarget {
-  '.id'?: string;
-  address?: string;
-  port?: string | number;
-  version?: string;
-  community?: string;
-  comment?: string;
-  disabled?: string | boolean;
-  [key: string]: unknown;
+  host: string;
 }
 
 /**
@@ -1398,8 +1413,10 @@ export const mikrotikApi = {
       payload,
     }),
 
+  // Backend returns a bare LLDP-interface array (not an {items} envelope):
+  // the route declares ``response_model=list[MikroTikLldpInterface]``.
   getLldpInterfaces: (controllerId: string) =>
-    api.get<MikroTikListResponse<MikroTikLldpInterface>>(
+    api.get<MikroTikLldpInterface[]>(
       `/gateway-mikrotik-system/${enc(controllerId)}/lldp`,
     ),
 
@@ -1412,29 +1429,32 @@ export const mikrotikApi = {
   // Lives on /gateway-mikrotik-security/{cid}/snmp/*, read endpoints
   // for /settings and /communities already exist. Trap targets and
   // SNMPv3 users are newly added.
+  // Backend returns a bare trap-target array (not an {items} envelope):
+  // the route declares ``response_model=list[MikroTikSnmpTrapTarget]``.
   getSnmpTrapTargets: (controllerId: string) =>
-    api.get<MikroTikListResponse<MikroTikSnmpTrapTarget>>(
+    api.get<MikroTikSnmpTrapTarget[]>(
       `/gateway-mikrotik-security/${enc(controllerId)}/snmp/trap-targets`,
     ),
 
-  addSnmpTrapTarget: (controllerId: string, payload: Record<string, unknown>) =>
+  /**
+   * Append a host to the SNMP ``trap-target`` comma-list.
+   *
+   * The applier reads ``payload.host`` (``payload.address`` is accepted
+   * as a legacy alias) and 400s without it, and ``add_snmp_trap_target``
+   * is idempotent, so this is the only write a trap target needs. There
+   * is deliberately no ``update``: RouterOS exposes no per-target row id,
+   * and the backend maps ``update`` onto the same append, so an "edit"
+   * would silently ADD a second host and leave the original in place.
+   */
+  addSnmpTrapTarget: (controllerId: string, host: string) =>
     stageChange('security', controllerId, 'mikrotik.security.snmp.trap_target', 'create', {
-      payload,
+      payload: { host },
     }),
 
-  updateSnmpTrapTarget: (
-    controllerId: string,
-    targetId: string,
-    payload: Record<string, unknown>,
-  ) =>
-    stageChange('security', controllerId, 'mikrotik.security.snmp.trap_target', 'update', {
-      target_id: targetId,
-      payload,
-    }),
-
-  removeSnmpTrapTarget: (controllerId: string, targetId: string) =>
+  /** Remove a host from the ``trap-target`` comma-list. */
+  removeSnmpTrapTarget: (controllerId: string, host: string) =>
     stageChange('security', controllerId, 'mikrotik.security.snmp.trap_target', 'delete', {
-      target_id: targetId,
+      payload: { host },
     }),
 
   // Backend returns a bare SNMPv3-user array (not an {items} envelope).

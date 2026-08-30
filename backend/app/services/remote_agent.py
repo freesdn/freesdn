@@ -1433,7 +1433,11 @@ class AgentRegistryService:
         """
         results = {}
 
-        for agent_id, connection in self._connections.items():
+        # list(): same race the "Audit HIGH #3 fix" note at :1353 describes and
+        # that :1344, :1361 and :1367 already guard against -- this fourth
+        # fan-out was missed by that sweep. send_command below awaits, and the
+        # agent WebSocket handler mutates this dict from another coroutine.
+        for agent_id, connection in list(self._connections.items()):
             if site_ids is None or connection.info.site_id in site_ids:
                 try:
                     result = await connection.send_command(command, wait_result=True)

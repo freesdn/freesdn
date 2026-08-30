@@ -1140,7 +1140,7 @@ class PersistentAnalyticsService:
                 extra_where += " AND 1 = 0"
 
         sql = f"""
-            SELECT time, value, labels
+            SELECT time, value, labels, organization_id, site_id, device_id
             FROM analytics.metric_data
             WHERE metric_name = :metric_name {extra_where}
             ORDER BY time DESC
@@ -1154,6 +1154,14 @@ class PersistentAnalyticsService:
             "timestamp": row.time.isoformat(),
             "value": {"value": row.value},
             "labels": row.labels,
+            # Carried so a caller acting on this reading (e.g. the threshold
+            # beat task) can attribute what it creates to the right tenant.
+            # Without these, ``check_metric_thresholds`` wrote alerts with a
+            # NULL organization_id and every reader -- which filters on
+            # ``AnalyticsAlert.organization_id == org`` -- was blind to them.
+            "organization_id": row.organization_id,
+            "site_id": row.site_id,
+            "device_id": row.device_id,
         }
 
     # ------- Dashboard Summary -------

@@ -74,7 +74,7 @@ import {
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout';
-import { useNotificationsStore } from '@/stores';
+import { useToast } from '@/hooks/use-toast';
 
 // ─── Icon map for storage types ─────────────────────────────────────────────
 const STORAGE_ICONS: Record<string, React.ElementType> = {
@@ -214,7 +214,7 @@ function storageSchemaForMode(mode: 'create' | 'edit', currentFields: StorageTyp
 export default function StorageLocationsPage() {
   const { t } = useTranslation('backup');
   const queryClient = useQueryClient();
-  const { addNotification } = useNotificationsStore();
+  const { toast } = useToast();
 
   // ── State ───────────────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
@@ -264,11 +264,11 @@ export default function StorageLocationsPage() {
       queryClient.invalidateQueries({ queryKey: ['storage-locations'] });
       setCreateOpen(false);
       setCreatePrefilledType('');
-      addNotification({ type: 'success', title: t('StorageLocationsPage.notifications.created.title'), message: t('StorageLocationsPage.notifications.created.message') });
+      toast({ title: t('StorageLocationsPage.notifications.created.title'), description: t('StorageLocationsPage.notifications.created.message') });
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
-      addNotification({ type: 'error', title: t('StorageLocationsPage.notifications.error'), message: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.createFailed') });
+      toast({ title: t('StorageLocationsPage.notifications.error'), description: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.createFailed'), variant: 'destructive' });
     },
   });
 
@@ -281,11 +281,11 @@ export default function StorageLocationsPage() {
       queryClient.invalidateQueries({ queryKey: ['storage-locations'] });
       setEditOpen(false);
       setSelectedLocation(null);
-      addNotification({ type: 'success', title: t('StorageLocationsPage.notifications.updated.title'), message: t('StorageLocationsPage.notifications.updated.message') });
+      toast({ title: t('StorageLocationsPage.notifications.updated.title'), description: t('StorageLocationsPage.notifications.updated.message') });
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
-      addNotification({ type: 'error', title: t('StorageLocationsPage.notifications.error'), message: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.updateFailed') });
+      toast({ title: t('StorageLocationsPage.notifications.error'), description: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.updateFailed'), variant: 'destructive' });
     },
   });
 
@@ -297,11 +297,11 @@ export default function StorageLocationsPage() {
       queryClient.invalidateQueries({ queryKey: ['storage-locations'] });
       setDeleteOpen(false);
       setSelectedLocation(null);
-      addNotification({ type: 'success', title: t('StorageLocationsPage.notifications.deleted.title'), message: t('StorageLocationsPage.notifications.deleted.message') });
+      toast({ title: t('StorageLocationsPage.notifications.deleted.title'), description: t('StorageLocationsPage.notifications.deleted.message') });
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
-      addNotification({ type: 'error', title: t('StorageLocationsPage.notifications.error'), message: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.deleteFailed') });
+      toast({ title: t('StorageLocationsPage.notifications.error'), description: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.deleteFailed'), variant: 'destructive' });
     },
   });
 
@@ -320,7 +320,7 @@ export default function StorageLocationsPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
       setTestingId(null);
-      addNotification({ type: 'error', title: t('StorageLocationsPage.notifications.testFailed.title'), message: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.testFailed.message') });
+      toast({ title: t('StorageLocationsPage.notifications.testFailed.title'), description: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.testFailed.message'), variant: 'destructive' });
     },
   });
 

@@ -151,6 +151,8 @@ export const enterpriseApi = {
     target: { scope: string; scope_id?: string; device_type?: string; tag?: string; device_ids?: string[] };
     config?: Record<string, unknown>;
     rollout?: { strategy: string; stages?: Array<{ percent: number; wait_minutes?: number }>; failure_threshold_percent?: number; rollback_on_failure?: boolean };
+    /** Required for firmware_update: an irreversible fleet flash. */
+    confirm?: boolean;
   }) => api.post<BulkOperation>('/enterprise/bulk-operations', data),
 
   listBulkOperations: (params?: { status?: string }) =>

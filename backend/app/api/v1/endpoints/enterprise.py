@@ -2389,7 +2389,10 @@ async def _resolve_bulk_target_site_ids(
             .join(DeviceTag, DeviceTag.device_id == Device.id)
             .join(Site, Device.site_id == Site.id)
             .where(
-                DeviceTag.tag == target.tag,
+                # Normalised to match the persisted form -- see the note in
+                # tasks/bulk_operations._resolve_device_ids. This site selects the
+                # SITES the permission check runs against; the two must agree.
+                DeviceTag.tag == (target.tag or "").strip().lower(),
                 Site.organization_id == org_id,
                 *conditions,
             )
@@ -2444,6 +2447,22 @@ async def create_bulk_operation(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(f"Operation {payload.operation!r} requires '{required_perm}' permission"),
+        )
+
+    # an irreversible fleet flash requires explicit confirmation.
+    #
+    # The three other firmware paths (devices.batch_firmware_upgrade,
+    # devices.upgrade_firmware, controllers.batch_firmware_upgrade) have always
+    # enforced this. THIS path did not, and nobody noticed because the executor
+    # required a ``firmware_url`` the shipped UI cannot produce, so a bulk
+    # firmware job died before reaching an adapter. Removing that stale
+    # requirement -- correctly, it was never part of the adapter contract --
+    # turned a dead endpoint into a live one-click fleet flash. The brake has to
+    # be the deliberate one, not an accident of a leftover argument check.
+    if payload.operation == "firmware_update" and not payload.confirm:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bulk firmware flash can brick devices. Re-issue with confirm=true.",
         )
 
     org_id = _org_id(user)

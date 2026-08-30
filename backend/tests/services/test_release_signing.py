@@ -83,3 +83,164 @@ class TestSignVerify:
         short = "ab" * 16  # 16 bytes
         with pytest.raises(ValueError):
             signing.sign_digest(short)
+
+
+# ---------------------------------------------------------------------------
+# Release manifest signing (F-02)
+# ---------------------------------------------------------------------------
+#
+# Signing the bare digest bound nothing else. A backend that does NOT hold the
+# private key could re-serve a genuine OLDER release -- its binary, its checksum
+# and its stored signature -- as an update, because the signed object never said
+# which version/platform/agent-type/channel that digest belonged to. The
+# signature now covers a canonical manifest carrying all of them.
+
+
+class TestReleaseManifestSigning:
+    @staticmethod
+    def _manifest(**overrides):
+        from app.services.release_signing import build_release_manifest
+
+        base = {
+            "digest_hex": "a" * 64,
+            "version": "1.0.4",
+            "platform": "linux-amd64",
+            "agent_type": "daemon",
+            "channel": "stable",
+        }
+        base.update(overrides)
+        return build_release_manifest(**base)
+
+    def test_roundtrip_verifies(self) -> None:
+        from app.services.release_signing import sign_manifest, verify_manifest
+
+        m = self._manifest()
+        assert verify_manifest(m, sign_manifest(m)) is True
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("version", "9.9.9"),
+            ("platform", "win64"),
+            ("agent_type", "gui"),
+            ("channel", "prerelease"),
+            ("digest", "b" * 64),
+        ],
+    )
+    def test_tampering_with_any_bound_field_invalidates(self, field, value) -> None:
+        """The whole point: the metadata is bound, so relabelling breaks the sig."""
+        from app.services.release_signing import sign_manifest, verify_manifest
+
+        m = self._manifest()
+        sig = sign_manifest(m)
+        tampered = dict(m)
+        tampered[field] = value
+        assert verify_manifest(tampered, sig) is False
+
+    def test_canonical_form_is_stable_and_sorted(self) -> None:
+        """Both sides must derive identical bytes; signing one serialisation and
+        verifying another is how a signature scheme quietly stops meaning
+        anything."""
+        from app.services.release_signing import canonical_manifest_bytes
+
+        m = self._manifest()
+        raw = canonical_manifest_bytes(m)
+        assert raw == canonical_manifest_bytes(dict(reversed(list(m.items()))))
+        assert raw.startswith(b'{"agent_type"'), "keys must be sorted"
+        assert b" " not in raw, "no insignificant whitespace"
+
+    def test_incomplete_manifest_is_refused(self) -> None:
+        from app.services.release_signing import canonical_manifest_bytes
+
+        m = self._manifest()
+        del m["platform"]
+        with pytest.raises(ValueError, match="missing required field"):
+            canonical_manifest_bytes(m)
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"digest_hex": "short"},
+            {"version": ""},
+            {"platform": "  "},
+            {"agent_type": ""},
+            {"channel": ""},
+        ],
+    )
+    def test_a_manifest_that_cannot_describe_a_release_is_refused(self, kwargs) -> None:
+        """Fail at build time rather than signing something meaningless."""
+        with pytest.raises(ValueError):
+            self._manifest(**kwargs)
+
+
+class TestManifestSurvivesThePersistenceLifecycle:
+    """Sign -> persist -> rebuild -> verify must hold for accepted input.
+
+    The endpoints accept mixed-case ``platform``/``agent_type`` (validation
+    lower-cases before comparing) but used to SIGN the raw values and PERSIST the
+    lower-cased ones. The update-check endpoint rebuilds the manifest from the
+    stored row, so the bytes it produced could never match the signature and the
+    agent refused a perfectly legitimate update.
+
+    Neither the endpoint tests nor the signing tests covered the round trip --
+    each end was fine in isolation. This pins the seam between them.
+    """
+
+    def test_normalised_metadata_still_verifies_after_a_rebuild(self) -> None:
+        from app.services.release_signing import (
+            build_release_manifest,
+            sign_manifest,
+            verify_manifest,
+        )
+
+        raw_platform, raw_agent_type = "Linux-AMD64", "Daemon"
+        # What the endpoints now do: normalise BEFORE signing.
+        platform, agent_type = raw_platform.lower(), raw_agent_type.lower()
+
+        signed = build_release_manifest(
+            digest_hex="c" * 64,
+            version="1.0.4",
+            platform=platform,
+            agent_type=agent_type,
+            channel="stable",
+        )
+        signature = sign_manifest(signed)
+
+        # What the update-check endpoint does: rebuild from the persisted row,
+        # which stores the lower-cased values.
+        rebuilt = build_release_manifest(
+            digest_hex="c" * 64,
+            version="1.0.4",
+            platform=platform,   # as stored
+            agent_type=agent_type,
+            channel="stable",
+        )
+        assert verify_manifest(rebuilt, signature) is True
+
+    def test_signing_raw_case_then_rebuilding_lowercase_would_fail(self) -> None:
+        """Pins WHY the normalisation matters, so removing it is caught here."""
+        from app.services.release_signing import (
+            build_release_manifest,
+            sign_manifest,
+            verify_manifest,
+        )
+
+        signed_raw = build_release_manifest(
+            digest_hex="c" * 64,
+            version="1.0.4",
+            platform="Linux-AMD64",
+            agent_type="Daemon",
+            channel="stable",
+        )
+        signature = sign_manifest(signed_raw)
+
+        rebuilt_lower = build_release_manifest(
+            digest_hex="c" * 64,
+            version="1.0.4",
+            platform="linux-amd64",
+            agent_type="daemon",
+            channel="stable",
+        )
+        assert verify_manifest(rebuilt_lower, signature) is False, (
+            "if this ever passes, the manifest stopped binding platform/agent_type"
+        )

@@ -8,9 +8,17 @@
 #   rule_files:
 #     - /etc/prometheus/freesdn-alerts.yml
 #
-# All metric names match the exposition at /metrics in the FreeSDN backend
-# (see backend/app/core/metrics.py). Alert handlers should be wired
-# to whichever channel you use (PagerDuty / Slack / email) via Alertmanager.
+# Every ACTIVE rule below reads a metric some FreeSDN code actually writes.
+# That is not a given: a metric can be declared in backend/app/core/metrics.py,
+# exported on /metrics and never incremented, in which case an alert on it is
+# silently dead. Three rules were in exactly that state and are commented out
+# below with what it takes to re-arm them.
+# tests/tasks/test_observability_metrics_have_producers.py is the gate: it
+# fails if a rule here (or a panel in ../grafana/) names a freesdn_* metric
+# with no writer in the backend.
+#
+# Alert handlers should be wired to whichever channel you use (PagerDuty /
+# Slack / email) via Alertmanager.
 #
 # Critical alerts carry a ``runbook_url`` annotation pointing at the
 # operator docs at https://docs.freesdn.org. If you re-host the project,
@@ -73,37 +81,65 @@ groups:
             event loops, or contended adapter calls.
 
   # ──────────────────────────────────────────────────────────────────────
-  - name: freesdn.celery
-    interval: 30s
-    rules:
-
-      - alert: FreeSDNCeleryQueueBacklog
-        expr: freesdn_celery_queue_depth > 1000
-        for: 10m
-        labels:
-          severity: warning
-          component: worker
-        annotations:
-          summary: "Celery queue {{ $labels.queue }} backlog above 1000"
-          description: |
-            The {{ $labels.queue }} Celery queue has had more than 1000
-            pending tasks for 10 minutes. Either the workers are too few,
-            the tasks themselves are too slow, or they're crash-looping.
-
-      - alert: FreeSDNCeleryTaskFailureSpike
-        expr: |
-          sum(rate(freesdn_celery_tasks_total{status="failure"}[5m]))
-            > 0.5
-        for: 10m
-        labels:
-          severity: warning
-          component: worker
-        annotations:
-          summary: "Celery task failures > 0.5/s for 10 minutes"
-          description: |
-            Celery task failure rate is sustained above 0.5/s. Scope to
-            the failing task with: ``rate(freesdn_celery_tasks_total
-            {status="failure"}[5m])``.
+  # DISARMED 2026-08-27 - the freesdn.celery group is commented out, not
+  # deleted, because there is nothing wrong with the rules: there is no
+  # producer for the metrics they read.
+  #
+  # ``freesdn_celery_queue_depth`` (backend/app/core/metrics.py:154) and
+  # ``freesdn_celery_tasks_total`` (:161) are declared, exported on /metrics
+  # and incremented from NOWHERE - grep the backend for either name and the
+  # only hit is the declaration. metrics.py:153 says the depth gauge is
+  # "updated by a periodic probe, see app.tasks.metrics"; app/tasks/metrics.py
+  # exists and contains no such probe. A scrape returns the empty family, so
+  # both expressions evaluate to no data and neither alert can ever fire.
+  #
+  # Shipping them meant an operator who wired this file into Alertmanager
+  # believed they had Celery backlog and failure paging and had neither. That
+  # is worse than having no rule, which is why they are off rather than
+  # annotated.
+  #
+  # TO RE-ARM: uncomment this whole group the same commit that lands the
+  # producers. Cheapest complete route (from the celeryobs handoff): a
+  # collect-time custom collector in app/core/metrics.py doing ``r.llen(q)``
+  # per declared queue - app/api/v1/endpoints/tasks.py:625 already does
+  # exactly that read - plus celery ``task_postrun``/``task_failure`` signal
+  # handlers for the counter. The counter additionally needs the WORKER
+  # process scraped, i.e. a new target in docker/prometheus/prometheus.yml;
+  # the queue-depth gauge does not, because the API can read Redis itself.
+  # tests/tasks/test_observability_metrics_have_producers.py fails the moment
+  # a rule here names a metric nothing writes, so re-arming early is caught.
+  #
+  # - name: freesdn.celery
+  #   interval: 30s
+  #   rules:
+  #
+  #     - alert: FreeSDNCeleryQueueBacklog
+  #       expr: freesdn_celery_queue_depth > 1000
+  #       for: 10m
+  #       labels:
+  #         severity: warning
+  #         component: worker
+  #       annotations:
+  #         summary: "Celery queue {{ $labels.queue }} backlog above 1000"
+  #         description: |
+  #           The {{ $labels.queue }} Celery queue has had more than 1000
+  #           pending tasks for 10 minutes. Either the workers are too few,
+  #           the tasks themselves are too slow, or they're crash-looping.
+  #
+  #     - alert: FreeSDNCeleryTaskFailureSpike
+  #       expr: |
+  #         sum(rate(freesdn_celery_tasks_total{status="failure"}[5m]))
+  #           > 0.5
+  #       for: 10m
+  #       labels:
+  #         severity: warning
+  #         component: worker
+  #       annotations:
+  #         summary: "Celery task failures > 0.5/s for 10 minutes"
+  #         description: |
+  #           Celery task failure rate is sustained above 0.5/s. Scope to
+  #           the failing task with: ``rate(freesdn_celery_tasks_total
+  #           {status="failure"}[5m])``.
 
   # ──────────────────────────────────────────────────────────────────────
   - name: freesdn.database
@@ -193,19 +229,31 @@ groups:
             should be blocking these at 5/min - confirm the limiter is
             up and consider broader IP-block rules at the edge.
 
-      - alert: FreeSDNRateLimitSpike
-        expr: |
-          sum(rate(freesdn_rate_limit_hits_total[5m])) > 50
-        for: 10m
-        labels:
-          severity: warning
-          component: api
-        annotations:
-          summary: "Rate-limit hits > 50/s for 10 minutes"
-          description: |
-            Lots of clients are getting 429s. Either there's a real
-            attack, a buggy client retrying without backoff, or your
-            rate-limit settings are too tight for current traffic.
+      # DISARMED 2026-08-27, same reason as the freesdn.celery group above:
+      # ``freesdn_rate_limit_hits`` (backend/app/core/metrics.py:200) is
+      # declared and never incremented. The two 429 paths that would do it are
+      # app/core/middleware.py:582 and :593. Note that the obvious substitute
+      # does NOT exist either: setup_metrics() builds the instrumentator with
+      # should_group_status_codes=True (metrics.py:283), so http_requests_total
+      # carries status="4xx" and cannot single out a 429.
+      #
+      # TO RE-ARM: uncomment together with a .labels(endpoint=...).inc() on
+      # both 429 paths. That one is a genuine two-liner in the API process, no
+      # new scrape target needed.
+      #
+      # - alert: FreeSDNRateLimitSpike
+      #   expr: |
+      #     sum(rate(freesdn_rate_limit_hits_total[5m])) > 50
+      #   for: 10m
+      #   labels:
+      #     severity: warning
+      #     component: api
+      #   annotations:
+      #     summary: "Rate-limit hits > 50/s for 10 minutes"
+      #     description: |
+      #       Lots of clients are getting 429s. Either there's a real
+      #       attack, a buggy client retrying without backoff, or your
+      #       rate-limit settings are too tight for current traffic.
 
   # ──────────────────────────────────────────────────────────────────────
   - name: freesdn.adapters

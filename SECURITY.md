@@ -7,7 +7,7 @@ to the current release only -- older releases do not receive backports.
 
 | Version | Supported |
 |---------|-----------|
-| 26.06.x | Active    |
+| 26.08.x | Active    |
 
 26.06.1 is the first public release. If you are running an older checkout,
 upgrade before reporting -- the issue may already be fixed.
@@ -182,16 +182,25 @@ binary proves integrity in transit, not provenance.
 
 **The in-app agent auto-update feed is genuinely signed.** When your backend
 serves an agent release to its own agents, it signs the release binary's
-SHA-256 digest with an ECDSA P-256 key
+release MANIFEST with an ECDSA P-256 key
 (`backend/app/services/release_signing.py`) and exposes the matching public
-key at `GET /api/v1/agents/releases/public-key`. The agent verifies that
-signature before staging an update and, by default
-(`auto_update_require_signature`), refuses to install an unsigned release.
-It also pins the public key: an install-time fingerprint
-(`release_public_key_sha256`) if you set one, otherwise a persisted
-trust-on-first-use fingerprint, so a later key swap by a compromised server
-is rejected. The keypair is generated per deployment on your own backend,
-so there is no project-wide fingerprint for us to publish.
+key at `GET /api/v1/agents/releases/public-key`. The signature covers the
+binary's SHA-256 **together with its version, platform, agent type and
+channel** — signing the digest alone would let a backend that does not hold
+the private key re-serve a genuine older release, with its genuine signature,
+as an "update". The agent verifies that signature and then checks the manifest
+against the bytes it downloaded and against itself: same platform, same agent
+type, and a version strictly newer than the one it is running. By default
+(`auto_update_require_signature`) it refuses an unsigned release.
+
+The public key must be **pinned**, and the pin is provisioned out of band — at
+registration, which is authenticated and operator-approved, or at install via
+`release_public_key_sha256`. With no pin the agent refuses to update rather
+than trusting a key handed to it by the same server that serves the binary and
+the signature: trust-on-first-use protects only against a *later* key change,
+and proves nothing on first contact against a control plane that is already
+compromised. The keypair is generated per deployment on your own backend, so
+there is no project-wide fingerprint for us to publish.
 
 ### Security testing and review
 

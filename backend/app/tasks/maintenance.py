@@ -15,9 +15,10 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import ColumnElement, delete, func, select, text
 
 from app.core.celery_app import celery_app
+from app.core.config import settings
 from app.db.session import CelerySessionLocal as AsyncSessionLocal
 from app.db.session import get_logdb_celery_factory
 from app.tasks.base import FreeSDNTask
@@ -118,6 +119,7 @@ def reap_stuck_omada_pending_changes(self: Any, max_age_minutes: int = 5) -> dic
     from sqlalchemy import update
 
     from app.models.staging import AdapterPendingChange
+    from app.services.adapter_staging import STATUS_RECONCILIATION_REQUIRED
 
     cutoff = datetime.now(UTC) - timedelta(minutes=max_age_minutes)
 
@@ -130,8 +132,18 @@ def reap_stuck_omada_pending_changes(self: Any, max_age_minutes: int = 5) -> dic
                     AdapterPendingChange.updated_at < cutoff,
                 )
                 .values(
-                    status="failed",
-                    failure_reason="janitor_timeout",
+                    # NOT ``failed``. The model defines that as "the controller
+                    # rejected it"; a row stranded in ``applying`` may instead
+                    # have been applied with the worker dying before the
+                    # terminal commit. Same reasoning -- and same state -- as
+                    # AdapterStagingService._recover_stale_applying, which this
+                    # beat task duplicates on a schedule.
+                    status=STATUS_RECONCILIATION_REQUIRED,
+                    failure_reason=(
+                        "janitor: apply timed out in the 'applying' state, so the "
+                        "outcome on the controller is UNKNOWN. Verify the device "
+                        "before re-staging - the change may already have been applied."
+                    ),
                 )
             )
             result = await session.execute(stmt)
@@ -182,14 +194,56 @@ def cleanup_stale_progress(self: Any, hours: int = 24) -> dict[str, Any]:
     }
 
 
+def _reapable_user_sessions(
+    now: datetime, idle_cutoff: datetime, token_dead_cutoff: datetime
+) -> ColumnElement[bool]:
+    """Rows in ``core.user_sessions`` that are safe to delete.
+
+    "Safe" is a stronger condition than "stale". A row is the ONLY record that
+    a session was revoked: ``app.core.session_revocation`` returns False for a
+    missing row and ``/auth/refresh`` only blocks when it finds one, so deleting
+    a revoked row while its refresh token is still inside its window silently
+    UN-revokes it for the rest of that 14- (or 30-) day life. The predicate
+    therefore never deletes a row whose refresh token could still be presented.
+
+    - ``expires_at`` is the bound refresh token's own expiry (stamped by
+      ``_upsert_session`` in the auth router). Once it has passed, both tokens
+      on the row are dead and the row can go regardless of revocation state.
+    - Rows written before that column was populated carry NULL. For those we
+      fall back to ``last_used_at`` — which is stamped every time a refresh_jti
+      is written to the row, so ``last_used_at + max refresh window`` is an
+      upper bound on when the token dies. Un-revoked legacy rows leave after
+      the caller's idle window; revoked ones only after that upper bound.
+    """
+    from app.models import UserSession
+
+    # last_used_at is nullable; NULL < cutoff is NULL, which would exempt those
+    # rows forever. created_at is NOT NULL and is the correct floor.
+    last_seen = func.coalesce(UserSession.last_used_at, UserSession.created_at)
+    revoked = UserSession.revoked_at.isnot(None) | UserSession.is_revoked.is_(True)
+
+    expired = UserSession.expires_at.isnot(None) & (UserSession.expires_at < now)
+    legacy = UserSession.expires_at.is_(None) & (
+        (~revoked & (last_seen < idle_cutoff)) | (revoked & (last_seen < token_dead_cutoff))
+    )
+    return expired | legacy
+
+
 @celery_app.task(bind=True, base=FreeSDNTask, soft_time_limit=120, time_limit=180)  # type: ignore[untyped-decorator]
 def cleanup_orphan_sessions(self: Any, hours: int = 24) -> dict[str, Any]:
     """
     Clean up orphaned user sessions.
 
     Removes sessions that:
-    - Are expired
-    - Haven't been used in the specified hours
+    - Are past the expiry of the refresh token bound to them
+    - Or (legacy rows with no recorded expiry) have been idle for ``hours``
+      and are not revoked — see ``_reapable_user_sessions`` for why revoked
+      rows have to outlive their token instead.
+
+    This never ran: the predicate referenced ``UserSession.last_activity_at``,
+    a column the model does not have (it is ``last_used_at``), so building the
+    statement raised AttributeError before either DELETE was issued — and the
+    ``# type: ignore[attr-defined]`` on that line hid it from mypy.
     """
 
     async def _run() -> dict[str, Any]:
@@ -197,12 +251,18 @@ def cleanup_orphan_sessions(self: Any, hours: int = 24) -> dict[str, Any]:
         from app.models.sso import SSOSession
 
         now = datetime.now(UTC)
-        cutoff = now - timedelta(hours=hours)
+        idle_cutoff = now - timedelta(hours=hours)
+        token_dead_cutoff = now - timedelta(
+            days=max(
+                settings.REFRESH_TOKEN_EXPIRE_DAYS,
+                settings.REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS,
+            )
+        )
 
         async with AsyncSessionLocal() as session:
             user_result = await session.execute(
                 delete(UserSession).where(
-                    (UserSession.expires_at < now) | (UserSession.last_activity_at < cutoff)  # type: ignore[attr-defined]
+                    _reapable_user_sessions(now, idle_cutoff, token_dead_cutoff)
                 )
             )
             # SSO sessions are short-lived (10-min TTL) and single-use; expired or

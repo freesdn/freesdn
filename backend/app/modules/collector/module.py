@@ -162,17 +162,39 @@ class CollectorModule(BaseModule):
         await super().on_stop(organization_id, db)
 
     async def health_check(self) -> dict[str, Any]:
+        """Report whether the receivers this module promised are actually bound.
+
+        This used to return a hard ``"healthy"`` in the same dict that reported
+        ``any_service_running: False`` -- so the one thing a caller would use it
+        for, "is the collector actually collecting", was the one thing it could
+        not say. A receiver that failed to bind (port in use, no CAP_NET_BIND
+        for 162/514) is swallowed by CollectorManager._start_* with a warning
+        and leaves the manager running with nothing listening; that is exactly
+        the state this must report as degraded.
+
+        NOTE: the platform still has no route that calls this -- there is no
+        GET /modules/{id}/health in app/modules/api.py, and neither loader.py
+        nor registry.py invokes health_check. GET /collector/status is the
+        surface an operator actually has. Fixing that means adding a route in
+        app/modules/api.py, which also covers the ai and network modules.
+        """
         from app.modules.collector.services.manager import get_collector_manager
 
-        svc_status = get_collector_manager().status()
+        manager = get_collector_manager()
+        svc_status = manager.status()
         any_running = any(v["running"] for v in svc_status.values())
+        # ``_running`` is set by CollectorManager.start(), i.e. the module was
+        # asked to collect. Enabled-but-nothing-bound is the degraded case;
+        # never-started (no org enabled the module) is legitimately healthy.
+        started = getattr(manager, "_running", False)
         return {
-            "status": "healthy",
+            "status": "degraded" if started and not any_running else "healthy",
             "module": self.manifest.id,
             "version": self.manifest.version,
             "state": self.state.value,
             "checks": {
                 "services": svc_status,
                 "any_service_running": any_running,
+                "events": manager.event_stats(),
             },
         }

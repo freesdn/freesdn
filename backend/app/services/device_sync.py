@@ -29,10 +29,12 @@ Security layers:
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import json
 import logging
 import re
+import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -689,6 +691,33 @@ class DeviceSyncService:
 DEBOUNCE_SECONDS = 5  # Coalesce rapid CRUD ops into one sync
 
 
+def _dispatch_device_registry_sync(module_id: str) -> None:
+    """Debounce in Redis and publish the Celery task. Blocking."""
+    from app.core.redis_client import get_sync_redis
+
+    r = get_sync_redis()
+    key = f"freesdn:device_sync_pending:{module_id}"
+
+    try:
+        # SET NX — only one task per module within the debounce window
+        if r.set(key, "1", nx=True, ex=DEBOUNCE_SECONDS):
+            from app.core.celery_app import celery_app
+
+            celery_app.send_task(
+                "sync.sync_module_incremental",
+                args=[module_id],
+                countdown=DEBOUNCE_SECONDS,
+                queue="sync",
+            )
+            logger.debug(
+                "Queued incremental sync for module %s (debounce %ds)", module_id, DEBOUNCE_SECONDS
+            )
+    finally:
+        # ``get_sync_redis`` hands back a fresh client (and pool) per call, so a
+        # raise before this ran leaked a connection on every failed dispatch.
+        r.close()
+
+
 def trigger_device_registry_sync(module_id: str) -> None:
     """
     Schedule an incremental device-registry sync for *one* module.
@@ -697,24 +726,32 @@ def trigger_device_registry_sync(module_id: str) -> None:
     exists, the task is already queued and we skip.  This prevents
     hammering the DB when 50 NVRs are bulk-imported in quick succession.
 
-    Safe to call from any async or sync context (fires a Celery task).
+    Callable from sync or async code, but NOT the same way in both, and the
+    docstring used to claim otherwise while the body did blocking socket I/O:
+    a Redis ``SET NX`` plus a Celery broker publish. Every caller today is an
+    ``async def`` FastAPI handler (``create_nvr``, ``create_gateway``,
+    ``create_pbx`` and their update twins), so on a slow broker or a Valkey
+    failover that froze the worker's whole event loop mid-request.
+
+    * On an event loop: dispatched on a worker thread, best-effort. A failure
+      is logged, not raised — the row the caller just committed is already
+      saved, and turning a broker hiccup into a 500 told the operator their
+      NVR had not been created when it had. The cost of a lost dispatch is
+      that this module's ``devices.devices`` rows lag until the next CRUD op
+      on it, because nothing else schedules ``sync.sync_module_incremental``.
+    * Off an event loop (Celery, scripts): unchanged — runs inline and
+      propagates.
     """
-    from app.core.redis_client import get_sync_redis
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        _dispatch_device_registry_sync(module_id)
+        return
 
-    r = get_sync_redis()
-    key = f"freesdn:device_sync_pending:{module_id}"
+    def _worker() -> None:
+        try:
+            _dispatch_device_registry_sync(module_id)
+        except Exception as exc:  # noqa: BLE001 - best-effort, see docstring
+            logger.warning("Device-registry sync dispatch failed for %s: %s", module_id, exc)
 
-    # SET NX — only one task per module within the debounce window
-    if r.set(key, "1", nx=True, ex=DEBOUNCE_SECONDS):
-        from app.core.celery_app import celery_app
-
-        celery_app.send_task(
-            "sync.sync_module_incremental",
-            args=[module_id],
-            countdown=DEBOUNCE_SECONDS,
-            queue="sync",
-        )
-        logger.debug(
-            "Queued incremental sync for module %s (debounce %ds)", module_id, DEBOUNCE_SECONDS
-        )
-    r.close()
+    threading.Thread(target=_worker, name=f"device-sync-dispatch-{module_id}", daemon=True).start()

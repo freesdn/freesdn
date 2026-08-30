@@ -89,6 +89,7 @@ import {
 
 import { accessPointsApi } from '@/lib/api';
 import { controllersApi } from '@/lib/api/controllers';
+import { escapeCell } from '@/lib/csv';
 import type {
   AccessPointSummary,
   AccessPointDetail,
@@ -530,10 +531,10 @@ export default function AccessPointsPage() {
       return;
     }
     const headers = ['Name', 'Model', 'Vendor', 'MAC Address', 'IP Address', 'Site', 'Status', 'Firmware', 'Clients', 'Uptime (s)', 'CPU %', 'Memory %'];
-    const escape = (val: unknown) => {
-      const s = val === null || val === undefined ? '' : String(val);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const escape = (val: unknown) => escapeCell(val);
     const rows = filteredAPs.map((ap) => [
       ap.name, ap.model, ap.vendor, ap.mac_address, ap.ip_address, ap.site_name,
       ap.status, ap.firmware_version, ap.clients, ap.uptime, ap.cpu_usage, ap.memory_usage,

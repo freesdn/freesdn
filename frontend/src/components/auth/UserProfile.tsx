@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
 import { Button } from '../ui/button';
@@ -22,19 +22,34 @@ import {
   Copy,
 } from 'lucide-react';
 
+/**
+ * The user record has ONE name column, `full_name`; `first_name`/`last_name`
+ * are split out of it by the auth store's normalizeUser. So the form edits the
+ * halves and the request has to carry the whole.
+ */
+function nameFields(user: { first_name?: string; last_name?: string } | null | undefined) {
+  return { first_name: user?.first_name || '', last_name: user?.last_name || '' };
+}
+
 export function UserProfile() {
   const { t } = useTranslation('common');
   const { user, logout, fetchCurrentUser } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
+
   // Profile form
-  const [profile, setProfile] = useState({
-    first_name: user?.first_name || '',
-    last_name: user?.last_name || '',
-  });
-  
+  const [profile, setProfile] = useState(() => nameFields(user));
+
+  // Re-seed from the server's answer, not from what was typed. Keyed on
+  // `full_name` (the only field the backend actually stores) so it fires when a
+  // save lands or another session renames the account, and never mid-typing --
+  // editing the inputs does not change the store.
+  const storedFullName = user?.full_name ?? '';
+  useEffect(() => {
+    setProfile(nameFields(useAuthStore.getState().user));
+  }, [storedFullName]);
+
   // Password change form
   const [passwordForm, setPasswordForm] = useState({
     current_password: '',
@@ -50,7 +65,13 @@ export function UserProfile() {
     backup_codes: string[];
   } | null>(null);
   const [mfaCode, setMfaCode] = useState('');
-  
+  // POST /auth/mfa/disable takes a REQUIRED `password` body field (step-up
+  // re-auth). This used to post no body at all, so FastAPI rejected it with a
+  // 422 before the handler ran and MFA could never be turned off from the UI —
+  // the toast just said "Failed to disable MFA". Collect the password first.
+  const [showDisableMfa, setShowDisableMfa] = useState(false);
+  const [disableMfaPassword, setDisableMfaPassword] = useState('');
+
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -58,7 +79,17 @@ export function UserProfile() {
     setIsLoading(true);
     
     try {
-      await api.patch('/auth/me', profile);
+      // PATCH /auth/me is validated by ProfileUpdateRequest, which declares
+      // full_name / username / language and (like every schema here) does not
+      // forbid extras. This used to send `{first_name, last_name}`: pydantic
+      // dropped both, the handler committed an empty update, the endpoint
+      // answered 200 and the UI reported "profile updated" while nothing had
+      // changed -- the old name was still there on reload. There is no
+      // first_name column to write; core.users has full_name.
+      const full_name = [profile.first_name.trim(), profile.last_name.trim()]
+        .filter(Boolean)
+        .join(' ');
+      await api.patch('/auth/me', { full_name });
       await fetchCurrentUser();
       setSuccess(t('UserProfile.messages.profileUpdated'));
     } catch (err: unknown) {
@@ -134,14 +165,18 @@ export function UserProfile() {
     }
   };
   
-  const handleDisableMfa = async () => {
+  const handleDisableMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
+    setSuccess(null);
     setIsLoading(true);
-    
+
     try {
-      await api.post('/auth/mfa/disable');
+      await api.post('/auth/mfa/disable', { password: disableMfaPassword });
       await fetchCurrentUser();
       setSuccess(t('UserProfile.messages.mfaDisabled'));
+      setShowDisableMfa(false);
+      setDisableMfaPassword('');
     } catch (err: unknown) {
       const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
       setError(axiosErr.response?.data?.detail || t('UserProfile.messages.mfaDisableFailed'));
@@ -397,31 +432,72 @@ export function UserProfile() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Smartphone className="h-8 w-8 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">
-                      {user.mfa_enabled ? t('UserProfile.mfa.statusEnabled') : t('UserProfile.mfa.statusDisabled')}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {user.mfa_enabled
-                        ? t('UserProfile.mfa.statusEnabledDescription')
-                        : t('UserProfile.mfa.statusDisabledDescription')}
-                    </p>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <Smartphone className="h-8 w-8 text-muted-foreground" />
+                    <div>
+                      <p className="font-medium">
+                        {user.mfa_enabled ? t('UserProfile.mfa.statusEnabled') : t('UserProfile.mfa.statusDisabled')}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {user.mfa_enabled
+                          ? t('UserProfile.mfa.statusEnabledDescription')
+                          : t('UserProfile.mfa.statusDisabledDescription')}
+                      </p>
+                    </div>
                   </div>
+
+                  {user.mfa_enabled ? (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => setShowDisableMfa(true)}
+                      disabled={isLoading || showDisableMfa}
+                    >
+                      {t('UserProfile.mfa.disable')}
+                    </Button>
+                  ) : (
+                    <Button onClick={handleEnableMfa} disabled={isLoading}>
+                      {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      {t('UserProfile.mfa.enable')}
+                    </Button>
+                  )}
                 </div>
-                
-                {user.mfa_enabled ? (
-                  <Button variant="destructive" onClick={handleDisableMfa} disabled={isLoading}>
-                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    {t('UserProfile.mfa.disable')}
-                  </Button>
-                ) : (
-                  <Button onClick={handleEnableMfa} disabled={isLoading}>
-                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    {t('UserProfile.mfa.enable')}
-                  </Button>
+
+                {/* Step-up re-auth: /auth/mfa/disable requires the account
+                    password, so there has to be somewhere to type it. */}
+                {user.mfa_enabled && showDisableMfa && (
+                  <form onSubmit={handleDisableMfa} className="space-y-2 max-w-md">
+                    <Label htmlFor="disable_mfa_password">{t('UserProfile.password.current')}</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="disable_mfa_password"
+                        type="password"
+                        autoComplete="current-password"
+                        value={disableMfaPassword}
+                        onChange={(e) => setDisableMfaPassword(e.target.value)}
+                        required
+                      />
+                      <Button
+                        type="submit"
+                        variant="destructive"
+                        disabled={isLoading || !disableMfaPassword}
+                      >
+                        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : t('UserProfile.mfa.disable')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setShowDisableMfa(false);
+                          setDisableMfaPassword('');
+                        }}
+                      >
+                        {t('UserProfile.actions.cancel')}
+                      </Button>
+                    </div>
+                  </form>
                 )}
               </div>
             )}

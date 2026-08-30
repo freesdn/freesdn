@@ -1650,6 +1650,52 @@ async def create_container(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# ORDER MATTERS: this literal route MUST stay above the
+# "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}" DELETE below.
+# Starlette answers with the first matching route, so while it was declared
+# after that catch-all, DELETE .../nodes/{node}/certificates/custom dispatched
+# to delete_vm with vm_type='certificates' and vmid='custom' -- a destructive
+# handler reached with parameters it was never meant to see, and the real
+# certificate handler unreachable. Found by
+# tests/api/test_no_route_is_shadowed.py once it began probing parameterised
+# routes rather than only literal ones.
+@router.delete(
+    "/controllers/{controller_id}/nodes/{node}/certificates/custom",
+    response_model=None,
+    summary="Delete custom TLS certificate",
+)
+async def delete_custom_certificate(
+    controller_id: UUID,
+    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
+    restart: bool = Query(False),
+    session: AsyncSession = Depends(get_db),
+    current_user=Depends(require_min_role("site_admin")),
+):
+    ctrl = await _get_controller(controller_id, session, current_user)
+    try:
+        svc = HypervisorService(session)
+        result = await svc.delete_custom_certificate(ctrl, node, restart)
+        if not result.success:
+            raise HTTPException(
+                status_code=400, detail=result.error or "Failed to delete certificate"
+            )
+        return result.data
+    except HTTPException:
+        raise
+    except ConnectionError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except AdapterError:
+        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
+    except Exception as e:
+        logger.error("Hypervisor API error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SUBSCRIPTION
+# ═══════════════════════════════════════════════════════════════════════════
+
+
 @router.delete(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}",
     summary="Delete a VM or container",
@@ -2372,43 +2418,6 @@ async def upload_custom_certificate(
     except Exception as e:
         logger.error("Hypervisor API error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.delete(
-    "/controllers/{controller_id}/nodes/{node}/certificates/custom",
-    response_model=None,
-    summary="Delete custom TLS certificate",
-)
-async def delete_custom_certificate(
-    controller_id: UUID,
-    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    restart: bool = Query(False),
-    session: AsyncSession = Depends(get_db),
-    current_user=Depends(require_min_role("site_admin")),
-):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        result = await svc.delete_custom_certificate(ctrl, node, restart)
-        if not result.success:
-            raise HTTPException(
-                status_code=400, detail=result.error or "Failed to delete certificate"
-            )
-        return result.data
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# SUBSCRIPTION
-# ═══════════════════════════════════════════════════════════════════════════
 
 
 @router.get(

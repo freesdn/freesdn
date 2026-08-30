@@ -45,7 +45,6 @@ function resetAuthStore(overrides: Record<string, unknown> = {}) {
     error: null,
     mfaPending: false,
     mfaToken: null,
-    forcePasswordChange: false,
     _isHydrated: true,
     _isAuthInitialized: true,
     ...overrides,

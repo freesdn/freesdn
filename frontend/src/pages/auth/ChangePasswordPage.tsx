@@ -3,14 +3,23 @@
 /**
  * FreeSDN - Change Password Page
  *
- * Shown when `forcePasswordChange` is true in the auth store
- * (e.g. first login after an admin reset, or password-rotation policy).
+ * Self-service password change at /change-password.
+ *
+ * This used to say it was "shown when `forcePasswordChange` is true in the
+ * auth store". Nothing ever set that: /auth/login declares
+ * response_model=BrowserAuthResponse, a response_model is a whitelist that
+ * silently drops undeclared keys, and no backend code or User column produced
+ * a force_password_change flag to begin with -- so the ProtectedRoute redirect
+ * that pointed here never fired in any release. The flag and the guard are
+ * gone; forcing a rotation needs a must_change_password column, a migration
+ * and an admin path to set it, and none of those exist yet.
+ *
+ * The page itself is real and reached by navigating to /change-password.
  */
 
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '@/stores/authStore';
 import { api, getApiErrorMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +30,6 @@ import { Network, Loader2, AlertCircle, Eye, EyeOff, ShieldAlert } from 'lucide-
 export default function ChangePasswordPage() {
   const { t } = useTranslation('auth');
   const navigate = useNavigate();
-  const { clearForcePasswordChange } = useAuthStore();
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -60,7 +68,6 @@ export default function ChangePasswordPage() {
         current_password: currentPassword,
         new_password: newPassword,
       });
-      clearForcePasswordChange();
       navigate('/dashboard', { replace: true });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, t('ChangePasswordPage.errors.changeFailed')));

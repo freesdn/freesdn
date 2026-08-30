@@ -2116,7 +2116,7 @@
         "interface": "接口",
         "systemName": "邻居系统名称",
         "portId": "邻居端口 ID",
-        "mgmtAddress": "管理地址"
+        "chassisId": "邻居 chassis-id"
       }
     },
     "dialog": {
@@ -2474,18 +2474,14 @@
     },
     "traps": {
       "title": "Trap 目标",
-      "description": "/snmp/trap 行 · 路由器发送 SNMP trap 的目标地址。",
+      "description": "/snmp 的 trap-target 逗号列表 · 路由器发送 SNMP trap 的主机。Community 与版本是服务器级设置，请在上方编辑。",
       "loadError": "加载 trap 目标失败",
       "empty": {
         "title": "未配置 trap 目标",
         "description": "添加一个 trap 目标以将 SNMP 通知转发至管理端。"
       },
       "columns": {
-        "address": "地址",
-        "port": "端口",
-        "version": "版本",
-        "community": "Community",
-        "comment": "备注",
+        "host": "主机",
         "actions": "操作"
       }
     },
@@ -2514,15 +2510,9 @@
       "locationPlaceholder": "机柜 3 / 2 层"
     },
     "trapDialog": {
-      "editTitle": "编辑 trap 目标",
       "addTitle": "添加 trap 目标",
-      "description": "暂存对 /snmp/trap 的更改。",
-      "address": "地址",
-      "port": "端口",
-      "version": "版本",
-      "community": "Community",
-      "comment": "备注",
-      "commentPlaceholder": "主 NMS"
+      "description": "暂存向 /snmp trap-target 列表的追加操作。",
+      "host": "主机"
     },
     "trapDelete": {
       "title": "删除 trap 目标",

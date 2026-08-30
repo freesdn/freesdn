@@ -63,6 +63,7 @@ import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { useToast } from '@/hooks/use-toast';
 import { Download } from 'lucide-react';
 import { AddDeviceDialog } from '@/components/cameras/AddDeviceDialog';
+import { escapeCell } from '@/lib/csv';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -396,10 +397,10 @@ export default function NVRListPage() {
       'firmware_version', 'serial_number', 'channel_count',
       'storage_total_gb', 'storage_used_gb', 'last_synced_at',
     ];
-    const escape = (v: unknown) => {
-      const s = v == null ? '' : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const escape = (v: unknown) => escapeCell(v);
     const rows = filteredNVRs.map((n) =>
       headers.map((h) => escape((n as unknown as Record<string, unknown>)[h])).join(','),
     );

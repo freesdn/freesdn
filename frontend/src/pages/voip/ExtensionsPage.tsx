@@ -51,6 +51,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { voipApi, getApiErrorMessage } from '@/lib/api';
 import { PageHeader, PageToolbar, PageTabs, type PageTab } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
+import { escapeCell } from '@/lib/csv';
 import type { Extension, RingGroup, PBXSystem } from './types';
 
 function RingStrategyBadge({ strategy }: { strategy?: string }) {
@@ -162,10 +163,10 @@ export default function ExtensionsPage() {
   function exportExtensionsCsv() {
     if (extensions.length === 0) return;
     const headers = ['extension_number', 'display_name', 'caller_id_name', 'extension_type', 'pbx', 'voicemail_enabled'];
-    const escape = (v: unknown) => {
-      const s = v == null ? '' : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const escape = (v: unknown) => escapeCell(v);
     const rows = extensions.map((e) => {
       const pbx = pbxSystems.find((p) => p.id === (e.pbx_id ?? e.pbx_system_id));
       return [

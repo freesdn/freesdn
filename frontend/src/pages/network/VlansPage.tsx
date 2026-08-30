@@ -82,6 +82,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { escapeCell } from '@/lib/csv';
 
 // DHCP Status badge · uses canonical StatusBadge
 function DhcpBadge({ enabled }: { enabled: boolean }) {
@@ -488,10 +489,10 @@ export default function VlansPage() {
       'dhcp_start',
       'dhcp_end',
     ];
-    const esc = (val: unknown) => {
-      const s = val === undefined || val === null ? '' : String(val);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const esc = (val: unknown) => escapeCell(val);
     const csv = [
       headers.join(','),
       ...rows.map((v) =>

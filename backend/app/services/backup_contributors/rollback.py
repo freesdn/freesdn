@@ -27,13 +27,36 @@ Trade-offs (documented for ops + the audit trail):
 - **Storage cost**: rollback slots count against the same retention
   policy as user-created backups. Default retention 7 days, so a
   rollback slot from a botched restore is recoverable for a week.
-- **Encryption**: rollback slots are encrypted with the same GPG key
-  + Fernet KDF as regular backups. Same blast-radius
-  story.
-- **No race**: the snapshot is taken with a DB-level snapshot
-  (REPEATABLE READ transaction) before the restore loop opens its
-  own transaction, so the rollback represents the EXACT pre-restore
-  state, not a partially-applied state.
+- **Encryption**: the slot is a CONFIG snapshot (``.fsdn``) sealed
+  with the instance ``SECRET_KEY``, because there is no operator
+  passphrase to collect on a restore that has already been
+  authorised. It is therefore bound to this instance and is NOT the
+  ``.fsdnvault`` posture a user can choose for their own backups.
+- **What it does NOT contain**: no credential secrets (API keys,
+  tokens, SSH private keys, certificates, SNMP communities), no user
+  password hashes, no roles/is_superuser, no MFA secrets —
+  ``include_secrets=False`` says so on the row, and the user rows it
+  does carry are identity only (see the ``include_secrets`` branch in
+  ``BackupService._collect_data``). Undoing a restore therefore
+  returns the CONFIG to its pre-restore shape and leaves the live
+  credential vault, password hashes and roles exactly as the botched
+  restore left them. That is safe
+  rather than destructive only because ``_BLOCKED_FIELDS`` in
+  ``app/services/backup.py`` derives the credential secret columns
+  from ``CREDENTIAL_SECRET_FIELDS``, so a config-only restore cannot
+  write the ``None`` placeholders over live ciphertext; without that
+  guard, clicking "undo" would itself have wiped the vault.
+- **What it cannot undo**: ``_restore_data`` only INSERTs and
+  UPDATEs — it never deletes. Restoring the slot cannot remove rows
+  the botched restore created; it can only put the rows that existed
+  before back the way they were.
+- **No DB-level snapshot**: an earlier version of this docstring
+  claimed the capture ran in a REPEATABLE READ transaction. It never
+  did — nothing in the tree sets an isolation level. The capture
+  reads through the caller's own session immediately before the
+  restore loop runs on that same session, so it is ordered ahead of
+  every restore write, but it is not isolated from unrelated
+  concurrent writers.
 
 Industry comparison:
   - **Cisco DNA**: "pre-restore backup" auto-captured + retained
@@ -83,6 +106,10 @@ async def capture_rollback_slot(
     about it is special except the ``backup_type`` marker and the
     link back to the RestoreJob it precedes.
 
+    It is a CONFIG snapshot (``include_secrets=False``), so "undo"
+    means "put the configuration back", not "put everything back" —
+    read the module docstring's trade-offs before assuming otherwise.
+
     Args:
       session: Async DB session — used for both the snapshot itself
         and the new Backup row's metadata.
@@ -108,8 +135,10 @@ async def capture_rollback_slot(
         users; v1 is strict.
       - We use the existing ``BackupService.create_backup`` machinery
         so the rollback slot benefits from the same encryption,
-        storage, and validate_restore monthly checks as user-created
-        backups. No bespoke storage path.
+        storage, and validate_restore monthly checks as a user-created
+        CONFIG backup. No bespoke storage path. It is not equivalent
+        to a user's Full/secure (``.fsdnvault``) backup, which carries
+        secrets under an operator passphrase.
     """
     # Lazy import to avoid a circular dep with BackupService.
     from app.modules.backup.models import Backup
@@ -126,26 +155,39 @@ async def capture_rollback_slot(
     source = await session.get(Backup, restore_job.backup_id)
     source_name = (source.name if source and source.name else "a backup")[:60]
     name = f'Pre-restore snapshot — before restoring "{source_name}"'
+    # The limitation belongs in the description, not just in this module's
+    # docstring: ``description`` is on BackupResponse and is what the catalog UI
+    # shows next to the slot. An operator reaching for "undo" after a bad
+    # restore has to know, at that moment, that the undo covers configuration
+    # and not the credential vault or logins.
     description = (
         f"Automatic snapshot of the current configuration, captured just "
         f'before restoring "{source_name}". Restore this snapshot to undo '
-        f"that restore. Retention: {retention_days} days."
+        f"that restore. Configuration only: credential secrets, user password "
+        f"hashes and roles are NOT in this snapshot and are left exactly as "
+        f"the restore left them, and rows the restore CREATED are not "
+        f"removed. Retention: {retention_days} days."
     )
 
     slot = await svc.create_backup(
         name=name,
         description=description,
         backup_type=ROLLBACK_BACKUP_TYPE,
-        # Capture everything — the rollback must be a complete
-        # representation of the pre-restore state, not a filtered
-        # subset. The operator's restore-time include/exclude flags
-        # do NOT apply to the rollback slot.
+        # Every category the config snapshot can carry — the operator's
+        # restore-time include/exclude flags do NOT narrow the rollback slot.
         include_devices=True,
         include_vlans=True,
         include_ssids=True,
         include_users=True,
         include_automation=True,
-        # Same encryption posture as user backups.
+        # Explicit, not defaulted: a secure (.fsdnvault) backup would carry the
+        # secrets this slot lacks, but create_backup rejects one without an
+        # operator passphrase of 12+ characters and there is nobody to prompt on
+        # an already-authorised restore. So the slot is a config snapshot, and
+        # the docstring + description above say so rather than implying
+        # otherwise. See the module docstring for what that costs an operator.
+        include_secrets=False,
+        # Encrypted under the instance SECRET_KEY (config snapshots always are).
         is_encrypted=True,
         retention_days=retention_days,
         organization_id=organization_id,

@@ -13,12 +13,12 @@ import time
 import uuid as _uuid
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +40,7 @@ from app.models import User
 from app.schemas import (
     BrowserAuthResponse,
     LoginRequest,
+    MfaChallengeResponse,
     MfaDisableRequest,
     MfaEnableRequest,
     MfaLoginRequest,
@@ -54,6 +55,9 @@ from app.schemas import (
     TokenResponse,
     UserResponse,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - typing only; runtime imports stay local
+    from app.models import UserSession
 
 router = APIRouter()
 
@@ -322,6 +326,65 @@ async def reset_auth_user_rate_limit(identifier: str) -> None:
     _fallback_user_rate.pop(key, None)
 
 
+# Verification attempts allowed against ONE mfa_pending token, across its whole
+# (5-minute) life. See _register_mfa_attempt for why this exists.
+_MFA_MAX_ATTEMPTS = 5
+
+
+async def _register_mfa_attempt(mfa_jti: str, mfa_exp: int | float) -> None:
+    """Count one code-verification attempt against this mfa_pending token.
+
+    Raises 401 once the budget is spent, and spends the token so nothing else
+    can be tried with it.
+
+    ``/login/mfa`` used to blacklist the pending token BEFORE checking the
+    code, which meant one mistyped digit permanently burned the challenge: the
+    first attempt answered "Invalid MFA code", and every retry with the SAME
+    token — which is exactly what the login page resubmits — hit the blacklist
+    check and answered "Invalid or expired MFA token" no matter how correct the
+    code was. The only escape was re-entering the password. The token is now
+    spent on SUCCESS only; brute force is bounded here instead, per token
+    rather than per token-presentation.
+
+    Fails CLOSED. The ``is_token_blacklisted`` check that runs just before this
+    is fail-closed too, so a Redis outage already 401s the request; letting the
+    counter fail open would make a Redis DoS the way to get unlimited TOTP
+    guesses.
+    """
+    ttl = int(mfa_exp - datetime.now(UTC).timestamp())
+    if ttl <= 0:
+        return  # token already expired; the JWT decode above will have caught it
+
+    try:
+        from app.core.redis_client import get_async_redis
+
+        r = get_async_redis(decode_responses=True)
+        try:
+            key = f"auth:mfa:attempts:{mfa_jti}"
+            count = await r.incr(key)
+            if count == 1:
+                await r.expire(key, ttl)
+        finally:
+            await r.aclose()
+    except Exception:
+        logger.error("Redis unavailable for MFA attempt accounting; failing closed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication temporarily unavailable. Please retry shortly.",
+        ) from None
+
+    if count > _MFA_MAX_ATTEMPTS:
+        # Budget spent — burn the token so the caller must re-authenticate
+        # with the password rather than keep guessing.
+        from app.core.token_blacklist import blacklist_token
+
+        await blacklist_token(mfa_jti, int(mfa_exp))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Too many incorrect MFA codes. Please log in again.",
+        )
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Security audit trail (best-effort, decoupled from the auth transaction)
 # ═══════════════════════════════════════════════════════════════════════
@@ -560,6 +623,7 @@ async def _upsert_session(
     access_jti: str | None,
     request: Request,
     previous_refresh_jti: str | None = None,
+    remember_me: bool = False,
 ) -> None:
     """Create-or-update the session row for this device.
 
@@ -567,6 +631,14 @@ async def _upsert_session(
     insert a new row. On a refresh-token rotation pass the OLD jti and
     we update that row in place — preserving the device identity across
     rotations without leaving an orphan row behind.
+
+    ``expires_at`` is stamped with the expiry of the refresh token we are
+    binding to the row. Nothing used to write it, so every row carried NULL:
+    the session reaper's ``expires_at < now`` half compared against NULL and
+    matched nothing, and ``/logout`` had no way to learn when the device's
+    refresh token dies. Both now key off this column, so it has to be written
+    on every path that (re)issues a refresh_jti — hence ``remember_me``, which
+    selects the same window ``_create_refresh_with_jti`` used for the token.
 
     Bookkeeping failures are swallowed: if the DB write fails for any
     reason we still let the user in. Revocation is enforced by checking
@@ -580,6 +652,7 @@ async def _upsert_session(
 
     try:
         now = datetime.now(UTC)
+        expires_at = now + _refresh_token_ttl(remember_me)
         row: UserSession | None = None
         if previous_refresh_jti:
             res = await session.execute(
@@ -596,6 +669,7 @@ async def _upsert_session(
                 ip_address=_client_ip(request)[:45],
                 created_at=now,
                 last_used_at=now,
+                expires_at=expires_at,
                 is_revoked=False,
             )
             session.add(row)
@@ -603,6 +677,11 @@ async def _upsert_session(
             row.refresh_jti = refresh_jti
             row.access_jti = access_jti
             row.last_used_at = now
+            # Rotation mints a NEW refresh token, so the row's death date moves
+            # with it. Leaving the old value would make the reaper delete a row
+            # whose refresh token is still live — which silently un-revokes it,
+            # because both revocation checks treat a missing row as not-revoked.
+            row.expires_at = expires_at
             # Update fingerprint in case the user moved networks; this
             # is informational, not an auth gate.
             row.user_agent = _client_user_agent(request) or row.user_agent
@@ -623,19 +702,26 @@ async def _session_is_revoked_for_access_jti(session: AsyncSession, access_jti: 
     return await is_session_revoked_for_access_jti(session, access_jti)
 
 
-async def _revoke_session_by_access_jti(session: AsyncSession, access_jti: str) -> bool:
+async def _revoke_session_by_access_jti(
+    session: AsyncSession, access_jti: str
+) -> "UserSession | None":
     """Flip ``revoked_at`` for the session that owns this access-jti.
-    Returns True on success."""
+
+    Returns the row (already flipped) so the caller can also act on the
+    refresh_jti / expires_at bound to it — ``/logout`` needs both to blacklist
+    this device's refresh token, and the refresh cookie is not visible there
+    (see the note in ``logout``). Returns None when no row exists.
+    """
     from app.models import UserSession
 
     res = await session.execute(select(UserSession).where(UserSession.access_jti == access_jti))
     row = res.scalar_one_or_none()
     if row is None:
-        return False
+        return None
     if row.revoked_at is None:
         row.revoked_at = datetime.now(UTC)
         row.is_revoked = True
-    return True
+    return row
 
 
 async def _revoke_session_by_refresh_jti(session: AsyncSession, refresh_jti: str) -> bool:
@@ -683,6 +769,14 @@ async def _get_authenticated_user(
 
     payload = await verify_token(token, token_type="access")
     if payload is None:
+        raise credentials_exception
+
+    # A narrowed token must not authenticate the auth router either. See the
+    # long note in app/core/dependencies.py: the stream-scoped camera token is
+    # designed to travel in a URL query string, so it reaches access logs,
+    # browser history and Referer headers. The WebSocket already refused any
+    # scope; the shared REST path and this one did not.
+    if payload.get("scope"):
         raise credentials_exception
 
     user_id = payload.get("sub")
@@ -903,7 +997,14 @@ async def login_for_access_token(
     )
 
 
-@router.post("/login", response_model=BrowserAuthResponse)
+# Two 200 shapes, and both have to be declared: a response_model is a whitelist
+# that FastAPI VALIDATES the return value against, so while this route said
+# BrowserAuthResponse alone, the MFA branch below -- which returns
+# {"require_mfa": True, "mfa_token": ...} and none of that model's required
+# expires_in -- raised ResponseValidationError and answered 500. Every
+# MFA-enabled user was locked out of the browser login, and no test saw it
+# because they all call login() directly, which never runs the response model.
+@router.post("/login", response_model=BrowserAuthResponse | MfaChallengeResponse)
 async def login(
     request: Request,
     response: Response,
@@ -1008,7 +1109,7 @@ async def login(
             token_version=mfa_tv,
         )
         auth_events_total.labels(event_type="login", status="mfa_required").inc()
-        return {"require_mfa": True, "mfa_token": mfa_token}
+        return MfaChallengeResponse(require_mfa=True, mfa_token=mfa_token)
 
     # Update last login
     user.last_login = datetime.now(UTC)
@@ -1039,6 +1140,7 @@ async def login(
         refresh_jti=refresh_jti,
         access_jti=access_jti,
         request=request,
+        remember_me=remember_me,
     )
     await session.commit()
 
@@ -1172,6 +1274,7 @@ async def refresh_token(
         access_jti=access_jti,
         request=request,
         previous_refresh_jti=str(old_jti) if old_jti else None,
+        remember_me=remember_me,
     )
     await session.commit()
 
@@ -1290,9 +1393,39 @@ async def logout(
         if access_jti and exp:
             await blacklist_token(access_jti, exp)
 
-    # Also blacklist + revoke the refresh-token JTI if the refresh
-    # cookie is present, so the refresh endpoint cannot mint new
+    # Also blacklist the refresh-token JTI so /auth/refresh cannot mint new
     # access tokens for this device.
+    #
+    # This used to read the refresh token out of ``request.cookies`` — which
+    # never worked. ``set_auth_cookies`` scopes the refresh cookie to
+    # Path=/api/v1/auth/refresh (cookies.py), and RFC 6265 path-matching sends
+    # such a cookie only to that path, never to /api/v1/auth/logout. So the
+    # cookie was always absent here and the blacklist write never happened for
+    # any browser or any correct HTTP client. The narrow path is a real control
+    # and stays; instead we take the refresh jti from the session row, which
+    # logout CAN reach (it holds the access jti).
+    #
+    # Without this, the only thing stopping a stolen refresh token after logout
+    # was the ``revoked_at`` flip _revoke_session_by_access_jti performs — one
+    # DB row, and _upsert_session swallows its own failures by design, so
+    # sessions with no row existed and logged out into a still-usable refresh
+    # token.
+    row = await _revoke_session_by_access_jti(session, str(access_jti)) if access_jti else None
+    if row is not None and row.refresh_jti:
+        # ``expires_at`` is the refresh token's own expiry (stamped by
+        # _upsert_session), which is exactly the TTL blacklist_token wants.
+        # Rows written before that column was populated fall back to the
+        # longest window a refresh token can have, so the entry outlives any
+        # token the row could be holding.
+        refresh_exp = row.expires_at or (
+            datetime.now(UTC) + timedelta(days=settings.REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS)
+        )
+        await blacklist_token(row.refresh_jti, refresh_exp)
+
+    # Non-browser clients may still present the refresh cookie explicitly;
+    # honour it so a caller that has no session row (bookkeeping failure, or a
+    # token minted before the session table existed) still gets its refresh
+    # token blacklisted.
     from app.core.cookies import REFRESH_COOKIE
 
     refresh_cookie_val = request.cookies.get(REFRESH_COOKIE)
@@ -1305,9 +1438,6 @@ async def logout(
                 await blacklist_token(r_jti, r_exp)
             if r_jti:
                 await _revoke_session_by_refresh_jti(session, str(r_jti))
-
-    if access_jti:
-        await _revoke_session_by_access_jti(session, str(access_jti))
 
     await session.commit()
 
@@ -1369,16 +1499,58 @@ async def logout_all(
 async def list_sessions(
     current_user: Annotated[User, Depends(_get_active_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> Any:
     """List the current user's active sessions for a "manage sessions"
     UI. Returns metadata only — never the raw refresh token / JTI.
+
+    "Active" is now enforced, not just claimed. This selected every
+    ``user_sessions`` row the user had ever produced, with no bound: a session
+    from six months ago whose refresh token died in week two came back looking
+    exactly like the laptop the user is holding, and the only deleter of those
+    rows (``cleanup_orphan_sessions``) had no beat entry, so nothing ever
+    trimmed them. 135 rows for the fleet on the dev DB, none prunable.
+
+    A row is listed only while the refresh token bound to it could still be
+    presented:
+
+    * ``expires_at`` is that token's own expiry, stamped by ``_upsert_session``;
+      once it is past, both tokens on the row are dead.
+    * Rows written before that column was populated carry NULL. ``last_used_at``
+      is re-stamped on every refresh, so ``last activity + the longest refresh
+      window`` is an upper bound on when their token dies. ``created_at`` is the
+      floor for rows that were never refreshed (NULL ``last_used_at``).
+
+    Revoked rows that are still inside that window ARE listed, and carry
+    ``is_revoked``/``revoked_at`` so the UI can show "signed out on this
+    device" — they are also exactly the rows whose existence is what keeps a
+    revoked refresh token rejected (``session_revocation`` treats a MISSING row
+    as not-revoked), so hiding them would hide the enforcement.
     """
     from app.models import UserSession
 
+    now = datetime.now(UTC)
+    # Same bound the reaper uses; REMEMBER_ME is the longer of the two windows.
+    legacy_floor = now - timedelta(
+        days=max(
+            settings.REFRESH_TOKEN_EXPIRE_DAYS,
+            settings.REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS,
+        )
+    )
+    last_seen = func.coalesce(UserSession.last_used_at, UserSession.created_at)
+    still_usable = or_(
+        UserSession.expires_at.isnot(None) & (UserSession.expires_at > now),
+        UserSession.expires_at.is_(None) & (last_seen > legacy_floor),
+    )
+
     res = await session.execute(
         select(UserSession)
-        .where(UserSession.user_id == current_user.id)
+        .where(UserSession.user_id == current_user.id, still_usable)
         .order_by(UserSession.created_at.desc())
+        # Bounded because nothing else bounds it: a user who logs in from a
+        # script mints a row per login, and every one of them is inside the
+        # window above for the next two to four weeks.
+        .limit(limit)
     )
     rows = res.scalars().all()
     return {
@@ -1982,13 +2154,14 @@ async def login_mfa(
             detail="Invalid MFA token type",
         )
 
-    # SECURITY: blacklist the MFA pending token so it cannot be replayed
-    from app.core.token_blacklist import blacklist_token as _blacklist
-
+    # SECURITY: bound brute force against this challenge. The token itself is
+    # spent only once it has actually completed a login (below) — burning it
+    # here made a single mistyped digit unrecoverable. See
+    # ``_register_mfa_attempt``.
     mfa_jti = payload.get("jti")
     mfa_exp = payload.get("exp")
     if mfa_jti and mfa_exp:
-        await _blacklist(mfa_jti, mfa_exp)
+        await _register_mfa_attempt(str(mfa_jti), mfa_exp)
 
     user_id = payload.get("sub")
     # SECURITY: lock the user row FOR UPDATE so concurrent
@@ -2085,6 +2258,15 @@ async def login_mfa(
             detail="Invalid MFA code",
         )
 
+    # SECURITY: the challenge succeeded, so spend the mfa_pending token now —
+    # it must not be replayable to mint a second session. This runs AFTER
+    # verification on purpose; running it before meant a wrong code consumed
+    # the challenge and the user could never retry with the right one.
+    from app.core.token_blacklist import blacklist_token as _blacklist
+
+    if mfa_jti and mfa_exp:
+        await _blacklist(mfa_jti, mfa_exp)
+
     # Successful MFA verification — issue tokens
     user.last_login = datetime.now(UTC)
     user.failed_login_attempts = 0
@@ -2120,6 +2302,7 @@ async def login_mfa(
         refresh_jti=refresh_jti,
         access_jti=access_jti,
         request=request,
+        remember_me=remember_me,
     )
     await session.commit()
 

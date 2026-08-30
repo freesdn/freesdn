@@ -2116,7 +2116,7 @@
         "interface": "Interface",
         "systemName": "Neighbor system-name",
         "portId": "Neighbor port-id",
-        "mgmtAddress": "Mgmt address"
+        "chassisId": "Neighbor chassis-id"
       }
     },
     "dialog": {
@@ -2474,18 +2474,14 @@
     },
     "traps": {
       "title": "Trap targets",
-      "description": "/snmp/trap rows · destinations the router sends SNMP traps to.",
+      "description": "The /snmp trap-target comma-list · hosts the router sends SNMP traps to. Community and version are server-wide settings, edited above.",
       "loadError": "Failed to load trap targets",
       "empty": {
         "title": "No trap targets configured",
         "description": "Add a trap target to forward SNMP notifications to a manager."
       },
       "columns": {
-        "address": "Address",
-        "port": "Port",
-        "version": "Version",
-        "community": "Community",
-        "comment": "Comment",
+        "host": "Host",
         "actions": "Actions"
       }
     },
@@ -2514,15 +2510,9 @@
       "locationPlaceholder": "rack-3 / floor 2"
     },
     "trapDialog": {
-      "editTitle": "Edit trap target",
       "addTitle": "Add trap target",
-      "description": "Stages a change to /snmp/trap.",
-      "address": "Address",
-      "port": "Port",
-      "version": "Version",
-      "community": "Community",
-      "comment": "Comment",
-      "commentPlaceholder": "primary NMS"
+      "description": "Stages an append to the /snmp trap-target list.",
+      "host": "Host"
     },
     "trapDelete": {
       "title": "Delete trap target",

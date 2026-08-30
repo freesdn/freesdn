@@ -177,3 +177,74 @@ def test_decrypt_v1_then_re_encrypt_writes_v2(enc: BackupEncryption) -> None:
 
     assert v2_kid.startswith(f"v2:{BackupEncryption.PBKDF2_ITERATIONS}:")
     assert enc.decrypt(v2_ct, v2_kid) == b"legacy archive"
+
+
+# ── the iteration count is attacker-controlled ──────────────────────────
+#
+# ``key_id`` is read out of the ARCHIVE's own header, and on
+# ``POST /setup/restore`` that archive is an UNAUTHENTICATED upload: the
+# endpoint is gated only by "no super_admin exists yet", it is CSRF-exempt,
+# and the passphrase is a form field the same uploader supplies. Every check
+# that runs before the KDF is therefore attacker-set too -- the SHA-256
+# checksum is over their own payload, ``secrets`` and ``encrypted`` are their
+# own booleans.
+#
+# ``int()`` has no upper bound, so a ~100-byte file declaring
+# ``v2:999999999:AAAA`` bought minutes of straight PBKDF2 on the event loop,
+# past GUNICORN_TIMEOUT, at which point the arbiter SIGKILLs the worker and
+# every other in-flight request dies with it.
+
+
+def test_absurd_iteration_count_is_refused_before_the_kdf_runs() -> None:
+    """The DoS lever, closed at the parser.
+
+    Mutation caught: deleting the range check in ``_parse_key_id``. Before it,
+    this returned ``(999999999, 'AAAA')`` and the caller happily fed it to
+    PBKDF2HMAC.
+    """
+    with pytest.raises(ValueError, match="unsupported iteration count"):
+        BackupEncryption._parse_key_id("v2:999999999:AAAA")
+
+
+def test_refusal_is_immediate_not_after_a_long_derive() -> None:
+    """A rejection that still ran the KDF would not fix anything -- the point
+    is that no CPU is spent on an unverified header.
+
+    Mutation caught: validating AFTER ``_derive_key`` instead of before, or
+    clamping the value instead of rejecting it.
+    """
+    import time
+
+    enc = BackupEncryption(master_key="test-master-key-with-enough-entropy-2026")
+    ct, _ = enc.encrypt(b"x")
+    start = time.monotonic()
+    with pytest.raises(ValueError):
+        enc.decrypt(ct, "v2:999999999:AAAA")
+    assert time.monotonic() - start < 1.0
+
+
+def test_zero_and_negative_iteration_counts_are_refused() -> None:
+    """A below-floor count is the other end of the same hole: it weakens the
+    KDF instead of stalling it, and PBKDF2HMAC(iterations=0) is not a
+    meaningful key derivation.
+
+    Mutation caught: a one-sided bound (``if iterations > MAX``).
+    """
+    for bogus in ("v2:0:AAAA", "v2:-5:AAAA", "v2:1:AAAA"):
+        with pytest.raises(ValueError, match="unsupported iteration count"):
+            BackupEncryption._parse_key_id(bogus)
+
+
+def test_the_band_still_admits_every_count_freesdn_has_ever_written() -> None:
+    """The cap must not orphan a real archive. 100k is the v1 value, 600k is
+    the current default, and 1.2M is the forward-bump case
+    ``test_v2_forward_iteration_bump_decrypts`` above actually decrypts.
+
+    Mutation caught: setting the ceiling below 1.2M, or the floor above 100k
+    -- either makes existing backups unreadable, which is worse than the DoS.
+    """
+    salt = base64.urlsafe_b64encode(os.urandom(16)).decode()
+    for good in (100_000, 600_000, 1_200_000, 2_000_000):
+        iterations, parsed_salt = BackupEncryption._parse_key_id(f"v2:{good}:{salt}")
+        assert iterations == good
+        assert parsed_salt == salt

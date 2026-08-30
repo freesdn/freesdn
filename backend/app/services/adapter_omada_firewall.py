@@ -145,6 +145,18 @@ class GatewayFirewallService(GatewayServiceBase):
                 )
             method = getattr(client, method_name)
 
+            # Command trigger, not a config write. ``update_ids_ips_signatures``
+            # is ``POST /sites/{id}/cmd/idsIps/updateDb`` and takes site_id
+            # ALONE -- the ``update_*`` name makes it look like its sibling
+            # ``update_ids_ips_config(site_id, payload)``, which is how it ended
+            # up on the generic ``create`` branch below. That branch passes a
+            # second positional, so every staged signature refresh died with
+            # TypeError before a request left the process, and ``apply_change``
+            # records only the exception class name -- the operator saw a row
+            # marked failed with ``failure_reason="TypeError"`` and no cause.
+            if c.feature == "firewall.ids_ips.signatures":
+                return await method(omada_site_id)
+
             if c.operation == "create":
                 return await method(omada_site_id, payload)
             if c.operation == "update":

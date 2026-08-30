@@ -287,7 +287,8 @@
       "deviceIds": "IDs de dispositivos",
       "deviceIdsPlaceholder": "Pegue los UUID de dispositivos, uno por línea o separados por comas",
       "deviceIdsHint": "Introduzca los UUID de dispositivos separados por saltos de línea o comas (hasta 500).",
-      "configPayload": "Carga de configuración (JSON)"
+      "configPayload": "Carga de configuración (JSON)",
+      "confirmFirmware": "Entiendo que esto actualiza el firmware en todos los dispositivos seleccionados y no se puede deshacer."
     },
     "operations": {
       "pushConfig": "Enviar configuración",

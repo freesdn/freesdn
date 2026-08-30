@@ -610,6 +610,33 @@ async def bulk_update_poe(
 # Schedule Schemas
 # =====================================================================
 
+# ``PoESchedule`` carries a CHECK constraint requiring exactly one target -- either
+# ``device_id`` or ``device_group_id``, never both and never neither (see
+# ``app/models/poe.py`` and alembic 010, which back-fills it onto upgraded
+# appliances). ``app/tasks/poe.py`` resolves the port list from one of the two and
+# does ``if not device_ids: continue``, so a targetless row is a schedule the UI
+# shows as enabled and that never switches anything.
+#
+# Until 010 the constraint existed only where ``create_all`` built the table, so a
+# targetless POST returned 201 and the operator got a silently inert schedule. With
+# the constraint present the same POST becomes an unhandled CheckViolation -- a 500.
+# The validators below are what make the refusal well-formed: a 422 naming the field,
+# on every deployment, before the row is built.
+
+
+def _blank_to_none(value: Any) -> Any:
+    """Treat an empty target field as "not supplied".
+
+    An HTML form that clears its device picker submits ``""``, not ``null``. Left
+    alone it is falsy for the XOR check but not-None for the handler's ``is not
+    None`` ownership branch, so the two disagree: the schedule passes validation
+    with no target and then the handler runs ``Device.id == ""`` against a uuid
+    column. Normalise once, here, so every later test of these two fields agrees.
+    """
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
 
 class PoEScheduleCreateIn(BaseModel):
     name: str = Field(..., max_length=255)
@@ -648,6 +675,21 @@ class PoEScheduleCreateIn(BaseModel):
         if v and v not in zoneinfo.available_timezones():
             raise ValueError(f"Invalid timezone: {v}")
         return v
+
+    @field_validator("device_id", "device_group_id", mode="before")
+    @classmethod
+    def normalize_blank_target(cls, v: Any) -> Any:
+        return _blank_to_none(v)
+
+    @model_validator(mode="after")
+    def validate_exactly_one_target(self) -> PoEScheduleCreateIn:
+        """Mirror the DB CHECK constraint: exactly one target, at create time."""
+        if bool(self.device_id) == bool(self.device_group_id):
+            raise ValueError(
+                "supply exactly one of device_id or device_group_id "
+                "(a schedule with neither can never fire)"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_times_differ(self) -> PoEScheduleCreateIn:
@@ -693,6 +735,27 @@ class PoEScheduleUpdateIn(BaseModel):
         if v and v not in zoneinfo.available_timezones():
             raise ValueError(f"Invalid timezone: {v}")
         return v
+
+    @field_validator("device_id", "device_group_id", mode="before")
+    @classmethod
+    def normalize_blank_target(cls, v: Any) -> Any:
+        return _blank_to_none(v)
+
+    @model_validator(mode="after")
+    def validate_at_most_one_target(self) -> PoEScheduleUpdateIn:
+        """At MOST one, not exactly one: this is a partial update.
+
+        ``None`` here means "field not supplied", so the create schema's
+        exactly-one rule would reject every ordinary rename. Both-supplied is the
+        only XOR violation visible from the payload alone; the other half -- the
+        row's resulting target state -- needs the stored row and is checked in
+        ``update_poe_schedule``.
+        """
+        if self.device_id is not None and self.device_group_id is not None:
+            raise ValueError(
+                "supply at most one of device_id or device_group_id; setting one clears it"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_times_differ(self) -> PoEScheduleUpdateIn:
@@ -911,10 +974,30 @@ async def update_poe_schedule(
         schedule.name = data.name
     if data.enabled is not None:
         schedule.enabled = data.enabled
+    # Retargeting: setting one target CLEARS the other. Assigning without clearing
+    # left the row with both set, which the XOR CHECK constraint rejects at COMMIT
+    # as an unhandled CheckViolation -- a 500 -- and, on an appliance old enough to
+    # predate the constraint, silently produced exactly the double-target rows
+    # alembic 010 has to repair. The update schema has no way to spell "clear this
+    # field" (``None`` means "not supplied"), so implying the clear is also the only
+    # way retargeting a schedule can succeed at all.
     if data.device_id is not None:
         schedule.device_id = data.device_id
-    if data.device_group_id is not None:
+        schedule.device_group_id = None
+    elif data.device_group_id is not None:
         schedule.device_group_id = data.device_group_id
+        schedule.device_id = None
+    elif not schedule.device_id and not schedule.device_group_id:
+        # A row that predates the constraint and has no target at all. PostgreSQL
+        # re-checks a NOT VALID constraint on every UPDATE, so even a plain rename
+        # would 500 here. Say what is actually wrong instead.
+        raise HTTPException(
+            422,
+            detail=(
+                "this schedule has no target and can never fire; "
+                "supply device_id or device_group_id to repair it"
+            ),
+        )
     if data.port_numbers is not None:
         schedule.port_numbers = data.port_numbers
     if data.power_off_time is not None:

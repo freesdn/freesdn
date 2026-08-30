@@ -169,7 +169,10 @@ export function MikroTikTopologyTab({
   const topology = topologyQuery.data?.data;
   // Backend returns a bare settings dict (not a {item} envelope).
   const settings = settingsQuery.data?.data;
-  const lldp = lldpQuery.data?.data.items ?? [];
+  // Backend returns a bare LLDP-interface list (not an {items} envelope);
+  // ``.items`` on an Array is undefined, so the table rendered empty on
+  // routers that really did have LLDP neighbours.
+  const lldp = lldpQuery.data?.data ?? [];
   // Backend returns a bare neighbor list; derive the count from its length.
   const neighborCount = neighborsQuery.data?.data?.length ?? 0;
 
@@ -450,7 +453,7 @@ export function MikroTikTopologyTab({
                     <TableHead>{t('MikroTikTopologyTab.lldp.columns.interface')}</TableHead>
                     <TableHead>{t('MikroTikTopologyTab.lldp.columns.systemName')}</TableHead>
                     <TableHead>{t('MikroTikTopologyTab.lldp.columns.portId')}</TableHead>
-                    <TableHead>{t('MikroTikTopologyTab.lldp.columns.mgmtAddress')}</TableHead>
+                    <TableHead>{t('MikroTikTopologyTab.lldp.columns.chassisId')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -465,8 +468,12 @@ export function MikroTikTopologyTab({
                       <TableCell className="font-mono text-xs">
                         {asStr(row['port-id'])}
                       </TableCell>
+                      {/* chassis-id, not management-address: the backend
+                          MikroTikLldpInterface schema is extra="forbid" and
+                          has no management-address field, so that column was
+                          "-" on every row. */}
                       <TableCell className="font-mono text-xs">
-                        {asStr(row['management-address'])}
+                        {asStr(row['chassis-id'])}
                       </TableCell>
                     </TableRow>
                   ))}

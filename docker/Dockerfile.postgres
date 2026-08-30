@@ -1,0 +1,18 @@
+# FreeSDN - PostgreSQL, OS layer patched at build time.
+#
+# A thin wrapper over the official postgres image. `apt-get upgrade` applies the
+# latest Debian security updates so the RUNNING database ships with the current
+# patched packages regardless of when Docker Hub last rebuilt the base tag. This
+# is what closes the gap the raw-base CVE scan used to flag: we no longer run the
+# stock tag, we run this built, patched image. Mirrors docker/Dockerfile.logdb.
+#
+# The version is an ARG so `POSTGRES_VERSION` in the environment still selects the
+# base, exactly as the old `image: postgres:${POSTGRES_VERSION}` line did.
+# User/Entrypoint/Cmd are inherited unchanged (base is User=[] root at build; the
+# entrypoint drops to the postgres user at runtime via gosu) so behaviour matches
+# the stock image one-for-one.
+ARG POSTGRES_VERSION=18.6-trixie
+FROM postgres:${POSTGRES_VERSION}
+
+RUN apt-get update && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*

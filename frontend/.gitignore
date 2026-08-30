@@ -59,6 +59,15 @@ src/lib/build-info.ts
 .env
 .env.*
 !.env.example
+# .env.demo is a PUBLIC build config -- VITE_DEMO_MODE=true and nothing else --
+# and `npm run build:demo` fails without it, because verify-demo-build.mjs
+# checks for it. It survives in this repo only because it was tracked before the
+# rule above existed; git applies ignore rules to UNTRACKED files only. The
+# flatten does `git init` + `git add -A` in a fresh worktree, where it IS
+# untracked, so `.env.*` silently dropped it and every public clone has been
+# unable to run build:demo for three releases. release.py's env-hygiene check
+# already whitelists this file by name as a benign public build config.
+!.env.demo
 
 # IDE
 .idea/

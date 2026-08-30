@@ -23,7 +23,7 @@ docker volume rm freesdn_redis_data 2>$null
 
 # Pull latest images
 Write-Host "`n[3/5] Pulling latest images..." -ForegroundColor Yellow
-docker pull postgres:18.4-trixie
+docker pull postgres:18.6-trixie
 docker pull valkey/valkey:8.1.3-bookworm
 
 # Start fresh containers

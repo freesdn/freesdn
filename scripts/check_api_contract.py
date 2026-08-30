@@ -100,15 +100,63 @@ def normalise(path: str) -> str:
 
 
 # api.get<T>(`/x/${y}`)  |  api.post('/x', body)  |  api.get('/x/' + fmt)
+# The path may also OPEN with a template hole -- `${prefix(controllerId, siteId)}/...`
+# -- which is how all twelve gateway-* clients are written; see _PREFIX_HELPER.
 _CALL = re.compile(
-    r"""\bapi\.(get|post|put|patch|delete)\s*(?:<[^(]*?>)?\s*\(\s*([`'"])(/[^`'"]*)\2(\s*\+)?""",
+    r"""\bapi\.(get|post|put|patch|delete)\s*(?:<[^(]*?>)?\s*\(\s*([`'"])((?:/|\$\{)[^`'"]*)\2(\s*\+)?""",
     re.S,
 )
 
+# const prefix = (controllerId: string, siteId: string) =>
+#   `/gateway-switch-advanced/${controllerId}/sites/${siteId}`;
+#
+# Every gateway-* client composes its routes from a module-local helper like
+# this, so its call paths do not begin with "/" and the _CALL regex -- which
+# used to require a leading slash -- never saw a single one of them. 70 calls,
+# the whole gateway* family, sat outside this gate while it printed "OK: every
+# frontend api call resolves". That is how a 404 path shipped under a green
+# check.
+#
+# Resolving the helper instead of hard-coding a name -> prefix table means a
+# thirteenth gateway module, or a renamed prefix, is covered the day it lands.
+_PREFIX_HELPER = re.compile(
+    r"^\s*(?:export\s+)?const\s+(\w+)\s*=\s*\([^)]*\)\s*=>\s*`(/[^`]*)`",
+    re.M | re.S,
+)
 
-def collect_frontend_calls() -> list[tuple[str, str, str, int]]:
-    """(METHOD, normalised path, source file, line) for every api.<verb>() call."""
+
+def expand_prefix_helper(raw: str, helpers: dict[str, str]) -> str | None:
+    """Replace a leading ``${helper(...)}`` with the literal that helper returns.
+
+    Returns the path unchanged when it already starts with a slash, and None
+    when the leading hole is something this file cannot resolve -- an unknown
+    helper, or a bare variable. None means "do not judge it": a false positive
+    here blocks a release, so an unresolvable call is counted and reported
+    rather than reported as broken.
+    """
+    if raw.startswith("/"):
+        return raw
+    head = re.match(r"\$\{\s*(\w+)\s*\(", raw)
+    if head is None:
+        return None
+    body = helpers.get(head.group(1))
+    if body is None:
+        return None
+    return body + raw[raw.index("}") + 1 :]
+
+
+def collect_frontend_calls() -> tuple[
+    list[tuple[str, str, str, int]], list[tuple[str, int, str]], int
+]:
+    """(METHOD, normalised path, source file, line) for every api.<verb>() call.
+
+    Also returns the calls whose leading template hole could NOT be resolved,
+    and how many WERE resolved through a prefix helper -- so main() can report
+    what a run left unchecked instead of silently shrinking the gate.
+    """
     calls: list[tuple[str, str, str, int]] = []
+    unresolved: list[tuple[str, int, str]] = []
+    via_helper = 0
     files = [
         f
         for f in list(FRONTEND_SRC.rglob("*.ts")) + list(FRONTEND_SRC.rglob("*.tsx"))
@@ -116,17 +164,25 @@ def collect_frontend_calls() -> list[tuple[str, str, str, int]]:
     ]
     for f in sorted(files):
         text = f.read_text(encoding="utf-8")
+        # Prefix helpers are module-local consts, so resolve them per file.
+        helpers = dict(_PREFIX_HELPER.findall(text))
         for match in _CALL.finditer(text):
             verb = match.group(1).upper()
             raw = match.group(3)
             concatenated = match.group(4) is not None
-            path = re.sub(r"\$\{[^}]*\}", "{}", raw)
+            line = text[: match.start()].count("\n") + 1
+            expanded = expand_prefix_helper(raw, helpers)
+            if expanded is None:
+                unresolved.append((str(f.relative_to(APP_ROOT)), line, raw))
+                continue
+            if not raw.startswith("/"):
+                via_helper += 1
+            path = re.sub(r"\$\{[^}]*\}", "{}", expanded)
             if concatenated and path.endswith("/"):
                 # '/logs/export/' + fmt  ->  /logs/export/{}
                 path += "{}"
-            line = text[: match.start()].count("\n") + 1
             calls.append((verb, normalise(path), str(f.relative_to(APP_ROOT)), line))
-    return calls
+    return calls, unresolved, via_helper
 
 
 def _segment_matches(fe: str, be: str) -> bool:
@@ -176,10 +232,22 @@ def main() -> int:
         )
         return 2
 
-    calls = collect_frontend_calls()
+    calls, unresolved, via_helper = collect_frontend_calls()
     if not calls:
         print(
             "ERROR: no frontend api.<verb>() calls found — the regex broke?",
+            file=sys.stderr,
+        )
+        return 2
+
+    # Vacuity guard for the half of the check that was missing. Every gateway-*
+    # client opens its paths with a ${prefix(...)} hole, so if the resolver
+    # stops matching those helpers this check silently goes back to grading
+    # ~1330 of ~1400 calls and passing. Zero resolved holes is that regression.
+    if not via_helper:
+        print(
+            "ERROR: the ${prefix(...)} resolver matched nothing — every "
+            "gateway-* call is unchecked again. See _PREFIX_HELPER.",
             file=sys.stderr,
         )
         return 2
@@ -191,7 +259,18 @@ def main() -> int:
         if not matches(path, verb, routes):
             broken.append((verb, path, src, line))
 
-    print(f"backend routes: {len(routes)}    frontend api calls: {len(calls)}")
+    print(
+        f"backend routes: {len(routes)}    frontend api calls: {len(calls)}"
+        f"    ({via_helper} resolved through a path-prefix helper)"
+    )
+    if unresolved:
+        # Not a failure: these are calls whose leading hole is a bare variable
+        # or an unknown helper, and guessing at them would block a release on a
+        # route that works. They are printed so the blind spot stays visible
+        # instead of shrinking the gate in silence.
+        print(f"\nNOTE: {len(unresolved)} call(s) not checked (unresolvable path prefix):")
+        for src, line, raw in unresolved:
+            print(f"  {src}:{line}\n      {raw}")
 
     if not broken:
         print("OK: every frontend api call resolves to a backend route.")

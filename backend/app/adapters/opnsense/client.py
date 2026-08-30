@@ -381,7 +381,22 @@ class OPNsenseClient:
 
         request_start = time.monotonic()
 
-        for attempt in range(1, self.max_retries + 1):
+        # Retry only what is safe to replay. ``is_write`` above is the
+        # vendor-aware discriminator: it already excludes OPNsense's read-only
+        # POST endpoints (search/get), so it is a better test than the bare
+        # method. A write that may already have reached the firewall is
+        # transmitted exactly once.
+        #
+        # Why it matters here: OPNsense writes config.xml BEFORE it answers, so a
+        # POST /api/firewall/filter/addRule that completes on the box but exceeds
+        # the read timeout -- or returns a transient 503 while pf reloads -- was
+        # re-sent, and OPNsense does not dedupe filter rules. The result was a
+        # second live rule whose UUID FreeSDN never recorded and could therefore
+        # never update or delete. Same exposure on addAlias, add_source_nat_rule,
+        # add_port_forward_rule, add_dns_override, add_dhcp_static_mapping.
+        max_attempts = 1 if is_write else self.max_retries
+
+        for attempt in range(1, max_attempts + 1):
             try:
                 kw: dict[str, Any] = {"params": params}
                 if method_upper in ("POST", "PUT", "PATCH"):
@@ -500,7 +515,7 @@ class OPNsenseClient:
                 # (3x the connect timeout + backoff ≈ a 27s hung page). Read / other
                 # transient request errors still retry as before.
                 connect_failure = isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout))
-                if attempt < self.max_retries and not connect_failure:
+                if attempt < max_attempts and not connect_failure:
                     delay = min(2 ** (attempt - 1), 8)  # 1s, 2s, 4s, 8s cap
                     logger.warning(
                         "OPNsense request %s %s attempt %d/%d failed: %s — retrying in %ss",
@@ -518,12 +533,12 @@ class OPNsenseClient:
                 _record_request_metric(method_upper, err_type)
                 _record_error(err_type)
                 raise AdapterConnectionError(
-                    f"OPNsense connection error after {self.max_retries} attempts: {exc}",
+                    f"OPNsense connection error after {max_attempts} attempt(s): {exc}",
                     adapter_id="opnsense",
                 ) from exc
 
             except OPNsenseAPIError as exc:
-                if exc.status_code and exc.status_code >= 500 and attempt < self.max_retries:
+                if exc.status_code and exc.status_code >= 500 and attempt < max_attempts:
                     # 502/503/504 are emitted transiently for ~3s
                     # while OPNsense reloads pf after a
                     # ``reconfigure`` call. The default 1s/2s/4s
@@ -557,7 +572,7 @@ class OPNsenseClient:
         # Should not reach here, but just in case
         self._circuit.record_failure()
         raise AdapterConnectionError(
-            f"OPNsense request failed after {self.max_retries} attempts",
+            f"OPNsense request failed after {max_attempts} attempt(s)",
             adapter_id="opnsense",
         )
 

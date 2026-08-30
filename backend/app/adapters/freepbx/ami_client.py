@@ -231,11 +231,28 @@ class AMIClient:
             await self._close_transport()
             raise AMIConnectionError("Timed out waiting for AMI greeting") from exc
 
-        # Authenticate
-        await self._login()
-
-        # Start background tasks
+        # Start the reader BEFORE authenticating.
+        #
+        # ``_login`` registers a future in ``self._pending`` and awaits it, but the
+        # ONLY code that resolves those futures is ``_read_loop``. Creating the
+        # read task after ``_login()`` returned meant nothing was draining the
+        # socket during the handshake: Asterisk sent ``Response: Success`` with the
+        # matching ActionID, nobody read it, and the login timed out on a perfectly
+        # healthy connection. AMI could never authenticate.
         self._read_task = asyncio.create_task(self._read_loop(), name="ami-read-loop")
+
+        try:
+            await self._login()
+        except BaseException:
+            # Stop the reader we just started; ``_login`` has already closed the
+            # transport, and leaving the task behind would leak it (and keep
+            # reading a dead socket) for every failed connection attempt.
+            self._read_task.cancel()
+            with contextlib.suppress(BaseException):
+                await self._read_task
+            self._read_task = None
+            raise
+
         self._keepalive_task = asyncio.create_task(self._keepalive_loop(), name="ami-keepalive")
         logger.info("AMI connected and authenticated to %s:%s", self.host, self.port)
 

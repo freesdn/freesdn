@@ -215,6 +215,25 @@ class CollectorManager:
         await self.stop()
         await self.start(config)
 
+    def event_stats(self) -> dict[str, Any]:
+        """Counters from the shared event publisher, for GET /collector/status.
+
+        ``CollectorEventPublisher.stats()`` had no caller: the publisher is
+        built here, handed to the receivers, and never inspected again, so
+        published / suppressed_by_severity / suppressed_by_rate /
+        suppressed_no_org were incremented into an object no endpoint could
+        reach. That defeated the reason they exist (events.py module docstring:
+        an operator whose rule never fires "needs to be able to tell 'no
+        message matched' from 'your device is shouting and we muted it'"), and
+        two of the three suppression paths log nothing at all, so from the UI
+        all three causes of silence looked identical.
+
+        Deliberately a sibling of ``status()`` rather than a key inside it:
+        ``CollectorModule.health_check`` and the frontend both iterate/index
+        that dict as "one entry per UDP service".
+        """
+        return self._publisher.stats()
+
     def status(self) -> dict[str, Any]:
         """Return the running status of each collector service."""
         return {
@@ -222,6 +241,7 @@ class CollectorManager:
                 "running": self._snmp_receiver is not None,
                 "port": getattr(self._snmp_receiver, "port", None),
                 "rejected": getattr(self._snmp_receiver, "_rejected_packets", 0),
+                "rejected_community": getattr(self._snmp_receiver, "_rejected_community", 0),
             },
             "syslog": {
                 "running": self._syslog_receiver is not None,
@@ -254,6 +274,12 @@ class CollectorManager:
             resolver=self._resolver,
             allowlist=allowlist,
             publisher=self._publisher,
+            # This argument existed here and went nowhere: the parameter was
+            # declared, the constructor had no ``community`` to receive it, and
+            # the trap path never compared a packet against it. The Community
+            # box on the Observability page was therefore inert while sitting
+            # next to a port and an enable toggle that both work.
+            community=community,
         )
         try:
             await receiver.start()

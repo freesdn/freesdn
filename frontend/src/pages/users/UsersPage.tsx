@@ -71,6 +71,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { usersApi, sitesApi, api, type UserAccount, type UserUpdatePayload } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
+import { escapeCell } from '@/lib/csv';
 
 type TFn = (key: string, options?: Record<string, unknown>) => string;
 
@@ -727,10 +728,10 @@ export function UsersPage() {
   const handleExport = () => {
     const rows = filteredUsers;
     const headers = ['username', 'email', 'full_name', 'role', 'is_active', 'is_verified', 'mfa_enabled', 'last_login'];
-    const esc = (v: unknown) => {
-      const s = v === null || v === undefined ? '' : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const esc = (v: unknown) => escapeCell(v);
     const lines = [
       headers.join(','),
       ...rows.map((u) =>

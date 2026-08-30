@@ -8,6 +8,30 @@ and the project uses [Calendar Versioning](https://calver.org/) (`YY.MM.PATCH`).
 FreeSDN is a Community Edition / Early Access project. Releases may contain
 breaking changes between versions - **back up your data before upgrading.**
 
+## [Unreleased]
+
+### Security
+
+- **Every data-tier image now ships with current OS security patches.** The
+  PostgreSQL and Valkey services build from thin wrappers that `apt-get upgrade`
+  the base at build time -- matching what the backend, frontend, and log-database
+  images already did -- so the running database and cache carry the latest Debian
+  security updates regardless of when Docker Hub last rebuilt the upstream tag.
+  Verified: the stock tags each carried 36 fixable HIGH OS CVEs; the built images
+  scan clean (0).
+
+### Changed
+
+- Dependency currency: nginx 1.31.4, plus the latest in-range backend (ruff,
+  Faker) and frontend (TanStack Query, react-hook-form, i18next, and others)
+  releases. Dependency audit stays clean (0 advisories across pip-audit and npm
+  audit). Aligned a drifted HA PostgreSQL pin and the dev frontend Node image
+  with the versions the rest of the stack already used.
+- The base-image CVE scan now covers only images run unmodified (nginx); the
+  images we build and patch at build time are documented rather than scanned as
+  raw upstream tags, so the scan no longer sits red on upstream tag-rebuild lag
+  for images that ship patched.
+
 ## [26.08.4] - 2026-08-24 - Storage you can write to, and observability that acts
 
 Storage was a very good pair of eyes with almost no hands, and the collector was

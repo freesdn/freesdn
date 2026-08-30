@@ -59,15 +59,15 @@ def cleanup_stale_agents(
 
     When an agent transitions online → offline:
     - status flips to "offline", disconnected_at = now
-    - notification_channels on the agent gets a dispatch (if set)
-    - offline_notified_at = now to dedup repeat alerts
+    - notification_channels on the agent gets a dispatch (if set), handed to
+      ``agents.notify_offline`` so this task never blocks on SMTP/Slack
+    - offline_notified_at = now, set by that task once the send succeeds
 
     Runs on Celery Beat (every 60s recommended).
     """
 
     async def _run() -> dict[str, Any]:
         from app.models.agents import RemoteAgent
-        from app.services.notification_helpers import dispatch_notifications
 
         now = datetime.now(UTC)
 
@@ -86,7 +86,11 @@ def cleanup_stale_agents(
             online_agents = q.scalars().all()
 
             count_offline = 0
-            count_notified = 0
+            # Collected during the scan, dispatched only AFTER the commit below:
+            # notify_offline_agent writes offline_notified_at on the same row, so
+            # handing it the id while the transaction is still open races the
+            # worker against our own uncommitted UPDATE.
+            pending_alerts: list[list[Any]] = []
             for agent in online_agents:
                 threshold = agent.offline_threshold_seconds or timeout_seconds
                 if agent.last_heartbeat is None:
@@ -99,45 +103,58 @@ def cleanup_stale_agents(
                 agent.disconnected_at = now
                 count_offline += 1
 
-                # Dispatch alert if channels configured + not already
+                # Queue the alert if channels configured + not already
                 # notified for THIS offline transition
                 if agent.notification_channels and agent.offline_notified_at is None:
-                    title = f"[FreeSDN] Agent OFFLINE: {agent.name}"
-                    body_lines = [
-                        f"Agent: {agent.name}",
-                        f"Agent ID: {agent.id}",
-                        f"Site: {agent.site_id}",
-                        f"Last heartbeat: {agent.last_heartbeat.isoformat()}",
-                        f"Stale for: {int(age)} seconds (threshold {threshold}s)",
-                    ]
-                    try:
-                        await dispatch_notifications(
-                            session,
-                            channels_config=agent.notification_channels,
-                            title=title,
-                            body="\n".join(body_lines),
-                        )
-                        agent.offline_notified_at = now
-                        count_notified += 1
-                    except Exception:
-                        logger.exception(
-                            "Failed to dispatch offline alert for agent %s",
-                            agent.id,
-                        )
+                    pending_alerts.append(
+                        [
+                            str(agent.id),
+                            agent.name,
+                            str(agent.site_id),
+                            agent.last_heartbeat.isoformat(),
+                            int(age),
+                            agent.notification_channels,
+                        ]
+                    )
 
             await session.commit()
 
+            # Audit MEDIUM #9, the second half: notify_offline_agent was written
+            # and registered to take the SMTP/Slack round-trip out of this
+            # periodic slot, and then nothing ever sent it -- the inline
+            # dispatch it was extracted from stayed. One hung notification
+            # provider could eat the whole soft_time_limit=120 budget and stall
+            # offline detection for the rest of the fleet. Enqueue instead.
+            # No explicit queue=: an explicit queue on apply_async overrides
+            # task_routes, and "agents.notify_offline" matches no route, so it
+            # lands on task_default_queue ("default") -- which every tier
+            # consumes -- by the same path as every other agents.* task.
+            count_queued = 0
+            for args in pending_alerts:
+                try:
+                    notify_offline_agent.apply_async(args=args)
+                    count_queued += 1
+                except Exception:
+                    # A broker outage must not cost us the offline transition,
+                    # which is already committed. The agent stays "offline" so
+                    # the next beat run will not re-select it; the alert for
+                    # this transition is lost, exactly as it was when an inline
+                    # dispatch raised.
+                    logger.exception("Failed to enqueue offline alert for agent %s", args[0])
+
             if count_offline > 0:
                 logger.warning(
-                    "Marked %d agent(s) as offline; dispatched %d alert(s)",
+                    "Marked %d agent(s) as offline; queued %d alert(s)",
                     count_offline,
-                    count_notified,
+                    count_queued,
                 )
 
             return {
                 "success": True,
                 "marked_offline": count_offline,
-                "notifications_dispatched": count_notified,
+                # Kept under the original key: this is the count of alerts that
+                # left this task, which is now "queued" rather than "delivered".
+                "notifications_dispatched": count_queued,
                 "checked_at": now.isoformat(),
             }
 

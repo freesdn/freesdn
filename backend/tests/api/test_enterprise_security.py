@@ -90,3 +90,34 @@ async def test_get_agent_scan_status_allows_same_org_task_access() -> None:
 
     assert response["task_id"] == str(task.id)
     assert response["result"] == {"hosts": 3}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raw,expected", [("Production", "production"), ("  Edge  ", "edge")])
+async def test_resolve_device_ids_normalises_the_tag_scope(raw: str, expected: str) -> None:
+    """Tags are persisted ``.strip().lower()``; the scope filter got raw input.
+
+    A bulk operation scoped to the tag "Production" therefore matched no rows and
+    completed as a successful zero-device operation -- the worst shape of
+    failure, because nothing errors and the operator believes the fleet was
+    touched. Same class as the agent-release list filter: a raw parameter
+    compared against a normalised column.
+
+    Fails before the fix: the WHERE clause carries 'Production'.
+    """
+    mock_result = MagicMock()
+    mock_result.all.return_value = []
+
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = mock_result
+
+    await _resolve_device_ids(mock_db, {"scope": "tag", "tag": raw}, uuid4())
+
+    statement = mock_db.execute.await_args.args[0]
+    sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert f"'{expected}'" in sql, (
+        f"tag scope {raw!r} must query for {expected!r} to match the stored row; "
+        f"the statement compares against something else"
+    )
+    if raw != expected:
+        assert f"'{raw}'" not in sql, "the raw tag reached the WHERE clause unnormalised"

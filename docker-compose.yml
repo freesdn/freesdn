@@ -28,6 +28,22 @@ x-backend-build: &backend-build
   dockerfile: Dockerfile
   target: ${BACKEND_TARGET:-production}
 
+# Data-tier images are BUILT from thin wrappers that apt-get upgrade the base at
+# build time (docker/Dockerfile.{postgres,valkey}), so the running database and
+# cache ship with current OS security patches regardless of when Docker Hub last
+# rebuilt the upstream tag. POSTGRES_VERSION / VALKEY_VERSION still select the
+# base via build args, exactly as the old `image:` lines did.
+x-postgres-build: &postgres-build
+  context: ./docker
+  dockerfile: Dockerfile.postgres
+  args:
+    POSTGRES_VERSION: ${POSTGRES_VERSION:-18.6-trixie}
+x-valkey-build: &valkey-build
+  context: ./docker
+  dockerfile: Dockerfile.valkey
+  args:
+    VALKEY_VERSION: ${VALKEY_VERSION:-8.1.9-trixie}
+
 x-backend-env: &backend-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-freesdn}:${POSTGRES_PASSWORD}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${POSTGRES_DB:-freesdn}
   LOGDB_URL: postgresql+asyncpg://${LOGDB_USER:-freesdn}:${LOGDB_PASSWORD}@${LOGDB_HOST:-logdb}:${LOGDB_PORT:-5432}/${LOGDB_DB:-freesdn_logs}
@@ -100,7 +116,7 @@ x-logging: &default-logging
 services:
   # ── PostgreSQL - primary relational DB (internal only) ─────────────────────
   postgres:
-    image: postgres:${POSTGRES_VERSION:-18.6-trixie}
+    build: *postgres-build
     restart: unless-stopped
     stop_grace_period: 60s
     init: true
@@ -180,7 +196,7 @@ services:
   # is a drop-in (same RESP protocol, same Sentinel, same redis-py clients). The
   # service is still keyed `redis` so REDIS_HOST/redis:// URLs are unchanged.
   redis:
-    image: valkey/valkey:${VALKEY_VERSION:-8.1.9-trixie}
+    build: *valkey-build
     restart: unless-stopped
     stop_grace_period: 30s
     init: true
@@ -331,6 +347,52 @@ services:
       # nothing said so. The worker and scheduler mount it too, because a task
       # that touches a plugin package needs the same files the api unpacked.
       - plugin_data:/data/plugins
+      # app/services/firmware.py:30 hardcodes FIRMWARE_DIR = /data/freesdn_firmware
+      # and writes uploaded images there. The image pre-creates that directory, but
+      # nothing mounted it -- and every backend service ships read_only: true, so the
+      # write hit the read-only image layer with EROFS. Firmware images also need to
+      # survive a container restart, which an image-layer path cannot do.
+      - firmware_data:/data/freesdn_firmware
+      # ── Four more paths the code writes that nothing used to mount ─────────
+      # The Celery queue split is env-driven (WORKER_QUEUES / WORKER_IO_QUEUES),
+      # so any task can land on EITHER worker: all four are mounted on api,
+      # worker and worker-io.
+      #
+      # app/services/backup.py:344 - LocalStorageBackend("/data/backups") is the
+      # fallback whenever a Backup/BackupSchedule has no storage_location_id
+      # (both columns are nullable, models.py:164/:314), i.e. the shipped
+      # "Local Storage" destination. save() does mkdir(parents=True) first, so on
+      # the read-only rootfs every out-of-the-box backup died with
+      # "[Errno 30] Read-only file system: '/data/backups'" and the row was
+      # stamped FAILED. api runs POST /backups inline; the worker runs
+      # backup.run_scheduled (queue "default") every 15 minutes.
+      - backup_data:/data/backups
+      # app/services/sla_reports.py:35 renders CSV/PDF under SLA_REPORTS_DIR
+      # (default /data/sla_reports). Worse than a 500: generate_report SWALLOWS
+      # the render failure (:236-245), so the row committed with file_path NULL
+      # and the download endpoint quietly served raw JSON instead of a CSV
+      # FileResponse. app/tasks/sla.py runs the scheduled variant on the
+      # "metrics" queue, which is worker-io in pro/max and worker in lite.
+      - sla_reports:/data/sla_reports
+      # app/modules/voip/provisioning.py:44 writes handset configs to
+      # /data/provisioning/voip. Its mkdir raises OSError, which is NOT the
+      # ProvisioningError the callers catch (api.py:810, provisioning.py:473),
+      # so both POST /voip/phones/{id}/provision and the unauthenticated
+      # handset-facing GET /voip/provisioning/cfg{MAC}.xml returned 500 on every
+      # request instead of a config. voip.generate_provisioning_files has no
+      # task_route, so it runs on "default" (the worker).
+      - voip_provisioning:/data/provisioning/voip
+      # app/services/import_export.py:39 hardcodes DATA_DIR = /tmp/freesdn_data,
+      # and /tmp is a PRIVATE per-container tmpfs on every backend service. The
+      # api wrote the uploaded import file into its own tmpfs and handed the
+      # absolute path to run_import_job, which executes in the worker where it
+      # does not exist -> "Import file not found". Export was the mirror image:
+      # the worker wrote the file, the api's download 404'd. A named volume at
+      # that exact path gives both containers ONE directory. It is deliberately
+      # mounted UNDER the tmpfs: the constant has no env override to point
+      # somewhere tidier, and a nested named volume takes precedence over the
+      # tmpfs beneath it.
+      - import_export_data:/tmp/freesdn_data
     depends_on:
       postgres: {condition: service_healthy}
       logdb: {condition: service_healthy}
@@ -372,6 +434,32 @@ services:
       - agent_releases:/data/agent-releases
       - proxmox_uploads:/data/proxmox-uploads
       - plugin_data:/data/plugins
+      # app/services/firmware.py:30 hardcodes FIRMWARE_DIR = /data/freesdn_firmware
+      # and writes uploaded images there. The image pre-creates that directory, but
+      # nothing mounted it -- and every backend service ships read_only: true, so the
+      # write hit the read-only image layer with EROFS. Firmware images also need to
+      # survive a container restart, which an image-layer path cannot do.
+      - firmware_data:/data/freesdn_firmware
+      # Legal-hold evidence export runs HERE, not in api: app/tasks/cameras.py's
+      # _archive_evidence says so in its own docstring ("Runs in a Celery
+      # worker") and does os.makedirs(settings.EVIDENCE_DIR) at :324. Only api
+      # mounted evidence_data, and every backend service has read_only: true, so
+      # the export failed with EROFS on the shipped compose and the archive row
+      # was stamped failed. It works in dev only because docker-compose.dev.yml
+      # sets read_only: false, where the write lands on the container's own
+      # layer and is lost when the container is recreated -- which is why this
+      # was invisible.
+      - evidence_data:/data/evidence
+      # Same four paths the api mounts, and for the same reason: the queue split
+      # is env-driven, so backup.run_scheduled (queue "default"),
+      # app.tasks.sla.generate_scheduled_reports ("metrics"),
+      # voip.generate_provisioning_files ("default") and data.run_import_job /
+      # data.run_export_job ("default") can all execute here. See the api
+      # service for the failure each one produced while unmounted.
+      - backup_data:/data/backups
+      - sla_reports:/data/sla_reports
+      - voip_provisioning:/data/provisioning/voip
+      - import_export_data:/tmp/freesdn_data
     depends_on:
       postgres: {condition: service_healthy}
       logdb: {condition: service_healthy}
@@ -403,7 +491,15 @@ services:
     tmpfs: [/tmp]
     security_opt: [no-new-privileges:true]
     logging: *default-logging
-    networks: [default]
+    # NO `networks:` key on purpose (it joins the project default network anyway
+    # and is reachable as `worker`). The key is omitted so docker-compose.vpn.yml
+    # can add `network_mode: service:vpn` -- compose rejects a service that
+    # declares both ("mutually exclusive `network_mode` and `networks`"), and an
+    # override file cannot delete a key. Same reason `api` has no networks key.
+    # The worker MUST be able to enter the sidecar netns: every VPN beat task
+    # (vpn.sync_vpn_connections / check_vpn_health / auto_reconnect /
+    # check_tunnel_health) runs on the `sync` queue, which this worker consumes
+    # in lite (WORKER_QUEUES=default,priority,discovery,sync,metrics).
 
   # ── Celery I/O worker - slow adapter/scan/metrics lane (pro/max) ───────────
   worker-io:
@@ -418,6 +514,32 @@ services:
       - agent_releases:/data/agent-releases
       - proxmox_uploads:/data/proxmox-uploads
       - plugin_data:/data/plugins
+      # app/services/firmware.py:30 hardcodes FIRMWARE_DIR = /data/freesdn_firmware
+      # and writes uploaded images there. The image pre-creates that directory, but
+      # nothing mounted it -- and every backend service ships read_only: true, so the
+      # write hit the read-only image layer with EROFS. Firmware images also need to
+      # survive a container restart, which an image-layer path cannot do.
+      - firmware_data:/data/freesdn_firmware
+      # Legal-hold evidence export runs HERE, not in api: app/tasks/cameras.py's
+      # _archive_evidence says so in its own docstring ("Runs in a Celery
+      # worker") and does os.makedirs(settings.EVIDENCE_DIR) at :324. Only api
+      # mounted evidence_data, and every backend service has read_only: true, so
+      # the export failed with EROFS on the shipped compose and the archive row
+      # was stamped failed. It works in dev only because docker-compose.dev.yml
+      # sets read_only: false, where the write lands on the container's own
+      # layer and is lost when the container is recreated -- which is why this
+      # was invisible.
+      - evidence_data:/data/evidence
+      # Same four paths the api mounts, and for the same reason: the queue split
+      # is env-driven, so backup.run_scheduled (queue "default"),
+      # app.tasks.sla.generate_scheduled_reports ("metrics"),
+      # voip.generate_provisioning_files ("default") and data.run_import_job /
+      # data.run_export_job ("default") can all execute here. See the api
+      # service for the failure each one produced while unmounted.
+      - backup_data:/data/backups
+      - sla_reports:/data/sla_reports
+      - voip_provisioning:/data/provisioning/voip
+      - import_export_data:/tmp/freesdn_data
     depends_on:
       postgres: {condition: service_healthy}
       logdb: {condition: service_healthy}
@@ -450,7 +572,10 @@ services:
     tmpfs: [/tmp]
     security_opt: [no-new-privileges:true]
     logging: *default-logging
-    networks: [default]
+    # NO `networks:` key -- see the note on `worker`. In pro/max this service
+    # owns WORKER_IO_QUEUES=discovery,sync,metrics, so it is the process that
+    # actually runs the VPN tasks and every adapter call that targets a
+    # remote-site address; docker-compose.vpn.yml puts it in the sidecar netns.
 
   # ── Celery beat - periodic task scheduler (single instance) ────────────────
   scheduler:
@@ -631,7 +756,22 @@ services:
     depends_on:
       api: {condition: service_healthy}
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      # curl WITHOUT -L, on purpose. Caddy's automatic HTTPS installs a global
+      # HTTP->HTTPS redirect on :80 as soon as CADDY_SITE_ADDRESS is a hostname
+      # or `localhost` - which is the shipped pro/max value (.env.pro.example:34,
+      # .env.max.example:46) and what install.sh:181 picks on a fresh install
+      # with no --domain. The old busybox `wget -qO- http://127.0.0.1/health`
+      # followed that 308 to https://127.0.0.1/, where the handshake fails
+      # because Caddy holds no certificate for the IP - so wget exited 1 and the
+      # edge reported `unhealthy` FOREVER while serving traffic perfectly.
+      # scripts/selfheal.py treats that as a fault: --check exits 1, --up times
+      # out, and --monitor restarts a healthy edge until it quarantines it.
+      # `curl -fsS` without -L accepts the 308 as the correct answer for a
+      # TLS-terminating Caddy and still fails on 4xx/5xx or connection refused
+      # (verified in all three CADDY_SITE_ADDRESS modes against
+      # caddy:2.11.4-alpine, the pinned edge base). install.sh:238 already
+      # probes this way, which is why the installer never surfaced the bug.
+      test: ["CMD", "curl", "-fsS", "--max-time", "5", "-o", "/dev/null", "http://127.0.0.1/health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -711,8 +851,16 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-      - /etc/pgbouncer:uid=999,gid=999
-      - /var/run/pgbouncer:uid=999,gid=999
+      # uid/gid 70, NOT 999. edoburu/pgbouncer is Alpine-based and its USER is
+      # `postgres` = uid 70; 999 is the DEBIAN postgres uid (and is right for
+      # edge-nginx above, whose image really does create uid 999). With 999 here
+      # the tmpfs came up owned by a user the process is not, the entrypoint's
+      # `echo ... > /etc/pgbouncer/userlist.txt` failed with EACCES, `set -e`
+      # killed it, and pgbouncer restart-looped -- which took the WHOLE max/ha
+      # stack down with it, because api's DATABASE_URL points at `pgbouncer` and
+      # the name never resolved. Verified against the image: `id -u` is 70.
+      - /etc/pgbouncer:uid=70,gid=70
+      - /var/run/pgbouncer:uid=70,gid=70
     security_opt: [no-new-privileges:true]
     logging: *default-logging
     networks: [default]
@@ -742,15 +890,23 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-      - /etc/pgbouncer:uid=999,gid=999
-      - /var/run/pgbouncer:uid=999,gid=999
+      # uid/gid 70, NOT 999. edoburu/pgbouncer is Alpine-based and its USER is
+      # `postgres` = uid 70; 999 is the DEBIAN postgres uid (and is right for
+      # edge-nginx above, whose image really does create uid 999). With 999 here
+      # the tmpfs came up owned by a user the process is not, the entrypoint's
+      # `echo ... > /etc/pgbouncer/userlist.txt` failed with EACCES, `set -e`
+      # killed it, and pgbouncer restart-looped -- which took the WHOLE max/ha
+      # stack down with it, because api's DATABASE_URL points at `pgbouncer` and
+      # the name never resolved. Verified against the image: `id -u` is 70.
+      - /etc/pgbouncer:uid=70,gid=70
+      - /var/run/pgbouncer:uid=70,gid=70
     security_opt: [no-new-privileges:true]
     logging: *default-logging
     networks: [default]
 
   # ── pg-backup - encrypted pg_dump of both DBs (core; fail-closed in prod) ──
   pg-backup:
-    image: postgres:${POSTGRES_VERSION:-18.6-trixie}
+    build: *postgres-build
     restart: unless-stopped
     stop_grace_period: 30s
     init: true
@@ -953,13 +1109,16 @@ services:
     networks: [default]
 
 networks:
-  # The project default network. Making it the *default* lets the `api` service
-  # join it with NO `networks:` key — which is what allows the optional VPN overlay
-  # (docker-compose.vpn.yml) to add `network_mode: service:vpn` to api without the
-  # illegal networks+network_mode combination. All other services attach explicitly
-  # via `networks: [default]`. Left project-scoped (compose names it
-  # <project>_default) so multiple FreeSDN stacks on one host don't collide on a
-  # shared network name.
+  # The project default network. Making it the *default* lets `api`, `worker` and
+  # `worker-io` join it with NO `networks:` key — which is what allows the optional
+  # VPN overlay (docker-compose.vpn.yml) to add `network_mode: service:vpn` to those
+  # three without the illegal networks+network_mode combination (compose rejects a
+  # service declaring both, and an override file cannot delete a base key). Those
+  # three are exactly the processes that talk to remote sites: the api and the two
+  # Celery workers that consume the queues carrying VPN and adapter work. All
+  # other services attach explicitly via `networks: [default]`. Left
+  # project-scoped (compose names it <project>_default) so multiple FreeSDN
+  # stacks on one host don't collide on a shared network name.
   default:
     driver: bridge
     ipam:
@@ -976,7 +1135,12 @@ volumes:
   fabric_artifacts:
   agent_releases:
   proxmox_uploads:
+  firmware_data:
   plugin_data:
+  backup_data:          # LocalStorageBackend default destination (/data/backups)
+  sla_reports:          # rendered SLA CSV/PDF (SLA_REPORTS_DIR)
+  voip_provisioning:    # generated handset config XML
+  import_export_data:   # shared /tmp/freesdn_data - api writes, worker reads (and back)
   tailscale_state:
   tailscale_run:      # tailscaled control socket, shared vpn <-> api/worker
   netbird_state:      # netbird daemon state

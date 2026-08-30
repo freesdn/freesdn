@@ -28,6 +28,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
+from app.adapters.base import BaseAdapter
 from app.services.adapter_base import GatewayServiceBase
 from app.services.adapter_redaction import redact_secrets
 from app.services.adapter_unifi_common import enforce_unifi_site_grant
@@ -37,11 +38,59 @@ _APPLY: dict[tuple[str, str], str] = {
     ("unifi.devices.disable", "update"): "disable_device",
     ("unifi.devices.port_override", "update"): "update_switch_port",
     ("unifi.devices.set_port_poe", "update"): "set_port_poe_on_site",
-    ("unifi.devices.adopt", "update"): "adopt_device",
+    # ``adopt_device_on_site``, NOT the neutral BaseAdapter wrapper
+    # ``adopt_device(device_id)``: the wrapper takes a single positional and
+    # pins the controller's ``_default_site``, so the ``(site, mac,
+    # force=True)`` call the applier makes below raised TypeError and the
+    # adopt command was never sent. Its two branch-mates (upgrade,
+    # force_provision) already point at the site-first form; this entry was
+    # missed when UniFi's site-aware writes moved to ``*_on_site`` names.
+    ("unifi.devices.adopt", "update"): "adopt_device_on_site",
     ("unifi.devices.upgrade", "update"): "upgrade_device",
     ("unifi.devices.force_provision", "update"): "force_provision_device",
     ("unifi.devices.locate", "update"): "locate_device",
 }
+
+
+async def _list_reachable_sites(client: Any) -> list[Any]:
+    """The sites this connection may touch, as a list of raw rows.
+
+    Two objects reach this helper and they spell the same call differently:
+
+    * :class:`~app.adapters.unifi.adapter.UniFiAdapter` -- what
+      :meth:`~app.services.adapter_base.GatewayServiceBase._get_adapter` returns and
+      what the applier below holds -- exposes ``list_sites()``, which already
+      unwraps ``{"data": [...]}`` and redacts the rows.
+    * ``UniFiClient`` (the raw REST layer, what sibling UniFi services resolve via
+      ``_get_client``) exposes ``get_sites()``, which returns the envelope.
+
+    The guard used to call ``get_sites()`` unconditionally. On an adapter that name
+    does not exist -- and because ``BaseAdapter.__getattr__`` stubs every unknown
+    ``get_*`` into a coroutine returning ``AdapterResult.fail("... does not support
+    'get_sites'")``, it did not even raise. The stub's return value is not a dict, so
+    ``resp.get("data")`` was skipped, the name set came out empty, and EVERY staged
+    ``unifi.devices.*`` apply on a controller with no ``site_mappings`` died with
+    404 "site not found on this controller" -- a site that was right there. The
+    existing tests miss it because they inject a ``MagicMock``, which grows a
+    ``get_sites`` attribute on demand.
+
+    An unrecognised shape raises 502, never 404: "we could not read the site list"
+    must not be reported to the operator as "your site does not exist", and must not
+    be able to pass a site through either.
+    """
+    if isinstance(client, BaseAdapter):
+        resp: Any = await client.list_sites()
+    else:
+        resp = await client.get_sites()
+    # /api/self/sites returns ``{meta, data: [{name, ...}, ...]}``; list_sites has
+    # already unwrapped it.
+    rows = resp.get("data") if isinstance(resp, dict) else resp
+    if not isinstance(rows, list):
+        raise HTTPException(
+            502,
+            detail="could not list UniFi sites: unexpected controller response",
+        )
+    return rows
 
 
 class GatewayUniFiDevicesService(GatewayServiceBase):
@@ -62,7 +111,7 @@ class GatewayUniFiDevicesService(GatewayServiceBase):
         ``ctrl.site_mappings`` (operator-configured allowlist of UniFi
         site → FreeSDN site) is the strict allowlist. If populated and
         ``site`` is in it, we're done — no extra network call.
-        Otherwise fall through to a live ``get_sites()`` check so we
+        Otherwise fall through to a live site listing so we
         don't break controllers that haven't been onboarded with
         explicit mappings yet. Either path failing → 404.
         """
@@ -70,19 +119,15 @@ class GatewayUniFiDevicesService(GatewayServiceBase):
         if mappings and site in mappings:
             return
         try:
-            resp = await client.get_sites()
+            rows = await _list_reachable_sites(client)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(
                 502,
                 detail=(f"could not list UniFi sites to verify site={site!r}: {exc}"),
             ) from exc
-        # /api/self/sites returns ``{meta, data: [{name, ...}, ...]}``
-        sites_data = resp.get("data") if isinstance(resp, dict) else None
-        site_names = (
-            {s.get("name") for s in sites_data if isinstance(s, dict)}
-            if isinstance(sites_data, list)
-            else set()
-        )
+        site_names = {s.get("name") for s in rows if isinstance(s, dict)}
         if site not in site_names:
             raise HTTPException(
                 404,

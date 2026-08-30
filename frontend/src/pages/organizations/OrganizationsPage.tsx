@@ -59,6 +59,7 @@ import {
 import { PageHeader, PageToolbar } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
+import { escapeCell } from '@/lib/csv';
 
 // Types
 interface Organization {
@@ -526,7 +527,9 @@ export function OrganizationsPage() {
   const exportToCsv = (rows: Organization[]) => {
     if (rows.length === 0) return;
     const headers = ['name', 'slug', 'plan', 'status', 'user_count', 'site_count', 'owner_email', 'created_at'];
-    const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy lacked.
+    const escape = (v: unknown) => escapeCell(v);
     const csv = [
       headers.join(','),
       ...rows.map((o) =>

@@ -405,6 +405,42 @@ describe('PendingChangesDrawer', () => {
     expect(submit).not.toBeDisabled();
   });
 
+  it('resolving a reconciliation_required row force-discards it', async () => {
+    // Without this the feature is inert in the UI: the drawer showed those rows
+    // permanently with no action, while the backend's apply and unforced-discard
+    // guards both refuse any non-'pending' status -- by design, because the
+    // change may ALREADY be live on the device. force=true is the operator's
+    // acknowledgement that they have checked it.
+    const user = userEvent.setup();
+    mockList.mockResolvedValue([
+      makeChange({
+        id: 'change-r',
+        feature: 'unifi.devices.restart',
+        operation: 'update',
+        status: 'reconciliation_required',
+        failure_reason: 'apply timed out; outcome on the controller is UNKNOWN',
+      }),
+    ]);
+    mockDiscard.mockResolvedValue(
+      ok(makeChange({ id: 'change-r', status: 'discarded' })),
+    );
+
+    renderWithProviders(<PendingChangesDrawer {...baseProps} />);
+
+    await user.click(await screen.findByRole('button', { name: /mark as resolved/i }));
+
+    const dialog = await screen.findByRole('alertdialog', {
+      name: /mark this change as resolved/i,
+    });
+    await user.click(
+      within(dialog).getByRole('button', { name: /^mark as resolved$/i }),
+    );
+
+    await waitFor(() => {
+      expect(mockDiscard).toHaveBeenCalledWith('change-r', { force: true });
+    });
+  });
+
   it('discard button calls discardPendingChange after confirmation', async () => {
     const user = userEvent.setup();
     mockList.mockResolvedValue([
@@ -434,7 +470,43 @@ describe('PendingChangesDrawer', () => {
     );
 
     await waitFor(() => {
-      expect(mockDiscard).toHaveBeenCalledWith('change-d');
+      // An ordinary discard carries NO force: the backend guard admits a
+      // 'pending' row without it, and passing force here would let the UI
+      // clear rows the guard is meant to refuse.
+      expect(mockDiscard).toHaveBeenCalledWith('change-d', undefined);
     });
+  });
+
+  it('surfaces reconciliation_required rows with their failure_reason', async () => {
+    // Regression guard: this status matched no section filter, so the row
+    // rendered nowhere at all. Invisible is worse than mislabelled here,
+    // the operator has to know the device outcome is unknown before they
+    // re-stage a non-idempotent write.
+    mockList.mockResolvedValue([
+      makeChange({
+        id: 'change-r',
+        feature: 'mikrotik.system.reboot',
+        operation: 'create',
+        status: 'reconciliation_required',
+        failure_reason:
+          'Stranded in applying past the 300s TTL; device outcome unknown.',
+      }),
+    ]);
+
+    renderWithProviders(<PendingChangesDrawer {...baseProps} />);
+
+    const section = await screen.findByRole('region', {
+      name: /changes needing verification/i,
+    });
+    expect(
+      within(section).getByText('mikrotik.system.reboot'),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText(/device outcome unknown/i),
+    ).toBeInTheDocument();
+    // Warning treatment, not the destructive "Failed" bucket.
+    expect(screen.queryByText(/^failed$/i)).not.toBeInTheDocument();
+    // And it must not fall through to the empty state.
+    expect(screen.queryByText(/no pending changes/i)).not.toBeInTheDocument();
   });
 });

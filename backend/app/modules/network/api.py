@@ -528,7 +528,19 @@ async def _resolve_control_device_id(
 # ============================================================================
 
 
-@router.get("/vlans", response_model=VlanListResponse)
+@router.get(
+    "/vlans",
+    response_model=VlanListResponse,
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py list_vlans
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def list_vlans(
     db: DBSession,
     current_user: DeviceReadUser,
@@ -558,7 +570,20 @@ async def list_vlans(
     )
 
 
-@router.post("/vlans", response_model=VlanResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/vlans",
+    response_model=VlanResponse,
+    status_code=status.HTTP_201_CREATED,
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py create_vlan
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def create_vlan(
     vlan: VlanCreate,
     db: DBSession,
@@ -590,7 +615,19 @@ async def create_vlan(
         )
 
 
-@router.get("/vlans/{vlan_uuid}", response_model=VlanResponse)
+@router.get(
+    "/vlans/{vlan_uuid}",
+    response_model=VlanResponse,
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py get_vlan (/vlans/{vlan_id})
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def get_vlan(
     vlan_uuid: UUID,
     db: DBSession,
@@ -636,7 +673,19 @@ async def update_vlan(
         )
 
 
-@router.delete("/vlans/{vlan_uuid}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/vlans/{vlan_uuid}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py delete_vlan (/vlans/{vlan_id})
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def delete_vlan(
     vlan_uuid: UUID,
     db: DBSession,
@@ -661,7 +710,19 @@ async def delete_vlan(
 # ============================================================================
 
 
-@router.get("/wifi", response_model=WifiNetworkListResponse)
+@router.get(
+    "/wifi",
+    response_model=WifiNetworkListResponse,
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py list_wifi
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def list_wifi_networks(
     db: DBSession,
     current_user: DeviceReadUser,
@@ -689,7 +750,20 @@ async def list_wifi_networks(
     )
 
 
-@router.post("/wifi", response_model=WifiNetworkResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/wifi",
+    response_model=WifiNetworkResponse,
+    status_code=status.HTTP_201_CREATED,
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py create_wifi
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def create_wifi_network(
     wifi: WifiNetworkCreate,
     db: DBSession,
@@ -731,7 +805,19 @@ async def create_wifi_network(
         )
 
 
-@router.get("/wifi/{wifi_id}", response_model=WifiNetworkResponse)
+@router.get(
+    "/wifi/{wifi_id}",
+    response_model=WifiNetworkResponse,
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py get_wifi
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def get_wifi_network(
     wifi_id: UUID,
     db: DBSession,
@@ -788,7 +874,19 @@ async def update_wifi_network(
         )
 
 
-@router.delete("/wifi/{wifi_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/wifi/{wifi_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py delete_wifi
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def delete_wifi_network(
     wifi_id: UUID,
     db: DBSession,
@@ -861,7 +959,19 @@ async def disable_wifi_network(
 # ============================================================================
 
 
-@router.get("/devices/{device_id}/ports", response_model=list[SwitchPortResponse])
+@router.get(
+    "/devices/{device_id}/ports",
+    response_model=list[SwitchPortResponse],
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py list_ports
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def list_switch_ports(
     device_id: UUID,
     db: DBSession,
@@ -1041,7 +1151,19 @@ async def disable_port(
 # ============================================================================
 
 
-@router.get("/clients", response_model=NetworkClientListResponse)
+@router.get(
+    "/clients",
+    response_model=NetworkClientListResponse,
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py list_clients
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def list_network_clients(
     db: DBSession,
     current_user: DeviceReadUser,
@@ -1071,7 +1193,19 @@ async def list_network_clients(
     )
 
 
-@router.get("/clients/{client_id}", response_model=NetworkClientResponse)
+@router.get(
+    "/clients/{client_id}",
+    response_model=NetworkClientResponse,
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py get_client
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def get_network_client(
     client_id: UUID,
     db: DBSession,
@@ -1132,7 +1266,19 @@ async def get_client_stats(
 # ============================================================================
 
 
-@router.get("/devices", response_model=NetworkDeviceListResponse)
+@router.get(
+    "/devices",
+    response_model=NetworkDeviceListResponse,
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py list_network_devices
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def list_network_devices(
     db: DBSession,
     current_user: DeviceReadUser,
@@ -1209,7 +1355,19 @@ async def get_device_stats(
 # ============================================================================
 
 
-@router.get("/topology", response_model=TopologyResponse)
+@router.get(
+    "/topology",
+    response_model=TopologyResponse,
+    # SHADOWED, therefore hidden from the schema: this router is mounted at
+    # /api/v1/network by the LIFESPAN, after endpoints/network.py get_topology
+    # is mounted at the same prefix at app construction. Starlette returns the
+    # first full match, so no request can reach this handler. It was still
+    # published in the OpenAPI schema, which meant the generated frontend types
+    # described THIS response model while the core handler answered.
+    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
+    # collision) for the decision to remove or re-point these.
+    include_in_schema=False,
+)
 async def get_network_topology(
     db: DBSession,
     current_user: DeviceReadUser,

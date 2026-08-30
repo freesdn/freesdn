@@ -58,7 +58,11 @@
 	handle {
 		header {
 			X-Frame-Options "SAMEORIGIN"
-			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self'; object-src 'none'; frame-ancestors 'self';"
+			# connect-src is 'self' only: the shipped bundle's WebSocket is same-origin
+			# (client.ts getWebSocketUrl falls back to window.location.host, and no
+			# VITE_* build arg is passed in the prod build). If you BUILD with
+			# VITE_WS_URL pointing elsewhere, add that origin here explicitly.
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';"
 		}
 		root * /srv
 		@assets path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2

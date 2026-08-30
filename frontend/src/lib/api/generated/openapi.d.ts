@@ -3317,6 +3317,29 @@ export interface paths {
          * List Sessions
          * @description List the current user's active sessions for a "manage sessions"
          *     UI. Returns metadata only — never the raw refresh token / JTI.
+         *
+         *     "Active" is now enforced, not just claimed. This selected every
+         *     ``user_sessions`` row the user had ever produced, with no bound: a session
+         *     from six months ago whose refresh token died in week two came back looking
+         *     exactly like the laptop the user is holding, and the only deleter of those
+         *     rows (``cleanup_orphan_sessions``) had no beat entry, so nothing ever
+         *     trimmed them. 135 rows for the fleet on the dev DB, none prunable.
+         *
+         *     A row is listed only while the refresh token bound to it could still be
+         *     presented:
+         *
+         *     * ``expires_at`` is that token's own expiry, stamped by ``_upsert_session``;
+         *       once it is past, both tokens on the row are dead.
+         *     * Rows written before that column was populated carry NULL. ``last_used_at``
+         *       is re-stamped on every refresh, so ``last activity + the longest refresh
+         *       window`` is an upper bound on when their token dies. ``created_at`` is the
+         *       floor for rows that were never refreshed (NULL ``last_used_at``).
+         *
+         *     Revoked rows that are still inside that window ARE listed, and carry
+         *     ``is_revoked``/``revoked_at`` so the UI can show "signed out on this
+         *     device" — they are also exactly the rows whose existence is what keeps a
+         *     revoked refresh token rejected (``session_revocation`` treats a MISSING row
+         *     as not-revoked), so hiding them would hide the enforcement.
          */
         get: operations["list_sessions_api_v1_auth_sessions_get"];
         put?: never;
@@ -6548,6 +6571,12 @@ export interface paths {
         /**
          * Collector Status
          * @description Return running status of each collector service.
+         *
+         *     ``events`` carries the event-publisher counters. Without them a
+         *     collector-triggered automation rule that never fires is indistinguishable
+         *     from a device that never spoke: the severity floor (default ``warning``)
+         *     and the per-source rate cap both drop messages, and only the rate cap logs
+         *     anything, at INFO, inside the collector container.
          */
         get: operations["collector_status_api_v1_collector_status_get"];
         put?: never;
@@ -20755,6 +20784,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/gateway-storage/{controller_id}/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Pending Storage
+         * @description Pending storage changes for one appliance, for the review drawer.
+         */
+        get: operations["list_pending_storage_api_v1_gateway_storage__controller_id__changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/gateway-storage/{controller_id}/changes/{feature}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage a storage write. Does NOT touch the appliance.
+         * @description Record a write intent against a storage appliance.
+         *
+         *     Nothing reaches the appliance here. The change appears in the pending list
+         *     and only runs if an operator later force-applies it.
+         */
+        post: operations["stage_storage_change_api_v1_gateway_storage__controller_id__changes__feature__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/gateway-switch-advanced/{controller_id}/sites/{site_id}/changes": {
         parameters: {
             query?: never;
@@ -24849,11 +24921,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * List Network Clients
-         * @description List all network clients for the current user's organization.
-         */
-        get: operations["list_network_clients_api_v1_network_clients_get"];
+        /** List Clients */
+        get: operations["list_clients_api_v1_network_clients_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -24889,11 +24958,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Network Client
-         * @description Get a specific network client.
-         */
-        get: operations["get_network_client_api_v1_network_clients__client_id__get"];
+        /** Get Client */
+        get: operations["get_client_api_v1_network_clients__client_id__get"];
         /**
          * Update Network Client
          * @description Update a network client.
@@ -24947,10 +25013,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * List Network Devices
-         * @description List all network devices for the current user's organization.
-         */
+        /** List Network Devices */
         get: operations["list_network_devices_api_v1_network_devices_get"];
         put?: never;
         post?: never;
@@ -25029,11 +25092,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * List Switch Ports
-         * @description List all ports on a switch device.
-         */
-        get: operations["list_switch_ports_api_v1_network_devices__device_id__ports_get"];
+        /** List Device Ports */
+        get: operations["list_device_ports_api_v1_network_devices__device_id__ports_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -25390,11 +25450,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Network Topology
-         * @description Get the network topology for the current user's organization.
-         */
-        get: operations["get_network_topology_api_v1_network_topology_get"];
+        /** Get Topology */
+        get: operations["get_topology_api_v1_network_topology_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -25430,17 +25487,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * List Vlans
-         * @description List all VLANs for the current user's organization.
-         *
-         *     Optionally filter by site.
-         */
+        /** List Vlans */
         get: operations["list_vlans_api_v1_network_vlans_get"];
         put?: never;
         /**
          * Create Vlan
-         * @description Create a new VLAN.
+         * @description Create a VLAN. If a controller is associated, push to the controller too.
          */
         post: operations["create_vlan_api_v1_network_vlans_post"];
         delete?: never;
@@ -25522,22 +25574,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Vlan
-         * @description Get a specific VLAN by UUID.
-         */
-        get: operations["get_vlan_api_v1_network_vlans__vlan_uuid__get"];
+        get?: never;
         /**
          * Update Vlan
          * @description Update a VLAN.
          */
         put: operations["update_vlan_api_v1_network_vlans__vlan_uuid__put"];
         post?: never;
-        /**
-         * Delete Vlan
-         * @description Delete a VLAN.
-         */
-        delete: operations["delete_vlan_api_v1_network_vlans__vlan_uuid__delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -25550,17 +25594,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * List Wifi Networks
-         * @description List all WiFi networks for the current user's organization.
-         */
-        get: operations["list_wifi_networks_api_v1_network_wifi_get"];
+        /** List Wifi */
+        get: operations["list_wifi_api_v1_network_wifi_get"];
         put?: never;
-        /**
-         * Create Wifi Network
-         * @description Create a new WiFi network.
-         */
-        post: operations["create_wifi_network_api_v1_network_wifi_post"];
+        /** Create Wifi */
+        post: operations["create_wifi_api_v1_network_wifi_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -25574,22 +25612,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Wifi Network
-         * @description Get a specific WiFi network.
-         */
-        get: operations["get_wifi_network_api_v1_network_wifi__wifi_id__get"];
+        /** Get Wifi */
+        get: operations["get_wifi_api_v1_network_wifi__wifi_id__get"];
         /**
          * Update Wifi Network
          * @description Update a WiFi network.
          */
         put: operations["update_wifi_network_api_v1_network_wifi__wifi_id__put"];
         post?: never;
-        /**
-         * Delete Wifi Network
-         * @description Delete a WiFi network.
-         */
-        delete: operations["delete_wifi_network_api_v1_network_wifi__wifi_id__delete"];
+        /** Delete Wifi */
+        delete: operations["delete_wifi_api_v1_network_wifi__wifi_id__delete"];
         options?: never;
         head?: never;
         /** Update Wifi */
@@ -34265,6 +34297,12 @@ export interface components {
              */
             instructions: string;
             /**
+             * Release Key Sha256
+             * @description SHA-256 of the release-signing public key, to pin for update verification. Delivered here because registration is the already-authenticated, operator-approved moment -- fetching the key from the update feed itself proves nothing on first contact.
+             * @default
+             */
+            release_key_sha256: string;
+            /**
              * Websocket Url
              * @description WebSocket endpoint for agent connection
              */
@@ -34788,6 +34826,10 @@ export interface components {
              * @default
              */
             latest_version: string;
+            /** Manifest */
+            manifest?: {
+                [key: string]: unknown;
+            };
             /**
              * Release Notes
              * @default
@@ -36424,6 +36466,13 @@ export interface components {
          *     in the JSON body is unnecessary and exposes them to JavaScript (XSS risk).
          *     This schema intentionally omits ``access_token`` and ``refresh_token`` so
          *     the JSON body carries no bearer-usable secrets.
+         *
+         *     A ``response_model`` is a WHITELIST: FastAPI validates the endpoint's
+         *     return value against it and drops every key this class does not declare,
+         *     silently and with a 200. So an endpoint cannot signal anything from here
+         *     that is not a field above -- the frontend read
+         *     ``data.force_password_change`` for three releases and got ``undefined``
+         *     every time, because nothing declared it. Add the field before you send it.
          */
         BrowserAuthResponse: {
             /**
@@ -36585,6 +36634,12 @@ export interface components {
             config?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Confirm
+             * @description Required for firmware_update. A fleet flash is irreversible and can brick devices.
+             * @default false
+             */
+            confirm: boolean;
             /** Operation */
             operation: string;
             rollout?: components["schemas"]["RolloutStrategy"] | null;
@@ -46546,6 +46601,36 @@ export interface components {
          */
         MetricType: "counter" | "gauge" | "histogram" | "summary";
         /**
+         * MfaChallengeResponse
+         * @description The OTHER 200 shape of ``POST /auth/login``: MFA is required.
+         *
+         *     ``/auth/login`` was declared ``response_model=BrowserAuthResponse`` when the
+         *     raw tokens were taken out of the body, but its MFA branch returns
+         *     ``{"require_mfa": True, "mfa_token": ...}`` -- which has none of that
+         *     model's required ``expires_in``. FastAPI validates the return value against
+         *     the response model, so that branch raised ResponseValidationError and every
+         *     MFA-enabled user got a 500 from /auth/login instead of a challenge, unable
+         *     to sign in at all. It went unnoticed because every test calls the ``login``
+         *     coroutine directly, and calling the function bypasses the response model.
+         *
+         *     Declared as a separate model rather than as optional fields on
+         *     ``BrowserAuthResponse`` so neither shape can be returned half-filled: the
+         *     success body must carry ``expires_in``, the challenge body must carry a
+         *     token, and ``/auth/refresh`` and ``/auth/login/mfa`` keep the narrow model.
+         */
+        MfaChallengeResponse: {
+            /**
+             * Mfa Token
+             * @description Short-lived mfa_pending JWT to submit to /auth/login/mfa
+             */
+            mfa_token: string;
+            /**
+             * Require Mfa
+             * @description True when the credentials were correct but MFA is due
+             */
+            require_mfa: boolean;
+        };
+        /**
          * MfaDisableRequest
          * @description Disable MFA (requires password confirmation).
          */
@@ -47815,6 +47900,17 @@ export interface components {
              */
             signal_state: string;
         };
+        /** NetworkClientListResponse */
+        NetworkClientListResponse: {
+            /** Items */
+            items: components["schemas"]["NetworkClientOut"][];
+            /** Limit */
+            limit: number;
+            /** Skip */
+            skip: number;
+            /** Total */
+            total: number;
+        };
         /** NetworkClientOut */
         NetworkClientOut: {
             /**
@@ -47923,6 +48019,17 @@ export interface components {
             hostname?: string | null;
             /** Notes */
             notes?: string | null;
+        };
+        /** NetworkDeviceListResponse */
+        NetworkDeviceListResponse: {
+            /** Items */
+            items: components["schemas"]["NetworkDeviceOut"][];
+            /** Limit */
+            limit: number;
+            /** Skip */
+            skip: number;
+            /** Total */
+            total: number;
         };
         /** NetworkDeviceOut */
         NetworkDeviceOut: {
@@ -49255,7 +49362,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "pending" | "applying" | "applied" | "discarded" | "failed";
+            status: "pending" | "applying" | "applied" | "discarded" | "failed" | "reconciliation_required";
             /** Target Id */
             target_id: string | null;
         };
@@ -56318,7 +56425,7 @@ export interface components {
              */
             generated_at: string;
             /** Nodes */
-            nodes: components["schemas"]["app__schemas__topology__TopologyNode"][];
+            nodes: components["schemas"]["TopologyNode"][];
             /** Site Id */
             site_id?: string | null;
             stats: components["schemas"]["TopologyStats"];
@@ -56398,27 +56505,6 @@ export interface components {
              */
             zoom: number;
         };
-        /**
-         * TopologyLink
-         * @description Topology link schema.
-         */
-        TopologyLink: {
-            /** Source */
-            source: string;
-            /** Source Port */
-            source_port?: string | null;
-            /** Speed */
-            speed?: string | null;
-            /**
-             * Status
-             * @default unknown
-             */
-            status: string;
-            /** Target */
-            target: string;
-            /** Target Port */
-            target_port?: string | null;
-        };
         /** TopologyLinkOut */
         TopologyLinkOut: {
             /** Source */
@@ -56436,6 +56522,52 @@ export interface components {
             target: string;
             /** Target Port */
             target_port?: string | null;
+        };
+        /**
+         * TopologyNode
+         * @description A node in the topology graph (device or gateway).
+         */
+        TopologyNode: {
+            /** Device Type */
+            device_type: string;
+            /** Health Score */
+            health_score?: number | null;
+            /** Health Status */
+            health_status?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ip Address */
+            ip_address?: string | null;
+            /** Label */
+            label: string;
+            /** Layer */
+            layer?: string | null;
+            /** Mac Address */
+            mac_address?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Model */
+            model?: string | null;
+            /**
+             * Pinned
+             * @default false
+             */
+            pinned: boolean;
+            /** Site Id */
+            site_id?: string | null;
+            /** Site Name */
+            site_name?: string | null;
+            /** Status */
+            status: string;
+            /** X */
+            x?: number | null;
+            /** Y */
+            y?: number | null;
         };
         /** TopologyNodeOut */
         TopologyNodeOut: {
@@ -56456,16 +56588,6 @@ export interface components {
             status: string;
             /** Vendor */
             vendor?: string | null;
-        };
-        /**
-         * TopologyResponse
-         * @description Network topology response.
-         */
-        TopologyResponse: {
-            /** Links */
-            links: components["schemas"]["TopologyLink"][];
-            /** Nodes */
-            nodes: components["schemas"]["app__modules__network__api__TopologyNode"][];
         };
         /** TopologyStats */
         TopologyStats: {
@@ -58307,6 +58429,30 @@ export interface components {
             /** Tagged Vlans */
             tagged_vlans?: number[];
         };
+        /** VlanCreate */
+        VlanCreate: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Dhcp Enabled
+             * @default false
+             */
+            dhcp_enabled: boolean;
+            /** Dhcp End */
+            dhcp_end?: string | null;
+            /** Dhcp Start */
+            dhcp_start?: string | null;
+            /** Gateway */
+            gateway?: string | null;
+            /** Name */
+            name: string;
+            /** Site Id */
+            site_id?: string | null;
+            /** Subnet Mask */
+            subnet_mask?: string | null;
+            /** Vlan Id */
+            vlan_id: number;
+        };
         /** VlanDistributeIn */
         VlanDistributeIn: {
             /**
@@ -58351,6 +58497,17 @@ export interface components {
             network_id?: string | null;
             /** Success */
             success: boolean;
+        };
+        /** VlanListResponse */
+        VlanListResponse: {
+            /** Items */
+            items: components["schemas"]["VlanOut"][];
+            /** Limit */
+            limit: number;
+            /** Skip */
+            skip: number;
+            /** Total */
+            total: number;
         };
         /** VlanOut */
         VlanOut: {
@@ -58952,19 +59109,60 @@ export interface components {
             /** Total */
             total: number;
         };
-        /**
-         * WifiNetworkListResponse
-         * @description Paginated WiFi network list response.
-         */
-        WifiNetworkListResponse: {
-            /** Items */
-            items: components["schemas"]["WifiNetworkResponse"][];
-            /** Limit */
-            limit: number;
-            /** Skip */
-            skip: number;
-            /** Total */
-            total: number;
+        /** WifiNetworkCreate */
+        WifiNetworkCreate: {
+            /**
+             * Band
+             * @default both
+             */
+            band: string;
+            /**
+             * Band Steering
+             * @default false
+             */
+            band_steering: boolean;
+            /**
+             * Client Isolation
+             * @default false
+             */
+            client_isolation: boolean;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Fast Roaming
+             * @default false
+             */
+            fast_roaming: boolean;
+            /**
+             * Hidden
+             * @default false
+             */
+            hidden: boolean;
+            /** Password */
+            password?: string | null;
+            /** Rate Limit Down */
+            rate_limit_down?: number | null;
+            /**
+             * Rate Limit Enabled
+             * @default false
+             */
+            rate_limit_enabled: boolean;
+            /** Rate Limit Up */
+            rate_limit_up?: number | null;
+            /**
+             * Security
+             * @default wpa2_personal
+             */
+            security: string;
+            /** Site Id */
+            site_id?: string | null;
+            /** Ssid */
+            ssid: string;
+            /** Vlan Id */
+            vlan_id?: number | null;
         };
         /** WifiNetworkOut */
         WifiNetworkOut: {
@@ -59576,28 +59774,6 @@ export interface components {
              */
             warning: number;
         };
-        /** NetworkClientListResponse */
-        app__api__v1__endpoints__network__NetworkClientListResponse: {
-            /** Items */
-            items: components["schemas"]["NetworkClientOut"][];
-            /** Limit */
-            limit: number;
-            /** Skip */
-            skip: number;
-            /** Total */
-            total: number;
-        };
-        /** NetworkDeviceListResponse */
-        app__api__v1__endpoints__network__NetworkDeviceListResponse: {
-            /** Items */
-            items: components["schemas"]["NetworkDeviceOut"][];
-            /** Limit */
-            limit: number;
-            /** Skip */
-            skip: number;
-            /** Total */
-            total: number;
-        };
         /** SwitchPortUpdate */
         app__api__v1__endpoints__network__SwitchPortUpdate: {
             /** Enabled */
@@ -59610,41 +59786,6 @@ export interface components {
             poe_enabled?: boolean | null;
             /** Tagged Vlans */
             tagged_vlans?: number[] | null;
-        };
-        /** VlanCreate */
-        app__api__v1__endpoints__network__VlanCreate: {
-            /** Description */
-            description?: string | null;
-            /**
-             * Dhcp Enabled
-             * @default false
-             */
-            dhcp_enabled: boolean;
-            /** Dhcp End */
-            dhcp_end?: string | null;
-            /** Dhcp Start */
-            dhcp_start?: string | null;
-            /** Gateway */
-            gateway?: string | null;
-            /** Name */
-            name: string;
-            /** Site Id */
-            site_id?: string | null;
-            /** Subnet Mask */
-            subnet_mask?: string | null;
-            /** Vlan Id */
-            vlan_id: number;
-        };
-        /** VlanListResponse */
-        app__api__v1__endpoints__network__VlanListResponse: {
-            /** Items */
-            items: components["schemas"]["VlanOut"][];
-            /** Limit */
-            limit: number;
-            /** Skip */
-            skip: number;
-            /** Total */
-            total: number;
         };
         /** VlanUpdate */
         app__api__v1__endpoints__network__VlanUpdate: {
@@ -59662,61 +59803,6 @@ export interface components {
             name?: string | null;
             /** Subnet Mask */
             subnet_mask?: string | null;
-        };
-        /** WifiNetworkCreate */
-        app__api__v1__endpoints__network__WifiNetworkCreate: {
-            /**
-             * Band
-             * @default both
-             */
-            band: string;
-            /**
-             * Band Steering
-             * @default false
-             */
-            band_steering: boolean;
-            /**
-             * Client Isolation
-             * @default false
-             */
-            client_isolation: boolean;
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            /**
-             * Fast Roaming
-             * @default false
-             */
-            fast_roaming: boolean;
-            /**
-             * Hidden
-             * @default false
-             */
-            hidden: boolean;
-            /** Password */
-            password?: string | null;
-            /** Rate Limit Down */
-            rate_limit_down?: number | null;
-            /**
-             * Rate Limit Enabled
-             * @default false
-             */
-            rate_limit_enabled: boolean;
-            /** Rate Limit Up */
-            rate_limit_up?: number | null;
-            /**
-             * Security
-             * @default wpa2_personal
-             */
-            security: string;
-            /** Site Id */
-            site_id?: string | null;
-            /** Ssid */
-            ssid: string;
-            /** Vlan Id */
-            vlan_id?: number | null;
         };
         /** WifiNetworkUpdate */
         app__api__v1__endpoints__network__WifiNetworkUpdate: {
@@ -60088,34 +60174,6 @@ export interface components {
             user: string;
         };
         /**
-         * NetworkClientListResponse
-         * @description Paginated network client list response.
-         */
-        app__modules__network__api__NetworkClientListResponse: {
-            /** Items */
-            items: components["schemas"]["NetworkClientResponse"][];
-            /** Limit */
-            limit: number;
-            /** Skip */
-            skip: number;
-            /** Total */
-            total: number;
-        };
-        /**
-         * NetworkDeviceListResponse
-         * @description Paginated network device list response.
-         */
-        app__modules__network__api__NetworkDeviceListResponse: {
-            /** Items */
-            items: components["schemas"]["NetworkDeviceResponse"][];
-            /** Limit */
-            limit: number;
-            /** Skip */
-            skip: number;
-            /** Total */
-            total: number;
-        };
-        /**
          * SwitchPortUpdate
          * @description Schema for updating a switch port.
          */
@@ -60138,73 +60196,6 @@ export interface components {
             vlan_id?: number | null;
         };
         /**
-         * TopologyNode
-         * @description Topology node schema.
-         */
-        app__modules__network__api__TopologyNode: {
-            /** Device Type */
-            device_type: string;
-            /** Id */
-            id: string;
-            /** Ip Address */
-            ip_address?: string | null;
-            /** Manufacturer */
-            manufacturer?: string | null;
-            /** Model */
-            model?: string | null;
-            /** Name */
-            name: string;
-            /**
-             * Status
-             * @default unknown
-             */
-            status: string;
-        };
-        /**
-         * VlanCreate
-         * @description Schema for creating a VLAN.
-         */
-        app__modules__network__api__VlanCreate: {
-            /** Description */
-            description?: string | null;
-            /**
-             * Dhcp Enabled
-             * @default false
-             */
-            dhcp_enabled: boolean;
-            /** Dhcp End */
-            dhcp_end?: string | null;
-            /** Dhcp Start */
-            dhcp_start?: string | null;
-            /** Gateway */
-            gateway?: string | null;
-            /** Name */
-            name: string;
-            /** Site Id */
-            site_id?: string | null;
-            /** Subnet Mask */
-            subnet_mask?: string | null;
-            /**
-             * Vlan Id
-             * @description VLAN ID (1-4094)
-             */
-            vlan_id: number;
-        };
-        /**
-         * VlanListResponse
-         * @description Paginated VLAN list response.
-         */
-        app__modules__network__api__VlanListResponse: {
-            /** Items */
-            items: components["schemas"]["VlanResponse"][];
-            /** Limit */
-            limit: number;
-            /** Skip */
-            skip: number;
-            /** Total */
-            total: number;
-        };
-        /**
          * VlanUpdate
          * @description Schema for updating a VLAN.
          */
@@ -60223,64 +60214,6 @@ export interface components {
             name?: string | null;
             /** Subnet Mask */
             subnet_mask?: string | null;
-        };
-        /**
-         * WifiNetworkCreate
-         * @description Schema for creating a WiFi network.
-         */
-        app__modules__network__api__WifiNetworkCreate: {
-            /**
-             * Band
-             * @default both
-             */
-            band: string;
-            /**
-             * Band Steering
-             * @default true
-             */
-            band_steering: boolean;
-            /**
-             * Client Isolation
-             * @default false
-             */
-            client_isolation: boolean;
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            /**
-             * Fast Roaming
-             * @default true
-             */
-            fast_roaming: boolean;
-            /**
-             * Hidden
-             * @default false
-             */
-            hidden: boolean;
-            /** Password */
-            password?: string | null;
-            /** Rate Limit Down */
-            rate_limit_down?: number | null;
-            /**
-             * Rate Limit Enabled
-             * @default false
-             */
-            rate_limit_enabled: boolean;
-            /** Rate Limit Up */
-            rate_limit_up?: number | null;
-            /**
-             * Security
-             * @default wpa2-personal
-             */
-            security: string;
-            /** Site Id */
-            site_id?: string | null;
-            /** Ssid */
-            ssid: string;
-            /** Vlan Id */
-            vlan_id?: number | null;
         };
         /**
          * WifiNetworkUpdate
@@ -61350,52 +61283,6 @@ export interface components {
             trend?: {
                 [key: string]: unknown;
             } | null;
-        };
-        /**
-         * TopologyNode
-         * @description A node in the topology graph (device or gateway).
-         */
-        app__schemas__topology__TopologyNode: {
-            /** Device Type */
-            device_type: string;
-            /** Health Score */
-            health_score?: number | null;
-            /** Health Status */
-            health_status?: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Ip Address */
-            ip_address?: string | null;
-            /** Label */
-            label: string;
-            /** Layer */
-            layer?: string | null;
-            /** Mac Address */
-            mac_address?: string | null;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /** Model */
-            model?: string | null;
-            /**
-             * Pinned
-             * @default false
-             */
-            pinned: boolean;
-            /** Site Id */
-            site_id?: string | null;
-            /** Site Name */
-            site_name?: string | null;
-            /** Status */
-            status: string;
-            /** X */
-            x?: number | null;
-            /** Y */
-            y?: number | null;
         };
     };
     responses: never;
@@ -66655,7 +66542,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BrowserAuthResponse"];
+                    "application/json": components["schemas"]["BrowserAuthResponse"] | components["schemas"]["MfaChallengeResponse"];
                 };
             };
             /** @description Validation Error */
@@ -67061,7 +66948,9 @@ export interface operations {
     };
     list_sessions_api_v1_auth_sessions_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -67075,6 +66964,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -73076,7 +72974,7 @@ export interface operations {
             query?: {
                 /** @description snmp_trap | syslog */
                 source_type?: string | null;
-                /** @description emergency|alert|critical|error|warning|notice|info|debug */
+                /** @description emergency|alert|critical|error|warning|notice|informational|debug (the RFC 5424 names the receivers store; the shorthands info/warn/err/crit/emerg/panic are accepted as aliases) */
                 severity?: string | null;
                 device_id?: string | null;
                 /** @description ISO-8601 start time */
@@ -101076,6 +100974,79 @@ export interface operations {
             };
         };
     };
+    list_pending_storage_api_v1_gateway_storage__controller_id__changes_get: {
+        parameters: {
+            query?: {
+                status?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                controller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingChangeResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_storage_change_api_v1_gateway_storage__controller_id__changes__feature__post: {
+        parameters: {
+            query: {
+                /** @description create | delete | start */
+                operation: string;
+            };
+            header?: never;
+            path: {
+                controller_id: string;
+                feature: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PendingChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_pending_switch_advanced_api_v1_gateway_switch_advanced__controller_id__sites__site_id__changes_get: {
         parameters: {
             query?: {
@@ -109216,14 +109187,13 @@ export interface operations {
             };
         };
     };
-    list_network_clients_api_v1_network_clients_get: {
+    list_clients_api_v1_network_clients_get: {
         parameters: {
             query?: {
-                /** @description Filter by site */
                 site_id?: string | null;
-                /** @description Filter by online status */
-                is_online?: boolean | null;
-                /** @description Search by MAC, hostname, or IP */
+                connection_type?: string | null;
+                status?: string | null;
+                blocked?: boolean | null;
                 search?: string | null;
                 skip?: number;
                 limit?: number;
@@ -109240,7 +109210,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__modules__network__api__NetworkClientListResponse"];
+                    "application/json": components["schemas"]["NetworkClientListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -109288,7 +109258,7 @@ export interface operations {
             };
         };
     };
-    get_network_client_api_v1_network_clients__client_id__get: {
+    get_client_api_v1_network_clients__client_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -109305,7 +109275,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NetworkClientResponse"];
+                    "application/json": components["schemas"]["NetworkClientOut"];
                 };
             };
             /** @description Validation Error */
@@ -109423,11 +109393,8 @@ export interface operations {
     list_network_devices_api_v1_network_devices_get: {
         parameters: {
             query?: {
-                /** @description Filter by site */
                 site_id?: string | null;
-                /** @description Filter by device type */
                 device_type?: string | null;
-                /** @description Filter by status */
                 status?: string | null;
                 skip?: number;
                 limit?: number;
@@ -109444,7 +109411,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__modules__network__api__NetworkDeviceListResponse"];
+                    "application/json": components["schemas"]["NetworkDeviceListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -109559,7 +109526,7 @@ export interface operations {
             };
         };
     };
-    list_switch_ports_api_v1_network_devices__device_id__ports_get: {
+    list_device_ports_api_v1_network_devices__device_id__ports_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -109576,7 +109543,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SwitchPortResponse"][];
+                    "application/json": components["schemas"]["SwitchPortConfigOut"][];
                 };
             };
             /** @description Validation Error */
@@ -110202,10 +110169,9 @@ export interface operations {
             };
         };
     };
-    get_network_topology_api_v1_network_topology_get: {
+    get_topology_api_v1_network_topology_get: {
         parameters: {
             query?: {
-                /** @description Filter by site */
                 site_id?: string | null;
             };
             header?: never;
@@ -110220,7 +110186,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TopologyResponse"];
+                    "application/json": components["schemas"]["NetworkTopologyOut"];
                 };
             };
             /** @description Validation Error */
@@ -110271,7 +110237,6 @@ export interface operations {
     list_vlans_api_v1_network_vlans_get: {
         parameters: {
             query?: {
-                /** @description Filter by site */
                 site_id?: string | null;
                 skip?: number;
                 limit?: number;
@@ -110288,7 +110253,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__modules__network__api__VlanListResponse"];
+                    "application/json": components["schemas"]["VlanListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -110311,7 +110276,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["app__modules__network__api__VlanCreate"];
+                "application/json": components["schemas"]["VlanCreate"];
             };
         };
         responses: {
@@ -110321,7 +110286,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VlanResponse"];
+                    "application/json": components["schemas"]["VlanOut"];
                 };
             };
             /** @description Validation Error */
@@ -110499,37 +110464,6 @@ export interface operations {
             };
         };
     };
-    get_vlan_api_v1_network_vlans__vlan_uuid__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                vlan_uuid: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VlanResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     update_vlan_api_v1_network_vlans__vlan_uuid__put: {
         parameters: {
             query?: never;
@@ -110565,41 +110499,10 @@ export interface operations {
             };
         };
     };
-    delete_vlan_api_v1_network_vlans__vlan_uuid__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                vlan_uuid: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_wifi_networks_api_v1_network_wifi_get: {
+    list_wifi_api_v1_network_wifi_get: {
         parameters: {
             query?: {
-                /** @description Filter by site */
                 site_id?: string | null;
-                /** @description Filter by enabled status */
                 enabled?: boolean | null;
                 skip?: number;
                 limit?: number;
@@ -110616,7 +110519,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WifiNetworkListResponse"];
+                    "application/json": components["schemas"]["WifiListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -110630,7 +110533,7 @@ export interface operations {
             };
         };
     };
-    create_wifi_network_api_v1_network_wifi_post: {
+    create_wifi_api_v1_network_wifi_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -110639,7 +110542,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["app__modules__network__api__WifiNetworkCreate"];
+                "application/json": components["schemas"]["WifiNetworkCreate"];
             };
         };
         responses: {
@@ -110649,7 +110552,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WifiNetworkResponse"];
+                    "application/json": components["schemas"]["WifiNetworkOut"];
                 };
             };
             /** @description Validation Error */
@@ -110663,7 +110566,7 @@ export interface operations {
             };
         };
     };
-    get_wifi_network_api_v1_network_wifi__wifi_id__get: {
+    get_wifi_api_v1_network_wifi__wifi_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -110680,7 +110583,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WifiNetworkResponse"];
+                    "application/json": components["schemas"]["WifiNetworkOut"];
                 };
             };
             /** @description Validation Error */
@@ -110729,7 +110632,7 @@ export interface operations {
             };
         };
     };
-    delete_wifi_network_api_v1_network_wifi__wifi_id__delete: {
+    delete_wifi_api_v1_network_wifi__wifi_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -110741,11 +110644,15 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {

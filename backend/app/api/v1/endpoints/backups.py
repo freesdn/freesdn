@@ -387,6 +387,18 @@ async def import_config(
         overwrite_existing=overwrite_existing,
         organization_id=org_id,
     )
+    # A rejected file used to come back as HTTP 200 with success=false. The
+    # Backups page never checks `success` and never renders `message`, so a
+    # file the importer refused (raw JSON export, an encrypted .fsdn from
+    # /download, a corrupt archive) opened the preview dialog showing
+    # "Sites 0 / Devices 0 / Version Unknown" and then produced a green
+    # "Import complete" toast. Answer with the status the outcome deserves so
+    # axios rejects and the operator sees WHY.
+    if not result.get("success", False):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            result.get("message") or "Import rejected",
+        )
     return result
 
 

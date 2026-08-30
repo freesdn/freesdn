@@ -67,6 +67,15 @@ class AgentRegisterResponse(BaseSchema):
     agent_key: str = Field(description="One-time API key - store securely")
     websocket_url: str = Field(description="WebSocket endpoint for agent connection")
     instructions: str = Field(description="Setup instructions")
+    release_key_sha256: str = Field(
+        default="",
+        description=(
+            "SHA-256 of the release-signing public key, to pin for update "
+            "verification. Delivered here because registration is the "
+            "already-authenticated, operator-approved moment -- fetching the key "
+            "from the update feed itself proves nothing on first contact."
+        ),
+    )
 
 
 # =============================================================================

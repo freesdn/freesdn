@@ -17,12 +17,15 @@
 #   ./scripts/dr_crypto_fidelity_drill.sh
 #
 # Override the backend image with BACKEND_IMAGE=... if yours is tagged
-# differently (default freesdn-backend:dev).
+# differently. With no override this tries freesdn-backend:local (what every
+# shipped compose builds -- docker-compose.yml's BACKEND_IMAGE default) and then
+# freesdn-backend:dev. It used to try ONLY :dev, so running this straight after
+# ./install.sh told you to "build the stack first" when you just had.
 set -uo pipefail
 
 NET=sfdrill-net
 PG_IMG="${POSTGRES_IMAGE:-postgres:18.6-trixie}"
-APP_IMG="${BACKEND_IMAGE:-freesdn-backend:dev}"
+APP_IMG="${BACKEND_IMAGE:-}"
 PW=drillpw
 # Fixed, reproducible key material (drill-only — never a real secret).
 KEY="drill-secret-key-0123456789-fixed-len-40"
@@ -44,7 +47,18 @@ crypto(){ docker run --rm -e "SECRET_KEY=$1" -e "ENCRYPTION_SALT=$SALT" -e ENVIR
 cleanup(){ docker rm -f sfdrill-src sfdrill-tgt >/dev/null 2>&1 || true; docker network rm "$NET" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 cleanup
-docker image inspect "$APP_IMG" >/dev/null 2>&1 || { echo "backend image $APP_IMG not found - build the stack first (or set BACKEND_IMAGE)"; exit 1; }
+if [ -z "$APP_IMG" ]; then
+    for candidate in freesdn-backend:local freesdn-backend:dev; do
+        if docker image inspect "$candidate" >/dev/null 2>&1; then APP_IMG="$candidate"; break; fi
+    done
+fi
+if [ -z "$APP_IMG" ] || ! docker image inspect "$APP_IMG" >/dev/null 2>&1; then
+    echo "no backend image found (looked for freesdn-backend:local and freesdn-backend:dev)."
+    echo "Build the stack first, e.g.  ./install.sh --tier lite --no-start"
+    echo "or point this at yours:      BACKEND_IMAGE=my-image:tag $0"
+    exit 1
+fi
+info "using backend image $APP_IMG"
 
 info "Spinning up throwaway source + target Postgres…"
 docker network create "$NET" >/dev/null

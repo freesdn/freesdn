@@ -313,30 +313,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Base images whose OS layer we consume AS PUBLISHED. A finding here is
-        # actionable: bump the tag, or the image genuinely ships unpatched.
+        # Only images we run UNMODIFIED (stock from Docker Hub) belong here. A
+        # finding is then actionable: the tag genuinely ships unpatched and we
+        # run it that way. Today that is nginx alone (the HA reverse proxy).
         image:
-          - postgres:18.6-trixie
-          - valkey/valkey:8.1.9-trixie
-          - python:3.14.7-slim-trixie
-          - node:26.7.0-trixie-slim
-          - nginx:1.31.3-alpine
-          - debian:trixie-slim
-        # DELIBERATELY NOT SCANNED: caddy:2.11.4-alpine.
-        # FreeSDN never runs that image unmodified. frontend/Dockerfile derives
-        # from it and runs `apk upgrade --no-cache` (frontend/Dockerfile:135),
-        # so every alpine CVE with a fix available is already patched in the
-        # edge image that is actually built and deployed. Scanning the raw base
-        # therefore measures something we do not ship, and it fails forever:
-        # the base accretes new alpine CVEs until caddy publishes a rebuild,
-        # which turns this job permanently red for a condition we have already
-        # fixed. Suppressing them one CVE at a time was the alternative and it
-        # does not converge; between one CI run and the next, c-ares and curl
-        # were joined by openssl CVE-2026-45447.
-        # That `apk upgrade` line is load-bearing. If it is ever removed, the
-        # shipped edge image regresses and nothing here will notice, so the
-        # right follow-up is to scan the BUILT edge image in build-images
-        # rather than to re-add the base tag above.
+          - nginx:1.31.4-alpine
+        # NOT SCANNED, because we do not run the raw base -- we run a BUILT image
+        # that apt-get/apk upgrades the OS layer at build time, so the shipped
+        # image carries current patches regardless of base-tag rebuild lag.
+        # Scanning the raw tag would measure something we do not ship and would
+        # sit permanently red on unfixable upstream lag (the caddy history this
+        # list used to carry):
+        #   python:3.14.7-slim-trixie   -> backend/Dockerfile, apt-get upgrade (all stages)
+        #   debian:trixie-slim          -> frontend/Dockerfile production, apt-get upgrade
+        #   node:26.7.0-trixie-slim     -> frontend build stage only; not shipped as a runtime
+        #   caddy:2.11.4-alpine         -> frontend/Dockerfile, apk upgrade --no-cache (:135)
+        #   postgres:18.6-trixie        -> docker/Dockerfile.postgres (+ Dockerfile.logdb), apt-get upgrade
+        #   valkey/valkey:8.1.9-trixie  -> docker/Dockerfile.valkey, apt-get upgrade
+        # Verified 2026-08-24: the stock postgres/valkey tags each carried 36
+        # fixable HIGH OS CVEs; the built wrappers scan clean (0). These
+        # apt-get/apk upgrade lines are load-bearing -- if one is removed the
+        # shipped image regresses and this job will NOT catch it. The proper
+        # safety net is to scan the BUILT images in a build-images job (not yet
+        # wired); until then the app-dependency surface is covered by the
+        # gating Dependency Audit job (pip-audit + npm audit).
 
     steps:
       # Required for .trivyignore to be readable. Without a checkout this job

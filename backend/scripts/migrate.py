@@ -2,14 +2,24 @@
 # Copyright (C) 2024-2026 FreeSDN
 """Smart migration script for fresh vs existing databases.
 
-All migrations have been consolidated into a single ``001_initial``
-revision.  ``Base.metadata.create_all()`` creates every table from the
-current ORM models, so a fresh install never needs incremental migrations.
+``001_initial`` is a consolidated baseline that builds the whole schema with
+``Base.metadata.create_all()`` off the live ORM models. It is NOT the only
+revision any more -- alembic/versions/ has carried incremental migrations on top
+of it since 002, and every schema change needs one.
 
 Strategy:
   - Fresh DB  → create_all() + alembic stamp head   (full schema, zero migrations)
   - Existing  → stamp head if schema already current (handles old revision IDs)
               → alembic upgrade head otherwise        (future incremental migrations)
+
+Know what the fresh path costs: it takes its schema straight from the models and
+stamps, so running this script proves NOTHING about the migration chain. CI
+bootstrapped its test schema with it too, which is how four schema-changing
+commits (1e0abdb0, a5dd43f3, 934099b6, 67353ef0) merged green having shipped no
+migration at all -- only an UPGRADED appliance, the one path nothing ran, ended
+up with a schema the code did not expect. The chain is now executed for real by
+tests/db/, which .github/workflows/ci.yml runs as its own must-not-skip step.
+That step is the gate; this script is not a substitute for it.
 
 This script is fully synchronous to avoid ``asyncio.run()`` conflicts when
 invoked from shell entrypoints that may already have an event loop.

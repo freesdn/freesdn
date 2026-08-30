@@ -53,6 +53,17 @@ class ProvisioningError(Exception):
     pass
 
 
+class ProvisioningStorageError(ProvisioningError):
+    """The config XML was rendered but could not be written to disk.
+
+    A distinct subclass because the two are handled differently: a plain
+    ``ProvisioningError`` on the unauthenticated handset route means "no config
+    for this MAC" and is answered with a 404, whereas a storage failure is a
+    broken appliance and must NOT be dressed up as an unknown device — see
+    ``get_config_for_mac``.
+    """
+
+
 class ProvisioningService:
     """
     GDMS-style phone provisioning service.
@@ -471,6 +482,14 @@ class ProvisioningService:
             phone.provision_status = ProvisionStatus.APPLIED.value
             await self.db.commit()
             return result_data["xml"], "application/xml"
+        except ProvisioningStorageError:
+            # Never answer a broken volume with "no config for this device".
+            # The blanket 404 below exists to deny a MAC-existence oracle, but
+            # ``resolve_provisioning_request`` has ALREADY authorised this
+            # caller for this phone, so failing loudly leaks nothing — whereas
+            # returning None sends the operator hunting for a missing phone
+            # record while the real fault is a full or unwritable volume.
+            raise
         except ProvisioningError:
             return None
 
@@ -676,8 +695,22 @@ class ProvisioningService:
         base = self.provision_dir.resolve()
         if base != resolved and base not in resolved.parents:
             raise ProvisioningError("config path escapes provisioning directory")
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(content, encoding="utf-8")
+        # Storage failures here used to escape as a bare OSError, which none of
+        # the callers catch (they all catch ProvisioningError), so a full disk, a
+        # root-owned volume or a read-only bind mount surfaced as an anonymous
+        # 500 with an unhandled traceback and no mention of the provisioning
+        # directory. Translate to the documented error type, and log the errno
+        # against the path so the operator can act on it.
+        try:
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(content, encoding="utf-8")
+        except OSError as exc:
+            logger.error(
+                "Could not write provisioning config %s: %s", file_path, exc, exc_info=True
+            )
+            raise ProvisioningStorageError(
+                f"could not write provisioning config to {file_path}: {exc}"
+            ) from exc
         logger.info("Wrote provisioning config: %s", file_path)
         return str(file_path)
 

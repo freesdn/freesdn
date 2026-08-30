@@ -47,6 +47,7 @@ import { SearchBar } from '@/components/ui/search-bar';
 import { useToast } from '@/hooks/use-toast';
 import { useAdapterMaturity } from '@/hooks/useAdapterMaturity';
 import { MaturityBadge } from '@/components/ui/maturity-badge';
+import { escapeCell } from '@/lib/csv';
 import { PBXTypeBadge, formatTimeAgo } from './components';
 import { Download } from 'lucide-react';
 import type { PBXSystem } from './types';
@@ -294,10 +295,10 @@ export default function PBXPage() {
   function exportPbxCsv() {
     if (allSystems.length === 0) return;
     const headers = ['name', 'pbx_type', 'ip_address', 'api_port', 'sip_port', 'is_active', 'extension_count', 'description'];
-    const escape = (v: unknown) => {
-      const s = v == null ? '' : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const escape = (v: unknown) => escapeCell(v);
     const rows = allSystems.map((p) => [
       p.name, p.pbx_type, p.ip_address, p.api_port, p.sip_port, p.is_active, p.extension_count ?? 0, p.description,
     ].map(escape).join(','));

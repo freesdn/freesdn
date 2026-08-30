@@ -50,6 +50,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { WizardDialog, type WizardStep } from '@/components/ui/wizard-dialog';
+import { escapeCell } from '@/lib/csv';
 import {
   FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form';
@@ -1166,10 +1167,10 @@ export default function IntegrationsPage() {
     const rows = integrations;
     if (rows.length === 0) return;
     const headers = ['name', 'integration_type', 'is_enabled', 'events', 'deliveries_7d', 'last_delivery_status', 'last_delivery_at'];
-    const escape = (v: unknown) => {
-      const s = v == null ? '' : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const escape = (v: unknown) => escapeCell(v);
     const lines = [
       headers.join(','),
       ...rows.map((i) =>

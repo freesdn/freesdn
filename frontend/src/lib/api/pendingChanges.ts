@@ -348,10 +348,17 @@ export function applyChange(changeId: string, opts?: { confirmed?: boolean }) {
   );
 }
 
-/** Discard a staged change without applying it. */
-export function discardChange(changeId: string) {
+/** Discard a staged change without applying it.
+ *
+ * ``force`` is required to clear a row the ordinary guard refuses -- one stuck
+ * in ``applying``, or in ``reconciliation_required`` where the outcome on the
+ * device is unknown. It is the operator's escape hatch AFTER they have verified
+ * the device by hand, which is why the caller must ask for it explicitly.
+ */
+export function discardChange(changeId: string, opts?: { force?: boolean }) {
+  const qs = opts?.force ? '?force=true' : '';
   return api.post<PendingChangeResponse>(
-    `/gateway-vpn/changes/${enc(changeId)}/discard`,
+    `/gateway-vpn/changes/${enc(changeId)}/discard${qs}`,
   );
 }
 

@@ -51,6 +51,7 @@ import { PageHeader, PageToolbar } from '@/components/layout';
 import { StatsGrid } from '@/components/ui/stats-grid';
 import { BulkActionsBar } from '@/components/ui/bulk-actions-bar';
 import { SearchBar } from '@/components/ui/search-bar';
+import { escapeCell } from '@/lib/csv';
 import { Download } from 'lucide-react';
 import { PhoneStatusBadge, LifecycleBadge, ProvisionBadge, SIPIndicator, VendorLabel, formatTimeAgo } from './components';
 import type { VoIPPhone } from './types';
@@ -244,10 +245,10 @@ export default function PhonesListPage() {
   function exportPhonesCsv() {
     if (phones.length === 0) return;
     const headers = ['name', 'status', 'lifecycle_state', 'ip_address', 'mac_address', 'vendor', 'model', 'extension', 'firmware_version', 'location', 'last_seen'];
-    const escape = (v: unknown) => {
-      const s = v == null ? '' : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const escape = (v: unknown) => escapeCell(v);
     const rows = phones.map((p) => [
       p.name, p.status, p.lifecycle_state, p.ip_address, p.mac_address, p.vendor, p.model, p.extension, p.firmware_version, p.location, p.last_seen,
     ].map(escape).join(','));

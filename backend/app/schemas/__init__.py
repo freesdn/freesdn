@@ -83,6 +83,7 @@ from app.schemas.core import (
     ControllerWithStats,
     LoginRequest,
     MessageResponse,
+    MfaChallengeResponse,
     MfaDisableRequest,
     MfaEnableRequest,
     MfaLoginRequest,
@@ -306,6 +307,7 @@ __all__ = [
     "MessageResponse",
     # Auth
     "BrowserAuthResponse",
+    "MfaChallengeResponse",
     "TokenResponse",
     "TokenPayload",
     "LoginRequest",

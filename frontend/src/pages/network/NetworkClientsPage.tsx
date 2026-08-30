@@ -67,6 +67,7 @@ import { PageHeader, PageToolbar } from '@/components/layout';
 import { networkApi, type NetworkClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { escapeCell } from '@/lib/csv';
 
 // ───────────────────────────────────────────────────────────────────
 // Helpers
@@ -391,10 +392,10 @@ export default function NetworkClientsPage() {
       'first_seen',
       'last_seen',
     ];
-    const esc = (val: unknown) => {
-      const s = val === undefined || val === null ? '' : String(val);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Route through the shared guarded escaper: it adds the spreadsheet
+    // formula-injection neutralisation this local copy
+    // lacked, and also quotes on a bare CR.
+    const esc = (val: unknown) => escapeCell(val);
     const csv = [
       headers.join(','),
       ...rows.map((c) =>

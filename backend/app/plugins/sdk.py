@@ -320,6 +320,14 @@ class DeviceSDK(_SessionBound, _PermissionMixin):
                 "status": getattr(r, "status", None),
                 "ip": getattr(r, "ip_address", None),
                 "mac": getattr(r, "mac_address", None),
+                # Identity fields. Their absence was not cosmetic: snipe-it-sync
+                # keys every asset on a serial, found neither ``serial`` nor
+                # ``serial_number`` in this dict, and skipped 100% of devices --
+                # then reported the miss as "your adapters do not report serials",
+                # blaming the operator's gear for an omission here. netbox-sync
+                # wants ``manufacturer`` for the same reason.
+                "serial_number": getattr(r, "serial_number", None),
+                "manufacturer": getattr(r, "manufacturer", None),
                 "site_id": str(r.site_id) if getattr(r, "site_id", None) else None,
                 # Required to stage a change against this device: stage_change()
                 # takes a controller_id and nothing else here could supply one, so
@@ -431,6 +439,10 @@ class DeviceSDK(_SessionBound, _PermissionMixin):
             "controller_id": (str(r.controller_id) if getattr(r, "controller_id", None) else None),
             "model": getattr(r, "model", None),
             "firmware": getattr(r, "firmware_version", None),
+            # Kept in step with DeviceSDK.list above -- a plugin that walks
+            # iter_all() and one that calls list() must see the same device.
+            "serial_number": getattr(r, "serial_number", None),
+            "manufacturer": getattr(r, "manufacturer", None),
         }
 
     async def register_device(self, device_data: dict[str, Any]) -> dict[str, Any]:
@@ -839,6 +851,12 @@ class SiteSDK(_SessionBound, _PermissionMixin):
         return self._serialize(row) if row else None
 
 
+#: How long two identical plugin alerts are treated as the same incident.
+#: AlertRuleService reads this per-rule from ``dedupe_window_seconds``; the
+#: synthetic per-plugin rule is not operator-tunable, so it is fixed here.
+_PLUGIN_ALERT_DEDUPE_WINDOW_SECONDS = 3600
+
+
 class AlertSDK(_SessionBound, _PermissionMixin):
     """Read/write access to alerts."""
 
@@ -857,8 +875,17 @@ class AlertSDK(_SessionBound, _PermissionMixin):
         self,
         severity: str | None = None,
         limit: int = 50,
+        status: str | None = None,
     ) -> list[dict[str, Any]]:
-        """List active alerts for this organization."""
+        """List alerts for this organization.
+
+        ``status`` filters on the alert lifecycle ("firing", "acknowledged",
+        "resolved"). It was missing while the serialiser below already emitted a
+        ``status`` field and the sibling ``DeviceSDK.list`` already took one, so
+        five shipped plugins called ``alerts.list(status="firing")`` to find the
+        alert they had raised and got a TypeError instead. Each of them caught it
+        at debug level, so their resolve paths silently did nothing.
+        """
         self._require_permission("alerts.read")
         from sqlalchemy import select
 
@@ -871,6 +898,8 @@ class AlertSDK(_SessionBound, _PermissionMixin):
         q = select(Alert).where(Alert.organization_id == self._org_id)
         if severity:
             q = q.where(Alert.severity == severity)
+        if status:
+            q = q.where(Alert.status == status)
         # scope to the bound caller's granted sites. Alerts carry a
         # nullable site_id; an org-level (site_id NULL) alert aggregates across
         # sites, so a site-limited caller must NOT see it — restrict strictly to
@@ -968,6 +997,57 @@ class AlertSDK(_SessionBound, _PermissionMixin):
         # Generate dedup fingerprint from plugin_id + title + severity
         fp_input = f"plugin:{self._plugin_id}:{title}:{severity}"
         fingerprint = hashlib.sha256(fp_input.encode()).hexdigest()[:64]
+
+        # Deduplicate, exactly as AlertRuleService does.
+        #
+        # This fingerprint was computed and stored but never QUERIED, so every
+        # call wrote a new row. A plugin on a schedule therefore produced one
+        # fresh alert per finding per run -- port-hygiene, enabled by default on
+        # a daily schedule, raises four per half-duplex port per day forever --
+        # and each one dispatched its own notification. Six plugins had hand-
+        # rolled an ``open_by_title`` scan to work around it; hello-world, the
+        # copy-paste template, had not, which is how the anti-pattern spread.
+        #
+        # Mirrors app/services/alert_rules.py:437-473: same status set, same
+        # ordering, same occurrence_count bump. The window is fixed here rather
+        # than read from rule.dedupe_window_seconds because the synthetic
+        # per-plugin rule is not operator-tunable.
+        from datetime import UTC, datetime, timedelta
+
+        from sqlalchemy import select as _select
+
+        cutoff = datetime.now(UTC) - timedelta(seconds=_PLUGIN_ALERT_DEDUPE_WINDOW_SECONDS)
+        existing = (
+            await self._db.execute(
+                _select(Alert)
+                .where(
+                    Alert.rule_id == rule_id,
+                    Alert.fingerprint == fingerprint,
+                    Alert.status.in_(["firing", "acknowledged"]),
+                    Alert.fired_at >= cutoff,
+                )
+                .order_by(Alert.fired_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+        # Raising the alert matters more than deduplicating it. If the lookup
+        # returns anything other than an Alert, fall through and create the row
+        # rather than letting a dedup anomaly suppress a real alert.
+        if isinstance(existing, Alert):
+            existing.occurrence_count = (existing.occurrence_count or 1) + 1
+            if hasattr(existing, "last_occurrence_at"):
+                existing.last_occurrence_at = datetime.now(UTC)
+            await _persist(self._db)
+            # Deliberately no re-notify: the operator has already been told about
+            # this condition and it has not been resolved.
+            return {
+                "id": str(existing.id),
+                "title": existing.title,
+                "severity": existing.severity,
+                "deduplicated": True,
+            }
+
         alert = Alert(
             organization_id=self._org_id,
             rule_id=rule_id,
@@ -996,7 +1076,12 @@ class AlertSDK(_SessionBound, _PermissionMixin):
         await self._notify(alert, rule)
         await self._publish_fired(alert, rule)
 
-        return {"id": str(alert.id), "title": alert.title, "severity": alert.severity}
+        return {
+            "id": str(alert.id),
+            "title": alert.title,
+            "severity": alert.severity,
+            "deduplicated": False,
+        }
 
     async def _notify(self, alert: Any, rule: Any) -> None:
         """Deliver through the operator's configured channels for this plugin.
@@ -1717,6 +1802,18 @@ class PluginHTTPClient:
     async def put(self, url: str, **kwargs: Any) -> Any:
         """Send a PUT request."""
         return await self._request("PUT", url, **kwargs)
+
+    async def patch(self, url: str, **kwargs: Any) -> Any:
+        """Send a PATCH request.
+
+        Its absence was not theoretical: servicenow-incidents dispatches through
+        ``ctx.http.patch`` to close and annotate an incident, so incidents opened
+        and could never be resolved. PATCH is the standard verb for the partial
+        updates every ticketing API expects, and ``_request`` already takes an
+        arbitrary method string, so this was a missing one-liner rather than a
+        missing capability.
+        """
+        return await self._request("PATCH", url, **kwargs)
 
     async def delete(self, url: str, **kwargs: Any) -> Any:
         """Send a DELETE request."""

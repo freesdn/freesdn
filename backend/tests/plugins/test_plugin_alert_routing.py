@@ -203,3 +203,133 @@ def test_the_rule_lookup_keeps_its_existing_guards(guard: str):
     from app.plugins.sdk import AlertSDK
 
     assert guard in inspect.getsource(AlertSDK._get_or_create_plugin_rule)
+
+
+# ── deduplication ────────────────────────────────────────────────
+#
+# ``create`` computed a dedup fingerprint and stored it on the row, but never
+# QUERIED it, so every call wrote a new alert. A plugin on a schedule therefore
+# raised one fresh alert per finding per run -- port-hygiene, enabled by default
+# on a daily schedule, produces four per half-duplex port per day forever -- and
+# each one dispatched its own notification. Six plugins had hand-rolled an
+# "is there already an open alert with this title" scan to compensate;
+# hello-world, the copy-paste template every plugin author starts from, had not.
+#
+# These are behavioural on purpose. The tests above this line assert on the
+# SOURCE of create(), which cannot tell whether the query actually dedupes.
+
+
+class _DedupSession:
+    """A session that answers the dedup lookup from what has been added."""
+
+    def __init__(self) -> None:
+        self.added: list = []
+        self.flushed = 0
+
+    async def execute(self, _stmt):
+        from unittest.mock import MagicMock
+
+        res = MagicMock()
+        # The dedup lookup is the only query create() issues once the rule
+        # lookup is stubbed out. Answer it from the rows already added.
+        res.scalar_one_or_none.return_value = self.added[0] if self.added else None
+        return res
+
+    def add(self, obj) -> None:
+        self.added.append(obj)
+
+    async def flush(self) -> None:
+        self.flushed += 1
+
+    async def commit(self) -> None:  # pragma: no cover - not reached in these tests
+        pass
+
+    async def rollback(self) -> None:  # pragma: no cover
+        pass
+
+
+@pytest.fixture()
+def dedup_sdk(monkeypatch):
+    """An AlertSDK whose rule lookup, notify and publish are stubbed out."""
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.plugins import sdk as sdk_mod
+
+    rule = SimpleNamespace(id=uuid4(), notification_channels=[], name="plugin:acme")
+
+    async def _rule(self):
+        return rule
+
+    async def _noop(self, *a, **k):
+        return None
+
+    monkeypatch.setattr(sdk_mod.AlertSDK, "_get_or_create_plugin_rule", _rule)
+    monkeypatch.setattr(sdk_mod.AlertSDK, "_notify", _noop)
+    monkeypatch.setattr(sdk_mod.AlertSDK, "_publish_fired", _noop)
+
+    db = _DedupSession()
+    return sdk_mod.AlertSDK("acme", ["alerts.read", "alerts.write"], uuid4(), db), db
+
+
+@pytest.mark.asyncio
+async def test_the_same_finding_twice_is_one_alert(dedup_sdk) -> None:
+    """The core regression.
+
+    Fails before the fix with two rows added and occurrence_count still 1 --
+    which is what a daily-scheduled plugin does to an operator's inbox.
+    """
+    sdk, db = dedup_sdk
+
+    first = await sdk.create(title="Port 3 is half-duplex", message="m", severity="warning")
+    second = await sdk.create(title="Port 3 is half-duplex", message="m", severity="warning")
+
+    assert len(db.added) == 1, (
+        f"the same finding raised twice must not create two alerts; "
+        f"{len(db.added)} rows were added"
+    )
+    assert db.added[0].occurrence_count == 2, (
+        "the repeat must bump occurrence_count so the operator can see how "
+        f"often it recurred; got {db.added[0].occurrence_count}"
+    )
+    assert first["deduplicated"] is False
+    assert second["deduplicated"] is True
+    assert second["id"] == first["id"], "the caller must get the original alert back"
+
+
+@pytest.mark.asyncio
+async def test_a_different_finding_is_a_separate_alert(dedup_sdk) -> None:
+    """Dedup must not collapse genuinely different findings.
+
+    The fingerprint covers plugin id, title and severity, so a different title
+    is a different alert.
+    """
+    sdk, db = dedup_sdk
+
+    await sdk.create(title="Port 3 is half-duplex", message="m", severity="warning")
+    db.added.clear()  # the fake answers from added[0]; clear to model "no match"
+    await sdk.create(title="Port 9 is errored", message="m", severity="warning")
+
+    assert len(db.added) == 1, "a distinct finding must raise its own alert"
+
+
+@pytest.mark.asyncio
+async def test_a_repeat_does_not_re_notify(dedup_sdk, monkeypatch) -> None:
+    """The operator has already been told, and it is not resolved.
+
+    Re-notifying on every scheduled run is the spam this fix exists to stop.
+    """
+    from app.plugins import sdk as sdk_mod
+
+    sdk, db = dedup_sdk
+    calls = {"n": 0}
+
+    async def _count(self, *a, **k):
+        calls["n"] += 1
+
+    monkeypatch.setattr(sdk_mod.AlertSDK, "_notify", _count)
+
+    await sdk.create(title="same", message="m", severity="warning")
+    await sdk.create(title="same", message="m", severity="warning")
+
+    assert calls["n"] == 1, f"a deduplicated alert must not re-notify; notified {calls['n']}x"

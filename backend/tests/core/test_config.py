@@ -350,3 +350,47 @@ class TestVersionSingleSource:
         pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
         data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
         assert data["tool"]["poetry"]["license"] == app.__license__
+
+
+class TestDefaultProductionInstallLogsNoErrors:
+    """A correct default install must not report a SECURITY error at boot.
+
+    ``install.sh`` brings up the bundled Caddy edge, which serves the SPA and
+    proxies ``/api`` on ONE origin, so no CORS grant is needed and refusing all
+    cross-origin requests is the posture we want. That state was logged at ERROR
+    with a "SECURITY:" prefix, so every healthy lite/pro/max install printed a
+    security error on startup -- observed on a clean-room install on 2026-08-29,
+    where the whole stack was green and the API answering.
+
+    The cost is not cosmetic: an operator grepping logs for ERROR finds one on a
+    working system, and anyone alerting on log level pages on a non-event. Worse,
+    it teaches people that this deployment's SECURITY errors are ignorable.
+
+    Asserted on the RECORDS, not on the message text, so rewording the line
+    cannot quietly re-raise the level.
+    """
+
+    def test_no_cors_origins_in_production_is_not_an_error(self, caplog):
+        import logging
+
+        with caplog.at_level(logging.DEBUG, logger="app.core.config"):
+            settings = _make_settings(
+                ENVIRONMENT="production",
+                SECRET_KEY="a" * 64,
+                CORS_ORIGINS=[],
+                LOGDB_URL="postgresql+asyncpg://test:test@localhost:5432/logdb_test",
+                REDIS_PASSWORD="test-redis-pw",
+            )
+
+        assert settings.CORS_ORIGINS == []
+        errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert not errors, (
+            "a default single-origin production install logged "
+            f"{[r.getMessage() for r in errors]} at ERROR. Serving the UI and the "
+            "API on one origin behind the bundled edge needs no CORS grant, so "
+            "this is the intended hardened state, not a fault."
+        )
+        assert any("No CORS origins configured" in r.getMessage() for r in caplog.records), (
+            "the notice was dropped entirely -- an operator who DOES split the UI "
+            "onto another domain should still find the explanation in the log."
+        )

@@ -199,11 +199,18 @@ COPY --chown=appuser:appgroup scripts/migrate_logdb.py ./scripts/migrate_logdb.p
 # directory at the mountpoint, inheriting its appuser:appgroup ownership. Without
 # this, the volume root is root-owned and the non-root appuser (uid 1001) cannot
 # mkdir/write - e.g. the agent release-signing key store 500s on a fresh deploy.
+#
+# /tmp/freesdn_data is here for the same reason even though it is not under
+# /data: app/services/import_export.py hardcodes it and the compose files mount
+# a named volume there (nested under the tmpfs) so the api and the worker share
+# one directory. Without this line that volume root is root-owned too.
 RUN mkdir -p \
         /app/celerybeat /app/scripts \
         /data/agent-releases /data/proxmox-uploads \
         /data/fabric_artifacts /data/evidence /data/freesdn_firmware \
-    && chown -R appuser:appgroup /app/celerybeat /app/scripts /data
+        /data/plugins /data/backups /data/sla_reports \
+        /data/provisioning/voip /tmp/freesdn_data \
+    && chown -R appuser:appgroup /app/celerybeat /app/scripts /data /tmp/freesdn_data
 
 # Fix line endings and make entrypoint executable
 RUN sed -i 's/\r$//' docker-entrypoint.sh vpn-sidecar-entrypoint.sh \

@@ -2116,7 +2116,7 @@
         "interface": "Interfaz",
         "systemName": "Nombre de sistema del vecino",
         "portId": "ID de puerto del vecino",
-        "mgmtAddress": "Dirección de gestión"
+        "chassisId": "chassis-id del vecino"
       }
     },
     "dialog": {
@@ -2474,18 +2474,14 @@
     },
     "traps": {
       "title": "Destinos de trap",
-      "description": "Filas /snmp/trap · destinos a los que el router envía traps SNMP.",
+      "description": "La lista separada por comas trap-target de /snmp · hosts a los que el router envía traps SNMP. La comunidad y la versión son ajustes globales del servidor y se editan arriba.",
       "loadError": "No se pudieron cargar los destinos de trap",
       "empty": {
         "title": "No hay destinos de trap configurados",
         "description": "Agrega un destino de trap para reenviar notificaciones SNMP a un gestor."
       },
       "columns": {
-        "address": "Dirección",
-        "port": "Puerto",
-        "version": "Versión",
-        "community": "Comunidad",
-        "comment": "Comentario",
+        "host": "Host",
         "actions": "Acciones"
       }
     },
@@ -2514,15 +2510,9 @@
       "locationPlaceholder": "rack-3 / piso 2"
     },
     "trapDialog": {
-      "editTitle": "Editar destino de trap",
       "addTitle": "Agregar destino de trap",
-      "description": "Prepara un cambio en /snmp/trap.",
-      "address": "Dirección",
-      "port": "Puerto",
-      "version": "Versión",
-      "community": "Comunidad",
-      "comment": "Comentario",
-      "commentPlaceholder": "NMS principal"
+      "description": "Prepara una adición a la lista trap-target de /snmp.",
+      "host": "Host"
     },
     "trapDelete": {
       "title": "Eliminar destino de trap",

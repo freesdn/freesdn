@@ -215,3 +215,75 @@ def test_every_secret_column_is_covered() -> None:
         "certificate",
         "snmp_community",
     }
+
+
+# ── Restoring a config-only backup must not destroy live secrets ──────────
+#
+# A .fsdn config snapshot exports every credential row with its secret columns
+# set to literal None, on purpose, so Device.credential_id still resolves --
+# test_config_only_backup_omits_every_secret above asserts exactly that.
+#
+# _restore_data's overwrite branch then does setattr(existing, k, v) for every
+# key not in _BLOCKED_FIELDS. Those six columns were not in it, so restoring
+# yesterday's config snapshot with "Overwrite existing" -- the only option the
+# restore dialog exposes -- wrote those Nones over the live ciphertext for every
+# credential in the org, reported credentials: {updated: N}, and completed green.
+# SSH private keys, API keys, tokens, certificates and SNMP communities, gone and
+# unrecoverable, with the operator's next device poll failing everywhere.
+#
+# Every module contributor already guarded this (firewall passes {"credentials"},
+# voip {"voicemail_pin"}, cameras and network their own sets). The core restore,
+# which owns the credentials table itself, did not.
+
+
+def _blocked_fields_source() -> str:
+    import inspect
+
+    from app.services.backup import BackupService
+
+    return inspect.getsource(BackupService._restore_data)
+
+
+def test_a_config_only_restore_blocks_every_credential_secret_column() -> None:
+    """The core regression.
+
+    Asserted on the real source: _BLOCKED_FIELDS is a local, so there is nothing
+    importable to compare against. The behaviour it produces was verified by
+    reproducing the filter against the live schema.
+    """
+    src = _blocked_fields_source()
+    assert "*CREDENTIAL_SECRET_FIELDS" in src, (
+        "the non-secret restore path no longer blocks the credential secret "
+        "columns. A config-only backup carries them as None by construction, so "
+        "an overwrite restore will NULL every live device credential in the org."
+    )
+
+
+def test_the_blocklist_is_derived_not_copied() -> None:
+    """A second hand-written copy would rot the moment a column is added.
+
+    CREDENTIAL_SECRET_FIELDS is already pinned against the model by
+    test_every_secret_column_is_covered, so deriving from it means a new secret
+    column is blocked on restore the moment it is declared.
+    """
+    src = _blocked_fields_source()
+    for column in CREDENTIAL_SECRET_FIELDS:
+        assert f'"{column}"' not in src.split("_BLOCKED_FIELDS")[1][:600], (
+            f"{column} looks hard-coded into _BLOCKED_FIELDS; derive the set from "
+            "CREDENTIAL_SECRET_FIELDS instead so it cannot drift from the model"
+        )
+
+
+def test_a_vault_restore_still_writes_secrets() -> None:
+    """The fix must not block the path that is SUPPOSED to write them.
+
+    A .fsdnvault carries real secrets and include_secrets is True, which selects
+    the narrow {id, organization_id} blocklist. Blocking the secret columns there
+    would silently turn a full restore into a config-only one.
+    """
+    src = _blocked_fields_source()
+    head = src[src.index("_BLOCKED_FIELDS = (") :][:400]
+    assert '{"id", "organization_id"}' in head, (
+        "the include_secrets branch must stay narrow, or a vault restore would "
+        "no longer restore the secrets it exists to carry"
+    )

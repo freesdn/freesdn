@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import secrets
 import socket
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -125,6 +126,44 @@ def _decode_value(data: bytes, offset: int) -> tuple[Any, int]:
     return value, offset
 
 
+def _extract_community(data: bytes) -> bytes | None:
+    """Return the raw community OCTET STRING of an SNMP v1/v2c message.
+
+    Bytes, not str: the caller compares them with ``secrets.compare_digest``
+    and throws them away. Nothing here decodes the value into anything a log
+    line, an exception message or a persisted row could pick up --
+    is about the community never reaching ``CollectorLog.message``, not about
+    it never being read, and the note left at the skip in ``_parse_snmp_trap``
+    said a configured-community check "can decode+compare here".
+
+    ``None`` means the header did not parse as SNMP v1/v2c, which
+    ``_parse_snmp_trap`` will reject anyway.
+    """
+    try:
+        offset = 0
+        if data[offset] != _TAG_SEQUENCE:
+            return None
+        offset += 1
+        _, offset = _decode_length(data, offset)
+
+        # Version (INTEGER)
+        offset += 1  # tag
+        length, offset = _decode_length(data, offset)
+        offset += length
+
+        # Community (OCTET STRING)
+        if data[offset] != _TAG_OCTET_STRING:
+            return None
+        offset += 1
+        length, offset = _decode_length(data, offset)
+        community = data[offset : offset + length]
+        if len(community) != length:  # truncated datagram
+            return None
+        return community
+    except (IndexError, ValueError):
+        return None
+
+
 def _parse_snmp_trap(data: bytes, source_ip: str) -> dict | None:
     """Parse SNMPv1 or v2c trap PDU."""
     try:
@@ -142,8 +181,10 @@ def _parse_snmp_trap(data: bytes, source_ip: str) -> dict | None:
         # Community (OCTET STRING) — intentionally SKIPPED, never
         # decoded into a readable field. The community is a device credential and
         # must not land in the persisted log message (a free-text field that the
-        # key-based redact_secrets cannot mask). A future configured-community
-        # validation can decode+compare here, but the value must never be stored.
+        # key-based redact_secrets cannot mask). The configured-community check
+        # now happens in ``SNMPTrapReceiver._handle`` via ``_extract_community``
+        # BEFORE this parser runs; it compares and discards, and nothing it
+        # touches reaches the record built below.
         offset += 1  # tag
         length, offset = _decode_length(data, offset)
         offset += length  # skip the community bytes
@@ -253,11 +294,23 @@ class SNMPTrapReceiver:
         publisher: Any = None,
         max_inflight: int = _MAX_INFLIGHT,
         allowlist: list[ipaddress._BaseNetwork] | None = None,
+        community: str | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self._session_factory = session_factory
         self._resolver = resolver
+        # The community string an accepted trap must carry. CollectorManager
+        # read this out of CollectorConfig and passed it to _start_snmp, which
+        # declared the parameter and then never used it -- there was no
+        # ``community`` argument on this constructor for it to reach. So the
+        # editable "Community" box on the Observability page changed nothing:
+        # every trap from any address inside the CIDR allowlist was accepted
+        # whatever community it carried. Empty/None keeps that behaviour, and
+        # is the explicit way to say "accept any community".
+        self._community: bytes | None = (
+            community.encode("utf-8", "surrogateescape") if community else None
+        )
         # None disables publishing entirely, which is what the unit
         # tests and any embedded use want; the manager supplies one.
         self._publisher = publisher
@@ -269,6 +322,11 @@ class SNMPTrapReceiver:
         self._transport: asyncio.DatagramTransport | None = None
         # NOTE(C3): count packets rejected by allowlist for /status.
         self._rejected_packets: int = 0
+        # Counted separately from the allowlist rejects, and surfaced on
+        # /collector/status: "traps arriving but every one has the wrong
+        # community" and "no traps arriving" are the same silence otherwise,
+        # and the first is a one-line config fix on the device.
+        self._rejected_community: int = 0
         # NOTE(C2): count rows dropped because source IP couldn't be
         # mapped to a known device → org.
         self._dropped_unknown_source: int = 0
@@ -342,6 +400,21 @@ class SNMPTrapReceiver:
                 source_ip,
             )
             return
+
+        # Community check before the full BER walk, for the same reason the
+        # allowlist runs first: rejecting is the attacker-controlled path and
+        # must be the cheapest. compare_digest, because a naive == over a
+        # shared secret leaks its prefix through timing to anyone who can send
+        # UDP to this port. The value itself is never logged or stored.
+        if self._community is not None:
+            offered = _extract_community(data)
+            if offered is None or not secrets.compare_digest(offered, self._community):
+                self._rejected_community += 1
+                logger.info(
+                    "collector.snmp_trap.rejected source_ip=%s reason=community",
+                    source_ip,
+                )
+                return
 
         parsed = _parse_snmp_trap(data, source_ip)
         if not parsed:

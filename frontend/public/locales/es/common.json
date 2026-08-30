@@ -945,7 +945,8 @@
       "applyAll": "Aplicar todo",
       "discard": "Descartar",
       "cancel": "Cancelar",
-      "close": "Cerrar"
+      "close": "Cerrar",
+      "resolve": "Marcar como resuelto"
     },
     "operations": {
       "create": "crear",
@@ -984,6 +985,12 @@
       "applying": {
         "aria": "Aplicando actualmente",
         "heading": "Aplicando"
+      },
+      "reconciliation": {
+        "aria": "Cambios que necesitan verificación",
+        "heading": "Necesita verificación",
+        "description": "Se desconoce el resultado en el dispositivo. Comprueba el dispositivo antes de volver a preparar estos cambios.",
+        "unknownOutcome": "Resultado desconocido: la aplicación se interrumpió después de enviar el cambio, por lo que el dispositivo puede haberlo aceptado o no. Verifica el dispositivo antes de volver a prepararlo."
       },
       "failed": {
         "aria": "Cambios fallidos",
@@ -1034,6 +1041,10 @@
         "title": "Todos los cambios aplicados",
         "description": "{{count}} cambio(s) enviados a {{gatewayName}}."
       }
+    },
+    "confirmResolve": {
+      "title": "¿Marcar este cambio como resuelto?",
+      "body": "Puede que este cambio ya esté aplicado en el dispositivo. Confirma solo después de comprobarlo: esto lo elimina de la cola y no deshace nada."
     }
   },
   "CameraAccessPanel": {

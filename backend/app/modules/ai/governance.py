@@ -480,76 +480,85 @@ class LLMGovernanceService:
 
         service = AIChatService()
         provider = await service._get_provider(db, org_id, provider_id)
-
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a data processing assistant. Respond ONLY with the requested output format. No explanations.",
-            },
-            {"role": "user", "content": prompt},
-        ]
-
         try:
-            response = await provider.chat(
-                messages=messages,
-                tools=None,
-                max_tokens=500,
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a data processing assistant. Respond ONLY with the requested output format. No explanations.",
+                },
+                {"role": "user", "content": prompt},
+            ]
+
+            try:
+                response = await provider.chat(
+                    messages=messages,
+                    tools=None,
+                    max_tokens=500,
+                )
+                success = True
+                error = None
+                result_text = response.content
+                prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+                completion_tokens = response.usage.completion_tokens if response.usage else 0
+                total_tokens = prompt_tokens + completion_tokens
+            except Exception as exc:
+                success = False
+                error = str(exc)
+                result_text = ""
+                prompt_tokens = 0
+                completion_tokens = 0
+                total_tokens = 0
+
+            latency_ms = (time.monotonic() - start) * 1000
+
+            # Log the call (privacy-preserving: field names only)
+            await self.log_call(
+                db,
+                organization_id=org_id,
+                provider=provider_id,
+                model=getattr(response, "model", provider_id) if success else provider_id,
+                operation=operation.value,
+                input_fields_sent=list(input_data.keys()),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                success=success,
+                error=error,
+                latency_ms=latency_ms,
+                rule_id=rule_id,
+                execution_id=execution_id,
             )
-            success = True
-            error = None
-            result_text = response.content
-            prompt_tokens = response.usage.prompt_tokens if response.usage else 0
-            completion_tokens = response.usage.completion_tokens if response.usage else 0
-            total_tokens = prompt_tokens + completion_tokens
-        except Exception as exc:
-            success = False
-            error = str(exc)
-            result_text = ""
-            prompt_tokens = 0
-            completion_tokens = 0
-            total_tokens = 0
 
-        latency_ms = (time.monotonic() - start) * 1000
+            # Record token usage for budget tracking
+            if success:
+                if total_tokens > 0:
+                    await self.record_token_usage(db, org_id, total_tokens)
+                # Reconcile the Redis reservation (pre-incremented by `estimated` at the
+                # budget check) DOWN to actual usage — otherwise the monthly counter
+                # inflates by (estimate - actual) per call and eventually false-rejects.
+                if estimated > 0:
+                    await self._redis_budget_rollback(org_id, estimated - total_tokens)
 
-        # Log the call (privacy-preserving: field names only)
-        await self.log_call(
-            db,
-            organization_id=org_id,
-            provider=provider_id,
-            model=getattr(response, "model", provider_id) if success else provider_id,
-            operation=operation.value,
-            input_fields_sent=list(input_data.keys()),
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            success=success,
-            error=error,
-            latency_ms=latency_ms,
-            rule_id=rule_id,
-            execution_id=execution_id,
-        )
+            if not success:
+                # Roll back the full Redis reservation since the LLM call failed
+                if estimated > 0:
+                    await self._redis_budget_rollback(org_id, estimated)
+                raise RuntimeError(f"LLM call failed: {error}")
 
-        # Record token usage for budget tracking
-        if success:
-            if total_tokens > 0:
-                await self.record_token_usage(db, org_id, total_tokens)
-            # Reconcile the Redis reservation (pre-incremented by `estimated` at the
-            # budget check) DOWN to actual usage — otherwise the monthly counter
-            # inflates by (estimate - actual) per call and eventually false-rejects.
-            if estimated > 0:
-                await self._redis_budget_rollback(org_id, estimated - total_tokens)
-
-        if not success:
-            # Roll back the full Redis reservation since the LLM call failed
-            if estimated > 0:
-                await self._redis_budget_rollback(org_id, estimated)
-            raise RuntimeError(f"LLM call failed: {error}")
-
-        return {
-            "result": result_text,
-            "tokens_used": total_tokens,
-            "model": getattr(response, "model", provider_id),
-            "operation": operation.value,
-        }
+            return {
+                "result": result_text,
+                "tokens_used": total_tokens,
+                "model": getattr(response, "model", provider_id),
+                "operation": operation.value,
+            }
+        finally:
+            # ``_get_provider`` hands back a live httpx client and its contract
+            # (H1) requires every caller to close it. This path fires on every
+            # LLM_CLASSIFY / LLM_EXTRACT / LLM_SUMMARIZE automation action, so a
+            # missed close leaked a connection pool per rule execution. The
+            # ``finally`` deliberately spans the provider call AND the audit-log /
+            # token-accounting work below it, so an exception in any of them still
+            # releases the transport.
+            await provider.close()
 
     @staticmethod
     def _sanitize_key(key: str) -> str:
