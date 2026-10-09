@@ -29,6 +29,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.backup_artifacts import ArtifactState, artifact_state
 from app.db.base import AuditMixin, Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
@@ -121,6 +122,17 @@ class StorageLocation(Base, UUIDMixin, TimestampMixin):
 
     def __repr__(self) -> str:
         return f"<StorageLocation {self.name} ({self.storage_type})>"
+
+    @property
+    def transport_security_review_required(self) -> bool:
+        """Expose upgrade status without returning destination config or secrets."""
+        from app.services.backup_transport import StorageConfigurationError, validate_policy
+
+        try:
+            validate_policy(self.storage_type, dict(self.config or {}))
+        except StorageConfigurationError:
+            return True
+        return False
 
 
 # =============================================================================
@@ -291,6 +303,39 @@ class Backup(Base, UUIDMixin, AuditMixin):
 
     # Extra metadata
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+
+    @property
+    def remote_write_operation_id(self) -> UUID | None:
+        metadata = self.metadata_json
+        if not isinstance(metadata, dict) or "remote_write" not in metadata:
+            return None
+        value = metadata["remote_write"]
+        try:
+            if type(value) is not dict or set(value) != {"operation_id", "recovery_required"}:
+                return None
+            operation = UUID(value["operation_id"])
+            if (
+                str(operation) != value["operation_id"]
+                or type(value["recovery_required"]) is not bool
+            ):
+                return None
+            return operation
+        except (ValueError, TypeError, AttributeError):
+            return None
+
+    @property
+    def remote_write_recovery_required(self) -> bool:
+        metadata = self.metadata_json
+        if not isinstance(metadata, dict) or "remote_write" not in metadata:
+            return False
+        if self.remote_write_operation_id is None:
+            return True
+        return metadata["remote_write"]["recovery_required"] is not False
+
+    @property
+    def artifact_integrity(self) -> ArtifactState:
+        """Catalog state only; reading this property does not inspect storage."""
+        return artifact_state(self.metadata_json)
 
     # Associations
     # NOTE C4: Direct org column eliminates the fragile inferred-from-joins

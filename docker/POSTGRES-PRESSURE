@@ -1,0 +1,41 @@
+# PostgreSQL storage-full and restart qualification
+
+This standalone Linux Docker drill fills only a new, explicitly bounded tmpfs
+volume. It never mounts an existing database, publishes a port, pulls an image,
+fills the host root filesystem or connects to customer infrastructure. Run it
+on a qualification host with at least 2 GiB of unused RAM. It requires the
+Docker local volume driver to support tmpfs mounts; rootless configurations
+that cannot mount them must fail, not fall back to a host directory.
+
+    python3 scripts/check_postgres_pressure.py \
+      --postgres REVIEWED_LOCAL_POSTGRES_IMAGE \
+      --work-dir /absolute/new/private/postgres-pressure
+
+The image is resolved once to its local immutable ID. The default volume limit
+is 512 MiB; --volume-mib accepts only 512..1024. A separate keeper container
+maintains the tmpfs mount while PostgreSQL restarts. Both containers have no
+network peers and explicit memory/CPU limits. The driver verifies volume
+ownership, mount type, actual filesystem capacity and absence of other mounts
+before deliberately consuming the remaining space.
+
+The test seeds and checkpoints 1,000 synthetic rows, fills the verified tmpfs
+to actual ENOSPC and requires a larger database transaction to fail with an
+explicit PostgreSQL storage-full diagnostic. After removing only its filler
+file, it restarts the database. The cluster identifier and original row
+fingerprint must be unchanged, and the failed transaction must have left no
+committed rows. A subsequent insert and checkpoint must succeed. An OOM
+invalidates the result; memory exhaustion is not accepted as storage failure.
+
+Only report.json is intended for sharing. Every other file in the private
+0700 work directory can contain fixture credentials or raw diagnostics. Keep
+failed runs and use a new work directory for each attempt. The runner removes
+only resources with its exact ownership label and reports uncertain cleanup;
+it never prunes Docker or deletes another deployment's resources.
+
+This is a synthetic PostgreSQL filesystem-full/restart check. The tmpfs is
+volatile; the keeper is a test mechanism, not a production persistence design.
+A pass does not establish host-crash durability, physical-disk behavior,
+application-level error handling, real workload capacity, HA/queue recovery,
+RTO/RPO, or a safe procedure for filling or repairing a live database. The
+separate CAPACITY-ACCEPTANCE drill covers report-path failure and bounded
+application load; it does not turn this database check into fleet acceptance.

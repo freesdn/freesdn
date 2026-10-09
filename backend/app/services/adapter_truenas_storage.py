@@ -170,7 +170,7 @@ async def build_truenas_adapter(ctrl: Controller) -> TrueNASAdapter:
         username=ctrl.username or "",
         api_key=ctrl.password or "",
         port=ctrl.port or 443,
-        verify_ssl=getattr(ctrl, "verify_ssl", False),
+        verify_ssl=getattr(ctrl, "verify_ssl", True),
     )
     connected = await adapter.connect()
     if not connected:

@@ -1,0 +1,37 @@
+HLS coordinator startup and failure handling
+==========================================
+
+Workers on the same Linux host coordinate through a private Unix socket and an
+exclusive election lock. A follower may arrive while the elected owner is still
+starting. It now waits for connection establishment within the existing
+20-second request budget, instead of abandoning startup after one 10 ms retry.
+Only missing/refused connections are retried. Invalid socket ownership or
+permissions remain refusals. Once any command bytes have been submitted, the
+command is never replayed after a lost or invalid response.
+
+The owner binds a unique temporary socket inside the private media directory,
+sets mode 0600, starts listening, and atomically publishes the normal control
+socket name. It does not change the process-wide umask. Interrupted startup
+closes the owned server/socket, removes only the temporary socket inode it
+created, and releases its election descriptors. Existing unsafe entries and
+unrelated files are not removed by this cleanup.
+
+The original full-suite failure is retained: two concurrent API workers returned
+200 and 503, producing 18 setup errors in one shared fixture. New regressions
+deliberately delay lock acquisition completion, permission setup, and listening
+in separate OS processes. They require both API starts to succeed, share one
+session and media child, and report two viewers through the heartbeat endpoint.
+Additional checks exercise deadline expiry, cancellation, and failed startup
+cleanup. Synthetic camera identity, authority and media generation are explicit
+fixtures; these checks do not prove real authentication or camera delivery.
+
+This is coordination for workers sharing one local media directory and trusted
+application UID. It is not cross-host routing, high availability, or seamless
+recovery of an active stream after owner or host failure. A process crash can
+leave private temporary socket entries; this change does not claim a general
+filesystem retention or quota policy.
+
+References:
+https://docs.python.org/3.14/library/asyncio-stream.html#asyncio.start_unix_server
+https://docs.python.org/3.14/library/os.html#os.rename
+https://man7.org/linux/man-pages/man7/unix.7.html

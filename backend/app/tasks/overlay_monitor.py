@@ -269,9 +269,10 @@ async def _poll_overlay_health() -> dict[str, Any]:
 @celery_app.task(bind=True, name="overlay.poll_health", soft_time_limit=120, time_limit=180)
 def poll_health(self) -> dict[str, Any]:
     """Periodic overlay-mesh peer health poll → ``overlay.*`` transition events."""
-    if not acquire_solo_lock("overlay.poll_health", ttl_seconds=180):
+    lock_token = acquire_solo_lock("overlay.poll_health", ttl_seconds=180)
+    if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:
         return asyncio.run(_poll_overlay_health())
     finally:
-        release_solo_lock("overlay.poll_health")
+        release_solo_lock("overlay.poll_health", lock_token)

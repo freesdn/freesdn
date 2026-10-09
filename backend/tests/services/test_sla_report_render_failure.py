@@ -36,6 +36,9 @@ def _mock_session() -> MagicMock:
     """A session whose queries return no policies / no snapshots."""
 
     class _Result:
+        def all(self):
+            return []
+
         def scalars(self):
             inner = MagicMock()
             inner.all.return_value = []
@@ -212,25 +215,6 @@ async def test_the_happy_path_writes_a_csv_the_download_endpoint_can_serve(tmp_p
     assert written.suffix == ".csv"
     assert report.file_size == written.stat().st_size
     assert db.add.call_count == 1
-
-
-# ---------------------------------------------------------------------------
-# Premise: why a NULL file_path is a content-type change and not just a gap
-# ---------------------------------------------------------------------------
-
-
-def test_the_download_endpoint_still_falls_back_to_json_on_a_null_file_path():
-    """Pins the consequence, so the two cannot drift apart.
-
-    If this ever stops holding -- e.g. the endpoint grows an explicit error for
-    an unrendered report -- the fix above can be revisited. Until then, a NULL
-    file_path IS a silent content-type change.
-    """
-    from app.api.v1.endpoints import sla_reports as endpoint
-
-    src = inspect.getsource(endpoint.download_report)
-    assert "if report.file_path:" in src
-    assert '"report_data": report.report_data' in src
 
 
 def test_the_scheduled_loop_does_not_advance_next_run_on_failure():

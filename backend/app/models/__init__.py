@@ -7,6 +7,12 @@ FreeSDN - Models Package
 All SQLAlchemy models for the application.
 """
 
+from app.models.agent_release_operations import AgentReleaseOperation
+from app.models.agent_signing import (
+    AgentSigningEnrollment,
+    AgentSigningIdentity,
+    AgentSigningIntent,
+)
 from app.models.agents import (
     AgentHeartbeat,
     AgentRelease,
@@ -123,13 +129,19 @@ from app.models.import_export import (
     JobStatus,
 )
 from app.models.integrations import Integration
-from app.models.marketplace import MarketplacePlugin, MarketplacePluginVersion, PluginReview
+from app.models.marketplace import (
+    MarketplaceCatalogState,
+    MarketplacePlugin,
+    MarketplacePluginVersion,
+    PluginReview,
+)
 from app.models.notification import (
     InAppNotification,
     NotificationDelivery,
     NotificationPreference,
     NotificationProviderRecord,  # noqa: F401
 )
+from app.models.notification_outbox import InAppNotificationEvent
 from app.models.oauth2 import OAuth2App, OAuth2AuthorizationCode, OAuth2Token
 from app.models.plugins import InstalledPlugin, PluginOrganizationState, PluginSetting
 from app.models.poe import PoESchedule
@@ -138,6 +150,7 @@ from app.models.radius import (
     Dot1xPortConfig,
     RadiusServerProfile,
 )
+from app.models.remote_write_operations import operations as remote_write_operations
 from app.models.security_audit import (
     AnomalyType,
     AuditActionType,
@@ -159,6 +172,7 @@ from app.models.sla import (
     SLAPolicyScope,
     SLAPolicyStatus,
     SLAReport,
+    SLAReportDelivery,
     SLAReportSchedule,
     SLASnapshot,
 )
@@ -239,6 +253,7 @@ from app.modules.network.models import (
 )
 
 __all__ = [
+    "remote_write_operations",
     # Fabric (universal interconnect)
     "Connection",
     "ConnectionRun",
@@ -257,6 +272,7 @@ __all__ = [
     "PluginOrganizationState",
     "PluginSetting",
     # Marketplace
+    "MarketplaceCatalogState",
     "MarketplacePlugin",
     "MarketplacePluginVersion",
     "PluginReview",
@@ -299,6 +315,10 @@ __all__ = [
     "RemoteAgent",
     "AgentHeartbeat",
     "AgentRelease",
+    "AgentSigningEnrollment",
+    "AgentReleaseOperation",
+    "AgentSigningIdentity",
+    "AgentSigningIntent",
     "AgentTask",
     "AgentType",
     "AgentStatus",
@@ -415,6 +435,7 @@ __all__ = [
     "PoESchedule",
     # Notifications
     "InAppNotification",
+    "InAppNotificationEvent",
     "NotificationDelivery",
     "NotificationPreference",
     # Automation
@@ -446,6 +467,7 @@ __all__ = [
     "SiteToSiteTunnel",
     # SLA Reports
     "SLAReport",
+    "SLAReportDelivery",
     "SLAReportSchedule",
     # Client Roaming
     "ClientRoamingEvent",

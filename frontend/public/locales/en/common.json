@@ -1111,6 +1111,30 @@
     "confirmResolve": {
       "title": "Mark this change as resolved?",
       "body": "This change may already be live on the device. Confirm only after you have checked the device: this clears it from the queue and does not undo anything."
+    },
+    "provider": {
+      "heading": "Provider tasks",
+      "description": "Accepted requests are tracked separately from completion. Observation never retries the write.",
+      "acceptedTitle": "Request accepted",
+      "acceptedDescription": "{{gatewayName}} accepted the request. Provider completion is not yet verified.",
+      "bulkPaused": "Bulk apply paused. Verify the provider task before applying the remaining changes.",
+      "checked": "Last checked: {{when}}",
+      "verify": "Review the task on Proxmox before continuing. A failed or unobserved task may have made partial changes; do not blindly repeat it.",
+      "status": {
+        "pending": "Accepted — awaiting observation",
+        "running": "Running on Proxmox",
+        "succeeded": "Provider task completed",
+        "warnings": "Completed with warnings",
+        "failed": "Provider task failed — verify changes",
+        "unknown": "Outcome unverified"
+      },
+      "pendingRestart": "The configuration is saved, but the current guest settings still differ. Arrange a restart; FreeSDN will check again without repeating the write.",
+      "stateVerified": "The requested guest state was verified by reading the provider configuration.",
+      "deletionVerified": "The deletion task completed and the guest ID was verified unused. This does not certify storage erasure.",
+      "nodePowerManual": "Verify host power/reboot through an independent management path before resolving this receipt. A lost connection does not prove completion.",
+      "haVerified": "The requested HA configuration was verified. Workload health and successful failover are not verified.",
+      "certificateVerified": "Stored leaf and configured TLS endpoint verified. This does not verify every endpoint, full chain trust or private-key erasure.",
+      "certificateVerify": "Certificate activation is not fully verified. Check the configured endpoint and console recovery path before resolving. Do not repeat the write blindly."
     }
   },
   "CameraAccessPanel": {

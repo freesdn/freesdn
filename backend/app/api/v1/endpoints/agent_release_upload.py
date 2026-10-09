@@ -1,35 +1,20 @@
 # mypy: ignore-errors
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2024-2026 FreeSDN
-"""Agent release upload + binary serving.
+"""Release catalogue, verified binary serving and latest-version promotion.
 
-Splits off from agent_downloads.py to keep concerns clean. The existing
-publish endpoint takes a `download_url` string and assumes the binary
-is hosted externally. This module adds:
-
-- POST /agents/releases/upload  — admin streams a binary up; backend
-  stores it, computes SHA-256, and creates the AgentRelease row with
-  a backend-served download URL.
-- GET  /agents/releases/{id}/binary  — public download endpoint
-  (rate-limited via the same in-process bucket).
-- DELETE /agents/releases/{id}  — admin soft-delete (file kept on
-  disk; the row is removed from queries).
-- PATCH /agents/releases/{id}/promote  — admin marks a release as
-  latest, clearing the previous latest for the same platform/type.
-
-Storage path is configured via FREESDN_AGENT_RELEASE_DIR (default
-``/var/lib/freesdn/agent-releases`` inside the container). The
-directory is created lazily on first upload.
+The old one-step upload/delete URLs refuse before body consumption or writes.
+Publication and retained deletion use the explicitly reviewed operation API.
+Legacy binary reads do not adopt or remove old files as a side effect.
 """
 
 import hashlib
 import logging
 import os
 import re
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 if TYPE_CHECKING:
     # Imported only for the "RemoteAgent | None" forward-ref annotation below;
@@ -39,22 +24,20 @@ if TYPE_CHECKING:
 from fastapi import (
     APIRouter,
     Depends,
-    File,
-    Form,
-    Header,
     HTTPException,
-    UploadFile,
-    status,
+    Query,
+    Request,
+    Response,
 )
-from fastapi.responses import FileResponse, PlainTextResponse
-from sqlalchemy import and_, select, update
+from fastapi.responses import PlainTextResponse
+from pydantic import AwareDatetime
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.endpoints.agent_downloads import (
-    VALID_AGENT_TYPES,
-    VALID_PLATFORMS,
     _public_download_rate_limit,
 )
+from app.core.config import settings
 from app.core.dependencies import (
     CurrentUser,
     get_current_user_optional,
@@ -64,6 +47,31 @@ from app.core.dependencies import (
 from app.db.session import get_session
 from app.models.agents import AgentRelease
 from app.schemas.agent_downloads import AgentReleaseResponse
+from app.schemas.agent_release_catalogue import CataloguePage
+from app.schemas.agent_release_operation_contract import (
+    release_context_contract,
+    release_download_context_contract,
+)
+from app.services.agent_release_authority import ReleaseMutationAuthority
+from app.services.agent_release_binary import create_release_binary_response
+from app.services.agent_release_browser_context import (
+    check_release_browser_context,
+    check_release_download_context,
+)
+from app.services.agent_release_catalogue import (
+    MAX_ROWS,
+    NO_STORE,
+    catalogue_rows,
+    catalogue_statement,
+    encode_catalogue_page,
+    encode_legacy_catalogue,
+)
+from app.services.agent_release_promotion import (
+    ReleasePromotionSnapshot,
+    promote_verified_release,
+)
+from app.services.agent_release_read_authority import capture_release_read_authority
+from app.services.release_signing_async import agent_release_operation
 
 logger = logging.getLogger(__name__)
 
@@ -110,9 +118,11 @@ def _binary_path(release_id: UUID, filename: str) -> Path:
 @router.get(
     "/releases",
     response_model=list[AgentReleaseResponse],
-    summary="List all releases (admin view, raw rows)",
+    summary="List up to 100 releases; use release-catalogue for larger catalogues",
+    openapi_extra=release_context_contract(),
 )
 async def list_releases(
+    request: Request,
     current_user: Annotated[CurrentUser, Depends(require_permissions("agent:admin"))],
     session: AsyncSession = Depends(get_session),
     platform: str | None = None,
@@ -124,27 +134,80 @@ async def list_releases(
     owned by their org PLUS legacy NULL-org releases (treated as
     global). Super_admin sees everything.
     """
-    q = select(AgentRelease)
-    if not is_unscoped_superuser(current_user):
-        org_id = current_user.organization_id
-        if not org_id:
-            return []
-        # Caller's own releases OR legacy global (NULL org)
-        q = q.where(
-            (AgentRelease.organization_id == org_id) | (AgentRelease.organization_id.is_(None))
-        )
-    # Normalise HERE. Rows are persisted lower-cased, and these are raw query
-    # parameters -- unlike the publish handler, this one has no normalised
-    # locals. A find-and-replace that removed the now-redundant ``.lower()``
-    # from the publish path stripped it here too, so ``?platform=Linux``
-    # compared "Linux" against the stored "linux" and returned nothing.
-    if platform:
-        q = q.where(AgentRelease.platform == platform.lower())
-    if agent_type:
-        q = q.where(AgentRelease.agent_type == agent_type.lower())
-    q = q.order_by(AgentRelease.published_at.desc())
-    rows = (await session.execute(q)).scalars().all()
-    return rows
+    check_release_browser_context(request, current_user)
+    authority = await ReleaseMutationAuthority.capture(
+        request,
+        current_user,
+        secret_key=settings.SECRET_KEY.encode("utf-8"),
+    )
+    rows = await _list_visible_releases(current_user, session, platform, agent_type)
+    # Authentication precedes the catalogue query. A database wait must not
+    # turn that earlier account/key/session snapshot into continuing authority.
+    # This fresh scalar read has no committing authentication side effects.
+    content = encode_legacy_catalogue(rows)
+    authority.validate(await authority._read())
+    return Response(content=content, media_type="application/json", headers=NO_STORE)
+
+
+async def _list_visible_releases(
+    current_user: CurrentUser,
+    session: AsyncSession,
+    platform: str | None = None,
+    agent_type: str | None = None,
+) -> Any:
+    """Only the scoped query, not an authentication or authorization entry point.
+
+    The public caller checks current authority before and after this read.
+    Kept separate so normalization units test the exact query without claiming
+    that their deliberately inert session is a current-authentication fixture.
+    """
+    statement = catalogue_statement(
+        current_user, platform=platform, agent_type=agent_type, limit=MAX_ROWS
+    )
+    return await catalogue_rows(session, statement)
+
+
+@router.get(
+    "/release-catalogue",
+    response_model=CataloguePage,
+    summary="Read a bounded, scoped release catalogue page",
+    openapi_extra=release_context_contract(),
+)
+async def release_catalogue(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(require_permissions("agent:admin"))],
+    session: AsyncSession = Depends(get_session),
+    platform: Annotated[str | None, Query(max_length=50)] = None,
+    agent_type: Annotated[str | None, Query(max_length=50)] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_ROWS)] = 50,
+    before_published_at: AwareDatetime | None = None,
+    before_id: UUID | None = None,
+) -> Response:
+    """Current observations ordered by timestamp then UUID, both descending.
+
+    Cursor position grants no authority and is not a snapshot across requests.
+    Concurrent publications require an explicit refresh from the first page.
+    Stored URLs/signatures are metadata, not independently verified trust.
+    """
+    check_release_browser_context(request, current_user)
+    authority = await ReleaseMutationAuthority.capture(
+        request,
+        current_user,
+        secret_key=settings.SECRET_KEY.encode("utf-8"),
+    )
+    statement = catalogue_statement(
+        current_user,
+        platform=platform,
+        agent_type=agent_type,
+        limit=limit,
+        before_published_at=before_published_at,
+        before_id=before_id,
+    )
+    rows = await catalogue_rows(session, statement)
+    content = encode_catalogue_page(rows, limit=limit)
+    # Revalidate after query AND encoding; no auth routine commits last_used here.
+    authority.validate(await authority._read())
+    return Response(content=content, media_type="application/json", headers=NO_STORE)
 
 
 async def _verify_release_access(
@@ -184,214 +247,23 @@ async def _verify_release_access(
     raise HTTPException(404, "Release not found")
 
 
-@router.post(
-    "/releases/upload",
-    response_model=AgentReleaseResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Upload a release binary and publish it (admin only)",
-)
+@router.post("/releases/upload", deprecated=True, summary="Retired one-step release mutation")
 async def upload_release(
+    request: Request,
     current_user: Annotated[CurrentUser, Depends(require_permissions("agent:admin"))],
-    file: Annotated[UploadFile, File(description="Agent binary (any platform-native format)")],
-    version: Annotated[str, Form(min_length=1, max_length=50)],
-    platform: Annotated[str, Form(min_length=1, max_length=50)],
-    agent_type: Annotated[str, Form()] = "daemon",
-    release_notes: Annotated[str, Form()] = "",
-    min_backend_version: Annotated[str, Form()] = "",
-    is_prerelease: Annotated[bool, Form()] = False,
-    is_latest: Annotated[bool, Form()] = True,
-    session: AsyncSession = Depends(get_session),
 ) -> Any:
-    """Stream upload a release binary.
+    """Refuse before consuming a body or changing release rows/files.
 
-    Differences from POST /downloads/releases:
-    - Binary stored on the backend (no external host needed).
-    - SHA-256 computed on-the-fly during streaming; no chance for the
-      checksum to drift from the file we'll later serve.
-    - is_latest defaults to True so a fresh upload becomes the
-      default for new agents.
-
-    On success returns the new AgentRelease row, with download_url
-    pointing at /api/v1/agents/releases/{id}/binary.
+    Clients must retain and review an explicit operation intent. There is no
+    redirect or automatic replay, and no inferred recovery from an old request.
     """
-    if not _VERSION_PATTERN.match(version):
-        raise HTTPException(400, "version must match [A-Za-z0-9._+-]{1,50}")
-    if platform.lower() not in VALID_PLATFORMS:
-        raise HTTPException(400, f"Invalid platform: {platform}")
-    if agent_type.lower() not in VALID_AGENT_TYPES:
-        raise HTTPException(400, f"Invalid agent_type: {agent_type}")
-
-    # Normalise ONCE, here, and use these below for querying, SIGNING and
-    # persistence alike. Previously the manifest was signed with the raw values
-    # while the row stored ``.lower()`` ones, so an upload of "Linux"/"Daemon"
-    # produced a signature over bytes the update-check endpoint could never
-    # reproduce -- it rebuilds the manifest from the stored row. The agent then
-    # refused a perfectly legitimate update as a signature mismatch. Validation,
-    # signing and storage must all see the same string.
-    platform = platform.lower()
-    agent_type = agent_type.lower()
-
-    # SECURITY: only super_admin may publish a GLOBAL
-    # (organization_id IS NULL) release; every other admin's upload is forced to
-    # their own organization, and the is_latest clear below is scoped to that
-    # same bucket — so a tenant admin can never poison the global / cross-tenant
-    # update feed.
-    is_super = is_unscoped_superuser(current_user)
-    release_org = None if is_super else current_user.organization_id
-    if not is_super and release_org is None:
-        raise HTTPException(400, "An organization context is required to upload a release.")
-
-    release_id = uuid4()
-    # sanitize once + persist on the row so the
-    # download endpoint can reconstruct the path deterministically.
-    safe_filename = re.sub(r"[^A-Za-z0-9._+-]", "_", (file.filename or "agent"))[:128] or "agent"
-    binary_path = _binary_path(release_id, safe_filename)
-    sha = hashlib.sha256()
-    bytes_written = 0
-
-    # Stream to disk while computing checksum. Enforce size cap during
-    # the read loop instead of buffering the whole file in memory.
-    try:
-        with binary_path.open("wb") as fh:
-            while True:
-                chunk = await file.read(1024 * 1024)  # 1 MiB chunks
-                if not chunk:
-                    break
-                bytes_written += len(chunk)
-                if bytes_written > _MAX_UPLOAD_BYTES:
-                    fh.close()
-                    binary_path.unlink(missing_ok=True)
-                    raise HTTPException(
-                        413,
-                        f"Upload exceeds {_MAX_UPLOAD_BYTES // (1024 * 1024)} MiB cap",
-                    )
-                sha.update(chunk)
-                fh.write(chunk)
-    except HTTPException:
-        raise
-    except Exception:
-        binary_path.unlink(missing_ok=True)
-        logger.exception("Release upload failed")
-        raise HTTPException(500, "Upload write failed")
-
-    checksum = sha.hexdigest()
-    download_url = f"/api/v1/agents/releases/{release_id}/binary"
-
-    # Sign the digest with the backend's ECDSA-P256 release-signing
-    # key. The agent verifies this signature before staging the
-    # downloaded binary — defense in depth on top of the existing
-    # HTTPS + checksum check (a compromised backend that swaps both
-    # binary AND checksum row would also need the private signing key
-    # to swap the signature).
-    #
-    # fail closed on signing failure for any release
-    # that is (or would become) the latest. Unsigned latest releases
-    # silently bypass the agent's signature-verification gate.
-    # Only explicitly non-latest uploads (is_latest=False) may proceed
-    # without a signature.
-    # Sign a MANIFEST, not the bare digest. A signature over the digest alone
-    # said nothing about which version/platform/agent-type/channel that digest
-    # belonged to, so a backend WITHOUT the private key could re-serve a genuine
-    # older release (with its genuine signature) as an update -- a rollback to a
-    # known-vulnerable build that verification could not detect.
-    from app.services.release_signing import build_release_manifest, sign_manifest
-
-    try:
-        manifest = build_release_manifest(
-            digest_hex=checksum,
-            version=version,
-            platform=platform,
-            agent_type=agent_type,
-            channel="prerelease" if is_prerelease else "stable",
-        )
-        signature = sign_manifest(manifest)
-    except Exception:
-        logger.exception(
-            "Release signing failed for upload version=%s platform=%s", version, platform
-        )
-        if is_latest:
-            # Remove the written binary before raising so we leave no
-            # orphaned artifact on disk.
-            binary_path.unlink(missing_ok=True)
-            raise HTTPException(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-                "Release signing failed; the release was not created. "
-                "Check the signing-key configuration and retry.",
-            )
-        # Non-latest / test artifact: unsigned is acceptable.
-        logger.warning(
-            "Proceeding with unsigned non-latest release version=%s platform=%s",
-            version,
-            platform,
-        )
-        signature = None
-
-    # The binary is already on disk. If any DB step below fails (the
-    # is_latest clear, the row insert, or the commit) we must roll back
-    # AND remove the just-written binary — otherwise a failed publish
-    # leaves an orphaned artifact in the release dir that no row points
-    # at and that delete_release/promote_release can never reach.
-    try:
-        # Clear previous is_latest for this (platform, agent_type) WITHIN the
-        # same org bucket only — NULL bucket is global/super_admin.
-        if is_latest:
-            org_bucket = (
-                AgentRelease.organization_id.is_(None)
-                if release_org is None
-                else AgentRelease.organization_id == release_org
-            )
-            await session.execute(
-                update(AgentRelease)
-                .where(
-                    and_(
-                        AgentRelease.platform == platform,
-                        AgentRelease.agent_type == agent_type,
-                        AgentRelease.is_latest,
-                        org_bucket,
-                    )
-                )
-                .values(is_latest=False)
-            )
-
-        release = AgentRelease(
-            id=release_id,
-            version=version,
-            platform=platform,
-            agent_type=agent_type,
-            download_url=download_url,
-            checksum_sha256=checksum,
-            signature=signature,
-            file_size=bytes_written,
-            release_notes=release_notes[:20000],
-            min_backend_version=min_backend_version[:50],
-            is_latest=is_latest,
-            is_prerelease=is_prerelease,
-            published_at=datetime.now(UTC),
-            download_count=0,
-            organization_id=release_org,  # super_admin→global, else own org
-            filename=safe_filename,
-        )
-        session.add(release)
-        await session.commit()
-    except Exception:
-        await session.rollback()
-        binary_path.unlink(missing_ok=True)
-        logger.exception(
-            "Release DB write failed; removed orphaned binary version=%s platform=%s",
-            version,
-            platform,
-        )
-        raise HTTPException(500, "Release publish failed")
-    await session.refresh(release)
-    logger.info(
-        "Uploaded agent release %s (%s/%s) — %d bytes, sha256=%s",
-        version,
-        platform,
-        agent_type,
-        bytes_written,
-        checksum[:16],
+    raise HTTPException(
+        410,
+        "This one-step release mutation is retired. Use the release-operation "
+        "workflow, retain the original intent, and inspect any earlier uncertain "
+        "outcome before explicitly starting or resuming an operation.",
+        headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
     )
-    return release
 
 
 @router.get(
@@ -406,9 +278,18 @@ async def release_public_key() -> str:
     once on startup + caches it; verifies each downloaded binary's
     signature against this key before staging.
     """
-    from app.services.release_signing import public_key_pem
+    from app.services.release_signing import SigningKeyError
+    from app.services.release_signing_async import SigningBusyError, public_key_pem_async
 
-    return public_key_pem().decode("ascii")
+    try:
+        public = await public_key_pem_async(public_request=True)
+    except (SigningBusyError, SigningKeyError):
+        raise HTTPException(
+            503,
+            "Release signing key is unavailable",
+            headers={"Retry-After": "1"},
+        ) from None
+    return public.decode("ascii")
 
 
 async def _authenticate_release_download(
@@ -422,7 +303,6 @@ async def _authenticate_release_download(
     Reused logic from agent_downloads.py so an agent's existing
     X-Agent-Key works on both endpoints.
     """
-    import hashlib
 
     generic = HTTPException(
         status_code=401,
@@ -457,74 +337,39 @@ def select_remote_agent_for_auth(agent_uuid: UUID, key_hash: str):
     )
 
 
+@router.head(
+    "/releases/{release_id}/binary",
+    dependencies=[Depends(_public_download_rate_limit)],
+    include_in_schema=False,
+)
 @router.get(
     "/releases/{release_id}/binary",
     dependencies=[Depends(_public_download_rate_limit)],
-    summary="Serve the binary blob for a release (agent-authenticated)",
+    summary="Serve verified managed or legacy release bytes with current authority",
+    response_class=Response,
+    openapi_extra=release_download_context_contract(),
 )
 async def download_release_binary(
+    request: Request,
     release_id: UUID,
-    session: AsyncSession = Depends(get_session),
-    x_agent_id: Annotated[str | None, Header(alias="X-Agent-ID")] = None,
-    x_agent_key: Annotated[str | None, Header(alias="X-Agent-Key")] = None,
     user: Annotated[CurrentUser | None, Depends(get_current_user_optional)] = None,
 ) -> Any:
-    """Stream the on-disk binary back to the client.
+    """Use current operator/agent authority and retain the verified descriptor.
 
-    Dual auth: an agent presents its X-Agent-Key (the same headers it sends
-    on /updates/check), OR a logged-in operator/admin presents
-    a valid session (httpOnly cookie / Bearer / API key). The latter lets the
-    Downloads + Releases admin pages fetch installers, which previously 401'd
-    because only the agent-key path existed. UUID-in-URL alone is still not
-    enough — at least one authenticated principal is required.
+    Managed history never falls back to legacy storage on error. GET and HEAD
+    use the same verification/authority rules; HEAD does not increment counts.
+    No pathname is passed to FileResponse or created as a side effect of reading.
     """
-    agent = None
-    if user is None:
-        # No logged-in session — fall back to (and require) agent-key auth.
-        agent = await _authenticate_release_download(session, x_agent_id, x_agent_key)
-    q = await session.execute(select(AgentRelease).where(AgentRelease.id == release_id))
-    release = q.scalar_one_or_none()
-    if not release:
-        raise HTTPException(404, "Release not found")
-
-    # SECURITY: scope the artifact fetch to the
-    # caller's org. super_admin may fetch any; everyone else may fetch a GLOBAL
-    # (organization_id IS NULL) release or their own org's — never another
-    # tenant's binary by guessed/leaked UUID. 404-shape to avoid existence oracle.
-    if not (user is not None and is_unscoped_superuser(user)):
-        caller_org = (
-            user.organization_id
-            if user is not None
-            else (agent.organization_id if agent is not None else None)
-        )
-        if release.organization_id is not None and release.organization_id != caller_org:
-            raise HTTPException(404, "Release not found")
-
-    # prefer the explicit filename column. Glob
-    # fallback for legacy rows (uploaded before migration 030).
-    if release.filename:
-        path = _release_dir() / f"{release_id}-{release.filename}"
-        if not path.exists():
-            raise HTTPException(404, "Binary missing on disk")
-    else:
-        matches = list(_release_dir().glob(f"{release_id}-*"))
-        if not matches:
-            raise HTTPException(404, "Binary missing on disk")
-        # Sort for determinism even on legacy rows
-        matches.sort()
-        path = matches[0]
-
-    # Bump download counter (best-effort; doesn't block serving)
-    try:
-        release.download_count = (release.download_count or 0) + 1
-        await session.commit()
-    except Exception:
-        logger.exception("Failed to bump download_count for %s", release_id)
-
-    return FileResponse(
-        path=str(path),
-        media_type="application/octet-stream",
-        filename=path.name.split("-", 1)[1] if "-" in path.name else path.name,
+    check_release_download_context(request, user)
+    authority = await capture_release_read_authority(
+        request,
+        user,
+        secret_key=settings.SECRET_KEY.encode("utf-8"),
+    )
+    return await create_release_binary_response(
+        authority=authority,
+        release_id=release_id,
+        policy=getattr(request.app.state, "agent_release_policy", None),
     )
 
 
@@ -532,79 +377,42 @@ async def download_release_binary(
     "/releases/{release_id}/promote",
     response_model=AgentReleaseResponse,
     summary="Mark a release as the latest for its platform+type (admin)",
+    openapi_extra=release_context_contract(),
 )
+@agent_release_operation
 async def promote_release(
+    request: Request,
     release_id: UUID,
     current_user: Annotated[CurrentUser, Depends(require_permissions("agent:admin"))],
     session: AsyncSession = Depends(get_session),
 ) -> Any:
-    """Atomically swap is_latest from the current row to this one.
-
-    Org-scoped: non-super_admin can only promote their own org's
-    releases. Legacy NULL-org releases require super_admin.
-    """
-    release = await _verify_release_access(
-        session,
-        release_id,
-        current_user,
-        mutate=True,
+    """Verify stored signature and current scoped authority before latest changes."""
+    check_release_browser_context(request, current_user)
+    authority = await ReleaseMutationAuthority.capture(
+        request, current_user, secret_key=settings.SECRET_KEY.encode("utf-8")
     )
-
-    # Clear previous is_latest for this (platform, agent_type) WITHIN the same
-    # org bucket only — NULL bucket is global/super_admin.
-    org_bucket = (
-        AgentRelease.organization_id.is_(None)
-        if release.organization_id is None
-        else AgentRelease.organization_id == release.organization_id
-    )
-    await session.execute(
-        update(AgentRelease)
-        .where(
-            and_(
-                AgentRelease.platform == release.platform,
-                AgentRelease.agent_type == release.agent_type,
-                AgentRelease.is_latest,
-                org_bucket,
-            )
-        )
-        .values(is_latest=False)
-    )
-    release.is_latest = True
-    await session.commit()
-    await session.refresh(release)
-    return release
+    release = await _verify_release_access(session, release_id, current_user, mutate=True)
+    snapshot = ReleasePromotionSnapshot.capture(release)
+    return await promote_verified_release(session, snapshot=snapshot, authority=authority)
 
 
 @router.delete(
-    "/releases/{release_id}",
-    summary="Delete a release (admin); also removes its on-disk binary",
+    "/releases/{release_id}", deprecated=True, summary="Retired one-step release mutation"
 )
 async def delete_release(
+    request: Request,
     release_id: UUID,
     current_user: Annotated[CurrentUser, Depends(require_permissions("agent:admin"))],
-    session: AsyncSession = Depends(get_session),
 ) -> Any:
-    """Delete a release.
+    """Refuse before consuming a body or changing release rows/files.
 
-    Org-scoped: non-super_admin can only delete their own org's
-    releases. Legacy NULL-org releases require super_admin.
+    Clients must retain and review an explicit operation intent. There is no
+    redirect or automatic replay, and no inferred recovery from an old request.
     """
-    release = await _verify_release_access(
-        session,
-        release_id,
-        current_user,
-        mutate=True,
+    raise HTTPException(
+        410,
+        "This one-step release mutation is retired. Use the release-operation "
+        "workflow, retain the original intent, and inspect any earlier uncertain "
+        "outcome before explicitly starting or resuming an operation.",
+        headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
     )
-
-    # Remove the on-disk binary first; row delete is the source of truth
-    # for "this release exists" so leaving the file orphaned is safer
-    # than leaving a row pointing at a missing file.
-    for path in _release_dir().glob(f"{release_id}-*"):
-        try:
-            path.unlink()
-        except Exception:
-            logger.warning("Could not remove %s", path, exc_info=True)
-
-    await session.delete(release)
-    await session.commit()
-    return {"message": "Release deleted"}

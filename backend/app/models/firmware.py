@@ -178,6 +178,14 @@ class FirmwareUpgradeJob(Base, UUIDMixin, AuditMixin):
         {"schema": "core"},
     )
 
+    # Nullable only for historical rows whose ownership cannot be recovered
+    # unambiguously. Such rows are quarantined from tenant-facing queries.
+    organization_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("core.organizations.id", ondelete="CASCADE"), index=True
+    )
+    # Immutable authorization snapshot, including jobs spanning several sites.
+    target_site_ids: Mapped[list[str] | None] = mapped_column(JSONB)
+
     # Job info
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=FirmwareJobStatus.PENDING

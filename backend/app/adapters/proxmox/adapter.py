@@ -15,7 +15,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from typing import Any, BinaryIO, ClassVar
+from uuid import UUID
 
 from app.adapters.base import (
     AdapterManifest,
@@ -25,7 +27,11 @@ from app.adapters.base import (
     DiscoveredDevice,
 )
 from app.adapters.capabilities import Capability
-from app.adapters.exceptions import AdapterConfirmationRequiredError, AdapterConnectionError
+from app.adapters.exceptions import (
+    AdapterConfirmationRequiredError,
+    AdapterConnectionError,
+    AdapterOutcomeUnknownError,
+)
 from app.adapters.proxmox import constants as C
 from app.adapters.proxmox.client import ProxmoxApiError, ProxmoxClient, ProxmoxClientConfig
 from app.adapters.proxmox.constants import DEFAULT_PORT, VM_STATUS_MAP
@@ -48,6 +54,14 @@ from app.adapters.proxmox.models import (
     ProxmoxTaskDetail,
     ProxmoxTaskLog,
     ProxmoxVM,
+)
+from app.adapters.proxmox.permissions import permissions_at_path
+from app.adapters.proxmox.sdn import native_flag
+from app.modules.hypervisor.sdn_schemas import (
+    SdnAttachmentInspection,
+    SdnDependencyInspection,
+    SdnDryRunObservation,
+    SdnInspection,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,7 +168,6 @@ class ProxmoxAdapter(BaseAdapter):
                     Capability.PROXMOX_REPLICATION,
                     Capability.PROXMOX_SDN_ZONE,
                     Capability.PROXMOX_SDN_VNET,
-                    Capability.PROXMOX_SDN_APPLY,
                     Capability.PROXMOX_CEPH_STATUS,
                     Capability.PROXMOX_CEPH_MON,
                     Capability.PROXMOX_CEPH_OSD,
@@ -267,11 +280,21 @@ class ProxmoxAdapter(BaseAdapter):
         try:
             nodes = await self._client.get(C.NODES)  # type: ignore[union-attr]
             if not isinstance(nodes, list):
-                return []
+                raise AdapterConnectionError("Invalid Proxmox node inventory", adapter_id="proxmox")
 
             devices = []
+            node_names: set[str] = set()
             for n in nodes:
-                node_name = n.get("node", "unknown")
+                node_name = n.get("node") if isinstance(n, dict) else None
+                if (
+                    not isinstance(node_name, str)
+                    or not node_name.strip()
+                    or node_name in node_names
+                ):
+                    raise AdapterConnectionError(
+                        "Invalid Proxmox node inventory", adapter_id="proxmox"
+                    )
+                node_names.add(node_name)
                 status = "online" if n.get("status") == "online" else "offline"
                 devices.append(
                     DiscoveredDevice(
@@ -288,9 +311,11 @@ class ProxmoxAdapter(BaseAdapter):
                     )
                 )
             return devices
-        except ProxmoxApiError as e:
-            logger.error("Proxmox discover_devices failed: %s", e)
-            return []
+        except ProxmoxApiError:
+            logger.error("Proxmox node discovery failed")
+            raise AdapterConnectionError(
+                "Proxmox node discovery failed", adapter_id="proxmox"
+            ) from None
 
     async def get_device_status(self, device_id: str) -> dict:
         """Get node status by node name."""
@@ -324,39 +349,67 @@ class ProxmoxAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_cluster_status(self) -> AdapterResult:
-        """Get cluster status including quorum and node membership."""
+        """Get validated cluster status without truthy-string quorum/online flags."""
         self._ensure_connected()
         try:
             data = await self._client.get(C.CLUSTER_STATUS)  # type: ignore[union-attr]
-            if not isinstance(data, list):
-                return AdapterResult.fail("Unexpected cluster status response")
-
+            if not isinstance(data, list) or not data or len(data) > 1025:
+                raise ValueError("Invalid cluster status collection")
             cluster_info = None
-            nodes: list[dict] = []
+            nodes: list[ProxmoxNodeInfo] = []
+            names: set[str] = set()
             for item in data:
+                if not isinstance(item, dict):
+                    raise ValueError("Invalid cluster status row")
                 if item.get("type") == "cluster":
+                    if cluster_info is not None:
+                        raise ValueError("Duplicate cluster status")
                     cluster_info = item
                 elif item.get("type") == "node":
-                    nodes.append(item)
-
-            result = ProxmoxClusterStatus(
-                name=cluster_info.get("name", "pve") if cluster_info else "pve",
-                quorate=bool(cluster_info.get("quorate", 0)) if cluster_info else len(nodes) > 0,
-                node_count=len(nodes),
-                version=cluster_info.get("version", 0) if cluster_info else 0,
-                nodes=[
-                    ProxmoxNodeInfo(
-                        node=n.get("name", ""),
-                        status="online" if n.get("online", 0) else "offline",
-                        ip=n.get("ip"),
-                        level=n.get("level", ""),
+                    name = item.get("name")
+                    if (
+                        not isinstance(name, str)
+                        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,62}", name)
+                        or name in names
+                    ):
+                        raise ValueError("Invalid cluster node identity")
+                    names.add(name)
+                    nodes.append(
+                        ProxmoxNodeInfo(
+                            node=name,
+                            status="online" if native_flag(item.get("online")) else "offline",
+                            ip=item.get("ip"),
+                            level=item.get("level", ""),
+                        )
                     )
-                    for n in nodes
-                ],
+            if not nodes or (cluster_info is None and len(nodes) != 1):
+                raise ValueError("Cluster membership is unavailable")
+            name = cluster_info.get("name") if cluster_info else "pve"
+            version = cluster_info.get("version", 0) if cluster_info else 0
+            if (
+                not isinstance(name, str)
+                or len(name) > 255
+                or type(version) is not int
+                or version < 0
+            ):
+                raise ValueError("Invalid cluster metadata")
+            return AdapterResult.ok(
+                ProxmoxClusterStatus(
+                    name=name,
+                    quorate=native_flag(cluster_info.get("quorate"))
+                    if cluster_info
+                    else any(n.status == "online" for n in nodes),
+                    node_count=len(nodes),
+                    version=version,
+                    nodes=nodes,
+                )
             )
-            return AdapterResult.ok(result)
-        except ProxmoxApiError as e:
-            return AdapterResult.fail(type(e).__name__)
+        except (ValueError, TypeError):
+            return AdapterResult.fail(
+                "Unexpected cluster status response", error_code="invalid_response"
+            )
+        except ProxmoxApiError as exc:
+            return AdapterResult.fail(type(exc).__name__)
 
     async def get_cluster_resources(self, resource_type: str | None = None) -> AdapterResult:
         """Get unified cluster resource list (nodes, VMs, storage, etc.)."""
@@ -366,7 +419,11 @@ class ProxmoxAdapter(BaseAdapter):
             if resource_type:
                 params["type"] = resource_type
             data = await self._client.get(C.CLUSTER_RESOURCES, params=params or None)  # type: ignore[union-attr]
-            return AdapterResult.ok(data if isinstance(data, list) else [])
+            if not isinstance(data, list):
+                return AdapterResult.fail(
+                    "Unexpected inventory response", error_code="invalid_response"
+                )
+            return AdapterResult.ok(data)
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
 
@@ -378,6 +435,42 @@ class ProxmoxAdapter(BaseAdapter):
             return AdapterResult.ok(data)
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
+
+    async def get_ha_configuration(self, kind: str) -> AdapterResult:
+        """Raw HA configuration, retaining identities/defaults without empty fallbacks."""
+        if kind not in {"resources", "groups"}:
+            raise ValueError("Invalid HA configuration kind")
+        self._ensure_connected()
+        assert self._client is not None
+        try:
+            data = await self._client.get(f"/cluster/ha/{kind}")
+            if not isinstance(data, list):
+                return AdapterResult.fail("Malformed HA configuration response")
+            return AdapterResult.ok(data)
+        except ProxmoxApiError:
+            return AdapterResult.fail("HA configuration unavailable")
+
+    async def get_cluster_operation_state(self, *, include_groups: bool = False) -> AdapterResult:
+        """Read-only impact review. Group API errors after rule migration fail closed."""
+        self._ensure_connected()
+        assert self._client is not None
+        try:
+            data = {
+                "permissions": {
+                    "/vms": permissions_at_path(
+                        await self._client.get("/access/permissions", params={"path": "/vms"}),
+                        "/vms",
+                    )
+                },
+                "status": await self._client.get("/cluster/status"),
+                "guests": await self._client.get("/cluster/resources", params={"type": "vm"}),
+                "resources": await self._client.get("/cluster/ha/resources"),
+            }
+            if include_groups:
+                data["groups"] = await self._client.get("/cluster/ha/groups")
+            return AdapterResult.ok(data)
+        except (ProxmoxApiError, ValueError):
+            return AdapterResult.fail("Cluster impact unavailable")
 
     async def get_ha_resources(self) -> AdapterResult:
         """Get HA-managed resources."""
@@ -704,12 +797,13 @@ class ProxmoxAdapter(BaseAdapter):
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
 
-    async def get_vm_config(self, node: str, vmid: int) -> AdapterResult:
+    async def get_vm_config(self, node: str, vmid: int, *, current: bool = False) -> AdapterResult:
         """Get VM configuration."""
         self._ensure_connected()
         try:
             data = await self._client.get(  # type: ignore[union-attr]
-                C.QEMU_CONFIG.format(node=node, vmid=vmid)
+                C.QEMU_CONFIG.format(node=node, vmid=vmid),
+                **({"params": {"current": 1}} if current else {}),
             )
             return AdapterResult.ok(data if isinstance(data, dict) else {})
         except ProxmoxApiError as e:
@@ -816,6 +910,7 @@ class ProxmoxAdapter(BaseAdapter):
         size: str,
         *,
         force: bool = False,
+        digest: str | None = None,
     ) -> AdapterResult:
         """Resize a VM disk.
 
@@ -827,7 +922,7 @@ class ProxmoxAdapter(BaseAdapter):
         try:
             data = await self._client.put(  # type: ignore[union-attr]
                 C.QEMU_RESIZE.format(node=node, vmid=vmid),
-                data={"disk": disk, "size": size},
+                data={"disk": disk, "size": size, **({"digest": digest} if digest else {})},
                 force=force,
             )
             return AdapterResult.ok(data)
@@ -935,7 +1030,7 @@ class ProxmoxAdapter(BaseAdapter):
                 "ostype": ostype,
                 "cpu": cpu_type,
                 "bios": bios,
-                "scsi0": f"{storage}:{disk_size}",
+                "scsi0": f"{storage}:{disk_size.removesuffix('G')}",
                 "scsihw": "virtio-scsi-single",
                 "net0": f"{net_model},bridge={net_bridge}",
             }
@@ -951,8 +1046,7 @@ class ProxmoxAdapter(BaseAdapter):
                 payload["description"] = description
             if machine:
                 payload["machine"] = machine
-            if balloon > 0:
-                payload["balloon"] = balloon
+            payload["balloon"] = balloon
             if onboot:
                 payload["onboot"] = 1
             if tags:
@@ -1073,12 +1167,25 @@ class ProxmoxAdapter(BaseAdapter):
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
 
+    async def assert_vmid_unused(self, vmid: int) -> AdapterResult:
+        """Read the cluster's allocation index; an ACL-filtered guest list is insufficient."""
+        self._ensure_connected()
+        try:
+            data = await self._client.get("/cluster/nextid", params={"vmid": vmid})  # type: ignore[union-attr]
+            if type(data) is not int or data != vmid:
+                return AdapterResult.fail("Invalid VMID availability response")
+            return AdapterResult.ok(data)
+        except ProxmoxApiError:
+            return AdapterResult.fail("VMID availability could not be verified")
+
     async def get_next_vmid(self) -> AdapterResult:
         """Get next available VMID from the cluster."""
         self._ensure_connected()
         try:
             data = await self._client.get("/cluster/nextid")  # type: ignore[union-attr]
-            return AdapterResult.ok(int(data) if data else 100)
+            if type(data) is not int or not 100 <= data <= 999999999:
+                return AdapterResult.fail("Invalid next VMID response")
+            return AdapterResult.ok(data)
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
 
@@ -1119,12 +1226,13 @@ class ProxmoxAdapter(BaseAdapter):
             return AdapterResult.fail(type(e).__name__)
 
     async def delete_ha_resource(self, sid: str, *, force: bool = False) -> AdapterResult:
-        """Remove a VM/CT from HA management."""
+        """Remove HA membership without purging rules. Never retry without this guard."""
         self._ensure_connected()
         try:
             data = await self._client.delete(  # type: ignore[union-attr]
                 f"{C.CLUSTER_HA_RESOURCES}/{sid}",
                 force=force,
+                params={"purge": 0},
             )
             return AdapterResult.ok(data)
         except ProxmoxApiError as e:
@@ -1211,12 +1319,15 @@ class ProxmoxAdapter(BaseAdapter):
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
 
-    async def get_container_config(self, node: str, vmid: int) -> AdapterResult:
+    async def get_container_config(
+        self, node: str, vmid: int, *, current: bool = False
+    ) -> AdapterResult:
         """Get container configuration."""
         self._ensure_connected()
         try:
             data = await self._client.get(  # type: ignore[union-attr]
-                C.LXC_CONFIG.format(node=node, vmid=vmid)
+                C.LXC_CONFIG.format(node=node, vmid=vmid),
+                **({"params": {"current": 1}} if current else {}),
             )
             return AdapterResult.ok(data if isinstance(data, dict) else {})
         except ProxmoxApiError as e:
@@ -1303,14 +1414,19 @@ class ProxmoxAdapter(BaseAdapter):
         target: str,
         online: bool = False,
         *,
+        restart: bool = False,
         force: bool = False,
     ) -> AdapterResult:
         """Migrate a container to another node."""
+        if online:
+            return AdapterResult.fail(
+                "LXC live migration is unsupported; choose offline or explicit restart"
+            )
         self._ensure_connected()
         try:
             payload: dict[str, Any] = {"target": target}
-            if online:
-                payload["online"] = 1
+            if restart:
+                payload["restart"] = 1
             data = await self._client.post(  # type: ignore[union-attr]
                 C.LXC_MIGRATE.format(node=node, vmid=vmid),
                 data=payload,
@@ -1328,13 +1444,14 @@ class ProxmoxAdapter(BaseAdapter):
         size: str,
         *,
         force: bool = False,
+        digest: str | None = None,
     ) -> AdapterResult:
         """Resize a container disk."""
         self._ensure_connected()
         try:
             data = await self._client.put(  # type: ignore[union-attr]
                 C.LXC_RESIZE.format(node=node, vmid=vmid),
-                data={"disk": disk, "size": size},
+                data={"disk": disk, "size": size, **({"digest": digest} if digest else {})},
                 force=force,
             )
             return AdapterResult.ok(data)
@@ -1461,7 +1578,9 @@ class ProxmoxAdapter(BaseAdapter):
                 C.NODE_STORAGE.format(node=node)
             )
             if not isinstance(data, list):
-                return AdapterResult.ok([])
+                return AdapterResult.fail(
+                    "Unexpected inventory response", error_code="invalid_response"
+                )
             pools = [
                 ProxmoxStorage(
                     storage=s.get("storage", ""),
@@ -1500,9 +1619,147 @@ class ProxmoxAdapter(BaseAdapter):
                 C.NODE_STORAGE_CONTENT.format(node=node, storage=storage),
                 params=params or None,
             )
-            return AdapterResult.ok(data if isinstance(data, list) else [])
+            if not isinstance(data, list):
+                return AdapterResult.fail(
+                    "Unexpected inventory response", error_code="invalid_response"
+                )
+            return AdapterResult.ok(data)
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
+
+    async def get_storage_operation_state(self, node: str, storage: str) -> AdapterResult:
+        """Raw storage identity, permissions and inventory; never empty fallbacks."""
+        self._ensure_connected()
+        try:
+            cluster = await self._client.get("/cluster/status")
+            config = await self._client.get(f"/storage/{storage}")
+            status = await self._client.get(f"/nodes/{node}/storage/{storage}/status")
+            permissions = await self._client.get(
+                "/access/permissions", params={"path": f"/storage/{storage}"}
+            )
+            root_permissions = await self._client.get("/access/permissions", params={"path": "/"})
+            permissions = {
+                f"/storage/{storage}": permissions_at_path(permissions, f"/storage/{storage}"),
+                "/": permissions_at_path(root_permissions, "/"),
+            }
+            content = await self._client.get(f"/nodes/{node}/storage/{storage}/content")
+            return AdapterResult.ok(
+                {
+                    "cluster": cluster,
+                    "config": config,
+                    "status": status,
+                    "permissions": permissions,
+                    "content": content,
+                }
+            )
+        except (ProxmoxApiError, ValueError):
+            return AdapterResult.fail("Storage review unavailable")
+
+    async def get_storage_guest_configs(self) -> AdapterResult:
+        """Current, pending and snapshot configurations of visible guests.
+
+        The caller requires global VM.Audit, but permission overrides and native
+        operators remain outside FreeSDN's serialization boundary.
+        """
+        from app.adapters.validation import validate_id
+
+        self._ensure_connected()
+        try:
+            guests = await self._client.get("/cluster/resources", params={"type": "vm"})
+            if not isinstance(guests, list) or len(guests) > 256:
+                return AdapterResult.fail("Guest inventory exceeds review limit or is malformed")
+            configs = []
+            seen = set()
+            for guest in sorted(
+                guests, key=lambda g: str(g.get("vmid")) if isinstance(g, dict) else ""
+            ):
+                if (
+                    not isinstance(guest, dict)
+                    or type(guest.get("vmid")) is not int
+                    or not 100 <= guest["vmid"] <= 999999999
+                    or guest.get("type") not in {"qemu", "lxc"}
+                    or guest["vmid"] in seen
+                ):
+                    return AdapterResult.fail("Malformed guest inventory")
+                seen.add(guest["vmid"])
+                node = validate_id(guest.get("node"), label="node")
+                path = f"/nodes/{node}/{guest['type']}/{guest['vmid']}"
+                current = await self._client.get(f"{path}/config", params={"current": 1})
+                pending = await self._client.get(f"{path}/config")
+                snapshots = await self._client.get(f"{path}/snapshot")
+                if (
+                    not isinstance(current, dict)
+                    or not current.get("digest")
+                    or not isinstance(pending, dict)
+                    or not pending.get("digest")
+                    or not isinstance(snapshots, list)
+                    or len(snapshots) > 64
+                ):
+                    return AdapterResult.fail("Guest configuration review incomplete")
+                saved = []
+                for snap in snapshots:
+                    if not isinstance(snap, dict):
+                        return AdapterResult.fail("Malformed snapshot inventory")
+                    name = validate_id(snap.get("name"), label="snapshot")
+                    if name != "current":
+                        config = await self._client.get(f"{path}/snapshot/{name}/config")
+                        if not isinstance(config, dict) or not config:
+                            return AdapterResult.fail("Snapshot configuration unavailable")
+                        saved.append({"name": name, "config": config})
+                configs.append(
+                    {
+                        "node": node,
+                        "vmid": guest["vmid"],
+                        "type": guest["type"],
+                        "current": current,
+                        "pending": pending,
+                        "snapshots": sorted(saved, key=lambda item: item["name"]),
+                    }
+                )
+            return AdapterResult.ok(configs)
+        except ProxmoxApiError:
+            return AdapterResult.fail("Guest configuration review unavailable")
+
+    async def upload_verified_storage_file(
+        self,
+        node: str,
+        storage: str,
+        filename: str,
+        content: str,
+        handle: BinaryIO,
+        checksum: str,
+        *,
+        force: bool = False,
+    ) -> AdapterResult:
+        """Send the already-open verified source with a provider-enforced SHA256.
+
+        The applier owns and closes the descriptor. Never reopen a supplied path.
+        """
+        self._ensure_connected()
+        try:
+            response = await self._client.post_multipart(
+                C.NODE_STORAGE_UPLOAD.format(node=node, storage=storage),
+                files={"filename": (filename, handle, "application/octet-stream")},
+                data={"content": content, "checksum": checksum, "checksum-algorithm": "sha256"},
+                force=force,
+            )
+            if 400 <= response.status_code < 500:
+                return AdapterResult.fail("Provider rejected upload")
+            try:
+                body = response.json()
+                if (
+                    not 200 <= response.status_code < 300
+                    or not isinstance(body, dict)
+                    or "data" not in body
+                ):
+                    raise ValueError("envelope")
+                return AdapterResult.ok(body["data"])
+            except (ValueError, UnicodeError):
+                raise AdapterOutcomeUnknownError(
+                    "Upload acknowledgement unavailable", adapter_id="proxmox"
+                ) from None
+        except ProxmoxApiError:
+            return AdapterResult.fail("Provider rejected upload")
 
     async def delete_storage_volume(
         self,
@@ -1581,16 +1838,16 @@ class ProxmoxAdapter(BaseAdapter):
         try:
             data = await self._client.get(  # type: ignore[union-attr]
                 C.NODE_TASKS.format(node=node),
-                params={"limit": min(limit, 200)},
+                params={"limit": min(limit, 200), "source": "all"},
             )
-            if not isinstance(data, list):
-                return AdapterResult.ok([])
+            if not isinstance(data, list) or any(not isinstance(t, dict) for t in data):
+                return AdapterResult.fail("Task inventory unavailable or malformed")
             tasks = [
                 ProxmoxTask(
                     upid=t.get("upid", ""),
                     node=node,
                     task_type=t.get("type", ""),
-                    status=t.get("status", ""),
+                    status="" if t.get("status") == "RUNNING" else t.get("status", ""),
                     user=t.get("user", ""),
                     starttime=int(t.get("starttime", 0)),
                     endtime=int(t.get("endtime", 0)),
@@ -1613,6 +1870,9 @@ class ProxmoxAdapter(BaseAdapter):
             )
             if not isinstance(data, dict):
                 return AdapterResult.fail("Unexpected response")
+            # Never substitute the requested ID for an unrelated provider reply.
+            if data.get("upid") != upid or data.get("node") != node:
+                return AdapterResult.fail("Task identity mismatch")
             return AdapterResult.ok(
                 ProxmoxTaskDetail(
                     upid=upid,
@@ -1638,12 +1898,24 @@ class ProxmoxAdapter(BaseAdapter):
                 C.NODE_TASK_LOG.format(node=node, upid=upid),
                 params={"start": start, "limit": min(limit, 500)},
             )
-            if not isinstance(data, list):
-                return AdapterResult.ok([])
-            logs = [ProxmoxTaskLog(n=int(l.get("n", 0)), t=l.get("t", "")) for l in data]
+            if not isinstance(data, list) or any(
+                not isinstance(line, dict) or not isinstance(line.get("t"), str) for line in data
+            ):
+                return AdapterResult.fail("Task log unavailable or malformed")
+            logs = [ProxmoxTaskLog(n=int(l.get("n", 0)), t=l["t"]) for l in data]
             return AdapterResult.ok(logs)
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
+
+    async def get_task_control_permissions(self, node: str) -> AdapterResult:
+        """Read only the requested node's effective privilege map."""
+        self._ensure_connected()
+        path = f"/nodes/{node}"
+        try:
+            data = await self._client.get("/access/permissions", params={"path": path})
+            return AdapterResult.ok(permissions_at_path(data, path))
+        except (ProxmoxApiError, ValueError):
+            return AdapterResult.fail("Task-control privileges unavailable")
 
     async def stop_task(self, node: str, upid: str, *, force: bool = False) -> AdapterResult:
         """Stop a running task.
@@ -1713,17 +1985,26 @@ class ProxmoxAdapter(BaseAdapter):
         self._ensure_connected()
         try:
             data = await self._client.get(C.CLUSTER_BACKUP)  # type: ignore[union-attr]
-            if not isinstance(data, list):
-                return AdapterResult.ok([])
+            if not isinstance(data, list) or any(
+                not isinstance(row, dict)
+                or not isinstance(row.get("id"), str)
+                or not row["id"]
+                or type(row.get("enabled", 1)) not in (int, bool, str)
+                or row.get("enabled", 1) not in (0, 1, "0", "1")
+                for row in data
+            ):
+                return AdapterResult.fail("Backup job inventory is malformed")
+            if len({row["id"] for row in data}) != len(data):
+                return AdapterResult.fail("Backup job inventory has duplicate identities")
             jobs = [
                 ProxmoxBackupJob(
                     id=b.get("id", ""),
                     schedule=b.get("schedule", ""),
                     storage=b.get("storage", ""),
                     vmid=str(b.get("vmid", "")),
-                    mode=b.get("mode", "snapshot"),
-                    compress=b.get("compress", "zstd"),
-                    enabled=bool(b.get("enabled", 1)),
+                    mode=b.get("mode", ""),
+                    compress=str(b.get("compress", "")),
+                    enabled=b.get("enabled", 1) in (1, "1"),
                     mailnotification=b.get("mailnotification", "always"),
                     mailto=b.get("mailto", ""),
                     node=b.get("node"),
@@ -1762,6 +2043,71 @@ class ProxmoxAdapter(BaseAdapter):
             return AdapterResult.ok(data)
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
+
+    async def get_backup_job_configuration(self) -> AdapterResult:
+        """Raw schedule configuration, including retention; malformed data is not empty."""
+        self._ensure_connected()
+        try:
+            return AdapterResult.ok(await self._client.get(C.CLUSTER_BACKUP))
+        except ProxmoxApiError:
+            return AdapterResult.fail("Backup job configuration unavailable")
+
+    async def get_backup_job_review_state(
+        self, node: str | None, storage: str | None, vmids: list[int]
+    ) -> AdapterResult:
+        """Read explicit privilege paths and selected guest/storage state."""
+        self._ensure_connected()
+        try:
+            permissions = {
+                "/": permissions_at_path(
+                    await self._client.get("/access/permissions", params={"path": "/"}), "/"
+                )
+            }
+            result: dict[str, Any] = {"permissions": permissions}
+            if node is not None and storage is not None:
+                result["cluster"] = await self._client.get("/cluster/status")
+                result["guests"] = await self._client.get(
+                    "/cluster/resources", params={"type": "vm"}
+                )
+                result["storage"] = await self._client.get(f"/storage/{storage}")
+                result["status"] = await self._client.get(f"/nodes/{node}/storage/{storage}/status")
+                result["defaults"] = await self._client.get(
+                    f"/nodes/{node}/vzdump/defaults", params={"storage": storage}
+                )
+                for path in [
+                    f"/nodes/{node}",
+                    f"/storage/{storage}",
+                    *(f"/vms/{vmid}" for vmid in vmids),
+                ]:
+                    granted = await self._client.get("/access/permissions", params={"path": path})
+                    permissions[path] = permissions_at_path(granted, path)
+            return AdapterResult.ok(result)
+        except (ProxmoxApiError, ValueError):
+            return AdapterResult.fail("Backup job review unavailable")
+
+    async def apply_reviewed_backup_job(
+        self, action: str, job_id: str, settings: dict[str, Any], *, force: bool = False
+    ) -> AdapterResult:
+        """Internal reviewed dispatcher; the service validates action/options first."""
+        self._ensure_connected()
+        payload = {k: int(v) if isinstance(v, bool) else v for k, v in settings.items()}
+        if action == "create":
+            # Native POST returns null, so supply an ID instead of losing the
+            # provider-generated ID when the response is lost.
+            data = await self._client.post(
+                C.CLUSTER_BACKUP,
+                data={**payload, "id": job_id, "prune-backups": "keep-all=1"},
+                force=force,
+            )
+        elif action == "update":
+            data = await self._client.put(
+                C.CLUSTER_BACKUP_JOB.format(jobid=job_id), data=payload, force=force
+            )
+        elif action == "delete":
+            data = await self._client.delete(C.CLUSTER_BACKUP_JOB.format(jobid=job_id), force=force)
+        else:
+            raise ValueError("Unsupported reviewed backup job action")
+        return AdapterResult.ok(data)
 
     async def create_backup_job(self, *, force: bool = False, **kwargs: Any) -> AdapterResult:
         """Create a scheduled backup job. ``force`` propagates to the
@@ -1892,9 +2238,20 @@ class ProxmoxAdapter(BaseAdapter):
                 return AdapterResult.fail(f"Upload failed: HTTP {resp.status_code}")
             try:
                 body = resp.json()
-                return AdapterResult.ok(body.get("data"))
-            except Exception:
-                return AdapterResult.ok(None)
+                if (
+                    not 200 <= resp.status_code < 300
+                    or not isinstance(body, dict)
+                    or "data" not in body
+                ):
+                    raise ValueError("invalid upload acknowledgement")
+                return AdapterResult.ok(body["data"])
+            except (ValueError, UnicodeError) as e:
+                raise AdapterOutcomeUnknownError(
+                    "Proxmox upload returned an invalid acknowledgement; reconcile before retrying",
+                    adapter_id="proxmox",
+                ) from e
+        except AdapterOutcomeUnknownError:
+            raise
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
         except Exception as e:
@@ -1912,6 +2269,82 @@ class ProxmoxAdapter(BaseAdapter):
     # FIREWALL
     # ═══════════════════════════════════════════════════════════════════════
 
+    @staticmethod
+    def _firewall_base(target: dict[str, Any]) -> str:
+        from app.modules.hypervisor.firewall_schemas import FirewallTarget
+
+        value = FirewallTarget.model_validate(target)
+        if value.scope == "cluster":
+            return "/cluster/firewall"
+        if value.scope == "node":
+            return f"/nodes/{value.node}/firewall"
+        return f"/nodes/{value.node}/{value.vm_type}/{value.vmid}/firewall"
+
+    async def get_firewall_configuration(self, target: dict[str, Any]) -> AdapterResult:
+        """Preserve native digests and fields for review and independent readback."""
+        self._ensure_connected()
+        base = self._firewall_base(target)
+        try:
+            rules = await self._client.get(f"{base}/rules")
+            options = await self._client.get(f"{base}/options")
+            identity = None
+            if target["scope"] == "guest":
+                identity = await self._client.get(base.removesuffix("/firewall") + "/config")
+                if not isinstance(identity, dict) or not isinstance(identity.get("digest"), str):
+                    return AdapterResult.fail("Guest identity unavailable")
+                identity = {"digest": identity["digest"]}
+            return AdapterResult.ok({"rules": rules, "options": options, "identity": identity})
+        except ProxmoxApiError:
+            return AdapterResult.fail("Firewall configuration unavailable")
+
+    async def get_firewall_permissions(self, target: dict[str, Any]) -> AdapterResult:
+        self._ensure_connected()
+        self._firewall_base(target)
+        path = (
+            "/"
+            if target["scope"] == "cluster"
+            else (
+                f"/vms/{target['vmid']}"
+                if target["scope"] == "guest"
+                else f"/nodes/{target['node']}"
+            )
+        )
+        try:
+            result = await self._client.get("/access/permissions", params={"path": path})
+            return AdapterResult.ok(permissions_at_path(result, path))
+        except (ProxmoxApiError, ValueError):
+            return AdapterResult.fail("Firewall privileges unavailable")
+
+    async def apply_firewall_operation(
+        self,
+        target: dict[str, Any],
+        action: str,
+        data: dict[str, Any],
+        pos: int | None = None,
+        *,
+        force: bool = False,
+    ) -> AdapterResult:
+        """One native write. Update/delete use Proxmox's locked digest check."""
+        self._ensure_connected()
+        base = self._firewall_base(target)
+        if action not in ("create", "update", "delete", "move", "options"):
+            raise ValueError("Unsupported firewall action")
+        if action != "create" and not re.fullmatch(r"[a-f0-9]{40}", str(data.get("digest", ""))):
+            raise ValueError("Native firewall digest required")
+        if action in ("update", "delete", "move") and (type(pos) is not int or pos < 0):
+            raise ValueError("Firewall position required")
+        try:
+            if action == "create":
+                result = await self._client.post(f"{base}/rules", data=data, force=force)
+            elif action == "delete":
+                result = await self._client.delete(f"{base}/rules/{pos}", params=data, force=force)
+            else:
+                path = f"{base}/options" if action == "options" else f"{base}/rules/{pos}"
+                result = await self._client.put(path, data=data, force=force)
+            return AdapterResult.ok(result)
+        except ProxmoxApiError:
+            return AdapterResult.fail("Firewall write rejected")
+
     async def get_firewall_rules(
         self, node: str | None = None, vmid: int | None = None, vm_type: str = "qemu"
     ) -> AdapterResult:
@@ -1927,14 +2360,24 @@ class ProxmoxAdapter(BaseAdapter):
             else:
                 path = C.CLUSTER_FIREWALL_RULES
             data = await self._client.get(path)  # type: ignore[union-attr]
-            if not isinstance(data, list):
-                return AdapterResult.ok([])
+            if not isinstance(data, list) or any(not isinstance(r, dict) for r in data):
+                return AdapterResult.fail("Malformed firewall rules")
+            if any(
+                not (
+                    type(r.get("enable", 0)) in (int, bool)
+                    and r.get("enable", 0) in (0, 1)
+                    or isinstance(r.get("enable", 0), str)
+                    and r["enable"] in ("0", "1")
+                )
+                for r in data
+            ):
+                return AdapterResult.fail("Malformed firewall flag")
             rules = [
                 ProxmoxFirewallRule(
                     pos=int(r.get("pos", 0)),
                     type=r.get("type", ""),
                     action=r.get("action", ""),
-                    enable=bool(r.get("enable", 1)),
+                    enable=r.get("enable", 0) in (1, True, "1"),
                     source=r.get("source"),
                     dest=r.get("dest"),
                     sport=r.get("sport"),
@@ -2038,7 +2481,11 @@ class ProxmoxAdapter(BaseAdapter):
             base = C.QEMU_FIREWALL_RULES if vm_type == "qemu" else C.LXC_FIREWALL_RULES
             url = base.format(node=node, vmid=vmid)
             data = await self._client.get(url)  # type: ignore[union-attr]
-            return AdapterResult.ok(data if isinstance(data, list) else [])
+            return (
+                AdapterResult.ok(data)
+                if isinstance(data, list) and all(isinstance(r, dict) for r in data)
+                else AdapterResult.fail("Malformed firewall rules")
+            )
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
 
@@ -2091,7 +2538,11 @@ class ProxmoxAdapter(BaseAdapter):
             base = C.QEMU_FIREWALL_OPTIONS if vm_type == "qemu" else C.LXC_FIREWALL_OPTIONS
             url = base.format(node=node, vmid=vmid)
             data = await self._client.get(url)  # type: ignore[union-attr]
-            return AdapterResult.ok(data if isinstance(data, dict) else {})
+            return (
+                AdapterResult.ok(data)
+                if isinstance(data, dict)
+                else AdapterResult.fail("Malformed firewall options")
+            )
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
 
@@ -2123,7 +2574,11 @@ class ProxmoxAdapter(BaseAdapter):
         self._ensure_connected()
         try:
             data = await self._client.get(C.CLUSTER_FIREWALL_OPTIONS)  # type: ignore[union-attr]
-            return AdapterResult.ok(data if isinstance(data, dict) else {})
+            return (
+                AdapterResult.ok(data)
+                if isinstance(data, dict)
+                else AdapterResult.fail("Malformed firewall options")
+            )
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
 
@@ -2404,7 +2859,29 @@ class ProxmoxAdapter(BaseAdapter):
             data = await self._client.get(  # type: ignore[union-attr]
                 C.NODE_CERTIFICATES.format(node=node)
             )
-            return AdapterResult.ok(data if isinstance(data, list) else [])
+            return (
+                AdapterResult.ok(data)
+                if isinstance(data, list)
+                else AdapterResult.fail("Malformed certificate inventory")
+            )
+        except ProxmoxApiError as e:
+            return AdapterResult.fail(type(e).__name__)
+
+    async def get_certificate_operation_state(
+        self, node: str, *, acme: bool = False
+    ) -> AdapterResult:
+        """Raw node inventory and the TLS peer of that exact response."""
+        self._ensure_connected()
+        assert self._client is not None
+        try:
+            certificates, peer = await self._client.get_with_peer(
+                C.NODE_CERTIFICATES.format(node=node)
+            )
+            status = await self._client.get(C.CLUSTER_STATUS)
+            config = await self._client.get(f"/nodes/{node}/config") if acme else None
+            return AdapterResult.ok(
+                {"certificates": certificates, "peer": peer, "status": status, "config": config}
+            )
         except ProxmoxApiError as e:
             return AdapterResult.fail(type(e).__name__)
 
@@ -2597,128 +3074,51 @@ class ProxmoxAdapter(BaseAdapter):
     # SDN
     # ═══════════════════════════════════════════════════════════════════════
 
-    async def get_sdn_zones(self) -> AdapterResult:
-        """List all SDN zones."""
+    async def inspect_sdn(self, controller_id: UUID) -> SdnInspection:
         self._ensure_connected()
-        try:
-            data = await self._client.get(C.SDN_ZONES)  # type: ignore[union-attr]
-            return AdapterResult.ok(data if isinstance(data, list) else [])
-        except ProxmoxApiError as e:
-            return AdapterResult.fail(type(e).__name__)
+        from app.adapters.proxmox.sdn import inspect_sdn
+
+        return await inspect_sdn(self._client, controller_id)
+
+    async def inspect_sdn_attachments(self, controller_id: UUID) -> SdnAttachmentInspection:
+        self._ensure_connected()
+        from app.adapters.proxmox.sdn_attachments import inspect_attachments
+
+        return await inspect_attachments(self._client, controller_id)
+
+    async def inspect_sdn_dependencies(self, controller_id: UUID) -> SdnDependencyInspection:
+        from app.adapters.proxmox.sdn_dependencies import inspect_dependencies
+
+        self._ensure_connected()
+        return await inspect_dependencies(self._client, controller_id)
+
+    async def get_sdn_dry_run(self, controller_id: UUID, node: str) -> SdnDryRunObservation:
+        from app.adapters.proxmox.sdn import dry_run, validate_node
+
+        validate_node(node)
+        self._ensure_connected()
+        return await dry_run(self._client, controller_id, node)
+
+    async def _sdn_collection(self, resource: str) -> AdapterResult:
+        self._ensure_connected()
+        from app.adapters.proxmox.sdn import observe_collection
+
+        observation = await observe_collection(self._client, resource, "configured")
+        if observation.status != "available":
+            return AdapterResult.fail("SDN collection " + observation.status)
+        return AdapterResult.ok(observation.items)
+
+    async def get_sdn_zones(self) -> AdapterResult:
+        """Visible configured zones; not an unfiltered or running-state inventory."""
+        return await self._sdn_collection("zones")
 
     async def get_sdn_vnets(self) -> AdapterResult:
-        """List all SDN VNets."""
-        self._ensure_connected()
-        try:
-            data = await self._client.get(C.SDN_VNETS)  # type: ignore[union-attr]
-            return AdapterResult.ok(data if isinstance(data, list) else [])
-        except ProxmoxApiError as e:
-            return AdapterResult.fail(type(e).__name__)
+        """Visible configured VNets; malformed data is a failure, not an empty list."""
+        return await self._sdn_collection("vnets")
 
     async def get_sdn_controllers(self) -> AdapterResult:
-        """List SDN controllers."""
-        self._ensure_connected()
-        try:
-            data = await self._client.get(C.SDN_CONTROLLERS)  # type: ignore[union-attr]
-            return AdapterResult.ok(data if isinstance(data, list) else [])
-        except ProxmoxApiError as e:
-            return AdapterResult.fail(type(e).__name__)
-
-    async def create_sdn_zone(
-        self,
-        zone: str,
-        zone_type: str,
-        *,
-        force: bool = False,
-        **kwargs: Any,
-    ) -> AdapterResult:
-        """Create an SDN zone.
-
-        ``force`` is keyword-only and consumed before ``**kwargs`` flow
-        into the payload, so a payload key named ``force`` cannot
-        accidentally trigger a write. The staging applier passes
-        ``force=True`` after the dual-gate clears.
-        """
-        self._ensure_connected()
-        try:
-            payload: dict[str, Any] = {"zone": zone, "type": zone_type}
-            payload.update(kwargs)
-            data = await self._client.post(  # type: ignore[union-attr]
-                C.SDN_ZONES,
-                data=payload,
-                force=force,
-            )
-            return AdapterResult.ok(data)
-        except ProxmoxApiError as e:
-            return AdapterResult.fail(type(e).__name__)
-
-    async def create_sdn_vnet(
-        self,
-        vnet: str,
-        zone: str,
-        *,
-        force: bool = False,
-        **kwargs: Any,
-    ) -> AdapterResult:
-        """Create an SDN VNet."""
-        self._ensure_connected()
-        try:
-            payload: dict[str, Any] = {"vnet": vnet, "zone": zone}
-            payload.update(kwargs)
-            data = await self._client.post(  # type: ignore[union-attr]
-                C.SDN_VNETS,
-                data=payload,
-                force=force,
-            )
-            return AdapterResult.ok(data)
-        except ProxmoxApiError as e:
-            return AdapterResult.fail(type(e).__name__)
-
-    async def delete_sdn_zone(
-        self,
-        zone: str,
-        *,
-        force: bool = False,
-    ) -> AdapterResult:
-        """Delete an SDN zone."""
-        self._ensure_connected()
-        try:
-            data = await self._client.delete(  # type: ignore[union-attr]
-                f"{C.SDN_ZONES}/{zone}",
-                force=force,
-            )
-            return AdapterResult.ok(data)
-        except ProxmoxApiError as e:
-            return AdapterResult.fail(type(e).__name__)
-
-    async def delete_sdn_vnet(
-        self,
-        vnet: str,
-        *,
-        force: bool = False,
-    ) -> AdapterResult:
-        """Delete an SDN VNet."""
-        self._ensure_connected()
-        try:
-            data = await self._client.delete(  # type: ignore[union-attr]
-                f"{C.SDN_VNETS}/{vnet}",
-                force=force,
-            )
-            return AdapterResult.ok(data)
-        except ProxmoxApiError as e:
-            return AdapterResult.fail(type(e).__name__)
-
-    async def apply_sdn(self, *, force: bool = False) -> AdapterResult:
-        """Apply pending SDN configuration changes."""
-        self._ensure_connected()
-        try:
-            data = await self._client.put(  # type: ignore[union-attr]
-                C.SDN_APPLY,
-                force=force,
-            )
-            return AdapterResult.ok(data)
-        except ProxmoxApiError as e:
-            return AdapterResult.fail(type(e).__name__)
+        """Allowlisted configured controller fields, excluding secret material."""
+        return await self._sdn_collection("controllers")
 
     # ═══════════════════════════════════════════════════════════════════════
     # GUEST AGENT (EXTENDED)
@@ -3046,10 +3446,10 @@ class ProxmoxAdapter(BaseAdapter):
     ) -> AdapterResult:
         """Restore a VM/CT from backup archive.
 
-        CATASTROPHIC: overwrites the target VM/CT with the backup
-        contents. If a VM with ``vmid`` already exists, this typically
-        fails — but with ``unique=False`` and an existing target it
-        will replace it. ``force`` propagates to the read-only gate.
+        Treat recovery as destructive and require staged confirmation.
+        ``unique`` controls regenerated MAC addresses, not overwrite permission.
+        ``force`` opens FreeSDN's write gate; it is NOT sent as Proxmox's
+        overwrite flag. An existing target may therefore be refused by Proxmox.
         """
         self._ensure_connected()
         try:

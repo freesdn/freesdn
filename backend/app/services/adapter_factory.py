@@ -130,6 +130,15 @@ def build_adapter_for_controller(controller: Any) -> "BaseAdapter":
             "cloud_region": getattr(controller, "cloud_region", None) or "us",
         }
 
+    # Match controller onboarding: API tokens take precedence over ticket login.
+    if controller.controller_type.lower() == "proxmox":
+        config = getattr(controller, "config", None) or {}
+        token_id = config.get("token_id", "")
+        if token_id:
+            cloud_kwargs["token_id"] = token_id
+            cloud_kwargs["token_secret"] = _decrypt_secret(config.get("token_secret"))
+        cloud_kwargs["realm"] = config.get("realm", "pam")
+
     return get_adapter(
         controller_type=controller.controller_type,
         host=controller.host,
@@ -145,16 +154,16 @@ def build_adapter_for_controller(controller: Any) -> "BaseAdapter":
 
 def _decrypt_secret(value: str | None) -> str:
     """Plaintext for a stored controller secret, tolerating already-plain values."""
-    from app.core.crypto import decrypt_credential, is_encrypted
-
     if not value:
         return ""
+    from app.core.crypto import decrypt_credential, is_encrypted
+
     if not is_encrypted(value):
         return value
     try:
         return decrypt_credential(value)
     except ValueError:
-        return value
+        raise ValueError("Stored controller credential could not be decrypted") from None
 
 
 def get_available_adapter_types() -> list[str]:

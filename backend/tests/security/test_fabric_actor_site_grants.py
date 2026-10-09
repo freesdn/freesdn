@@ -63,6 +63,7 @@ def _user(role: str = "operator", sites: list | None = None):
     return SimpleNamespace(
         id=uuid4(),
         role=role,
+        is_active=True,
         deleted_at=None,
         site_access=[SimpleNamespace(site_id=s) for s in (sites or [])],
     )
@@ -106,24 +107,21 @@ async def test_an_actor_with_no_grants_is_unrestricted_not_denied() -> None:
     assert await resolve_actor_site_grants(session, uuid4()) is None
 
 
-async def test_a_missing_actor_does_not_disable_the_automation() -> None:
-    """
-    A deleted or unresolvable author. These paths re-check the author's
-    PERMISSION separately; the grant is a narrowing, not the authorisation, so
-    failing closed on a lookup miss would stop automations for the wrong
-    reason.
-    """
-    assert await resolve_actor_site_grants(_Session(None), uuid4()) is None
+async def test_a_missing_actor_refuses_the_automation() -> None:
+    """A prior permission check cannot authorize a later unresolved scope."""
+    with pytest.raises(PermissionError, match="Site authorization"):
+        await resolve_actor_site_grants(_Session(None), uuid4())
 
 
 async def test_no_actor_id_is_unrestricted() -> None:
     assert await resolve_actor_site_grants(_Session(_user()), None) is None
 
 
-async def test_a_database_error_does_not_raise_into_the_caller() -> None:
+async def test_a_database_error_refuses_the_operation() -> None:
     session = _Session(_user("operator", [SITE_A]))
     session.raises = True
-    assert await resolve_actor_site_grants(session, uuid4()) is None
+    with pytest.raises(PermissionError, match="Site authorization"):
+        await resolve_actor_site_grants(session, uuid4())
 
 
 async def test_the_resolver_excludes_deleted_users() -> None:

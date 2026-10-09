@@ -1,0 +1,94 @@
+package relay
+
+import (
+	"errors"
+	"net"
+	"syscall"
+
+	"github.com/netbirdio/netbird/client/internal/stdnet"
+	nbnet "github.com/netbirdio/netbird/client/net"
+	transport3 "github.com/pion/transport/v3"
+	transport4 "github.com/pion/transport/v4"
+)
+
+// probeNet bridges the STUN transport API while retaining NetBird's sockets,
+// routing hooks, filtered interface discovery and cached interface addresses.
+// ICE continues using NetBird's existing transport/v3 implementation.
+type probeNet struct{ *stdnet.Net }
+
+var _ transport4.Net = (*probeNet)(nil)
+
+func (n *probeNet) DialUDP(network string, local, remote *net.UDPAddr) (transport4.UDPConn, error) {
+	return n.Net.DialUDP(network, local, remote)
+}
+func (n *probeNet) ListenUDP(network string, local *net.UDPAddr) (transport4.UDPConn, error) {
+	return n.Net.ListenUDP(network, local)
+}
+func (n *probeNet) DialTCP(network string, local, remote *net.TCPAddr) (transport4.TCPConn, error) {
+	return n.Net.DialTCP(network, local, remote)
+}
+
+type probeTCPListener struct{ transport3.TCPListener }
+
+func (l probeTCPListener) AcceptTCP() (transport4.TCPConn, error) { return l.TCPListener.AcceptTCP() }
+func (n *probeNet) ListenTCP(network string, local *net.TCPAddr) (transport4.TCPListener, error) {
+	l, err := n.Net.ListenTCP(network, local)
+	if err != nil {
+		return nil, err
+	}
+	return probeTCPListener{l}, nil
+}
+func (n *probeNet) CreateDialer(d *net.Dialer) transport4.Dialer { return n.Net.CreateDialer(d) }
+func convertProbeInterface(iface *transport3.Interface, err error) (*transport4.Interface, error) {
+	if err != nil {
+		return nil, err
+	}
+	addrs, err := iface.Addrs()
+	if err != nil && !errors.Is(err, transport3.ErrNoAddressAssigned) {
+		return nil, err
+	}
+	out := transport4.NewInterface(iface.Interface)
+	for _, addr := range addrs {
+		out.AddAddress(addr)
+	}
+	return out, nil
+}
+func (n *probeNet) InterfaceByIndex(index int) (*transport4.Interface, error) {
+	return convertProbeInterface(n.Net.InterfaceByIndex(index))
+}
+func (n *probeNet) InterfaceByName(name string) (*transport4.Interface, error) {
+	return convertProbeInterface(n.Net.InterfaceByName(name))
+}
+func (n *probeNet) Interfaces() ([]*transport4.Interface, error) {
+	ifaces, err := n.Net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*transport4.Interface, 0, len(ifaces))
+	for _, iface := range ifaces {
+		v, err := convertProbeInterface(iface, nil)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+func (n *probeNet) CreateListenConfig(config *net.ListenConfig) transport4.ListenConfig {
+	// Preserve the caller's settings and run NetBird's socket-mark control as well.
+	listener := nbnet.NewListener()
+	control := listener.Control
+	listener.ListenConfig = *config
+	listener.Control = func(network, address string, conn syscall.RawConn) error {
+		if control != nil {
+			if err := control(network, address, conn); err != nil {
+				return err
+			}
+		}
+		if config.Control != nil {
+			return config.Control(network, address, conn)
+		}
+		return nil
+	}
+	return listener
+}

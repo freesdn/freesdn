@@ -89,6 +89,28 @@ class TaskResult(BaseModel):
         use_enum_values = True
 
 
+def _safe_progress_diagnostics(progress: TaskProgress) -> TaskProgress:
+    """Keep failure details out of the tenant-facing progress record.
+
+    Apply on writes and on legacy reads. This deliberately does not try to
+    recognize secret formats inside arbitrary third-party exception messages.
+    Successful results and explicit running-task messages have separate contracts.
+    """
+    if progress.status == TaskStatus.FAILURE:
+        updates = {"message": "Task failed", "error": "task_failed", "result": None}
+    elif progress.status == TaskStatus.RETRY:
+        updates = {
+            "message": f"Retrying ({progress.retries}/{progress.max_retries})",
+            "error": "task_retry",
+            "result": None,
+        }
+    elif progress.status == TaskStatus.REVOKED:
+        updates = {"message": "Task was revoked", "error": None, "result": None}
+    else:
+        return progress
+    return progress.model_copy(update=updates)
+
+
 # ===========================================
 # Progress Storage (Redis)
 # ===========================================
@@ -119,33 +141,53 @@ class TaskProgressStore:
     def _key(self, task_id: str) -> str:
         return f"{self.PREFIX}{task_id}"
 
+    def seed_progress(self, task_id: str, progress: TaskProgress) -> bool:
+        """Reserve scoped progress before publishing, without replacing a run."""
+        if (
+            progress.task_id != task_id
+            or not progress.organization_id
+            or progress.status != TaskStatus.PENDING
+        ):
+            return False
+        try:
+            return bool(
+                self.redis.set(self._key(task_id), progress.model_dump_json(), ex=self.TTL, nx=True)
+            )
+        except Exception:
+            logger.warning("Task progress reservation unavailable")
+            return False
+
     def set_progress(self, task_id: str, progress: TaskProgress) -> None:
-        """Store task progress."""
+        """Store progress only under its own task identity."""
+        if progress.task_id != task_id:
+            raise ValueError("Task progress identity mismatch")
         try:
             self.redis.setex(
                 self._key(task_id),
                 self.TTL,
-                progress.model_dump_json(),
+                _safe_progress_diagnostics(progress).model_dump_json(),
             )
-        except Exception as e:
-            logger.warning("Failed to store task progress: %s", e)
+        except Exception:
+            logger.warning("Failed to store task progress")
 
     def get_progress(self, task_id: str) -> TaskProgress | None:
         """Get task progress."""
         try:
             data = self.redis.get(self._key(task_id))
             if data:
-                return TaskProgress.model_validate_json(data)
-        except Exception as e:
-            logger.warning("Failed to get task progress: %s", e)
+                progress = TaskProgress.model_validate_json(data)
+                if progress.task_id == task_id:
+                    return _safe_progress_diagnostics(progress)
+        except Exception:
+            logger.warning("Failed to get task progress")
         return None
 
     def delete_progress(self, task_id: str) -> None:
         """Delete task progress."""
         try:
             self.redis.delete(self._key(task_id))
-        except Exception as e:
-            logger.warning("Failed to delete task progress: %s", e)
+        except Exception:
+            logger.warning("Failed to delete task progress")
 
     def get_all_active(
         self, pattern: str = "*", organization_id: str | None = None
@@ -167,17 +209,20 @@ class TaskProgressStore:
                     progress = TaskProgress.model_validate_json(data)
                 except Exception:
                     continue
+                if key != self._key(progress.task_id):
+                    continue
                 if progress.status not in (
                     TaskStatus.PENDING,
                     TaskStatus.STARTED,
                     TaskStatus.PROGRESS,
+                    TaskStatus.RETRY,
                 ):
                     continue
                 if organization_id and progress.organization_id != organization_id:
                     continue
-                results.append(progress)
-        except Exception as e:
-            logger.warning("Failed to scan task progress: %s", e)
+                results.append(_safe_progress_diagnostics(progress))
+        except Exception:
+            logger.warning("Failed to scan task progress")
         return results
 
 
@@ -215,10 +260,29 @@ class FreeSDNTask(Task):  # type: ignore[misc]
     # Track execution
     track_started = True
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._progress: TaskProgress | None = None
-        self._start_time: float | None = None
+    # Celery reuses a Task instance across invocations. Its request stack keeps
+    # mutable progress separate for nested and concurrent worker requests.
+    @property
+    def _progress(self) -> TaskProgress | None:
+        progress = getattr(self.request, "_freesdn_progress", None)
+        if isinstance(progress, TaskProgress) and progress.task_id == self.request.id:
+            return progress
+        return None
+
+    @_progress.setter
+    def _progress(self, progress: TaskProgress | None) -> None:
+        self.request._freesdn_progress = progress
+
+    @property
+    def _start_time(self) -> float | None:
+        started = getattr(self.request, "_freesdn_started", None)
+        if started is not None and started[0] == self.request.id:
+            return float(started[1])
+        return None
+
+    @_start_time.setter
+    def _start_time(self, value: float) -> None:
+        self.request._freesdn_started = (self.request.id, value)
 
     # =========================================
     # Progress Tracking
@@ -247,13 +311,7 @@ class FreeSDNTask(Task):  # type: ignore[misc]
 
         # Preserve organization_id from the seeded row (or from the cached
         # _progress field) so org-scoped queries keep matching.
-        existing_org_id: str | None = None
-        if self._progress is not None and self._progress.organization_id is not None:
-            existing_org_id = self._progress.organization_id
-        else:
-            existing = progress_store.get_progress(self.request.id)
-            if existing is not None:
-                existing_org_id = existing.organization_id
+        existing_org_id = self._preserved_org_id(self.request.id)
 
         self._progress = TaskProgress(
             task_id=self.request.id,
@@ -301,11 +359,13 @@ class FreeSDNTask(Task):  # type: ignore[misc]
 
     def before_start(self, task_id: str, args: Any, kwargs: Any) -> None:
         """Called before task starts."""
+        organization_id = self._preserved_org_id(task_id)
         self._start_time = time.time()
 
         self._progress = TaskProgress(
             task_id=task_id,
             task_name=self.name,
+            organization_id=organization_id,
             status=TaskStatus.STARTED,
             message="Task started",
             started_at=datetime.now(UTC),
@@ -318,12 +378,17 @@ class FreeSDNTask(Task):  # type: ignore[misc]
 
     def _preserved_org_id(self, task_id: str) -> str | None:
         """Look up organization_id for the given task_id, preserving the seeded row."""
-        if self._progress is not None and self._progress.organization_id is not None:
-            return self._progress.organization_id
+        progress = self._progress
+        if progress is not None and progress.task_id == task_id:
+            return progress.organization_id
         existing = progress_store.get_progress(task_id)
         if existing is not None:
             return existing.organization_id
         return None
+
+    def _success_message(self, retval: Any) -> str:
+        """Describe this task's completed unit without changing its result."""
+        return "Task completed successfully"
 
     def on_success(self, retval: Any, task_id: str, args: Any, kwargs: Any) -> None:
         """Called on task success."""
@@ -335,7 +400,7 @@ class FreeSDNTask(Task):  # type: ignore[misc]
             organization_id=self._preserved_org_id(task_id),
             status=TaskStatus.SUCCESS,
             progress=100,
-            message="Task completed successfully",
+            message=self._success_message(retval),
             result=retval,
             started_at=datetime.fromtimestamp(self._start_time, tz=UTC)
             if self._start_time
@@ -357,8 +422,8 @@ class FreeSDNTask(Task):  # type: ignore[misc]
             task_name=self.name,
             organization_id=self._preserved_org_id(task_id),
             status=TaskStatus.FAILURE,
-            message=f"Task failed: {str(exc)}",
-            error=str(exc),
+            message="Task failed",
+            error="task_failed",
             started_at=datetime.fromtimestamp(self._start_time, tz=UTC)
             if self._start_time
             else None,
@@ -368,7 +433,7 @@ class FreeSDNTask(Task):  # type: ignore[misc]
         )
         progress_store.set_progress(task_id, self._progress)
 
-        logger.error("Task %s[%s] failed after %.2fs: %s", self.name, task_id, duration, exc)
+        logger.error("Task %s[%s] failed after %.2fs", self.name, task_id, duration)
 
     def on_retry(self, exc: Exception, task_id: str, args: Any, kwargs: Any, einfo: Any) -> None:
         """Called on task retry."""
@@ -377,8 +442,8 @@ class FreeSDNTask(Task):  # type: ignore[misc]
             task_name=self.name,
             organization_id=self._preserved_org_id(task_id),
             status=TaskStatus.RETRY,
-            message=f"Retrying ({self.request.retries + 1}/{self.max_retries}): {str(exc)}",
-            error=str(exc),
+            message=f"Retrying ({self.request.retries + 1}/{self.max_retries})",
+            error="task_retry",
             started_at=datetime.fromtimestamp(self._start_time, tz=UTC)
             if self._start_time
             else None,
@@ -388,7 +453,11 @@ class FreeSDNTask(Task):  # type: ignore[misc]
         progress_store.set_progress(task_id, self._progress)
 
         logger.warning(
-            f"Task {self.name}[{task_id}] retry {self.request.retries + 1}/{self.max_retries}: {exc}"
+            "Task %s[%s] retry %s/%s",
+            self.name,
+            task_id,
+            self.request.retries + 1,
+            self.max_retries,
         )
 
 
@@ -481,7 +550,7 @@ def get_task_result(task_id: str) -> TaskResult | None:
     """
     Get the result of a completed task.
 
-    Checks both the progress store and Celery result backend.
+    Uses the scoped progress store; unowned Celery results are not queried.
     """
     # First check progress store
     progress = progress_store.get_progress(task_id)
@@ -498,20 +567,8 @@ def get_task_result(task_id: str) -> TaskResult | None:
             retries=progress.retries,
         )
 
-    # Fall back to Celery result backend
-    from celery.result import AsyncResult
-
-    result = AsyncResult(task_id, app=celery_app)
-
-    if result.ready():
-        return TaskResult(
-            task_id=task_id,
-            task_name=result.name or "unknown",
-            status=TaskStatus.SUCCESS if result.successful() else TaskStatus.FAILURE,
-            result=result.result if result.successful() else None,
-            error=str(result.result) if not result.successful() else None,
-            traceback=result.traceback,
-        )
+    # Celery's raw result backend has no trusted organization owner. Do not
+    # fetch arbitrary exception/result/traceback payloads for an unscoped ID.
 
     return None
 

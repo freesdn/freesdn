@@ -129,3 +129,23 @@ async def _generate_scheduled_reports() -> dict[str, Any]:
 def generate_scheduled_reports(self) -> dict[str, Any]:
     """Celery task: generate any SLA reports whose schedule is due."""
     return asyncio.run(_generate_scheduled_reports())
+
+
+async def _deliver_scheduled_reports() -> dict[str, int]:
+    from app.services.sla_report_delivery import process_one
+
+    processed = 0
+    # A bounded pass: at most 8 SMTP deadlines fit inside the task time budget.
+    # Durable due rows are polled again; broker messages contain no recipients.
+    for _ in range(8):
+        if not await process_one(AsyncSessionLocal):
+            break
+        processed += 1
+    return {"processed": processed}
+
+
+@celery_app.task(
+    name="app.tasks.sla.deliver_scheduled_reports", soft_time_limit=300, time_limit=360
+)
+def deliver_scheduled_reports() -> dict[str, int]:
+    return asyncio.run(_deliver_scheduled_reports())

@@ -7,6 +7,7 @@ Asserts raise_for_adapter_result maps each error_code to the correct FINAL HTTP
 status -- either via a canonical adapter exception (mapped by the central
 middleware handler) or a direct HTTPException for codes with no canonical type.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -46,7 +47,7 @@ _CASES = [
     ("TIMEOUT", 504),
     ("DIAGNOSTIC_TIMEOUT", 504),
     ("RATE_LIMITED", 429),
-    ("AUTH_FAILED", 502),          # upstream auth -> 502, NOT 401
+    ("AUTH_FAILED", 502),  # upstream auth -> 502, NOT 401
     ("CONNECTION_FAILED", 502),
     ("NO_SITE", 502),
     ("NOT_SUPPORTED", 501),
@@ -55,22 +56,26 @@ _CASES = [
     ("MISSING_IDENTIFIER", 400),
     ("NO_PARENT_INTERFACE", 400),
     ("SERVICE_NOT_ALLOWED", 403),
-    ("VLAN_CREATE_FAILED", 502),   # arbitrary *_FAILED -> 502
+    ("VLAN_CREATE_FAILED", 502),  # arbitrary *_FAILED -> 502
     ("SSID_DELETE_FAILED", 502),
-    ("TOTALLY_UNMAPPED", 502),     # unknown code -> 502
-    (None, 502),                   # no code -> 502
+    ("TOTALLY_UNMAPPED", 502),  # unknown code -> 502
+    (None, 502),  # no code -> 502
 ]
 
 
 @pytest.mark.parametrize("code,expected", _CASES)
-def test_error_code_maps_to_status(code: str | None, expected: int) -> None:
+@pytest.mark.parametrize("serialized", [False, True])
+def test_error_code_maps_to_status(code: str | None, expected: int, serialized: bool) -> None:
+    result = AdapterResult.fail("boom", error_code=code)
     with pytest.raises((HTTPException, exc.AdapterError)) as ei:
-        raise_for_adapter_result(AdapterResult.fail("boom", error_code=code))
+        raise_for_adapter_result(result.to_dict() if serialized else result)
     assert _final_status(ei.value) == expected
 
 
 def test_success_is_noop() -> None:
     raise_for_adapter_result(AdapterResult.ok(data={"x": 1}))  # must not raise
+    raise_for_adapter_result(AdapterResult.ok(data={"x": 1}).to_dict())
+    raise_for_adapter_result({"vendor_id": "opaque-response-with-no-success-flag"})
 
 
 def test_not_found_ok_suppresses_404() -> None:
@@ -84,9 +89,7 @@ def test_not_found_ok_suppresses_404() -> None:
 
 def test_detail_is_preserved() -> None:
     with pytest.raises(exc.AdapterReadOnlyError) as ei:
-        raise_for_adapter_result(
-            AdapterResult.fail("read-only engaged", error_code="READ_ONLY")
-        )
+        raise_for_adapter_result(AdapterResult.fail("read-only engaged", error_code="READ_ONLY"))
     assert "read-only engaged" in str(ei.value)
 
 
@@ -104,6 +107,4 @@ def test_gateway_write_result_chokepoint() -> None:
             AdapterResult.fail("device unreachable", error_code="CONNECTION_FAILED")
         )
     with pytest.raises(exc.AdapterReadOnlyError):
-        GatewayService._write_result(
-            AdapterResult.fail("blocked", error_code="READ_ONLY")
-        )
+        GatewayService._write_result(AdapterResult.fail("blocked", error_code="READ_ONLY"))

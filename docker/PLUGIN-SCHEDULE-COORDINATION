@@ -1,0 +1,36 @@
+PLUGIN SCHEDULE COORDINATION
+============================
+
+Unattended plugin methods require a confirmed shared Redis slot claim and a
+successful read of the operator's current schedule settings. A missing client,
+failed claim, lost claim reply, unreadable settings row or absent database session
+pauses the attempt. There is no per-worker execution fallback. An unreadable
+settings row is different from a successful query finding no row; only the latter
+uses the manifest's enabled_by_default value.
+
+The API worker marks its plugin_scheduler subsystem degraded while one of its
+active schedules has such a refusal. The authenticated plugin schedules API
+exposes blocked_this_worker with a reason and the time the local refusal began.
+It is a diagnostic for the worker answering the request, not a global status or
+an execution record. Refused attempts do not increment runs_this_worker or
+failures_this_worker, and do not overwrite last_run with fictitious work.
+
+Client construction is retried on later scheduler ticks. A confirmed Redis
+response clears a coordination refusal; a successful settings read clears a
+settings refusal. A job is still skipped when another worker already owns the
+slot or the operator has disabled it. Missed historical slots are not replayed.
+A request that successfully acquired a slot but could not read settings waits
+for a later slot; the claim is not deleted to force a retry.
+
+This does not guarantee exactly-once external effects. Claim eviction, Redis
+state loss or restoration of an older Redis snapshot can remove a slot marker.
+Plugin implementations must use durable external idempotency for writes and
+reconcile uncertain outcomes rather than blindly retrying them. Restoring a
+production installation still requires fencing the old writers and reviewing
+external effects. The local pause diagnostics do not survive a process restart;
+they are re-established when the worker next attempts the schedule.
+
+Existing installations that depended on continuing schedules during a Redis or
+database outage now pause them instead. Alert on degraded subsystem health and
+inspect the authenticated schedules API. Do not interpret an absent last_run as
+proof that a monitoring scan completed or that no drift exists.

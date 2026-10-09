@@ -60,10 +60,21 @@ class TestR2022EmptyScopeChildKey:
         from app.api.v1.endpoints.api_keys import APIKeyCreate, create_api_key
 
         user = _scoped_user(["network:read"])  # deliberately narrowed
+        from types import SimpleNamespace
+
+        # Model the new locked-column result; this unit case still tests the
+        # same scope refusal. Real database/auth races have a separate suite.
+        user.user.token_version = 0
+        user.token_claims = {"tv": 0, "exp": 4102444800}
+        locked_res = MagicMock()
+        locked_res.one_or_none.return_value = SimpleNamespace(
+            token_version=0, role=user.role, organization_id=user.organization_id,
+            is_active=True, deleted_at=None,
+        )
         count_res = MagicMock()
         count_res.scalar_one.return_value = 0  # under the per-user key ceiling
         session = MagicMock()
-        session.execute = AsyncMock(side_effect=[MagicMock(), count_res])
+        session.execute = AsyncMock(side_effect=[locked_res, count_res])
 
         with pytest.raises(HTTPException) as exc:
             await create_api_key(APIKeyCreate(name="child", scopes=[]), user, session)

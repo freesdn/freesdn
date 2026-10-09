@@ -113,6 +113,21 @@ class PendingChangeRequest(BaseModel):
     )
 
 
+class ProviderTaskResponse(BaseModel):
+    """An acknowledgement plus the latest read-only provider observation.
+
+    finished_at is when FreeSDN observed termination, not the provider end time.
+    A failed task may have made partial changes; it must not be blindly replayed.
+    """
+
+    id: str | None = None
+    node: str | None = None
+    status: Literal["pending", "running", "succeeded", "warnings", "failed", "unknown"]
+    checked_at: datetime | None = None
+    finished_at: datetime | None = None
+    detail: str | None = None
+
+
 class PendingChangeResponse(BaseModel):
     id: UUID
     organization_id: UUID
@@ -128,6 +143,7 @@ class PendingChangeResponse(BaseModel):
     status: ChangeStatus
     applied_at: datetime | None
     applied_response: dict[str, Any] | None
+    provider_task: ProviderTaskResponse | None = None
     failure_reason: str | None
     notes: str | None
     created_at: datetime
@@ -161,6 +177,11 @@ class PendingChangeResponse(BaseModel):
             applied_response=(
                 redact_secrets(change.applied_response)
                 if change.applied_response is not None
+                else None
+            ),
+            provider_task=(
+                change.provider_task
+                if isinstance(getattr(change, "provider_task", None), dict)
                 else None
             ),
             failure_reason=change.failure_reason,

@@ -1,31 +1,25 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2024-2026 FreeSDN
-"""Tests for the release upload + serve endpoints.
+"""Retained pure filename/version contracts and real public upload failures.
 
-Smoke-test the version regex + version-string filename sanitization
-without actually writing files. Live binary-upload verification
-happens in the deployment-runbook section.
+The operation protocol keeps acknowledged bytes after failed publication until
+explicit same-intent cancellation and cleanup. No deployed keys are used.
 """
 
 from __future__ import annotations
 
-from io import BytesIO
-from types import SimpleNamespace
-from typing import Any
 from unittest.mock import patch
-from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
 
-from app.api.v1.endpoints import agent_release_upload as upload_endpoint
-from app.api.v1.endpoints.agent_release_upload import (
-    _VERSION_PATTERN,
-    _binary_path,
-)
-from app.core.dependencies import get_current_active_user
-from app.db.session import get_session
+from app.api.v1.endpoints.agent_release_upload import _VERSION_PATTERN, _binary_path
+from app.services.release_signing import SigningKeyError
+from tests.api import release_operation_contract as contract
+from tests.db.conftest import maintenance_engine as maintenance_engine
+from tests.services import test_agent_release_publication as publication
+from tests.services import test_agent_release_upload_stream as upload
+from tests.services.test_public_release_binary import public_reader as public_reader
+from tests.services.test_public_release_operations import command
 
 
 class TestVersionPattern:
@@ -85,148 +79,79 @@ class TestBinaryPath:
         assert len(suffix) <= 128
 
 
-# ---------------------------------------------------------------------------
-# fail closed on signing failure for latest releases
-# ---------------------------------------------------------------------------
-
-
-class _FakeUploadSession:
-    """Minimal AsyncSession stand-in for upload endpoint tests."""
-
-    def __init__(self) -> None:
-        self.added: list[Any] = []
-        self.commits = 0
-
-    async def execute(self, query: Any) -> Any:  # noqa: ARG002
-        # The upload endpoint issues an UPDATE to demote previous is_latest;
-        # return an empty result — it's a fire-and-forget UPDATE.
-        return type(
-            "R",
-            (),
-            {
-                "scalar_one_or_none": lambda _: None,
-                "scalars": lambda _: type("S", (), {"all": lambda _: []})(),
-            },
-        )()
-
-    async def commit(self) -> None:
-        self.commits += 1
-
-    def add(self, obj: Any) -> None:
-        self.added.append(obj)
-
-    async def refresh(self, obj: Any) -> None:
-        for attr, default in [("id", uuid4()), ("download_count", 0), ("min_backend_version", "")]:
-            if not hasattr(obj, attr) or getattr(obj, attr) is None:
-                setattr(obj, attr, default)
-
-
-def _build_upload_app(session: _FakeUploadSession, *, tmp_path: Any) -> FastAPI:
-    """Mount the upload router with fakes wired in."""
-    app = FastAPI()
-    app.include_router(upload_endpoint.router, prefix="/api/v1/agents")
-
-    async def _override_session():
-        yield session
-
-    fake_user = SimpleNamespace(
-        user=SimpleNamespace(id=uuid4(), email="admin@test", is_active=True),
-        role="super_admin",
-        is_superuser=True,
-        is_org_admin=True,
-        organization_id=None,  # super_admin → global release
-        has_all_permissions=lambda _p: True,
-        has_any_permission=lambda _p: True,
-        has_permission=lambda _p: True,
-    )
-    app.dependency_overrides[get_session] = _override_session
-    app.dependency_overrides[get_current_active_user] = lambda: fake_user
-    return app
-
-
 class TestSigningFailureOnUpload:
-    """upload path must fail closed when signing raises."""
+    """Signing errors never publish a latest release or silently replace it."""
 
     @pytest.mark.asyncio
     async def test_signing_failure_on_latest_raises_500_and_does_not_persist(
-        self, tmp_path, monkeypatch
+        self, public_reader, monkeypatch
     ) -> None:
-        """When sign_manifest raises and is_latest=True (the default), the upload
-        endpoint must return HTTP 500 and leave no release row in the DB and no
-        binary file on disk.
-        """
-        monkeypatch.setenv("FREESDN_AGENT_RELEASE_DIR", str(tmp_path))
-        session = _FakeUploadSession()
-        app = _build_upload_app(session, tmp_path=tmp_path)
-
-        binary_content = b"fake-agent-binary"
-        with patch(
-            "app.services.release_signing.sign_manifest",
-            side_effect=RuntimeError("signing key unavailable"),
-        ):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
-                r = await c.post(
-                    "/api/v1/agents/releases/upload",
-                    data={
-                        "version": "3.0.0",
-                        "platform": "linux",
-                        "agent_type": "daemon",
-                        "is_latest": "true",
-                        "is_prerelease": "false",
-                    },
-                    files={
-                        "file": ("agent-linux", BytesIO(binary_content), "application/octet-stream")
-                    },
-                )
-
-        assert r.status_code == 500, r.text
-        assert "signing" in r.json()["detail"].lower()
-        # No DB row created.
-        assert len(session.added) == 0
-        assert session.commits == 0
-        # No artifact left on disk.
-        leftover = list(tmp_path.glob("*-agent-linux"))
-        assert leftover == [], f"Expected no leftover binary; found: {leftover}"
+        """Unexpected signer exceptions retain the upload, with no release commit."""
+        f = public_reader
+        contract.intent(f)
+        await publication.seed(f, organization=f.org)
+        before = await publication.releases(f)
+        headers = await contract.prepare(f)
+        with patch("app.services.agent_release_publication.sign_manifest_async",
+                   side_effect=RuntimeError("owned unexpected signing failure")):
+            response = await command(f, headers, "publish")
+        assert response.status_code == 503, response.text
+        assert response.json()["error"]["code"] == 503
+        assert "inspect the same operation" in response.json()["error"]["message"]
+        assert "owned unexpected signing failure" not in response.text
+        await contract.unchanged_release_rows_and_cleanup(f, headers, before)
 
     @pytest.mark.asyncio
     async def test_signing_failure_on_non_latest_proceeds_unsigned(
-        self, tmp_path, monkeypatch
+        self, public_reader, monkeypatch
     ) -> None:
-        """When is_latest=False (explicit test artifact), signing failure is
-        tolerated: the release is created with signature=None.
-        """
-        monkeypatch.setenv("FREESDN_AGENT_RELEASE_DIR", str(tmp_path))
-        session = _FakeUploadSession()
-        app = _build_upload_app(session, tmp_path=tmp_path)
+        """Only an explicit non-latest owned release permits known key failure."""
+        f = public_reader
+        contract.intent(f, latest=False)
+        old_id = await publication.seed(f, organization=f.org)
+        before = await publication.releases(f)
+        headers = await contract.prepare(f)
+        with patch("app.services.agent_release_publication.sign_manifest_async",
+                   side_effect=SigningKeyError("owned key unavailable")):
+            response = await command(f, headers, "publish")
+        assert response.status_code == 200, response.text
+        rows = await publication.releases(f)
+        assert len(rows) == len(before) + 1
+        assert next(r for r in rows if r["id"] == old_id) == before[0]
+        row = next(r for r in rows if r["id"] == f.publication.release_id)
+        assert row["is_latest"] is False and row["signature"] is None
+        assert row["organization_id"] == f.org
+        assert upload.payload(f).read_bytes() == f.data
 
-        binary_content = b"fake-agent-binary-test"
-        with patch(
-            "app.services.release_signing.sign_manifest",
-            side_effect=RuntimeError("signing key unavailable"),
-        ):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
-                r = await c.post(
-                    "/api/v1/agents/releases/upload",
-                    data={
-                        "version": "3.0.0-test",
-                        "platform": "linux",
-                        "agent_type": "daemon",
-                        "is_latest": "false",
-                        "is_prerelease": "true",
-                    },
-                    files={
-                        "file": (
-                            "agent-linux-test",
-                            BytesIO(binary_content),
-                            "application/octet-stream",
-                        )
-                    },
-                )
+    @pytest.mark.asyncio
+    async def test_known_signing_unavailability_keeps_previous_latest_and_retained_payload(
+        self, public_reader
+    ) -> None:
+        f = public_reader
+        contract.intent(f)
+        await publication.seed(f, organization=f.org)
+        before = await publication.releases(f)
+        headers = await contract.prepare(f)
+        with patch("app.services.agent_release_publication.sign_manifest_async",
+                   side_effect=SigningKeyError("owned key unavailable")):
+            response = await command(f, headers, "publish")
+        assert response.status_code == 503, response.text
+        await contract.unchanged_release_rows_and_cleanup(f, headers, before)
 
-        assert r.status_code == 201, r.text
-        body = r.json()
-        assert body["is_latest"] is False
-        assert body["signature"] is None
-        # The binary is on disk (not cleaned up).
-        leftover = list(tmp_path.glob("*-agent-linux-test"))
-        assert len(leftover) == 1
+    @pytest.mark.asyncio
+    async def test_unexpected_non_latest_signing_error_never_downgrades_to_unsigned(
+        self, public_reader
+    ) -> None:
+        f = public_reader
+        contract.intent(f, latest=False)
+        await publication.seed(f, organization=f.org)
+        before = await publication.releases(f)
+        headers = await contract.prepare(f)
+        with patch("app.services.agent_release_publication.sign_manifest_async",
+                   side_effect=RuntimeError("owned unexpected signing failure")):
+            response = await command(f, headers, "publish")
+        assert response.status_code == 503, response.text
+        assert response.json()["error"]["code"] == 503
+        assert "inspect the same operation" in response.json()["error"]["message"]
+        assert "owned unexpected signing failure" not in response.text
+        await contract.unchanged_release_rows_and_cleanup(f, headers, before)

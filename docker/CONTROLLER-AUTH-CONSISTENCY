@@ -1,0 +1,21 @@
+TrueNAS controller authentication and connection ownership
+=========================================================
+
+The saved-controller connection check maps the decrypted password field to
+TrueNAS API-key authentication, matching onboarding and storage operations.
+Legacy plaintext and encrypted stored credentials are accepted consistently;
+wrong keys remain rejected and tenant checks run before authentication.
+
+TrueNASAdapter.connect reuses its already-open transport instead of replacing
+an unclosed WebSocket or HTTP client. A standalone test_connection closes the
+transport even when system-info retrieval fails. Sequential reconnect after
+explicit disconnect still works. This is not a concurrent connection lock or
+an automatic reconnect policy after network failure.
+
+Qualification uses actual adapters and authentication serialization, with
+synthetic appliance responses. The dedicated before/after probe additionally
+uses PostgreSQL, HTTP-ASGI and a real loopback TLS WebSocket connection with a
+probe CA. Identity, quota, appliance response and discovery publication edges
+are synthetic. It does not qualify a new TrueNAS version or modify hardware.
+Existing direct adapter username/password authentication and unrelated Omada
+cloud/Proxmox API-token parameter handling remain supported.

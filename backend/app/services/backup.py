@@ -25,9 +25,12 @@ import io
 import json
 import logging
 import os
+import posixpath
 import time
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -37,6 +40,17 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.backup_artifacts import (
+    BackupArtifactError,
+    make_identity,
+    recorded_identity,
+    verify_identity,
+)
+from app.core.backup_download_response import LocalDownloadSource
+from app.core.backup_downloads import DownloadSnapshot
+from app.core.backup_files import BackupFiles, BackupPublicationError
+from app.core.owned_async import complete_before_cancellation
+from app.core.remote_write_plan import RemotePublicationError, RemoteSavePlan
 from app.core.security_utils import MAX_BACKUP_IMPORT_BYTES, escape_like, resolve_and_pin_host
 from app.core.site_access import site_ids_for_request
 from app.modules.backup.models import (
@@ -46,8 +60,36 @@ from app.modules.backup.models import (
     RestoreJob,
     StorageLocation,
 )
+from app.services.backup_transport import (
+    StorageConfigurationError,
+    StorageConfigurationView,
+    ftps_connection,
+    remote_path,
+    sftp_connection,
+    validate_policy,
+)
 
 logger = logging.getLogger(__name__)
+
+
+class BackupInputError(ValueError):
+    """An explicitly authored input diagnostic that is safe for the operator."""
+
+
+class BackupRecoveryError(RuntimeError):
+    """An explicitly authored recovery refusal, without provider details."""
+
+
+def backup_failure_detail(error: Exception, fallback: str) -> str:
+    """Never publish arbitrary provider, parser, database or plugin exceptions.
+
+    A general ValueError is not proof that its text is safe: SDKs and parsers
+    can include connection strings or decrypted input. Only our explicit
+    diagnostic types carry reviewed operator messages.
+    """
+    if isinstance(error, (BackupInputError, BackupRecoveryError)):
+        return str(error)
+    return fallback
 
 
 def _must_force_encryption(is_encrypted: bool, environment: str, allow_plaintext: bool) -> bool:
@@ -75,13 +117,13 @@ def _bounded_gunzip(payload: bytes, limit: int = MAX_BACKUP_IMPORT_BYTES) -> byt
     for i in range(0, len(payload), chunk):
         out += dec.decompress(payload[i : i + chunk], limit - len(out) + 1)
         if len(out) > limit:
-            raise ValueError(
+            raise BackupInputError(
                 f"Decompressed backup exceeds {limit // (1024 * 1024)} MB limit "
                 "— refusing to inflate (possible decompression bomb)"
             )
     out += dec.flush()
     if len(out) > limit:
-        raise ValueError("Decompressed backup exceeds size limit")
+        raise BackupInputError("Decompressed backup exceeds size limit")
     return bytes(out)
 
 
@@ -184,11 +226,11 @@ class BackupEncryption:
         if key_id.startswith("v2:"):
             parts = key_id.split(":", 2)
             if len(parts) != 3:
-                raise ValueError(f"malformed v2 key_id (expected 'v2:<iter>:<salt>'): {key_id!r}")
+                raise BackupInputError("malformed v2 key_id (expected 'v2:<iter>:<salt>')")
             try:
                 iterations = int(parts[1])
-            except ValueError as exc:
-                raise ValueError(f"v2 key_id has non-numeric iteration count: {key_id!r}") from exc
+            except ValueError:
+                raise BackupInputError("v2 key_id has non-numeric iteration count") from None
             # Reject before the KDF runs — see _PBKDF2_ITERATIONS_MAX. The
             # declared count is attacker-controlled on the unauthenticated
             # first-install restore, and every check that runs before this one
@@ -197,7 +239,7 @@ class BackupEncryption:
             lo = BackupEncryption._PBKDF2_ITERATIONS_LEGACY_V1
             hi = BackupEncryption._PBKDF2_ITERATIONS_MAX
             if not lo <= iterations <= hi:
-                raise ValueError(
+                raise BackupInputError(
                     f"v2 key_id declares an unsupported iteration count "
                     f"({iterations}); accepted range is {lo:,}-{hi:,}"
                 )
@@ -337,8 +379,8 @@ class StorageDeleteUnsupported(Exception):
 class BackupStorageBackend(ABC):
     """Abstract base for all backup storage backends."""
 
-    #: Whether this backend can remove a stored file. All but TrueNAS can;
-    #: the retention path reads this to decide whether pruning is possible.
+    #: Whether this backend can acknowledge removal of a stored backup.
+    #: Retention preserves the catalog when a provider cannot prune it.
     SUPPORTS_DELETE: bool = True
 
     @abstractmethod
@@ -351,7 +393,7 @@ class BackupStorageBackend(ABC):
 
     @abstractmethod
     async def delete(self, path: str) -> bool:
-        """Delete file at path. Returns success."""
+        """Acknowledge deletion (or confirmed absence); false is an unconfirmed failure."""
 
     @abstractmethod
     async def exists(self, path: str) -> bool:
@@ -372,39 +414,31 @@ class LocalStorageBackend(BackupStorageBackend):
     def __init__(self, config: dict[str, Any]):
         self.base_path = Path(config.get("path", "/data/backups"))
 
-    def _safe_path(self, path: str) -> Path:
-        """Resolve path and ensure it stays within base_path (prevent traversal)."""
-        resolved = (self.base_path / path).resolve()
-        if not resolved.is_relative_to(self.base_path.resolve()):
-            raise ValueError("Path traversal detected")
-        return resolved
+    def _files(self) -> BackupFiles:
+        return BackupFiles(self.base_path, MAX_BACKUP_IMPORT_BYTES)
 
+    @complete_before_cancellation
     async def save(self, backup_id: str, data: bytes, filename: str) -> str:
-        # Atomic write — write to .tmp then os.replace() so a
-        # crash mid-write never leaves a partial backup file in place.
         rel = f"{self._date_prefix()}/{backup_id}_{filename}"
-        full = self._safe_path(rel)
-        full.parent.mkdir(parents=True, exist_ok=True)
-        tmp = full.with_suffix(full.suffix + ".tmp")
-        tmp.write_bytes(data)
-        os.replace(tmp, full)
-        return str(rel)
+        # Keep the owning coroutine alive through worker completion, including
+        # direct task cancellation as well as framework cancellation scopes.
+        return await anyio.to_thread.run_sync(self._files().save, rel, data)
 
+    @complete_before_cancellation
     async def load(self, path: str) -> bytes:
-        return self._safe_path(path).read_bytes()
+        return await anyio.to_thread.run_sync(self._files().load, path)
 
+    @complete_before_cancellation
     async def delete(self, path: str) -> bool:
-        fp = self._safe_path(path)
-        if fp.exists():
-            fp.unlink()
-            return True
-        return False
+        return await anyio.to_thread.run_sync(self._files().delete, path)
 
+    @complete_before_cancellation
     async def exists(self, path: str) -> bool:
-        return self._safe_path(path).exists()
+        return await anyio.to_thread.run_sync(self._files().exists, path)
 
+    @complete_before_cancellation
     async def get_size(self, path: str) -> int:
-        return self._safe_path(path).stat().st_size
+        return await anyio.to_thread.run_sync(self._files().get_size, path)
 
 
 class S3StorageBackend(BackupStorageBackend):
@@ -551,213 +585,324 @@ class S3StorageBackend(BackupStorageBackend):
         return int(resp["ContentLength"])
 
 
-class SFTPStorageBackend(BackupStorageBackend):
-    """Store backups via SFTP."""
+class _RemoteFileStorageBackend(BackupStorageBackend):
+    """One isolated connection per operation; blocking protocol I/O runs off-loop."""
+
+    scheme: str
+    default_port: int
+
+    # A filesystem configuration worker remains owned through cancellation.
+    _PREPARATION_ADMISSION = anyio.CapacityLimiter(2)
+    _CONFIG_THREADS = anyio.CapacityLimiter(2)
+    # Shared by direct SSH/FTPS operations across all backend instances in this
+    # process. Callers retain ownership until protocol cleanup has finished.
+    _OPERATION_ADMISSION = anyio.CapacityLimiter(2)
+    _OPERATION_THREADS = anyio.CapacityLimiter(2)
 
     def __init__(self, config: dict[str, Any]):
-        # pin host to a validated IP literal at init time so
-        # paramiko.Transport never performs a second DNS lookup.
-        self.host = resolve_and_pin_host(config["host"], allow_private=False)
-        self.port = int(config.get("port", 22))
-        self.username = config["username"]
+        self.hostname = config["host"]
+        pinned_ip = resolve_and_pin_host(self.hostname, allow_private=False)
+        self._configure_endpoint(config, pinned_ip)
+
+    @classmethod
+    async def create_bounded(cls, config: dict[str, Any]):
+        from copy import deepcopy
+        from time import monotonic
+
+        from app.services.vault_native_resolution import resolve_storage_host
+
+        await anyio.lowlevel.checkpoint()
+        try:
+            cls._PREPARATION_ADMISSION.acquire_nowait()
+        except anyio.WouldBlock:
+            raise StorageConfigurationError(
+                "Remote storage preparation is busy; retry later"
+            ) from None
+        started = monotonic()
+        try:
+            prepared = deepcopy(config)
+            pinned_ip = await resolve_storage_host(prepared["host"], allow_private=False)
+            await anyio.lowlevel.checkpoint()
+            result = cls.__new__(cls)
+            result.hostname = prepared["host"]
+            await result._configure_owned(prepared, pinned_ip)
+            await anyio.lowlevel.checkpoint()
+            if monotonic() - started > 5.0:
+                raise StorageConfigurationError(
+                    "Remote storage preparation exceeded its acceptance deadline"
+                )
+            return result
+        finally:
+            cls._PREPARATION_ADMISSION.release()
+
+    @complete_before_cancellation
+    async def _configure_owned(self, config, pinned_ip):
+        # SFTP path canonicalization can touch the filesystem. Drain this
+        # worker before releasing admission, even when the caller is cancelled.
+        # The acceptance deadline does not promise to kill blocked kernel I/O.
+        await anyio.to_thread.run_sync(
+            self._configure_endpoint, config, pinned_ip, limiter=self._CONFIG_THREADS
+        )
+
+    def _configure_endpoint(self, config: dict[str, Any], pinned_ip: str):
+        self.host = pinned_ip
+        self.port = int(config.get("port", self.default_port))
+        if not 1 <= self.port <= 65535:
+            raise StorageConfigurationError("Storage port must be between 1 and 65535.")
+        self.username = config.get("username", "anonymous")
         self.password = config.get("password")
-        # NOTE H6: validate the key path lives in the sandboxed keys dir.
-        # Rejects operator-supplied paths like "/etc/shadow".
+        self.remote_path = config.get("remote_path", "/backups").rstrip("/") or "/"
+        # Validate the root using a synthetic child, without making a connection.
+        self._path(self.remote_path.rstrip("/") + "/.validation")
+        self.config = config
+
+    def _path(self, path: str) -> str:
+        return remote_path(path, self.remote_path, self.hostname, self.host, self.port)
+
+    def _new_path(self, backup_id: str, filename: str) -> str:
+        for component in (backup_id, filename):
+            if not component or "/" in component or "\\" in component or component in {".", ".."}:
+                raise StorageConfigurationError(
+                    "Backup ID and filename must be single path segments."
+                )
+        return self._path(
+            f"{self.remote_path.rstrip('/')}/{self._date_prefix()}/{backup_id}_{filename}"
+        )
+
+    def _url(self, path: str) -> str:
+        authority = f"[{self.host}]" if ":" in self.host else self.host
+        return f"{self.scheme}://{authority}:{self.port}{path}"
+
+    async def _run_bounded(
+        self, operation: str, path: str, data: bytes | None, *, temporary: str | None = None
+    ) -> Any:
+        # Each public caller is complete_before_cancellation-owned. Admission
+        # must remain charged while its thread drains, including late failures.
+        try:
+            self._OPERATION_ADMISSION.acquire_nowait()
+        except anyio.WouldBlock:
+            raise StorageConfigurationError(
+                "Remote backup operation capacity is busy; retry later"
+            ) from None
+        try:
+            target = self._run if temporary is None else partial(self._run, temporary=temporary)
+            authorize = getattr(self, "_probe_authorize", None)
+            native_check = getattr(self, "_probe_native_check", None)
+
+            def checked_target(operation, path, data):
+                # The worker has acquired its real thread limiter before this
+                # check. Never trust an earlier check across that handoff.
+                if authorize is not None:
+                    anyio.from_thread.run(authorize)
+                if native_check is not None:
+                    native_check()
+                return target(operation, path, data)
+
+            return await anyio.to_thread.run_sync(
+                checked_target, operation, path, data, limiter=self._OPERATION_THREADS
+            )
+        finally:
+            self._OPERATION_ADMISSION.release()
+
+    def prepare_save(self, backup_id: str, data: bytes, filename: str) -> RemoteSavePlan:
+        path = self._new_path(backup_id, filename)
+        if type(data) is not bytes or not 0 < len(data) <= MAX_BACKUP_IMPORT_BYTES:
+            raise StorageConfigurationError("Backup exceeds the remote transfer size limit.")
+        operation = uuid4()
+        temporary = path + ".partial-" + operation.hex
+        return RemoteSavePlan(
+            operation,
+            path,
+            temporary,
+            self._url(path),
+            self._url(temporary),
+            hashlib.sha256(data).hexdigest(),
+            len(data),
+        )
+
+    @complete_before_cancellation
+    async def save_prepared(self, plan: RemoteSavePlan, data: bytes) -> str:
+        if (
+            type(plan) is not RemoteSavePlan
+            or type(data) is not bytes
+            or not 0 < len(data) <= MAX_BACKUP_IMPORT_BYTES
+            or self._path(plan.path) != plan.path
+            or plan.location != self._url(plan.path)
+            or plan.temporary != plan.path + ".partial-" + plan.operation_id.hex
+            or plan.temporary_location != self._url(plan.temporary)
+            or plan.payload_size != len(data)
+            or plan.payload_sha256 != hashlib.sha256(data).hexdigest()
+        ):
+            raise StorageConfigurationError("Remote write no longer matches its retained plan")
+        await self._run_bounded("save", plan.path, data, temporary=plan.temporary)
+        return plan.location
+
+    @complete_before_cancellation
+    async def save(self, backup_id: str, data: bytes, filename: str) -> str:
+        # Standalone storage probes have no catalogue transaction. Application
+        # backup creation reserves this exact plan before calling save_prepared.
+        return await self.save_prepared(self.prepare_save(backup_id, data, filename), data)
+
+    @complete_before_cancellation
+    async def load(self, path: str) -> bytes:
+        return await self._run_bounded("load", self._path(path), None)
+
+    @complete_before_cancellation
+    async def delete(self, path: str) -> bool:
+        return await self._run_bounded("delete", self._path(path), None)
+
+    @complete_before_cancellation
+    async def exists(self, path: str) -> bool:
+        return await self._run_bounded("exists", self._path(path), None)
+
+    @complete_before_cancellation
+    async def get_size(self, path: str) -> int:
+        return await self._run_bounded("size", self._path(path), None)
+
+    async def copy_download_into(
+        self, path: str, expected: dict | None, snapshot: DownloadSnapshot
+    ) -> None:
+        from app.services.vault_remote_stream import copy_remote_into
+
+        await copy_remote_into(self, path, expected, snapshot)
+
+    @abstractmethod
+    def _run(self, operation: str, path: str, data: bytes | None) -> Any:
+        raise NotImplementedError
+
+
+class SFTPStorageBackend(_RemoteFileStorageBackend):
+    """SFTP with an operator-enrolled server fingerprint, checked before authentication."""
+
+    scheme = "sftp"
+    default_port = 22
+
+    def _configure_endpoint(self, config: dict[str, Any], pinned_ip: str):
+        super()._configure_endpoint(config, pinned_ip)
         raw_key = config.get("private_key_path")
         self.private_key_path = _validate_private_key_path(raw_key) if raw_key else None
-        self.remote_path = config.get("remote_path", "/backups")
-        self._transport: Any = None
-        self._sftp: Any = None
 
-    def _connect(self) -> None:
-        import paramiko
-
-        if self._sftp is not None:
-            return
-        transport = paramiko.Transport((self.host, self.port))
-        if self.private_key_path:
-            pkey = paramiko.RSAKey.from_private_key_file(
+    def _run(
+        self, operation: str, path: str, data: bytes | None, *, temporary: str | None = None
+    ) -> Any:
+        mutation_attempted = False
+        try:
+            with sftp_connection(
+                self.host,
+                self.port,
+                self.username,
+                self.password,
                 self.private_key_path,
-                password=self.password,
-            )
-            transport.connect(username=self.username, pkey=pkey)
-        else:
-            transport.connect(username=self.username, password=self.password)
-        self._transport = transport
-        self._sftp = paramiko.SFTPClient.from_transport(transport)
+                self.config.get("host_key_sha256"),
+            ) as client:
+                if operation == "save":
+                    current = ""
+                    for part in posixpath.dirname(path).strip("/").split("/"):
+                        if not part:
+                            continue
+                        current += "/" + part
+                        try:
+                            client.stat(current)
+                        except FileNotFoundError:
+                            client.mkdir(current)
+                    temporary = temporary or path + ".partial-" + uuid4().hex
+                    mutation_attempted = True
+                    try:
+                        with client.open(temporary, "wb") as output:
+                            output.write(data)
+                        client.rename(temporary, path)
+                    except BaseException:
+                        # The complete or partial object may remain. Preserve
+                        # recovery names; never reconnect or replay cleanup here.
+                        raise
+                    return None
+                if operation == "load":
+                    with client.open(path, "rb") as source:
+                        payload = source.read(MAX_BACKUP_IMPORT_BYTES + 1)
+                        if len(payload) > MAX_BACKUP_IMPORT_BYTES:
+                            raise StorageConfigurationError("Remote backup exceeds the size limit.")
+                        return payload
+                try:
+                    if operation == "delete":
+                        client.remove(path)
+                        return True
+                    size = client.stat(path).st_size
+                    return True if operation == "exists" else size
+                except FileNotFoundError:
+                    if operation == "delete":
+                        return True  # the server specifically confirmed absence
+                    if operation == "exists":
+                        return False
+                    raise
+        except Exception as error:
+            if operation == "save" and mutation_attempted:
+                raise RemotePublicationError(self._url(path), self._url(temporary)) from error
+            raise
 
-    def _close(self) -> None:
-        if self._sftp:
-            self._sftp.close()
-        if self._transport:
-            self._transport.close()
-        self._sftp = None
-        self._transport = None
 
-    def _ensure_dirs(self, remote: str) -> None:
-        """Recursively create remote directories."""
-        parts = remote.split("/")
-        current = ""
-        for part in parts:
-            if not part:
-                continue
-            current += f"/{part}"
-            try:
-                self._sftp.stat(current)
-            except FileNotFoundError:
-                self._sftp.mkdir(current)
+class FTPStorageBackend(_RemoteFileStorageBackend):
+    """Explicit FTPS only, with system CA trust and protected data connections."""
 
-    async def save(self, backup_id: str, data: bytes, filename: str) -> str:
-        self._connect()
+    scheme = "ftps"
+    default_port = 21
+
+    def _run(
+        self, operation: str, path: str, data: bytes | None, *, temporary: str | None = None
+    ) -> Any:
+        mutation_attempted = False
         try:
-            rel = f"{self._date_prefix()}/{backup_id}_{filename}"
-            remote = f"{self.remote_path}/{rel}"
-            self._ensure_dirs(str(Path(remote).parent))
-            with self._sftp.open(remote, "wb") as f:
-                f.write(data)
-            return f"sftp://{self.host}{remote}"
-        finally:
-            self._close()
+            with ftps_connection(
+                self.hostname,
+                self.host,
+                self.port,
+                self.username,
+                self.password or "",
+                self.config.get("use_tls"),
+            ) as client:
+                if operation == "save":
+                    current = ""
+                    for part in posixpath.dirname(path).strip("/").split("/"):
+                        if not part:
+                            continue
+                        current += "/" + part
+                        try:
+                            client.cwd(current)
+                        except ftplib.error_perm:
+                            client.mkd(current)
+                    temporary = temporary or path + ".partial-" + uuid4().hex
+                    mutation_attempted = True
+                    try:
+                        client.storbinary(f"STOR {temporary}", io.BytesIO(data))
+                        client.rename(temporary, path)
+                    except BaseException:
+                        # The complete or partial object may remain. Preserve
+                        # recovery names; never reconnect or replay cleanup here.
+                        raise
+                    return None
+                if operation == "load":
+                    buf = io.BytesIO()
 
-    async def load(self, path: str) -> bytes:
-        self._connect()
-        try:
-            remote = path
-            if path.startswith("sftp://"):
-                remote = "/" + "/".join(path.split("/")[3:])
-            buf = io.BytesIO()
-            self._sftp.getfo(remote, buf)
-            return buf.getvalue()
-        finally:
-            self._close()
+                    def receive(chunk: bytes) -> None:
+                        if buf.tell() + len(chunk) > MAX_BACKUP_IMPORT_BYTES:
+                            raise StorageConfigurationError("Remote backup exceeds the size limit.")
+                        buf.write(chunk)
 
-    async def delete(self, path: str) -> bool:
-        self._connect()
-        try:
-            remote = path
-            if path.startswith("sftp://"):
-                remote = "/" + "/".join(path.split("/")[3:])
-            self._sftp.remove(remote)
-            return True
-        except Exception:
-            return False
-        finally:
-            self._close()
-
-    async def exists(self, path: str) -> bool:
-        self._connect()
-        try:
-            remote = path
-            if path.startswith("sftp://"):
-                remote = "/" + "/".join(path.split("/")[3:])
-            self._sftp.stat(remote)
-            return True
-        except Exception:
-            return False
-        finally:
-            self._close()
-
-    async def get_size(self, path: str) -> int:
-        self._connect()
-        try:
-            remote = path
-            if path.startswith("sftp://"):
-                remote = "/" + "/".join(path.split("/")[3:])
-            return self._sftp.stat(remote).st_size or 0
-        finally:
-            self._close()
-
-
-class FTPStorageBackend(BackupStorageBackend):
-    """Store backups via FTP/FTPS."""
-
-    def __init__(self, config: dict[str, Any]):
-        # pin host to a validated IP literal at init time so
-        # ftplib.FTP.connect() never performs a second DNS lookup.
-        self.host = resolve_and_pin_host(config["host"], allow_private=False)
-        self.port = int(config.get("port", 21))
-        self.username = config.get("username", "anonymous")
-        self.password = config.get("password", "")
-        self.remote_path = config.get("remote_path", "/backups")
-        self.use_tls = config.get("use_tls", False)
-
-    def _connect(self) -> ftplib.FTP:
-        ftp: ftplib.FTP
-        ftp = ftplib.FTP_TLS() if self.use_tls else ftplib.FTP()
-        ftp.connect(self.host, self.port)
-        ftp.login(self.username, self.password)
-        if self.use_tls and isinstance(ftp, ftplib.FTP_TLS):
-            ftp.prot_p()
-        return ftp
-
-    def _ensure_dirs(self, ftp: ftplib.FTP, path: str) -> None:
-        parts = path.strip("/").split("/")
-        current = ""
-        for part in parts:
-            current += f"/{part}"
-            try:
-                ftp.cwd(current)
-            except ftplib.error_perm:
-                ftp.mkd(current)
-
-    async def save(self, backup_id: str, data: bytes, filename: str) -> str:
-        ftp = self._connect()
-        try:
-            rel = f"{self._date_prefix()}/{backup_id}_{filename}"
-            remote = f"{self.remote_path}/{rel}"
-            self._ensure_dirs(ftp, str(Path(remote).parent))
-            ftp.storbinary(f"STOR {remote}", io.BytesIO(data))
-            return f"ftp://{self.host}{remote}"
-        finally:
-            ftp.quit()
-
-    async def load(self, path: str) -> bytes:
-        ftp = self._connect()
-        try:
-            remote = path
-            if path.startswith("ftp://"):
-                remote = "/" + "/".join(path.split("/")[3:])
-            buf = io.BytesIO()
-            ftp.retrbinary(f"RETR {remote}", buf.write)
-            return buf.getvalue()
-        finally:
-            ftp.quit()
-
-    async def delete(self, path: str) -> bool:
-        ftp = self._connect()
-        try:
-            remote = path
-            if path.startswith("ftp://"):
-                remote = "/" + "/".join(path.split("/")[3:])
-            ftp.delete(remote)
-            return True
-        except Exception:
-            return False
-        finally:
-            ftp.quit()
-
-    async def exists(self, path: str) -> bool:
-        ftp = self._connect()
-        try:
-            remote = path
-            if path.startswith("ftp://"):
-                remote = "/" + "/".join(path.split("/")[3:])
-            ftp.size(remote)
-            return True
-        except Exception:
-            return False
-        finally:
-            ftp.quit()
-
-    async def get_size(self, path: str) -> int:
-        ftp = self._connect()
-        try:
-            remote = path
-            if path.startswith("ftp://"):
-                remote = "/" + "/".join(path.split("/")[3:])
-            return ftp.size(remote) or 0
-        finally:
-            ftp.quit()
+                    client.retrbinary(f"RETR {path}", receive)
+                    return buf.getvalue()
+                if operation == "delete":
+                    client.delete(path)
+                    return True
+                client.voidcmd("TYPE I")
+                # FTP 550 conflates missing files with permission errors. Never turn
+                # it into a false 'missing' or a successful connectivity result.
+                size = client.size(path)
+                if size is None:
+                    raise StorageConfigurationError("FTPS server did not return a file size.")
+                return True if operation == "exists" else size
+        except Exception as error:
+            if operation == "save" and mutation_attempted:
+                raise RemotePublicationError(self._url(path), self._url(temporary)) from error
+            raise
 
 
 class GoogleDriveStorageBackend(BackupStorageBackend):
@@ -901,54 +1046,96 @@ class DropboxStorageBackend(BackupStorageBackend):
 
 
 class WebDAVStorageBackend(BackupStorageBackend):
-    """Store backups via WebDAV (fully async via httpx)."""
+    """Store backups via WebDAV with an independently owned client per operation."""
+
+    _METADATA_LIMIT = 256 * 1024
+    _CHUNK_BYTES = 64 * 1024
+    _OPERATION_SECONDS = 60.0
 
     def __init__(self, config: dict[str, Any]):
-        from urllib.parse import urlparse, urlunparse
+        # Preserve the existing synchronous factory while callers migrate to
+        # create_bounded(). Its two historical resolution calls remain explicit.
+        raw_url, parsed_raw = self._parse_endpoint(config)
+        _validate_endpoint_url(raw_url)
+        pinned_ip = resolve_and_pin_host(parsed_raw.hostname or "", allow_private=False)
+        self._configure_endpoint(config, parsed_raw, pinned_ip)
+
+    @classmethod
+    def _parse_endpoint(cls, config: dict[str, Any]):
+        from urllib.parse import urlsplit
+
+        raw_url = (config["url"] or "").rstrip("/")
+        cls._check_url_text(raw_url)
+        parsed_raw = urlsplit(raw_url)
+        if parsed_raw.username is not None or parsed_raw.password is not None:
+            raise ValueError("WebDAV endpoint credentials must use the credential fields")
+        return raw_url, parsed_raw
+
+    @classmethod
+    async def create_bounded(cls, config: dict[str, Any]):
+        from copy import deepcopy
+
+        from app.services.vault_native_resolution import resolve_storage_host
+
+        # Pin the exact copied configuration; a wait cannot adopt caller changes.
+        prepared = deepcopy(config)
+        _, parsed_raw = cls._parse_endpoint(prepared)
+        if parsed_raw.scheme not in ("http", "https") or not parsed_raw.hostname:
+            raise ValueError("WebDAV endpoint must have an http(s) scheme and hostname")
+        pinned_ip = await resolve_storage_host(parsed_raw.hostname or "", allow_private=False)
+        await anyio.lowlevel.checkpoint()
+        result = cls.__new__(cls)
+        result._configure_endpoint(prepared, parsed_raw, pinned_ip)
+        return result
+
+    def _configure_endpoint(self, config, parsed_raw, pinned_ip):
+        from urllib.parse import quote, urlunsplit
 
         import httpx
 
-        # resolve_and_pin_host once at __init__ time and rebuild
-        # base_url from the IP literal. The long-lived AsyncClient then
-        # connects to a fixed address for every request — no second DNS
-        # lookup can rebind the hostname to 127.0.0.1 / 169.254.169.254.
-        # The Host header is set per-request (in _url) so TLS SNI and
-        # HTTP vhost routing continue to work against the original hostname.
-        raw_url = (config["url"] or "").rstrip("/")
-        _validate_endpoint_url(raw_url)  # scheme + reachability check
-        parsed_raw = urlparse(raw_url)
         raw_host = parsed_raw.hostname or ""
-        pinned_ip = resolve_and_pin_host(raw_host, allow_private=False)
         # Store original hostname for Host header injection.
         self._orig_hostname = raw_host
         port = parsed_raw.port
+        if port == 0:
+            raise ValueError("Invalid WebDAV endpoint port")
+        self._port = port or (443 if parsed_raw.scheme == "https" else 80)
+        self._pinned_ip = pinned_ip
+        self._base_path = self._checked_path(parsed_raw.path)
+        self.path_prefix = self._checked_path(config.get("path", "/backups"))
+        self._storage_root = self._base_path + self.path_prefix
         if ":" in pinned_ip:
             netloc_ip = f"[{pinned_ip}]:{port}" if port else f"[{pinned_ip}]"
         else:
             netloc_ip = f"{pinned_ip}:{port}" if port else pinned_ip
-        self.base_url = urlunparse(
+        self._origin = urlunsplit((parsed_raw.scheme, netloc_ip, "", "", ""))
+        self.base_url = urlunsplit(
             (
                 parsed_raw.scheme,
                 netloc_ip,
-                parsed_raw.path,
-                parsed_raw.params,
-                parsed_raw.query,
-                parsed_raw.fragment,
+                quote(self._base_path, safe="/"),
+                "",
+                "",
             )
         ).rstrip("/")
         self.username = config.get("username", "")
         self.password = config.get("password", "")
-        self.path_prefix = config.get("path", "/backups")
         auth = httpx.BasicAuth(self.username, self.password) if self.username else None
         # Inject Host header so HTTP vhost routing works against the original
         # hostname while the TCP connection goes to the pinned IP.
         default_port = 443 if parsed_raw.scheme == "https" else 80
-        host_header = raw_host if port in (None, default_port) else f"{raw_host}:{port}"
-        self._client = httpx.AsyncClient(
-            auth=auth,
-            timeout=60.0,
-            headers={"Host": host_header},
-        )
+        routing_host = f"[{raw_host}]" if ":" in raw_host else raw_host
+        host_header = routing_host if port in (None, default_port) else f"{routing_host}:{port}"
+        # Constructing a backend must not allocate an unowned network client.
+        # Operations reuse their own client for related requests and close it
+        # before returning; independent concurrent operations share no pool.
+        self._client_options = {
+            "auth": auth,
+            "timeout": 60.0,
+            "headers": {"Host": host_header, "Accept-Encoding": "identity"},
+            "follow_redirects": False,
+        }
+        self._closed = False
         # preserve the original hostname for TLS SNI so
         # httpcore verifies the certificate against the hostname (not the
         # pinned IP).  ``sni_hostname`` is passed per-request via extensions
@@ -957,70 +1144,371 @@ class WebDAVStorageBackend(BackupStorageBackend):
             {"sni_hostname": raw_host} if parsed_raw.scheme == "https" and raw_host else {}
         )
 
-    def _url(self, path: str) -> str:
-        return f"{self.base_url}{path}"
+    @staticmethod
+    def _check_url_text(value: str) -> None:
+        # urllib strips some controls before parsing; refuse them first.
+        if not isinstance(value, str) or any(ord(c) < 32 or ord(c) == 127 for c in value):
+            raise ValueError("Invalid WebDAV locator")
+        if any(c in value for c in ("\\", "?", "#")) or value != value.strip():
+            raise ValueError("Ambiguous WebDAV locator")
 
-    async def _ensure_dirs(self, path: str) -> None:
+    @classmethod
+    def _checked_path(cls, value: str) -> str:
+        """Decode once, reject ambiguous segments, then encode for transport."""
+        import re
+        from urllib.parse import unquote
+
+        cls._check_url_text(value)
+        if value and not value.startswith("/"):
+            raise ValueError("WebDAV paths must begin with a slash")
+        if re.search(r"%(?![0-9a-fA-F]{2})|%2[fF]|%5[cC]", value):
+            raise ValueError("Ambiguous WebDAV path encoding")
+        try:
+            decoded = unquote(value, errors="strict")
+        except UnicodeDecodeError as error:
+            raise ValueError("Invalid WebDAV path encoding") from error
+        cls._check_url_text(decoded)
+        if "//" in decoded or ";" in decoded or re.search(r"%[0-9a-fA-F]{2}", decoded):
+            raise ValueError("Ambiguous WebDAV path")
+        if any(part in (".", "..") for part in decoded.split("/")):
+            raise ValueError("WebDAV path traversal is not allowed")
+        return decoded.rstrip("/")
+
+    def _url(self, path: str) -> str:
+        from urllib.parse import quote
+
+        return self._origin + quote(self._base_path + self._checked_path(path), safe="/")
+
+    def _object_url(self, locator: str) -> str:
+        """A stored locator identifies an object, never a new destination."""
+        from ipaddress import ip_address
+        from urllib.parse import quote, urlsplit
+
+        self._check_url_text(locator)
+        parsed = urlsplit(locator)
+        if parsed.path.endswith("/"):
+            raise ValueError("WebDAV backup locators must identify a file")
+        if parsed.scheme:
+            if parsed.scheme != "webdav" or not parsed.netloc:
+                raise ValueError("Unsupported WebDAV locator")
+            if parsed.username is not None or parsed.password is not None:
+                raise ValueError("WebDAV locators cannot contain credentials")
+
+            def normalized_host(host: str) -> str:
+                try:
+                    return str(ip_address(host))
+                except ValueError:
+                    return host.encode("idna").decode("ascii").lower()
+
+            allowed = {normalized_host(self._orig_hostname), normalized_host(self._pinned_ip)}
+            if normalized_host(parsed.hostname or "") not in allowed:
+                raise ValueError("WebDAV locator does not match the configured destination")
+            default_port = 443 if self._origin.startswith("https:") else 80
+            locator_port = parsed.port if parsed.port is not None else default_port
+            if locator_port != self._port:
+                raise ValueError("WebDAV locator does not match the configured port")
+            path = self._checked_path(parsed.path)
+        else:
+            if parsed.netloc:
+                raise ValueError("WebDAV locators cannot replace the configured authority")
+            path = self._base_path + self._checked_path(parsed.path)
+        if not path.startswith(self._storage_root + "/"):
+            raise ValueError("WebDAV locator is outside the configured backup root")
+        # Legacy webdav:// records contain no scheme. Preserve the configured
+        # scheme and current pin, with the configured Host header and TLS SNI.
+        return self._origin + quote(path, safe="/")
+
+    @staticmethod
+    async def _close_client(client: Any) -> None:
+        import asyncio
+
+        # Cleanup admission cannot have a cancellable checkpoint: the client
+        # already exists. Keep the close task owned under repeated cancellation.
+        cancelled = None
+        with anyio.CancelScope(shield=True):
+
+            async def capture() -> Exception | None:
+                try:
+                    await client.aclose()
+                except Exception as error:
+                    return error
+                return None
+
+            cleanup = asyncio.create_task(capture())
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError as error:
+                    if cleanup.cancelled():
+                        raise
+                    cancelled = error
+            error = cleanup.result()
+            if error is not None:
+                logger.error("WebDAV client cleanup ended with %s", type(error).__name__)
+        if cancelled is not None:
+            raise cancelled from None
+        # An outer AnyIO cancellation was shielded during close. Recheck only
+        # after the physical resources are closed, before delivering any result.
+        await anyio.lowlevel.checkpoint_if_cancelled()
+        if error is not None:
+            raise BackupRecoveryError("WebDAV client cleanup failed") from None
+
+    @contextlib.asynccontextmanager
+    async def _session(self):
+        import httpx
+
+        if self._closed:
+            raise ValueError("WebDAV backend is closed")
+        deadline = time.monotonic() + self._OPERATION_SECONDS
+        client = httpx.AsyncClient(**self._client_options)
+        try:
+            # A slow peer must not extend the operation indefinitely by sending
+            # a byte before each per-read timeout. Mandatory close is outside
+            # this scope and remains owned when that deadline cancels I/O.
+            with anyio.fail_after(max(0.0, deadline - time.monotonic())):
+                yield client
+        finally:
+            await self._close_client(client)
+        if time.monotonic() >= deadline:
+            raise TimeoutError("WebDAV operation deadline exceeded")
+
+    @classmethod
+    async def _iter_bounded(cls, response: Any, limit: int) -> AsyncIterator[bytes]:
+        """Bound transport and decoded output before each bounded handoff."""
+        import zlib
+
+        encoding = response.headers.get("content-encoding", "identity").strip().lower()
+        if encoding not in {"", "identity", "gzip"}:
+            raise ValueError("Unsupported WebDAV content encoding")
+        decoder = zlib.decompressobj(16 + zlib.MAX_WBITS) if encoding == "gzip" else None
+        encoded_limit = limit + max(cls._CHUNK_BYTES, limit // 100 + 64)
+        encoded_bytes = 0
+        decoded_bytes = 0
+
+        def account(data: bytes) -> bytes:
+            nonlocal decoded_bytes
+            if len(data) > limit - decoded_bytes:
+                raise ValueError("WebDAV response exceeds the size limit")
+            decoded_bytes += len(data)
+            return data
+
+        try:
+            async for chunk in response.aiter_raw(chunk_size=cls._CHUNK_BYTES):
+                encoded_bytes += len(chunk)
+                if encoded_bytes > encoded_limit:
+                    raise ValueError("WebDAV encoded response exceeds the size limit")
+                if decoder is None:
+                    yield account(chunk)
+                    continue
+                pending = chunk
+                while pending:
+                    decoded = account(
+                        decoder.decompress(
+                            pending, min(cls._CHUNK_BYTES, limit - decoded_bytes + 1)
+                        )
+                    )
+                    pending = decoder.unconsumed_tail
+                    if decoder.unused_data:
+                        raise ValueError("WebDAV gzip response has trailing data")
+                    if decoded:
+                        yield decoded
+            if decoder is not None and not decoder.eof:
+                raise ValueError("WebDAV gzip response is incomplete")
+        except zlib.error as error:
+            raise ValueError("Invalid WebDAV gzip response") from error
+
+    @classmethod
+    async def _read_bounded(cls, response: Any, limit: int) -> bytes:
+        """Materialize only callers that still explicitly require bounded bytes."""
+        result = bytearray()
+        async for chunk in cls._iter_bounded(response, limit):
+            result.extend(chunk)
+        return bytes(result)
+
+    @staticmethod
+    @complete_before_cancellation
+    async def _append_download_owned(snapshot: DownloadSnapshot, chunk: bytes) -> None:
+        await anyio.to_thread.run_sync(snapshot.append, chunk)
+
+    @staticmethod
+    @complete_before_cancellation
+    async def _seal_download_owned(
+        snapshot: DownloadSnapshot, expected: dict[str, Any] | None
+    ) -> None:
+        await anyio.to_thread.run_sync(snapshot.seal, expected)
+
+    async def copy_download_into(
+        self, path: str, expected: dict[str, Any] | None, snapshot: DownloadSnapshot
+    ) -> None:
+        """Fill an already-owned disk snapshot without materializing the archive."""
+        url = self._object_url(path)
+        async with self._session() as client:
+            async with client.stream("GET", url, extensions=self._sni_extensions) as response:
+                self._require_status(response, {200})
+                async for chunk in self._iter_bounded(
+                    response, min(MAX_BACKUP_IMPORT_BYTES, snapshot.limit)
+                ):
+                    await self._append_download_owned(snapshot, chunk)
+        # The real network client is closed before disk readback verification.
+        # The response owner retains the snapshot through every failure path.
+        await self._seal_download_owned(snapshot, expected)
+
+    @staticmethod
+    def _require_status(response: Any, accepted: set[int]) -> None:
+        response.raise_for_status()
+        if response.status_code not in accepted:
+            raise ValueError("Unexpected WebDAV response status")
+
+    async def _ensure_dirs(self, client: Any, path: str) -> None:
         parts = path.strip("/").split("/")
         current = ""
         for part in parts:
             current += f"/{part}"
-            await self._client.request("MKCOL", self._url(current), extensions=self._sni_extensions)
+            async with client.stream(
+                "MKCOL", self._url(current), extensions=self._sni_extensions
+            ) as response:
+                # WebDAV uses 405 for a collection which already exists. The
+                # following PUT still has to independently acknowledge success.
+                if response.status_code != 405:
+                    self._require_status(response, {201})
 
     async def save(self, backup_id: str, data: bytes, filename: str) -> str:
-        rel = f"{self.path_prefix}/{self._date_prefix()}/{backup_id}_{filename}"
-        await self._ensure_dirs(str(Path(rel).parent))
-        resp = await self._client.put(self._url(rel), content=data, extensions=self._sni_extensions)
-        resp.raise_for_status()
-        return f"webdav://{self.base_url.split('://', 1)[-1]}{rel}"
+        from urllib.parse import quote
+
+        for component in (backup_id, filename):
+            if not component or "/" in component or "/" in self._checked_path("/" + component)[1:]:
+                raise ValueError("WebDAV backup names must be single path components")
+        if len(data) > MAX_BACKUP_IMPORT_BYTES:
+            raise ValueError("WebDAV backup exceeds the size limit")
+        rel = f"{quote(self.path_prefix, safe='/')}/{self._date_prefix()}/{backup_id}_{filename}"
+        url = self._object_url(rel)  # Validate before MKCOL or PUT can occur.
+        async with self._session() as client:
+            await self._ensure_dirs(client, str(Path(rel).parent))
+            async with client.stream(
+                "PUT", url, content=data, extensions=self._sni_extensions
+            ) as response:
+                self._require_status(response, {200, 201, 204})
+        return f"webdav://{url.split('://', 1)[-1]}"
 
     async def load(self, path: str) -> bytes:
-        if path.startswith("webdav://"):
-            remote_part = path.replace("webdav://", "")
-            url = f"https://{remote_part}" if "://" not in remote_part else remote_part
-        else:
-            url = self._url(path)
-        resp = await self._client.get(url, extensions=self._sni_extensions)
-        resp.raise_for_status()
-        return bytes(resp.content)
+        url = self._object_url(path)
+        async with self._session() as client:
+            async with client.stream("GET", url, extensions=self._sni_extensions) as response:
+                self._require_status(response, {200})
+                return await self._read_bounded(response, MAX_BACKUP_IMPORT_BYTES)
 
     async def delete(self, path: str) -> bool:
-        if path.startswith("webdav://"):
-            remote_part = path.replace("webdav://", "")
-            url = f"https://{remote_part}"
+        url = self._object_url(path)
+        async with self._session() as client:
+            async with client.stream("DELETE", url, extensions=self._sni_extensions) as response:
+                if response.status_code == 404:
+                    return True  # Backend contract: already absent is complete.
+                self._require_status(response, {200, 204})
+                return True
+
+    @staticmethod
+    def _metadata_status(element: Any) -> int:
+        import re
+
+        if element is None or len(element):
+            raise ValueError("WebDAV metadata status must be a scalar value")
+        text = element.text if element is not None else None
+        match = re.fullmatch(r"HTTP/1\.[01] ([1-5][0-9]{2})(?: [^\r\n]*)?", (text or "").strip())
+        if match is None:
+            raise ValueError("Invalid WebDAV metadata status")
+        return int(match.group(1))
+
+    def _metadata_href(self, href: str, expected_url: str) -> None:
+        from urllib.parse import quote, urlsplit
+
+        self._check_url_text(href)
+        parsed = urlsplit(href)
+        if parsed.path.endswith("/"):
+            raise ValueError("WebDAV metadata must describe the requested file")
+        if parsed.scheme:
+            if parsed.scheme != urlsplit(self._origin).scheme:
+                raise ValueError("WebDAV metadata has a different origin")
+            resolved = self._object_url("webdav" + href[len(parsed.scheme) :])
         else:
-            url = self._url(path)
-        resp = await self._client.request("DELETE", url, extensions=self._sni_extensions)
-        return bool(resp.status_code < 400)
+            if parsed.netloc or not parsed.path.startswith("/"):
+                raise ValueError("Invalid WebDAV metadata reference")
+            resolved = self._origin + quote(self._checked_path(parsed.path), safe="/")
+        if resolved != expected_url:
+            raise ValueError("WebDAV metadata does not match the requested file")
+
+    async def _file_size(self, path: str) -> int | None:
+        from app.core.xml_utils import parse_untrusted_xml
+
+        url = self._object_url(path)
+        body = (
+            b'<d:propfind xmlns:d="DAV:"><d:prop><d:getcontentlength/>'
+            b"<d:resourcetype/></d:prop></d:propfind>"
+        )
+        async with self._session() as client:
+            async with client.stream(
+                "PROPFIND",
+                url,
+                content=body,
+                headers={"Depth": "0", "Content-Type": "application/xml; charset=utf-8"},
+                extensions=self._sni_extensions,
+            ) as response:
+                if response.status_code == 404:
+                    return None
+                self._require_status(response, {207})
+                payload = await self._read_bounded(response, self._METADATA_LIMIT)
+        root = parse_untrusted_xml(payload, max_bytes=self._METADATA_LIMIT)
+        namespace = "{DAV:}"
+        entries = root.findall(namespace + "response")
+        if root.tag != namespace + "multistatus" or len(entries) != 1:
+            raise ValueError("Ambiguous WebDAV metadata response")
+        entry = entries[0]
+        hrefs = entry.findall(namespace + "href")
+        if len(hrefs) != 1 or len(hrefs[0]) or not hrefs[0].text:
+            raise ValueError("Invalid WebDAV metadata reference")
+        self._metadata_href(hrefs[0].text, url)
+        statuses = entry.findall(namespace + "status")
+        propstats = entry.findall(namespace + "propstat")
+        if statuses:
+            if len(statuses) != 1 or propstats or self._metadata_status(statuses[0]) != 404:
+                raise ValueError("WebDAV metadata did not confirm the file")
+            return None
+        sizes = []
+        for propstat in propstats:
+            statuses = propstat.findall(namespace + "status")
+            properties = propstat.findall(namespace + "prop")
+            if len(statuses) != 1 or len(properties) != 1:
+                raise ValueError("Malformed WebDAV file properties")
+            code = self._metadata_status(statuses[0])
+            prop = properties[0]
+            lengths = prop.findall(namespace + "getcontentlength")
+            if prop.find(namespace + "resourcetype/" + namespace + "collection") is not None:
+                raise ValueError("WebDAV metadata describes a collection")
+            if lengths:
+                if code != 200 or len(lengths) != 1 or len(lengths[0]):
+                    raise ValueError("WebDAV file size is unavailable or ambiguous")
+                text = lengths[0].text or ""
+                if not text.isascii() or not text.isdecimal() or len(text) > 19:
+                    raise ValueError("Invalid WebDAV file size")
+                size = int(text)
+                if size > 2**63 - 1:
+                    raise ValueError("WebDAV file size exceeds the supported range")
+                sizes.append(size)
+        if len(sizes) != 1:
+            raise ValueError("WebDAV metadata lacks an unambiguous file size")
+        return sizes[0]
 
     async def exists(self, path: str) -> bool:
-        if path.startswith("webdav://"):
-            remote_part = path.replace("webdav://", "")
-            url = f"https://{remote_part}"
-        else:
-            url = self._url(path)
-        resp = await self._client.request(
-            "PROPFIND", url, headers={"Depth": "0"}, extensions=self._sni_extensions
-        )
-        return bool(resp.status_code < 400)
+        return await self._file_size(path) is not None
 
     async def get_size(self, path: str) -> int:
-        if path.startswith("webdav://"):
-            remote_part = path.replace("webdav://", "")
-            url = f"https://{remote_part}"
-        else:
-            url = self._url(path)
-        resp = await self._client.request(
-            "PROPFIND", url, headers={"Depth": "0"}, extensions=self._sni_extensions
-        )
-        # Parse content-length from PROPFIND response
-        return int(resp.headers.get("content-length", "0"))
+        size = await self._file_size(path)
+        if size is None:
+            raise FileNotFoundError("WebDAV backup does not exist")
+        return size
 
     async def close(self) -> None:
-        """Close the httpx client to release resources."""
-        if self._client:
-            await self._client.aclose()
-            self._client = None  # type: ignore[assignment]
+        """Disallow new work; in-flight operations retain their own cleanup."""
+        self._closed = True
 
     async def __aenter__(self):
         return self
@@ -1085,31 +1573,40 @@ class TrueNASStorageBackend(BackupStorageBackend):
         from sqlalchemy import select
 
         from app.db.session import AsyncSessionLocal
-        from app.models.core import Controller
+        from app.models.core import Controller, Site
         from app.services.adapter_truenas_storage import build_truenas_adapter
 
+        # Controller ownership is on Site, never Controller.organization_id.
+        # Require the caller's org before a database lookup or network access.
+        try:
+            organization_id = UUID(str(self._organization_id))
+        except (TypeError, ValueError, AttributeError):
+            raise ValueError(f"TrueNAS controller {self.controller_id} not found") from None
+
         async with AsyncSessionLocal() as db:
-            # Not db.get(): that ignores soft deletes, so an appliance the
-            # operator removed would keep serving as a backup destination --
-            # writing to a box that is gone from the UI, or failing nightly
-            # with an error that names a controller nobody can find any more.
-            # The soft-delete guard caught this one.
-            ctrl = (
+            row = (
                 await db.execute(
-                    select(Controller).where(
+                    select(Controller, Site.organization_id)
+                    .join(Site, Site.id == Controller.site_id)
+                    .where(
                         Controller.id == self.controller_id,
                         Controller.deleted_at.is_(None),
+                        Controller.is_active.is_(True),
+                        Controller.controller_type == "truenas",
+                        Site.deleted_at.is_(None),
+                        Site.organization_id == organization_id,
                     )
                 )
-            ).scalar_one_or_none()
-            if ctrl is None:
+            ).one_or_none()
+            if row is None:
                 raise ValueError(f"TrueNAS controller {self.controller_id} not found")
-            if self._organization_id is not None and str(ctrl.organization_id) != str(
-                self._organization_id
-            ):
-                # Fail closed and say nothing about the other org's controller.
+            ctrl, site_organization_id = row
+            if site_organization_id != organization_id:
+                # Keep every refusal indistinguishable from an absent target.
                 raise ValueError(f"TrueNAS controller {self.controller_id} not found")
-            return await build_truenas_adapter(ctrl)
+        # The controller's connection fields are loaded by the scoped query.
+        # Do not keep a database session open across appliance network I/O.
+        return await build_truenas_adapter(ctrl)
 
     #: Delete works again -- via ``pool.dataset.delete``, not a file unlink.
     #: The middleware has no file-delete on any version (verified live on
@@ -1304,6 +1801,13 @@ SUPPORTED_STORAGE_TYPES = [
         "icon": "Server",
         "fields": [
             {
+                "name": "host_key_sha256",
+                "type": "text",
+                "label": "Trusted server fingerprint (obtain from server administrator)",
+                "required": True,
+                "placeholder": "SHA256:...",
+            },
+            {
                 "name": "host",
                 "type": "text",
                 "label": "Host",
@@ -1351,8 +1855,8 @@ SUPPORTED_STORAGE_TYPES = [
     },
     {
         "id": "ftp",
-        "name": "FTP / FTPS",
-        "description": "Store backups via FTP with optional TLS",
+        "name": "FTPS (TLS required)",
+        "description": "Authenticated TLS for control and data; plaintext FTP is disabled",
         "icon": "FolderSync",
         "fields": [
             {
@@ -1395,9 +1899,9 @@ SUPPORTED_STORAGE_TYPES = [
             {
                 "name": "use_tls",
                 "type": "boolean",
-                "label": "Use TLS",
-                "required": False,
-                "default": "false",
+                "label": "TLS required (trusted server certificate)",
+                "required": True,
+                "default": "true",
             },
         ],
     },
@@ -1675,11 +2179,20 @@ class BackupService:
                     options,
                 )
             except Exception as exc:
-                logger.exception(
-                    "contributor %s collect() raised; omitting from backup",
+                logger.warning(
+                    "Contributor %s collection failed (%s)",
                     contrib.contributor_id,
+                    type(exc).__name__,
                 )
-                self._collect_omissions.append(f"{contrib.contributor_id} ({exc!s:.120})")
+                self._collect_omissions.append(f"{contrib.contributor_id} ({type(exc).__name__})")
+                if options.get("include_secrets"):
+                    # A disaster-recovery vault must not seal a silently partial
+                    # account/module set. Refuse before writing any archive, with
+                    # a fixed diagnostic rather than a contributor exception.
+                    raise BackupRecoveryError(
+                        "Full vault collection failed; no archive was stored. "
+                        "Repair the failing collector and retry the backup."
+                    ) from None
                 continue
 
             contributor_data[contrib.contributor_id] = payload.data
@@ -1690,6 +2203,12 @@ class BackupService:
                     counts=payload.counts,
                     metadata=payload.metadata,
                 ),
+            )
+
+        if options.get("include_secrets") and "core" not in contributor_data:
+            raise BackupRecoveryError(
+                "Full vault collection requires the core collector; no archive was stored. "
+                "Restore the core collector and retry the backup."
             )
 
         manifest = BackupManifest(
@@ -1804,11 +2323,11 @@ class BackupService:
                             entry.schema_version,
                             payload,
                         )
-                    except Exception:
-                        logger.exception(
-                            "contributor %s migrate_from(%s) raised",
+                    except Exception as exc:
+                        logger.warning(
+                            "Contributor %s migration failed (%s)",
                             cid,
-                            entry.schema_version,
+                            type(exc).__name__,
                         )
                 if migrated is None:
                     results.append(
@@ -1840,7 +2359,7 @@ class BackupService:
                         options=restore_options,
                     )
                 else:
-                    async with self.db.begin_nested():
+                    async with self.db.begin_nested() as transaction:
                         result = await contrib.restore(
                             self.db,
                             organization_id,
@@ -1848,15 +2367,28 @@ class BackupService:
                             dry_run=False,
                             options=restore_options,
                         )
+                        if result.status == "error":
+                            # Contributors may report a caught Python failure
+                            # without raising through this context manager.
+                            # Explicitly undo their pending/flushed writes.
+                            await transaction.rollback()
+                            skipped = dict(result.skipped)
+                            for counts in (result.created, result.updated):
+                                for resource, count in counts.items():
+                                    skipped[resource] = skipped.get(resource, 0) + count
+                            result.created = {}
+                            result.updated = {}
+                            result.skipped = skipped
             except Exception as exc:
-                logger.exception(
-                    "contributor %s restore raised; rolling back savepoint",
+                logger.warning(
+                    "Contributor %s restore failed (%s); rolling back savepoint",
                     cid,
+                    type(exc).__name__,
                 )
                 result = RestoreResult(
                     contributor_id=cid,
                     status="error",
-                    errors=[str(exc)[:500]],
+                    errors=["Contributor restore failed; review module availability and retry."],
                 )
 
             results.append(result)
@@ -2013,30 +2545,35 @@ class BackupService:
             # and forwarded by the scheduled-backup Celery task.)
             if not loc or (self.org_id is not None and loc.organization_id != self.org_id):
                 raise ValueError(f"Storage location {storage_location_id} not found")
-            config = dict(loc.config or {})
-            if loc.encrypted_credentials:
-                try:
-                    from app.core.crypto import decrypt_credential
-
-                    creds = json.loads(decrypt_credential(loc.encrypted_credentials))
-                    # Decrypted credentials override anything in plaintext config.
-                    config.update(creds)
-                except Exception:
-                    logger.exception(
-                        "Failed to decrypt storage credentials for location %s",
-                        loc.id,
-                    )
-            # The org is threaded into the backend config because a TrueNAS
-            # destination names a CONTROLLER, and that id is caller-supplied
-            # like storage_location_id was. Without it, org A could point a
-            # backup at org B's appliance and write through org B's stored
-            # credentials -- the same defect V3 closed one level up.
-            config["_organization_id"] = str(loc.organization_id)
+            if loc.is_active is False:
+                raise StorageConfigurationError("Storage location is disabled.")
+            config = self._storage_config(loc)
             return get_storage_backend(loc.storage_type, config), loc.id
 
         # Default local
         config = {"path": "/data/backups"}
         return get_storage_backend(storage_type, config), None
+
+    @staticmethod
+    def _storage_config(loc: StorageConfigurationView) -> dict[str, Any]:
+        config = dict(loc.config or {})
+        if loc.encrypted_credentials:
+            from app.core.crypto import decrypt_credential
+
+            try:
+                credentials = json.loads(decrypt_credential(loc.encrypted_credentials))
+                if not isinstance(credentials, dict) or any(
+                    key not in BackupService._SENSITIVE_STORAGE_FIELDS for key in credentials
+                ):
+                    raise ValueError("Invalid credential fields")
+            except Exception:
+                raise StorageConfigurationError(
+                    "Stored credentials could not be decrypted or validated; restore the encryption key or recreate this destination with valid credentials."
+                ) from None
+            config.update(credentials)
+        if loc.storage_type == "truenas":
+            config["_organization_id"] = str(loc.organization_id)
+        return config
 
     # Sensitive fields that must live in encrypted_credentials, never in
     # the plaintext JSONB ``config`` column. (NOTE C1)
@@ -2187,6 +2724,14 @@ class BackupService:
                 "controller_type": str(getattr(c, "controller_type", "")),
                 "host": getattr(c, "host", None),
                 "port": getattr(c, "port", None),
+                "use_ssl": getattr(c, "use_ssl", True),
+                "verify_ssl": getattr(c, "verify_ssl", False),
+                "sync_enabled": getattr(c, "sync_enabled", True),
+                "sync_interval_seconds": getattr(c, "sync_interval_seconds", 300),
+                "is_active": getattr(c, "is_active", True),
+                "credential_id": str(c.credential_id)
+                if getattr(c, "credential_id", None)
+                else None,
                 "status": str(getattr(c, "status", "")),
                 "site_id": str(c.site_id) if getattr(c, "site_id", None) else None,
                 # Config snapshot: credentials excluded. Vault: decrypted config so a
@@ -2274,7 +2819,8 @@ class BackupService:
             )
             if device_ids:
                 query = query.where(Device.id.in_(device_ids))
-            elif site_id:
+            # Explicit device IDs narrow the selected site, never override it.
+            if site_id:
                 query = query.where(Device.site_id == site_id)
             result = await self.db.execute(query)
             devices = result.scalars().all()
@@ -2285,7 +2831,11 @@ class BackupService:
                     "device_type": str(getattr(d, "device_type", "")),
                     "vendor": getattr(d, "vendor", None),
                     "model": getattr(d, "model", None),
-                    "ip_address": str(getattr(d, "ip_address", "")),
+                    "ip_address": str(d.ip_address) if getattr(d, "ip_address", None) else None,
+                    "external_id": getattr(d, "external_id", None),
+                    "credential_id": str(d.credential_id)
+                    if getattr(d, "credential_id", None)
+                    else None,
                     "mac_address": getattr(d, "mac_address", None),
                     "hostname": getattr(d, "hostname", None),
                     "firmware_version": getattr(d, "firmware_version", None),
@@ -2299,17 +2849,34 @@ class BackupService:
                 for d in devices
             ]
 
-        # --- Users ---
-        if include_users:
-            result = await self.db.execute(
-                select(User).where(User.organization_id == org_id, User.deleted_at.is_(None))
-            )
+        # --- Configuration-only user profiles ---
+        if include_users and not include_secrets:
+            user_q = select(User).where(User.organization_id == org_id, User.deleted_at.is_(None))
+            if site_id:
+                # Only users with an explicit grant to this active site can
+                # travel with its partial grant set. Otherwise an unrelated
+                # restricted account restores with zero grants and becomes
+                # unrestricted. Organization-wide accounts belong in an
+                # organization-wide backup.
+                user_q = user_q.where(
+                    User.id.in_(
+                        select(UserSiteAccess.user_id)
+                        .join(Site, UserSiteAccess.site_id == Site.id)
+                        .where(
+                            Site.id == site_id,
+                            Site.organization_id == org_id,
+                            Site.deleted_at.is_(None),
+                        )
+                    )
+                )
+            result = await self.db.execute(user_q)
             users = result.scalars().all()
             data["users"] = [
                 {
                     "id": str(u.id),
                     "username": getattr(u, "username", None),
                     "email": u.email,
+                    "full_name": getattr(u, "full_name", None),
                     "first_name": getattr(u, "first_name", None),
                     "last_name": getattr(u, "last_name", None),
                     "display_name": getattr(u, "display_name", None),
@@ -2374,6 +2941,26 @@ class BackupService:
                 }
                 for g in grant_result.scalars().all()
             ]
+            if site_id:
+                # The two queries can observe a grant/lifecycle change between
+                # reads. Export only matching pairs; never emit a selected user
+                # without a grant or a new grant without its selected user.
+                selected_user_ids = {row["id"] for row in data["users"]}
+                data["user_site_access"] = [
+                    row for row in data["user_site_access"] if row["user_id"] in selected_user_ids
+                ]
+                granted_user_ids = {row["user_id"] for row in data["user_site_access"]}
+                data["users"] = [row for row in data["users"] if row["id"] in granted_user_ids]
+
+        if include_secrets:
+            from app.services.backup_contributors.account_security import FORMAT, collect_snapshot
+
+            if include_users:
+                data.update(await collect_snapshot(self.db, org_id, site_id=site_id))
+            else:
+                data.update(
+                    account_security_format=FORMAT, users=[], sso_providers=[], user_site_access=[]
+                )
 
         # --- Automation rules ---
         if include_automation:
@@ -2438,6 +3025,7 @@ class BackupService:
     # Backup creation
     # -------------------------------------------------------------------------
 
+    @complete_before_cancellation
     async def create_backup(
         self,
         *,
@@ -2460,6 +3048,7 @@ class BackupService:
         created_by_id: UUID | None = None,
         schedule_id: UUID | None = None,
         organization_id: UUID | None = None,
+        creation_guard: Any | None = None,
     ) -> Backup:
         """Create a backup: collect → compress → encrypt → store → record.
 
@@ -2478,13 +3067,23 @@ class BackupService:
             raise ValueError("organization_id is required — backups must be tenant-scoped")
         self.org_id = organization_id
 
+        async def checkpoint() -> None:
+            # This capability comes only from a server-side fresh-export
+            # consumer. Existing internal snapshots keep their separate policy.
+            if creation_guard is not None:
+                await creation_guard.check()
+
+        if creation_guard is not None and not include_secrets:
+            raise BackupInputError("Vault authorization cannot create a configuration snapshot")
+        await checkpoint()
+
         # A secure (vault) backup carries decrypted secrets, so it MUST be encrypted
         # under a strong operator passphrase — reject rather than silently write a
         # leaky/instance-bound file. The passphrase (not SECRET_KEY) is what makes the
         # archive portable across instances (proven by the re-key drill).
         if include_secrets:
             if not passphrase or len(passphrase) < 12:
-                raise ValueError(
+                raise BackupInputError(
                     "a secure (full) backup requires a passphrase of at least 12 characters"
                 )
             is_encrypted = True  # never write a plaintext secrets archive
@@ -2534,6 +3133,7 @@ class BackupService:
         self.db.add(backup)
         await self.db.flush()
 
+        remote_write = None
         try:
             backup.status = BackupStatus.IN_PROGRESS
             backup.started_at = datetime.now(UTC)
@@ -2578,11 +3178,13 @@ class BackupService:
                 # the passphrase below. Contributors ignore this key for a config snapshot.
                 "include_secrets": include_secrets,
             }
+            await checkpoint()
             archive = await self._assemble_backup_archive(
                 backup_id=backup.id,
                 organization_id=organization_id,
                 options=collect_options,
             )
+            await checkpoint()
             backup.progress = 30
 
             # 2. Serialize + compress. Pydantic's model_dump_json handles
@@ -2628,18 +3230,91 @@ class BackupService:
             header_bytes = json.dumps(header).encode("utf-8")
             header_len = len(header_bytes)
             final_data = header_len.to_bytes(4, "big") + header_bytes + compressed
+            identity = make_identity(final_data)
             backup.progress = 70
 
             # 5. Store
-            backend, loc_id = await self._resolve_storage(storage_type, storage_location_id)
+            await checkpoint()
+            if creation_guard is None:
+                backend, loc_id = await self._resolve_storage(storage_type, storage_location_id)
+            else:
+                backend, loc_id = await creation_guard.backend()
+            await checkpoint()
             ext = "fsdnvault" if include_secrets else "fsdn"
             filename = f"backup_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.{ext}"
-            storage_path = await backend.save(str(backup.id), final_data, filename)
-            backup.progress = 90
+            try:
+                if isinstance(backend, _RemoteFileStorageBackend):
+                    from app.services.remote_write_coordination import RemoteBackupWrite
 
-            # 6. Update record
+                    plan = backend.prepare_save(str(backup.id), final_data, filename)
+                    remote_write = await RemoteBackupWrite.reserve(
+                        self.db,
+                        backend,
+                        plan,
+                        backup_id=backup.id,
+                        organization_id=organization_id,
+                        storage_location_id=loc_id,
+                        created_by_id=created_by_id,
+                        schedule_id=schedule_id,
+                        include_secrets=include_secrets,
+                    )
+                    backup.storage_path = plan.location  # possible, not verified
+                    backup.file_size = plan.payload_size
+                    backup.storage_location_id = loc_id
+                    backup.metadata_json = {
+                        **(backup.metadata_json or {}),
+                        "remote_write": {
+                            "operation_id": str(plan.operation_id),
+                            "recovery_required": True,
+                        },
+                    }
+                    await checkpoint()
+                    await remote_write.dispatch()
+                    await checkpoint()
+                    storage_path = await backend.save_prepared(plan, final_data)
+                    await remote_write.acknowledge()
+                else:
+                    storage_path = await backend.save(str(backup.id), final_data, filename)
+            except BackupPublicationError as error:
+                # The final file exists, but fsync/close acknowledgement failed.
+                # Retain its locator in the FAILED catalog row for inspection;
+                # never promote an unverified identity or imply rollback.
+                backup.storage_path = error.storage_path
+                backup.file_size = len(final_data)
+                if loc_id:
+                    backup.storage_location_id = loc_id
+                raise BackupRecoveryError(
+                    "Backup publication could not be confirmed; its file locator "
+                    "is retained for inspection. The backup is not verified."
+                ) from error
+            # Keep the acknowledged locator even if verification fails, so the
+            # failed catalog entry can still identify its stored file for cleanup.
             backup.storage_path = storage_path
             backup.file_size = len(final_data)
+            if loc_id:
+                backup.storage_location_id = loc_id
+            # Keep the acknowledged locator before a late permission refusal.
+            # A failed response must not imply that an acknowledged write vanished.
+            await checkpoint()
+            if remote_write is not None:
+                await remote_write.check_destination()
+            verify_identity(await backend.load(storage_path), identity)
+            await checkpoint()
+            if remote_write is not None:
+                await remote_write.check_destination()
+            backup.metadata_json = {**(backup.metadata_json or {}), "artifact_identity": identity}
+            if remote_write is not None:
+                backup.metadata_json = {
+                    **backup.metadata_json,
+                    "remote_write": {
+                        "operation_id": str(remote_write.intent.operation_id),
+                        "recovery_required": False,
+                    },
+                }
+            backup.progress = 90
+
+            await checkpoint()
+            # 6. Update record only after the stored complete file matches.
             backup.status = BackupStatus.COMPLETED
             backup.completed_at = datetime.now(UTC)
             backup.progress = 100
@@ -2659,6 +3334,7 @@ class BackupService:
 
             await self.db.commit()
             await self.db.refresh(backup)
+            await checkpoint()
             logger.info(
                 "Backup %s completed: %s (%d bytes)", backup.id, storage_path, len(final_data)
             )
@@ -2666,10 +3342,30 @@ class BackupService:
 
         except Exception as e:
             backup.status = BackupStatus.FAILED
-            backup.error_message = str(e)[:2000]
+            if remote_write is not None:
+                backup.metadata_json = {
+                    **(backup.metadata_json or {}),
+                    "remote_write": {
+                        "operation_id": str(remote_write.intent.operation_id),
+                        "recovery_required": True,
+                    },
+                }
+                # Late authority/commit/readback failure does not undo remote
+                # publication. Do not advertise retry as rollback or cleanup.
+                backup.error_message = (
+                    "Remote backup publication needs inspection. Recovery history "
+                    "and possible file locations are retained; do not retry automatically."
+                )
+            else:
+                backup.error_message = backup_failure_detail(
+                    BackupInputError(str(e)) if isinstance(e, BackupArtifactError) else e,
+                    "Backup creation failed; review storage access and retry.",
+                )
             backup.completed_at = datetime.now(UTC)
             await self.db.commit()
-            logger.error("Backup %s failed: %s", backup.id, e)
+            logger.error("Backup %s failed (%s)", backup.id, type(e).__name__)
+            if isinstance(e, BackupArtifactError):
+                raise BackupInputError(str(e)) from None
             raise
 
     # -------------------------------------------------------------------------
@@ -2737,8 +3433,6 @@ class BackupService:
             )
         self.org_id = organization_id
 
-        from app.models import Controller, Device, Site, User
-
         # NOTE C5: only .fsdn files are accepted now. The first 4 bytes are
         # the big-endian header length; reject anything that doesn't start
         # with a plausible .fsdn binary header.
@@ -2755,12 +3449,14 @@ class BackupService:
         try:
             config = self._parse_fsdn_file(file_data)
         except Exception as e:
+            logger.warning("Config import archive rejected (%s)", type(e).__name__)
             return {
                 "success": False,
                 "dry_run": dry_run,
-                "message": (
-                    f"Invalid .fsdn file: {e}. Only the .fsdn format with a "
-                    "verified SHA-256 checksum is accepted."
+                "message": backup_failure_detail(
+                    e,
+                    "Invalid .fsdn file. Only the .fsdn format with a verified "
+                    "SHA-256 checksum is accepted.",
                 ),
             }
 
@@ -2792,10 +3488,11 @@ class BackupService:
             try:
                 archive = BackupArchive.model_validate(config)
             except Exception as e:
+                logger.warning("Config import layout rejected (%s)", type(e).__name__)
                 return {
                     "success": False,
                     "dry_run": dry_run,
-                    "message": f"Unrecognized .fsdn archive layout: {e}",
+                    "message": "Unrecognized .fsdn archive layout; check the archive format.",
                 }
             # Each contributor section IS its flat resource dict; only ``core``
             # holds the sites/controllers/devices/users this importer handles.
@@ -2810,116 +3507,54 @@ class BackupService:
                 "created_at": created_at.isoformat() if created_at else None,
                 "product_version": archive.manifest.source_version,
             }
-        if not isinstance(data, dict):
-            data = {}
-        summary: dict[str, Any] = {}
+        from app.services.backup_import import ConfigImportError, plan_config_import
 
-        # NOTE C4/H3: Organization is intentionally NOT in the import map —
-        # we never let an import create or modify orgs.
-        model_map = {
-            "sites": (Site, "id"),
-            "controllers": (Controller, "id"),
-            "devices": (Device, "id"),
-            "users": (User, "id"),
-        }
-
-        # NOTE H4/H5: identical blocked-field set applied on BOTH insert and
-        # update branches. Previously the insert branch silently accepted
-        # hashed_password / role / is_superuser if the model had those columns.
-        _BLOCKED_FIELDS = {
-            "id",
-            "hashed_password",
-            "password_hash",
-            "role",
-            "is_superuser",
-            "mfa_secret",
-            "organization_id",  # H4: caller is the source of truth, not file
-        }
-
-        for key, (model_cls, pk_field) in model_map.items():
-            records = data.get(key, [])
-            if not records:
-                continue
-            created = 0
-            updated = 0
-            skipped = 0
-            rejected_org = 0
-            for record in records:
-                # NOTE H4: reject records that originated in a different org.
-                rec_org = record.get("organization_id")
-                if rec_org and str(rec_org) != str(organization_id):
-                    rejected_org += 1
-                    skipped += 1
-                    continue
-
-                pk_val = record.get(pk_field)
-                if not pk_val:
-                    skipped += 1
-                    continue
-
-                result = await self.db.execute(
-                    select(model_cls).where(getattr(model_cls, pk_field) == pk_val)
+        try:
+            # Planning must not flush any pending resource before all ownership
+            # and reference checks have accepted the complete configuration.
+            with self.db.no_autoflush:
+                plan = await plan_config_import(
+                    self.db,
+                    data,
+                    organization_id,
+                    overwrite_existing=overwrite_existing,
+                    dry_run=dry_run,
+                    controller_secret_fields=CONTROLLER_SECRET_CONFIG_KEYS,
                 )
-                existing = result.scalars().first()
-
-                if existing:
-                    # H4: do not touch rows belonging to a different org.
-                    existing_org = getattr(existing, "organization_id", None)
-                    if existing_org and existing_org != organization_id:
-                        rejected_org += 1
-                        skipped += 1
-                        continue
-                    if overwrite_existing and not dry_run:
-                        for k, v in record.items():
-                            if k != pk_field and hasattr(existing, k) and k not in _BLOCKED_FIELDS:
-                                setattr(existing, k, v)
-                        updated += 1
-                    else:
-                        skipped += 1
-                else:
-                    if not dry_run:
-                        # NOTE H5: apply _BLOCKED_FIELDS on insert too.
-                        clean = {
-                            k: v
-                            for k, v in record.items()
-                            if hasattr(model_cls, k) and k not in _BLOCKED_FIELDS
-                        }
-                        # H4: force the inserted record into the caller's org
-                        if hasattr(model_cls, "organization_id"):
-                            clean["organization_id"] = organization_id
-                        try:
-                            obj = model_cls(**clean)
-                            self.db.add(obj)
-                        except Exception:
-                            skipped += 1
-                            continue
-                    created += 1
-
-            summary[key] = {
-                "created": created,
-                "updated": updated,
-                "skipped": skipped,
-                "rejected_cross_org": rejected_org,
-            }
+        except ConfigImportError as exc:
+            await self.db.rollback()
+            return {"success": False, "dry_run": dry_run, "message": str(exc)}
 
         if not dry_run:
             try:
+                plan.apply(self.db)
                 await self.db.commit()
-            except Exception as e:
+            except Exception as exc:
                 await self.db.rollback()
+                logger.error(
+                    "Config import transaction failed for organization %s (%s)",
+                    organization_id,
+                    type(exc).__name__,
+                )
                 return {
                     "success": False,
                     "dry_run": False,
-                    "message": f"Import failed: {e}",
+                    "message": "Import failed; no changes were applied. Check the configuration and retry.",
                 }
 
+        message = (
+            "Dry run complete — no changes applied" if dry_run else "Import completed successfully"
+        )
+        if plan.new_disabled_users:
+            message += (
+                ". New user profiles are disabled and have no usable password; "
+                "complete account setup and access grants before activation."
+            )
         return {
             "success": True,
             "dry_run": dry_run,
-            "would_import" if dry_run else "imported": summary,
-            "message": "Dry run complete — no changes applied"
-            if dry_run
-            else "Import completed successfully",
+            "would_import" if dry_run else "imported": plan.summary,
+            "message": message,
             "metadata": meta,
         }
 
@@ -2931,11 +3566,11 @@ class BackupService:
 
         # Verify checksum
         if hashlib.sha256(payload).hexdigest() != header.get("checksum"):
-            raise ValueError("Checksum verification failed — file may be corrupted")
+            raise BackupInputError("Checksum verification failed — file may be corrupted")
 
         # Decrypt if needed
         if header.get("encrypted"):
-            raise ValueError(
+            raise BackupInputError(
                 "Encrypted backup detected — use the restore endpoint with the backup ID instead of import"
             )
 
@@ -2949,6 +3584,22 @@ class BackupService:
     # -------------------------------------------------------------------------
     # Restore
     # -------------------------------------------------------------------------
+
+    async def _load_catalogue_artifact(
+        self, backup: Backup, *, backend: BackupStorageBackend | None = None
+    ) -> tuple[bytes, str]:
+        """Validate metadata before storage, then verify the exact returned bytes."""
+        try:
+            expected = recorded_identity(backup.metadata_json)
+            if backend is None:
+                backend, _ = await self._resolve_storage(
+                    backup.storage_type, backup.storage_location_id
+                )
+            raw = await backend.load(backup.storage_path)
+            integrity = verify_identity(raw, expected)
+        except BackupArtifactError as exc:
+            raise BackupInputError(str(exc)) from None
+        return raw, integrity
 
     async def preview_backup_manifest(
         self,
@@ -2999,8 +3650,13 @@ class BackupService:
         # the caller gets a well-formed response it can render as "passphrase
         # required" rather than an error it cannot explain.
         if getattr(backup, "include_secrets", False):
+            try:
+                recorded_identity(backup.metadata_json)
+            except BackupArtifactError as exc:
+                raise BackupInputError(str(exc)) from None
             return {
                 "backup_id": str(backup.id),
+                "artifact_integrity": backup.artifact_integrity,
                 "format_version": None,
                 "created_at": backup.created_at.isoformat() if backup.created_at else None,
                 "source_version": None,
@@ -3013,15 +3669,14 @@ class BackupService:
                 ),
             }
 
-        backend, _ = await self._resolve_storage(backup.storage_type, backup.storage_location_id)
-        raw = await backend.load(backup.storage_path)
+        raw, integrity = await self._load_catalogue_artifact(backup)
 
         header_len = int.from_bytes(raw[:4], "big")
         header = json.loads(raw[4 : 4 + header_len].decode("utf-8"))
         payload = raw[4 + header_len :]
 
         if hashlib.sha256(payload).hexdigest() != header.get("checksum"):
-            raise ValueError("Checksum verification failed")
+            raise BackupInputError("Checksum verification failed")
         if header.get("encrypted") and backup.encryption_key_id:
             payload = self.encryption.decrypt(payload, backup.encryption_key_id)
         if header.get("compressed"):
@@ -3072,6 +3727,7 @@ class BackupService:
         return {
             "backup_id": backup.id,
             "format_version": archive.manifest.format_version,
+            "artifact_integrity": integrity,
             "created_at": archive.manifest.created_at,
             "source_version": archive.manifest.source_version,
             "organization_id": archive.manifest.organization_id,
@@ -3157,10 +3813,7 @@ class BackupService:
             await self.db.commit()
 
             # Load backup data (outside the atomic restore txn — read-only).
-            backend, _ = await self._resolve_storage(
-                backup.storage_type, backup.storage_location_id
-            )
-            raw = await backend.load(backup.storage_path)
+            raw, _ = await self._load_catalogue_artifact(backup)
 
             # Parse .fsdn
             header_len = int.from_bytes(raw[:4], "big")
@@ -3169,7 +3822,7 @@ class BackupService:
 
             # Verify checksum
             if hashlib.sha256(payload).hexdigest() != header.get("checksum"):
-                raise ValueError("Checksum verification failed")
+                raise BackupInputError("Checksum verification failed")
 
             # Decrypt. A vault (.fsdnvault) is sealed under the operator PASSPHRASE
             # (portable across instances); a config snapshot uses the instance
@@ -3180,7 +3833,7 @@ class BackupService:
             if header.get("encrypted") and key_id:
                 if backup.include_secrets:
                     if not passphrase:
-                        raise ValueError(
+                        raise BackupInputError(
                             "this is a secure (full) backup — a passphrase is required to restore it"
                         )
                     # A wrong passphrase surfaces as ``cryptography.fernet
@@ -3199,7 +3852,7 @@ class BackupService:
                         # FILE — do not mask them as a passphrase mistake.
                         raise
                     except Exception as exc:
-                        raise ValueError(
+                        raise BackupInputError(
                             "could not decrypt this backup — wrong passphrase?"
                         ) from exc
                 else:
@@ -3267,16 +3920,17 @@ class BackupService:
                         created_by_id=initiated_by_id,
                     )
                 except Exception as exc:
-                    logger.exception(
-                        "pre-restore rollback slot capture failed for "
-                        "RestoreJob %s; refusing to proceed without undo support",
+                    logger.error(
+                        "Pre-restore rollback capture failed for RestoreJob %s (%s); "
+                        "refusing to proceed without undo support",
                         job.id,
+                        type(exc).__name__,
                     )
-                    raise RuntimeError(
+                    raise BackupRecoveryError(
                         "Pre-restore rollback snapshot could not be captured; "
                         "refusing to perform a destructive restore without an "
                         "undo point. Resolve the snapshot failure and retry."
-                    ) from exc
+                    ) from None
             job.progress = 40
 
             restore_options = {
@@ -3315,8 +3969,26 @@ class BackupService:
                 job.restore_log = result
             summary = result.get("summary", {})
             job.items_restored = summary.get("total_created", 0) + summary.get("total_updated", 0)
-            job.items_failed = summary.get("total_skipped", 0)
-            job.status = "completed"
+            # Deliberately preserved records are skips, not failed writes.
+            # Some module failures have no reliable record count; their status
+            # and errors still fail the job even when items_failed is zero.
+            job.items_failed = sum(
+                sum(section.get("skipped", {}).values())
+                for section in result.get("contributors", [])
+                if section.get("status") in {"error", "schema_mismatch"}
+            )
+            failed = bool(summary.get("contributors_failed", 0) or summary.get("total_errors", 0))
+            job.status = "failed" if failed else "completed"
+            job.error_message = (
+                (
+                    "Restore preview found errors; no configuration was applied. Review the contributor report."
+                    if dry_run
+                    else "Restore finished with errors. Other sections may have been applied; "
+                    "review the contributor report before retrying."
+                )
+                if failed
+                else None
+            )
             job.completed_at = datetime.now(UTC)
             job.progress = 100
             await self.db.commit()
@@ -3328,7 +4000,9 @@ class BackupService:
             # SAVEPOINT) before we update the job to "failed".
             await self.db.rollback()
             job.status = "failed"
-            job.error_message = str(e)[:2000]
+            job.error_message = backup_failure_detail(
+                e, "Backup restore failed; review archive and destination access before retrying."
+            )
             job.completed_at = datetime.now(UTC)
             self.db.add(job)
             await self.db.commit()
@@ -3351,7 +4025,7 @@ class BackupService:
         restores every contributor INCLUDING secrets, re-keyed onto THIS instance. The
         restored super_admin makes setup complete and the operator's old login works.
         """
-        from app.models.core import Organization
+        from app.models.core import Organization, User, UserRole
         from app.services.backup_contributors import (
             BackupArchive,
             is_legacy_v1_payload,
@@ -3360,26 +4034,28 @@ class BackupService:
 
         # 1. Parse + decrypt (key_id from the self-describing header — portable).
         if len(file_bytes) < 4:
-            raise ValueError("not a FreeSDN backup file")
+            raise BackupInputError("not a FreeSDN backup file")
         header_len = int.from_bytes(file_bytes[:4], "big")
         try:
             header = json.loads(file_bytes[4 : 4 + header_len].decode("utf-8"))
         except Exception as exc:
-            raise ValueError("unrecognized backup file") from exc
+            raise BackupInputError("unrecognized backup file") from exc
         payload = file_bytes[4 + header_len :]
         if hashlib.sha256(payload).hexdigest() != header.get("checksum"):
-            raise ValueError("checksum verification failed — the file is corrupt")
+            raise BackupInputError("checksum verification failed — the file is corrupt")
         if not header.get("secrets"):
-            raise ValueError(
+            raise BackupInputError(
                 "this is a config snapshot (.fsdn), not a full backup — first-install "
                 "restore needs a secure .fsdnvault that carries your accounts + credentials"
             )
         if header.get("encrypted"):
             key_id = header.get("key_id")
             if not key_id:
-                raise ValueError("encrypted file is missing its key descriptor — cannot restore")
+                raise BackupInputError(
+                    "encrypted file is missing its key descriptor — cannot restore"
+                )
             if not passphrase:
-                raise ValueError("a passphrase is required to restore a secure backup")
+                raise BackupInputError("a passphrase is required to restore a secure backup")
             # PBKDF2 is a synchronous CPU burn and this handler is
             # unauthenticated (only "no super_admin exists yet" gates it), so a
             # derive run inline stalls the whole event loop — /health, the setup
@@ -3396,7 +4072,7 @@ class BackupService:
                 # mistake would send the operator chasing the wrong thing.
                 raise
             except Exception as exc:
-                raise ValueError("could not decrypt — wrong passphrase?") from exc
+                raise BackupInputError("could not decrypt — wrong passphrase?") from exc
         if header.get("compressed"):
             payload = _bounded_gunzip(payload)
         config = json.loads(payload.decode("utf-8"))
@@ -3435,71 +4111,71 @@ class BackupService:
             if org_id is not None:
                 break
         if org_id is None:
-            raise ValueError("backup contains no organization-scoped data to restore")
+            raise BackupInputError("backup contains no organization-scoped data to restore")
 
-        # 3. Recreate the Organization with its ORIGINAL id (so records match). The org
-        # row itself is never inside a backup, so name/slug are synthesized — a unique
-        # slug is derived from the preserved id (the operator can rename it later).
-        existing_org = (
-            await self.db.execute(
-                select(Organization).where(
-                    Organization.id == org_id, Organization.deleted_at.is_(None)
+        # A partial first-install restore can create an administrator and
+        # close the setup gate before the remaining modules are recovered.
+        # Keep every database change, including the organization, in one
+        # savepoint so a failed contributor leaves this setup retryable.
+        async with self.db.begin_nested():
+            # 3. Recreate the Organization with its ORIGINAL id (so records match). The org
+            # row itself is never inside a backup, so name/slug are synthesized — a unique
+            # slug is derived from the preserved id (the operator can rename it later).
+            existing_org = (
+                await self.db.execute(
+                    select(Organization).where(
+                        Organization.id == org_id, Organization.deleted_at.is_(None)
+                    )
                 )
-            )
-        ).scalar_one_or_none()
-        if existing_org is None:
-            self.db.add(
-                Organization(
-                    id=org_id,
-                    name=(org_name or "Restored Organization"),
-                    slug=f"restored-{str(org_id).replace('-', '')[:16]}",
+            ).scalar_one_or_none()
+            if existing_org is None:
+                self.db.add(
+                    Organization(
+                        id=org_id,
+                        name=(org_name or "Restored Organization"),
+                        slug=f"restored-{str(org_id).replace('-', '')[:16]}",
+                    )
                 )
+                await self.db.flush()
+            self.org_id = org_id
+
+            # 4. Restore everything, re-keyed onto this instance.
+            result = await self._dispatch_restore_via_contributors(
+                archive,
+                organization_id=org_id,
+                dry_run=False,
+                restore_options={
+                    "include_secrets": True,
+                    "restore_users": True,
+                    "restore_devices": True,
+                    "overwrite_existing": True,
+                },
+                selected_contributors=None,
             )
+            summary = result.get("summary", {})
+            if summary.get("contributors_failed", 0) or summary.get("total_errors", 0):
+                raise BackupRecoveryError(
+                    "Vault restore did not complete; no setup changes were committed. "
+                    "Check required modules and archive compatibility before retrying."
+                )
             await self.db.flush()
-        self.org_id = org_id
-
-        # 4. Restore everything, re-keyed onto this instance.
-        result = await self._dispatch_restore_via_contributors(
-            archive,
-            organization_id=org_id,
-            dry_run=False,
-            restore_options={
-                "include_secrets": True,
-                "restore_users": True,
-                "restore_devices": True,
-                "overwrite_existing": True,
-            },
-            selected_contributors=None,
-        )
-        await self.db.flush()
+            administrator = await self.db.scalar(
+                select(User.id)
+                .where(
+                    User.organization_id == org_id,
+                    User.role == UserRole.SUPER_ADMIN,
+                    User.is_active.is_(True),
+                    User.deleted_at.is_(None),
+                )
+                .limit(1)
+            )
+            if administrator is None:
+                raise BackupRecoveryError(
+                    "Vault restore did not include an active administrator; no setup "
+                    "changes were committed. Choose a full backup containing an active "
+                    "super administrator before retrying."
+                )
         return {"organization_id": str(org_id), "result": result}
-
-    async def _restorable_ids(self, model_cls: Any, payload_records: list[Any]) -> set[str]:
-        """Ids of ``model_cls`` rows a restore may reference as a foreign key.
-
-        The union of (a) the ids this restore is about to create — records in
-        the payload that the H4 cross-org check will accept — and (b) the ids
-        already present in ``self.org_id``. Used to validate ``user_site_access``,
-        whose FKs cannot be checked by the generic org filter because the table
-        has no organization_id of its own.
-
-        Deliberately NOT filtered on ``deleted_at``: the question here is
-        whether the foreign key will RESOLVE at flush time, and a soft-deleted
-        row is still a row. Filtering it out would refuse a legitimate grant
-        and, worse, report it as a cross-tenant rejection.
-        """
-        ids = {
-            str(r["id"])
-            for r in payload_records
-            if isinstance(r, dict)
-            and r.get("id")
-            and (not r.get("organization_id") or str(r["organization_id"]) == str(self.org_id))
-        }
-        rows = await self.db.execute(
-            select(model_cls.id).where(model_cls.organization_id == self.org_id)
-        )
-        ids |= {str(i) for i in rows.scalars().all()}
-        return ids
 
     async def _restore_data(
         self,
@@ -3511,7 +4187,7 @@ class BackupService:
         restore_users: bool,
         include_secrets: bool = False,
     ) -> dict[str, Any]:
-        """Restore data into DB, respecting FK order: Sites → Controllers → Devices.
+        """Restore sites, credentials and their consumers in dependency order.
 
         NOTE H4: organization_id is forced to ``self.org_id`` on every insert.
         Records whose stored organization_id doesn't match are REJECTED
@@ -3522,11 +4198,38 @@ class BackupService:
         """
         # NOTE C4/H3: Organization is intentionally excluded from the restore
         # map. A restore must NEVER create or modify Organization rows.
-        from app.models import Controller, Credential, Device, Site, User, UserSiteAccess
+        from app.models import Controller, Credential, Device, Site, User, UserRole, UserSiteAccess
         from app.models.automation import AutomationRuleRecord
+        from app.models.sso import SSOProvider
+        from app.services.backup_contributors.account_security import (
+            administrator_bits,
+            destination_fields,
+            merge_existing_user,
+            require_administrator_survivors,
+            require_same_provider_security,
+            validate_snapshot,
+        )
+        from app.services.backup_contributors.account_security_codec import (
+            AccountSecurityFormatError,
+        )
 
         if self.org_id is None:
             raise ValueError("BackupService.org_id must be set before _restore_data")
+
+        security_restore = include_secrets and restore_users
+        if security_restore:
+            data = {**data, **validate_snapshot(data, self.org_id)}
+        if restore_users and not dry_run:
+            # Configuration profile restore also locks User rows after Sites;
+            # join lifecycle coordination before either class of resource lock.
+            from app.core.user_lifecycle import try_lock_user_lifecycle
+
+            if not await try_lock_user_lifecycle(self.db):
+                raise AccountSecurityFormatError(
+                    "Account lifecycle changes are in progress. No core restore changes were applied; retry the vault restore."
+                )
+        preserved_destination_users: set[UUID] = set()
+        administrator_transitions: list[tuple[bool, bool, bool, bool]] = []
 
         # NOTE H4/H5: identical blocked-field set on BOTH update and insert.
         # A config-snapshot restore blocks identity/secret fields (they're never in the
@@ -3574,13 +4277,17 @@ class BackupService:
             }
         )
 
+        _BLOCKED_FIELDS |= {"created_at", "updated_at", "created_by", "updated_by", "deleted_at"}
+
+        user_profile_fields = {"full_name", "language", "preferences"}
+        user_create_fields = user_profile_fields | {"email", "username"}
+
         result: dict[str, Any] = {}
         restore_map = [
             ("sites", Site),
-            ("controllers", Controller),
-            # Before devices: Device.credential_id references these rows, so a
-            # device restored first would carry a dangling FK.
+            # Restore dependencies before consumers in both preview and apply.
             ("credentials", Credential),
+            ("controllers", Controller),
             # Collected since the feature shipped, but nothing ever restored
             # them -- the rules rode along in the file and were dropped on the
             # way back in. They reference only the organization, so ordering
@@ -3590,6 +4297,8 @@ class BackupService:
         if restore_devices:
             restore_map.append(("devices", Device))
         if restore_users:
+            if security_restore:
+                restore_map.append(("sso_providers", SSOProvider))
             restore_map.append(("users", User))
             # AFTER users: a grant's user_id references the row restored above.
             # Gated on restore_users for the same reason — restoring grants for
@@ -3597,30 +4306,95 @@ class BackupService:
             # one org's access model to another instance's accounts.
             restore_map.append(("user_site_access", UserSiteAccess))
 
-        # Site ids / user ids a restored ``user_site_access`` row may legally
-        # point at: the ones this restore itself is creating PLUS the ones
-        # already live in this org. UserSiteAccess has no organization_id
-        # column, so the generic H4 cross-org reject below cannot see a grant
-        # aimed at another org's site — and a dangling FK would not fail the
-        # row, it would fail the whole flush and roll back the entire core
-        # section. Computed from the payload as well as the DB so the check
-        # gives the same answer in a dry run (nothing written yet) as in the
-        # real run that follows it.
-        grant_targets: dict[str, set[str]] | None = None
-        if restore_users and data.get("user_site_access"):
-            grant_targets = {
-                "site_id": await self._restorable_ids(Site, data.get("sites") or []),
-                "user_id": await self._restorable_ids(User, data.get("users") or []),
-            }
+        from types import SimpleNamespace
+
+        from sqlalchemy import Uuid
+
+        from app.models.enterprise import SiteGroup
+
+        # Loaded rows are refreshed, and application holds both resource and
+        # parent rows through the surrounding contributor transaction. Preview
+        # is advisory and revalidates without locks when actually applied.
+        loaded: dict[tuple[Any, UUID], Any] = {}
+        accepted: dict[tuple[Any, UUID], Any] = {}
+        moved_parents: set[tuple[Any, UUID]] = set()
+
+        async def load(model: Any, identifier: Any) -> Any:
+            if identifier is None:
+                return None
+            identity = identifier if isinstance(identifier, UUID) else UUID(str(identifier))
+            key = (model, identity)
+            if key not in loaded:
+                query = (
+                    select(model)
+                    .where(model.id == identity)
+                    .execution_options(populate_existing=True)
+                )
+                if not dry_run:
+                    query = query.with_for_update()
+                loaded[key] = (await self.db.execute(query)).scalars().first()
+            return loaded[key]
+
+        async def owned(model: Any, row: Any) -> bool:
+            if row is None or getattr(row, "deleted_at", None) is not None:
+                return False
+            if model in (Controller, Device):
+                return await owned(Site, await load(Site, row.site_id))
+            if model is UserSiteAccess:
+                return await owned(Site, await load(Site, row.site_id)) and await owned(
+                    User, await load(User, row.user_id)
+                )
+            return getattr(row, "organization_id", None) == self.org_id
+
+        async def reference(model: Any, identifier: Any) -> Any:
+            if identifier is None:
+                return None
+            identity = identifier if isinstance(identifier, UUID) else UUID(str(identifier))
+            key = (model, identity)
+            if key in accepted:
+                return accepted[key]
+            row = await load(model, identity)
+            return row if await owned(model, row) else None
 
         for key, model_cls in restore_map:
+            columns = {prop.key: prop.columns[0] for prop in model_cls.__mapper__.column_attrs}
+            uuid_columns = {
+                field
+                for field, column in columns.items()
+                if isinstance(column.type, Uuid) and column.type.as_uuid
+            }
             records = data.get(key, [])
+            seen: set[UUID] = set()
             created = 0
             updated = 0
             skipped = 0
             rejected_org = 0
 
             for record in records:
+                # Only explicit vault recovery can reinstate account access.
+                # Config snapshots may carry old grants, but must not undo
+                # current permission decisions or activate imported profiles.
+                if model_cls is UserSiteAccess and not include_secrets:
+                    skipped += 1
+                    continue
+                # JSON carries UUIDs as strings, whereas mapped UUID columns
+                # expect UUID objects. Bulk INSERT RETURNING correlates these
+                # identities in Python; implicit driver coercion is insufficient.
+                # Convert only mapped columns, leaving JSON payloads untouched.
+                portable_security_record = dict(record)
+                record = dict(record)
+                try:
+                    for field in uuid_columns:
+                        value = record.get(field)
+                        if value is None or isinstance(value, UUID):
+                            continue
+                        if not isinstance(value, str):
+                            raise ValueError("Invalid archived UUID")
+                        record[field] = UUID(value)
+                except ValueError:
+                    skipped += 1
+                    continue
+
                 # Vault restore: the controller ``config`` arrived with its secret fields
                 # DECRYPTED inside the passphrase-sealed payload. Re-encrypt those fields
                 # INDIVIDUALLY under THIS instance's SECRET_KEY (matching how the live app
@@ -3662,24 +4436,78 @@ class BackupService:
                     skipped += 1
                     continue
 
-                # Site grants carry no organization_id, so the check above is
-                # blind to them — see ``grant_targets``. Both FK ends must
-                # resolve inside this org or the row is refused.
-                if grant_targets is not None and model_cls is UserSiteAccess:
-                    if any(
-                        str(record.get(fk) or "") not in allowed
-                        for fk, allowed in grant_targets.items()
-                    ):
-                        rejected_org += 1
-                        skipped += 1
-                        continue
-
                 pk = record.get("id")
                 if not pk:
                     skipped += 1
                     continue
 
-                existing = await self.db.get(model_cls, pk)
+                if pk in seen:
+                    raise ValueError("Core restore contains duplicate resource identifiers.")
+                seen.add(pk)
+                existing = await load(model_cls, pk)
+                if existing is not None and not await owned(model_cls, existing):
+                    if security_restore and model_cls in (User, UserSiteAccess, SSOProvider):
+                        raise AccountSecurityFormatError(
+                            "Account-security destination ownership conflicts with the archive."
+                        )
+                    rejected_org += 1
+                    skipped += 1
+                    continue
+
+                # Validate effective references, including values retained when
+                # overwrite is disabled. A payload claim alone never authorizes
+                # a rejected parent or another tenant's existing resource.
+                def value(
+                    field: str, row: Any = existing, archived: dict[str, Any] = record
+                ) -> Any:
+                    if (row is None or overwrite_existing) and field in archived:
+                        return archived[field]
+                    return getattr(row, field, None) if row is not None else None
+
+                refs_valid = True
+                if model_cls in (Controller, Device, Credential):
+                    site_id = value("site_id")
+                    site = await reference(Site, site_id)
+                    refs_valid = site is not None or (model_cls is Credential and site_id is None)
+                    if model_cls in (Controller, Device) and refs_valid:
+                        credential_id = value("credential_id")
+                        if credential_id is not None:
+                            credential = await reference(Credential, credential_id)
+                            refs_valid = credential is not None and (
+                                getattr(credential, "site_id", None) is None
+                                or credential.site_id == site_id
+                            )
+                        if model_cls is Device and value("controller_id") is not None:
+                            controller = await reference(Controller, value("controller_id"))
+                            refs_valid = (
+                                refs_valid
+                                and controller is not None
+                                and controller.site_id == site_id
+                            )
+                elif model_cls is UserSiteAccess:
+                    refs_valid = (
+                        await reference(Site, value("site_id")) is not None
+                        and await reference(User, value("user_id")) is not None
+                    )
+                elif model_cls is Site and value("site_group_id") is not None:
+                    refs_valid = await reference(SiteGroup, value("site_group_id")) is not None
+                elif model_cls is User and include_secrets and value("sso_provider_id") is not None:
+                    refs_valid = await reference(SSOProvider, value("sso_provider_id")) is not None
+                if not refs_valid:
+                    if security_restore and model_cls in (User, UserSiteAccess, SSOProvider):
+                        raise AccountSecurityFormatError(
+                            "Account-security restore requires every referenced parent."
+                        )
+                    rejected_org += 1
+                    skipped += 1
+                    continue
+                if (
+                    security_restore
+                    and model_cls is UserSiteAccess
+                    and record.get("user_id") in preserved_destination_users
+                ):
+                    skipped += 1
+                    continue
                 if existing is None and model_cls is UserSiteAccess:
                     # ix_user_site_access_user_site is UNIQUE on (user_id,
                     # site_id). A grant re-created by hand after the backup has
@@ -3687,24 +4515,145 @@ class BackupService:
                     # archived row raises at flush — and that takes the whole
                     # core section down with it, not just this record. Match on
                     # the unique key as well as the pk.
-                    dup = await self.db.execute(
-                        select(UserSiteAccess).where(
+                    query = (
+                        select(UserSiteAccess)
+                        .where(
                             UserSiteAccess.user_id == record.get("user_id"),
                             UserSiteAccess.site_id == record.get("site_id"),
                         )
+                        .execution_options(populate_existing=True)
                     )
-                    existing = dup.scalars().first()
+                    if not dry_run:
+                        query = query.with_for_update()
+                    existing = (await self.db.execute(query)).scalars().first()
+                    if existing is not None and not await owned(model_cls, existing):
+                        rejected_org += 1
+                        skipped += 1
+                        continue
+                if security_restore and model_cls in (User, SSOProvider):
+                    portable = portable_security_record
+                    if model_cls is SSOProvider and existing is not None:
+                        require_same_provider_security(portable, existing)
+                    elif model_cls is User:
+                        if (existing is None or overwrite_existing) and portable[
+                            "sso_provider_id"
+                        ] is not None:
+                            # The incoming archive can be internally unique yet
+                            # collide with a different destination account. Check
+                            # preview and apply without transferring that identity.
+                            # Apply already owns lifecycle coordination; the DB
+                            # unique index also covers independent legacy writers.
+                            collision = await self.db.scalar(
+                                select(User.id)
+                                .where(
+                                    User.sso_provider_id == UUID(portable["sso_provider_id"]),
+                                    User.external_id == portable["external_id"],
+                                    User.deleted_at.is_(None),
+                                    User.id != pk,
+                                )
+                                .limit(1)
+                            )
+                            if collision is not None:
+                                raise AccountSecurityFormatError(
+                                    "External identity already belongs to another destination account; "
+                                    "an explicit authenticated account migration is required."
+                                )
+                        if existing is None:
+                            portable = {**portable, "token_version": portable["token_version"] + 1}
+                        elif overwrite_existing:
+                            current_grants = {
+                                (str(site), level)
+                                for site, level in (
+                                    await self.db.execute(
+                                        select(
+                                            UserSiteAccess.site_id, UserSiteAccess.access_level
+                                        ).where(UserSiteAccess.user_id == existing.id)
+                                    )
+                                ).all()
+                            }
+                            archived_grants = {
+                                (row["site_id"], row["access_level"])
+                                for row in data["user_site_access"]
+                                if row["user_id"] == str(existing.id)
+                            }
+                            portable = merge_existing_user(
+                                portable, existing, current_grants, archived_grants
+                            )
+                        else:
+                            preserved_destination_users.add(existing.id)
+                    record = destination_fields(portable, provider=model_cls is SSOProvider)
+                    if model_cls is User and (existing is None or overwrite_existing):
+                        before_bits = (
+                            administrator_bits(existing.is_active, existing.role)
+                            if existing
+                            else (False, False)
+                        )
+                        after_bits = administrator_bits(record["is_active"], record["role"])
+                        administrator_transitions.append((*before_bits, *after_bits))
+                    for field in uuid_columns:
+                        if record.get(field) is not None:
+                            record[field] = UUID(str(record[field]))
                 if existing:
+                    if (
+                        model_cls in (Controller, Credential)
+                        and overwrite_existing
+                        and value("site_id") != existing.site_id
+                    ):
+                        moved_parents.add((model_cls, pk))
                     # H4: never touch a row owned by a different org.
                     existing_org = getattr(existing, "organization_id", None)
                     if existing_org and existing_org != self.org_id:
                         rejected_org += 1
                         skipped += 1
                         continue
+                    if model_cls is User and include_secrets and overwrite_existing:
+                        # Restoring login or authority is a security change. Never
+                        # reuse an archived counter or leave destination sessions
+                        # valid after replacing the account. The row was refreshed
+                        # and locked above; validate during preview as well.
+                        current_version = existing.token_version
+                        archived_version = record.get("token_version", current_version)
+                        versions = (current_version, archived_version)
+                        if any(
+                            type(version) is not int or not 0 <= version < 2**31 - 1
+                            for version in versions
+                        ):
+                            raise ValueError(
+                                "Account restore requires valid non-exhausted token versions."
+                            )
+                        record = {**record, "token_version": max(versions) + 1}
+                        # A snapshot predates later security decisions. Keep a
+                        # destination account disabled; reactivation belongs to
+                        # the explicit administrator account-management path.
+                        if existing.is_active is False and record.get("is_active") is True:
+                            record = {**record, "is_active": False}
                     if overwrite_existing and not dry_run:
                         for k, v in record.items():
-                            if k != "id" and hasattr(existing, k) and k not in _BLOCKED_FIELDS:
+                            if (
+                                model_cls is User
+                                and not include_secrets
+                                and k not in user_profile_fields
+                            ):
+                                continue
+                            if k != "id" and k in columns and k not in _BLOCKED_FIELDS:
                                 setattr(existing, k, v)
+                        if model_cls is User and include_secrets:
+                            from sqlalchemy import update
+
+                            from app.models import UserSession
+                            from app.models.api_keys import revoke_user_api_keys
+
+                            await revoke_user_api_keys(self.db, existing.id)
+                            await self.db.execute(
+                                update(UserSession)
+                                .where(UserSession.user_id == existing.id)
+                                .values(
+                                    is_revoked=True,
+                                    revoked_at=func.coalesce(
+                                        UserSession.revoked_at, datetime.now(UTC)
+                                    ),
+                                )
+                            )
                         updated += 1
                     else:
                         skipped += 1
@@ -3714,8 +4663,18 @@ class BackupService:
                         clean = {
                             k: v
                             for k, v in record.items()
-                            if hasattr(model_cls, k) and k not in _BLOCKED_FIELDS
+                            if k in columns and k not in _BLOCKED_FIELDS
                         }
+                        if model_cls is User and not include_secrets:
+                            clean = {k: v for k, v in clean.items() if k in user_create_fields}
+                            # This is a profile, not a recovered login. Require
+                            # normal account setup and separately assigned access.
+                            clean.update(
+                                hashed_password="!",
+                                role=UserRole.VIEWER,
+                                is_active=False,
+                                is_verified=False,
+                            )
                         # PRESERVE the original primary key on insert so intra-core FKs
                         # resolve (e.g. a restored Controller's site_id points at the
                         # restored Site) and the restore is faithful — matching the
@@ -3726,12 +4685,33 @@ class BackupService:
                         # NOTE H4: force the caller's org on every insert.
                         if hasattr(model_cls, "organization_id"):
                             clean["organization_id"] = self.org_id
-                        try:
-                            self.db.add(model_cls(**clean))
-                        except Exception:
-                            skipped += 1
-                            continue
+                        self.db.add(model_cls(**clean))
                     created += 1
+
+                if not dry_run:
+                    # A database rejection fails the complete contributor. Do
+                    # not retain success counts or accept its parent identity.
+                    await self.db.flush()
+                if existing is not None:
+                    if dry_run and overwrite_existing:
+                        fields = {field: getattr(existing, field) for field in columns}
+                        fields.update(
+                            {
+                                k: v
+                                for k, v in record.items()
+                                if k in columns and k not in _BLOCKED_FIELDS
+                            }
+                        )
+                        accepted[(model_cls, pk)] = SimpleNamespace(**fields)
+                    else:
+                        accepted[(model_cls, pk)] = existing
+                else:
+                    fields = {
+                        k: v for k, v in record.items() if k in columns and k not in _BLOCKED_FIELDS
+                    }
+                    if "organization_id" in columns:
+                        fields["organization_id"] = self.org_id
+                    accepted[(model_cls, pk)] = SimpleNamespace(id=pk, **fields)
 
             result[key] = {
                 "created": created,
@@ -3740,8 +4720,50 @@ class BackupService:
                 "rejected_cross_org": rejected_org,
             }
 
+        # A parent may move only if every retained dependent remains coherent.
+        # Check the final accepted graph, including rows omitted from the archive
+        # and rows whose incoming edits were rejected. Preview uses virtual rows;
+        # application uses flushed rows and locks every retained dependent. A
+        # failure is a contributor error: its dispatcher savepoint rolls back ALL
+        # core writes, including earlier accepted records.
+        for model, identity in moved_parents:
+            parent = accepted[(model, identity)]
+            if model is Credential and parent.site_id is None:
+                continue  # Organization-wide credentials may serve any owned site.
+            dependents = (
+                ((Device, "controller_id"),)
+                if model is Controller
+                else (
+                    (Controller, "credential_id"),
+                    (Device, "credential_id"),
+                )
+            )
+            for child_model, field in dependents:
+                query = (
+                    select(child_model)
+                    .where(
+                        getattr(child_model, field) == identity,
+                    )
+                    .execution_options(populate_existing=True)
+                )
+                if not dry_run:
+                    query = query.with_for_update()
+                for stored in (await self.db.execute(query)).scalars().all():
+                    child = accepted.get((child_model, stored.id), stored)
+                    if getattr(child, field, None) == identity and child.site_id != parent.site_id:
+                        raise ValueError(
+                            "Core restore would leave dependent resources in another site."
+                        )
+
         if not dry_run:
             await self.db.flush()
+        if security_restore:
+            await require_administrator_survivors(
+                self.db,
+                self.org_id,
+                administrator_transitions,
+                dry_run=dry_run,
+            )
         return result
 
     # -------------------------------------------------------------------------
@@ -3843,11 +4865,17 @@ class BackupService:
     async def get_backup(self, backup_id: UUID) -> Backup | None:
         return await self.db.get(Backup, backup_id)
 
+    @complete_before_cancellation
     async def delete_backup(self, backup_id: UUID) -> bool:
         """Delete backup record and storage file."""
         backup = await self.db.get(Backup, backup_id)
         if not backup:
             return False
+
+        if backup.remote_write_recovery_required:
+            raise HTTPException(
+                409, "Remote write outcome requires explicit recovery; the record is retained"
+            )
 
         # Delete from storage
         if backup.storage_path:
@@ -3856,8 +4884,7 @@ class BackupService:
                     backup.storage_type, backup.storage_location_id
                 )
                 if not getattr(backend, "SUPPORTS_DELETE", True):
-                    # A destination that cannot prune -- TrueNAS via the
-                    # middleware. Removing the FreeSDN record while the file
+                    # A destination that cannot prune. Removing the record while the file
                     # stays on the appliance is an orphan, and doing it in a
                     # debug log is how a NAS silently fills. Surface it loudly
                     # and keep the record so the file is still accounted for.
@@ -3870,7 +4897,8 @@ class BackupService:
                         backup.storage_path,
                     )
                     raise StorageDeleteUnsupported(backup.storage_type)
-                await backend.delete(backup.storage_path)
+                if await backend.delete(backup.storage_path) is not True:
+                    raise RuntimeError("Storage did not acknowledge deletion")
             except StorageDeleteUnsupported:
                 # Deliberately NOT deleting the record: the file is still there,
                 # and a record pointing at it is better than a silent orphan.
@@ -3883,21 +4911,81 @@ class BackupService:
                         "record is kept so the file is not orphaned."
                     ),
                 )
-            except Exception as e:
-                logger.warning("Failed to delete storage for backup %s: %s", backup_id, e)
+            except Exception as exc:
+                # Keep the catalog row so an unconfirmed file is still visible
+                # and retryable. Provider exceptions may contain credentials or
+                # signed URLs, so neither logs nor the API echo their text.
+                logger.warning(
+                    "Backup storage deletion was not confirmed for %s (%s)",
+                    backup_id,
+                    type(exc).__name__,
+                )
+                raise HTTPException(
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=(
+                        "Backup storage deletion could not be confirmed. "
+                        "The backup record is retained; check the destination and retry."
+                    ),
+                ) from None
 
         await self.db.delete(backup)
         await self.db.commit()
         return True
 
-    async def download_backup(self, backup_id: UUID) -> tuple[bytes, str] | None:
+    async def local_download_source(
+        self, backup: Backup, *, backend: BackupStorageBackend | None = None
+    ) -> LocalDownloadSource | None:
+        """Copy a local download plan without opening a file or retaining ORM state.
+
+        The route has already applied its organization/site/secret-vault gates.
+        Remote transports retain their existing behavior pending bounded SDK work.
+        """
+        if not backup.storage_path:
+            return None
+        if backup.status != BackupStatus.COMPLETED:
+            raise BackupInputError("Backup is not completed.")
+        try:
+            recorded_identity(backup.metadata_json)
+            if backend is None:
+                backend, _ = await self._resolve_storage(
+                    backup.storage_type, backup.storage_location_id
+                )
+            if not isinstance(backend, LocalStorageBackend):
+                return None
+            return LocalDownloadSource(
+                backend.base_path,
+                backup.storage_path,
+                backup.metadata_json,
+                MAX_BACKUP_IMPORT_BYTES,
+            )
+        except BackupArtifactError as error:
+            raise BackupInputError(str(error)) from None
+
+    def webdav_download_source(
+        self, backup: Backup, *, backend: BackupStorageBackend
+    ) -> Callable[[DownloadSnapshot], Awaitable[None]] | None:
+        """Copy remote intent without retaining a session or mutable ORM row."""
+        if not isinstance(backend, WebDAVStorageBackend) or not backup.storage_path:
+            return None
+        if backup.status != BackupStatus.COMPLETED:
+            raise BackupInputError("Backup is not completed.")
+        try:
+            expected = recorded_identity(backup.metadata_json)
+        except BackupArtifactError as error:
+            raise BackupInputError(str(error)) from None
+        return partial(backend.copy_download_into, backup.storage_path, expected)
+
+    async def download_backup(
+        self, backup_id: UUID, *, backend: BackupStorageBackend | None = None
+    ) -> tuple[bytes, str] | None:
         """Download a backup file. Returns (data, filename) or None."""
         backup = await self.db.get(Backup, backup_id)
         if not backup or not backup.storage_path:
             return None
 
-        backend, _ = await self._resolve_storage(backup.storage_type, backup.storage_location_id)
-        data = await backend.load(backup.storage_path)
+        if backup.status != BackupStatus.COMPLETED:
+            raise BackupInputError("Backup is not completed.")
+        data, _ = await self._load_catalogue_artifact(backup, backend=backend)
         filename = (
             backup.storage_path.rsplit("/", 1)[-1]
             if "/" in backup.storage_path
@@ -4100,15 +5188,27 @@ class BackupService:
             "retention_days",
             "max_backups",
         }
+        # Validate before mutating the ORM row. Enabling through PUT follows
+        # the same missed-run policy as the dedicated toggle endpoint.
+        next_run = None
+        if (
+            kwargs.get("cron_expression") is not None
+            or kwargs.get("timezone") is not None
+            or kwargs.get("is_enabled") is True
+        ):
+            cron = kwargs.get("cron_expression")
+            tz = kwargs.get("timezone")
+            cron = schedule.cron_expression if cron is None else cron
+            tz = schedule.timezone if tz is None else tz
+            next_run = self._calculate_next_run(
+                "0 2 * * *" if cron is None else cron,
+                "UTC" if tz is None else tz,
+            )
         for k, v in kwargs.items():
             if v is not None and k in _ALLOWED and hasattr(schedule, k):
                 setattr(schedule, k, v)
-        # Recalculate next_run if cron changed
-        if "cron_expression" in kwargs or "timezone" in kwargs:
-            schedule.next_run_at = self._calculate_next_run(
-                schedule.cron_expression or "0 2 * * *",
-                schedule.timezone or "UTC",
-            )
+        if next_run is not None:
+            schedule.next_run_at = next_run
         await self.db.commit()
         await self.db.refresh(schedule)
         return schedule
@@ -4125,32 +5225,21 @@ class BackupService:
         schedule = await self.db.get(BackupSchedule, schedule_id)
         if not schedule:
             return None
-        schedule.is_enabled = is_enabled
         if is_enabled:
             schedule.next_run_at = self._calculate_next_run(
-                schedule.cron_expression or "0 2 * * *",
-                schedule.timezone or "UTC",
+                "0 2 * * *" if schedule.cron_expression is None else schedule.cron_expression,
+                "UTC" if schedule.timezone is None else schedule.timezone,
             )
+        schedule.is_enabled = is_enabled
         await self.db.commit()
         await self.db.refresh(schedule)
         return schedule
 
     def _calculate_next_run(self, cron_expr: str, tz: str = "UTC") -> datetime:
-        """Calculate the next run time from a cron expression."""
-        try:
-            from croniter import croniter  # type: ignore[import-untyped]
+        """Honor the local calendar and persist its next occurrence in UTC."""
+        from app.core.backup_schedule import next_backup_run
 
-            now = datetime.now(UTC)
-            cron = croniter(cron_expr, now)
-            next_dt: datetime = cron.get_next(datetime)
-            return next_dt
-        except Exception:
-            # Fallback: next day at 2 AM UTC
-            now = datetime.now(UTC)
-            next_run = now.replace(hour=2, minute=0, second=0, microsecond=0)
-            if next_run <= now:
-                next_run += timedelta(days=1)
-            return next_run
+        return next_backup_run(cron_expr, tz, after=datetime.now(UTC))
 
     # -------------------------------------------------------------------------
     # Storage Locations CRUD
@@ -4186,7 +5275,7 @@ class BackupService:
         # credential-key validator on ``config``.
         from app.core.crypto import encrypt_credential
 
-        cfg = kwargs.get("config") or {}
+        cfg = dict(kwargs.get("config") or {})
         # SSRF guard at create time: backends re-check at client-construction
         # but rejecting at create-time gives the operator immediate feedback
         # and prevents persisting a stash of internal-IP locations that fail
@@ -4196,6 +5285,7 @@ class BackupService:
         # - ftp / sftp use ``host``
         storage_type = (kwargs.get("storage_type") or "").lower()
         _ssrf_validate_storage_cfg(storage_type, cfg)
+        validate_policy(storage_type, cfg, creating=True)
 
         public, sensitive = self._extract_sensitive(cfg)
         kwargs["config"] = public
@@ -4203,6 +5293,8 @@ class BackupService:
         # Merge the explicit credentials dict on top of
         # anything split from config.  Explicit credentials win on key conflicts.
         explicit_creds: dict[str, Any] = kwargs.pop("credentials", None) or {}
+        if any(key not in self._SENSITIVE_STORAGE_FIELDS for key in explicit_creds):
+            raise StorageConfigurationError("Credentials contain unsupported fields.")
         sensitive.update(explicit_creds)
 
         if sensitive:
@@ -4231,14 +5323,12 @@ class BackupService:
             "encrypted_credentials",
         }
 
-        # SSRF guard on update — the original create guard
-        # only ran at create time so a PATCH could silently change
-        # endpoint_url / host to an internal address.
         if "config" in kwargs and kwargs["config"] is not None:
-            storage_type = (
-                kwargs.get("storage_type") or (loc.storage_type if loc else "") or ""
-            ).lower()
-            _ssrf_validate_storage_cfg(storage_type, kwargs["config"])
+            storage_type = (kwargs.get("storage_type") or loc.storage_type or "").lower()
+            config = {**(loc.config or {}), **kwargs["config"]}
+            _ssrf_validate_storage_cfg(storage_type, config)
+            validate_policy(storage_type, config)
+            kwargs["config"] = config
 
         # If config is being updated, split out sensitive keys and
         # rotate the encrypted_credentials blob.
@@ -4253,13 +5343,18 @@ class BackupService:
         # from ``config`` (explicit creds win on key conflicts) so the caller
         # can update just the credential portion without touching ``config``.
         explicit_creds: dict[str, Any] = kwargs.pop("credentials", None) or {}
+        if any(key not in self._SENSITIVE_STORAGE_FIELDS for key in explicit_creds):
+            raise StorageConfigurationError("Credentials contain unsupported fields.")
         sensitive.update(explicit_creds)
 
         if sensitive:
             from app.core.crypto import encrypt_credential
 
+            previous = self._storage_config(loc) if loc.encrypted_credentials else {}
+            credentials = {k: v for k, v in previous.items() if k in self._SENSITIVE_STORAGE_FIELDS}
+            credentials.update(sensitive)
             kwargs["encrypted_credentials"] = encrypt_credential(
-                json.dumps(sensitive, separators=(",", ":"))
+                json.dumps(credentials, separators=(",", ":"))
             )
 
         for k, v in kwargs.items():
@@ -4277,65 +5372,167 @@ class BackupService:
         await self.db.commit()
         return True
 
-    async def test_storage_location(self, loc_id: UUID) -> dict[str, Any]:
-        """Test connectivity for a storage location.
-
-        use the same decrypt-and-merge path as
-        ``_resolve_storage`` so the connectivity test exercises the ACTUAL
-        credentials stored in ``encrypted_credentials``, not just the
-        plaintext ``config`` blob (which never contains secrets).
-        """
+    @complete_before_cancellation
+    async def test_storage_location(
+        self,
+        loc_id: UUID,
+        *,
+        created_by_id: UUID | None = None,
+        authorize: Callable[[], Awaitable[None]] | None = None,
+        authorize_native: Callable[[], None] | None = None,
+    ) -> dict[str, Any]:
+        """Require a byte-for-byte round trip and truthful cleanup acknowledgement."""
         loc = await self.db.get(StorageLocation, loc_id)
-        if not loc:
+        if not loc or (self.org_id is not None and loc.organization_id != self.org_id):
             return {"success": False, "message": "Storage location not found"}
+        started = time.monotonic()
+        path = None
+        backend = None
+        remote_write = None
+        remote_recovery = None
+        authorization_ended = False
+        cleanup = "not_created"
+        success = False
+        message = "Storage verification failed; check destination permissions and connectivity."
 
-        start = time.time()
+        async def checkpoint():
+            if authorize is not None:
+                await authorize()
+
         try:
-            # Merge decrypted credentials into config exactly as _resolve_storage does.
-            config = dict(loc.config or {})
-            if loc.encrypted_credentials:
+            await checkpoint()
+            if loc.is_active is False:
+                raise StorageConfigurationError("Storage location is disabled.")
+            backend = get_storage_backend(loc.storage_type, self._storage_config(loc))
+            await checkpoint()
+            if isinstance(backend, (SFTPStorageBackend, FTPStorageBackend)):
+                if authorize is None or authorize_native is None:
+                    raise HTTPException(403, "Current probe authority is required")
+                backend._probe_authorize = authorize
+                backend._probe_native_check = authorize_native
+            # Avoid leaving undeletable probe objects on append-only destinations.
+            if not backend.SUPPORTS_DELETE:
+                raise StorageConfigurationError(
+                    "This destination cannot delete probe files. Use a managed backup and "
+                    "restore validation; a non-destructive connection test is unavailable."
+                )
+            payload = b"freesdn-connectivity-test-" + uuid4().hex.encode("ascii")
+            if isinstance(backend, (SFTPStorageBackend, FTPStorageBackend)):
+                from app.services.remote_write_coordination import RemoteBackupWrite
+
+                probe_id = uuid4()
+                plan = backend.prepare_save(str(probe_id), payload, "connectivity_test.txt")
+                # Retain candidates before the independent reserve/dispatch
+                # commits. An ambiguous receipt may leave history even when
+                # the owner was never returned to this request.
+                remote_recovery = {
+                    "purpose": "connectivity_probe",
+                    "operation_id": str(plan.operation_id),
+                    "possible_storage_paths": [plan.location, plan.temporary_location],
+                    "payload_sha256": plan.payload_sha256,
+                    "payload_size": plan.payload_size,
+                    "recovery_required": True,
+                    "automatic_retry_allowed": False,
+                }
+                remote_write = await RemoteBackupWrite.reserve(
+                    self.db,
+                    backend,
+                    plan,
+                    backup_id=probe_id,
+                    organization_id=loc.organization_id,
+                    storage_location_id=loc.id,
+                    created_by_id=created_by_id,
+                    schedule_id=None,
+                    include_secrets=False,
+                    purpose="connectivity_probe",
+                )
+                await checkpoint()
+                await remote_write.dispatch()
+                await checkpoint()
+                cleanup = "unknown"
+                path = await backend.save_prepared(plan, payload)
+                await remote_write.acknowledge()
+            else:
+                path = await backend.save("test_" + uuid4().hex, payload, "connectivity_test.txt")
+            await checkpoint()
+            if not await backend.exists(path):
+                raise StorageConfigurationError("Uploaded probe could not be found.")
+            await checkpoint()
+            if await backend.load(path) != payload:
+                raise StorageConfigurationError(
+                    "Downloaded probe content does not match the upload."
+                )
+            await checkpoint()
+            if remote_write is not None:
+                await remote_write.check_destination()
+            success = True
+            message = "Upload and byte-for-byte download verified."
+        except HTTPException:
+            authorization_ended = True
+            success = False
+            raise
+        except RemotePublicationError:
+            # Either name may exist. Neither is safe to erase or retry merely
+            # because this request lost the server's acknowledgment.
+            cleanup = "unknown"
+            message = (
+                "Probe publication could not be confirmed; inspect retained recovery information."
+            )
+        except BackupPublicationError as exc:
+            # Even a failed acknowledgement may have left the owned probe.
+            # Preserve its locator for the same finally-cleanup path.
+            path = exc.storage_path
+            message = "Probe publication could not be confirmed; storage is not verified."
+        except StorageConfigurationError as exc:
+            message = str(exc)
+        except Exception as exc:
+            # Provider exceptions may echo a URL, credential or SMTP/HTTP response.
+            logger.warning("Storage probe %s failed (%s)", loc.id, type(exc).__name__)
+        finally:
+            if (
+                not authorization_ended
+                and path is not None
+                and backend is not None
+                and (remote_recovery is None or success)
+            ):
                 try:
-                    from app.core.crypto import decrypt_credential
-
-                    creds = json.loads(decrypt_credential(loc.encrypted_credentials))
-                    config.update(creds)
+                    await checkpoint()
+                    if remote_write is not None:
+                        await remote_write.check_destination()
+                    cleanup = "acknowledged" if await backend.delete(path) else "failed"
+                    await checkpoint()
+                except HTTPException:
+                    success = False
+                    raise
                 except Exception:
-                    logger.exception(
-                        "Failed to decrypt storage credentials for location %s",
-                        loc.id,
-                    )
-            backend = get_storage_backend(loc.storage_type, config)
-            # Try a simple save/exists/delete cycle
-            test_id = f"test_{uuid4().hex[:8]}"
-            test_data = b"freesdn-connectivity-test"
-            test_path = await backend.save(test_id, test_data, "connectivity_test.txt")
-            exists = await backend.exists(test_path)
-            await backend.delete(test_path)
-
-            latency = round((time.time() - start) * 1000, 1)
-
-            loc.last_test_at = datetime.now(UTC)
-            loc.last_test_status = "success"
-            loc.last_test_message = f"OK — {latency}ms"
-            await self.db.commit()
-
-            return {
-                "success": True,
-                "message": f"Connection successful ({latency}ms)",
-                "latency_ms": latency,
-                "details": {"exists_check": exists},
-            }
-        except Exception as e:
-            latency = round((time.time() - start) * 1000, 1)
-            loc.last_test_at = datetime.now(UTC)
-            loc.last_test_status = "failed"
-            loc.last_test_message = str(e)[:500]
-            await self.db.commit()
-            return {
-                "success": False,
-                "message": f"Connection failed: {e}",
-                "latency_ms": latency,
-            }
+                    cleanup = "failed"
+                if cleanup != "acknowledged":
+                    success = False
+                    message += " Probe cleanup failed; remove the test object on the destination."
+        if remote_recovery is not None:
+            # A cleanup response is only a statement about this completed
+            # request. The durable acknowledged phase remains conservatively
+            # inspectable; it does not prove deletion or grant replay authority.
+            remote_recovery["recovery_required"] = not (success and cleanup == "acknowledged")
+            if remote_recovery["recovery_required"]:
+                message += " Recovery reference: " + remote_recovery["operation_id"] + "."
+        await checkpoint()
+        latency = round((time.monotonic() - started) * 1000, 1)
+        loc.last_test_at = datetime.now(UTC)
+        loc.last_test_status = "success" if success else "failed"
+        loc.last_test_message = message
+        await self.db.commit()
+        await checkpoint()
+        return {
+            "success": success,
+            "message": message,
+            "latency_ms": latency,
+            "details": {
+                "round_trip_verified": success,
+                "cleanup": cleanup,
+                **({"remote_write": remote_recovery} if remote_recovery is not None else {}),
+            },
+        }
 
     # -------------------------------------------------------------------------
     # Cleanup
@@ -4344,7 +5541,7 @@ class BackupService:
     async def cleanup_expired_backups(self) -> int:
         """Delete expired backups. Returns count of deleted."""
         now = datetime.now(UTC)
-        query = select(Backup).where(
+        query = select(Backup.id).where(
             Backup.expires_at.isnot(None),
             Backup.expires_at < now,
             Backup.status == BackupStatus.COMPLETED,
@@ -4353,11 +5550,18 @@ class BackupService:
         expired = result.scalars().all()
 
         deleted = 0
-        for backup in expired:
+        for backup_id in expired:
             try:
-                await self.delete_backup(backup.id)
-                deleted += 1
-            except Exception as e:
-                logger.warning("Failed to delete expired backup %s: %s", backup.id, e)
+                if await self.delete_backup(backup_id):
+                    deleted += 1
+            except Exception as exc:
+                # A failed database delete must not poison the remaining batch.
+                # Iterate UUIDs, not ORM instances expired by this rollback.
+                await self.db.rollback()
+                logger.warning(
+                    "Failed to delete expired backup %s (%s)",
+                    backup_id,
+                    type(exc).__name__,
+                )
 
         return deleted

@@ -1,0 +1,44 @@
+HLS ownership across API workers on one Linux host
+==================================================
+
+All HLS start, metadata, heartbeat, playlist, segment and stop requests go
+through one elected media owner. Only that process owns native Process handles.
+Every HTTP continuation still checks current organization, camera existence,
+site and live/playback authority before media access or session mutation.
+
+Election uses a stable private flock file; it is never unlinked. Control uses a
+pathname Unix socket in the shared media directory, with mode0600, descriptor
+based directory checks and same-UID peer verification on both ends. Messages,
+connections and request time are bounded. Only whitelisted operations and flat
+results cross this socket. Credentials may travel in the private start request,
+but never in session-info responses, caller-visible errors or application logs.
+A submitted mutation is not automatically replayed after an uncertain reply.
+Same application UID is the trust boundary, not isolation from compromised code
+running with that UID. Do not expose the socket or volume to untrusted services.
+
+The base API mounts hls_media at /tmp/freesdn-hls. The single-host HA api-2
+inherits that mount. Both development and production images precreate the path
+as UID/GID1001, mode0700, so a fresh Docker named volume receives private ownership.
+Custom deployments must give every cooperating API worker the same local volume
+and application UID. An existing incorrectly owned volume is refused, not made
+world writable. This directory contains derived media and private control files;
+it is not customer configuration backup storage. Never remove it while workers
+are running or place it on an unqualified network/distributed filesystem.
+
+Shutdown refuses new local coordinator requests, closes the listener, cancels
+accepted handlers, drains owned media children, removes its socket and releases
+the lock last. A crashed owner releases the kernel lock; a surviving worker can
+elect itself on a later request. Old session IDs then return not found. Clients
+must start playback again. Linux parent-death binding separately kills native
+children after owner death. Crash-left media files are not automatically removed.
+A paused owner retains the lock; there is no unsafe lease-expiry takeover.
+
+This is single-host coordination. It does not provide cross-host media routing,
+NFS guarantees, seamless playback migration, individual viewer leases, aggregate
+resource quotas or orphan-file retention. Bounded native diagnostics and child
+cleanup remain described in HLS-STREAM-LIFECYCLE and CAMERA-CHILD-OWNERSHIP.
+
+Regression tests use actual local workers and children with explicit synthetic
+camera, authority and media fixtures. They do not prove HTTP authentication,
+database policy or vendor RTSP compatibility. Packaged container qualification
+and complete release/runtime evidence must pass separately before publication.

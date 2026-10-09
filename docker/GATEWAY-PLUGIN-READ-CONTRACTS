@@ -1,0 +1,33 @@
+Read-only OPNsense plugin contracts
+
+Reviewed upstream source snapshots:
+core cdde38bee141a71733638a645600f68126ce1af7
+plugins b3f542633841ff9743262979630e5ee9c52d0c89
+
+Telegraf: general/get, output/get, service/status; model output flags include
+InfluxDB v1/v2, Graphite and Prometheus. Only selected public fields leave the
+parser. HTTP(S) metrics URLs omit user info, query and fragment components.
+
+CrowdSec: alerts/search and decisions/search. Retain the first50 records and
+upstream totals separately. Partial/inconsistent pages and invalid identities
+are unavailable. The UI explicitly identifies truncated windows.
+
+NetFlow: diagnostics/netflow/getconfig and diagnostics/netflow/status.
+Configuration uses selected interface/version options and collect.enable.
+Enabled configuration requires both a target and selected interface; active
+runtime is reported independently. Egress interface scope is retained.
+
+Squid: forward.port, general.cache.local.enabled, and individual access/store
+logging flags. Monit service/alert booleans are normalized and every searched
+inventory must be complete. Tailscale reports only selected exit-node options.
+
+Unknown service values are unavailable, not stopped. Only running/stopped/
+disabled and NetFlow active/inactive are interpreted as known runtime states.
+Required read errors propagate safely; cancellation is never an empty success.
+
+Tests use the actual OPNsense HTTP client with synthetic responses, plus real
+PostgreSQL/ASGI and real UI components. They do not qualify installed firmware,
+normal authenticated device operations, service health, throughput, hardware
+writes, restoration, host-loss HA, production RTO/RPO or enterprise readiness.
+Older firmware/plugin schemas that omit required fields are refused, not
+silently guessed. Validate your exact versions before production operation.

@@ -2,6 +2,7 @@
 # Copyright (C) 2024-2026 FreeSDN
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -10,8 +11,9 @@ from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from app.api.v1.endpoints import plugins as plugins_endpoint
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import CurrentUser, get_current_active_user
 from app.db import get_session
+from app.models.core import User
 
 
 class _ScalarResult:
@@ -21,28 +23,54 @@ class _ScalarResult:
     def scalar_one_or_none(self) -> object | None:
         return self._record
 
+    def one_or_none(self) -> object | None:
+        return self._record
+
 
 class _FakePluginsSession:
-    def __init__(self, plugin: object | None) -> None:
+    def __init__(self, plugin: object | None, *, user: User) -> None:
         self._plugin = plugin
+        self._user = user
         self.commits = 0
+        self.authority_reads = 0
 
-    async def execute(self, _query: object) -> _ScalarResult:
+    async def execute(self, query: object) -> _ScalarResult:
+        # The endpoint tests still fake SQL; the production authority check is
+        # not replaced. Give its scalar account read the same authenticated
+        # actor, and reject an unexpected actor query instead of returning a
+        # plugin object for every SELECT. Real JWT/API-key and PostgreSQL wait
+        # behavior is qualified separately by the queued-authority cases.
+        descriptions = query.column_descriptions
+        if all(column["entity"] is User for column in descriptions):
+            assert {column["name"] for column in descriptions} == {
+                "token_version", "role", "organization_id", "hashed_password",
+                "is_active", "deleted_at",
+            }
+            assert query.compile().params == {"id_1": self._user.id}
+            self.authority_reads += 1
+            return _ScalarResult(self._user)
         return _ScalarResult(self._plugin)
 
     async def commit(self) -> None:
         self.commits += 1
 
 
-def _fake_current_user(*, organization_id: object | None = None) -> SimpleNamespace:
-    return SimpleNamespace(
-        id=uuid4(),
-        email="admin@example.com",
-        full_name="Plugin Admin",
-        is_org_admin=True,
-        is_superuser=False,
-        organization_id=organization_id,
-        has_permission=lambda _permission: False,
+def _fake_current_user(
+    *, organization_id: object | None = None, role: str = "org_admin",
+) -> CurrentUser:
+    # Authentication itself is overridden in these endpoint unit tests. Use
+    # the actual context shape consumed by the real mutation boundary check;
+    # this is not a claim that a synthetic token passed JWT authentication.
+    user = User(
+        id=uuid4(), email="admin@example.com", full_name="Plugin Admin",
+        role=role, organization_id=organization_id, token_version=17,
+        hashed_password="!fixture-context-only", is_active=True,
+        is_verified=True, deleted_at=None,
+    )
+    return CurrentUser(
+        user, permissions=[], token_claims={
+            "tv": 17, "exp": (datetime.now(UTC) + timedelta(minutes=5)).timestamp(),
+        },
     )
 
 
@@ -80,10 +108,9 @@ async def test_public_auth_status_endpoint_returns_routes_and_secret_presence(
     plugin = _build_plugin(
         public_routes=[{"path": "/webhook", "methods": ["POST"]}],
     )
-    session = _FakePluginsSession(plugin)
-    plugins_app.dependency_overrides[get_current_active_user] = lambda: _fake_current_user(
-        organization_id=org_id
-    )
+    user = _fake_current_user(organization_id=org_id)
+    session = _FakePluginsSession(plugin, user=user.user)
+    plugins_app.dependency_overrides[get_current_active_user] = lambda: user
     plugins_app.dependency_overrides[get_session] = lambda: session
 
     async def _fake_get_public_secret(_session: object, _plugin_id: str, _org_id: object) -> str | None:
@@ -111,10 +138,9 @@ async def test_rotate_public_auth_secret_endpoint_returns_secret_and_commits(
     plugin = _build_plugin(
         public_routes=[{"path": "/webhook", "methods": ["POST"]}],
     )
-    session = _FakePluginsSession(plugin)
-    plugins_app.dependency_overrides[get_current_active_user] = lambda: _fake_current_user(
-        organization_id=org_id
-    )
+    user = _fake_current_user(organization_id=org_id)
+    session = _FakePluginsSession(plugin, user=user.user)
+    plugins_app.dependency_overrides[get_current_active_user] = lambda: user
     plugins_app.dependency_overrides[get_session] = lambda: session
 
     async def _fake_rotate_secret(_session: object, _plugin_id: str, _org_id: object) -> str:
@@ -144,10 +170,9 @@ async def test_org_disable_endpoint_stops_runtime_and_returns_disabled(
 ) -> None:
     org_id = uuid4()
     plugin = _build_plugin()
-    session = _FakePluginsSession(plugin)
-    plugins_app.dependency_overrides[get_current_active_user] = lambda: _fake_current_user(
-        organization_id=org_id
-    )
+    user = _fake_current_user(organization_id=org_id)
+    session = _FakePluginsSession(plugin, user=user.user)
+    plugins_app.dependency_overrides[get_current_active_user] = lambda: user
     plugins_app.dependency_overrides[get_session] = lambda: session
 
     calls: dict[str, object] = {}
@@ -182,6 +207,7 @@ async def test_org_disable_endpoint_stops_runtime_and_returns_disabled(
     assert calls["set_state"] == ("demo-plugin", org_id, False)
     assert calls["stop"] == ("demo-plugin", org_id)
     assert session.commits == 1
+    assert session.authority_reads == 1
 
 
 @pytest.mark.asyncio
@@ -190,10 +216,9 @@ async def test_org_enable_endpoint_requires_global_plugin_to_be_enabled(
 ) -> None:
     org_id = uuid4()
     plugin = _build_plugin(is_active=False, status="disabled")
-    session = _FakePluginsSession(plugin)
-    plugins_app.dependency_overrides[get_current_active_user] = lambda: _fake_current_user(
-        organization_id=org_id
-    )
+    user = _fake_current_user(organization_id=org_id)
+    session = _FakePluginsSession(plugin, user=user.user)
+    plugins_app.dependency_overrides[get_current_active_user] = lambda: user
     plugins_app.dependency_overrides[get_session] = lambda: session
 
     async with AsyncClient(
@@ -204,6 +229,7 @@ async def test_org_enable_endpoint_requires_global_plugin_to_be_enabled(
 
     assert response.status_code == 409
     assert "globally disabled" in response.json()["detail"]
+    assert session.authority_reads == 1
 
 
 @pytest.mark.asyncio
@@ -213,10 +239,9 @@ async def test_org_enable_endpoint_starts_runtime_when_global_plugin_is_enabled(
 ) -> None:
     org_id = uuid4()
     plugin = _build_plugin()
-    session = _FakePluginsSession(plugin)
-    plugins_app.dependency_overrides[get_current_active_user] = lambda: _fake_current_user(
-        organization_id=org_id
-    )
+    user = _fake_current_user(organization_id=org_id)
+    session = _FakePluginsSession(plugin, user=user.user)
+    plugins_app.dependency_overrides[get_current_active_user] = lambda: user
     plugins_app.dependency_overrides[get_session] = lambda: session
 
     calls: dict[str, object] = {}
@@ -256,20 +281,15 @@ async def test_org_enable_endpoint_starts_runtime_when_global_plugin_is_enabled(
     assert calls["set_state"] == ("demo-plugin", org_id, True)
     assert calls["start"] == ("demo-plugin", org_id)
     assert session.commits == 1
+    assert session.authority_reads == 1
 
 
 @pytest.mark.asyncio
 async def test_install_plugin_from_url_is_disabled_by_policy_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    user = SimpleNamespace(
-        id=uuid4(),
-        is_superuser=True,
-        is_org_admin=False,
-        organization_id=uuid4(),
-        has_permission=lambda _permission: False,
-    )
-    request = SimpleNamespace(app=None)
+    user = _fake_current_user(organization_id=uuid4(), role="super_admin")
+    request = SimpleNamespace(app=None, headers={})
     session = SimpleNamespace()
 
     monkeypatch.setattr(plugins_endpoint.settings, "PLUGIN_ENABLE_DIRECT_URL_INSTALLS", False)

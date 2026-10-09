@@ -15,7 +15,7 @@
  * its fields back verbatim would send `***` as the token. The backend now reads
  * that as "unchanged" (it used to encrypt the literal and destroy the real
  * credential), but this form does not rely on that: it sends a secret only when
- * the operator actually typed into it. Two independent reasons the credential
+ * the operator actually changed it. Two independent reasons the credential
  * survives, because one of them is a remote endpoint anyone can call.
  */
 
@@ -64,6 +64,12 @@ function isSecret(spec: FieldSpec): boolean {
   return spec.secret === true || String(spec.format ?? '').toLowerCase() === 'password';
 }
 
+// Select control values are strings, but the settings API preserves JSON types.
+// JSON scalar encoding also keeps 1 / "1" and true / "true" distinct.
+function optionKey(value: SettingValue): string {
+  return JSON.stringify(value);
+}
+
 export function PluginSettingsForm({
   pluginId,
   manifest,
@@ -86,7 +92,7 @@ export function PluginSettingsForm({
   });
 
   const [values, setValues] = useState<Record<string, SettingValue>>({});
-  // Which secrets the operator actually typed into. Only these are sent.
+  // Which secrets the operator explicitly edited or selected. Only these are sent.
   const [touchedSecrets, setTouchedSecrets] = useState<Set<string>>(new Set());
   const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +106,7 @@ export function PluginSettingsForm({
       // A field the operator has never set falls back to the schema default, so
       // the form shows what the plugin will actually do rather than a blank
       // that implies "off".
-      next[name] = stored === undefined || stored === null ? (spec.default ?? '') : stored;
+      next[name] = stored === undefined ? (spec.default === undefined ? '' : spec.default) : stored;
     }
     setValues(next);
     setTouchedSecrets(new Set());
@@ -111,7 +117,9 @@ export function PluginSettingsForm({
       const payload: Record<string, SettingValue> = {};
       for (const [name, spec] of Object.entries(properties)) {
         if (isSecret(spec) && !touchedSecrets.has(name)) continue;
-        payload[name] = values[name] ?? spec.default ?? '';
+        payload[name] = values[name] === undefined
+          ? (spec.default === undefined ? '' : spec.default)
+          : values[name];
       }
       return api.put(`/plugins/${pluginId}/settings`, { settings: payload }).then((r) => r.data);
     },
@@ -158,6 +166,21 @@ export function PluginSettingsForm({
             const label = spec.title || name;
             const value = values[name];
             const id = `plugin-${pluginId}-${name}`;
+            const options = Array.isArray(spec.enum) ? spec.enum : [];
+            const secretUntouched = secret && !touchedSecrets.has(name);
+            const retainedChoice = !secretUntouched && value !== undefined
+              && !options.some((option) => Object.is(option, value));
+            const optionLabel = (option: SettingValue) => {
+              if (option === '') return t('PluginsPage.settings.emptyChoice');
+              const display = String(option);
+              const ambiguous = options.some((other) => !Object.is(other, option) && String(other) === display);
+              if (!ambiguous) return display;
+              const kind = option === null ? 'null' : typeof option;
+              return t('PluginsPage.settings.typedChoice', {
+                value: display,
+                type: t(`PluginsPage.settings.choiceType.${kind}`),
+              });
+            };
 
             return (
               <div key={name} className="space-y-1">
@@ -180,18 +203,28 @@ export function PluginSettingsForm({
                       {label}
                       {required.has(name) && <span className="text-destructive"> *</span>}
                     </Label>
-                    {Array.isArray(spec.enum) && spec.enum.length > 0 ? (
+                    {options.length > 0 ? (
                       <Select
-                        value={String(value ?? '')}
-                        onValueChange={(v) => set(name, v, false)}
+                        value={secretUntouched || value === undefined ? '' : optionKey(value)}
+                        onValueChange={(key) => {
+                          const option = options.find((item) => optionKey(item) === key);
+                          if (option !== undefined) set(name, option, secret);
+                        }}
                       >
                         <SelectTrigger id={id} className="h-8 text-xs">
-                          <SelectValue />
+                          <SelectValue placeholder={secretUntouched
+                            ? t(value === SECRET_MASK ? 'PluginsPage.settings.secretChoiceConfigured' : 'PluginsPage.settings.secretEmpty')
+                            : undefined} />
                         </SelectTrigger>
                         <SelectContent>
-                          {spec.enum.map((option) => (
-                            <SelectItem key={String(option)} value={String(option)}>
-                              {String(option)}
+                          {retainedChoice && (
+                            <SelectItem value={optionKey(value)} disabled>
+                              {t('PluginsPage.settings.retainedChoice', { value: optionLabel(value) })}
+                            </SelectItem>
+                          )}
+                          {options.map((option) => (
+                            <SelectItem key={optionKey(option)} value={optionKey(option)}>
+                              {optionLabel(option)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -232,6 +265,11 @@ export function PluginSettingsForm({
                       />
                     )}
                   </>
+                )}
+                {options.length > 0 && retainedChoice && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {t('PluginsPage.settings.retainedChoiceHint')}
+                  </p>
                 )}
                 {spec.description && (
                   <p className="text-[11px] leading-snug text-muted-foreground whitespace-pre-line">

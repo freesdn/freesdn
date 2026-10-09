@@ -47,7 +47,12 @@ export function AboutSettingsTab() {
     retry: 1,
     staleTime: 60_000,
   });
-  const version = data?.platform?.app_version ?? '26.06.1';
+  // Never fall back to a hardcoded version. This read '26.06.1' for months,
+  // so any deployment whose infrastructure-health response lacked
+  // platform.app_version displayed a release from June with total confidence --
+  // and that is exactly what demo.freesdn.org showed long after it had been
+  // rebuilt. A wrong version is worse than no version.
+  const version = data?.platform?.app_version ?? t('AboutPage.platform.versionUnknown');
 
   return (
     <div className="space-y-6">

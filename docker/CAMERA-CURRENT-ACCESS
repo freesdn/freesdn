@@ -1,0 +1,60 @@
+Current camera authority for HLS continuation
+=============================================
+
+Heartbeat, playlist, segment and stop requests all require complete session
+metadata, the resolved organization scope, a valid camera identity and an
+explicit live/recorded flag. Before renewing a heartbeat, decrementing viewers
+or returning a file path, each route checks current camera existence, deletion,
+site access and the live/playback grant. Refusals do not mutate stream activity
+or call the media method.
+
+The API helper now resolves camera identity and site together, using the existing
+org_scope_or_platform policy. Only an unscoped super administrator can resolve
+platform-wide scope. An org-less scoped key or ordinary principal is refused;
+scoped tenant credentials remain restricted to their organization. Platform
+sessions compare metadata to that resolved scope, including an unscoped platform
+administrator whose user record has an organization assigned.
+
+Missing, deleted or foreign cameras now return 404 consistently at the helper.
+Tenant playlist and segment requests ALREADY had a second identity/org/deletion
+check inside CameraAccessService before this change: they refused unavailable
+cameras with 403. This correction is not evidence of a prior tenant media bypass
+on those complete paths. The prior heartbeat and stop routes omitted per-camera
+authorization, and the no-org helper returned before current-camera validation.
+Incomplete metadata could also skip the playlist/segment per-camera check.
+
+Camera.site_id is NOT NULL in the shipped schema. Identity/site tuple handling
+also has a synthetic nullable-site compatibility control; it does not establish
+that a migrated database permits cameras without a site. Real qualification must
+use valid Site records and actual missing/deleted camera rows.
+
+Playlists and segments send private, no-store cache directives. Playlist polling
+also retains no-cache and must-revalidate. This affects new responses only; it
+cannot recall media already delivered/buffered or purge previously cached copies.
+Existing authentication and cameras.view dependencies remain unchanged.
+
+Qualification requirements
+--------------------------
+Focused tests must cover all four routes with missing/foreign/deleted cameras,
+denied sites and grants, incomplete metadata, scoped credentials, legitimate
+platform access and refusal before media methods. Existing Fabric and camera
+automation authorization tests retain their assertions; their DB doubles now
+return the current identity/site projection. Migrated PostgreSQL qualification
+must exercise real CurrentUser, site and CameraAccessService resolution. Synthetic
+HLS media methods do not prove FFmpeg, camera hardware or HTTP authentication.
+The full frozen source still requires backend, runtime/recovery, browser, image,
+source, dependency and packaging qualification before a release claim.
+
+Remaining lifecycle limits
+--------------------------
+HLS metadata and child-process ownership remain local to the API worker. Multiple
+API workers/containers still need a shared ownership and media-serving design;
+this change does not fix intermittent cross-worker 404s or duplicate transcoders.
+Viewer counts also are not per-viewer leases. A current camera grant authorizes
+the existing shared-session operations; it does not identify which viewer joined.
+
+A permission or camera change can race after the final authorization check.
+Already-open FileResponse streams and external processes are not transactionally
+fenced, and already delivered media cannot be revoked retroactively. Worker-death
+recovery, multi-host streaming, recorded playback identity/window deduplication
+and durable audit retention require separate qualification.

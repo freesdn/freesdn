@@ -31,4 +31,4 @@ def affirmative(v: Any) -> bool:
         return v
     if isinstance(v, str):
         return v.strip().lower() in {"true", "1", "yes", "on"}
-    return v == 1
+    return isinstance(v, (int, float)) and v == 1

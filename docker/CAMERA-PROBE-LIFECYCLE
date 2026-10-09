@@ -1,0 +1,23 @@
+Camera codec probe limits and diagnostics
+=========================================
+
+Codec discovery discards FFprobe stderr because native diagnostics can contain
+RTSP credentials. Application warnings contain fixed categories and the child
+exit code, not the RTSP URL, vendor reply, native output or transport exception.
+Previously stored logs are not rewritten by this change.
+
+The probe accepts at most 1 MiB of stdout and uses a 15-second execution timeout.
+Timeout or oversized output returns unknown metadata. Cancellation propagates
+after killing the owned child and draining its pipe. Child creation failures
+return a fixed StreamError. Normal H.264/HEVC codec metadata remains available;
+malformed JSON shapes, unsafe codec names and invalid dimensions/bitrates do not
+become arbitrary response text. Missing or invalid fields remain unknown/zero.
+
+Regression tests use real harmless OS children with synthetic output, including
+native secret markers, cancellation, timeout, oversize JSON and malformed
+metadata. They do not contact cameras or claim vendor/RTSP interoperability.
+The packaged FFprobe binary and full candidate need separate runtime qualification.
+
+This is codec-probe lifecycle work only. It does not change FFmpeg HLS ownership,
+coordinate API workers or hosts, bound the private HLS stderr file, provide
+per-viewer leases, or fence camera permission changes after their final check.

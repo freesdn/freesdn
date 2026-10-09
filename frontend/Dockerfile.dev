@@ -1,16 +1,14 @@
 # FreeSDN - Frontend Development Dockerfile
-# Enterprise-grade Debian Trixie base
-# Node.js 24 LTS + Vite 7.x + React 19
+# Alpine development environment; production serves compiled assets with Caddy.
+# Node.js 24 LTS + Vite 8.x + React 19
 
-FROM node:26.7.0-trixie-slim
+# Release policy: stay on Node 24 LTS; qualify LTS major migrations explicitly.
+FROM node:24.21.0-alpine3.24
 
-RUN npm install -g npm@11.17.0
+RUN npm install -g npm@12.2.0
 
-# Full security patches + git for npm dependencies
-RUN apt-get update && apt-get upgrade -y \
-    && apt-get install --no-install-recommends -y \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+# Refresh security patches; keep git for dependencies fetched from repositories.
+RUN apk upgrade --no-cache && apk add --no-cache git
 
 WORKDIR /app
 
@@ -23,16 +21,14 @@ ENV NODE_OPTIONS="--max-old-space-size=4096"
 # Drop the flag once openapi-typescript ships a TS6-compatible peer.
 # (.npmrc carries the same flag - copied so local/CI/Docker stay consistent.)
 COPY package*.json .npmrc* ./
-RUN npm install --legacy-peer-deps
-
-# Copy source
-COPY . .
-
-# Entrypoint syncs node_modules when package.json changes
-# (handles anonymous volume staleness in docker-compose)
+# Bind the dependency volume to the lock, npm config and actual native runtime.
 COPY docker-entrypoint.dev.sh /usr/local/bin/
 RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.dev.sh && \
-    chmod +x /usr/local/bin/docker-entrypoint.dev.sh
+    chmod +x /usr/local/bin/docker-entrypoint.dev.sh && \
+    docker-entrypoint.dev.sh true
+
+# Copy source after the locked dependency layer.
+COPY . .
 
 EXPOSE 5173
 

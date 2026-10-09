@@ -1,0 +1,139 @@
+FreeSDN legacy queue inventory — read-only review, no migration
+=============================================================
+
+Scope and meaning of success
+----------------------------
+scripts/inventory_legacy_queues.py inventories the in-memory dataset of ONE
+isolated disposable Redis/Valkey copy. Run it separately for each retained source
+that needs comparison. It does not choose an elected primary, load/validate a
+backup, merge sources, copy queues, restore jobs, change HA markers, or authorize
+replay. An exit status of 0 means the supported inventory was complete during its
+observation window. It does NOT mean a source is authoritative, its backup was
+fully loaded, or any hardware operation is safe to repeat. Even an empty receipt
+is not proof that the original deployment was drained.
+
+The old Sentinel URL database suffix defect can leave broker/result data in
+DB 0, 1 or 2. See HA-UPGRADING. This tool scans every configured database (up to
+64), understands FreeSDN's five standard queues and priority lists in DB 0/1/2,
+and rejects nonempty extra databases. Keep the original volumes, anonymous
+replica volume, Sentinel configurations, exact images and application backups.
+Record the observed election, roles, replication IDs/offsets and writer-fencing
+procedure privately before stopping the old deployment. The clone's current
+replication metadata is not a substitute for that original evidence.
+
+Preparing a source (operator-controlled; not an automated restore)
+-----------------------------------------------------------------
+Use a SECOND disposable copy of retained backups, never the sole backup or an
+installation. Verify the copy was fully loaded using the retained server version,
+source counts/fingerprints and the actual persistence format. AOF-only data will
+NOT load if you simply start a server with appendonly=no. Where AOF replay requires
+writes, use a separate writable scratch copy, validate the resulting dataset,
+then disable persistence in that disposable server before inventory. This tool
+does not qualify that conversion or a backup format/version upgrade.
+
+The running source container must satisfy ALL of these guards:
+
+- --network=none; no published ports, extra networks or namespace peers.
+- --read-only; no writable persistent mounts. A disposable /data tmpfs is allowed.
+  Persisted backup/config mounts must remain read-only. A read-only Docker socket
+  mount is not safe: never mount a Docker/host control socket into a source copy.
+- No privileged mode, host PID/IPC, added capabilities/devices, restart policy or
+  healthcheck. Use --no-healthcheck to override an inherited image healthcheck.
+- Label freesdn.queue-inventory.disposable-copy=true. This is an operator assertion
+  of copy provenance; a label cannot prove that a backup is complete or disposable.
+- Valkey listening on 127.0.0.1:6379, cluster mode off, appendonly=no and save="".
+  The probe must be its only connected client. No shell/exec writer, worker,
+  producer, Sentinel, scheduler or other administrator may access it during the
+  read. Do not bypass the deployed HA entrypoint's old-volume/identity guards.
+
+The tool uses one non-root, read-only, capability-free helper container in the
+source's isolated network namespace, with bounded memory/process count and no
+mounts/ports. It resolves the retained trusted backend image to its immutable ID;
+only Python and redis-py from that image are used, not the FreeSDN application or
+Celery consumers. It removes only its own labelled helper. It never stops or
+removes the source. Docker access is required; a malicious Docker administrator
+can defeat isolation, so do not run concurrent administrative changes.
+
+Running the inventory
+---------------------
+Use a private POSIX filesystem, not a Windows mount without POSIX permissions.
+Create an owner-only (0600), regular, non-symlink auth JSON file, for example:
+
+    {"username": "default", "password": "REPLACE_WITH_PRIVATE_COPY_PASSWORD"}
+
+Do not put credentials in shell arguments, a Redis URL, logs or a release archive.
+Omit --auth-file only if the isolated copy deliberately has no authentication.
+Use a NEW absolute directory for each run; it is created with permissions 0700.
+
+    python3 scripts/inventory_legacy_queues.py \
+      --source-container YOUR_DISPOSABLE_COPY \
+      --backend-image YOUR_RETAINED_TRUSTED_BACKEND_IMAGE \
+      --auth-file /private/path/copy-auth.json \
+      --work-dir /private/path/new-queue-inventory
+
+Add --docker /path/to/docker if needed. The host script needs only the Python
+standard library. The retained image supplies redis-py. The source must support
+PEXPIRETIME (Redis 7+/Valkey); unsupported commands fail closed.
+
+Only receipt.json is intended to be shared. source.json, probe-output.json,
+cleanup.json and failure logs are PRIVATE: they can contain infrastructure
+identifiers, task IDs/names, routing/binding metadata or confidential diagnostics.
+The manifest does not include task arguments, result bodies or credentials, but
+identifiers themselves can be sensitive. Never publish the entire work directory.
+The tool writes an initial incomplete receipt before Docker work, and atomically
+replaces it on completion. Host power loss/disk failure can still interrupt writes.
+If probe_removed=false, inspect private cleanup.json, verify the recorded helper's
+ID and ownership label, then remove that helper only. Keep the source and backups.
+
+What is examined
+----------------
+Two complete scans compare key types, opaque DUMP hashes and absolute expirations.
+Server identity/role/replication offsets, write/expiry/eviction/connection counters,
+and command accounting must agree. The check detects an intervening write/delete
+although the final bytes match. It describes that observation window, not an
+ongoing lock. Expiring keys can make a copy change naturally; retry on a properly
+prepared disposable snapshot and retain any incomplete receipt.
+
+For standard Kombu protocol-2 JSON envelopes, the private manifest records task
+ID/name, opaque body/envelope/execution hashes, routing and priority. Task bodies
+are never unpickled, executed, or decoded into task arguments. Queued list_index
+is the Redis left-to-right index; fifo_index=0 is the next item from RPOP for that
+physical list. There is no promised total execution order across separate queues.
+Reserved unacked envelopes and unacked_index delivery timestamps are reconciled;
+missing mates are errors. Binding sets and JSON result status/expiry/hash are
+recorded without result payloads. SUCCESS/FAILURE/REVOKED are completion evidence,
+not proof of a safe replay decision. Missing or expired results mean UNKNOWN.
+
+Duplicate IDs, IDs in several databases, conflicting execution payloads/result
+metadata, queued/reserved overlap and completion evidence appear in private
+reconciliation and sanitized aggregate counts. All work stays quarantined for
+operator/application/device review. Nothing is automatically classified as safe
+for replay, even when there are no duplicates.
+
+Unsupported keys (including cache/heartbeat/control keys), prefixes, custom
+queues/routing/bindings, priority schemes, protocol-1/non-JSON bodies, malformed
+records and nonempty DBs beyond 2 produce an INCOMPLETE inventory. This deliberately
+conservative first version cannot certify a mixed application cache as fully
+understood. Do not delete unknown records to force a green result; preserve the
+copy and review/extend the format handling before a migration is supported.
+
+Bounds and remaining acceptance
+-------------------------------
+Defaults: 10,000 keys, 10,000 records (messages/index entries/bindings/results),
+4 MiB per value, 64 MiB examined per scan, 180-second helper timeout. CLI limits
+have hard caps. An oversized server reply may exhaust the 512 MiB helper before a
+Python limit is checked; the host then retains an incomplete receipt. No safe or
+empty conclusion follows from timeout, authentication failure or a truncated run.
+
+scripts/check_queue_inventory.py exercises real Valkey and Celery/Kombu data with
+synthetic secrets in disposable containers. scripts/tests/test_queue_inventory.py
+covers unsafe-source guards, credential-file restrictions and engine failures.
+These checks do not qualify target HA bootstrap, queue restoration/actual worker
+consumption after cutover, password rotation, rollback after target/device writes,
+production-scale RTO/RPO, or real hardware acceptance. Those remain release gates.
+
+Protocol references (validate against the retained installed versions):
+https://docs.celeryq.dev/en/stable/getting-started/backends-and-brokers/redis.html
+https://docs.celeryq.dev/en/stable/internals/protocol.html
+https://valkey.io/commands/dump/
+https://valkey.io/commands/pexpiretime/

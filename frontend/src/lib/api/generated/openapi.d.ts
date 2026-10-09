@@ -1074,11 +1074,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Publish Release
-         * @description Publish a new agent release (admin only).
+         * Retired one-step release mutation
+         * @deprecated
+         * @description Refuse before consuming a body or changing release rows/files.
          *
-         *     Automatically sets is_latest=True for this platform/type
-         *     and clears is_latest on previous releases.
+         *     Clients must retain and review an explicit operation intent. There is no
+         *     redirect or automatic replay, and no inferred recovery from an old request.
          */
         post: operations["publish_release_api_v1_agents_downloads_releases_post"];
         delete?: never;
@@ -1197,6 +1198,115 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/release-catalogue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a bounded, scoped release catalogue page
+         * @description Current observations ordered by timestamp then UUID, both descending.
+         *
+         *     Cursor position grants no authority and is not a snapshot across requests.
+         *     Concurrent publications require an explicit refresh from the first page.
+         *     Stored URLs/signatures are metadata, not independently verified trust.
+         */
+        get: operations["release_catalogue_api_v1_agents_release_catalogue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/release-operation-intents/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Intent Review */
+        post: operations["intent_review_api_v1_agents_release_operation_intents_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/release-operations/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operation Status */
+        get: operations["operation_status_api_v1_agents_release_operations__operation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/release-operations/{operation_id}/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Operation Upload */
+        post: operations["operation_upload_api_v1_agents_release_operations__operation_id__upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/release-operations/{operation_id}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Operation Command */
+        post: operations["operation_command_api_v1_agents_release_operations__operation_id___action__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/release-runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Release Runtime Status */
+        get: operations["release_runtime_status_api_v1_agents_release_runtime_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents/releases": {
         parameters: {
             query?: never;
@@ -1205,7 +1315,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List all releases (admin view, raw rows)
+         * List up to 100 releases; use release-catalogue for larger catalogues
          * @description Return AgentRelease rows visible to the caller.
          *
          *     Org-scoped: non-super_admin sees only releases
@@ -1255,18 +1365,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Upload a release binary and publish it (admin only)
-         * @description Stream upload a release binary.
+         * Retired one-step release mutation
+         * @deprecated
+         * @description Refuse before consuming a body or changing release rows/files.
          *
-         *     Differences from POST /downloads/releases:
-         *     - Binary stored on the backend (no external host needed).
-         *     - SHA-256 computed on-the-fly during streaming; no chance for the
-         *       checksum to drift from the file we'll later serve.
-         *     - is_latest defaults to True so a fresh upload becomes the
-         *       default for new agents.
-         *
-         *     On success returns the new AgentRelease row, with download_url
-         *     pointing at /api/v1/agents/releases/{id}/binary.
+         *     Clients must retain and review an explicit operation intent. There is no
+         *     redirect or automatic replay, and no inferred recovery from an old request.
          */
         post: operations["upload_release_api_v1_agents_releases_upload_post"];
         delete?: never;
@@ -1286,11 +1390,12 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Delete a release (admin); also removes its on-disk binary
-         * @description Delete a release.
+         * Retired one-step release mutation
+         * @deprecated
+         * @description Refuse before consuming a body or changing release rows/files.
          *
-         *     Org-scoped: non-super_admin can only delete their own org's
-         *     releases. Legacy NULL-org releases require super_admin.
+         *     Clients must retain and review an explicit operation intent. There is no
+         *     redirect or automatic replay, and no inferred recovery from an old request.
          */
         delete: operations["delete_release_api_v1_agents_releases__release_id__delete"];
         options?: never;
@@ -1306,17 +1411,31 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Serve the binary blob for a release (agent-authenticated)
-         * @description Stream the on-disk binary back to the client.
+         * Serve verified managed or legacy release bytes with current authority
+         * @description Use current operator/agent authority and retain the verified descriptor.
          *
-         *     Dual auth: an agent presents its X-Agent-Key (the same headers it sends
-         *     on /updates/check), OR a logged-in operator/admin presents
-         *     a valid session (httpOnly cookie / Bearer / API key). The latter lets the
-         *     Downloads + Releases admin pages fetch installers, which previously 401'd
-         *     because only the agent-key path existed. UUID-in-URL alone is still not
-         *     enough — at least one authenticated principal is required.
+         *     Managed history never falls back to legacy storage on error. GET and HEAD
+         *     use the same verification/authority rules; HEAD does not increment counts.
+         *     No pathname is passed to FileResponse or created as a side effect of reading.
          */
         get: operations["download_release_binary_api_v1_agents_releases__release_id__binary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/releases/{release_id}/deletion-intent/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Deletion Review */
+        get: operations["deletion_review_api_v1_agents_releases__release_id__deletion_intent__operation_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1340,10 +1459,7 @@ export interface paths {
         head?: never;
         /**
          * Mark a release as the latest for its platform+type (admin)
-         * @description Atomically swap is_latest from the current row to this one.
-         *
-         *     Org-scoped: non-super_admin can only promote their own org's
-         *     releases. Legacy NULL-org releases require super_admin.
+         * @description Verify stored signature and current scoped authority before latest changes.
          */
         patch: operations["promote_release_api_v1_agents_releases__release_id__promote_patch"];
         trace?: never;
@@ -2797,15 +2913,15 @@ export interface paths {
          * Get Resource Audit Logs
          * @description Get audit logs for a specific resource.
          *
-         *     SECURITY: Always scoped to the caller's organization to prevent IDOR
-         *     A caller in Org A cannot read Org B's audit-log history by
-         *     supplying a foreign resource UUID — the query is filtered by
-         *     ``organization_id`` server-side.
+         *         SECURITY: Always scoped to the caller's organization to prevent IDOR
+         *     . A caller in Org A cannot read Org B's audit-log history by
+         *         supplying a foreign resource UUID — the query is filtered by
+         *         ``organization_id`` server-side.
          *
-         *     NOTE: now returns a ``PaginatedResponse`` envelope
-         *     matching ``/logs``. Use ``page``/``per_page`` query params; the
-         *     response includes ``total``, ``page``, ``per_page``, ``pages`` so
-         *     the frontend can render a real pager.
+         *         NOTE: now returns a ``PaginatedResponse`` envelope
+         *         matching ``/logs``. Use ``page``/``per_page`` query params; the
+         *         response includes ``total``, ``page``, ``per_page``, ``pages`` so
+         *         the frontend can render a real pager.
          */
         get: operations["get_resource_audit_logs_api_v1_audit_logs_resource__resource_type___resource_id__get"];
         put?: never;
@@ -2983,18 +3099,97 @@ export interface paths {
         };
         /**
          * Validate Audit Chain
-         * @description Walk the audit hash chain and report any tampering.
+         * @description Verify a bounded global audit window and its local signed state.
          *
-         *     Admin-only. Returns ``{"valid": bool, "broken_at": id | null,
-         *     "broken_reason": str | null, "checked": int, "unchained": int}``.
+         *     Requires an authenticated, unscoped platform superuser. ``valid`` alone
+         *     does not authenticate the whole retained chain: inspect ``complete``,
+         *     ``state_authenticated``, ``boundary_verified`` and
+         *     ``retained_history_authenticated`` together. Explicit bounds or truncation
+         *     cannot qualify complete retained-history authentication. Counts such as
+         *     ``checked``, ``legacy_rows`` and ``unchained`` describe the selected window;
+         *     ``unsigned_history_rows`` discloses earlier unsigned history when sealed.
          *
-         *     NOTE: this is tamper-EVIDENCE, not prevention. A
-         *     DB admin holding both ``AUDIT_HMAC_KEY`` and direct table access
-         *     could still re-key the entire chain. The endpoint is intended for
-         *     SOC2/HIPAA/PCI evidence trails — operators run it on a schedule
-         *     and alert on any non-``valid`` response.
+         *     UUID bounds are inclusive in append order. Verification also has an 8 MiB
+         *     serialized window budget. ``next_start_id`` points to the first unexamined
+         *     row, but subsequent requests use new snapshots. Missing/reversed bounds or
+         *     detected inconsistencies produce ``valid: false``.
+         *
+         *     ``retention_applied`` records a local retained-prefix boundary, not recovery
+         *     of deleted bodies. ``history_authenticated`` and
+         *     ``external_immutability_proven`` remain false: this endpoint cannot prove
+         *     complete event capture, external immutability or whole-database rollback
+         *     resistance. A valid unsigned/unsealed result is not a certification.
+         *     See backend/docs/audit-retention.md for operator actions and trust limits.
          */
         get: operations["validate_audit_chain_api_v1_audit_validate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/agent-signing/execute-local": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Signing Execute Local */
+        post: operations["signing_execute_local_api_v1_auth_agent_signing_execute_local_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/agent-signing/operations/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Signing Operation */
+        get: operations["signing_operation_api_v1_auth_agent_signing_operations__operation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/agent-signing/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Signing Preflight */
+        post: operations["signing_preflight_api_v1_auth_agent_signing_preflight_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/agent-signing/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Signing Status */
+        get: operations["signing_status_api_v1_auth_agent_signing_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3587,6 +3782,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/vault-export/authorize/external": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * External
+         * @description Requires current unscoped platform-administrator authority and fresh factors. Browser callers send both captured account/organization headers. Never place passwords, passphrases or confirmation tokens in a URL. The parser rejects duplicate JSON keys, nonfinite numbers and unknown fields. The server rechecks authority, operation binding and expiry after waits; confirmation does not itself export an archive. Responses must not be cached.
+         */
+        post: operations["external_api_v1_auth_vault_export_authorize_external_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/vault-export/authorize/local": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Local
+         * @description Requires current unscoped platform-administrator authority and fresh factors. Browser callers send both captured account/organization headers. Never place passwords, passphrases or confirmation tokens in a URL. The parser rejects duplicate JSON keys, nonfinite numbers and unknown fields. The server rechecks authority, operation binding and expiry after waits; confirmation does not itself export an archive. Responses must not be cached.
+         */
+        post: operations["local_api_v1_auth_vault_export_authorize_local_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/vault-export/identity/ldap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ldap
+         * @description Requires current unscoped platform-administrator authority and fresh factors. Browser callers send both captured account/organization headers. Never place passwords, passphrases or confirmation tokens in a URL. The parser rejects duplicate JSON keys, nonfinite numbers and unknown fields. The server rechecks authority, operation binding and expiry after waits; confirmation does not itself export an archive. Responses must not be cached.
+         */
+        post: operations["ldap_api_v1_auth_vault_export_identity_ldap_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/vault-export/identity/oidc/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Oidc Complete
+         * @description Requires current unscoped platform-administrator authority and fresh factors. Browser callers send both captured account/organization headers. Never place passwords, passphrases or confirmation tokens in a URL. The parser rejects duplicate JSON keys, nonfinite numbers and unknown fields. The server rechecks authority, operation binding and expiry after waits; confirmation does not itself export an archive. Responses must not be cached.
+         */
+        post: operations["oidc_complete_api_v1_auth_vault_export_identity_oidc_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/vault-export/identity/oidc/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Oidc Start
+         * @description Requires current unscoped platform-administrator authority and fresh factors. Browser callers send both captured account/organization headers. Never place passwords, passphrases or confirmation tokens in a URL. The parser rejects duplicate JSON keys, nonfinite numbers and unknown fields. The server rechecks authority, operation binding and expiry after waits; confirmation does not itself export an archive. Responses must not be cached.
+         */
+        post: operations["oidc_start_api_v1_auth_vault_export_identity_oidc_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/vault-export/requirements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Requirements
+         * @description Read the current supported confirmation method and MFA requirement. This hint grants no identity or export permission and does not verify provider connectivity. Browser callers send both captured account/organization headers. The callback is explicit server configuration, never derived from Host or Origin. No passwords, archive passphrases or confirmation tokens belong in this GET request. Subsequent confirmation and consumption must revalidate current authority and freshness. Responses must not be cached.
+         */
+        get: operations["requirements_api_v1_auth_vault_export_requirements_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/automation/": {
         parameters: {
             query?: never;
@@ -3877,11 +4192,7 @@ export interface paths {
         put?: never;
         /**
          * Create Backup
-         * @description Create and execute a backup.
-         *
-         *     - Full backup: all config data
-         *     - Device-specific: only selected devices
-         *     - Supports local, S3, SFTP, FTP, Google Drive, Dropbox, WebDAV storage
+         * @description Full vault operations require fresh confirmation and current unscoped platform-administrator authority. The server consumes the proof and rechecks authority/expiry after waits and storage reads. Current legacy-byte observation never proves historical authenticity or renews authentication. Secret-free configuration snapshots retain their existing authorization policy.
          */
         post: operations["create_backup_api_v1_backups__post"];
         delete?: never;
@@ -4161,7 +4472,7 @@ export interface paths {
         };
         /**
          * Download Backup
-         * @description Download a backup file.
+         * @description Full vault operations require fresh confirmation and current unscoped platform-administrator authority. The server consumes the proof and rechecks authority/expiry after waits and storage reads. Current legacy-byte observation never proves historical authenticity or renews authentication. Secret-free configuration snapshots retain their existing authorization policy.
          */
         get: operations["download_backup_api_v1_backups__backup_id__download_get"];
         put?: never;
@@ -4189,6 +4500,46 @@ export interface paths {
         get: operations["preview_backup_manifest_api_v1_backups__backup_id__manifest_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/backups/{backup_id}/vault-download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Download Legacy Vault
+         * @description Full vault operations require fresh confirmation and current unscoped platform-administrator authority. The server consumes the proof and rechecks authority/expiry after waits and storage reads. Current legacy-byte observation never proves historical authenticity or renews authentication. Secret-free configuration snapshots retain their existing authorization policy.
+         */
+        post: operations["download_legacy_vault_api_v1_backups__backup_id__vault_download_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/backups/{backup_id}/vault-observation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Observe Legacy Vault
+         * @description Full vault operations require fresh confirmation and current unscoped platform-administrator authority. The server consumes the proof and rechecks authority/expiry after waits and storage reads. Current legacy-byte observation never proves historical authenticity or renews authentication. Secret-free configuration snapshots retain their existing authorization policy.
+         */
+        post: operations["observe_legacy_vault_api_v1_backups__backup_id__vault_observation_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7565,7 +7916,7 @@ export interface paths {
         put?: never;
         /**
          * Test Credential
-         * @description Test a credential against a target device.
+         * @description Check HTTP connectivity without claiming credential authentication.
          */
         post: operations["test_credential_api_v1_credentials__credential_id__test_post"];
         delete?: never;
@@ -22550,8 +22901,25 @@ export interface paths {
         /** List scheduled backup jobs */
         get: operations["get_backup_jobs_api_v1_hypervisor_controllers__controller_id__backup_jobs_get"];
         put?: never;
-        /** Create a scheduled backup job */
+        /** Create a reviewed backup schedule */
         post: operations["create_backup_job_api_v1_hypervisor_controllers__controller_id__backup_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hypervisor/controllers/{controller_id}/backup/jobs/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review a backup schedule change without modifying the provider */
+        post: operations["review_backup_job_api_v1_hypervisor_controllers__controller_id__backup_jobs_review_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -22566,10 +22934,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Update a backup job */
+        /** Update a reviewed backup schedule */
         put: operations["update_backup_job_api_v1_hypervisor_controllers__controller_id__backup_jobs__job_id__put"];
         post?: never;
-        /** Delete a backup job */
+        /** Delete a reviewed schedule without deleting archives */
         delete: operations["delete_backup_job_api_v1_hypervisor_controllers__controller_id__backup_jobs__job_id__delete"];
         options?: never;
         head?: never;
@@ -22630,6 +22998,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/hypervisor/controllers/{controller_id}/cluster-operations/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Review cluster impact before node power or HA configuration changes */
+        get: operations["review_cluster_operation_api_v1_hypervisor_controllers__controller_id__cluster_operations_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/hypervisor/controllers/{controller_id}/cluster/config/nodes": {
         parameters: {
             query?: never;
@@ -22656,8 +23041,7 @@ export interface paths {
         };
         /** Get cluster firewall options */
         get: operations["get_cluster_fw_options_api_v1_hypervisor_controllers__controller_id__cluster_firewall_options_get"];
-        /** Update cluster firewall options */
-        put: operations["update_cluster_fw_options_api_v1_hypervisor_controllers__controller_id__cluster_firewall_options_put"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -22795,6 +23179,40 @@ export interface paths {
         get: operations["get_dashboard_api_v1_hypervisor_controllers__controller_id__dashboard_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hypervisor/controllers/{controller_id}/firewall/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Firewall Operation */
+        post: operations["submit_firewall_operation_api_v1_hypervisor_controllers__controller_id__firewall_operations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hypervisor/controllers/{controller_id}/firewall/operations/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Firewall Operation */
+        post: operations["review_firewall_operation_api_v1_hypervisor_controllers__controller_id__firewall_operations_review_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -23050,7 +23468,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Renew ACME certificate on a node */
+        /** Submit reviewed certificate renew */
         post: operations["renew_node_acme_certificate_api_v1_hypervisor_controllers__controller_id__nodes__node__certificates_acme_renew_post"];
         delete?: never;
         options?: never;
@@ -23067,10 +23485,27 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload a custom TLS certificate */
+        /** Submit reviewed certificate upload */
         post: operations["upload_custom_certificate_api_v1_hypervisor_controllers__controller_id__nodes__node__certificates_custom_post"];
-        /** Delete custom TLS certificate */
+        /** Submit reviewed certificate delete */
         delete: operations["delete_custom_certificate_api_v1_hypervisor_controllers__controller_id__nodes__node__certificates_custom_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hypervisor/controllers/{controller_id}/nodes/{node}/certificates/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read and review certificate impact without writing to Proxmox */
+        post: operations["review_node_certificate_api_v1_hypervisor_controllers__controller_id__nodes__node__certificates_review_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -23137,26 +23572,8 @@ export interface paths {
         /** Get node firewall rules */
         get: operations["get_node_firewall_rules_api_v1_hypervisor_controllers__controller_id__nodes__node__firewall_rules_get"];
         put?: never;
-        /** Create a node firewall rule */
-        post: operations["create_node_firewall_rule_api_v1_hypervisor_controllers__controller_id__nodes__node__firewall_rules_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/hypervisor/controllers/{controller_id}/nodes/{node}/firewall/rules/{pos}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         post?: never;
-        /** Delete a node firewall rule */
-        delete: operations["delete_node_firewall_rule_api_v1_hypervisor_controllers__controller_id__nodes__node__firewall_rules__pos__delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -23539,7 +23956,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete a storage volume */
+        /** Submit a reviewed storage artifact deletion */
         delete: operations["delete_storage_volume_api_v1_hypervisor_controllers__controller_id__nodes__node__storage__storage__content__volume__delete"];
         options?: never;
         head?: never;
@@ -23586,6 +24003,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/hypervisor/controllers/{controller_id}/nodes/{node}/storage/{storage}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review a storage artifact upload or deletion */
+        post: operations["review_storage_operation_api_v1_hypervisor_controllers__controller_id__nodes__node__storage__storage__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/hypervisor/controllers/{controller_id}/nodes/{node}/storage/{storage}/upload": {
         parameters: {
             query?: never;
@@ -23595,7 +24029,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload a file (ISO/template) to storage */
+        /** Submit a reviewed ISO or template upload */
         post: operations["upload_to_storage_api_v1_hypervisor_controllers__controller_id__nodes__node__storage__storage__upload_post"];
         delete?: never;
         options?: never;
@@ -23664,7 +24098,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Stop a running task */
+        /** Submit a reviewed, tracked task-stop request */
         delete: operations["stop_task_api_v1_hypervisor_controllers__controller_id__nodes__node__tasks__upid__delete"];
         options?: never;
         head?: never;
@@ -23705,6 +24139,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/hypervisor/controllers/{controller_id}/nodes/{node}/tasks/{upid}/stop-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review termination of an exact running task */
+        post: operations["review_task_stop_api_v1_hypervisor_controllers__controller_id__nodes__node__tasks__upid__stop_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/hypervisor/controllers/{controller_id}/nodes/{node}/vms": {
         parameters: {
             query?: never;
@@ -23732,7 +24183,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete a VM or container */
+        /** Submit a reviewed VM/container deletion */
         delete: operations["delete_vm_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__delete"];
         options?: never;
         head?: never;
@@ -23748,7 +24199,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Perform a VM/container power action */
+        /** Submit a durably tracked VM/container power action */
         post: operations["vm_action_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__action_post"];
         delete?: never;
         options?: never;
@@ -23799,7 +24250,7 @@ export interface paths {
         };
         /** Get VM/container configuration */
         get: operations["get_vm_config_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__config_get"];
-        /** Update VM/CT configuration */
+        /** Submit a reviewed VM/CT configuration change */
         put: operations["update_config_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__config_put"];
         post?: never;
         delete?: never;
@@ -23834,8 +24285,7 @@ export interface paths {
         };
         /** Get guest firewall options for a VM/CT */
         get: operations["get_guest_firewall_options_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__firewall_options_get"];
-        /** Update guest firewall options for a VM/CT */
-        put: operations["update_guest_firewall_options_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__firewall_options_put"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -23853,26 +24303,8 @@ export interface paths {
         /** Get guest firewall rules for a VM/CT */
         get: operations["get_guest_firewall_rules_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__firewall_rules_get"];
         put?: never;
-        /** Create a guest firewall rule on a VM/CT */
-        post: operations["create_guest_firewall_rule_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__firewall_rules_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/hypervisor/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/firewall/rules/{pos}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         post?: never;
-        /** Delete a guest firewall rule on a VM/CT */
-        delete: operations["delete_guest_firewall_rule_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__firewall_rules__pos__delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -23903,7 +24335,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Resize a VM/CT disk */
+        /** Submit a reviewed disk resize */
         put: operations["resize_disk_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__resize_put"];
         post?: never;
         delete?: never;
@@ -23973,7 +24405,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Convert VM/CT to template */
+        /** Submit a confirmed template conversion */
         post: operations["convert_to_template_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__template_post"];
         delete?: never;
         options?: never;
@@ -24023,17 +24455,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/hypervisor/controllers/{controller_id}/sdn/apply": {
+    "/api/v1/hypervisor/controllers/{controller_id}/sdn/attachments": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Inspect Sdn Attachments */
+        get: operations["inspect_sdn_attachments_api_v1_hypervisor_controllers__controller_id__sdn_attachments_get"];
         put?: never;
-        /** Apply pending SDN configuration */
-        post: operations["apply_sdn_api_v1_hypervisor_controllers__controller_id__sdn_apply_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -24057,6 +24489,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/hypervisor/controllers/{controller_id}/sdn/dependencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect Sdn Dependencies */
+        get: operations["inspect_sdn_dependencies_api_v1_hypervisor_controllers__controller_id__sdn_dependencies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hypervisor/controllers/{controller_id}/sdn/inspection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect Sdn */
+        get: operations["inspect_sdn_api_v1_hypervisor_controllers__controller_id__sdn_inspection_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hypervisor/controllers/{controller_id}/sdn/nodes/{node}/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect Sdn Dry Run */
+        get: operations["inspect_sdn_dry_run_api_v1_hypervisor_controllers__controller_id__sdn_nodes__node__dry_run_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/hypervisor/controllers/{controller_id}/sdn/vnets": {
         parameters: {
             query?: never;
@@ -24067,26 +24550,8 @@ export interface paths {
         /** Get SDN vnets */
         get: operations["get_sdn_vnets_api_v1_hypervisor_controllers__controller_id__sdn_vnets_get"];
         put?: never;
-        /** Create an SDN vnet */
-        post: operations["create_sdn_vnet_api_v1_hypervisor_controllers__controller_id__sdn_vnets_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/hypervisor/controllers/{controller_id}/sdn/vnets/{vnet}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         post?: never;
-        /** Delete an SDN vnet */
-        delete: operations["delete_sdn_vnet_api_v1_hypervisor_controllers__controller_id__sdn_vnets__vnet__delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -24102,26 +24567,8 @@ export interface paths {
         /** Get SDN zones */
         get: operations["get_sdn_zones_api_v1_hypervisor_controllers__controller_id__sdn_zones_get"];
         put?: never;
-        /** Create an SDN zone */
-        post: operations["create_sdn_zone_api_v1_hypervisor_controllers__controller_id__sdn_zones_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/hypervisor/controllers/{controller_id}/sdn/zones/{zone}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         post?: never;
-        /** Delete an SDN zone */
-        delete: operations["delete_sdn_zone_api_v1_hypervisor_controllers__controller_id__sdn_zones__zone__delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -24735,8 +25182,10 @@ export interface paths {
         put?: never;
         /**
          * Disable a module
-         * @description Disable a module for an organization.
+         * @description Disable navigation/widgets and invoke the module's organization stop hook.
          *
+         *     This is not an API access or global background-job kill switch. Existing
+         *     endpoints remain subject to their normal permissions and site boundaries.
          *     Cannot disable core modules.
          */
         post: operations["disable_module_api_v1_modules_org__organization_id__disable_post"];
@@ -25373,7 +25822,7 @@ export interface paths {
         };
         /**
          * Get Discovery Status
-         * @description Get the status of a discovery task.
+         * @description Read a discovery result only after current tenant/site authorization.
          */
         get: operations["get_discovery_status_api_v1_network_discovery_status_get"];
         put?: never;
@@ -27998,6 +28447,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sla/reports/{report_id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Report Deliveries
+         * @description Operator status; archive site grants and organization apply to every row.
+         */
+        get: operations["list_report_deliveries_api_v1_sla_reports__report_id__deliveries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sla/reports/{report_id}/deliveries/{delivery_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Report Delivery
+         * @description Cancel unclaimed mail only. Accepted or uncertain outcomes cannot be undone.
+         */
+        post: operations["cancel_report_delivery_api_v1_sla_reports__report_id__deliveries__delivery_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sla/reports/{report_id}/download": {
         parameters: {
             query?: never;
@@ -28007,10 +28496,7 @@ export interface paths {
         };
         /**
          * Download Report
-         * @description Download a generated SLA report file.
-         *
-         *     If no file has been rendered yet (file_path is null),
-         *     the report_data JSON is returned instead.
+         * @description Download a rendered file; legacy missing or mislabeled renders must regenerate.
          */
         get: operations["download_report_api_v1_sla_reports__report_id__download_get"];
         put?: never;
@@ -28830,7 +29316,7 @@ export interface paths {
         put?: never;
         /**
          * Toggle Port Poe
-         * @description Enable/disable PoE on a port.
+         * @description Stage and apply an explicit PoE-state request; succeed only after readback.
          */
         post: operations["toggle_port_poe_api_v1_switches__switch_id__ports__port_index__poe_post"];
         delete?: never;
@@ -28910,7 +29396,7 @@ export interface paths {
         put?: never;
         /**
          * Toggle Port
-         * @description Enable/disable a port.
+         * @description Stage and apply an explicit port-state request; succeed only after readback.
          */
         post: operations["toggle_port_api_v1_switches__switch_id__ports__port_index__toggle_post"];
         delete?: never;
@@ -34299,7 +34785,6 @@ export interface components {
             /**
              * Release Key Sha256
              * @description SHA-256 of the release-signing public key, to pin for update verification. Delivered here because registration is the already-authenticated, operator-approved moment -- fetching the key from the update feed itself proves nothing on first contact.
-             * @default
              */
             release_key_sha256: string;
             /**
@@ -34307,50 +34792,6 @@ export interface components {
              * @description WebSocket endpoint for agent connection
              */
             websocket_url: string;
-        };
-        /**
-         * AgentReleaseCreate
-         * @description Admin request to publish a new agent release.
-         */
-        AgentReleaseCreate: {
-            /**
-             * Agent Type
-             * @default daemon
-             * @example daemon
-             * @example desktop
-             */
-            agent_type: string;
-            /** Checksum Sha256 */
-            checksum_sha256: string;
-            /** Download Url */
-            download_url: string;
-            /** File Size */
-            file_size: number;
-            /**
-             * Is Prerelease
-             * @default false
-             */
-            is_prerelease: boolean;
-            /**
-             * Min Backend Version
-             * @default
-             */
-            min_backend_version: string;
-            /**
-             * Platform
-             * @example windows
-             */
-            platform: string;
-            /**
-             * Release Notes
-             * @default
-             */
-            release_notes: string;
-            /**
-             * Version
-             * @example 0.4.0
-             */
-            version: string;
         };
         /**
          * AgentReleaseLatest
@@ -35380,6 +35821,10 @@ export interface components {
             /** Scopes */
             scopes?: string[] | null;
         };
+        /** ApplicationError */
+        ApplicationError: {
+            error: components["schemas"]["ErrorDetail"];
+        };
         /**
          * ApplyPendingChangeRequest
          * @description Body for ``POST /pending-changes/{id}/apply``.
@@ -35663,17 +36108,20 @@ export interface components {
         BackupAgeReport: {
             /** Age Hours */
             age_hours?: number | null;
-            /**
-             * Is Stale
-             * @default false
-             */
-            is_stale: boolean;
+            /** Is Stale */
+            is_stale?: boolean | null;
             /** Last Backup Time */
             last_backup_time?: string | null;
             /** Name */
             name?: string | null;
             /** Node */
             node: string;
+            /**
+             * Status
+             * @default unknown
+             * @enum {string}
+             */
+            status: "current" | "stale" | "missing" | "unknown";
             /** Vmid */
             vmid: number;
         };
@@ -35681,14 +36129,33 @@ export interface components {
         BackupAgeResponse: {
             /** Backed Up */
             backed_up: number;
+            /**
+             * Complete
+             * @default true
+             */
+            complete: boolean;
+            /**
+             * Fresh
+             * @default 0
+             */
+            fresh: number;
             /** Never Backed Up */
             never_backed_up: number;
+            /** Observed At */
+            observed_at?: string | null;
+            /** Read Failures */
+            read_failures?: components["schemas"]["BackupReadFailure"][];
             /** Stale */
             stale: number;
             /** Threshold Hours */
             threshold_hours: number;
             /** Total Vms */
             total_vms: number;
+            /**
+             * Unknown
+             * @default 0
+             */
+            unknown: number;
             /** Vms */
             vms: components["schemas"]["BackupAgeReport"][];
         };
@@ -35760,48 +36227,58 @@ export interface components {
              */
             storage_type: string;
         };
-        /** BackupJobCreateRequest */
-        BackupJobCreateRequest: {
+        /** BackupJobOperationRequest */
+        BackupJobOperationRequest: {
             /**
-             * Compress
-             * @default zstd
+             * Action
+             * @enum {string}
              */
-            compress: string;
+            action: "create" | "update" | "delete";
             /**
-             * Enabled
-             * @default true
+             * Confirmed
+             * @default false
              */
-            enabled: boolean;
+            confirmed: boolean;
+            /** Expected Digest */
+            expected_digest: string;
             /**
-             * Mailnotification
-             * @default always
+             * Force
+             * @default false
              */
-            mailnotification: string;
+            force: boolean;
+            /** Job Id */
+            job_id: string;
             /**
-             * Mailto
-             * @default
+             * Request Id
+             * Format: uuid
              */
-            mailto: string;
+            request_id: string;
+            settings?: components["schemas"]["BackupJobSettings"] | null;
+        };
+        /** BackupJobOperationResponse */
+        BackupJobOperationResponse: {
             /**
-             * Mode
-             * @default snapshot
+             * Action
+             * @enum {string}
              */
-            mode: string;
-            /** Node */
-            node?: string | null;
+            action: "create" | "update" | "delete";
             /**
-             * Schedule
-             * @description Proxmox schedule format e.g. 'sat 02:00'
+             * Change Id
+             * Format: uuid
              */
-            schedule: string;
-            /** Storage */
-            storage: string;
+            change_id: string;
+            /** Job Id */
+            job_id: string;
+            /** Message */
+            message: string;
+            provider_task?: components["schemas"]["ProviderTaskResponse"] | null;
             /**
-             * Vmid
-             * @description Comma-separated VMIDs or empty for all
-             * @default
+             * Request Id
+             * Format: uuid
              */
-            vmid: string;
+            request_id: string;
+            /** Status */
+            status: string;
         };
         /** BackupJobResponse */
         BackupJobResponse: {
@@ -35839,24 +36316,61 @@ export interface components {
              */
             vmid: string;
         };
-        /** BackupJobUpdateRequest */
-        BackupJobUpdateRequest: {
-            /** Compress */
-            compress?: string | null;
-            /** Enabled */
-            enabled?: boolean | null;
-            /** Mailto */
-            mailto?: string | null;
-            /** Mode */
-            mode?: string | null;
+        /** BackupJobReviewRequest */
+        BackupJobReviewRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "create" | "update" | "delete";
+            /** Job Id */
+            job_id: string;
+            settings?: components["schemas"]["BackupJobSettings"] | null;
+        };
+        /** BackupJobReviewResponse */
+        BackupJobReviewResponse: {
+            /** Expected Digest */
+            expected_digest: string;
+            /** Snapshot */
+            snapshot: {
+                [key: string]: unknown;
+            };
+            /** Warnings */
+            warnings: string[];
+        };
+        /**
+         * BackupJobSettings
+         * @description Explicit guest selection; no implicit all-guests or inherited create retention.
+         */
+        BackupJobSettings: {
+            /**
+             * Compress
+             * @default zstd
+             * @enum {string}
+             */
+            compress: "zstd" | "lzo" | "gzip" | "0";
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Mode
+             * @default snapshot
+             * @enum {string}
+             */
+            mode: "snapshot" | "suspend" | "stop";
             /** Node */
-            node?: string | null;
-            /** Schedule */
-            schedule?: string | null;
+            node: string;
+            /**
+             * Schedule
+             * @description Daily HH:MM or comma-separated weekdays followed by HH:MM; node local time
+             */
+            schedule: string;
             /** Storage */
-            storage?: string | null;
+            storage: string;
             /** Vmid */
-            vmid?: string | null;
+            vmid: string;
         };
         /**
          * BackupListResponse
@@ -35896,6 +36410,12 @@ export interface components {
          */
         BackupManifestPreview: {
             /**
+             * Artifact Integrity
+             * @default legacy_unverified
+             * @enum {string}
+             */
+            artifact_integrity: "recorded" | "verified" | "legacy_unverified" | "invalid";
+            /**
              * Backup Id
              * Format: uuid
              */
@@ -35908,17 +36428,39 @@ export interface components {
             /** Created At */
             created_at?: string | null;
             /** Format Version */
-            format_version: string;
+            format_version: string | null;
             /** Organization Id */
             organization_id?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Requires Passphrase
+             * @default false
+             */
+            requires_passphrase: boolean;
             /** Source Version */
             source_version?: string | null;
+        };
+        /** BackupReadFailure */
+        BackupReadFailure: {
+            /** Node */
+            node: string;
+            /** Reason */
+            reason: string;
+            /** Storage */
+            storage?: string | null;
         };
         /**
          * BackupResponse
          * @description Backup response.
          */
         BackupResponse: {
+            /**
+             * Artifact Integrity
+             * @default legacy_unverified
+             * @enum {string}
+             */
+            artifact_integrity: "recorded" | "legacy_unverified" | "invalid";
             /** Backup Type */
             backup_type: string;
             /** Completed At */
@@ -35987,6 +36529,13 @@ export interface components {
              * @default 0
              */
             progress: number;
+            /** Remote Write Operation Id */
+            remote_write_operation_id?: string | null;
+            /**
+             * Remote Write Recovery Required
+             * @default false
+             */
+            remote_write_recovery_required: boolean;
             /**
              * Retention Days
              * @default 30
@@ -36017,10 +36566,21 @@ export interface components {
              */
             compress: string;
             /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
              * Mode
              * @default snapshot
              */
             mode: string;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
+             */
+            request_id: string;
             /** Storage */
             storage: string;
         };
@@ -36311,6 +36871,11 @@ export interface components {
             /** Device Macs */
             device_macs: string[];
         };
+        /** BodyLimitError */
+        BodyLimitError: {
+            /** Detail */
+            detail: string;
+        };
         /** Body_create_import_api_v1_data_imports_post */
         Body_create_import_api_v1_data_imports_post: {
             /**
@@ -36405,47 +36970,31 @@ export interface components {
             /** File */
             file: string;
         };
-        /** Body_upload_release_api_v1_agents_releases_upload_post */
-        Body_upload_release_api_v1_agents_releases_upload_post: {
-            /**
-             * Agent Type
-             * @default daemon
-             */
-            agent_type: string;
-            /**
-             * File
-             * @description Agent binary (any platform-native format)
-             */
-            file: string;
-            /**
-             * Is Latest
-             * @default true
-             */
-            is_latest: boolean;
-            /**
-             * Is Prerelease
-             * @default false
-             */
-            is_prerelease: boolean;
-            /**
-             * Min Backend Version
-             * @default
-             */
-            min_backend_version: string;
-            /** Platform */
-            platform: string;
-            /**
-             * Release Notes
-             * @default
-             */
-            release_notes: string;
-            /** Version */
-            version: string;
-        };
         /** Body_upload_to_storage_api_v1_hypervisor_controllers__controller_id__nodes__node__storage__storage__upload_post */
         Body_upload_to_storage_api_v1_hypervisor_controllers__controller_id__nodes__node__storage__storage__upload_post: {
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
+            /** Content */
+            content: string;
+            /** Expected Digest */
+            expected_digest: string;
             /** File */
             file: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Size */
+            size: number;
         };
         /** Body_validate_import_file_api_v1_data_imports_validate_post */
         Body_validate_import_file_api_v1_data_imports_validate_post: {
@@ -36511,15 +37060,27 @@ export interface components {
         BulkActionRequest: {
             /** Action */
             action: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
             /** Targets */
             targets: components["schemas"]["BulkVMTarget"][];
         };
         /** BulkActionResult */
         BulkActionResult: {
+            /** Change Id */
+            change_id?: string | null;
             /** Error */
             error?: string | null;
             /** Node */
             node: string;
+            provider_task?: components["schemas"]["ProviderTaskResponse"] | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Status */
+            status?: string | null;
             /** Success */
             success: boolean;
             /** Upid */
@@ -36619,10 +37180,22 @@ export interface components {
         /** BulkMigrateRequest */
         BulkMigrateRequest: {
             /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
              * Online
+             * @description Online migration for QEMU VMs only
              * @default true
              */
             online: boolean;
+            /**
+             * Restart
+             * @description Permit LXC shutdown, migration and restart
+             * @default false
+             */
+            restart: boolean;
             /** Target Node */
             target_node: string;
             /** Targets */
@@ -36754,8 +37327,12 @@ export interface components {
         };
         /** BulkVMTarget */
         BulkVMTarget: {
+            /** Expected Digest */
+            expected_digest?: string | null;
             /** Node */
             node: string;
+            /** Request Id */
+            request_id?: string | null;
             /** Vm Type */
             vm_type: string;
             /** Vmid */
@@ -37702,6 +38279,61 @@ export interface components {
             title?: string | null;
         };
         /**
+         * CataloguePage
+         * @description Keyset navigation is an observation, not a transaction across pages.
+         */
+        CataloguePage: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["CatalogueRecord"][];
+            /** Limit */
+            limit: number;
+            /** Next Id */
+            next_id: string | null;
+            /** Next Published At */
+            next_published_at: string | null;
+        };
+        /** CatalogueRecord */
+        CatalogueRecord: {
+            /** Agent Type */
+            agent_type: string;
+            /** Checksum Sha256 */
+            checksum_sha256: string;
+            /** Download Count */
+            download_count: number;
+            /** Download Url */
+            download_url: string;
+            /** File Size */
+            file_size: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Latest */
+            is_latest: boolean;
+            /** Is Prerelease */
+            is_prerelease: boolean;
+            /** Min Backend Version */
+            min_backend_version: string;
+            /** Organization Id */
+            organization_id: string | null;
+            /** Platform */
+            platform: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Release Notes */
+            release_notes: string;
+            /** Signature */
+            signature: string | null;
+            /** Version */
+            version: string;
+        };
+        /**
          * CeleryStatsResponse
          * @description Celery cluster statistics.
          */
@@ -37801,6 +38433,184 @@ export interface components {
              */
             used_percent: number;
         };
+        /** CertificateCandidateSummary */
+        CertificateCandidateSummary: {
+            /** Chain Fingerprints */
+            chain_fingerprints: string[];
+            /** Chain Length */
+            chain_length: number;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Issuer */
+            issuer: string;
+            /** Notafter */
+            notafter: number;
+            /** Notbefore */
+            notbefore: number;
+            /** San */
+            san: string[];
+            /** Subject */
+            subject: string;
+        };
+        /** CertificateInfoSummary */
+        CertificateInfoSummary: {
+            /** Fingerprint */
+            fingerprint: string;
+            /** Issuer */
+            issuer: string;
+            /** Notafter */
+            notafter: number;
+            /** Notbefore */
+            notbefore: number;
+            /** San */
+            san: string[];
+            /** Subject */
+            subject: string;
+        };
+        /** CertificateOperationRequest */
+        CertificateOperationRequest: {
+            /**
+             * Acme Force
+             * @default false
+             */
+            acme_force: boolean;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "upload" | "delete" | "renew";
+            /**
+             * Certificates
+             * @default
+             */
+            certificates: string;
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
+            /** Expected Digest */
+            expected_digest: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
+             * Key
+             * Format: password
+             * @default
+             */
+            key: string;
+            /**
+             * Overwrite
+             * @default false
+             */
+            overwrite: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Restart
+             * @default false
+             */
+            restart: boolean;
+        };
+        /** CertificateOperationResponse */
+        CertificateOperationResponse: {
+            /** Action */
+            action: string;
+            /**
+             * Change Id
+             * Format: uuid
+             */
+            change_id: string;
+            /** Message */
+            message: string;
+            provider_task?: components["schemas"]["ProviderTaskResponse"] | null;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Status */
+            status: string;
+            /** Target */
+            target: string;
+        };
+        /** CertificateReviewRequest */
+        CertificateReviewRequest: {
+            /**
+             * Acme Force
+             * @default false
+             */
+            acme_force: boolean;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "upload" | "delete" | "renew";
+            /**
+             * Certificates
+             * @default
+             */
+            certificates: string;
+            /**
+             * Key
+             * Format: password
+             * @default
+             */
+            key: string;
+            /**
+             * Overwrite
+             * @default false
+             */
+            overwrite: boolean;
+            /**
+             * Restart
+             * @default false
+             */
+            restart: boolean;
+        };
+        /** CertificateReviewResponse */
+        CertificateReviewResponse: {
+            /** Expected Digest */
+            expected_digest: string;
+            snapshot: components["schemas"]["CertificateReviewSnapshot"];
+        };
+        /** CertificateReviewSnapshot */
+        CertificateReviewSnapshot: {
+            /** Acme Configuration */
+            acme_configuration: {
+                [key: string]: string;
+            };
+            /** Acme Force */
+            acme_force: boolean;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "upload" | "delete" | "renew";
+            candidate: components["schemas"]["CertificateCandidateSummary"] | null;
+            /** Endpoint Fingerprint */
+            endpoint_fingerprint: string | null;
+            /** Endpoint Node */
+            endpoint_node: string;
+            /** Expected Domains */
+            expected_domains: string[];
+            /** Inventory */
+            inventory: {
+                [key: string]: components["schemas"]["CertificateInfoSummary"];
+            };
+            /** Node */
+            node: string;
+            /** Overwrite */
+            overwrite: boolean;
+            /** Restart */
+            restart: boolean;
+        };
         /**
          * ChannelStatusItem
          * @description NVR channel online/offline status.
@@ -37855,6 +38665,45 @@ export interface components {
             device_ids?: string[] | null;
             /** Site Id */
             site_id?: string | null;
+        };
+        /** CleanupResult */
+        CleanupResult: {
+            /**
+             * Authorization Granted
+             * @constant
+             */
+            authorization_granted: false;
+            /** Complete */
+            complete: boolean;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "deleted" | "cancelled";
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "preserve-live" | "no-owned-file" | "retain-unverified" | "retire-owned";
+            /** Newly Recorded */
+            newly_recorded: boolean;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /** Payload Absence Verified This Call */
+            payload_absence_verified_this_call: boolean;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "decided" | "cleaned";
+            /**
+             * Release Id
+             * Format: uuid
+             */
+            release_id: string;
         };
         /**
          * ClientAnalyticsResponse
@@ -37940,6 +38789,11 @@ export interface components {
              */
             description: string;
             /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
              * Full
              * @default true
              */
@@ -37954,6 +38808,12 @@ export interface components {
              * @description New VMID for the clone
              */
             newid: number;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
+             */
+            request_id: string;
             /**
              * Storage
              * @default
@@ -38004,19 +38864,6 @@ export interface components {
              */
             sshkeys?: string | null;
         };
-        /** ClusterFirewallOptions */
-        ClusterFirewallOptions: {
-            /** Ebtables */
-            ebtables?: number | null;
-            /** Enable */
-            enable?: number | null;
-            /** Log Ratelimit */
-            log_ratelimit?: string | null;
-            /** Policy In */
-            policy_in?: string | null;
-            /** Policy Out */
-            policy_out?: string | null;
-        };
         /** ClusterNodeSummary */
         ClusterNodeSummary: {
             /** Ip */
@@ -38030,6 +38877,58 @@ export interface components {
             node: string;
             /** Status */
             status: string;
+        };
+        /** ClusterOperationRequest */
+        ClusterOperationRequest: {
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
+            /** Expected Digest */
+            expected_digest: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
+             */
+            request_id: string;
+        };
+        /** ClusterOperationResponse */
+        ClusterOperationResponse: {
+            /** Action */
+            action: string;
+            /**
+             * Change Id
+             * Format: uuid
+             */
+            change_id: string;
+            /** Message */
+            message: string;
+            provider_task?: components["schemas"]["ProviderTaskResponse"] | null;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Status */
+            status: string;
+            /** Target */
+            target: string;
+        };
+        /** ClusterOperationReview */
+        ClusterOperationReview: {
+            /** Expected Digest */
+            expected_digest: string;
+            /** Snapshot */
+            snapshot: {
+                [key: string]: unknown;
+            };
         };
         /**
          * ClusterResourceItem
@@ -38661,7 +39560,7 @@ export interface components {
             username: string;
             /**
              * Verify Ssl
-             * @default false
+             * @default true
              */
             verify_ssl: boolean;
         };
@@ -38740,7 +39639,7 @@ export interface components {
             use_ssl: boolean;
             /**
              * Verify Ssl
-             * @default false
+             * @default true
              */
             verify_ssl: boolean;
         };
@@ -38898,7 +39797,7 @@ export interface components {
             use_ssl: boolean;
             /**
              * Verify Ssl
-             * @default false
+             * @default true
              */
             verify_ssl: boolean;
         };
@@ -39124,6 +40023,11 @@ export interface components {
              */
             description: string;
             /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
              * Hostname
              * @default
              */
@@ -39167,14 +40071,20 @@ export interface components {
             ostemplate: string;
             /**
              * Password
-             * @default
+             * Format: password
              */
-            password: string;
+            password?: string;
             /**
              * Pool
              * @default
              */
             pool: string;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
+             */
+            request_id: string;
             /**
              * Rootfs Size
              * @description Root disk size in GB
@@ -39219,77 +40129,9 @@ export interface components {
             unprivileged: boolean;
             /**
              * Vmid
-             * @description VMID (auto if omitted)
+             * @description Reviewed VMID; next-id lookup is only a suggestion
              */
-            vmid?: number | null;
-        };
-        /** CreateGuestFirewallRuleRequest */
-        CreateGuestFirewallRuleRequest: {
-            /** Action */
-            action: string;
-            /** Comment */
-            comment?: string | null;
-            /** Dest */
-            dest?: string | null;
-            /** Dport */
-            dport?: string | null;
-            /**
-             * Enable
-             * @default 1
-             */
-            enable: number;
-            /** Iface */
-            iface?: string | null;
-            /** Log */
-            log?: string | null;
-            /** Macro */
-            macro?: string | null;
-            /** Proto */
-            proto?: string | null;
-            /** Source */
-            source?: string | null;
-            /** Sport */
-            sport?: string | null;
-            /**
-             * Type
-             * @default in
-             */
-            type: string;
-        };
-        /** CreateSdnVnetRequest */
-        CreateSdnVnetRequest: {
-            /** Alias */
-            alias?: string | null;
-            /** Tag */
-            tag?: number | null;
-            /**
-             * Vlanaware
-             * @default false
-             */
-            vlanaware: boolean;
-            /** Vnet */
-            vnet: string;
-            /** Zone */
-            zone: string;
-        };
-        /** CreateSdnZoneRequest */
-        CreateSdnZoneRequest: {
-            /** Bridge */
-            bridge?: string | null;
-            /** Dns */
-            dns?: string | null;
-            /** Dnszone */
-            dnszone?: string | null;
-            /** Mtu */
-            mtu?: number | null;
-            /** Nodes */
-            nodes?: string | null;
-            /** Tag */
-            tag?: number | null;
-            /** Type */
-            type: string;
-            /** Zone */
-            zone: string;
+            vmid: number;
         };
         /**
          * CreateVMRequest
@@ -39328,6 +40170,11 @@ export interface components {
              * @default 32G
              */
             disk_size: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
             /**
              * Iso
              * @description ISO volume (e.g. local:iso/ubuntu.iso)
@@ -39381,6 +40228,12 @@ export interface components {
              */
             pool: string;
             /**
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
+             */
+            request_id: string;
+            /**
              * Sockets
              * @default 1
              */
@@ -39402,22 +40255,37 @@ export interface components {
             tags: string;
             /**
              * Vmid
-             * @description VMID (auto if omitted)
+             * @description Reviewed VMID; next-id lookup is only a suggestion
              */
-            vmid?: number | null;
+            vmid: number;
         };
-        /** CreateVMResponse */
+        /**
+         * CreateVMResponse
+         * @description Durable creation receipt; acceptance is not guest readiness.
+         */
         CreateVMResponse: {
+            /** Action */
+            action: string;
+            /**
+             * Change Id
+             * Format: uuid
+             */
+            change_id: string;
             /**
              * Message
              * @default
              */
             message: string;
+            provider_task?: components["schemas"]["ProviderTaskResponse"] | null;
             /**
-             * Upid
-             * @default
+             * Request Id
+             * Format: uuid
              */
-            upid: string;
+            request_id: string;
+            /** Status */
+            status: string;
+            /** Upid */
+            upid?: string | null;
             /** Vmid */
             vmid: number;
         };
@@ -39925,6 +40793,36 @@ export interface components {
             /** Protocol */
             protocol?: number | null;
         };
+        /** DashboardCoverage */
+        DashboardCoverage: {
+            cpu?: components["schemas"]["DashboardMetricCoverage"];
+            memory?: components["schemas"]["DashboardMetricCoverage"];
+            node_filesystem?: components["schemas"]["DashboardMetricCoverage"];
+        };
+        /** DashboardMetricCoverage */
+        DashboardMetricCoverage: {
+            /** Expected Nodes */
+            expected_nodes: number;
+            /** Observed Nodes */
+            observed_nodes: number;
+            /** Reasons */
+            reasons?: ("missing_statistics" | "invalid_statistics" | "node_not_online" | "inventory_mismatch")[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "partial" | "unavailable";
+        };
+        /** DashboardNodeObservation */
+        DashboardNodeObservation: {
+            /** Node */
+            node: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "online" | "offline" | "unknown";
+        };
         /**
          * DashboardStats
          * @description Dashboard statistics response - matches frontend DashboardStats interface.
@@ -40133,6 +41031,33 @@ export interface components {
             version: string;
         };
         /**
+         * DeleteVMRequest
+         * @description Reviewed deletion, without purge, force-stop or extra disk destruction.
+         */
+        DeleteVMRequest: {
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
+            /**
+             * Expected Digest
+             * @description Digest of the guest configuration reviewed by the operator
+             */
+            expected_digest: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
+             */
+            request_id: string;
+        };
+        /**
          * DeletedResponse
          * @description Generic deletion confirmation.
          */
@@ -40144,6 +41069,96 @@ export interface components {
              * @default ok
              */
             status: string;
+        };
+        /** DeletionDocument */
+        DeletionDocument: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "delete";
+            metadata: components["schemas"]["DeletionMetadata"];
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /** Organization Id */
+            organization_id: string | null;
+            /**
+             * Release Id
+             * Format: uuid
+             */
+            release_id: string;
+        };
+        /** DeletionMetadata */
+        DeletionMetadata: {
+            /** Agent Type */
+            agent_type: string;
+            /** Checksum Sha256 */
+            checksum_sha256: string;
+            /** Download Url */
+            download_url: string;
+            /** File Size */
+            file_size: number;
+            /** Filename */
+            filename: string | null;
+            /** Is Latest */
+            is_latest: boolean;
+            /** Is Prerelease */
+            is_prerelease: boolean;
+            /** Min Backend Version */
+            min_backend_version: string;
+            /** Platform */
+            platform: string;
+            /**
+             * Published At
+             * @description Original canonical UTC ISO timestamp; retain its exact spelling.
+             */
+            published_at: string;
+            /** Release Notes */
+            release_notes: string;
+            /** Signature */
+            signature: string | null;
+            /** Version */
+            version: string;
+        };
+        /** DeletionResult */
+        DeletionResult: {
+            /**
+             * Bytes Removed
+             * @constant
+             */
+            bytes_removed: false;
+            /**
+             * Cleanup Authorized
+             * @constant
+             */
+            cleanup_authorized: false;
+            /**
+             * Cleanup Disposition
+             * @enum {string}
+             */
+            cleanup_disposition: "preserve-live" | "pending-owned-verification" | "no-owned-file" | "retain-unverified" | "not-authorized";
+            /** Decision */
+            decision: ("deleted" | "cancelled") | null;
+            /** Newly Changed */
+            newly_changed: boolean;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "reserved" | "prepared" | "decided" | "cleaned";
+            /**
+             * Release Id
+             * Format: uuid
+             */
+            release_id: string;
         };
         /**
          * DependencySchema
@@ -40399,7 +41414,7 @@ export interface components {
             /** Firmware Score */
             firmware_score: number | null;
             /** Health Score */
-            health_score: number;
+            health_score: number | null;
             /** Health Status */
             health_status: string;
             /** Ip Address */
@@ -40620,13 +41635,13 @@ export interface components {
             /** Floor */
             floor?: string | null;
             /** Is Active */
-            is_active?: boolean | null;
+            is_active?: boolean;
             /** Is Managed */
-            is_managed?: boolean | null;
+            is_managed?: boolean;
             /** Location */
             location?: string | null;
             /** Name */
-            name?: string | null;
+            name?: string;
             /** Notes */
             notes?: string | null;
             /** Room */
@@ -41541,6 +42556,16 @@ export interface components {
             /** Version */
             version?: string | null;
         };
+        /** ErrorDetail */
+        ErrorDetail: {
+            /** Code */
+            code: number;
+            /** Details */
+            details?: components["schemas"]["ValidationDetail"][] | null;
+            message: components["schemas"]["JsonValue"];
+            /** Request Id */
+            request_id: string | null;
+        };
         /**
          * EventCategory
          * @description High-level event categories.
@@ -42135,6 +43160,113 @@ export interface components {
              */
             timestamp: string;
         };
+        /** FirewallOperationRequest */
+        FirewallOperationRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "create" | "update" | "delete" | "move" | "options";
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
+            /** Expected Digest */
+            expected_digest: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /** Moveto */
+            moveto?: number | null;
+            options?: components["schemas"]["FirewallOptionSettings"] | null;
+            /** Pos */
+            pos?: number | null;
+            /**
+             * Recovery Confirmed
+             * @default false
+             */
+            recovery_confirmed: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            rule?: components["schemas"]["FirewallRuleSettings"] | null;
+            target: components["schemas"]["FirewallTarget"];
+        };
+        /** FirewallOperationResponse */
+        FirewallOperationResponse: {
+            /**
+             * Change Id
+             * Format: uuid
+             */
+            change_id: string;
+            /** Message */
+            message: string;
+            provider_task?: components["schemas"]["ProviderTaskResponse"] | null;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Status */
+            status: string;
+        };
+        /** FirewallOptionSettings */
+        FirewallOptionSettings: {
+            /** Dhcp */
+            dhcp?: boolean | null;
+            /** Enable */
+            enable?: boolean | null;
+            /** Ipfilter */
+            ipfilter?: boolean | null;
+            /** Macfilter */
+            macfilter?: boolean | null;
+            /** Ndp */
+            ndp?: boolean | null;
+            /** Policy In */
+            policy_in?: ("ACCEPT" | "DROP" | "REJECT") | null;
+            /** Policy Out */
+            policy_out?: ("ACCEPT" | "DROP" | "REJECT") | null;
+            /** Radv */
+            radv?: boolean | null;
+        };
+        /** FirewallReviewRequest */
+        FirewallReviewRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "create" | "update" | "delete" | "move" | "options";
+            /** Moveto */
+            moveto?: number | null;
+            options?: components["schemas"]["FirewallOptionSettings"] | null;
+            /** Pos */
+            pos?: number | null;
+            rule?: components["schemas"]["FirewallRuleSettings"] | null;
+            target: components["schemas"]["FirewallTarget"];
+        };
+        /** FirewallReviewResponse */
+        FirewallReviewResponse: {
+            /** Action */
+            action: string;
+            /** Before */
+            before: {
+                [key: string]: unknown;
+            };
+            /** Desired */
+            desired: {
+                [key: string]: unknown;
+            };
+            /** Expected Digest */
+            expected_digest: string;
+            target: components["schemas"]["FirewallTarget"];
+            /** Warnings */
+            warnings: string[];
+        };
         /**
          * FirewallRuleCreate
          * @description Create a firewall rule.
@@ -42184,8 +43316,18 @@ export interface components {
             /** Source Zone */
             source_zone?: string | null;
         };
-        /** FirewallRuleCreateRequest */
-        FirewallRuleCreateRequest: {
+        /**
+         * FirewallRuleListResponse
+         * @description Paginated firewall rule list.
+         */
+        FirewallRuleListResponse: {
+            /** Items */
+            items: components["schemas"]["app__modules__firewall__schemas__FirewallRuleResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** FirewallRuleSettings */
+        FirewallRuleSettings: {
             /** Action */
             action: string;
             /** Comment */
@@ -42196,9 +43338,13 @@ export interface components {
             dport?: string | null;
             /**
              * Enable
-             * @default true
+             * @default false
              */
             enable: boolean;
+            /** Iface */
+            iface?: string | null;
+            /** Log */
+            log?: ("nolog" | "emerg" | "alert" | "crit" | "err" | "warning" | "notice" | "info" | "debug") | null;
             /** Macro */
             macro?: string | null;
             /** Proto */
@@ -42210,18 +43356,9 @@ export interface components {
             /**
              * Type
              * @default in
+             * @enum {string}
              */
-            type: string;
-        };
-        /**
-         * FirewallRuleListResponse
-         * @description Paginated firewall rule list.
-         */
-        FirewallRuleListResponse: {
-            /** Items */
-            items: components["schemas"]["app__modules__firewall__schemas__FirewallRuleResponse"][];
-            /** Total */
-            total: number;
+            type: "in" | "out" | "group";
         };
         /**
          * FirewallRuleUpdate
@@ -42254,6 +43391,20 @@ export interface components {
             source_port?: string | null;
             /** Source Zone */
             source_zone?: string | null;
+        };
+        /** FirewallTarget */
+        FirewallTarget: {
+            /** Node */
+            node?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "cluster" | "node" | "guest";
+            /** Vm Type */
+            vm_type?: ("qemu" | "lxc") | null;
+            /** Vmid */
+            vmid?: number | null;
         };
         /**
          * FirmwareCreate
@@ -42547,196 +43698,213 @@ export interface components {
             /** Release Type */
             release_type?: string | null;
         };
-        /**
-         * FleetClusterSummary
-         * @description Summary of a single Proxmox cluster within the fleet.
-         */
+        /** FleetClusterSummary */
         FleetClusterSummary: {
             /**
              * Cluster Name
              * @default
              */
             cluster_name: string;
-            /** Controller Id */
+            /** Collection Started At */
+            collection_started_at?: string | null;
+            /**
+             * Controller Id
+             * @default
+             */
             controller_id: string;
             /** Controller Name */
             controller_name: string;
             /**
-             * Cpu Usage Percent
-             * @default 0
+             * Coverage
+             * @default unavailable
+             * @enum {string}
              */
-            cpu_usage_percent: number;
+            coverage: "complete_visible" | "partial" | "unavailable";
+            /** Cpu Usage Percent */
+            cpu_usage_percent?: number | null;
             /**
              * Error
              * @default
              */
             error: string;
             /**
-             * Memory Usage Percent
-             * @default 0
+             * Ha Active
+             * @deprecated
+             * @description HA health is not established by a status-list read; always unknown.
              */
-            memory_usage_percent: number;
+            ha_active?: boolean | null;
+            /** Ha Services Visible */
+            ha_services_visible?: number | null;
             /**
-             * Online Nodes
-             * @default 0
+             * Inventory Scope
+             * @default credential_visible
+             * @constant
              */
-            online_nodes: number;
+            inventory_scope: "credential_visible";
+            /** Memory Usage Percent */
+            memory_usage_percent?: number | null;
+            metric_coverage?: components["schemas"]["DashboardCoverage"];
+            /** Nodes */
+            nodes?: components["schemas"]["DashboardNodeObservation"][];
+            /** Observation Age Seconds */
+            observation_age_seconds?: number | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /** Online Nodes */
+            online_nodes?: number | null;
             /**
-             * Quorate
-             * @default true
+             * Provider Sample Time Known
+             * @default false
+             * @constant
              */
-            quorate: boolean;
+            provider_sample_time_known: false;
+            /** Quorate */
+            quorate?: boolean | null;
+            /** Running Containers */
+            running_containers?: number | null;
+            /** Running Vms */
+            running_vms?: number | null;
+            /** Served At */
+            served_at?: string | null;
             /**
-             * Running Containers
-             * @default 0
+             * Stale After Seconds
+             * @default 90
+             * @constant
              */
-            running_containers: number;
-            /**
-             * Running Vms
-             * @default 0
-             */
-            running_vms: number;
+            stale_after_seconds: 90;
             /**
              * Status
-             * @default online
+             * @default error
+             * @enum {string}
              */
-            status: string;
+            status: "online" | "error";
             /**
-             * Storage Usage Percent
-             * @default 0
+             * Storage Scope
+             * @default node_filesystems
+             * @constant
              */
-            storage_usage_percent: number;
-            /**
-             * Total Containers
-             * @default 0
-             */
-            total_containers: number;
-            /**
-             * Total Cpu Cores
-             * @default 0
-             */
-            total_cpu_cores: number;
-            /**
-             * Total Memory Bytes
-             * @default 0
-             */
-            total_memory_bytes: number;
-            /**
-             * Total Nodes
-             * @default 0
-             */
-            total_nodes: number;
-            /**
-             * Total Storage Bytes
-             * @default 0
-             */
-            total_storage_bytes: number;
-            /**
-             * Total Vms
-             * @default 0
-             */
-            total_vms: number;
-            /**
-             * Used Memory Bytes
-             * @default 0
-             */
-            used_memory_bytes: number;
-            /**
-             * Used Storage Bytes
-             * @default 0
-             */
-            used_storage_bytes: number;
+            storage_scope: "node_filesystems";
+            /** Storage Usage Percent */
+            storage_usage_percent?: number | null;
+            /** Total Containers */
+            total_containers?: number | null;
+            /** Total Cpu Cores */
+            total_cpu_cores?: number | null;
+            /** Total Memory Bytes */
+            total_memory_bytes?: number | null;
+            /** Total Nodes */
+            total_nodes?: number | null;
+            /** Total Storage Bytes */
+            total_storage_bytes?: number | null;
+            /** Total Vms */
+            total_vms?: number | null;
+            /** Used Cpu Cores */
+            used_cpu_cores?: number | null;
+            /** Used Memory Bytes */
+            used_memory_bytes?: number | null;
+            /** Used Storage Bytes */
+            used_storage_bytes?: number | null;
         };
-        /**
-         * FleetDashboardResponse
-         * @description Aggregated fleet dashboard across all Proxmox controllers.
-         */
+        /** FleetDashboardResponse */
         FleetDashboardResponse: {
             /**
-             * Clusters
-             * @default []
+             * Aggregation Scope
+             * @default controller_registrations
+             * @constant
              */
-            clusters: components["schemas"]["FleetClusterSummary"][];
+            aggregation_scope: "controller_registrations";
+            /** Clusters */
+            clusters?: components["schemas"]["FleetClusterSummary"][];
+            /** Collection Started At */
+            collection_started_at?: string | null;
             /**
-             * Cpu Usage Percent
+             * Coverage
+             * @default unavailable
+             * @enum {string}
+             */
+            coverage: "complete_visible" | "partial" | "unavailable";
+            /** Cpu Usage Percent */
+            cpu_usage_percent?: number | null;
+            /**
+             * Deduplicated
+             * @default false
+             * @constant
+             */
+            deduplicated: false;
+            /**
+             * Failed Clusters
              * @default 0
              */
-            cpu_usage_percent: number;
+            failed_clusters: number;
             /**
-             * Memory Usage Percent
-             * @default 0
+             * Inventory Scope
+             * @default credential_visible
+             * @constant
              */
-            memory_usage_percent: number;
+            inventory_scope: "credential_visible";
+            /** Memory Usage Percent */
+            memory_usage_percent?: number | null;
+            metric_coverage?: components["schemas"]["DashboardCoverage"];
+            /** Observation Age Seconds */
+            observation_age_seconds?: number | null;
+            /** Observed At */
+            observed_at?: string | null;
             /**
              * Online Clusters
              * @default 0
              */
             online_clusters: number;
+            /** Online Nodes */
+            online_nodes?: number | null;
             /**
-             * Online Nodes
-             * @default 0
+             * Provider Sample Time Known
+             * @default false
+             * @constant
              */
-            online_nodes: number;
+            provider_sample_time_known: false;
+            /** Running Containers */
+            running_containers?: number | null;
+            /** Running Vms */
+            running_vms?: number | null;
+            /** Served At */
+            served_at?: string | null;
             /**
-             * Running Containers
-             * @default 0
+             * Stale After Seconds
+             * @default 90
+             * @constant
              */
-            running_containers: number;
+            stale_after_seconds: 90;
             /**
-             * Running Vms
-             * @default 0
+             * Storage Scope
+             * @default node_filesystems
+             * @constant
              */
-            running_vms: number;
-            /**
-             * Storage Usage Percent
-             * @default 0
-             */
-            storage_usage_percent: number;
+            storage_scope: "node_filesystems";
+            /** Storage Usage Percent */
+            storage_usage_percent?: number | null;
             /**
              * Total Clusters
              * @default 0
              */
             total_clusters: number;
-            /**
-             * Total Containers
-             * @default 0
-             */
-            total_containers: number;
-            /**
-             * Total Cpu Cores
-             * @default 0
-             */
-            total_cpu_cores: number;
-            /**
-             * Total Memory Bytes
-             * @default 0
-             */
-            total_memory_bytes: number;
-            /**
-             * Total Nodes
-             * @default 0
-             */
-            total_nodes: number;
-            /**
-             * Total Storage Bytes
-             * @default 0
-             */
-            total_storage_bytes: number;
-            /**
-             * Total Vms
-             * @default 0
-             */
-            total_vms: number;
-            /**
-             * Used Memory Bytes
-             * @default 0
-             */
-            used_memory_bytes: number;
-            /**
-             * Used Storage Bytes
-             * @default 0
-             */
-            used_storage_bytes: number;
+            /** Total Containers */
+            total_containers?: number | null;
+            /** Total Cpu Cores */
+            total_cpu_cores?: number | null;
+            /** Total Memory Bytes */
+            total_memory_bytes?: number | null;
+            /** Total Nodes */
+            total_nodes?: number | null;
+            /** Total Storage Bytes */
+            total_storage_bytes?: number | null;
+            /** Total Vms */
+            total_vms?: number | null;
+            /** Used Cpu Cores */
+            used_cpu_cores?: number | null;
+            /** Used Memory Bytes */
+            used_memory_bytes?: number | null;
+            /** Used Storage Bytes */
+            used_storage_bytes?: number | null;
         };
         /**
          * FleetHealthSummary
@@ -42924,7 +44092,7 @@ export interface components {
             vendor: string;
             /**
              * Verify Ssl
-             * @default false
+             * @default true
              */
             verify_ssl: boolean;
         };
@@ -43615,7 +44783,7 @@ export interface components {
             vendor: string;
             /**
              * Verify Ssl
-             * @default false
+             * @default true
              */
             verify_ssl: boolean;
         };
@@ -43995,29 +45163,6 @@ export interface components {
              */
             name: string;
         };
-        /** GuestFirewallOptions */
-        GuestFirewallOptions: {
-            /** Dhcp */
-            dhcp?: boolean | null;
-            /** Enable */
-            enable?: boolean | null;
-            /** Ipfilter */
-            ipfilter?: boolean | null;
-            /** Log Level In */
-            log_level_in?: string | null;
-            /** Log Level Out */
-            log_level_out?: string | null;
-            /** Macfilter */
-            macfilter?: boolean | null;
-            /** Ndp */
-            ndp?: boolean | null;
-            /** Policy In */
-            policy_in?: string | null;
-            /** Policy Out */
-            policy_out?: string | null;
-            /** Radv */
-            radv?: boolean | null;
-        };
         /** HAGroupCreateRequest */
         HAGroupCreateRequest: {
             /**
@@ -44025,6 +45170,18 @@ export interface components {
              * @default
              */
             comment: string;
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
+            /** Expected Digest */
+            expected_digest: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
             /** Group */
             group: string;
             /**
@@ -44037,6 +45194,12 @@ export interface components {
              * @default false
              */
             nofailback: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
+             */
+            request_id: string;
             /**
              * Restricted
              * @default false
@@ -44076,6 +45239,18 @@ export interface components {
              */
             comment: string;
             /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
+            /** Expected Digest */
+            expected_digest: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
              * Group
              * @default
              */
@@ -44091,9 +45266,12 @@ export interface components {
              */
             max_restart: number;
             /**
-             * Sid
-             * @description VM/CT SID (e.g. vm:100)
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
              */
+            request_id: string;
+            /** Sid */
             sid: string;
             /**
              * State
@@ -44198,7 +45376,7 @@ export interface components {
         /** HealthDailySnapshotResponse */
         HealthDailySnapshotResponse: {
             /** Avg Health Score */
-            avg_health_score: number;
+            avg_health_score: number | null;
             /**
              * Created At
              * Format: date-time
@@ -44422,96 +45600,113 @@ export interface components {
             /** Hour */
             hour: string;
         };
-        /**
-         * HypervisorDashboardResponse
-         * @description Aggregated cluster overview for the hypervisor dashboard.
-         */
+        /** HypervisorDashboardResponse */
         HypervisorDashboardResponse: {
             /**
              * Cluster Name
              * @default
              */
             cluster_name: string;
+            /** Collection Started At */
+            collection_started_at?: string | null;
             /**
-             * Cpu Usage Percent
-             * @default 0
+             * Controller Id
+             * @default
              */
-            cpu_usage_percent: number;
+            controller_id: string;
+            /**
+             * Coverage
+             * @default unavailable
+             * @enum {string}
+             */
+            coverage: "complete_visible" | "partial" | "unavailable";
+            /** Cpu Usage Percent */
+            cpu_usage_percent?: number | null;
             /**
              * Ha Active
+             * @deprecated
+             * @description HA health is not established by a status-list read; always unknown.
+             */
+            ha_active?: boolean | null;
+            /** Ha Services Visible */
+            ha_services_visible?: number | null;
+            /**
+             * Inventory Scope
+             * @default credential_visible
+             * @constant
+             */
+            inventory_scope: "credential_visible";
+            /** Memory Usage Percent */
+            memory_usage_percent?: number | null;
+            metric_coverage?: components["schemas"]["DashboardCoverage"];
+            /** Nodes */
+            nodes?: components["schemas"]["DashboardNodeObservation"][];
+            /** Observation Age Seconds */
+            observation_age_seconds?: number | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /** Online Nodes */
+            online_nodes?: number | null;
+            /**
+             * Provider Sample Time Known
+             * @default false
+             * @constant
+             */
+            provider_sample_time_known: false;
+            /** Quorate */
+            quorate?: boolean | null;
+            /** Running Containers */
+            running_containers?: number | null;
+            /** Running Vms */
+            running_vms?: number | null;
+            /** Served At */
+            served_at?: string | null;
+            /**
+             * Stale After Seconds
+             * @default 90
+             * @constant
+             */
+            stale_after_seconds: 90;
+            /**
+             * Storage Scope
+             * @default node_filesystems
+             * @constant
+             */
+            storage_scope: "node_filesystems";
+            /** Storage Usage Percent */
+            storage_usage_percent?: number | null;
+            /** Total Containers */
+            total_containers?: number | null;
+            /** Total Cpu Cores */
+            total_cpu_cores?: number | null;
+            /** Total Memory Bytes */
+            total_memory_bytes?: number | null;
+            /** Total Nodes */
+            total_nodes?: number | null;
+            /** Total Storage Bytes */
+            total_storage_bytes?: number | null;
+            /** Total Vms */
+            total_vms?: number | null;
+            /** Used Cpu Cores */
+            used_cpu_cores?: number | null;
+            /** Used Memory Bytes */
+            used_memory_bytes?: number | null;
+            /** Used Storage Bytes */
+            used_storage_bytes?: number | null;
+        };
+        /** HypervisorIntentRequest */
+        HypervisorIntentRequest: {
+            /**
+             * Force
              * @default false
              */
-            ha_active: boolean;
+            force: boolean;
             /**
-             * Memory Usage Percent
-             * @default 0
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
              */
-            memory_usage_percent: number;
-            /**
-             * Online Nodes
-             * @default 0
-             */
-            online_nodes: number;
-            /**
-             * Quorate
-             * @default true
-             */
-            quorate: boolean;
-            /**
-             * Running Containers
-             * @default 0
-             */
-            running_containers: number;
-            /**
-             * Running Vms
-             * @default 0
-             */
-            running_vms: number;
-            /**
-             * Storage Usage Percent
-             * @default 0
-             */
-            storage_usage_percent: number;
-            /**
-             * Total Containers
-             * @default 0
-             */
-            total_containers: number;
-            /**
-             * Total Cpu Cores
-             * @default 0
-             */
-            total_cpu_cores: number;
-            /**
-             * Total Memory Bytes
-             * @default 0
-             */
-            total_memory_bytes: number;
-            /**
-             * Total Nodes
-             * @default 0
-             */
-            total_nodes: number;
-            /**
-             * Total Storage Bytes
-             * @default 0
-             */
-            total_storage_bytes: number;
-            /**
-             * Total Vms
-             * @default 0
-             */
-            total_vms: number;
-            /**
-             * Used Memory Bytes
-             * @default 0
-             */
-            used_memory_bytes: number;
-            /**
-             * Used Storage Bytes
-             * @default 0
-             */
-            used_storage_bytes: number;
+            request_id: string;
         };
         /**
          * HysteresisEvaluateRequest
@@ -45689,6 +46884,68 @@ export interface components {
             /** Verify Ssl */
             verify_ssl?: boolean | null;
         };
+        /** IntentReviewResponse */
+        IntentReviewResponse: {
+            /**
+             * Absence Authorizes Retry Or Cleanup
+             * @constant
+             */
+            absence_authorizes_retry_or_cleanup: false;
+            /**
+             * All Artifact References Checked
+             * @constant
+             */
+            all_artifact_references_checked: false;
+            /**
+             * Authorization Granted
+             * @constant
+             */
+            authorization_granted: false;
+            /** Deletion Target Matches */
+            deletion_target_matches: boolean | null;
+            /**
+             * Historical Observation
+             * @constant
+             */
+            historical_observation: true;
+            /** Intent */
+            intent: components["schemas"]["PublicationDocument"] | components["schemas"]["DeletionDocument"];
+            /** Intent Sha256 */
+            intent_sha256: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            operation: components["schemas"]["JournalObservation"] | null;
+            /** Release Row Present */
+            release_row_present: boolean;
+            /**
+             * Reservation Created
+             * @constant
+             */
+            reservation_created: false;
+            /**
+             * Retry Requires Identical Intent And Current Authority
+             * @constant
+             */
+            retry_requires_identical_intent_and_current_authority: true;
+            /**
+             * Save Original Intent Before Mutation
+             * @constant
+             */
+            save_original_intent_before_mutation: true;
+            /**
+             * Server Retains Full Intent
+             * @constant
+             */
+            server_retains_full_intent: false;
+            /**
+             * Storage Checked
+             * @constant
+             */
+            storage_checked: false;
+        };
         /**
          * InteractiveScanRequest
          * @description Operator-triggered network scan via WS push.
@@ -45807,6 +47064,62 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** JournalObservation */
+        JournalObservation: {
+            /** Cleaned At */
+            cleaned_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decision */
+            decision: ("cancelled" | "published" | "deleted") | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "publish" | "delete";
+            /**
+             * Last Transition By
+             * Format: uuid
+             */
+            last_transition_by: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /** Organization Id */
+            organization_id: string | null;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "reserved" | "prepared" | "decided" | "cleaned";
+            /** Prepared At */
+            prepared_at: string | null;
+            /**
+             * Release Id
+             * Format: uuid
+             */
+            release_id: string;
+            /**
+             * Requested By
+             * Format: uuid
+             */
+            requested_by: string;
+            /**
+             * Storage Kind
+             * @enum {string}
+             */
+            storage_kind: "owned" | "external" | "legacy";
+            /** Transition Sequence */
+            transition_sequence: number;
+        };
+        JsonValue: unknown;
         /** LAGCreateIn */
         LAGCreateIn: {
             /**
@@ -46088,6 +47401,47 @@ export interface components {
             enabled: boolean;
             /** Rules */
             rules?: components["schemas"]["LineCrossingRule"][];
+        };
+        /** LocalSigningExecutionRequest */
+        LocalSigningExecutionRequest: {
+            /** Acknowledge Identity Risk */
+            acknowledge_identity_risk: boolean;
+            /**
+             * Acknowledge Independent Fingerprint
+             * @default false
+             */
+            acknowledge_independent_fingerprint: boolean;
+            /**
+             * Acknowledge No Prior Identity
+             * @default false
+             */
+            acknowledge_no_prior_identity: boolean;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "initialize" | "adopt" | "resume" | "cancel" | "recover";
+            /** Code */
+            code?: string | null;
+            /** Expected Public Sha256 */
+            expected_public_sha256?: string | null;
+            /** Identity Epoch */
+            identity_epoch: number;
+            /**
+             * Installation Id
+             * Format: uuid
+             */
+            installation_id: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /**
+             * Password
+             * Format: password
+             */
+            password: string;
         };
         /** LocationUpdateIn */
         LocationUpdateIn: {
@@ -46660,10 +48014,10 @@ export interface components {
          * MfaSetupRequest
          * @description Optional body for POST /auth/mfa/setup.
          *
-         *     Fresh enrollment (MFA not yet enabled) needs no body. Re-enrolling on an
-         *     account that ALREADY has MFA enabled requires step-up re-authentication
-         * — supply the account password here. The whole body is
-         *     optional so the fresh-enrollment flow is unchanged.
+         *        Fresh enrollment (MFA not yet enabled) needs no body. Re-enrolling on an
+         *        account that ALREADY has MFA enabled requires step-up re-authentication
+         *     — supply the account password here. The whole body is
+         *        optional so the fresh-enrollment flow is unchanged.
          */
         MfaSetupRequest: {
             /** Password */
@@ -46684,10 +48038,27 @@ export interface components {
         /** MigrateRequest */
         MigrateRequest: {
             /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
              * Online
-             * @default true
+             * @default false
              */
             online: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
+             */
+            request_id: string;
+            /**
+             * Restart
+             * @description LXC only: permit shutdown, migration and restart
+             * @default false
+             */
+            restart: boolean;
             /**
              * Target
              * @description Target node name
@@ -46774,13 +48145,13 @@ export interface components {
          * MikroTikPackage
          * @description RouterOS ``/system/package`` row.
          *
-         *     NOTE: ``extra="ignore"`` is used here (not ``"forbid"``) because
-         *     RouterOS adds fields across minor versions — 7.21.3 returns
-         *     ``available`` and ``size`` that the schema didn't declare, and
-         *     forbidding extras would 500 every /packages request on real CHR.
-         * Specific new fields:
-         *     ``available`` (bool-as-string, indicates an update can be applied),
-         *     ``size`` (bytes-as-string, install footprint).
+         *        NOTE: ``extra="ignore"`` is used here (not ``"forbid"``) because
+         *        RouterOS adds fields across minor versions — 7.21.3 returns
+         *        ``available`` and ``size`` that the schema didn't declare, and
+         *        forbidding extras would 500 every /packages request on real CHR.
+         *     Specific new fields:
+         *        ``available`` (bool-as-string, indicates an update can be applied),
+         *        ``size`` (bytes-as-string, install footprint).
          */
         MikroTikPackage: {
             /** .Id */
@@ -46924,11 +48295,8 @@ export interface components {
         };
         /** ModuleHealthSummary */
         ModuleHealthSummary: {
-            /**
-             * Avg Health Score
-             * @default 0
-             */
-            avg_health_score: number;
+            /** Avg Health Score */
+            avg_health_score?: number | null;
             /**
              * Critical
              * @default 0
@@ -46949,6 +48317,11 @@ export interface components {
              * @default 0
              */
             healthy: number;
+            /**
+             * Measured Device Count
+             * @default 0
+             */
+            measured_device_count: number;
             /** Module */
             module: string;
             /**
@@ -48515,14 +49888,82 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** OperationResponse */
+        OperationResponse: {
+            /**
+             * Authorization Granted
+             * @constant
+             */
+            authorization_granted: false;
+            /**
+             * Historical Observation
+             * @constant
+             */
+            historical_observation: true;
+            /** Intent Sha256 */
+            intent_sha256: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /**
+             * Release Id
+             * Format: uuid
+             */
+            release_id: string;
+            /** Result */
+            result: components["schemas"]["ReservationResult"] | components["schemas"]["PreparationResult"] | components["schemas"]["PublicationResult"] | components["schemas"]["DeletionResult"] | components["schemas"]["CleanupResult"];
+            /**
+             * Retry Requires Identical Intent And Current Authority
+             * @constant
+             */
+            retry_requires_identical_intent_and_current_authority: true;
+        };
+        /** OperationStatusResponse */
+        OperationStatusResponse: {
+            /**
+             * Absence Authorizes Retry Or Cleanup
+             * @constant
+             */
+            absence_authorizes_retry_or_cleanup: false;
+            /**
+             * All Artifact References Checked
+             * @constant
+             */
+            all_artifact_references_checked: false;
+            /**
+             * Authorization Granted
+             * @constant
+             */
+            authorization_granted: false;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            operation: components["schemas"]["JournalObservation"];
+            /** Release Row Present */
+            release_row_present: boolean;
+            /**
+             * Storage Checked
+             * @constant
+             */
+            storage_checked: false;
+        };
         /** OrgHealthSummary */
         OrgHealthSummary: {
             /** Avg Health Score */
-            avg_health_score: number;
+            avg_health_score: number | null;
             /** Device Count */
             device_count: number;
             /** Health Status */
             health_status: string;
+            /**
+             * Measured Device Count
+             * @default 0
+             */
+            measured_device_count: number;
             /**
              * Organization Id
              * Format: uuid
@@ -48565,9 +50006,19 @@ export interface components {
         };
         /**
          * OrgModuleRead
-         * @description Module enablement for an organization.
+         * @description Navigation and lifecycle selection; not an API authorization boundary.
          */
         OrgModuleRead: {
+            /**
+             * Api Access Gated
+             * @default false
+             */
+            api_access_gated: boolean;
+            /**
+             * Background Jobs Cancelled
+             * @default false
+             */
+            background_jobs_cancelled: boolean;
             /** Disabled At */
             disabled_at?: string | null;
             /** Enabled At */
@@ -49356,6 +50807,7 @@ export interface components {
             payload: {
                 [key: string]: unknown;
             };
+            provider_task?: components["schemas"]["ProviderTaskResponse"] | null;
             /** Site Id */
             site_id: string | null;
             /**
@@ -49912,6 +51364,10 @@ export interface components {
          *     supervision exists.
          */
         PluginScheduleInfo: {
+            /** Blocked This Worker */
+            blocked_this_worker?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Description
              * @default
@@ -50361,6 +51817,19 @@ export interface components {
              */
             tx_utilization: number;
         };
+        /**
+         * PortToggleIn
+         * @description Explicit apply intent for the synchronous, staged port-state API.
+         */
+        PortToggleIn: {
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+        };
         /** PortUpdateIn */
         PortUpdateIn: {
             /** Duplex */
@@ -50449,6 +51918,39 @@ export interface components {
              * @default []
              */
             warnings: string[];
+        };
+        /** PreparationResult */
+        PreparationResult: {
+            /**
+             * Last Transition By
+             * Format: uuid
+             */
+            last_transition_by: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /**
+             * Phase
+             * @constant
+             */
+            phase: "prepared";
+            /**
+             * Publication Or Storage Authorized
+             * @constant
+             */
+            publication_or_storage_authorized: false;
+            /**
+             * Release Id
+             * Format: uuid
+             */
+            release_id: string;
+            /**
+             * Requested By
+             * Format: uuid
+             */
+            requested_by: string;
         };
         /**
          * PrivacyMaskRegion
@@ -50682,6 +52184,30 @@ export interface components {
             updated_at: string;
         };
         /**
+         * ProviderTaskResponse
+         * @description An acknowledgement plus the latest read-only provider observation.
+         *
+         *     finished_at is when FreeSDN observed termination, not the provider end time.
+         *     A failed task may have made partial changes; it must not be blindly replayed.
+         */
+        ProviderTaskResponse: {
+            /** Checked At */
+            checked_at?: string | null;
+            /** Detail */
+            detail?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Id */
+            id?: string | null;
+            /** Node */
+            node?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "running" | "succeeded" | "warnings" | "failed" | "unknown";
+        };
+        /**
          * ProviderTestRequest
          * @description Test a notification provider.
          */
@@ -50733,6 +52259,28 @@ export interface components {
             rate_limit_per_day?: number | null;
             /** Rate Limit Per Hour */
             rate_limit_per_hour?: number | null;
+        };
+        /** ProxmoxBackupChangeRequest */
+        ProxmoxBackupChangeRequest: {
+            /**
+             * Notes
+             * @description Free-text reason / change-management ticket reference.
+             */
+            notes?: string | null;
+            /**
+             * Payload
+             * @description Config payload to push when applied (≤ ~256 KB).
+             */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Request Id */
+            request_id?: string | null;
+            /**
+             * Target Id
+             * @description Entity ID being modified for update / delete. Omit for create.
+             */
+            target_id?: string | null;
         };
         /** PruneBackupsRequest */
         PruneBackupsRequest: {
@@ -50787,6 +52335,99 @@ export interface components {
              * Format: date-time
              */
             timestamp: string;
+        };
+        /** PublicationDocument */
+        PublicationDocument: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "publish";
+            metadata: components["schemas"]["PublicationMetadata"];
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /** Organization Id */
+            organization_id: string | null;
+            /**
+             * Release Id
+             * Format: uuid
+             */
+            release_id: string;
+            /**
+             * Storage Kind
+             * @enum {string}
+             */
+            storage_kind: "owned" | "external";
+        };
+        /** PublicationMetadata */
+        PublicationMetadata: {
+            /**
+             * Agent Type
+             * @enum {string}
+             */
+            agent_type: "daemon" | "desktop";
+            /** Checksum Sha256 */
+            checksum_sha256: string;
+            /** Download Url */
+            download_url: string;
+            /**
+             * File Size
+             * @description Owned payloads additionally require at most 524288000 bytes.
+             */
+            file_size: number;
+            /** Filename */
+            filename: string | null;
+            /** Is Latest */
+            is_latest: boolean;
+            /** Is Prerelease */
+            is_prerelease: boolean;
+            /** Min Backend Version */
+            min_backend_version: string;
+            /**
+             * Platform
+             * @enum {string}
+             */
+            platform: "linux" | "windows" | "macos";
+            /** Release Notes */
+            release_notes: string;
+            /** Version */
+            version: string;
+        };
+        /** PublicationResult */
+        PublicationResult: {
+            /** Artifact Verified This Call */
+            artifact_verified_this_call: boolean;
+            /** Current Is Latest */
+            current_is_latest: boolean | null;
+            /**
+             * Decision
+             * @constant
+             */
+            decision: "published";
+            /** Newly Published */
+            newly_published: boolean;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /**
+             * Publication Or Storage Authorized
+             * @constant
+             */
+            publication_or_storage_authorized: false;
+            /**
+             * Release Id
+             * Format: uuid
+             */
+            release_id: string;
+            /** Release Row Present */
+            release_row_present: boolean;
+            /** Signature Verified This Call */
+            signature_verified_this_call: boolean;
         };
         /** PushActionResponse */
         PushActionResponse: {
@@ -51292,6 +52933,39 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** ReleaseRuntimeResponse */
+        ReleaseRuntimeResponse: {
+            /**
+             * Actions Revalidate Current State
+             * @constant
+             */
+            actions_revalidate_current_state: true;
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /**
+             * Observation Only
+             * @constant
+             */
+            observation_only: true;
+            /**
+             * Reference Schema
+             * @enum {string}
+             */
+            reference_schema: "observed" | "unavailable";
+            /**
+             * Signing Identity
+             * @enum {string}
+             */
+            signing_identity: "observed" | "unavailable";
+            /**
+             * Storage
+             * @enum {string}
+             */
+            storage: "observed" | "unavailable";
+        };
         /** RemoteMigrateRequest */
         RemoteMigrateRequest: {
             /**
@@ -51368,13 +53042,66 @@ export interface components {
              */
             start_time: string;
         };
+        /** ReservationResult */
+        ReservationResult: {
+            /** Created */
+            created: boolean;
+            /** Decision */
+            decision: ("published" | "cancelled") | null;
+            /**
+             * Last Transition By
+             * Format: uuid
+             */
+            last_transition_by: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "reserved" | "prepared" | "decided" | "cleaned";
+            /**
+             * Release Id
+             * Format: uuid
+             */
+            release_id: string;
+            /**
+             * Requested By
+             * Format: uuid
+             */
+            requested_by: string;
+        };
         /** ResizeDiskRequest */
         ResizeDiskRequest: {
+            /**
+             * Current Size Bytes
+             * @description Reviewed disk size in bytes
+             */
+            current_size_bytes: number;
             /**
              * Disk
              * @description Disk name (e.g., scsi0, virtio0)
              */
             disk: string;
+            /**
+             * Expected Digest
+             * @description Digest of the guest configuration reviewed by the operator
+             */
+            expected_digest: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
+             */
+            request_id: string;
             /**
              * Size
              * @description Size string (e.g., +10G, 50G)
@@ -52068,6 +53795,34 @@ export interface components {
             /** Warning Threshold Percent */
             warning_threshold_percent?: number | null;
         };
+        /** SLAReportDeliveryResponse */
+        SLAReportDeliveryResponse: {
+            /** Accepted At */
+            accepted_at?: string | null;
+            /** Attempts */
+            attempts: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Next Attempt At
+             * Format: date-time
+             */
+            next_attempt_at: string;
+            /** Recipient Email */
+            recipient_email: string;
+            /** State */
+            state: string;
+        };
         /** SLAReportGenerateRequest */
         SLAReportGenerateRequest: {
             /**
@@ -52148,6 +53903,13 @@ export interface components {
             /** Day Of Week */
             day_of_week?: number | null;
             /**
+             * Delivery Enabled
+             * @default false
+             */
+            delivery_enabled: boolean;
+            /** Delivery Provider Id */
+            delivery_provider_id?: string | null;
+            /**
              * Enabled
              * @default true
              */
@@ -52166,6 +53928,16 @@ export interface components {
             recipients?: string[];
             /** Sla Policy Ids */
             sla_policy_ids?: string[];
+            /**
+             * Time Of Day
+             * @default 09:00
+             */
+            time_of_day: string;
+            /**
+             * Timezone
+             * @default UTC
+             */
+            timezone: string;
         };
         /** SLAReportScheduleListResponse */
         SLAReportScheduleListResponse: {
@@ -52183,10 +53955,19 @@ export interface components {
             /** Day Of Week */
             day_of_week?: number | null;
             /**
+             * Delivery Enabled
+             * @default false
+             */
+            delivery_enabled: boolean;
+            /** Delivery Provider Id */
+            delivery_provider_id?: string | null;
+            /**
              * Enabled
              * @default true
              */
             enabled: boolean;
+            /** Execution Error */
+            execution_error?: string | null;
             /** Frequency */
             frequency: string;
             /**
@@ -52209,6 +53990,16 @@ export interface components {
             recipients?: unknown[];
             /** Sla Policy Ids */
             sla_policy_ids?: unknown[];
+            /**
+             * Time Of Day
+             * @default 09:00
+             */
+            time_of_day: string;
+            /**
+             * Timezone
+             * @default UTC
+             */
+            timezone: string;
             /** Updated At */
             updated_at?: string | null;
         };
@@ -52218,6 +54009,10 @@ export interface components {
             day_of_month?: number | null;
             /** Day Of Week */
             day_of_week?: number | null;
+            /** Delivery Enabled */
+            delivery_enabled?: boolean | null;
+            /** Delivery Provider Id */
+            delivery_provider_id?: string | null;
             /** Enabled */
             enabled?: boolean | null;
             /** Frequency */
@@ -52230,6 +54025,10 @@ export interface components {
             recipients?: string[] | null;
             /** Sla Policy Ids */
             sla_policy_ids?: string[] | null;
+            /** Time Of Day */
+            time_of_day?: string | null;
+            /** Timezone */
+            timezone?: string | null;
         };
         /** SLASnapshotResponse */
         SLASnapshotResponse: {
@@ -53189,6 +54988,542 @@ export interface components {
              */
             record_type: string;
         };
+        /** SdnAttachmentInspection */
+        SdnAttachmentInspection: {
+            /**
+             * Atomic Snapshot
+             * @default false
+             * @constant
+             */
+            atomic_snapshot: false;
+            /**
+             * Connectivity Verified
+             * @default false
+             * @constant
+             */
+            connectivity_verified: false;
+            /**
+             * Controller Id
+             * Format: uuid
+             */
+            controller_id: string;
+            /**
+             * Dependency Graph Complete
+             * @default false
+             * @constant
+             */
+            dependency_graph_complete: false;
+            /**
+             * Finished At
+             * Format: date-time
+             */
+            finished_at: string;
+            guest_inventory: components["schemas"]["SdnAttachmentInventory"];
+            /** Guests */
+            guests: components["schemas"]["SdnGuestAttachments"][];
+            /** Hosts */
+            hosts: components["schemas"]["SdnHostInterfaces"][];
+            node_inventory: components["schemas"]["SdnAttachmentInventory"];
+            /**
+             * Request Limit
+             * @description Maximum logical reads; excludes transport retries
+             */
+            request_limit: number;
+            /**
+             * Requests Made
+             * @description Logical reads started; not HTTP attempt count
+             */
+            requests_made: number;
+            /** Response Limit Reached */
+            response_limit_reached: boolean;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Unobserved Dependencies */
+            unobserved_dependencies?: string[];
+            /**
+             * Visibility
+             * @default partial_or_unverified
+             * @constant
+             */
+            visibility: "partial_or_unverified";
+            /** Vnets */
+            vnets: components["schemas"]["SdnAttachmentVnets"][];
+            /**
+             * Writes Enabled
+             * @default false
+             * @constant
+             */
+            writes_enabled: false;
+        };
+        /** SdnAttachmentInventory */
+        SdnAttachmentInventory: {
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Omitted By Limit
+             * @default 0
+             */
+            omitted_by_limit: number;
+            /**
+             * Omitted Fields
+             * @default 0
+             */
+            omitted_fields: number;
+            /** Reason */
+            reason?: ("inspection_deadline" | "response_limit") | null;
+            /**
+             * Selected
+             * @default 0
+             */
+            selected: number;
+            /** Selection Limit */
+            selection_limit: number;
+            /** Status */
+            status: ("available" | "denied" | "unsupported_or_missing" | "unavailable" | "invalid") | "not_observed";
+            /**
+             * Visibility Complete
+             * @default false
+             * @constant
+             */
+            visibility_complete: false;
+            /** Visible Count */
+            visible_count?: number | null;
+        };
+        /** SdnAttachmentVnets */
+        SdnAttachmentVnets: {
+            /** Identities */
+            identities?: string[] | null;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Omitted Fields
+             * @default 0
+             */
+            omitted_fields: number;
+            /** Reason */
+            reason?: ("inspection_deadline" | "response_limit") | null;
+            /** Status */
+            status: ("available" | "denied" | "unsupported_or_missing" | "unavailable" | "invalid") | "not_observed";
+            /**
+             * View
+             * @enum {string}
+             */
+            view: "configured" | "running";
+        };
+        /** SdnCollection */
+        SdnCollection: {
+            /** Items */
+            items?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Omitted Fields
+             * @default 0
+             */
+            omitted_fields: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "denied" | "unsupported_or_missing" | "unavailable" | "invalid";
+        };
+        /** SdnDependencyCollection */
+        SdnDependencyCollection: {
+            /**
+             * Content Scope
+             * @default allowlisted_fields
+             * @enum {string}
+             */
+            content_scope: "allowlisted_fields" | "identities_only";
+            /** Items */
+            items?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Omitted Fields
+             * @default 0
+             */
+            omitted_fields: number;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Reason */
+            reason?: ("view_not_exposed" | "inspection_deadline" | "response_limit" | "parent_inventory_unavailable") | null;
+            /**
+             * Resource
+             * @enum {string}
+             */
+            resource: "zones" | "vnets" | "controllers" | "subnets" | "ipams" | "dns" | "fabrics" | "fabric-nodes" | "prefix-lists" | "route-maps" | "prefix-list-entries" | "route-map-entries";
+            /** Status */
+            status: ("available" | "denied" | "unsupported_or_missing" | "unavailable" | "invalid") | "not_observed";
+            /**
+             * View
+             * @enum {string}
+             */
+            view: "configured" | "running" | "pending";
+        };
+        /** SdnDependencyInspection */
+        SdnDependencyInspection: {
+            /**
+             * Atomic Snapshot
+             * @default false
+             * @constant
+             */
+            atomic_snapshot: false;
+            /** Collections */
+            collections: components["schemas"]["SdnDependencyCollection"][];
+            /**
+             * Controller Id
+             * Format: uuid
+             */
+            controller_id: string;
+            /**
+             * Dependency Graph Complete
+             * @default false
+             * @constant
+             */
+            dependency_graph_complete: false;
+            /**
+             * Finished At
+             * Format: date-time
+             */
+            finished_at: string;
+            /**
+             * Pending State
+             * @enum {string}
+             */
+            pending_state: "changes_detected" | "unknown";
+            /** References */
+            references: components["schemas"]["SdnDependencyReference"][];
+            /**
+             * Request Limit
+             * @description Maximum logical collection reads; excludes transport retries
+             */
+            request_limit: number;
+            /**
+             * Requests Made
+             * @description Logical collection reads started; not HTTP attempt count
+             */
+            requests_made: number;
+            /** Response Limit Reached */
+            response_limit_reached: boolean;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Subnet Parent Inventory Complete
+             * @default false
+             * @constant
+             */
+            subnet_parent_inventory_complete: false;
+            /** Subnet Parent Limit */
+            subnet_parent_limit: number;
+            /** Subnet Parents Omitted By Limit */
+            subnet_parents_omitted_by_limit: number;
+            /** Subnet Parents Selected */
+            subnet_parents_selected: number;
+            /** Unobserved Dependencies */
+            unobserved_dependencies?: string[];
+            /**
+             * Visibility
+             * @default partial_or_unverified
+             * @constant
+             */
+            visibility: "partial_or_unverified";
+            /**
+             * Writes Enabled
+             * @default false
+             * @constant
+             */
+            writes_enabled: false;
+        };
+        /** SdnDependencyReference */
+        SdnDependencyReference: {
+            /** Field */
+            field: string;
+            /** Source Id */
+            source_id: string;
+            /**
+             * Source Resource
+             * @enum {string}
+             */
+            source_resource: "zones" | "vnets" | "controllers" | "subnets" | "ipams" | "dns" | "fabrics" | "fabric-nodes" | "prefix-lists" | "route-maps" | "prefix-list-entries" | "route-map-entries";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "visible" | "not_visible" | "target_unavailable";
+            /** Target Id */
+            target_id: string;
+            /**
+             * Target Resource
+             * @enum {string}
+             */
+            target_resource: "zones" | "vnets" | "controllers" | "subnets" | "ipams" | "dns" | "fabrics" | "fabric-nodes" | "prefix-lists" | "route-maps" | "prefix-list-entries" | "route-map-entries";
+            /**
+             * Target View
+             * @enum {string}
+             */
+            target_view: "configured" | "running";
+            /**
+             * View
+             * @enum {string}
+             */
+            view: "configured" | "running";
+        };
+        /** SdnDiffSummary */
+        SdnDiffSummary: {
+            /** Added Lines */
+            added_lines: number;
+            /** Changed */
+            changed: boolean;
+            /** Removed Lines */
+            removed_lines: number;
+        };
+        /** SdnDryRunObservation */
+        SdnDryRunObservation: {
+            /**
+             * Connectivity Verified
+             * @default false
+             * @constant
+             */
+            connectivity_verified: false;
+            /**
+             * Content Withheld
+             * @default true
+             * @constant
+             */
+            content_withheld: true;
+            /**
+             * Controller Id
+             * Format: uuid
+             */
+            controller_id: string;
+            frr?: components["schemas"]["SdnDiffSummary"] | null;
+            interfaces?: components["schemas"]["SdnDiffSummary"] | null;
+            /** Node */
+            node: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "denied" | "unsupported_or_missing" | "unavailable" | "invalid";
+        };
+        /** SdnGuestAttachments */
+        SdnGuestAttachments: {
+            /**
+             * Guest Type
+             * @enum {string}
+             */
+            guest_type: "qemu" | "lxc";
+            /** Nics */
+            nics?: components["schemas"]["SdnNicAttachment"][] | null;
+            /** Node */
+            node: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Omitted Fields
+             * @default 0
+             */
+            omitted_fields: number;
+            /** Reason */
+            reason?: ("inspection_deadline" | "response_limit") | null;
+            /** Status */
+            status: ("available" | "denied" | "unsupported_or_missing" | "unavailable" | "invalid") | "not_observed";
+            /**
+             * View
+             * @enum {string}
+             */
+            view: "current" | "pending_merged";
+            /** Vmid */
+            vmid: number;
+        };
+        /** SdnHostInterface */
+        SdnHostInterface: {
+            /** Active */
+            active?: boolean | null;
+            /** Bridge Ports */
+            bridge_ports?: string[] | null;
+            /** Exists */
+            exists?: boolean | null;
+            /** Iface */
+            iface: string;
+            /** Interface Type */
+            interface_type: string;
+            /** Ovs Bonds */
+            ovs_bonds?: string[] | null;
+            /** Ovs Ports */
+            ovs_ports?: string[] | null;
+            /** Slaves */
+            slaves?: string[] | null;
+            /** Vlan Raw Device */
+            vlan_raw_device?: string | null;
+        };
+        /** SdnHostInterfaces */
+        SdnHostInterfaces: {
+            /** Interfaces */
+            interfaces?: components["schemas"]["SdnHostInterface"][] | null;
+            /** Node */
+            node: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Omitted Fields
+             * @default 0
+             */
+            omitted_fields: number;
+            /** Reason */
+            reason?: ("inspection_deadline" | "response_limit") | null;
+            /** Status */
+            status: ("available" | "denied" | "unsupported_or_missing" | "unavailable" | "invalid") | "not_observed";
+            /**
+             * View
+             * @default native_report
+             * @constant
+             */
+            view: "native_report";
+        };
+        /** SdnInspection */
+        SdnInspection: {
+            /** Allocate At Sdn */
+            allocate_at_sdn?: boolean | null;
+            /** Allocate Propagates */
+            allocate_propagates?: boolean | null;
+            /**
+             * Atomic Snapshot
+             * @default false
+             * @constant
+             */
+            atomic_snapshot: false;
+            /** Audit At Sdn */
+            audit_at_sdn?: boolean | null;
+            /** Audit Propagates */
+            audit_propagates?: boolean | null;
+            /** Blockers */
+            blockers?: string[];
+            /**
+             * Controller Id
+             * Format: uuid
+             */
+            controller_id: string;
+            /**
+             * Finished At
+             * Format: date-time
+             */
+            finished_at: string;
+            /**
+             * Pending State
+             * @enum {string}
+             */
+            pending_state: "changes_detected" | "no_visible_changes" | "unknown";
+            /**
+             * Permissions Status
+             * @enum {string}
+             */
+            permissions_status: "available" | "denied" | "unsupported_or_missing" | "unavailable" | "invalid";
+            /** Resources */
+            resources: components["schemas"]["SdnResourceObservation"][];
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Unobserved Resources */
+            unobserved_resources?: string[];
+            /**
+             * Visibility
+             * @default partial_or_unverified
+             * @constant
+             */
+            visibility: "partial_or_unverified";
+            /**
+             * Writes Enabled
+             * @default false
+             * @constant
+             */
+            writes_enabled: false;
+        };
+        /** SdnNicAttachment */
+        SdnNicAttachment: {
+            /** Bridge */
+            bridge?: string | null;
+            /**
+             * Configured Vnet
+             * @default not_observed
+             * @enum {string}
+             */
+            configured_vnet: "visible" | "not_visible" | "target_unavailable" | "not_observed" | "no_bridge";
+            /** Firewall */
+            firewall?: boolean | null;
+            /**
+             * Host Interface
+             * @default not_observed
+             * @enum {string}
+             */
+            host_interface: "visible" | "not_visible" | "target_unavailable" | "not_observed" | "no_bridge";
+            /** Key */
+            key: string;
+            /** Link Down */
+            link_down?: boolean | null;
+            /**
+             * Omitted Options
+             * @default 0
+             */
+            omitted_options: number;
+            /**
+             * Running Vnet
+             * @default not_observed
+             * @enum {string}
+             */
+            running_vnet: "visible" | "not_visible" | "target_unavailable" | "not_observed" | "no_bridge";
+            /** Tag */
+            tag?: number | null;
+            /** Trunks */
+            trunks?: string | null;
+        };
+        /** SdnResourceObservation */
+        SdnResourceObservation: {
+            configured: components["schemas"]["SdnCollection"];
+            pending: components["schemas"]["SdnCollection"];
+            /**
+             * Resource
+             * @enum {string}
+             */
+            resource: "zones" | "vnets" | "controllers";
+            running: components["schemas"]["SdnCollection"];
+        };
         /**
          * SecurityAnomalyListResponse
          * @description Paginated anomaly list.
@@ -53587,6 +55922,28 @@ export interface components {
              */
             target_queue: string;
         };
+        /** SigningCommandRequest */
+        SigningCommandRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "initialize" | "adopt" | "resume" | "cancel" | "recover";
+            /** Expected Public Sha256 */
+            expected_public_sha256?: string | null;
+            /** Identity Epoch */
+            identity_epoch: number;
+            /**
+             * Installation Id
+             * Format: uuid
+             */
+            installation_id: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+        };
         /**
          * SiteCreate
          * @description Site creation schema.
@@ -53700,7 +56057,7 @@ export interface components {
         /** SiteHealthSummary */
         SiteHealthSummary: {
             /** Avg Health Score */
-            avg_health_score: number;
+            avg_health_score: number | null;
             /** Critical */
             critical: number;
             /** Degraded */
@@ -53711,6 +56068,11 @@ export interface components {
             health_status: string;
             /** Healthy */
             healthy: number;
+            /**
+             * Measured Device Count
+             * @default 0
+             */
+            measured_device_count: number;
             /**
              * Site Id
              * Format: uuid
@@ -53726,9 +56088,14 @@ export interface components {
         /** SiteRanking */
         SiteRanking: {
             /** Avg Health Score */
-            avg_health_score: number;
+            avg_health_score: number | null;
             /** Device Count */
             device_count: number;
+            /**
+             * Measured Device Count
+             * @default 0
+             */
+            measured_device_count: number;
             /**
              * Site Id
              * Format: uuid
@@ -53738,15 +56105,12 @@ export interface components {
             site_name: string;
             /**
              * Trend
-             * @default stable
+             * @default unknown
              * @enum {string}
              */
-            trend: "up" | "down" | "stable";
-            /**
-             * Trend Delta
-             * @default 0
-             */
-            trend_delta: number;
+            trend: "up" | "down" | "stable" | "unknown";
+            /** Trend Delta */
+            trend_delta?: number | null;
             /** Uptime Percent */
             uptime_percent?: number | null;
         };
@@ -54177,7 +56541,10 @@ export interface components {
             priority: number;
             /** Remote Subnets */
             remote_subnets?: string[] | null;
-            /** Site Id */
+            /**
+             * Site Id
+             * Format: uuid
+             */
             site_id: string;
             /**
              * Status
@@ -54398,6 +56765,17 @@ export interface components {
              * @default
              */
             description: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
+             */
+            request_id: string;
             /** Snapname */
             snapname: string;
             /**
@@ -54697,6 +57075,11 @@ export interface components {
             name: string;
             /** Storage Type */
             storage_type: string;
+            /**
+             * Transport Security Review Required
+             * @default false
+             */
+            transport_security_review_required: boolean;
             /** Updated At */
             updated_at?: string | null;
         };
@@ -54745,6 +57128,82 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /** StorageOperationRequest */
+        StorageOperationRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "delete" | "upload";
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
+            /**
+             * Content
+             * @default iso
+             * @enum {string}
+             */
+            content: "iso" | "vztmpl";
+            /** Expected Digest */
+            expected_digest: string;
+            /**
+             * Filename
+             * @default
+             */
+            filename: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Size
+             * @default 0
+             */
+            size: number;
+            /**
+             * Volume
+             * @default
+             */
+            volume: string;
+        };
+        /** StorageOperationResponse */
+        StorageOperationResponse: {
+            /** Action */
+            action: string;
+            /**
+             * Change Id
+             * Format: uuid
+             */
+            change_id: string;
+            /** Checksum */
+            checksum?: string | null;
+            /** Message */
+            message: string;
+            provider_task?: components["schemas"]["ProviderTaskResponse"] | null;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Status */
+            status: string;
+            /** Target */
+            target: string;
+        };
+        /** StorageOperationReview */
+        StorageOperationReview: {
+            /** Expected Digest */
+            expected_digest: string;
+            snapshot: components["schemas"]["StorageReviewSnapshot"];
+        };
         /** StorageResponse */
         StorageResponse: {
             /**
@@ -54790,6 +57249,65 @@ export interface components {
              * @default 0
              */
             used_percent: number;
+        };
+        /** StorageReviewRequest */
+        StorageReviewRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "delete" | "upload";
+            /**
+             * Content
+             * @default iso
+             * @enum {string}
+             */
+            content: "iso" | "vztmpl";
+            /**
+             * Filename
+             * @default
+             */
+            filename: string;
+            /**
+             * Size
+             * @default 0
+             */
+            size: number;
+            /**
+             * Volume
+             * @default
+             */
+            volume: string;
+        };
+        /** StorageReviewSnapshot */
+        StorageReviewSnapshot: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "delete" | "upload";
+            /** Content */
+            content: string;
+            /** Endpoint Node */
+            endpoint_node: string;
+            /** Node */
+            node: string;
+            /** Owner */
+            owner?: number | null;
+            /** References Digest */
+            references_digest: string;
+            /** Size */
+            size: number;
+            /** Storage */
+            storage: string;
+            /** Storage Digest */
+            storage_digest: string;
+            /** Storage Type */
+            storage_type: string;
+            /** Volume */
+            volume: string;
+            /** Volume Digest */
+            volume_digest: string;
         };
         /**
          * StorageTypeField
@@ -56082,6 +58600,70 @@ export interface components {
          * @enum {string}
          */
         TaskStatus: "pending" | "started" | "progress" | "success" | "failure" | "retry" | "revoked";
+        /** TaskStopRequest */
+        TaskStopRequest: {
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
+            /** Expected Digest */
+            expected_digest: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /** TaskStopResponse */
+        TaskStopResponse: {
+            /**
+             * Change Id
+             * Format: uuid
+             */
+            change_id: string;
+            /** Message */
+            message: string;
+            /** Node */
+            node: string;
+            provider_task?: components["schemas"]["ProviderTaskResponse"] | null;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Status */
+            status: string;
+            /** Upid */
+            upid: string;
+        };
+        /** TaskStopReviewResponse */
+        TaskStopReviewResponse: {
+            /** Expected Digest */
+            expected_digest: string;
+            snapshot: components["schemas"]["TaskStopSnapshot"];
+            /** Warnings */
+            warnings: string[];
+        };
+        /** TaskStopSnapshot */
+        TaskStopSnapshot: {
+            /** Node */
+            node: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "running";
+            /** Task Type */
+            task_type: string;
+            /** Upid */
+            upid: string;
+        };
         /**
          * TaskSubmitResponse
          * @description Response when a task is submitted.
@@ -56132,6 +58714,30 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             status?: components["schemas"]["AgentTaskStatus"] | null;
+        };
+        /** TemplateConversionRequest */
+        TemplateConversionRequest: {
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
+            /**
+             * Expected Digest
+             * @description Digest of the guest configuration reviewed by the operator
+             */
+            expected_digest: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
+             */
+            request_id: string;
         };
         /**
          * TestCredentialRequest
@@ -56366,9 +58972,9 @@ export interface components {
             /** Site Name */
             site_name?: string | null;
             /** Worst Component */
-            worst_component: string;
+            worst_component: string | null;
             /** Worst Component Score */
-            worst_component_score: number;
+            worst_component_score: number | null;
         };
         /** TopIssuesResponse */
         TopIssuesResponse: {
@@ -57027,6 +59633,16 @@ export interface components {
             /** Description */
             description?: string | null;
             /**
+             * Expected Digest
+             * @description Digest of the guest configuration reviewed by the operator
+             */
+            expected_digest: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
              * Memory
              * @description Memory in MB
              */
@@ -57037,6 +59653,12 @@ export interface components {
             onboot?: boolean | null;
             /** Protection */
             protection?: boolean | null;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Stable intent ID; reuse on transport retries
+             */
+            request_id: string;
             /** Tags */
             tags?: string | null;
         };
@@ -57207,20 +59829,50 @@ export interface components {
         };
         /** UploadCertificateRequest */
         UploadCertificateRequest: {
-            /** Certificates */
+            /**
+             * Acme Force
+             * @default false
+             */
+            acme_force: boolean;
+            /**
+             * Action
+             * @default upload
+             * @constant
+             */
+            action: "upload";
+            /**
+             * Certificates
+             * @default
+             */
             certificates: string;
             /**
              * Confirmed
              * @default false
              */
             confirmed: boolean;
+            /** Expected Digest */
+            expected_digest: string;
             /**
              * Force
              * @default false
              */
             force: boolean;
-            /** Key */
+            /**
+             * Key
+             * Format: password
+             * @default
+             */
             key: string;
+            /**
+             * Overwrite
+             * @default false
+             */
+            overwrite: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
             /**
              * Restart
              * @default false
@@ -57230,19 +59882,33 @@ export interface components {
         /** UploadResponse */
         UploadResponse: {
             /**
-             * Content Type
-             * @default
+             * Authorization Granted
+             * @constant
              */
-            content_type: string;
-            /** Filename */
-            filename: string;
+            authorization_granted: false;
             /**
-             * Size
-             * @default 0
+             * Historical Observation
+             * @constant
              */
-            size: number;
-            /** Upid */
-            upid?: string | null;
+            historical_observation: true;
+            /** Intent Sha256 */
+            intent_sha256: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /**
+             * Release Id
+             * Format: uuid
+             */
+            release_id: string;
+            result: components["schemas"]["PreparationResult"];
+            /**
+             * Retry Requires Identical Intent And Current Authority
+             * @constant
+             */
+            retry_requires_identical_intent_and_current_authority: true;
         };
         /**
          * UserActivityResponse
@@ -57580,6 +60246,44 @@ export interface components {
              * @description Power action to perform
              */
             action: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Stable ID for this intent; reuse it on transport retries
+             */
+            request_id: string;
+        };
+        /** VMActionResponse */
+        VMActionResponse: {
+            /** Action */
+            action: string;
+            /**
+             * Change Id
+             * Format: uuid
+             */
+            change_id: string;
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            provider_task?: components["schemas"]["ProviderTaskResponse"] | null;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Status */
+            status: string;
+            /** Upid */
+            upid?: string | null;
+            /** Vmid */
+            vmid: number;
         };
         /** VMResponse */
         VMResponse: {
@@ -58199,6 +60903,15 @@ export interface components {
          * @enum {string}
          */
         VPNType: "tailscale" | "wireguard" | "openvpn" | "netbird" | "ipsec" | "zerotier" | "generic";
+        /** ValidationDetail */
+        ValidationDetail: {
+            /** Field */
+            field: string;
+            /** Message */
+            message: string;
+            /** Type */
+            type: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -58218,6 +60931,29 @@ export interface components {
             enabled: boolean;
             /** Public Key */
             public_key: string;
+        };
+        /**
+         * VaultConfirmationRequestError
+         * @description Sanitized framework validation error; rejected inputs are never echoed.
+         */
+        VaultConfirmationRequestError: {
+            /** Detail */
+            detail: string;
+        };
+        /**
+         * VaultFactorRequirements
+         * @description A current UI hint, never a permission or a provider-connectivity guarantee.
+         */
+        VaultFactorRequirements: {
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "local" | "ldap" | "oidc";
+            /** Mfa Required */
+            mfa_required: boolean;
+            /** Oidc Redirect Uri */
+            oidc_redirect_uri: string | null;
         };
         /**
          * VideoExportRequest
@@ -58626,7 +61362,7 @@ export interface components {
             /** Device Type */
             device_type: string;
             /** Health Score */
-            health_score: number;
+            health_score: number | null;
             /** Ip Address */
             ip_address?: string | null;
             /** Latency Score */
@@ -59495,6 +62231,8 @@ export interface components {
         _OpenVPNImportRequest: {
             /** Config Content */
             config_content: string;
+            /** Config Id */
+            config_id?: string | null;
             /**
              * Site Id
              * Format: uuid
@@ -60639,7 +63377,7 @@ export interface components {
             username?: string | null;
             /**
              * Verify Ssl
-             * @default false
+             * @default true
              */
             verify_ssl: boolean;
         };
@@ -60758,20 +63496,22 @@ export interface components {
             api_key?: string | null;
             /** Certificate */
             certificate?: string | null;
-            credential_type?: components["schemas"]["CredentialType"] | null;
+            /** Credential Type */
+            credential_type?: components["schemas"]["CredentialType"];
             /** Description */
             description?: string | null;
             /** Is Default */
-            is_default?: boolean | null;
+            is_default?: boolean;
             /** Name */
-            name?: string | null;
+            name?: string;
             /** Options */
             options?: {
                 [key: string]: unknown;
-            } | null;
+            };
             /** Password */
             password?: string | null;
-            scope?: components["schemas"]["CredentialScope"] | null;
+            /** Scope */
+            scope?: components["schemas"]["CredentialScope"];
             /** Site Id */
             site_id?: string | null;
             /** Snmp Community */
@@ -60871,7 +63611,7 @@ export interface components {
             /** Firmware Score */
             firmware_score: number | null;
             /** Health Score */
-            health_score: number;
+            health_score: number | null;
             /** Health Status */
             health_status: string;
             /** Latency Score */
@@ -63368,28 +66108,15 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentReleaseCreate"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentReleaseResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": unknown;
                 };
             };
         };
@@ -63542,13 +66269,905 @@ export interface operations {
             };
         };
     };
+    release_catalogue_api_v1_agents_release_catalogue_get: {
+        parameters: {
+            query?: {
+                platform?: string | null;
+                agent_type?: string | null;
+                limit?: number;
+                before_published_at?: string | null;
+                before_id?: string | null;
+            };
+            header?: {
+                /** @description Browser initiating account, paired with the organization header. Canonical nonzero UUID. Must equal the authenticated caller; grants no authority. */
+                "X-FreeSDN-Release-Actor"?: string;
+                /** @description Initiating account organization, not target release organization. Use none only for an account without an organization. Both headers must occur exactly once when supplied. */
+                "X-FreeSDN-Release-Organization"?: string | "none";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CataloguePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    intent_review_api_v1_agents_release_operation_intents_review_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Browser initiating account, paired with the organization header. Canonical nonzero UUID. Must equal the authenticated caller; grants no authority. */
+                "X-FreeSDN-Release-Actor"?: string;
+                /** @description Initiating account organization, not target release organization. Use none only for an account without an organization. Both headers must occur exactly once when supplied. */
+                "X-FreeSDN-Release-Organization"?: string | "none";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Retain the full original intent before mutation. Duplicate JSON keys, non-finite values, semantic identity mismatches and requests above 307200 UTF-8 bytes are refused. */
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Kind
+                     * @constant
+                     */
+                    kind: "publish";
+                    /** PublicationMetadata */
+                    metadata: {
+                        /**
+                         * Agent Type
+                         * @enum {string}
+                         */
+                        agent_type: "daemon" | "desktop";
+                        /** Checksum Sha256 */
+                        checksum_sha256: string;
+                        /** Download Url */
+                        download_url: string;
+                        /**
+                         * File Size
+                         * @description Owned payloads additionally require at most 524288000 bytes.
+                         */
+                        file_size: number;
+                        /** Filename */
+                        filename: string | null;
+                        /** Is Latest */
+                        is_latest: boolean;
+                        /** Is Prerelease */
+                        is_prerelease: boolean;
+                        /** Min Backend Version */
+                        min_backend_version: string;
+                        /**
+                         * Platform
+                         * @enum {string}
+                         */
+                        platform: "linux" | "windows" | "macos";
+                        /** Release Notes */
+                        release_notes: string;
+                        /** Version */
+                        version: string;
+                    };
+                    /**
+                     * Operation Id
+                     * Format: uuid
+                     */
+                    operation_id: string;
+                    /** Organization Id */
+                    organization_id: string | null;
+                    /**
+                     * Release Id
+                     * Format: uuid
+                     */
+                    release_id: string;
+                    /**
+                     * Storage Kind
+                     * @enum {string}
+                     */
+                    storage_kind: "owned" | "external";
+                } | {
+                    /**
+                     * Kind
+                     * @constant
+                     */
+                    kind: "delete";
+                    /** DeletionMetadata */
+                    metadata: {
+                        /** Agent Type */
+                        agent_type: string;
+                        /** Checksum Sha256 */
+                        checksum_sha256: string;
+                        /** Download Url */
+                        download_url: string;
+                        /** File Size */
+                        file_size: number;
+                        /** Filename */
+                        filename: string | null;
+                        /** Is Latest */
+                        is_latest: boolean;
+                        /** Is Prerelease */
+                        is_prerelease: boolean;
+                        /** Min Backend Version */
+                        min_backend_version: string;
+                        /** Platform */
+                        platform: string;
+                        /**
+                         * Published At
+                         * @description Original canonical UTC ISO timestamp; retain its exact spelling.
+                         */
+                        published_at: string;
+                        /** Release Notes */
+                        release_notes: string;
+                        /** Signature */
+                        signature: string | null;
+                        /** Version */
+                        version: string;
+                    };
+                    /**
+                     * Operation Id
+                     * Format: uuid
+                     */
+                    operation_id: string;
+                    /** Organization Id */
+                    organization_id: string | null;
+                    /**
+                     * Release Id
+                     * Format: uuid
+                     */
+                    release_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntentReviewResponse"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+        };
+    };
+    operation_status_api_v1_agents_release_operations__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Browser initiating account, paired with the organization header. Canonical nonzero UUID. Must equal the authenticated caller; grants no authority. */
+                "X-FreeSDN-Release-Actor"?: string;
+                /** @description Initiating account organization, not target release organization. Use none only for an account without an organization. Both headers must occur exactly once when supplied. */
+                "X-FreeSDN-Release-Organization"?: string | "none";
+            };
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationStatusResponse"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+        };
+    };
+    operation_upload_api_v1_agents_release_operations__operation_id__upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Browser initiating account, paired with the organization header. Canonical nonzero UUID. Must equal the authenticated caller; grants no authority. */
+                "X-FreeSDN-Release-Actor"?: string;
+                /** @description Initiating account organization, not target release organization. Use none only for an account without an organization. Both headers must occur exactly once when supplied. */
+                "X-FreeSDN-Release-Organization"?: string | "none";
+            };
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description Exactly two parts in order: full owned-publication intent JSON, then file. Save the intent first. Standard OpenAPI cannot enforce part order or the linked payload checksum/size; the server does. Filename is transport-only. A response is a historical preparation observation, not publication. */
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    /** OwnedPublicationDocument */
+                    intent: {
+                        /**
+                         * Kind
+                         * @constant
+                         */
+                        kind: "publish";
+                        /** OwnedPublicationMetadata */
+                        metadata: {
+                            /**
+                             * Agent Type
+                             * @enum {string}
+                             */
+                            agent_type: "daemon" | "desktop";
+                            /** Checksum Sha256 */
+                            checksum_sha256: string;
+                            /** Download Url */
+                            download_url: string;
+                            /** File Size */
+                            file_size: number;
+                            /** Filename */
+                            filename: string;
+                            /** Is Latest */
+                            is_latest: boolean;
+                            /** Is Prerelease */
+                            is_prerelease: boolean;
+                            /** Min Backend Version */
+                            min_backend_version: string;
+                            /**
+                             * Platform
+                             * @enum {string}
+                             */
+                            platform: "linux" | "windows" | "macos";
+                            /** Release Notes */
+                            release_notes: string;
+                            /** Version */
+                            version: string;
+                        };
+                        /**
+                         * Operation Id
+                         * Format: uuid
+                         */
+                        operation_id: string;
+                        /** Organization Id */
+                        organization_id: string | null;
+                        /**
+                         * Release Id
+                         * Format: uuid
+                         */
+                        release_id: string;
+                        /**
+                         * Storage Kind
+                         * @constant
+                         */
+                        storage_kind: "owned";
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadResponse"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+        };
+    };
+    operation_command_api_v1_agents_release_operations__operation_id___action__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Browser initiating account, paired with the organization header. Canonical nonzero UUID. Must equal the authenticated caller; grants no authority. */
+                "X-FreeSDN-Release-Actor"?: string;
+                /** @description Initiating account organization, not target release organization. Use none only for an account without an organization. Both headers must occur exactly once when supplied. */
+                "X-FreeSDN-Release-Organization"?: string | "none";
+            };
+            path: {
+                operation_id: string;
+                action: "reserve" | "resume" | "publish" | "delete" | "cancel" | "cleanup";
+            };
+            cookie?: never;
+        };
+        /** @description Retain the full original intent before mutation. Duplicate JSON keys, non-finite values, semantic identity mismatches and requests above 307200 UTF-8 bytes are refused. */
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Kind
+                     * @constant
+                     */
+                    kind: "publish";
+                    /** PublicationMetadata */
+                    metadata: {
+                        /**
+                         * Agent Type
+                         * @enum {string}
+                         */
+                        agent_type: "daemon" | "desktop";
+                        /** Checksum Sha256 */
+                        checksum_sha256: string;
+                        /** Download Url */
+                        download_url: string;
+                        /**
+                         * File Size
+                         * @description Owned payloads additionally require at most 524288000 bytes.
+                         */
+                        file_size: number;
+                        /** Filename */
+                        filename: string | null;
+                        /** Is Latest */
+                        is_latest: boolean;
+                        /** Is Prerelease */
+                        is_prerelease: boolean;
+                        /** Min Backend Version */
+                        min_backend_version: string;
+                        /**
+                         * Platform
+                         * @enum {string}
+                         */
+                        platform: "linux" | "windows" | "macos";
+                        /** Release Notes */
+                        release_notes: string;
+                        /** Version */
+                        version: string;
+                    };
+                    /**
+                     * Operation Id
+                     * Format: uuid
+                     */
+                    operation_id: string;
+                    /** Organization Id */
+                    organization_id: string | null;
+                    /**
+                     * Release Id
+                     * Format: uuid
+                     */
+                    release_id: string;
+                    /**
+                     * Storage Kind
+                     * @enum {string}
+                     */
+                    storage_kind: "owned" | "external";
+                } | {
+                    /**
+                     * Kind
+                     * @constant
+                     */
+                    kind: "delete";
+                    /** DeletionMetadata */
+                    metadata: {
+                        /** Agent Type */
+                        agent_type: string;
+                        /** Checksum Sha256 */
+                        checksum_sha256: string;
+                        /** Download Url */
+                        download_url: string;
+                        /** File Size */
+                        file_size: number;
+                        /** Filename */
+                        filename: string | null;
+                        /** Is Latest */
+                        is_latest: boolean;
+                        /** Is Prerelease */
+                        is_prerelease: boolean;
+                        /** Min Backend Version */
+                        min_backend_version: string;
+                        /** Platform */
+                        platform: string;
+                        /**
+                         * Published At
+                         * @description Original canonical UTC ISO timestamp; retain its exact spelling.
+                         */
+                        published_at: string;
+                        /** Release Notes */
+                        release_notes: string;
+                        /** Signature */
+                        signature: string | null;
+                        /** Version */
+                        version: string;
+                    };
+                    /**
+                     * Operation Id
+                     * Format: uuid
+                     */
+                    operation_id: string;
+                    /** Organization Id */
+                    organization_id: string | null;
+                    /**
+                     * Release Id
+                     * Format: uuid
+                     */
+                    release_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationResponse"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+        };
+    };
+    release_runtime_status_api_v1_agents_release_runtime_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseRuntimeResponse"];
+                };
+            };
+        };
+    };
     list_releases_api_v1_agents_releases_get: {
         parameters: {
             query?: {
                 platform?: string | null;
                 agent_type?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description Browser initiating account, paired with the organization header. Canonical nonzero UUID. Must equal the authenticated caller; grants no authority. */
+                "X-FreeSDN-Release-Actor"?: string;
+                /** @description Initiating account organization, not target release organization. Use none only for an account without an organization. Both headers must occur exactly once when supplied. */
+                "X-FreeSDN-Release-Organization"?: string | "none";
+            };
             path?: never;
             cookie?: never;
         };
@@ -63601,28 +67220,15 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_upload_release_api_v1_agents_releases_upload_post"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentReleaseResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": unknown;
                 };
             };
         };
@@ -63660,10 +67266,21 @@ export interface operations {
     };
     download_release_binary_api_v1_agents_releases__release_id__binary_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Native browser initiating account. Canonical nonzero UUID paired with release_organization; must equal the authenticated operator. Not a token or authority grant. */
+                release_actor?: string;
+                /** @description Initiating account organization, never the target release organization. Both query parameters must occur exactly once when supplied. Existing nonbrowser clients may omit both. Any supplied header pair must also match. */
+                release_organization?: string | "none";
+            };
             header?: {
-                "X-Agent-ID"?: string | null;
-                "X-Agent-Key"?: string | null;
+                /** @description Browser initiating account, paired with the organization header. Canonical nonzero UUID. Must equal the authenticated caller; grants no authority. */
+                "X-FreeSDN-Release-Actor"?: string;
+                /** @description Initiating account organization, not target release organization. Use none only for an account without an organization. Both headers must occur exactly once when supplied. */
+                "X-FreeSDN-Release-Organization"?: string | "none";
+                /** @description Optional byte ranges. A satisfiable request returns206; multiple ranges use multipart/byteranges. */
+                Range?: string;
+                /** @description ETag or HTTP date condition for Range. A nonmatching condition returns the full representation. */
+                "If-Range"?: string;
             };
             path: {
                 release_id: string;
@@ -63672,13 +67289,56 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description Verified binary attachment. HEAD serves the same status/headers without a body or download-count increment. */
             200: {
                 headers: {
+                    "Accept-Ranges"?: "bytes";
+                    /** @description Private/no-store response policy. */
+                    "Cache-Control"?: string;
+                    /** @description Attachment filename. */
+                    "Content-Disposition"?: string;
+                    "Content-Length"?: number;
+                    /** @description Quoted SHA-256 content digest; not an authorization grant. */
+                    ETag?: string;
+                    /** @description HTTP date of the verified local file. */
+                    "Last-Modified"?: string;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Verified partial attachment; multiple ranges use a multipart body. */
+            206: {
+                headers: {
+                    "Accept-Ranges"?: "bytes";
+                    /** @description Private/no-store response policy. */
+                    "Cache-Control"?: string;
+                    /** @description Attachment filename. */
+                    "Content-Disposition"?: string;
+                    "Content-Length"?: number;
+                    /** @description Present for a single range; multipart ranges carry per-part Content-Range. */
+                    "Content-Range"?: string;
+                    /** @description Quoted SHA-256 content digest; not an authorization grant. */
+                    ETag?: string;
+                    /** @description HTTP date of the verified local file. */
+                    "Last-Modified"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                    "multipart/byteranges": string;
+                };
+            };
+            /** @description Requested ranges do not overlap the verified representation. Empty response body. */
+            416: {
+                headers: {
+                    /** @description bytes *\/ followed by the verified total size. */
+                    "Content-Range"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
                 };
             };
             /** @description Validation Error */
@@ -63692,10 +67352,151 @@ export interface operations {
             };
         };
     };
+    deletion_review_api_v1_agents_releases__release_id__deletion_intent__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Browser initiating account, paired with the organization header. Canonical nonzero UUID. Must equal the authenticated caller; grants no authority. */
+                "X-FreeSDN-Release-Actor"?: string;
+                /** @description Initiating account organization, not target release organization. Use none only for an account without an organization. Both headers must occur exactly once when supplied. */
+                "X-FreeSDN-Release-Organization"?: string | "none";
+            };
+            path: {
+                release_id: string;
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntentReviewResponse"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+            /** @description Request refused or outcome unconfirmed. This response does not prove rollback; inspect the same operation before any explicit retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationError"] | components["schemas"]["BodyLimitError"];
+                };
+            };
+        };
+    };
     promote_release_api_v1_agents_releases__release_id__promote_patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Browser initiating account, paired with the organization header. Canonical nonzero UUID. Must equal the authenticated caller; grants no authority. */
+                "X-FreeSDN-Release-Actor"?: string;
+                /** @description Initiating account organization, not target release organization. Use none only for an account without an organization. Both headers must occur exactly once when supplied. */
+                "X-FreeSDN-Release-Organization"?: string | "none";
+            };
             path: {
                 release_id: string;
             };
@@ -66523,6 +70324,123 @@ export interface operations {
             };
         };
     };
+    signing_execute_local_api_v1_auth_agent_signing_execute_local_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalSigningExecutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    signing_operation_api_v1_auth_agent_signing_operations__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    signing_preflight_api_v1_auth_agent_signing_preflight_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SigningCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    signing_status_api_v1_auth_agent_signing_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     login_api_v1_auth_login_post: {
         parameters: {
             query?: never;
@@ -67427,6 +71345,1070 @@ export interface operations {
             };
         };
     };
+    external_api_v1_auth_vault_export_authorize_external_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Actor"?: string;
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Organization"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Identity-encoded JSON, at most 131072 wire bytes; 10-second read deadline and bounded concurrent readers. */
+        requestBody: {
+            content: {
+                "application/json": {
+                    identity_token: string;
+                    /** @description A legacy download permission is obtained only through the server's subsequent artifact observation exchange. */
+                    intent: {
+                        /**
+                         * BackupCreate
+                         * @description Create a backup.
+                         */
+                        backup: {
+                            /**
+                             * Backup Type
+                             * @default full
+                             */
+                            backup_type?: string;
+                            /** Description */
+                            description?: string | null;
+                            /** Device Ids */
+                            device_ids?: string[] | null;
+                            /**
+                             * Include Automation
+                             * @default true
+                             */
+                            include_automation?: boolean;
+                            /**
+                             * Include Devices
+                             * @default true
+                             */
+                            include_devices?: boolean;
+                            /** @constant */
+                            include_secrets: true;
+                            /**
+                             * Include Ssids
+                             * @default true
+                             */
+                            include_ssids?: boolean;
+                            /**
+                             * Include Users
+                             * @default true
+                             */
+                            include_users?: boolean;
+                            /**
+                             * Include Vlans
+                             * @default true
+                             */
+                            include_vlans?: boolean;
+                            /**
+                             * Is Encrypted
+                             * @default true
+                             */
+                            is_encrypted?: boolean;
+                            /** Name */
+                            name: string;
+                            /** Passphrase */
+                            passphrase?: string | null;
+                            /**
+                             * Retention Days
+                             * @default 30
+                             */
+                            retention_days?: number;
+                            /** Site Id */
+                            site_id?: string | null;
+                            /** Storage Location Id */
+                            storage_location_id?: string | null;
+                            /**
+                             * Storage Type
+                             * @default local
+                             */
+                            storage_type?: string;
+                        };
+                        /** @constant */
+                        kind: "create";
+                    } | {
+                        backup_id: string;
+                        /** @constant */
+                        kind: "download_recorded";
+                    } | {
+                        backup_id: string;
+                        /** @constant */
+                        kind: "observe_legacy";
+                        /** @constant */
+                        legacy_acknowledged: true;
+                    };
+                    mfa_code?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Fresh confirmation completed; tokens remain purpose-bound and expire. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        proof: string;
+                    };
+                };
+            };
+            /** @description Invalid browser context or declared request length. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current authentication or fresh confirmation refused or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Required authority or CSRF protection not satisfied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation request-body deadline exceeded. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Initiating account, organization or operation changed; start again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request exceeds the byte bound. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unsupported content type or content encoding. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid command; input and validation internals are not echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation unavailable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Capacity, rate-limit service or trusted provider configuration unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    local_api_v1_auth_vault_export_authorize_local_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Actor"?: string;
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Organization"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Identity-encoded JSON, at most 131072 wire bytes; 10-second read deadline and bounded concurrent readers. */
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description A legacy download permission is obtained only through the server's subsequent artifact observation exchange. */
+                    intent: {
+                        /**
+                         * BackupCreate
+                         * @description Create a backup.
+                         */
+                        backup: {
+                            /**
+                             * Backup Type
+                             * @default full
+                             */
+                            backup_type?: string;
+                            /** Description */
+                            description?: string | null;
+                            /** Device Ids */
+                            device_ids?: string[] | null;
+                            /**
+                             * Include Automation
+                             * @default true
+                             */
+                            include_automation?: boolean;
+                            /**
+                             * Include Devices
+                             * @default true
+                             */
+                            include_devices?: boolean;
+                            /** @constant */
+                            include_secrets: true;
+                            /**
+                             * Include Ssids
+                             * @default true
+                             */
+                            include_ssids?: boolean;
+                            /**
+                             * Include Users
+                             * @default true
+                             */
+                            include_users?: boolean;
+                            /**
+                             * Include Vlans
+                             * @default true
+                             */
+                            include_vlans?: boolean;
+                            /**
+                             * Is Encrypted
+                             * @default true
+                             */
+                            is_encrypted?: boolean;
+                            /** Name */
+                            name: string;
+                            /** Passphrase */
+                            passphrase?: string | null;
+                            /**
+                             * Retention Days
+                             * @default 30
+                             */
+                            retention_days?: number;
+                            /** Site Id */
+                            site_id?: string | null;
+                            /** Storage Location Id */
+                            storage_location_id?: string | null;
+                            /**
+                             * Storage Type
+                             * @default local
+                             */
+                            storage_type?: string;
+                        };
+                        /** @constant */
+                        kind: "create";
+                    } | {
+                        backup_id: string;
+                        /** @constant */
+                        kind: "download_recorded";
+                    } | {
+                        backup_id: string;
+                        /** @constant */
+                        kind: "observe_legacy";
+                        /** @constant */
+                        legacy_acknowledged: true;
+                    };
+                    mfa_code?: string | null;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Fresh confirmation completed; tokens remain purpose-bound and expire. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        proof: string;
+                    };
+                };
+            };
+            /** @description Invalid browser context or declared request length. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current authentication or fresh confirmation refused or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Required authority or CSRF protection not satisfied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation request-body deadline exceeded. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Initiating account, organization or operation changed; start again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request exceeds the byte bound. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unsupported content type or content encoding. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid command; input and validation internals are not echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation unavailable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Capacity, rate-limit service or trusted provider configuration unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ldap_api_v1_auth_vault_export_identity_ldap_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Actor"?: string;
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Organization"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Identity-encoded JSON, at most 131072 wire bytes; 10-second read deadline and bounded concurrent readers. */
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description A legacy download permission is obtained only through the server's subsequent artifact observation exchange. */
+                    intent: {
+                        /**
+                         * BackupCreate
+                         * @description Create a backup.
+                         */
+                        backup: {
+                            /**
+                             * Backup Type
+                             * @default full
+                             */
+                            backup_type?: string;
+                            /** Description */
+                            description?: string | null;
+                            /** Device Ids */
+                            device_ids?: string[] | null;
+                            /**
+                             * Include Automation
+                             * @default true
+                             */
+                            include_automation?: boolean;
+                            /**
+                             * Include Devices
+                             * @default true
+                             */
+                            include_devices?: boolean;
+                            /** @constant */
+                            include_secrets: true;
+                            /**
+                             * Include Ssids
+                             * @default true
+                             */
+                            include_ssids?: boolean;
+                            /**
+                             * Include Users
+                             * @default true
+                             */
+                            include_users?: boolean;
+                            /**
+                             * Include Vlans
+                             * @default true
+                             */
+                            include_vlans?: boolean;
+                            /**
+                             * Is Encrypted
+                             * @default true
+                             */
+                            is_encrypted?: boolean;
+                            /** Name */
+                            name: string;
+                            /** Passphrase */
+                            passphrase?: string | null;
+                            /**
+                             * Retention Days
+                             * @default 30
+                             */
+                            retention_days?: number;
+                            /** Site Id */
+                            site_id?: string | null;
+                            /** Storage Location Id */
+                            storage_location_id?: string | null;
+                            /**
+                             * Storage Type
+                             * @default local
+                             */
+                            storage_type?: string;
+                        };
+                        /** @constant */
+                        kind: "create";
+                    } | {
+                        backup_id: string;
+                        /** @constant */
+                        kind: "download_recorded";
+                    } | {
+                        backup_id: string;
+                        /** @constant */
+                        kind: "observe_legacy";
+                        /** @constant */
+                        legacy_acknowledged: true;
+                    };
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Fresh confirmation completed; tokens remain purpose-bound and expire. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        expires_at: number;
+                        identity_token: string;
+                    };
+                };
+            };
+            /** @description Invalid browser context or declared request length. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current authentication or fresh confirmation refused or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Required authority or CSRF protection not satisfied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation request-body deadline exceeded. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Initiating account, organization or operation changed; start again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request exceeds the byte bound. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unsupported content type or content encoding. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid command; input and validation internals are not echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation unavailable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Capacity, rate-limit service or trusted provider configuration unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    oidc_complete_api_v1_auth_vault_export_identity_oidc_complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Actor"?: string;
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Organization"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Identity-encoded JSON, at most 131072 wire bytes; 10-second read deadline and bounded concurrent readers. */
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                    /** @description A legacy download permission is obtained only through the server's subsequent artifact observation exchange. */
+                    intent: {
+                        /**
+                         * BackupCreate
+                         * @description Create a backup.
+                         */
+                        backup: {
+                            /**
+                             * Backup Type
+                             * @default full
+                             */
+                            backup_type?: string;
+                            /** Description */
+                            description?: string | null;
+                            /** Device Ids */
+                            device_ids?: string[] | null;
+                            /**
+                             * Include Automation
+                             * @default true
+                             */
+                            include_automation?: boolean;
+                            /**
+                             * Include Devices
+                             * @default true
+                             */
+                            include_devices?: boolean;
+                            /** @constant */
+                            include_secrets: true;
+                            /**
+                             * Include Ssids
+                             * @default true
+                             */
+                            include_ssids?: boolean;
+                            /**
+                             * Include Users
+                             * @default true
+                             */
+                            include_users?: boolean;
+                            /**
+                             * Include Vlans
+                             * @default true
+                             */
+                            include_vlans?: boolean;
+                            /**
+                             * Is Encrypted
+                             * @default true
+                             */
+                            is_encrypted?: boolean;
+                            /** Name */
+                            name: string;
+                            /** Passphrase */
+                            passphrase?: string | null;
+                            /**
+                             * Retention Days
+                             * @default 30
+                             */
+                            retention_days?: number;
+                            /** Site Id */
+                            site_id?: string | null;
+                            /** Storage Location Id */
+                            storage_location_id?: string | null;
+                            /**
+                             * Storage Type
+                             * @default local
+                             */
+                            storage_type?: string;
+                        };
+                        /** @constant */
+                        kind: "create";
+                    } | {
+                        backup_id: string;
+                        /** @constant */
+                        kind: "download_recorded";
+                    } | {
+                        backup_id: string;
+                        /** @constant */
+                        kind: "observe_legacy";
+                        /** @constant */
+                        legacy_acknowledged: true;
+                    };
+                    state: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Fresh confirmation completed; tokens remain purpose-bound and expire. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        expires_at: number;
+                        identity_token: string;
+                    };
+                };
+            };
+            /** @description Invalid browser context or declared request length. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current authentication or fresh confirmation refused or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Required authority or CSRF protection not satisfied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation request-body deadline exceeded. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Initiating account, organization or operation changed; start again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request exceeds the byte bound. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unsupported content type or content encoding. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid command; input and validation internals are not echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation unavailable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Capacity, rate-limit service or trusted provider configuration unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    oidc_start_api_v1_auth_vault_export_identity_oidc_start_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Actor"?: string;
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Organization"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Identity-encoded JSON, at most 131072 wire bytes; 10-second read deadline and bounded concurrent readers. */
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description A legacy download permission is obtained only through the server's subsequent artifact observation exchange. */
+                    intent: {
+                        /**
+                         * BackupCreate
+                         * @description Create a backup.
+                         */
+                        backup: {
+                            /**
+                             * Backup Type
+                             * @default full
+                             */
+                            backup_type?: string;
+                            /** Description */
+                            description?: string | null;
+                            /** Device Ids */
+                            device_ids?: string[] | null;
+                            /**
+                             * Include Automation
+                             * @default true
+                             */
+                            include_automation?: boolean;
+                            /**
+                             * Include Devices
+                             * @default true
+                             */
+                            include_devices?: boolean;
+                            /** @constant */
+                            include_secrets: true;
+                            /**
+                             * Include Ssids
+                             * @default true
+                             */
+                            include_ssids?: boolean;
+                            /**
+                             * Include Users
+                             * @default true
+                             */
+                            include_users?: boolean;
+                            /**
+                             * Include Vlans
+                             * @default true
+                             */
+                            include_vlans?: boolean;
+                            /**
+                             * Is Encrypted
+                             * @default true
+                             */
+                            is_encrypted?: boolean;
+                            /** Name */
+                            name: string;
+                            /** Passphrase */
+                            passphrase?: string | null;
+                            /**
+                             * Retention Days
+                             * @default 30
+                             */
+                            retention_days?: number;
+                            /** Site Id */
+                            site_id?: string | null;
+                            /** Storage Location Id */
+                            storage_location_id?: string | null;
+                            /**
+                             * Storage Type
+                             * @default local
+                             */
+                            storage_type?: string;
+                        };
+                        /** @constant */
+                        kind: "create";
+                    } | {
+                        backup_id: string;
+                        /** @constant */
+                        kind: "download_recorded";
+                    } | {
+                        backup_id: string;
+                        /** @constant */
+                        kind: "observe_legacy";
+                        /** @constant */
+                        legacy_acknowledged: true;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Fresh confirmation completed; tokens remain purpose-bound and expire. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        authorize_url: string;
+                        expires_at: number;
+                        state: string;
+                    };
+                };
+            };
+            /** @description Invalid browser context or declared request length. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current authentication or fresh confirmation refused or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Required authority or CSRF protection not satisfied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation request-body deadline exceeded. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Initiating account, organization or operation changed; start again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request exceeds the byte bound. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unsupported content type or content encoding. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid command; input and validation internals are not echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation unavailable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Capacity, rate-limit service or trusted provider configuration unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    requirements_api_v1_auth_vault_export_requirements_get: {
+        parameters: {
+            query?: {
+                action?: "create" | "download";
+            };
+            header?: {
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Actor"?: string;
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Organization"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current supported confirmation factors; this hint grants no permission or proof. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VaultFactorRequirements"];
+                };
+            };
+            /** @description Incomplete or invalid captured browser context. */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current authentication refused or expired. */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current unscoped platform-administrator authority is required. */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Initiating account or organization changed; start again. */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid action or framework input; rejected values are not echoed. */
+            422: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VaultConfirmationRequestError"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation requirements unavailable. */
+            500: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current authority snapshot or required capacity unavailable. */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_automation_rules_api_v1_automation__get: {
         parameters: {
             query?: {
@@ -67910,7 +72892,14 @@ export interface operations {
     create_backup_api_v1_backups__post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Actor"?: string;
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Organization"?: string;
+                /** @description One-use purpose-bound proof from fresh confirmation. Required for full vaults; ordinary secret-free configuration snapshots do not require it. Never send it in a URL or request body. */
+                "X-FreeSDN-Vault-Proof"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -68486,7 +73475,12 @@ export interface operations {
     test_storage_location_api_v1_backups_storage_locations__location_id__test_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Initiating browser account. Send with the organization header; both must match current authentication. Grants no permission. Non-browser clients may omit both. */
+                "X-FreeSDN-Storage-Probe-Actor"?: string;
+                /** @description Initiating browser organization. Equality assertion only, never a target-organization override. Send with the actor header or omit both. */
+                "X-FreeSDN-Storage-Probe-Organization"?: string;
+            };
             path: {
                 location_id: string;
             };
@@ -68577,7 +73571,14 @@ export interface operations {
     download_backup_api_v1_backups__backup_id__download_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Actor"?: string;
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Organization"?: string;
+                /** @description One-use purpose-bound proof from fresh confirmation. Required for full vaults; ordinary secret-free configuration snapshots do not require it. Never send it in a URL or request body. */
+                "X-FreeSDN-Vault-Proof"?: string;
+            };
             path: {
                 backup_id: string;
             };
@@ -68585,16 +73586,68 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description Archive bytes; retain the reported integrity classification. */
             200: {
                 headers: {
+                    "Cache-Control"?: string;
+                    "Content-Disposition"?: string;
+                    "X-FreeSDN-Artifact-Integrity"?: "verified" | "legacy_unverified";
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/octet-stream": string;
                 };
             };
-            /** @description Validation Error */
+            /** @description Invalid browser context or declared request length. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current authentication or fresh confirmation refused or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Required authority or CSRF protection not satisfied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation request-body deadline exceeded. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Initiating account, organization or operation changed; start again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request exceeds the byte bound. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unsupported content type or content encoding. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid command; input and validation internals are not echoed. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -68602,6 +73655,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation unavailable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Capacity, rate-limit service or trusted provider configuration unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -68633,6 +73707,262 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    download_legacy_vault_api_v1_backups__backup_id__vault_download_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Actor"?: string;
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Organization"?: string;
+                /** @description One-use purpose-bound proof from fresh confirmation. Required for full vaults; ordinary secret-free configuration snapshots do not require it. Never send it in a URL or request body. */
+                "X-FreeSDN-Vault-Proof": string;
+            };
+            path: {
+                backup_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description Identity-encoded JSON, at most 2048 wire bytes and a 10-second read deadline. Duplicate/unknown keys and nonfinite numbers are refused. Proof is header-only. */
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @constant */
+                    legacy_acknowledged: true;
+                    observed_identity: {
+                        bytes: number;
+                        sha256: string;
+                        /** @constant */
+                        version: 1;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Archive bytes; retain the reported integrity classification. */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "Content-Disposition"?: string;
+                    "X-FreeSDN-Artifact-Integrity"?: "legacy_unverified";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Invalid browser context or declared request length. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current authentication or fresh confirmation refused or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Required authority or CSRF protection not satisfied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation request-body deadline exceeded. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Initiating account, organization or operation changed; start again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request exceeds the byte bound. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unsupported content type or content encoding. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid command; input and validation internals are not echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation unavailable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Capacity, rate-limit service or trusted provider configuration unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    observe_legacy_vault_api_v1_backups__backup_id__vault_observation_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Actor"?: string;
+                /** @description Send both captured browser identifiers together; they assert equality and grant no authority. */
+                "X-FreeSDN-Vault-Organization"?: string;
+                /** @description One-use purpose-bound proof from fresh confirmation. Required for full vaults; ordinary secret-free configuration snapshots do not require it. Never send it in a URL or request body. */
+                "X-FreeSDN-Vault-Proof": string;
+            };
+            path: {
+                backup_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description Identity-encoded JSON, at most 2048 wire bytes and a 10-second read deadline. Duplicate/unknown keys and nonfinite numbers are refused. Proof is header-only. */
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @constant */
+                    legacy_acknowledged: true;
+                };
+            };
+        };
+        responses: {
+            /** @description Current bytes observed. */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "X-FreeSDN-Artifact-Integrity"?: "legacy_unverified";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        artifact_integrity: "legacy_unverified";
+                        authentication_expires_at: number;
+                        observed_identity: {
+                            bytes: number;
+                            sha256: string;
+                            /** @constant */
+                            version: 1;
+                        };
+                        /** @constant */
+                        operation: "download_legacy";
+                        proof: string;
+                    };
+                };
+            };
+            /** @description Invalid browser context or declared request length. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current authentication or fresh confirmation refused or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Required authority or CSRF protection not satisfied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation request-body deadline exceeded. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Initiating account, organization or operation changed; start again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request exceeds the byte bound. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unsupported content type or content encoding. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid command; input and validation internals are not echoed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Confirmation unavailable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Capacity, rate-limit service or trusted provider configuration unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -98022,7 +103352,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PendingChangeRequest"];
+                "application/json": components["schemas"]["ProxmoxBackupChangeRequest"];
             };
         };
         responses: {
@@ -104347,7 +109677,42 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BackupJobCreateRequest"];
+                "application/json": components["schemas"]["BackupJobOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupJobOperationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_backup_job_api_v1_hypervisor_controllers__controller_id__backup_jobs_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                controller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupJobReviewRequest"];
             };
         };
         responses: {
@@ -104357,7 +109722,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["BackupJobReviewResponse"];
                 };
             };
             /** @description Validation Error */
@@ -104383,17 +109748,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BackupJobUpdateRequest"];
+                "application/json": components["schemas"]["BackupJobOperationRequest"];
             };
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["BackupJobOperationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -104417,15 +109782,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupJobOperationRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["BackupJobOperationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -104547,6 +109916,41 @@ export interface operations {
             };
         };
     };
+    review_cluster_operation_api_v1_hypervisor_controllers__controller_id__cluster_operations_review_get: {
+        parameters: {
+            query: {
+                action: string;
+                target: string;
+                group?: string;
+            };
+            header?: never;
+            path: {
+                controller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClusterOperationReview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_cluster_config_nodes_api_v1_hypervisor_controllers__controller_id__cluster_config_nodes_get: {
         parameters: {
             query?: never;
@@ -104588,41 +109992,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_cluster_fw_options_api_v1_hypervisor_controllers__controller_id__cluster_firewall_options_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                controller_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ClusterFirewallOptions"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -104852,7 +110221,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -104889,6 +110258,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HypervisorDashboardResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_firewall_operation_api_v1_hypervisor_controllers__controller_id__firewall_operations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                controller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FirewallOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirewallOperationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_firewall_operation_api_v1_hypervisor_controllers__controller_id__firewall_operations_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                controller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FirewallReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirewallReviewResponse"];
                 };
             };
             /** @description Validation Error */
@@ -104980,12 +110419,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ClusterOperationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -105009,15 +110448,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClusterOperationRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ClusterOperationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -105078,12 +110521,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ClusterOperationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -105107,15 +110550,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClusterOperationRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ClusterOperationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -105417,9 +110864,7 @@ export interface operations {
     };
     renew_node_acme_certificate_api_v1_hypervisor_controllers__controller_id__nodes__node__certificates_acme_renew_post: {
         parameters: {
-            query?: {
-                force?: boolean;
-            };
+            query?: never;
             header?: never;
             path: {
                 controller_id: string;
@@ -105427,15 +110872,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CertificateOperationRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CertificateOperationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -105466,12 +110915,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CertificateOperationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -105487,9 +110936,7 @@ export interface operations {
     };
     delete_custom_certificate_api_v1_hypervisor_controllers__controller_id__nodes__node__certificates_custom_delete: {
         parameters: {
-            query?: {
-                restart?: boolean;
-            };
+            query?: never;
             header?: never;
             path: {
                 controller_id: string;
@@ -105497,7 +110944,47 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CertificateOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CertificateOperationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_node_certificate_api_v1_hypervisor_controllers__controller_id__nodes__node__certificates_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                controller_id: string;
+                node: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CertificateReviewRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -105505,7 +110992,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CertificateReviewResponse"];
                 };
             };
             /** @description Validation Error */
@@ -105637,75 +111124,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["app__modules__hypervisor__schemas__FirewallRuleResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_node_firewall_rule_api_v1_hypervisor_controllers__controller_id__nodes__node__firewall_rules_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                controller_id: string;
-                node: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FirewallRuleCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_node_firewall_rule_api_v1_hypervisor_controllers__controller_id__nodes__node__firewall_rules__pos__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                controller_id: string;
-                node: string;
-                pos: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -106254,10 +111672,7 @@ export interface operations {
     };
     reboot_node_api_v1_hypervisor_controllers__controller_id__nodes__node__reboot_post: {
         parameters: {
-            query?: {
-                /** @description Must be true to reboot the node (catastrophic — takes the whole node and its guests offline). The UI's type-to-confirm dialog sets this; without it the API returns 409. */
-                confirmed?: boolean;
-            };
+            query?: never;
             header?: never;
             path: {
                 controller_id: string;
@@ -106265,15 +111680,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClusterOperationRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ClusterOperationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -106389,10 +111808,7 @@ export interface operations {
     };
     shutdown_node_api_v1_hypervisor_controllers__controller_id__nodes__node__shutdown_post: {
         parameters: {
-            query?: {
-                /** @description Must be true to shut the node down (catastrophic — takes the whole node offline with no auto-recovery). The UI's type-to-confirm dialog sets this; without it the API returns 409. */
-                confirmed?: boolean;
-            };
+            query?: never;
             header?: never;
             path: {
                 controller_id: string;
@@ -106400,15 +111816,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClusterOperationRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ClusterOperationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -106504,15 +111924,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageOperationRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StorageOperationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -106598,6 +112022,43 @@ export interface operations {
             };
         };
     };
+    review_storage_operation_api_v1_hypervisor_controllers__controller_id__nodes__node__storage__storage__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                controller_id: string;
+                node: string;
+                storage: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageOperationReview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_to_storage_api_v1_hypervisor_controllers__controller_id__nodes__node__storage__storage__upload_post: {
         parameters: {
             query?: never;
@@ -106616,12 +112077,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UploadResponse"];
+                    "application/json": components["schemas"]["StorageOperationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -106747,15 +112208,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskStopRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TaskStopResponse"];
                 };
             };
             /** @description Validation Error */
@@ -106838,6 +112303,39 @@ export interface operations {
             };
         };
     };
+    review_task_stop_api_v1_hypervisor_controllers__controller_id__nodes__node__tasks__upid__stop_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                controller_id: string;
+                node: string;
+                upid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskStopReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_node_vms_api_v1_hypervisor_controllers__controller_id__nodes__node__vms_get: {
         parameters: {
             query?: never;
@@ -106872,10 +112370,7 @@ export interface operations {
     };
     delete_vm_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__delete: {
         parameters: {
-            query?: {
-                /** @description Must be true to destroy the guest (irreversible). The UI's type-to-confirm dialog sets this; without it the API returns 409. */
-                confirmed?: boolean;
-            };
+            query?: never;
             header?: never;
             path: {
                 controller_id: string;
@@ -106885,15 +112380,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteVMRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VMActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -106926,12 +112425,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VMActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -106964,12 +112463,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VMActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -107002,12 +112501,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VMActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -107076,12 +112575,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VMActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -107165,44 +112664,6 @@ export interface operations {
             };
         };
     };
-    update_guest_firewall_options_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__firewall_options_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                controller_id: string;
-                node: string;
-                vm_type: string;
-                vmid: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GuestFirewallOptions"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_guest_firewall_rules_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__firewall_rules_get: {
         parameters: {
             query?: never;
@@ -107212,79 +112673,6 @@ export interface operations {
                 node: string;
                 vm_type: string;
                 vmid: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_guest_firewall_rule_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__firewall_rules_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                controller_id: string;
-                node: string;
-                vm_type: string;
-                vmid: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateGuestFirewallRuleRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_guest_firewall_rule_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__firewall_rules__pos__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                controller_id: string;
-                node: string;
-                vm_type: string;
-                vmid: number;
-                pos: number;
             };
             cookie?: never;
         };
@@ -107329,12 +112717,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VMActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -107367,12 +112755,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VMActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -107439,12 +112827,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VMActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -107460,7 +112848,13 @@ export interface operations {
     };
     delete_snapshot_api_v1_hypervisor_controllers__controller_id__nodes__node___vm_type___vmid__snapshots__snapname__delete: {
         parameters: {
-            query?: never;
+            query: {
+                /** @description Stable intent ID; reuse on retries */
+                request_id: string;
+                force?: boolean;
+                /** @description Required: permanently removes the snapshot */
+                confirmed?: boolean;
+            };
             header?: never;
             path: {
                 controller_id: string;
@@ -107474,12 +112868,12 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VMActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -107509,15 +112903,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HypervisorIntentRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VMActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -107543,15 +112941,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateConversionRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["VMActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -107631,7 +113033,7 @@ export interface operations {
             };
         };
     };
-    apply_sdn_api_v1_hypervisor_controllers__controller_id__sdn_apply_post: {
+    inspect_sdn_attachments_api_v1_hypervisor_controllers__controller_id__sdn_attachments_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -107648,7 +113050,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SdnAttachmentInspection"];
                 };
             };
             /** @description Validation Error */
@@ -107693,6 +113095,100 @@ export interface operations {
             };
         };
     };
+    inspect_sdn_dependencies_api_v1_hypervisor_controllers__controller_id__sdn_dependencies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                controller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdnDependencyInspection"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inspect_sdn_api_v1_hypervisor_controllers__controller_id__sdn_inspection_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                controller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdnInspection"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inspect_sdn_dry_run_api_v1_hypervisor_controllers__controller_id__sdn_nodes__node__dry_run_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                controller_id: string;
+                node: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SdnDryRunObservation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_sdn_vnets_api_v1_hypervisor_controllers__controller_id__sdn_vnets_get: {
         parameters: {
             query?: never;
@@ -107724,146 +113220,12 @@ export interface operations {
             };
         };
     };
-    create_sdn_vnet_api_v1_hypervisor_controllers__controller_id__sdn_vnets_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                controller_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateSdnVnetRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_sdn_vnet_api_v1_hypervisor_controllers__controller_id__sdn_vnets__vnet__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                controller_id: string;
-                vnet: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_sdn_zones_api_v1_hypervisor_controllers__controller_id__sdn_zones_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 controller_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_sdn_zone_api_v1_hypervisor_controllers__controller_id__sdn_zones_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                controller_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateSdnZoneRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_sdn_zone_api_v1_hypervisor_controllers__controller_id__sdn_zones__zone__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                controller_id: string;
-                zone: string;
             };
             cookie?: never;
         };
@@ -107939,7 +113301,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -115072,6 +120434,69 @@ export interface operations {
             };
         };
     };
+    list_report_deliveries_api_v1_sla_reports__report_id__deliveries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SLAReportDeliveryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_report_delivery_api_v1_sla_reports__report_id__deliveries__delivery_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                delivery_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SLAReportDeliveryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_report_api_v1_sla_reports__report_id__download_get: {
         parameters: {
             query?: never;
@@ -116847,7 +122272,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ToggleIn"];
+                "application/json": components["schemas"]["PortToggleIn"];
             };
         };
         responses: {
@@ -116987,7 +122412,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ToggleIn"];
+                "application/json": components["schemas"]["PortToggleIn"];
             };
         };
         responses: {

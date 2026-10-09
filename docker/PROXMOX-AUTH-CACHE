@@ -1,0 +1,22 @@
+Proxmox authentication cache boundaries
+=======================================
+
+Shared ticket and live-client cache entries use a process-local keyed digest
+of credentials, endpoint, TLS settings and direct/overlay proxy configuration.
+The digest does not put plaintext passwords or token secrets into cache keys.
+Explicit custom/agent transports bypass shared caches so a ticket cannot move
+between sites that happen to use the same appliance address and username.
+Repeated requests through an already-open client still reuse its connection.
+
+Closing an older client does not remove a newer cached client. Ticket entries
+are pruned after expiry and capped at256 identities. A stale401 invalidates
+only its matching cached ticket. Selected API-token authentication never
+switches to password login after401; incomplete token configuration fails
+closed. Password-mode401 retries retain their existing single re-login rule.
+
+The safe tradeoff is more password-login calls across separate agent-backed
+client instances. This is not proof of live appliance compatibility, external
+agent delivery, revocation immediacy or concurrent client ownership. Shared
+host reachability cooldown and provider discovery error propagation remain
+separate reviews. Deploy every serving API/worker process together; old
+processes still retain the old unsafe cache behavior.

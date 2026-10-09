@@ -11,18 +11,20 @@ is centralised here; the API layer stays thin.
 """
 
 import asyncio
+import copy
 import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.adapters.backup_inventory import validate_backup_metadata
 from app.adapters.base import AdapterResult, BaseAdapter
 from app.adapters.cache import adapter_cache
 from app.adapters.exceptions import (
@@ -31,8 +33,11 @@ from app.adapters.exceptions import (
     AdapterTimeoutError,
 )
 from app.adapters.registry import adapter_registry
+from app.adapters.trust_inventory import inventory_data, inventory_rows, inventory_settings
 from app.core.adapter_result import raise_for_adapter_result
 from app.core.crypto import decrypt_dict, encrypt_dict
+from app.models.core import Organization, Site
+from app.modules.firewall.gateway_live_reads import aggregate_payload
 from app.modules.firewall.models import (
     GatewayConnection,
     GatewaySyncLog,
@@ -65,6 +70,126 @@ class GatewayConnectionTestError(GatewayError):
     pass
 
 
+class GatewayBackupInventoryError(GatewayError):
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class GatewayAggregateReadError(GatewayError):
+    """A required live aggregate is unsupported or unavailable."""
+
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class GatewayTrustInventoryError(GatewayError):
+    """Trust/ACME inventory is unsupported, unavailable or incomplete."""
+
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class GatewayCertificateInventoryError(GatewayError):
+    """A certificate read is unsupported, unavailable or incomplete."""
+
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _gateway_certificate_rows(result: Any) -> list[dict[str, Any]]:
+    if isinstance(result, AdapterResult) and result.success is False:
+        if result.error_code in {"NOT_SUPPORTED", "NOT_IMPLEMENTED"}:
+            raise GatewayCertificateInventoryError(
+                501, "Certificate inventory is not supported by this gateway"
+            )
+    if not isinstance(result, AdapterResult) or result.success is not True:
+        raise GatewayCertificateInventoryError(502, "Certificate inventory is unavailable")
+    data = result.data
+    rows = data.get("certificates") if isinstance(data, dict) else None
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise GatewayCertificateInventoryError(502, "Certificate inventory is unavailable")
+    if "count" in data and (type(data["count"]) is not int or data["count"] != len(rows)):
+        raise GatewayCertificateInventoryError(502, "Certificate inventory is incomplete")
+    return rows
+
+
+def _certificate_expiry(value: Any) -> datetime | None:
+    """Parse UTC expiry without treating missing/invalid vendor data as healthy."""
+    if isinstance(value, bool):
+        return None
+    try:
+        if isinstance(value, (int, float)):
+            return datetime.fromtimestamp(value, UTC)
+        if not isinstance(value, str) or not value.strip():
+            return None
+        text = value.strip()
+        # OPNsense Trust Store returns Unix seconds, often as a JSON string.
+        if text.lstrip("+-").isascii() and text.lstrip("+-").isdigit():
+            return datetime.fromtimestamp(int(text), UTC)
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            # Older exports use an OpenSSL notAfter string with an explicit UTC zone.
+            parsed = None
+            for fmt in ("%b %d %H:%M:%S %Y GMT", "%b %d %H:%M:%S %Y UTC"):
+                try:
+                    parsed = datetime.strptime(text, fmt)
+                    break
+                except ValueError:
+                    continue
+            if parsed is None:
+                return None
+        return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+class GatewayConfigBackupUnavailableError(GatewayError):
+    """Managed gateway artifact storage has no implementation."""
+
+    def __init__(self):
+        super().__init__(
+            "Managed gateway configuration backup storage is not implemented; no backup was saved"
+        )
+
+
+class GatewayLogReadError(GatewayError):
+    """A log read failed or returned an unrecognized envelope."""
+
+    def __init__(self) -> None:
+        super().__init__("Gateway logs are unavailable")
+
+
+def _gateway_log_rows(result: AdapterResult, limit: int) -> list[dict[str, Any]]:
+    if not result.success:
+        raise GatewayLogReadError()
+    rows = result.data
+    if isinstance(rows, dict):
+        rows = rows.get("logs", rows.get("rows"))
+    if not isinstance(rows, list) or any(not isinstance(row, (dict, str)) for row in rows):
+        raise GatewayLogReadError()
+    return [
+        {"message": row} if isinstance(row, str) else row
+        for row in rows[: max(1, min(int(limit), 5000))]
+    ]
+
+
+class GatewayConfigDownloadError(GatewayError):
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class GatewayConfigComparisonError(GatewayError):
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Error sanitisation helpers
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -74,8 +199,7 @@ def _sanitize_adapter_error(exc: Exception) -> str:
     """Map adapter exceptions to user-safe messages.
 
     Internal details (stack traces, raw messages) are never returned to clients.
-    Callers are responsible for logging the full exception server-side before
-    invoking this helper.
+    Caller logging policy is separate; avoid emitting raw device diagnostics.
     """
     if isinstance(exc, AdapterAuthenticationError):
         return "Authentication failed - check credentials"
@@ -89,6 +213,45 @@ def _sanitize_adapter_error(exc: Exception) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Service
 # ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _safe_gateway_adapter_settings(settings: dict[str, Any] | None) -> dict[str, Any]:
+    """Keep vendor options separate from trusted connection identity and write policy."""
+    reserved = {
+        "adapter_id",
+        "vendor",
+        "host",
+        "port",
+        "verify_ssl",
+        "username",
+        "password",
+        "api_key",
+        "api_secret",
+    }
+    return {
+        key: value
+        for key, value in (settings or {}).items()
+        if isinstance(key, str)
+        and key.lower() not in reserved
+        and key.lower() not in FORBIDDEN_ADAPTER_SETTINGS
+    }
+
+
+def _gateway_test_result_message(result: AdapterResult) -> str:
+    """Expose fixed test outcomes, never arbitrary vendor diagnostics."""
+    if result.success:
+        return "Connection successful"
+    messages = {
+        "AUTH_FAILED": "Authentication failed - check credentials",
+        "CONN_FAILED": "Connection failed - check host and port",
+        "TIMEOUT": "Connection timed out - device may be unreachable",
+    }
+    code = result.error_code
+    return (
+        messages.get(code, "Connection test failed")
+        if isinstance(code, str)
+        else "Connection test failed"
+    )
 
 
 class GatewayService:
@@ -120,11 +283,7 @@ class GatewayService:
         # adapter constructor - that would bypass ADAPTER_READ_ONLY. The schema
         # strips these on write; this is the defense-in-depth backstop for any
         # pre-existing or out-of-band row.
-        safe_settings = {
-            k: v
-            for k, v in (gw.settings or {}).items()
-            if str(k).lower() not in FORBIDDEN_ADAPTER_SETTINGS
-        }
+        safe_settings = _safe_gateway_adapter_settings(gw.settings)
         return adapter_registry.create_adapter(
             adapter_id=gw.vendor,
             host=gw.host,
@@ -154,11 +313,7 @@ class GatewayService:
         else:
             u, p = username or "", password or ""
 
-        safe_extra = {
-            k: v
-            for k, v in (extra or {}).items()
-            if str(k).lower() not in FORBIDDEN_ADAPTER_SETTINGS
-        }
+        safe_extra = _safe_gateway_adapter_settings(extra)
         return adapter_registry.create_adapter(
             adapter_id=vendor,
             host=host,
@@ -169,18 +324,48 @@ class GatewayService:
             **safe_extra,
         )
 
+    def _scope_filters(self, org_id: UUID) -> list[Any]:
+        """Apply current parent and site-grant scope equally to rows and totals."""
+        active_org = (
+            select(Organization.id)
+            .where(
+                Organization.id == GatewayConnection.org_id,
+                Organization.deleted_at.is_(None),
+                Organization.is_active.is_(True),
+            )
+            .exists()
+        )
+        active_site = (
+            select(Site.id)
+            .where(
+                Site.id == GatewayConnection.site_id,
+                Site.organization_id == GatewayConnection.org_id,
+                Site.deleted_at.is_(None),
+                Site.is_active.is_(True),
+            )
+            .exists()
+        )
+        filters = [
+            GatewayConnection.org_id == org_id,
+            active_org,
+            or_(GatewayConnection.site_id.is_(None), active_site),
+        ]
+        if self.accessible_site_ids is not None:
+            filters.append(GatewayConnection.site_id.in_(self.accessible_site_ids))
+        return filters
+
     async def _get_gw(self, gw_id: UUID, org_id: UUID) -> GatewayConnection:
         result = await self.db.execute(
-            select(GatewayConnection).where(
+            select(GatewayConnection)
+            .where(
                 GatewayConnection.id == gw_id,
-                GatewayConnection.org_id == org_id,
                 GatewayConnection.deleted_at.is_(None),
+                *self._scope_filters(org_id),
             )
+            .execution_options(populate_existing=True)
         )
         gw = result.scalar_one_or_none()
         if not gw:
-            raise GatewayNotFoundError(gw_id)
-        if self.accessible_site_ids is not None and gw.site_id not in self.accessible_site_ids:
             raise GatewayNotFoundError(gw_id)
         return gw
 
@@ -200,28 +385,19 @@ class GatewayService:
         """List gateway connections with optional filters."""
         q = (
             select(GatewayConnection)
-            .where(
-                GatewayConnection.org_id == org_id,
-                GatewayConnection.deleted_at.is_(None),
-            )
+            .where(GatewayConnection.deleted_at.is_(None), *self._scope_filters(org_id))
             .options(selectinload(GatewayConnection.sync_logs))
             .order_by(GatewayConnection.created_at.desc())
         )
         count_q = (
             select(func.count())
             .select_from(GatewayConnection)
-            .where(
-                GatewayConnection.org_id == org_id,
-                GatewayConnection.deleted_at.is_(None),
-            )
+            .where(GatewayConnection.deleted_at.is_(None), *self._scope_filters(org_id))
         )
 
         if site_id:
             q = q.where(GatewayConnection.site_id == site_id)
             count_q = count_q.where(GatewayConnection.site_id == site_id)
-        if self.accessible_site_ids is not None:
-            q = q.where(GatewayConnection.site_id.in_(self.accessible_site_ids))
-            count_q = count_q.where(GatewayConnection.site_id.in_(self.accessible_site_ids))
         if vendor:
             q = q.where(GatewayConnection.vendor == vendor)
             count_q = count_q.where(GatewayConnection.vendor == vendor)
@@ -233,6 +409,28 @@ class GatewayService:
     async def get_gateway(self, gw_id: UUID, org_id: UUID) -> GatewayConnection:
         return await self._get_gw(gw_id, org_id)
 
+    async def _lock_assignment_parents(self, org_id: UUID, site_id: UUID | None) -> None:
+        """Keep active assignment parents stable until this transaction ends."""
+        if self.accessible_site_ids is not None and site_id not in self.accessible_site_ids:
+            raise GatewayNotFoundError(site_id or org_id)
+        query = select(Organization.id).where(
+            Organization.id == org_id,
+            Organization.deleted_at.is_(None),
+            Organization.is_active.is_(True),
+        )
+        parents = (Organization,)
+        if site_id is not None:
+            query = query.join(Site, Site.organization_id == Organization.id).where(
+                Site.id == site_id,
+                Site.deleted_at.is_(None),
+                Site.is_active.is_(True),
+            )
+            parents = (*parents, Site)
+        # SHARE, not KEY SHARE: inactive/deleted status is not a key update.
+        result = await self.db.execute(query.with_for_update(read=True, of=parents))
+        if result.scalar_one_or_none() is None:
+            raise GatewayNotFoundError(site_id or org_id)
+
     async def create_gateway(
         self,
         org_id: UUID,
@@ -241,7 +439,7 @@ class GatewayService:
         vendor: str,
         host: str,
         port: int = 443,
-        verify_ssl: bool = False,
+        verify_ssl: bool = True,
         site_id: UUID | None = None,
         api_key: str | None = None,
         api_secret: str | None = None,
@@ -263,11 +461,7 @@ class GatewayService:
         canonical ``_validate_controller_host`` chokepoint and a tenant
         site lookup.
         """
-        # Late import keeps the firewall module decoupled from the
-        # core models package at import time (the gateway_service is
-        # eagerly loaded during app init and the Site model is
-        # registered later in the autoload sequence).
-        from app.models.core import Site
+        # Import the shared host policy only when an assignment is requested.
         from app.services.adapter_base import GatewayServiceBase as GatewayFeatureService
 
         # SSRF chokepoint — refuses cloud-metadata IPs / loopback /
@@ -280,8 +474,7 @@ class GatewayService:
             # shadow Device under an arbitrary fallback site that may be outside
             # the caller's grant (and, before the device_sync fix, another
             # tenant). Org admins (accessible_site_ids is None) may still create
-            # org-wide gateways. Raise a clean 422 (the create route does not
-            # map GatewayNotFoundError).
+            # org-wide gateways. Preserve the existing required-site 422.
             from fastapi import HTTPException
 
             raise HTTPException(
@@ -289,18 +482,7 @@ class GatewayService:
                 detail="site_id is required when your access is limited to specific sites",
             )
 
-        if site_id is not None:
-            site = await self.db.get(Site, site_id)
-            if site is None or site.organization_id != org_id:
-                # Use the same opaque "not found" shape we use elsewhere
-                # so a tenant probing for another tenant's site IDs
-                # can't distinguish "site exists but isn't mine" from
-                # "site doesn't exist".
-                raise GatewayNotFoundError(site_id)
-            # a site-limited caller must hold a grant on the
-            # target site, mirroring the read-path check in ``_get_gw``.
-            if self.accessible_site_ids is not None and site_id not in self.accessible_site_ids:
-                raise GatewayNotFoundError(site_id)
+        await self._lock_assignment_parents(org_id, site_id)
 
         if vendor in (GatewayVendor.OPNSENSE, GatewayVendor.PFSENSE):
             creds = {"api_key": api_key or "", "api_secret": api_secret or ""}
@@ -340,24 +522,33 @@ class GatewayService:
         switch a gateway from a permitted host to a cloud-metadata IP,
         or attach a gateway to another tenant's site, mid-lifecycle.
         """
-        from app.models.core import Site
         from app.services.adapter_base import GatewayServiceBase as GatewayFeatureService
 
         gw = await self._get_gw(gw_id, org_id)
 
         if fields.get("host") is not None:
             GatewayFeatureService._validate_controller_host(fields["host"])
-        if fields.get("site_id") is not None:
-            site = await self.db.get(Site, fields["site_id"])
-            if site is None or site.organization_id != org_id:
-                raise GatewayNotFoundError(fields["site_id"])
-            # a site-limited caller cannot reassign a gateway
-            # to a sibling site they lack a grant for.
-            if (
-                self.accessible_site_ids is not None
-                and fields["site_id"] not in self.accessible_site_ids
-            ):
-                raise GatewayNotFoundError(fields["site_id"])
+        # Resolve current gateway ownership again under a row lock before any
+        # local update. Parent validation must not bind an obsolete identity-map
+        # copy, and a concurrent tenant transfer must not race the pending edit.
+        query = (
+            select(GatewayConnection)
+            .where(
+                GatewayConnection.id == gw_id,
+                GatewayConnection.deleted_at.is_(None),
+                *self._scope_filters(org_id),
+            )
+            .with_for_update(of=GatewayConnection)
+            .execution_options(populate_existing=True)
+        )
+        gw = (await self.db.execute(query)).scalar_one_or_none()
+        if gw is None:
+            raise GatewayNotFoundError(gw_id)
+        target_site_id = fields.get("site_id")
+        if target_site_id is None:
+            # Explicit null still has the existing no-change semantics.
+            target_site_id = gw.site_id
+        await self._lock_assignment_parents(org_id, target_site_id)
 
         simple_fields = {
             "name",
@@ -453,27 +644,27 @@ class GatewayService:
         **extra: Any,
     ) -> dict[str, Any]:
         """Test connection to a gateway without persisting. Returns a result dict."""
-        adapter = self._build_adapter_from_raw(
-            vendor,
-            host,
-            port,
-            verify_ssl,
-            api_key=api_key,
-            api_secret=api_secret,
-            username=username,
-            password=password,
-            **extra,
-        )
-
+        adapter: BaseAdapter | None = None
         t0 = time.monotonic()
         try:
+            adapter = self._build_adapter_from_raw(
+                vendor,
+                host,
+                port,
+                verify_ssl,
+                api_key=api_key,
+                api_secret=api_secret,
+                username=username,
+                password=password,
+                **extra,
+            )
             result: AdapterResult = await adapter.test_connection()
             latency = int((time.monotonic() - t0) * 1000)
 
             if not result.success:
                 return {
                     "success": False,
-                    "message": result.message or "Connection test failed",
+                    "message": _gateway_test_result_message(result),
                     "vendor": vendor,
                     "latency_ms": latency,
                 }
@@ -492,7 +683,7 @@ class GatewayService:
 
             return {
                 "success": True,
-                "message": result.message or "Connection successful",
+                "message": _gateway_test_result_message(result),
                 "vendor": vendor,
                 "hostname": hostname,
                 "version": str(version) if version else None,
@@ -502,13 +693,20 @@ class GatewayService:
             }
         except Exception as exc:
             latency = int((time.monotonic() - t0) * 1000)
-            logger.error("Connection test failed for %s: %s", vendor, exc, exc_info=True)
+            logger.warning("Gateway connection test failed for %s", vendor)
             return {
                 "success": False,
                 "message": _sanitize_adapter_error(exc),
                 "vendor": vendor,
                 "latency_ms": latency,
             }
+
+        finally:
+            if adapter is not None:
+                try:
+                    await adapter.disconnect()
+                except Exception:
+                    logger.warning("Gateway connection test cleanup failed for %s", vendor)
 
     async def test_existing_gateway(
         self,
@@ -526,6 +724,51 @@ class GatewayService:
         still be toggled (it does not redirect where the secret goes).
         """
         gw = await self._get_gw(gw_id, org_id)
+        initial_site_id = gw.site_id
+        authority = (
+            select(GatewayConnection)
+            .join(Organization, GatewayConnection.org_id == Organization.id)
+            .where(
+                GatewayConnection.id == gw_id,
+                GatewayConnection.org_id == org_id,
+                GatewayConnection.deleted_at.is_(None),
+                Organization.deleted_at.is_(None),
+                Organization.is_active.is_(True),
+            )
+        )
+        lock_models = (GatewayConnection, Organization)
+        if initial_site_id is None:
+            authority = authority.where(GatewayConnection.site_id.is_(None))
+        else:
+            authority = authority.join(Site, GatewayConnection.site_id == Site.id).where(
+                Site.id == initial_site_id,
+                Site.organization_id == org_id,
+                Site.deleted_at.is_(None),
+                Site.is_active.is_(True),
+            )
+            lock_models = (*lock_models, Site)
+        authority = authority.execution_options(populate_existing=True, autoflush=False)
+        gw = (await self.db.execute(authority)).scalar_one_or_none()
+        if gw is None:
+            raise GatewayNotFoundError(gw_id)
+
+        def snapshot(row: GatewayConnection) -> tuple[Any, ...]:
+            return (
+                row.vendor,
+                row.host,
+                row.port,
+                row.verify_ssl,
+                copy.deepcopy(row.credentials or {}),
+                copy.deepcopy(row.settings or {}),
+                row.updated_at,
+                row.is_online,
+                row.last_seen_at,
+                row.detected_hostname,
+                row.detected_version,
+                row.detected_model,
+            )
+
+        original = snapshot(gw)
         creds = decrypt_dict(gw.credentials or {})
         result = await self.test_connection(
             vendor=gw.vendor,
@@ -536,7 +779,15 @@ class GatewayService:
             api_secret=creds.get("api_secret"),
             username=creds.get("username"),
             password=creds.get("password"),
+            **_safe_gateway_adapter_settings(gw.settings),
         )
+
+        # Lock current resource authority only after device I/O has ended.
+        gw = (await self.db.execute(authority.with_for_update(of=lock_models))).scalar_one_or_none()
+        if gw is None:
+            raise GatewayNotFoundError(gw_id)
+        if snapshot(gw) != original:
+            raise GatewayConnectionTestError("Gateway changed during its connection test")
 
         # Persist detected metadata on successful test
         if result.get("success"):
@@ -583,12 +834,8 @@ class GatewayService:
             finally:
                 try:
                     await adapter.disconnect()
-                except Exception as exc:
-                    logger.debug(
-                        "Adapter disconnect failed for gateway %s: %s",
-                        gw_id,
-                        exc,
-                    )
+                except Exception:
+                    logger.debug("Adapter disconnect failed for gateway %s", gw_id)
 
         return _ctx()
 
@@ -674,23 +921,27 @@ class GatewayService:
                 "total": len(rules) if isinstance(rules, list) else 0,
             }
 
-    async def get_live_vpn_status(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_vpn_status()
-            if not result.success:
-                raise AdapterConnectionError(result.error or "Gateway is unreachable")
-            # Redact PSKs / WireGuard private keys / OpenVPN tls_keys
-            # / certificate bodies before returning. The legacy
-            # ``/firewall/gateways/{id}/vpn`` endpoint is gated only
-            # by ``firewall.view`` so any read-tier operator could
-            # otherwise lift VPN secrets straight off the wire.
-            from app.services.adapter_redaction import redact_secrets
+    async def _read_live_aggregate(
+        self, gw_id: UUID, org_id: UUID, method: str, kind: str
+    ) -> dict[str, Any]:
+        try:
+            async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
+                result = await getattr(adapter, method)()
+                if (
+                    isinstance(result, AdapterResult)
+                    and result.success is False
+                    and result.error_code in {"NOT_SUPPORTED", "NOT_IMPLEMENTED"}
+                ):
+                    raise GatewayAggregateReadError(501, "This gateway read is not supported")
+                payload = aggregate_payload(result, kind, vendor=gw.vendor)
+                return {"gateway_id": str(gw.id), "vendor": gw.vendor, **payload}
+        except (GatewayNotFoundError, GatewayAggregateReadError):
+            raise
+        except Exception:
+            raise GatewayAggregateReadError(502, "Gateway status is unavailable") from None
 
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "tunnels": redact_secrets(result.data) if result.success else {},
-            }
+    async def get_live_vpn_status(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
+        return await self._read_live_aggregate(gw_id, org_id, "get_vpn_status", "vpn")
 
     async def get_live_interfaces(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
         async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
@@ -1203,15 +1454,7 @@ class GatewayService:
     # --- Gateway health (WAN gateways) ------------------------------------
 
     async def get_live_gateway_health(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_gateway_status()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "gateways": data.get("gateways", []) if isinstance(data, dict) else [],
-                "count": data.get("count", 0) if isinstance(data, dict) else 0,
-            }
+        return await self._read_live_aggregate(gw_id, org_id, "get_gateway_status", "health")
 
     # --- IDS / IPS --------------------------------------------------------
 
@@ -1384,15 +1627,40 @@ class GatewayService:
     # --- Backups ----------------------------------------------------------
 
     async def get_live_backups(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_backup_list()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "backups": data.get("backups", []) if isinstance(data, dict) else [],
-                "count": len(data.get("backups", [])) if isinstance(data, dict) else 0,
-            }
+        try:
+            async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
+                operation = getattr(adapter, "get_backup_list", None)
+                if not callable(operation):
+                    raise GatewayBackupInventoryError(
+                        501, "Backup inventory is not supported by this gateway"
+                    )
+                result = await operation()
+                if isinstance(result, AdapterResult) and result.success is False:
+                    if result.error_code in ("NOT_SUPPORTED", "NOT_IMPLEMENTED"):
+                        raise GatewayBackupInventoryError(
+                            501, "Backup inventory is not supported by this gateway"
+                        )
+                if (
+                    not isinstance(result, AdapterResult)
+                    or result.success is not True
+                    or not isinstance(result.data, dict)
+                ):
+                    raise GatewayBackupInventoryError(
+                        502, "Backup inventory could not be retrieved"
+                    )
+                backups = validate_backup_metadata(result.data.get("backups"))
+                return {
+                    "gateway_id": str(gw.id),
+                    "vendor": gw.vendor,
+                    "backups": backups,
+                    "count": len(backups),
+                }
+        except (GatewayNotFoundError, GatewayBackupInventoryError):
+            raise
+        except Exception:
+            raise GatewayBackupInventoryError(
+                502, "Backup inventory could not be retrieved"
+            ) from None
 
     async def create_live_backup(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
         async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
@@ -1416,19 +1684,7 @@ class GatewayService:
     # --- Firmware ---------------------------------------------------------
 
     async def get_live_firmware(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        cache_key = f"fw:firmware:{gw_id}"
-        cached = adapter_cache.get(cache_key)
-        if cached is not None:
-            return cached
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_firmware_info()
-            data = {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "firmware": result.data if result.success else {},
-            }
-            adapter_cache.set(cache_key, data, ttl=300)  # 5 min TTL
-            return data
+        return await self._read_live_aggregate(gw_id, org_id, "get_firmware_info", "firmware")
 
     # --- Diagnostics (ping / traceroute / DNS) ----------------------------
 
@@ -1488,7 +1744,7 @@ class GatewayService:
             return {
                 "gateway_id": str(gw.id),
                 "vendor": gw.vendor,
-                "logs": result.data if result.success else [],
+                "logs": _gateway_log_rows(result, limit),
             }
 
     async def get_live_firewall_log(
@@ -1502,19 +1758,15 @@ class GatewayService:
             return {
                 "gateway_id": str(gw.id),
                 "vendor": gw.vendor,
-                "logs": result.data if result.success else [],
+                "logs": _gateway_log_rows(result, limit),
             }
 
     # --- Device summary ---------------------------------------------------
 
     async def get_live_device_summary(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_device_summary()
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "summary": result.data if result.success else {},
-            }
+        return await self._read_live_aggregate(
+            gw_id, org_id, "get_device_summary", "device-summary"
+        )
 
     # --- Service control --------------------------------------------------
 
@@ -1680,7 +1932,8 @@ class GatewayService:
             }
 
     async def get_live_installed_packages(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        cache_key = f"fw:packages:{gw_id}"
+        await self._get_gw(gw_id, org_id)
+        cache_key = f"fw:packages:{org_id}:{gw_id}"
         cached = adapter_cache.get(cache_key)
         if cached is not None:
             return cached
@@ -1697,7 +1950,8 @@ class GatewayService:
             return resp
 
     async def get_live_installed_plugins(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        cache_key = f"fw:plugins:{gw_id}"
+        await self._get_gw(gw_id, org_id)
+        cache_key = f"fw:plugins:{org_id}:{gw_id}"
         cached = adapter_cache.get(cache_key)
         if cached is not None:
             return cached
@@ -1730,13 +1984,69 @@ class GatewayService:
             return self._write_result(result)
 
     async def download_live_config(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.download_config()
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "config": result.data if result.success else {},
-            }
+        import base64
+
+        try:
+            async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
+                result = await adapter.download_config()
+                if isinstance(result, AdapterResult) and result.success is False:
+                    if result.error_code in ("NOT_SUPPORTED", "NOT_IMPLEMENTED"):
+                        raise GatewayConfigDownloadError(
+                            501, "Configuration download is not supported by this gateway"
+                        )
+                if (
+                    not isinstance(result, AdapterResult)
+                    or result.success is not True
+                    or not isinstance(result.data, dict)
+                ):
+                    raise GatewayConfigDownloadError(
+                        502, "Configuration download could not be retrieved"
+                    )
+                data = result.data
+                limit = 16 * 1024 * 1024
+                config: dict[str, Any]
+                if "config_xml" in data and "backup_data" not in data:
+                    content = data["config_xml"]
+                    if (
+                        not isinstance(content, str)
+                        or not content.strip()
+                        or len(content) > limit
+                        or len(content.encode("utf-8")) > limit
+                    ):
+                        raise GatewayConfigDownloadError(
+                            502, "Gateway returned invalid configuration content"
+                        )
+                    config = {"config_xml": content}
+                elif "backup_data" in data and "config_xml" not in data:
+                    archive = data["backup_data"]
+                    if (
+                        not isinstance(archive, bytes)
+                        or not archive
+                        or len(archive) > limit
+                        or data.get("format") != "tar.gz"
+                        or data.get("scope") not in ("/etc/config/", "sysupgrade")
+                    ):
+                        raise GatewayConfigDownloadError(
+                            502, "Gateway returned invalid configuration content"
+                        )
+                    config = {
+                        "backup_data": base64.b64encode(archive).decode("ascii"),
+                        "encoding": "base64",
+                        "format": "tar.gz",
+                        "scope": data["scope"],
+                    }
+                else:
+                    raise GatewayConfigDownloadError(
+                        502, "Gateway returned invalid configuration content"
+                    )
+                return {"gateway_id": str(gw.id), "vendor": gw.vendor, "config": config}
+        except (GatewayNotFoundError, GatewayConfigDownloadError):
+            raise
+        except Exception:
+            # Device errors and configuration content can contain credentials.
+            raise GatewayConfigDownloadError(
+                502, "Configuration download could not be retrieved"
+            ) from None
 
     # --- Interfaces extras ------------------------------------------------
 
@@ -2008,14 +2318,7 @@ class GatewayService:
     # --- Tailscale VPN ---------------------------------------------------
 
     async def get_live_tailscale_status(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_tailscale_status()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                **(data if isinstance(data, dict) else {}),
-            }
+        return await self._read_live_aggregate(gw_id, org_id, "get_tailscale_status", "tailscale")
 
     # --- VLAN / LAGG / Virtual IP Devices --------------------------------
 
@@ -2347,20 +2650,11 @@ class GatewayService:
         ):
             raise GatewayNotFoundError(site_id)
 
-        base_filter = [
-            GatewayConnection.org_id == org_id,
-            GatewayConnection.deleted_at.is_(None),
-        ]
+        base_filter = [GatewayConnection.deleted_at.is_(None), *self._scope_filters(org_id)]
         # the summary stat cards ignored the selected site while
         # the gateway table below filtered by it — the counts mismatched.
         if site_id:
             base_filter.append(GatewayConnection.site_id == site_id)
-        # confine the org-wide aggregate to the caller's granted
-        # sites. Guard on `is not None` so admins/org-admins/background
-        # (unrestricted) are unaffected and we never build in_(None).
-        if self.accessible_site_ids is not None:
-            base_filter.append(GatewayConnection.site_id.in_(self.accessible_site_ids))
-
         # Single query that counts everything in SQL
         q = select(
             func.count().label("total"),
@@ -2409,112 +2703,121 @@ class GatewayService:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_live_haproxy_status(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_haproxy_status()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                **(data if isinstance(data, dict) else {}),
-            }
+        return await self._read_live_aggregate(gw_id, org_id, "get_haproxy_status", "haproxy")
 
     async def get_live_haproxy_servers(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_haproxy_servers()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "servers": data.get("servers", []) if isinstance(data, dict) else [],
-                "count": data.get("count", 0) if isinstance(data, dict) else 0,
-            }
+        return await self._read_live_aggregate(gw_id, org_id, "get_haproxy_servers", "servers")
 
     async def get_live_haproxy_backends(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_haproxy_backends()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "backends": data.get("backends", []) if isinstance(data, dict) else [],
-                "count": data.get("count", 0) if isinstance(data, dict) else 0,
-            }
+        return await self._read_live_aggregate(gw_id, org_id, "get_haproxy_backends", "backends")
 
     async def get_live_haproxy_frontends(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_haproxy_frontends()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "frontends": data.get("frontends", []) if isinstance(data, dict) else [],
-                "count": data.get("count", 0) if isinstance(data, dict) else 0,
-            }
+        return await self._read_live_aggregate(gw_id, org_id, "get_haproxy_frontends", "frontends")
 
     # ═══════════════════════════════════════════════════════════════════════
     # Certificate Management (Trust store)
     # ═══════════════════════════════════════════════════════════════════════
 
+    async def _read_trust_inventory(
+        self, gw_id: UUID, org_id: UUID, method: str, kind: str
+    ) -> dict[str, Any]:
+        try:
+            async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
+                result = await getattr(adapter, method)()
+                if (
+                    isinstance(result, AdapterResult)
+                    and result.success is False
+                    and result.error_code in {"NOT_SUPPORTED", "NOT_IMPLEMENTED"}
+                ):
+                    raise GatewayTrustInventoryError(
+                        501, "Trust/ACME inventory is not supported by this gateway"
+                    )
+                data = inventory_data(result)
+                if kind in {"certificate_authorities", "acme_certificates"}:
+                    rows = inventory_rows(result, kind)
+                    payload = {kind: rows, "count": len(rows)}
+                else:
+                    overview = data.get(kind)
+                    if not isinstance(overview, dict):
+                        raise ValueError("Missing inventory overview")
+                    fields = (
+                        {
+                            "certificate_authorities": "ca_count",
+                            "certificates": "cert_count",
+                            "crls": "crl_count",
+                        }
+                        if kind == "trust"
+                        else {
+                            "certificates": "cert_count",
+                            "accounts": "account_count",
+                            "validations": None,
+                            "actions": None,
+                        }
+                    )
+                    normalized = {}
+                    for key, count_key in fields.items():
+                        rows = overview.get(key)
+                        count = (
+                            overview.get(count_key)
+                            if count_key
+                            else len(rows)
+                            if isinstance(rows, list)
+                            else None
+                        )
+                        normalized[key] = inventory_rows(
+                            AdapterResult.ok({key: rows, "count": count}), key
+                        )
+                        if count_key:
+                            normalized[count_key] = len(normalized[key])
+                    if kind == "acme":
+                        normalized["settings"] = inventory_settings(
+                            AdapterResult.ok({"acme_settings": overview.get("settings")})
+                        )
+                    payload = {kind: normalized}
+                return {"gateway_id": str(gw.id), "vendor": gw.vendor, **payload}
+        except (GatewayNotFoundError, GatewayTrustInventoryError):
+            raise
+        except Exception:
+            # Device bodies, key material and exception messages are never exposed.
+            raise GatewayTrustInventoryError(502, "Trust/ACME inventory is unavailable") from None
+
     async def get_live_trust_overview(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_trust_overview()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                **(data if isinstance(data, dict) else {}),
-            }
+        return await self._read_trust_inventory(gw_id, org_id, "get_trust_overview", "trust")
 
     async def get_live_certificates(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_certificates()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "certificates": data.get("certificates", []) if isinstance(data, dict) else [],
-                "count": data.get("count", 0) if isinstance(data, dict) else 0,
-            }
+        try:
+            async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
+                rows = _gateway_certificate_rows(await adapter.get_certificates())
+                return {
+                    "gateway_id": str(gw.id),
+                    "vendor": gw.vendor,
+                    "certificates": rows,
+                    "count": len(rows),
+                }
+        except (GatewayNotFoundError, GatewayCertificateInventoryError):
+            raise
+        except Exception:
+            # Device error bodies and stack traces may include private key material.
+            raise GatewayCertificateInventoryError(
+                502, "Certificate inventory is unavailable"
+            ) from None
 
     async def get_live_certificate_authorities(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_certificate_authorities()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "certificate_authorities": data.get("certificate_authorities", [])
-                if isinstance(data, dict)
-                else [],
-                "count": data.get("count", 0) if isinstance(data, dict) else 0,
-            }
+        return await self._read_trust_inventory(
+            gw_id, org_id, "get_certificate_authorities", "certificate_authorities"
+        )
 
     # ═══════════════════════════════════════════════════════════════════════
     # ACME / Let's Encrypt
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_live_acme_overview(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_acme_overview()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                **(data if isinstance(data, dict) else {}),
-            }
+        return await self._read_trust_inventory(gw_id, org_id, "get_acme_overview", "acme")
 
     async def get_live_acme_certificates(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_acme_certificates()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "acme_certificates": data.get("acme_certificates", [])
-                if isinstance(data, dict)
-                else [],
-                "count": data.get("count", 0) if isinstance(data, dict) else 0,
-            }
+        return await self._read_trust_inventory(
+            gw_id, org_id, "get_acme_certificates", "acme_certificates"
+        )
 
     # ═══════════════════════════════════════════════════════════════════════
     # Syslog Forwarding
@@ -2699,14 +3002,7 @@ class GatewayService:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_live_proxy_settings(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_proxy_settings()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "proxy": data.get("proxy", {}) if isinstance(data, dict) else {},
-            }
+        return await self._read_live_aggregate(gw_id, org_id, "get_proxy_settings", "proxy")
 
     async def get_live_proxy_blacklists(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
         async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
@@ -2726,56 +3022,28 @@ class GatewayService:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_live_crowdsec_status(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_crowdsec_status()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "crowdsec": data.get("crowdsec", {}) if isinstance(data, dict) else {},
-            }
+        return await self._read_live_aggregate(gw_id, org_id, "get_crowdsec_status", "crowdsec")
 
     # ═══════════════════════════════════════════════════════════════════════
     # Telegraf
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_live_telegraf_status(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_telegraf_status()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "telegraf": data.get("telegraf", {}) if isinstance(data, dict) else {},
-            }
+        return await self._read_live_aggregate(gw_id, org_id, "get_telegraf_status", "telegraf")
 
     # ═══════════════════════════════════════════════════════════════════════
     # Monit
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_live_monit_status(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_monit_status()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "monit": data.get("monit", {}) if isinstance(data, dict) else {},
-            }
+        return await self._read_live_aggregate(gw_id, org_id, "get_monit_status", "monit")
 
     # ═══════════════════════════════════════════════════════════════════════
     # NetFlow / sFlow
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_live_netflow_status(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.get_netflow_status()
-            data = result.data if result.success else {}
-            return {
-                "gateway_id": str(gw.id),
-                "vendor": gw.vendor,
-                "netflow": data.get("netflow", {}) if isinstance(data, dict) else {},
-            }
+        return await self._read_live_aggregate(gw_id, org_id, "get_netflow_status", "netflow")
 
     # ═══════════════════════════════════════════════════════════════════
     # Cross-cutting: Bulk Rule Operations
@@ -2864,38 +3132,57 @@ class GatewayService:
         """Get diff between current running config and last backup."""
         import difflib
 
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            # Fetch current config and backup list in parallel
-            current_result, backups_result = await asyncio.gather(
-                adapter.download_config(),
-                adapter.get_backup_list(),
-                return_exceptions=True,
-            )
-
-            # Parse current config
-            if isinstance(current_result, Exception) or not getattr(
-                current_result, "success", False
+        def require_result(result: Any) -> dict[str, Any]:
+            if isinstance(result, AdapterResult) and result.success is False:
+                if result.error_code in ("NOT_SUPPORTED", "NOT_IMPLEMENTED"):
+                    raise GatewayConfigComparisonError(
+                        501, "Configuration comparison is not supported by this gateway"
+                    )
+            if (
+                not isinstance(result, AdapterResult)
+                or result.success is not True
+                or not isinstance(result.data, dict)
             ):
-                current_xml = ""
-            else:
-                current_xml = (
-                    current_result.data.get("config_xml", "") if current_result.success else ""
+                raise GatewayConfigComparisonError(
+                    502, "Configuration comparison could not be retrieved"
                 )
+            return result.data
 
-            # Parse backup list
-            backup_xml = ""
-            if not isinstance(backups_result, Exception) and getattr(
-                backups_result, "success", False
-            ):
-                backups = []
-                if isinstance(backups_result.data, dict):
-                    backups = backups_result.data.get("backups", [])
-                if backups:
-                    latest = backups[0] if isinstance(backups, list) else {}
-                    backup_xml = latest.get("config_xml", "") or latest.get("content", "")
-
-            # Generate unified diff
-            if current_xml and backup_xml:
+        try:
+            async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
+                current_result, backups_result = await asyncio.gather(
+                    adapter.download_config(), adapter.get_backup_list(), return_exceptions=True
+                )
+                # Cancellation remains cancellation even if the sibling read failed.
+                for result in (current_result, backups_result):
+                    if isinstance(result, asyncio.CancelledError):
+                        raise result
+                current = require_result(current_result)
+                history = require_result(backups_result)
+                current_xml = current.get("config_xml")
+                backups = history.get("backups")
+                if not isinstance(current_xml, str) or not current_xml.strip():
+                    raise GatewayConfigComparisonError(
+                        502, "Gateway did not return configuration content for comparison"
+                    )
+                if not isinstance(backups, list) or (backups and not isinstance(backups[0], dict)):
+                    raise GatewayConfigComparisonError(
+                        502, "Gateway returned invalid backup history"
+                    )
+                if not backups:
+                    raise GatewayConfigComparisonError(409, "No backup is available for comparison")
+                latest = backups[0]
+                backup_xml = latest.get("config_xml")
+                if backup_xml is None or backup_xml == "":
+                    backup_xml = latest.get("content")
+                if backup_xml is not None and not isinstance(backup_xml, str):
+                    raise GatewayConfigComparisonError(
+                        502, "Gateway returned invalid backup content"
+                    )
+                if not backup_xml or not backup_xml.strip():
+                    raise GatewayConfigComparisonError(
+                        409, "Backup content is unavailable for comparison"
+                    )
                 diff_lines = list(
                     difflib.unified_diff(
                         backup_xml.splitlines(keepends=True),
@@ -2905,52 +3192,34 @@ class GatewayService:
                         lineterm="",
                     )
                 )
-                has_changes = len(diff_lines) > 0
-            else:
-                diff_lines = []
-                has_changes = False
-
-            return {
-                "gateway_id": str(gw.id),
-                "has_changes": has_changes,
-                "diff_lines": diff_lines,
-                "current_size": len(current_xml),
-                "backup_size": len(backup_xml),
-                "summary": f"{sum(1 for l in diff_lines if l.startswith('+') and not l.startswith('+++'))} additions, "
-                f"{sum(1 for l in diff_lines if l.startswith('-') and not l.startswith('---'))} deletions",
-            }
+                return {
+                    "gateway_id": str(gw.id),
+                    "comparison_available": True,
+                    "has_changes": bool(diff_lines),
+                    "diff_lines": diff_lines,
+                    "current_size": len(current_xml),
+                    "backup_size": len(backup_xml),
+                    "summary": f"{sum(1 for line in diff_lines if line.startswith('+') and not line.startswith('+++'))} additions, "
+                    f"{sum(1 for line in diff_lines if line.startswith('-') and not line.startswith('---'))} deletions",
+                }
+        except (GatewayNotFoundError, GatewayConfigComparisonError):
+            raise
+        except Exception:
+            # Device diagnostics and configuration bodies may contain secrets.
+            raise GatewayConfigComparisonError(
+                502, "Configuration comparison could not be retrieved"
+            ) from None
 
     # ═══════════════════════════════════════════════════════════════════
     # Cross-cutting: Config Backup Trigger
     # ═══════════════════════════════════════════════════════════════════
 
     async def trigger_config_backup(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        """Download and store a config backup from the gateway."""
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            try:
-                result = await adapter.download_config()
-                if result.success:
-                    config_data = result.data or {}
-                    return {
-                        "gateway_id": str(gw.id),
-                        "success": True,
-                        "message": "Configuration backup captured successfully",
-                        "config_size": len(str(config_data.get("config_xml", ""))),
-                        "timestamp": datetime.now(UTC).isoformat(),
-                    }
-                else:
-                    return {
-                        "gateway_id": str(gw.id),
-                        "success": False,
-                        "message": f"Backup failed: {result.error}",
-                    }
-            except Exception as exc:
-                logger.error("Config backup failed for gateway %s: %s", gw_id, exc)
-                return {
-                    "gateway_id": str(gw.id),
-                    "success": False,
-                    "message": "Backup operation failed",
-                }
+        """Refuse a managed backup until durable artifact storage is implemented."""
+        # Preserve tenant/site/existence checks without fetching secret-bearing
+        # configuration or silently changing this route into a vendor write.
+        await self._get_gw(gw_id, org_id)
+        raise GatewayConfigBackupUnavailableError()
 
     # ═══════════════════════════════════════════════════════════════════
     # Cross-cutting: Certificate Lifecycle
@@ -2959,70 +3228,62 @@ class GatewayService:
     async def get_certificate_expiry(
         self, gw_id: UUID, org_id: UUID, days_threshold: int = 30
     ) -> dict[str, Any]:
-        """Check gateway certificates for upcoming expiry."""
-        from datetime import datetime, timedelta
+        """Classify every returned certificate; unavailable inventory is an error."""
+        inventory = await self.get_live_certificates(gw_id, org_id)
+        certs = inventory["certificates"]
+        now = datetime.now(UTC)
+        threshold = now + timedelta(days=days_threshold)
+        expiring = []
+        expired = []
+        unknown = []
+        valid_count = 0
 
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            try:
-                result = await adapter.get_trust_cert_list()
-                certs = []
-                if result.success and isinstance(result.data, dict):
-                    certs = result.data.get("certificates", [])
-            except Exception:
-                certs = []
+        def public_text(row: dict[str, Any], *keys: str) -> str:
+            return next(
+                (row[key] for key in keys if isinstance(row.get(key), str) and row[key]),
+                "",
+            )
 
-            now = datetime.now(UTC)
-            threshold = now + timedelta(days=days_threshold)
-            expiring = []
-            valid = []
-            expired = []
-
-            for cert in certs:
-                not_after = cert.get("not_after") or cert.get("valid_to") or cert.get("notAfter")
-                if not not_after:
-                    continue
-                try:
-                    # Try multiple date formats
-                    exp_date = None
-                    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%b %d %H:%M:%S %Y %Z", "%Y-%m-%d %H:%M:%S"):
-                        try:
-                            exp_date = datetime.strptime(str(not_after), fmt)
-                            if exp_date.tzinfo is None:
-                                exp_date = exp_date.replace(tzinfo=UTC)
-                            break
-                        except ValueError:
-                            continue
-
-                    if exp_date is None:
-                        continue
-
-                    cert_info = {
-                        "name": cert.get("descr")
-                        or cert.get("description")
-                        or cert.get("cn", "Unknown"),
-                        "common_name": cert.get("cn") or cert.get("common_name", ""),
-                        "expires": exp_date.isoformat(),
-                        "days_remaining": (exp_date - now).days,
-                    }
-
-                    if exp_date < now:
-                        cert_info["status"] = "expired"
-                        expired.append(cert_info)
-                    elif exp_date < threshold:
-                        cert_info["status"] = "expiring_soon"
-                        expiring.append(cert_info)
-                    else:
-                        cert_info["status"] = "valid"
-                        valid.append(cert_info)
-                except Exception:
-                    continue
-
-            return {
-                "gateway_id": str(gw.id),
-                "days_threshold": days_threshold,
-                "total_certificates": len(certs),
-                "expired": expired,
-                "expiring_soon": expiring,
-                "valid_count": len(valid),
-                "needs_attention": len(expired) + len(expiring) > 0,
+        for cert in certs:
+            common_name = public_text(cert, "cn", "common_name", "dn_commonname")
+            identity = {
+                "name": public_text(cert, "descr", "description") or common_name or "Unknown",
+                "common_name": common_name,
             }
+            not_after = next(
+                (
+                    cert[key]
+                    for key in ("not_after", "valid_to", "notAfter")
+                    if key in cert and cert[key] is not None and cert[key] != ""
+                ),
+                None,
+            )
+            expires = _certificate_expiry(not_after)
+            if expires is None:
+                unknown.append(
+                    {**identity, "status": "unknown", "expires": None, "days_remaining": None}
+                )
+                continue
+            info = {
+                **identity,
+                "expires": expires.isoformat(),
+                "days_remaining": (expires - now).days,
+            }
+            if expires <= now:
+                expired.append({**info, "status": "expired"})
+            elif expires <= threshold:
+                expiring.append({**info, "status": "expiring_soon"})
+            else:
+                valid_count += 1
+
+        return {
+            "gateway_id": inventory["gateway_id"],
+            "days_threshold": days_threshold,
+            "total_certificates": len(certs),
+            "expired": expired,
+            "expiring_soon": expiring,
+            "valid_count": valid_count,
+            "unknown": unknown,
+            "unknown_count": len(unknown),
+            "needs_attention": bool(expired or expiring or unknown),
+        }

@@ -2,7 +2,7 @@
   "FirmwarePage": {
     "header": {
       "title": "Gestión de firmware",
-      "description": "Administra e implementa actualizaciones de firmware en tus dispositivos"
+      "description": "Administra el catálogo de firmware y consulta el historial de trabajos"
     },
     "errors": {
       "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
@@ -224,6 +224,7 @@
       "selectFirmware": "Selecciona una version de firmware",
       "upgradeFailed": "La actualizacion fallo",
       "unknownError": "Error desconocido"
-    }
+    },
+    "catalogExecutionUnavailable": "Este catálogo almacena imágenes de firmware e historial de trabajos. La implementación desde el catálogo, la copia de seguridad automática y la reversión no están disponibles. Para las actualizaciones compatibles, utiliza el flujo de firmware con cambios preparados del controlador. Las finalizaciones históricas del catálogo no se verificaron en el hardware."
   }
 }

@@ -1,0 +1,48 @@
+Notification outcome semantics
+==============================
+
+Fabric notify reports dispatched attempts separately from policy skips and
+failed attempts. Any failed attempt makes the operation unsuccessful, while
+preserving counts for partial success. This is an acknowledgement from the
+configured provider or an in-app write, not proof of final recipient delivery.
+An empty configuration continues to be an intentional no-op.
+
+The shared helper preserves a failed result when a provider or in-app write
+raises. Raw exception details, recipient addresses and provider error strings
+are not written into these helper log messages or Fabric results. Lower-level
+provider logs and stored provider responses have separate disclosure policies.
+Cancellation propagates and does not trigger helper retry scheduling.
+A failed in-app flush or commit raises a fixed persistence error and does not
+publish a notification-created event. When commit=False, the enclosing caller
+retains transaction ownership; publishing after a flush still does not guarantee
+the outer transaction will later commit.
+
+A retry can only refer to the delivery row assigned to the exact attempt after
+its database flush succeeds. Missing providers, raised sends and failed
+tracking flushes have no such identity; the helper does not borrow another
+recipient's or organization's recent row with a matching subject. These failed
+attempts remain visible to callers, but no automatic retry is promised for an
+untracked attempt.
+
+Limits requiring further operational qualification
+--------------------------------------------------
+A successful database flush is not a commit. This change does not introduce a
+transactional outbox, guarantee delivery after a transaction rollback, or make
+external provider sends exactly once. The existing shared-session concurrency
+and enqueue-before-commit lifecycle still need dedicated transaction and broker
+failure qualification. Successful channel sends are not undone if another
+channel fails. Do not blindly retry an entire partially successful workflow.
+Unknown channel names and configurations resolving no recipients retain their
+existing behavior; configuration validation is a separate gate.
+
+Regression checks use synthetic providers and do not send real notifications.
+Customer SMTP/webhook/SMS acceptance requires explicit authorized destinations.
+
+In-app recipient authorization
+------------------------------
+A non-null organization scope requires an active, non-deleted recipient in that
+organization before any write or creation event. Missing, foreign, inactive or
+deleted recipients return the same fixed error. Lookup errors refuse and
+cancellation propagates. The trusted internal platform scope (organization_id
+is None) retains its existing behavior; it is not a tenant authorization bypass
+for Fabric, which supplies the Connection organization.

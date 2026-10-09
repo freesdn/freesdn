@@ -52,6 +52,10 @@ updates:
   # Frontend (npm)
   - package-ecosystem: "npm"
     directory: "/frontend"
+    # LTS major migrations require explicit qualification; patches still update.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     schedule:
       interval: "weekly"
       day: "monday"
@@ -97,9 +101,81 @@ updates:
   # Container base image — frontend/edge Dockerfile FROM lines
   - package-ecosystem: "docker"
     directory: "/frontend"
+    # LTS major migrations require explicit qualification; patches still update.
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
     schedule:
       interval: "weekly"
       day: "monday"
     labels:
       - "dependencies"
       - "security"
+
+  # Dependency surface validated in the 2026-09-15 refresh.
+  - package-ecosystem: "gomod"
+    directory: "/frontend/caddy-build"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "security"]
+
+  # Source-built VPN client: security fixes include transitive Go libraries.
+  - package-ecosystem: "gomod"
+    directory: "/backend/netbird-build"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "security"]
+
+  # Source-built VPN client: security fixes include transitive Go libraries.
+  - package-ecosystem: "gomod"
+    directory: "/backend/tailscale-build"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "security"]
+
+  # Privilege-drop helper used by the database images.
+  - package-ecosystem: "gomod"
+    directory: "/docker/gosu-build"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "security"]
+
+  - package-ecosystem: "gomod"
+    directory: "/docker/go2rtc-build"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "security"]
+
+  - package-ecosystem: "gomod"
+    directory: "/docker/rclone-build"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "security"]
+
+  - package-ecosystem: "gomod"
+    directory: "/docker/postgres-exporter-build"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "security"]
+
+  - package-ecosystem: "gomod"
+    directory: "/docker/prometheus-build"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "security"]

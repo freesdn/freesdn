@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import logging
 import secrets
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token, create_refresh_token
@@ -26,6 +29,8 @@ from app.core.security_utils import (
     safe_http_request,
     validate_target_host,
 )
+from app.core.user_lifecycle import try_lock_user_lifecycle, try_share_user_lifecycle
+from app.core.xml_utils import UnsafeXML, parse_untrusted_xml
 from app.models.core import User, UserRole
 from app.models.sso import SSOProtocol, SSOProvider, SSOProviderStatus, SSOSession
 from app.schemas.sso import (
@@ -108,6 +113,10 @@ class SSOCallbackError(SSOError):
 
 class SSOAuthError(SSOError):
     """Remote IdP denied authentication."""
+
+
+class SSOProviderInUseError(SSOError):
+    """Provider retirement would orphan a remaining account binding."""
 
 
 class SSONotSupportedError(SSOError):
@@ -239,9 +248,39 @@ class SSOService:
 
     async def delete_provider(self, provider_id: UUID) -> bool:
         """Soft-delete an SSO provider."""
-        provider = await self.get_provider(provider_id)
+        # The management route already owns the exclusive lifecycle lock.
+        # Service callers must join the same transaction order without an
+        # inverse wait if they arrived holding another resource.
+        if not await try_lock_user_lifecycle(self.db):
+            raise SSOProviderInUseError("Account lifecycle is busy; retry provider retirement")
+        provider = (
+            await self.db.execute(
+                select(SSOProvider)
+                .where(
+                    SSOProvider.id == provider_id,
+                    SSOProvider.deleted_at.is_(None),
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
         if not provider:
             return False
+        # Disabled accounts still require their provider during recovery and
+        # later reactivation. A soft-deleted account is no longer a live
+        # dependency. Do not silently change any account's login method here.
+        dependency = await self.db.scalar(
+            select(User.id)
+            .where(
+                User.sso_provider_id == provider_id,
+                User.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        if dependency is not None:
+            raise SSOProviderInUseError(
+                "Provider still has account bindings; migrate or unlink them before retirement"
+            )
         provider.deleted_at = datetime.now(UTC)
         await self.db.flush()
         return True
@@ -323,6 +362,9 @@ class SSOService:
         if not provider:
             raise SSOProviderNotFoundError("SSO provider not found")
 
+        verified_provider_state = self._provider_security_state(provider)
+        self._require_provider_active(provider)
+
         # Discover token endpoint (derive discovery from issuer when not set)
         token_endpoint = None
         userinfo_endpoint = None
@@ -366,12 +408,14 @@ class SSOService:
         token_data = token_resp.json()
         id_token = token_data.get("id_token")
         access_token_ext = token_data.get("access_token")
+        if not isinstance(id_token, str) or not id_token:
+            raise SSOAuthError("OIDC authentication requires an ID token")
 
         claims: dict[str, Any] = {}
 
         # ------------------------------------------------------------------
-        # ALWAYS verify the id_token when present, regardless of
-        # whether we also hit the userinfo endpoint.  The id_token is the
+        # Require and verify the id_token, regardless of whether we also
+        # hit the userinfo endpoint. The id_token is the
         # only place that carries the nonce we minted at authorize time,
         # so skipping verification here re-opens the replay window.
         # ------------------------------------------------------------------
@@ -417,7 +461,7 @@ class SSOService:
                 # Build the required-claims set.  We always enforce the
                 # standard OIDC core claims; issuer and nonce are added
                 # when the provider/session configured them.
-                required_claims: list[str] = ["exp", "iat", "aud"]
+                required_claims: list[str] = ["exp", "iat", "aud", "sub"]
                 if provider.oidc_issuer:
                     required_claims.append("iss")
                 if session.nonce:
@@ -461,12 +505,15 @@ class SSOService:
                         "Invalid or missing nonce in id_token — possible replay attack"
                     )
 
+            subject = id_token_claims.get("sub")
+            if not isinstance(subject, str) or not subject:
+                raise SSOAuthError("OIDC ID token requires a nonempty subject")
+
             claims = dict(id_token_claims)
 
-        # Userinfo endpoint enrichment (does NOT carry nonce).  We merge
-        # userinfo into the id_token claims so attribute mapping has the
-        # full picture, but we do not trust userinfo as the sole source of
-        # identity when an id_token was also supplied.
+        # UserInfo is optional enrichment, never an alternative identity.
+        # Ignore the entire response unless its subject matches the verified
+        # ID token, including groups that could affect role mapping.
         if userinfo_endpoint and access_token_ext:
             # DNS-rebinding-safe userinfo fetch
             try:
@@ -479,7 +526,10 @@ class SSOService:
                 )
                 if ui_resp.status_code == 200:
                     ui_claims = ui_resp.json()
-                    if isinstance(ui_claims, dict):
+                    if (
+                        isinstance(ui_claims, dict)
+                        and ui_claims.get("sub") == id_token_claims["sub"]
+                    ):
                         # id_token claims win over userinfo for any overlap:
                         # the signed token is the authoritative source.
                         merged = dict(ui_claims)
@@ -493,16 +543,22 @@ class SSOService:
 
         # Map claims → user attributes
         user_attrs = self._map_attributes(provider, claims)
-        user = await self._provision_or_update_user(provider, user_attrs, claims)
+        user = await self._provision_or_update_user(
+            provider,
+            user_attrs,
+            claims,
+            verified_provider_state=verified_provider_state,
+            flow_expires_at=session.expires_at,
+        )
 
         # Complete SSO session
         session.user_id = user.id
-        session.external_id = claims.get("sub") or claims.get("email")
+        session.external_id = id_token_claims["sub"]
         session.completed_at = datetime.now(UTC)
         session.idp_response = claims
 
         # Issue FreeSDN tokens
-        return await self._issue_tokens(user, provider)
+        return await self._issue_tokens(user, provider, flow_expires_at=session.expires_at)
 
     def _effective_discovery_url(self, provider: SSOProvider) -> str | None:
         """The OIDC discovery URL to use: the explicit one, else the standard
@@ -676,8 +732,7 @@ class SSOService:
 
     @staticmethod
     def _parse_saml_attributes(xml_str: str) -> dict[str, Any]:
-        """Best-effort extraction of SAML assertion attributes."""
-        import xml.etree.ElementTree as ET
+        """Extract attributes without weakening the separate SAML acceptance gate."""
 
         ns = {
             "saml": "urn:oasis:names:tc:SAML:2.0:assertion",
@@ -685,14 +740,7 @@ class SSOService:
         }
         attrs: dict[str, Any] = {}
         try:
-            # CPython's xml.etree.ElementTree does not resolve external entities
-            # by default, but we use defusedxml where available for defense-in-depth
-            try:
-                import defusedxml.ElementTree as SafeET
-
-                root = SafeET.fromstring(xml_str)
-            except ImportError:
-                root = ET.fromstring(xml_str)
+            root = parse_untrusted_xml(xml_str, max_bytes=1024 * 1024)
             # NameID
             name_id = root.find(".//saml:NameID", ns)
             if name_id is not None and name_id.text:
@@ -704,8 +752,8 @@ class SSOService:
                 values = [v.text for v in attr.findall("saml:AttributeValue", ns) if v.text]
                 if values:
                     attrs[name] = values[0] if len(values) == 1 else values
-        except ET.ParseError as e:
-            logger.warning("SAML XML parse error: %s", e)
+        except UnsafeXML as exc:
+            raise SSOCallbackError("SAML XML is invalid or cannot be parsed safely") from exc
 
         return attrs
 
@@ -719,6 +767,8 @@ class SSOService:
         """Authenticate via LDAP bind."""
         if provider.protocol != SSOProtocol.LDAP:
             raise SSOConfigError("Provider is not an LDAP provider")
+        verified_provider_state = self._provider_security_state(provider)
+        self._require_provider_active(provider)
         if not provider.ldap_url or not provider.ldap_base_dn:
             raise SSOConfigError("LDAP URL or base DN not configured")
 
@@ -842,7 +892,12 @@ class SSOService:
             claims[attr_name] = str(val) if val else None
 
         user_attrs = self._map_attributes(provider, claims)
-        user = await self._provision_or_update_user(provider, user_attrs, claims)
+        user = await self._provision_or_update_user(
+            provider,
+            user_attrs,
+            claims,
+            verified_provider_state=verified_provider_state,
+        )
 
         return await self._issue_tokens(user, provider)
 
@@ -902,70 +957,228 @@ class SSOService:
     # JIT User Provisioning
     # =====================================================================
 
+    @staticmethod
+    def _provider_security_state(provider: SSOProvider) -> dict[str, Any]:
+        """Copy verified trust inputs before any network or database wait.
+
+        Presentation and audit timestamps do not change identity authority.
+        Configuration dictionaries must be copied, not retained by reference.
+        Never log this snapshot: it contains encrypted provider credentials.
+        """
+        presentation = {
+            "name",
+            "slug",
+            "description",
+            "icon_url",
+            "display_order",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        }
+        return {
+            column.key: deepcopy(getattr(provider, column.key))
+            for column in SSOProvider.__table__.columns
+            if column.key not in presentation
+        }
+
+    @staticmethod
+    def _require_provider_active(provider: SSOProvider) -> None:
+        if provider.deleted_at is not None or provider.status != SSOProviderStatus.ACTIVE:
+            raise SSOAuthError("SSO provider is no longer active; start a new sign-in")
+
+    @staticmethod
+    def _account_security_state(user: User) -> tuple[Any, ...]:
+        # Exclude profile/last-login timestamps so independent normal sign-ins
+        # can succeed. Credential, binding and authority changes invalidate the
+        # earlier account decision instead of silently adopting new authority.
+        return tuple(
+            getattr(user, name)
+            for name in (
+                "id",
+                "organization_id",
+                "role",
+                "auth_provider",
+                "sso_provider_id",
+                "external_id",
+                "hashed_password",
+                "token_version",
+                "is_active",
+                "is_verified",
+                "mfa_enabled",
+                "mfa_secret",
+                "mfa_backup_codes",
+                "mfa_pending_secret",
+                "mfa_pending_backup_codes",
+                "mfa_last_totp_step",
+                "locked_until",
+                "failed_login_attempts",
+                "deleted_at",
+            )
+        )
+
+    @staticmethod
+    def _require_flow_current(expires_at: datetime | None) -> None:
+        if expires_at is not None and expires_at <= datetime.now(UTC):
+            raise SSOAuthError("SSO session expired; start a new sign-in")
+
+    @staticmethod
+    def _require_account_current(user: User) -> None:
+        if user.deleted_at is not None or not user.is_active or not user.is_verified:
+            raise SSOAuthError("Account is unavailable")
+        if user.locked_until is not None and user.locked_until > datetime.now(UTC):
+            raise SSOAuthError("Account is temporarily locked")
+        if type(user.token_version) is not int or not 0 <= user.token_version < 2147483647:
+            raise SSOAuthError("Account security counter requires recovery")
+
     async def _provision_or_update_user(
         self,
         provider: SSOProvider,
         user_attrs: dict[str, Any],
         raw_claims: dict[str, Any],
+        *,
+        verified_provider_state: dict[str, Any] | None = None,
+        flow_expires_at: datetime | None = None,
     ) -> User:
-        """Find existing user by email/external_id or create via JIT provisioning."""
-        email = user_attrs.get("email")
-        if not email:
-            raise SSOAuthError("No email claim in IdP response")
-
-        # Try to find existing user — SCOPED to the provider's own organization.
-        # SECURITY (cross-tenant account takeover): an SSO provider is org-scoped
-        # and its IdP config (issuer/JWKS/cert/LDAP) is fully controlled by the
-        # org_admin who created it. The signature checks only prove the assertion
-        # was signed by THAT org's configured key — they do NOT bind the asserted
-        # email to the org. Without the organization_id filter, a malicious
-        # org_admin could sign an assertion for victim@other-org.com and this
-        # lookup would return the foreign-org user, then _issue_tokens() would
-        # mint a real FreeSDN JWT carrying the victim's org + role (up to
-        # super_admin). User.email is globally unique, so the match is
-        # deterministic. Pin the lookup to provider.organization_id (NOT NULL).
-        stmt = select(User).where(
-            User.email == email,
-            User.organization_id == provider.organization_id,
-            User.deleted_at.is_(None),
+        """Resolve a verified external binding or create an explicitly allowed JIT user."""
+        subject_key = {
+            SSOProtocol.OIDC: "sub",
+            SSOProtocol.SAML: "NameID",
+            SSOProtocol.LDAP: "dn",
+        }.get(provider.protocol)
+        subject = raw_claims.get(subject_key) if subject_key is not None else None
+        if not isinstance(subject, str) or not subject.strip() or len(subject) > 512:
+            raise SSOAuthError("Missing or invalid external subject")
+        expected_provider = (
+            deepcopy(verified_provider_state)
+            if verified_provider_state is not None
+            else self._provider_security_state(provider)
         )
-        result = await self.db.execute(stmt)
-        user = result.scalar_one_or_none()
+        self._require_provider_active(provider)
+        self._require_flow_current(flow_expires_at)
 
-        # Defense in depth: if the email matches a user in a DIFFERENT org (the
-        # org-scoped query above already excludes them, but a future refactor
-        # could widen it), refuse rather than fall through to JIT-create a
-        # duplicate-email row.
-        if user is None:
-            foreign = await self.db.execute(
-                select(User.id).where(
-                    User.email == email,
-                    User.organization_id != provider.organization_id,
-                    User.deleted_at.is_(None),
-                )
+        # Email is mutable profile information, not authority to replace a
+        # local password or a different external binding. Resolve the exact
+        # verified provider/protocol/subject inside its own organization first.
+        # Refuse ambiguous legacy data rather than selecting an arbitrary user.
+        stmt = (
+            select(User)
+            .where(
+                User.organization_id == provider.organization_id,
+                User.auth_provider == provider.protocol.value,
+                User.sso_provider_id == provider.id,
+                User.external_id == subject,
+                User.deleted_at.is_(None),
             )
-            if foreign.scalar_one_or_none() is not None:
-                logger.warning(
-                    "SSO login blocked: email belongs to a different organization",
-                    extra={
-                        "sso_provider": provider.protocol.value,
-                        "provider_id": str(provider.id),
-                    },
-                )
-                raise SSOAuthError("User does not belong to this SSO provider's organization")
-
-        if user:
-            # Update SSO-related fields
-            user.auth_provider = provider.protocol.value
-            user.external_id = (
-                raw_claims.get("sub") or raw_claims.get("NameID") or raw_claims.get("dn")
+            .limit(2)
+        )
+        with self.db.no_autoflush:
+            matches = list(
+                (await self.db.execute(stmt.execution_options(populate_existing=True))).scalars()
             )
-            user.sso_provider_id = provider.id
+        if len(matches) > 1:
+            raise SSOAuthError("External identity has ambiguous account bindings")
+        expected_account = self._account_security_state(matches[0]) if matches else None
+        original_id = matches[0].id if matches else None
+        # Existing users share the global lifecycle gate, then lock only their
+        # own account. New JIT bindings use the exclusive creation gate. Never
+        # wait on lifecycle while retaining the callback's SSO state row.
+        acquired = (
+            await try_share_user_lifecycle(self.db)
+            if matches
+            else await try_lock_user_lifecycle(self.db)
+        )
+        if not acquired:
+            raise SSOAuthError("Account lifecycle changed; start a new sign-in")
+        with self.db.no_autoflush:
+            current_provider = (
+                await self.db.execute(
+                    select(SSOProvider)
+                    .where(
+                        SSOProvider.id == provider.id,
+                    )
+                    .with_for_update(read=True)
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one_or_none()
+        if (
+            current_provider is None
+            or self._provider_security_state(current_provider) != expected_provider
+        ):
+            raise SSOAuthError("Identity provider changed; start a new sign-in")
+        self._require_provider_active(current_provider)
+        if original_id is not None:
+            with self.db.no_autoflush:
+                locked = (
+                    await self.db.execute(
+                        select(User)
+                        .where(
+                            User.id == original_id,
+                        )
+                        .with_for_update()
+                        .execution_options(populate_existing=True)
+                    )
+                ).scalar_one_or_none()
+            if locked is None or self._account_security_state(locked) != expected_account:
+                raise SSOAuthError("Account changed; start a new sign-in")
+            matches = [locked]
+        else:
+            # A concurrent creator may have committed between the initial
+            # snapshot and our exclusive acquisition. Resolve the same stable
+            # identity again; never fall back to matching it by email.
+            with self.db.no_autoflush:
+                matches = list(
+                    (
+                        await self.db.execute(
+                            stmt.with_for_update().execution_options(
+                                populate_existing=True,
+                            )
+                        )
+                    ).scalars()
+                )
+            if len(matches) > 1:
+                raise SSOAuthError("External identity has ambiguous account bindings")
+        self._require_flow_current(flow_expires_at)
+        if matches:
+            user = matches[0]
+            self._require_account_current(user)
+            # Preserve existing security fields, grants, role and email. A
+            # changed or absent email must not change which account signs in.
             user.last_login = datetime.now(UTC)
             if user_attrs.get("full_name"):
                 user.full_name = user_attrs["full_name"]
             await self.db.flush()
             return user
+
+        email = user_attrs.get("email")
+        if not isinstance(email, str) or not email:
+            raise SSOAuthError("No email claim in IdP response")
+        try:
+            email = str(TypeAdapter(EmailStr).validate_python(email))
+        except ValidationError as exc:
+            raise SSOAuthError("Invalid email claim in IdP response") from exc
+        username = user_attrs.get("username") or email.split("@")[0]
+        full_name = user_attrs.get("full_name")
+        if (
+            not isinstance(username, str)
+            or not username.strip()
+            or len(username) > 100
+            or (full_name is not None and (not isinstance(full_name, str) or len(full_name) > 255))
+        ):
+            raise SSOAuthError("Invalid account profile in IdP response")
+        # Include every organization, including a platform account with NULL
+        # organization_id. A collision requires a separate authenticated link
+        # operation; ordinary sign-in must never perform that transfer.
+        existing = await self.db.scalar(
+            select(User.id)
+            .where(
+                User.email == email,
+                User.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        if existing is not None:
+            raise SSOAuthError("Existing account requires explicit authenticated linking")
 
         # JIT provisioning
         if not provider.jit_provisioning:
@@ -981,13 +1194,13 @@ class SSOService:
         user = User(
             id=uuid4(),
             email=email,
-            username=user_attrs.get("username") or email.split("@")[0],
-            full_name=user_attrs.get("full_name"),
+            username=username,
+            full_name=full_name,
             hashed_password="!SSO_MANAGED",  # SSO users don't have local passwords
             role=role,
             organization_id=provider.organization_id,
             auth_provider=provider.protocol.value,
-            external_id=(raw_claims.get("sub") or raw_claims.get("NameID") or raw_claims.get("dn")),
+            external_id=subject,
             sso_provider_id=provider.id,
             is_active=True,
             is_verified=True,  # IdP-authenticated users are pre-verified
@@ -995,8 +1208,21 @@ class SSOService:
             language="en",
             preferences={},
         )
-        self.db.add(user)
-        await self.db.flush()
+        try:
+            async with self.db.begin_nested():
+                self.db.add(user)
+                await self.db.flush()
+        except IntegrityError as exc:
+            # Only known identity collisions become a normal refusal. Other
+            # SQL failures must escape and roll back the entire caller flow.
+            constraint = getattr(getattr(exc.orig, "__cause__", None), "constraint_name", None)
+            if constraint not in {
+                "ix_users_email",
+                "ix_users_username",
+                "ix_users_external_binding",
+            }:
+                raise
+            raise SSOAuthError("Account identity changed; start a new sign-in") from exc
         # log user_id + provider, not email.
         logger.info(
             "JIT provisioned user",
@@ -1012,7 +1238,11 @@ class SSOService:
     # =====================================================================
 
     async def _issue_tokens(
-        self, user: User, provider: SSOProvider | None = None
+        self,
+        user: User,
+        provider: SSOProvider | None = None,
+        *,
+        flow_expires_at: datetime | None = None,
     ) -> SSOCallbackResponse:
         """Issue FreeSDN JWT tokens for an authenticated SSO user.
 
@@ -1028,6 +1258,7 @@ class SSOService:
         to ``true`` to declare that the upstream IdP is already
         enforcing MFA, in which case we skip the local TOTP gate.
         """
+        self._require_flow_current(flow_expires_at)
         token_version = getattr(user, "token_version", 0) or 0
 
         # ------------------------------------------------------------------
@@ -1036,8 +1267,11 @@ class SSOService:
         if getattr(user, "mfa_enabled", False) and getattr(user, "mfa_secret", None):
             trust_idp_mfa = False
             if provider is not None:
-                extra = getattr(provider, "extra_settings", None) or {}
-                trust_idp_mfa = bool(extra.get("trust_idp_mfa", False))
+                extra = getattr(provider, "extra_settings", None)
+                # Old stored JSON may predate management validation. Only an
+                # explicit boolean opt-in can replace the account's local MFA;
+                # strings, numbers, containers and missing values cannot.
+                trust_idp_mfa = isinstance(extra, dict) and extra.get("trust_idp_mfa") is True
 
             if not trust_idp_mfa:
                 logger.info(
@@ -1102,6 +1336,8 @@ class SSOService:
             await self.db.flush()
         except Exception:
             logger.warning("SSO UserSession bookkeeping failed", exc_info=True)
+
+        self._require_flow_current(flow_expires_at)
 
         auth_provider_name = user.auth_provider or (
             provider.protocol.value if provider is not None else "local"

@@ -1,0 +1,19 @@
+Fabric Connection persistence outcomes
+======================================
+
+A chain's final database commit is part of its reported outcome. An exception
+or lost acknowledgement now returns success=false, error_code=COMMIT_FAILED and
+commit_status=unconfirmed. The response and Connection-run recorder retain the
+individual step results, and diagnostics omit database exception details.
+
+The session attempts rollback and closes. Rollback is best effort, and a failed
+commit reply does not establish whether the database committed. This change
+cannot undo an external webhook, notification, camera action or a staged change
+that another service already committed. It does not add automatic retries;
+shared event claims remain intact to avoid blindly repeating uncertain effects.
+Operators must reconcile the affected records/effects before deliberately retrying.
+
+This fixes false successful run outcomes. It does not provide a transactional
+outbox, exactly-once effects, durable event delivery, atomic multi-step changes
+or durable run auditing while the database itself is unavailable. Cancellation
+still propagates rather than being converted into a successful result.

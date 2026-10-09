@@ -17,7 +17,8 @@
       "totalVMs": "Total VMs",
       "backedUpOk": "Backed Up (OK)",
       "stale": "Stale",
-      "neverBackedUp": "Never Backed Up"
+      "neverBackedUp": "Never Backed Up",
+      "unknown": "Unknown"
     },
     "table": {
       "vmid": "VMID",
@@ -30,7 +31,8 @@
     "status": {
       "ok": "OK",
       "stale": "Stale",
-      "never": "Never"
+      "never": "Never",
+      "unknown": "Unknown"
     },
     "empty": {
       "noVMs": "No VMs found in backup age report.",
@@ -39,7 +41,8 @@
     "errors": {
       "loadBanner": "Failed to load the backup-age report. The data below may be stale or empty.",
       "loadReport": "Failed to load backup age report",
-      "selectNodeStorage": "Select node and storage"
+      "selectNodeStorage": "Select node and storage",
+      "incomplete": "Some backup storage could not be read. Missing or stale backups cannot be confirmed until all storage is reachable. Recent observed backups remain visible."
     },
     "actions": {
       "retry": "Retry",
@@ -390,14 +393,15 @@
       "delete": "Delete {{count}} VMs/CTs? This cannot be undone. Ensure all are stopped."
     },
     "toast": {
-      "actionCompleteTitle": "Bulk action complete",
-      "actionCompleteDescription": "{{succeeded}} succeeded, {{failed}} failed",
+      "actionCompleteTitle": "Requests processed",
+      "actionCompleteDescription": "{{succeeded}} acknowledged, {{failed}} need review. Check Pending Changes for tracked operation outcomes.",
       "actionFailedTitle": "Bulk action failed",
       "migrationStarted": "Migration started for {{count}} VMs"
     },
     "results": {
       "title": "Bulk Operation Results",
-      "close": "Close"
+      "close": "Close",
+      "tracked": "Tracked in Pending Changes"
     },
     "migrate": {
       "title": "Bulk Migrate {{count}} VMs/CTs",
@@ -406,7 +410,7 @@
       "targetNodeLabel": "Target Node",
       "targetNodePlaceholder": "Select target node",
       "targetNodeRequired": "Select a target node",
-      "onlineLabel": "Online migration (live)"
+      "onlineLabel": "Online migration (QEMU VMs only)"
     }
   },
   "EditConfigDialog": {
@@ -1056,7 +1060,8 @@
       "quorate": "Quorate",
       "noQuorum": "No quorum",
       "active": "Active",
-      "inactive": "Inactive"
+      "inactive": "Inactive",
+      "unknown": "Unknown"
     },
     "taskStatus": {
       "completed": "Completed",
@@ -1352,7 +1357,18 @@
       "restoreStaged": {
         "title": "Restore staged",
         "description": "Review and apply it from Pending Changes. A restore overwrites the target guest."
-      }
+      },
+      "actionNeedsReview": "Action needs review",
+      "powerTracked": "Operation {{id}} is saved. Check Pending Changes for completion.",
+      "powerResponseLost": "Check Pending Changes before issuing another power request. The previous request may have reached Proxmox.",
+      "operationAccepted": "Request accepted",
+      "operationTracked": "Operation {{id}} is tracked in Pending Changes. Acceptance does not confirm completion.",
+      "operationResponseLost": "The outcome needs review. Check Pending Changes before starting another operation. Resubmitting this unchanged dialog reuses the same request ID.",
+      "recoveryResponseLost": "The outcome needs review. Check Pending Changes before starting another recovery operation. A new request ID can submit another operation.",
+      "guestChangeVerified": "Guest state verified",
+      "pendingRestart": "Configuration saved; restart is still required",
+      "reviewUnavailable": "A verified configuration and disk size are required. Close and reopen to reload.",
+      "intentChanged": "This request has already been submitted. Review its result before changing the request."
     },
     "snapshotDialog": {
       "title": "Create Snapshot",
@@ -1390,14 +1406,17 @@
       "targetNode": "Target Node",
       "selectTargetNode": "Select target node",
       "onlineMigration": "Online migration (live)",
-      "migrating": "Migrating..."
+      "migrating": "Migrating...",
+      "restartMigration": "Allow container shutdown and restart",
+      "restartWarning": "Container migration is not live. Enable restart migration to allow downtime for running containers; otherwise only stopped containers can migrate."
     },
     "resizeDialog": {
       "title": "Resize Disk · VM {{vmid}}",
       "description": "Extend disk size on {{node}}",
       "sizeHint": "Use +10G to add 10GB, or 50G for absolute size",
       "resizing": "Resizing...",
-      "resize": "Resize"
+      "resize": "Resize",
+      "reviewedSize": "Reviewed disk size: {{size}} GiB. The guest filesystem may need a separate expansion."
     },
     "backupDialog": {
       "title": "Backup VM {{vmid}}",
@@ -1476,5 +1495,348 @@
       "startAfterRestore": "Start after restore",
       "uniqueMac": "Unique MAC addresses"
     }
+  },
+  "DeleteGuestDialog": {
+    "title": "Review guest deletion",
+    "warning": "Permanently delete these guests and their owned disks. There is no undo. Stop guests first; protection and provider locks are respected.",
+    "limit": "Proxmox cannot atomically match a reviewed configuration during deletion. Avoid concurrent changes outside FreeSDN. Backup jobs and unreferenced disks are not purged.",
+    "loading": "Reading the guest configurations for this review…",
+    "reviewFailed": "Review unavailable, protected, locked, or controller changed. Close this dialog and review again.",
+    "readOnly": "Device writes are disabled in read-only mode.",
+    "accepted": "Requests recorded. Check Pending Changes for provider completion; accepted does not mean deleted.",
+    "notAccepted": "Request not accepted",
+    "type": "Type DELETE to confirm these reviewed targets",
+    "submit": "Submit deletion"
+  },
+  "CreateGuestDialog": {
+    "title": "Review guest creation",
+    "warning": "Choose an explicit VMID. A suggested ID is not reserved; an allocation conflict stops this request.",
+    "vmid": "VMID",
+    "suggest": "Suggest available ID",
+    "review": "Review creation",
+    "submit": "Submit creation",
+    "frozen": "This review is fixed. After a lost response, resubmit this same intent; do not open a new creation request until Pending Changes has been checked.",
+    "receipt": "Creation receipt recorded. Accepted does not mean the guest or its applications are ready. Follow this operation in Pending Changes.",
+    "invalid": "Enter a valid VMID, node, name, disk size and (for containers) template before review.",
+    "suggestFailed": "Could not suggest an ID. Enter and review an explicit ID.",
+    "changed": "Controller changed. Close and review on the intended controller.",
+    "password": "Container root password (optional)",
+    "passwordHint": "The password is encrypted in the operation record and is never shown in its receipt."
+  },
+  "ClusterOperationDialog": {
+    "title": "Review cluster operation",
+    "review": "Review impact",
+    "warning": "Node power can interrupt every guest and cluster access. HA changes can start, stop or move workloads. Verify maintenance, backups and recovery access before proceeding.",
+    "limits": "This review does not prove remaining quorum, storage availability, fencing safety or complete guest visibility under every ACL. External changes can race the final check.",
+    "manual": "Node power has no provider task ID. Completion remains unknown until you verify the host through an independent management path and resolve the receipt in Pending Changes.",
+    "ha": "HA readback verifies configuration only, not workload health or successful failover. Group operations require the legacy group API. Resource removal never purges HA rules.",
+    "failed": "Impact review unavailable. No command was sent. Close this dialog and review again.",
+    "loading": "Reading cluster impact…",
+    "confirm": "Type the exact target to confirm: {{target}}",
+    "submit": "Submit reviewed operation",
+    "changed": "The selected controller or action changed. Close and review again.",
+    "receipt": "Request recorded. Acceptance is not completion; inspect this receipt in Pending Changes.",
+    "guests": "Visible guests (cluster-wide)",
+    "nodes": "Cluster members",
+    "resources": "HA configuration",
+    "options": "Frozen operation parameters",
+    "quorum": "Current quorum",
+    "retry": "The response was lost or rejected. Inspect Pending Changes. A manual retry here reuses the same request ID and reviewed parameters."
+  },
+  "CertificateOperationDialog": {
+    "title": "Review certificate operation",
+    "warning": "Changing TLS can interrupt management access. Keep independent console access and a securely stored recovery certificate/key before proceeding.",
+    "limits": "Validation checks the key pair, supplied chain and certificate validity. It does not prove browser trust, hostname coverage, revocation status or every cluster endpoint. No automatic rollback or TLS trust downgrade is performed.",
+    "acmeWarning": "ACME renewal reloads the proxy and may revoke the old certificate. Account and DNS plugin credentials are not reconfigured here.",
+    "restartWarning": "Restarting the proxy may interrupt API and console connections. Without restart, stored changes may remain inactive.",
+    "acmeForce": "Renew even before the normal expiry window",
+    "review": "Validate and review",
+    "reviewFailed": "Review failed. No write was sent. Retry this review or close and correct the certificate, key or options.",
+    "endpoint": "Configured endpoint node",
+    "options": "Overwrite: {{overwrite}} · Restart: {{restart}} · Early renewal: {{acmeForce}}",
+    "candidate": "Validated candidate certificate",
+    "current": "Current certificate fingerprints",
+    "domains": "Reviewed ACME domains",
+    "confirm": "Type the exact node to confirm: {{node}}",
+    "changed": "The selected target changed. Close and review again.",
+    "retry": "The response was not received. Inspect Pending Changes first. Retrying here uses the same request ID and frozen intent; do not start a new operation blindly.",
+    "receipt": "Request recorded. Acceptance does not prove activation. Follow the operation in Pending Changes; unresolved results require independent verification.",
+    "submit": "Submit reviewed certificate change",
+    "remove": "Remove custom certificate"
+  },
+  "StorageOperationDialog": {
+    "upload": "Review storage upload",
+    "delete": "Review volume deletion",
+    "warning": "Deletion is irreversible. Uploads must use a new filename. A recorded request is not proof of completion.",
+    "limits": "Guest disks are excluded. ISO references are checked with the controller credentials; external changes and permission overrides can still race the review. Completion needs a matching task and storage readback, not secure erasure or an independent hash of stored bytes.",
+    "filePolicy": "Maximum 4 GiB. Use an ASCII filename: .iso, .tar.gz, .tar.xz or .tar.zst. No paths, spaces or consecutive dots.",
+    "review": "Review storage state",
+    "reviewFailed": "Storage review unavailable or unsafe. Check storage health, permissions and references before trying again.",
+    "confirm": "Type the full volume ID: {{volume}}",
+    "changed": "The target changed. Close this dialog and review again.",
+    "failed": "No verified receipt was received. Inspect Pending Changes before starting another request. Retrying here keeps the same request ID and file.",
+    "cancel": "Cancel",
+    "submit": "Submit reviewed operation"
+  },
+  "ReviewedBackupJob": {
+    "create": "Create reviewed backup schedule",
+    "update": "Update reviewed backup schedule",
+    "delete": "Delete reviewed backup schedule",
+    "warning": "Saving a schedule does not prove that a backup ran or can be restored. Deleting a schedule does not delete archives or stop an existing run.",
+    "limits": "Select 1 to 64 explicit guest IDs on one node. Use HH:MM or weekdays followed by HH:MM in the node’s local time. New jobs keep all backups; monitor storage capacity. Existing retention and notifications are preserved. Stop/suspend mode can interrupt guests. An enabled job may run before readback completes.",
+    "node": "Node",
+    "storage": "Backup storage",
+    "schedule": "Schedule",
+    "vmid": "Guest IDs (comma-separated, no spaces)",
+    "snapshot": "Reviewed configuration, retention and guest selection",
+    "confirm": "Type the exact job ID: {{id}}",
+    "error": "The review or request could not be verified. Check Pending Changes before retrying or starting a new request. Advanced native options may require native management.",
+    "review": "Review backup schedule",
+    "submit": "Submit reviewed schedule",
+    "inherited": "Inherited",
+    "nativeSelection": "Native selection"
+  },
+  "TaskStop": {
+    "title": "Review task termination",
+    "warning": "Stopping a worker does not undo its changes. Backups, migrations and other operations may remain incomplete. A stop acknowledgement does not prove the task has stopped.",
+    "requirements": "Requires node Sys.Audit and Sys.Modify privileges. Inspect the original operation and its effects before recovery.",
+    "reviewed": "Running task {{type}} on {{node}} reviewed.",
+    "confirm": "Type the node name to confirm: {{node}}",
+    "review": "Review running task",
+    "submit": "Submit tracked stop request",
+    "error": "Task review or submission is unavailable. Inspect Pending Changes before retrying. A retry here reuses the same request ID.",
+    "logUnavailable": "Task log is unavailable. This does not mean the log is empty."
+  },
+  "FirewallOps": {
+    "title": "Review firewall operation",
+    "warning": "Firewall changes can disconnect management and workloads. Saved configuration does not prove effective filtering or connectivity; no automatic rollback is provided.",
+    "before": "Current configuration",
+    "desired": "Expected configuration",
+    "confirm": "Type the target to confirm: {{target}}",
+    "recovery": "I have verified independent console or out-of-band recovery access.",
+    "error": "Review or request could not be verified. Inspect Pending Changes before trying again; do not repeat an uncertain write with a new request.",
+    "review": "Review firewall change",
+    "submit": "Submit tracked firewall request",
+    "scope": "Firewall scope",
+    "cluster": "Cluster",
+    "refresh": "Refresh rules",
+    "pending": "Pending Changes",
+    "enable": "Review firewall enable",
+    "disable": "Review firewall disable",
+    "add": "Review new rule",
+    "delete": "Review delete",
+    "loading": "Loading firewall rules…",
+    "actions": "Actions",
+    "fields": {
+      "source": "Source",
+      "dest": "Destination",
+      "dport": "Destination port",
+      "proto": "Protocol",
+      "comment": "Comment"
+    },
+    "toggle": "Review toggle",
+    "first": "Review move to first"
+  },
+  "SdnInspection": {
+    "title": "SDN configuration inspection",
+    "refresh": "Refresh observations",
+    "writeBoundary": "SDN changes and apply are unavailable in FreeSDN until the reviewed native-lock workflow is qualified.",
+    "visibility": "These are permission-filtered observations, not an atomic or complete snapshot. Running configuration does not prove node reloads or connectivity.",
+    "recovery": "Use native Proxmox management for changes, with independent recovery access. Do not apply a management-network change based only on this inspection.",
+    "pending": {
+      "changes_detected": "Visible changes detected",
+      "no_visible_changes": "No changes in the visible configuration",
+      "unknown": "Pending state is unknown"
+    },
+    "observed": "Observed: {{time}}",
+    "refreshing": "Reading current state…",
+    "permissions": "Permission lookup: {{status}} · SDN.Audit: {{audit}} · SDN.Allocate: {{allocate}}. Permissions at /sdn do not prove visibility of every child object.",
+    "unknown": "unknown",
+    "unobserved": "Not inspected: {{resources}}. Guest/interface impact and lock capabilities remain unverified.",
+    "resources": {
+      "zones": "Zones",
+      "vnets": "VNets",
+      "controllers": "SDN controllers"
+    },
+    "views": {
+      "configured": "Configured (desired)",
+      "running": "Running (committed)",
+      "pending": "Native pending changes"
+    },
+    "status": {
+      "available": "Read available",
+      "denied": "Permission denied",
+      "unsupported_or_missing": "Unsupported or missing",
+      "unavailable": "Unavailable",
+      "invalid": "Invalid provider response"
+    },
+    "failed": "SDN observation failed. Previous data must not be treated as current.",
+    "empty": "No visible objects. Permissions may hide other objects.",
+    "omitted": "Fields withheld or not supported: {{count}}",
+    "dryRun": "Node dry-run summary",
+    "diffBoundary": "Read-only preview of generated interface and FRR changes. Raw content is withheld because it may contain credentials. This does not verify reachability or authorize apply.",
+    "node": "Exact Proxmox node name",
+    "preview": "Read dry-run",
+    "interfaces": "Interfaces",
+    "frr": "FRR routing",
+    "changed": "Difference reported",
+    "unchanged": "No difference reported",
+    "lines": "{{added}} added lines, {{removed}} removed lines"
+  },
+  "SdnDependencies": {
+    "title": "SDN dependency coverage",
+    "boundary": "Read-only, permission-filtered observations. This is not a complete dependency graph or approval to apply networking changes. Inspection uses at most three concurrent reads and a 20-second read budget. Secrets and unsupported policy fields are withheld.",
+    "inspect": "Inspect dependencies",
+    "refresh": "Refresh dependency observations",
+    "reads": "{{used}} of {{limit}} collection reads started (transport retries not counted)",
+    "parents": "Selected {{selected}} visible VNet parents (limit {{limit}}); {{omitted}} additional visible parents were omitted by the limit. Hidden or unavailable parents may also exist.",
+    "limited": "The response budget was reached. Some collections were not observed; they must not be treated as empty.",
+    "unobserved": "Still unverified: {{resources}}.",
+    "resource": "Dependency family",
+    "view": "Configuration view",
+    "noCollection": "No collection was observed for this selection. This does not prove that no objects exist.",
+    "parent": "VNet: {{name}}",
+    "notObserved": "Not observed",
+    "identitiesOnly": "Catalogue identities only. Nested rules are not part of this catalogue; select the corresponding policy-entry family for its separate observation.",
+    "displayLimit": "Showing the first {{limit}} of {{total}} returned entries.",
+    "references": "Visible object references",
+    "referenceBoundary": "Not visible can mean absent, hidden by permissions, or changed between reads. A visible target is not proof of a valid configuration. Running references to IPAM/DNS use their configured-only catalogue. Pending-field overlays are not resolved into a dependency graph.",
+    "noReferences": "No supported references were observed for this selection; dependencies may remain unobserved.",
+    "resources": {
+      "zones": "Zones",
+      "vnets": "VNets",
+      "controllers": "SDN controllers",
+      "subnets": "Subnets by VNet",
+      "ipams": "IPAM providers",
+      "dns": "DNS providers",
+      "fabrics": "Fabrics",
+      "fabric-nodes": "Fabric nodes",
+      "prefix-lists": "Prefix-list catalogue",
+      "route-maps": "Route-map catalogue",
+      "prefix-list-entries": "Prefix-list rules",
+      "route-map-entries": "Route-map entries"
+    },
+    "reasons": {
+      "view_not_exposed": "This native collection does not expose this configuration view.",
+      "inspection_deadline": "The inspection deadline was reached before this read completed.",
+      "response_limit": "This collection exceeded the aggregate response budget.",
+      "parent_inventory_unavailable": "At least one VNet inventory view was unavailable; subnet enumeration is incomplete."
+    },
+    "referenceStatus": {
+      "visible": "Target visible in this observation",
+      "not_visible": "Target not visible; existence is unverified",
+      "target_unavailable": "Target collection unavailable"
+    },
+    "unobservedNames": {
+      "guest_nic_references": "guest NIC references",
+      "host_network_interfaces": "host network interfaces",
+      "route_map_entries": "route-map entries",
+      "prefix_list_entries": "prefix-list entries",
+      "fabric_interface_and_peer_details": "fabric interface and peer details",
+      "provider_version_and_plugin_support": "provider version and plugin support",
+      "withheld_or_unobserved_policy_fields": "withheld or unobserved policy fields",
+      "policy_evaluation_and_enforcement": "policy evaluation and live enforcement",
+      "fabric_runtime_and_withheld_fields": "fabric runtime and withheld configuration fields"
+    },
+    "unobservedFallback": "Additional dependencies remain unverified; coverage details are unavailable.",
+    "policyBoundary": "Parsed policy configuration only; FRR evaluation and live enforcement are unverified. Native pending rows can carry identities in their overlay, and deletion markers are preserved. Unknown fields and unsupported peer text are withheld. Catalogue and entry reads may have different native permission filters. Pending overlays are not merged into an executable policy.",
+    "nestedDisplayLimit": "{{field}}: showing the first {{limit}} of {{total}} returned items.",
+    "fabricBoundary": "Fabric configuration only. Node keys include both fabric and node; a node can belong to multiple fabrics. Interface and peer matches stay in the same observed configuration view and fabric. They do not prove host interface existence, active sessions, a WireGuard handshake, routing validity or connectivity. Keys, endpoints, addresses and unsupported fields are withheld; pending overlays are not resolved into a graph.",
+    "unsupportedFabricProtocol": "This fabric protocol is not supported by this reader. Identities remain visible; protocol-specific details are withheld."
+  },
+  "SdnAttachments": {
+    "title": "Guest NIC and host-interface observations",
+    "boundary": "Read-only, partial observations. Matching names do not verify connectivity or establish a complete impact graph. SDN apply remains blocked.",
+    "inspect": "Inspect guest and host attachments",
+    "refresh": "Refresh attachment observations",
+    "guest_inventory": "Visible guest inventory",
+    "node_inventory": "Visible node inventory",
+    "selection": "Selected {{selected}} of {{total}} visible entries (limit {{limit}}); {{omitted}} omitted by the selection limit.",
+    "coverage": "Hidden or unselected guests and nodes, snapshots, passthrough devices, host pending diffs, management paths, nested SDN policies, provider versions and live connectivity remain unverified.",
+    "vnets": "VNets · {{view}}",
+    "visibleVnets": "Visible VNet identities: {{count}}",
+    "guestBoundary": "Current configuration is not a live guest-network probe. The pending-merged view includes pending edits and removals. The two views are read independently and may race with migration or native changes.",
+    "guest": "Selected guest",
+    "view": "Guest configuration view",
+    "views": {
+      "current": "Current configuration",
+      "pending_merged": "Configuration with pending changes"
+    },
+    "noGuest": "No guest observations selected",
+    "noNics": "No NIC entries are visible in this configuration view. This does not rule out passthrough devices or hidden dependencies.",
+    "noBridge": "No explicit bridge",
+    "tag": "VLAN tag: {{tag}}",
+    "trunks": "VLAN trunks: {{trunks}}",
+    "link_down": "Configured link down: {{value}}",
+    "firewall": "Configured firewall flag: {{value}}",
+    "yes": "Yes",
+    "no": "No",
+    "targets": {
+      "configured_vnet": "Configured VNet name",
+      "running_vnet": "Running VNet name",
+      "host_interface": "Interface name on the guest node"
+    },
+    "match": {
+      "visible": "Name visible; connectivity unverified",
+      "not_visible": "Name not visible; may be absent, hidden or changed",
+      "target_unavailable": "Target observation unavailable",
+      "not_observed": "Target not observed or not selected",
+      "no_bridge": "No explicit bridge reference"
+    },
+    "omittedOptions": "Other NIC options withheld: {{count}}",
+    "hostBoundary": "Host reports combine configuration and runtime flags and may include staged settings. Active or existing interfaces do not prove reachability. Host pending diffs and result metadata are not inspected.",
+    "node": "Selected host",
+    "noHost": "No host observations selected",
+    "active": "Native active flag: {{value}}",
+    "exists": "Native exists flag: {{value}}",
+    "noMembers": "No explicit members"
+  },
+  "DashboardObservation": {
+    "freshness": {
+      "current": "Recent collection",
+      "stale": "Observation is stale",
+      "unavailable": "Observation freshness is unknown"
+    },
+    "coverage": {
+      "complete_visible": "Visible observations complete",
+      "partial": "Partial observations",
+      "unavailable": "No usable observations"
+    },
+    "collected": "Collection started {{time}} · observation age {{age}} seconds",
+    "visibleScope": "Counts include only resources visible to the controller credential. Collection time does not establish the age of native samples; this is not an atomic snapshot.",
+    "storageScope": "Disk capacity describes node filesystems, not datastore capacity or safe workload placement.",
+    "registrationScope": "Fleet totals are by registered controller. Physical clusters are not deduplicated; multiple registrations can count the same infrastructure more than once. Node coverage excludes failed controllers whose node counts are unknown.",
+    "metrics": {
+      "cpu": "CPU usage",
+      "memory": "Memory usage",
+      "node_filesystem": "Node filesystem usage"
+    },
+    "metricStatus": {
+      "available": "Observed",
+      "partial": "Partially observed",
+      "unavailable": "Unavailable"
+    },
+    "contributors": "{{observed}} of {{expected}} known nodes contributed",
+    "reasons": {
+      "missing_statistics": "Missing statistics",
+      "invalid_statistics": "Invalid statistics",
+      "node_not_online": "Node not observed online",
+      "inventory_mismatch": "Membership and resource views differ"
+    },
+    "incompleteMetric": "Complete metric unavailable",
+    "refreshRequired": "Current values are hidden until a fresh, valid observation is available.",
+    "readSucceeded": "Read succeeded",
+    "readFailed": "Read failed",
+    "controllerCoverage": "{{observed}} of {{total}} controllers observed; {{failed}} failed",
+    "separateTasks": "Task counts have a separate collection lifecycle and are not qualified by the dashboard observation above.",
+    "loading": "Waiting for a dashboard observation",
+    "exitKiosk": "Exit kiosk mode",
+    "nodeStatus": {
+      "online": "Online",
+      "offline": "Offline",
+      "unknown": "Unknown"
+    },
+    "haServices": "Visible HA services",
+    "haBoundary": "Visible entries do not establish HA health or failover readiness."
   }
 }

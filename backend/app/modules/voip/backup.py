@@ -384,7 +384,18 @@ class VoipBackupContributor:
             .all()
         }
         # User ids (for nulling dangling extension.user_id references).
-        valid_user_ids = {str(u) for u in (await session.execute(select(User.id))).scalars().all()}
+        valid_user_ids = {
+            str(u)
+            for u in (
+                await session.execute(
+                    select(User.id).where(
+                        User.organization_id == organization_id, User.deleted_at.is_(None)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        }
 
         # --- PBX first (FK target for extensions + ring groups) ---
         # blocked_fields mirrors the Core contributor's policy: never let

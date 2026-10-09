@@ -43,7 +43,7 @@ from app.adapters.proxmox.adapter import ProxmoxAdapter
 from app.adapters.validation import validate_id
 from app.models.core import Controller
 from app.services.adapter_base import GatewayServiceBase
-from app.services.adapter_proxmox_vm import build_proxmox_adapter
+from app.services.adapter_proxmox_vm import build_proxmox_adapter, close_proxmox_adapter
 from app.services.adapter_redaction import redact_list
 
 _VALID_VM_TYPES = ("qemu", "lxc")
@@ -200,7 +200,7 @@ class GatewayProxmoxSnapshotService(GatewayServiceBase):
                     return await method(node, vmid, snapname, vm_type, force=True)
                 raise HTTPException(400, detail=f"unhandled feature={c.feature!r}")
             finally:
-                await adapter.disconnect()
+                await close_proxmox_adapter(adapter)
 
         return _apply
 

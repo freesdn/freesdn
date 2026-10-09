@@ -12,7 +12,7 @@ from datetime import UTC
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -535,6 +535,52 @@ async def get_organization_dashboard(
 # ===========================================
 
 
+async def _locked_site_access_parents(
+    session: AsyncSession,
+    request: Request,
+    current_user: Any,
+    org_id: UUID,
+    user_id: UUID,
+    site_ids: list[UUID],
+    *,
+    missing_status: int,
+) -> None:
+    """Serialize built-in grant changes and refresh ownership after real waits.
+
+    Reuse the qualified lifecycle/target/credential guard rather than calling
+    API-key authentication, which would commit usage and release these locks.
+    A second check covers the later Site waits as well. Core user-profile and
+    account restoration join the same lifecycle boundary before resource locks.
+    """
+    from app.api.v1.endpoints.users import _locked_mutation_target
+
+    target = await _locked_mutation_target(session, request, current_user, user_id)
+    if target.organization_id != org_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found in this organization")
+    sites = (
+        (
+            await session.execute(
+                select(Site)
+                .where(Site.id.in_(site_ids), Site.deleted_at.is_(None))
+                .order_by(Site.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        )
+        .scalars()
+        .all()
+        if site_ids
+        else []
+    )
+    # Refresh actual actor/key/JWT state after all parent-row lock waits. The
+    # target and sites remain locked through the caller's commit or rollback.
+    await _locked_mutation_target(session, request, current_user, user_id)
+    if len(sites) != len(site_ids) or any(site.organization_id != org_id for site in sites):
+        raise HTTPException(
+            missing_status, detail="One or more sites not found in this organization"
+        )
+
+
 @router.get(
     "/{org_id}/site-access",
     response_model=list[UserSiteAccessResponse],
@@ -584,6 +630,7 @@ async def list_site_access(
 )
 async def grant_site_access(
     org_id: UUID,
+    request: Request,
     payload: UserSiteAccessCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_active_user)],
@@ -596,23 +643,15 @@ async def grant_site_access(
     if not is_unscoped_superuser(current_user) and current_user.organization_id != org_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Cannot manage another organization")
 
-    # Verify user belongs to org
-    target_user = (
-        await session.execute(
-            select(User).where(User.id == payload.user_id, User.deleted_at.is_(None))
-        )
-    ).scalar_one_or_none()
-    if not target_user or target_user.organization_id != org_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found in this organization")
-
-    # Verify site belongs to org
-    target_site = (
-        await session.execute(
-            select(Site).where(Site.id == payload.site_id, Site.deleted_at.is_(None))
-        )
-    ).scalar_one_or_none()
-    if not target_site or target_site.organization_id != org_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Site not found in this organization")
+    await _locked_site_access_parents(
+        session,
+        request,
+        current_user,
+        org_id,
+        payload.user_id,
+        [payload.site_id],
+        missing_status=status.HTTP_404_NOT_FOUND,
+    )
 
     # Check duplicate
     existing = (
@@ -653,6 +692,7 @@ async def grant_site_access(
 )
 async def bulk_set_site_access(
     org_id: UUID,
+    request: Request,
     payload: UserSiteAccessBulk,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_active_user)],
@@ -663,29 +703,15 @@ async def bulk_set_site_access(
     if not is_unscoped_superuser(current_user) and current_user.organization_id != org_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Cannot manage another organization")
 
-    # Verify user in org
-    target_user = (
-        await session.execute(
-            select(User).where(User.id == payload.user_id, User.deleted_at.is_(None))
-        )
-    ).scalar_one_or_none()
-    if not target_user or target_user.organization_id != org_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found in this organization")
-
-    # Verify all sites belong to org
-    if payload.site_ids:
-        valid_count = await session.scalar(
-            select(func.count()).where(
-                Site.id.in_(payload.site_ids),
-                Site.organization_id == org_id,
-                Site.deleted_at.is_(None),
-            )
-        )
-        if valid_count != len(payload.site_ids):
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="One or more sites not found in this organization",
-            )
+    await _locked_site_access_parents(
+        session,
+        request,
+        current_user,
+        org_id,
+        payload.user_id,
+        payload.site_ids,
+        missing_status=status.HTTP_400_BAD_REQUEST,
+    )
 
     # Delete existing grants for this user (scoped to org's sites)
     existing = (
@@ -705,6 +731,11 @@ async def bulk_set_site_access(
     for row in existing:
         await session.delete(row)
 
+    # Complete removals inside the same transaction before inserting retained
+    # pairs. SQLAlchemy otherwise inserts before deletes and the unique
+    # (user, site) index rejects an ordinary overlapping replacement.
+    await session.flush()
+
     # Create new grants
     grants = []
     for sid in payload.site_ids:
@@ -718,6 +749,17 @@ async def bulk_set_site_access(
         grants.append(g)
 
     await session.flush()
+    # Deleting old grants can wait on their rows, after the initial parent
+    # checks. Refuse stale credentials and roll the whole replacement back.
+    await _locked_site_access_parents(
+        session,
+        request,
+        current_user,
+        org_id,
+        payload.user_id,
+        payload.site_ids,
+        missing_status=status.HTTP_400_BAD_REQUEST,
+    )
     for g in grants:
         await session.refresh(g)
 
@@ -728,6 +770,7 @@ async def bulk_set_site_access(
 async def revoke_site_access(
     org_id: UUID,
     access_id: UUID,
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> None:
@@ -743,14 +786,40 @@ async def revoke_site_access(
     if not grant:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Access grant not found")
 
-    # Verify it belongs to this org
-    target_user = (
+    parents = (grant.user_id, grant.site_id)
+    await _locked_site_access_parents(
+        session,
+        request,
+        current_user,
+        org_id,
+        parents[0],
+        [parents[1]],
+        missing_status=status.HTTP_404_NOT_FOUND,
+    )
+    grant = (
         await session.execute(
-            select(User).where(User.id == grant.user_id, User.deleted_at.is_(None))
+            select(UserSiteAccess)
+            .where(UserSiteAccess.id == access_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
     ).scalar_one_or_none()
-    if not target_user or target_user.organization_id != org_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Access grant not found")
+    if grant is None or (grant.user_id, grant.site_id) != parents:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail="Access grant changed; refresh before retrying"
+        )
+
+    # The grant itself may have waited after both parent locks and their
+    # authority checks. Revalidate again before deleting under those locks.
+    await _locked_site_access_parents(
+        session,
+        request,
+        current_user,
+        org_id,
+        parents[0],
+        [parents[1]],
+        missing_status=status.HTTP_404_NOT_FOUND,
+    )
 
     await session.delete(grant)
     await session.flush()

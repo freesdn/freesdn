@@ -21,11 +21,9 @@ RE-PUBLISHES the plugin the project decided nobody should install any more.
 exist, the serial advances build over build, and all three are covered by the
 signature rather than bolted onto the file afterwards.
 
-The VERIFYING half -- a persisted serial floor and an expiry refusal in
-marketplace.py -- is deliberately not covered here, because it is deliberately
-not implemented: it needs a schema addition and a rollback story and is tracked
-separately. Emitting the signed data first is what lets that land later without
-another republish of the catalogue.
+The consumer now checks persisted serial and expiry in marketplace_catalog.py.
+Its PostgreSQL, concurrency and restore-floor tests live under tests/services/.
+The deployed publisher artifact still requires a reviewed fresh signature.
 
 These tests skip in a backend-only checkout, where registry/ is absent.
 """
@@ -331,15 +329,6 @@ def test_build_refuses_to_guess_a_serial_from_an_unreadable_catalogue(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "The live catalogue was signed before freshness fields existed and cannot "
-        "gain them without being re-signed, which needs the publisher key. It goes "
-        "green with the republish already required for the archive-determinism fix "
-        "(docs/agents/REGISTRY-REPUBLISH.md); remove this marker then."
-    ),
-    strict=False,
-)
 def test_the_published_catalogue_carries_a_freshness_binding() -> None:
     """The end state: what registry.freesdn.org serves says how old it is."""
     path = _catalog_path()

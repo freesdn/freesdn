@@ -1,20 +1,39 @@
 #!/bin/sh
 # FreeSDN Frontend - Development Entrypoint
-# Ensures node_modules stays in sync with package.json
-# even when using an anonymous Docker volume for node_modules.
+# Reinstall a dependency volume when its lock/config or native runtime changes.
 
 set -e
 
-# Fast check: if package.json is newer than node_modules/.package-lock.json,
-# or if a key dependency is missing, run npm install.
-if [ ! -f node_modules/.package-lock.json ] || \
-   [ package.json -nt node_modules/.package-lock.json ] || \
-   [ package-lock.json -nt node_modules/.package-lock.json ]; then
-  echo "[entrypoint] package.json changed - running npm install..."
-  # Match the Dockerfile flag (see Dockerfile.dev comment).
-  npm install --legacy-peer-deps
+npm_version=$(npm --version)
+fingerprint=$(node - "$npm_version" <<'JS'
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+const hash = crypto.createHash('sha256');
+for (const file of ['package.json', 'package-lock.json', '.npmrc']) {
+  hash.update(file + '\0');
+  if (file !== '.npmrc' || fs.existsSync(file)) hash.update(fs.readFileSync(file));
+  hash.update('\0');
+}
+hash.update(JSON.stringify({
+  node: process.versions.node, abi: process.versions.modules,
+  platform: process.platform, arch: process.arch,
+  libc: process.report.getReport().header.glibcVersionRuntime || 'musl',
+  npm: process.argv[2],
+}));
+process.stdout.write(hash.digest('hex'));
+JS
+)
+stamp=node_modules/.freesdn-dev-dependencies
+if [ ! -f "$stamp" ] || [ "$(cat "$stamp")" != "$fingerprint" ] || \
+   [ ! -f node_modules/.package-lock.json ] || [ ! -x node_modules/.bin/vite ]; then
+  echo "[entrypoint] dependency lock or runtime changed - running npm ci..."
+  # npm ci fails on lock drift and replaces native bindings from another libc/ABI.
+  # A failed installation must never leave an accepted fingerprint.
+  rm -f "$stamp"
+  npm ci --legacy-peer-deps --no-audit --no-fund
+  printf '%s\n' "$fingerprint" > "$stamp"
 else
-  echo "[entrypoint] node_modules up to date."
+  echo "[entrypoint] dependency lock and runtime match."
 fi
 
 exec "$@"

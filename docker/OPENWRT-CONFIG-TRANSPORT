@@ -1,0 +1,59 @@
+OpenWrt configuration export transport (2026-09-25)
+=================================================
+
+The OpenWrt client historically tried rpc-sys.backup. That method is absent from
+the inspected stock rpcd implementation. LuCI instead posts the ubus session ID
+as application/x-www-form-urlencoded data to /cgi-bin/cgi-backup. Its cgi-io
+handler checks the cgi-io/backup/read ACL and streams sysupgrade --create-backup -.
+
+This correction uses that CGI transport, with the existing session refresh and
+TLS configuration. It refuses redirects, never puts the session in the URL, and
+never falls back to the old RPC or a shell-command endpoint. A 401/403 is an
+authentication error; other unsuccessful responses fail without provider text.
+The adapter returns a fixed download error without configuration or diagnostics.
+Cancellation propagates and closes the response. The total configured timeout
+bounds session refresh and download, including a slow body that would otherwise
+keep satisfying HTTPX per-read timeouts.
+
+Compressed input is streamed with a 16 MiB ceiling. Invalid content lengths,
+unexpected encodings/types and length mismatches are rejected. Gzip integrity is
+checked with a separate 64 MiB inflated-data ceiling, discarding decoded chunks
+without extracting files. This checks compressed-container integrity; it does not
+validate every tar entry, prove completeness of a device's selected files or prove
+that the archive can be restored on any device. Validation runs outside the event
+loop; cancellation may leave that already-bounded in-memory validation finishing.
+
+Sysupgrade may include configured files beyond /etc/config/. Export metadata now
+says scope=sysupgrade. The delivery API and browser explicitly accept that value
+and the older /etc/config/ value, preserving existing integrations. Other scopes
+remain rejected. The API's permission checks, base64 encoding and 16 MiB payload
+ceiling are unchanged. The client method retains its historic create_backup name
+for adapter compatibility; the adapter's saved-backup creation remains unsupported.
+No backup history entry, local artifact, retention job or restore is created here.
+
+Dependencies and acceptance limits
+---------------------------------
+The gateway needs the LuCI/cgi-io backup endpoint and the session's backup read ACL.
+Devices with ubus only or a nonstandard CGI base path are not covered. Existing TLS
+policy still applies; this change does not qualify all network/TLS configurations.
+At the initial transport qualification, the separate OpenWrt page had no export
+button. Those browser checks exercised the generic gateway path. The subsequent
+dedicated-page control and its separate checks are described in OPENWRT-EXPORT-UI.
+
+Upstream references (captured with source hashes in private qualification evidence):
+https://github.com/openwrt/luci/blob/f4f91aee257bab4eb9c6b7de6160cea294217956/modules/luci-mod-system/htdocs/luci-static/resources/view/system/flash.js
+https://github.com/openwrt/cgi-io/blob/31cb3c89f02d918d7f17bf62a80c852fc38a1ca1/main.c
+
+New regression coverage includes 68 transport cases (64 old failures, four controls)
+and four API metadata cases (two old failures, two controls). The initial related
+PostgreSQL run found two API failures after changing the metadata; that original
+run is retained. The API and browser allowlists were then updated explicitly,
+with new compatibility controls. Final results are recorded in the source-bound
+qualification receipts, not inferred from the old run.
+
+Independent loopback HTTPS checks use real HTTPX, certificate verification, a
+synthetic ubus login and an owned CGI server. They reproduce the old method-not-found
+behavior, check lossless exports and refusal cases, and verify that an untrusted
+certificate receives no login request. The synthetic protocol peer is not an
+OpenWrt appliance. Physical-device authentication, installed-package compatibility,
+archive restore, backup durability, RTO/RPO and enterprise acceptance remain open.

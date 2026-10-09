@@ -33,10 +33,10 @@ BACKEND = Path(__file__).resolve().parents[2]
 APP = BACKEND / "app"
 SERVICES_GLOB = "services/adapter_*.py"
 
-# The four services that ship an intentionally empty ``_APPLY``: live reads, no
+# The five services that ship an intentionally empty ``_APPLY``: live reads, no
 # write verbs on the adapter yet, and the map kept in place so that adding one
 # is a one-line diff. Each says so at its declaration. Asserted as an EQUALITY,
-# because that is the whole point -- a fifth entry appearing here means some
+# because that is the whole point -- a sixth entry appearing here means some
 # applier stopped being graded by the sweep, and an entry disappearing means
 # this list is stale and would hide the next one.
 READ_ONLY_STUBS = frozenset(
@@ -45,13 +45,18 @@ READ_ONLY_STUBS = frozenset(
         "app/services/adapter_pfsense_vpn.py",
         "app/services/adapter_proxmox_ceph.py",
         "app/services/adapter_proxmox_replication.py",
+        # 2026-09-18: legacy SDN writes deliberately removed; native management
+        # is required until reviewed lock/apply semantics are qualified.
+        "app/services/adapter_proxmox_sdn.py",
     }
 )
 
 # Non-empty maps the sweep grades today (2026-08-27). A floor, not an equality:
 # appliers get added, and a new one must not force an edit here. It dropping is
 # what matters -- that is a module deleted or a map that stopped being found.
-GRADED_MAPS_FLOOR = 64
+# 2026-09-18: 64 -> 63 for the explicitly documented SDN write withdrawal.
+# The equality above and SDN no-dispatch regressions guard this boundary.
+GRADED_MAPS_FLOOR = 63
 
 
 def _apply_dict(module: ast.Module) -> ast.Dict | None:

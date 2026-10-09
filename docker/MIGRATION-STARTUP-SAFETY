@@ -1,0 +1,99 @@
+DATABASE STARTUP: DO NOT GUESS MISSING MIGRATION HISTORY
+=======================================================
+
+The startup migration script distinguishes a genuinely fresh application
+database from an existing database with a known, single migration revision.
+Missing metadata is not proof of an empty database. ORM create_all creates
+missing tables but does not add missing columns to existing tables. Stamping
+such a restored database to head can report success while required upgrades
+never ran.
+
+Supported automatic startup
+---------------------------
+- No migration table and no non-extension user relations: initialize the current
+  schema, then stamp its revision. Pre-created empty schemas are allowed.
+  PostgreSQL extension-owned relations are not treated as application tables.
+- Exactly one known older revision: execute the actual incremental migrations.
+- Exactly one current revision: no migration is needed. This is not a complete
+  schema/data-integrity check or evidence that a customer restore is correct.
+
+Startup refuses before changing schema when an unversioned database contains
+ordinary, partitioned or foreign tables, views, materialized views or sequences
+outside system schemas, unless they belong to an installed PostgreSQL extension.
+This includes unrelated application objects: use a dedicated empty database for
+a fresh installation. It also refuses empty, blank, multiple or unrecognized
+revision metadata rather than choosing one value or treating it as a legacy
+baseline. No relation names, row contents or credentials are included in these
+refusal messages.
+
+Fresh initialization is atomic
+------------------------------
+Creating the application schema and stamping its recognized revision now share
+one PostgreSQL transaction. An exception or process termination before commit
+rolls both operations back, including newly created application schemas. Empty
+schemas that existed before startup remain intact. A normal retry can initialize
+the database without deleting relations or inventing migration history.
+
+If the transaction committed but its acknowledgment was lost, schema and revision
+are committed together; the next startup recognizes that revision. This does not
+make all existing-database migrations atomic: their established incremental path
+and explicit autocommit requirements are unchanged. The advisory startup lock
+still serializes cooperating starters.
+
+This change does not automatically repair partial initialization left by an older
+release or a genuinely incomplete restore. Existing unversioned relations still
+refuse safely and require the recovery procedure below. Do not delete or stamp
+them on the assumption that they came from an interrupted first installation.
+
+Compatibility change
+--------------------
+Older startup code treated every unrecognized revision as pre-consolidation,
+created missing model tables, re-stamped to 001_initial and replayed migrations.
+That could also act on a future or divergent schema. This automatic guess is
+removed. An installation with an unknown historical revision now requires its
+matching source and a separately reviewed migration plan. Do not substitute an
+arbitrary supported revision just to make startup proceed.
+
+Known revisions in the shipped chain, including the published v26.09.0 revision,
+remain eligible for normal incremental migration. A successful known-revision
+upgrade does not cover custom schemas, missing metadata, arbitrary roles/ACLs,
+database runtime conversion or a change of HA topology.
+
+If startup refuses
+------------------
+1. Keep ingress and device/SMTP egress fenced. Stop all application writers,
+   including API/worker/scheduler replicas, collectors, plugins and external
+   maintenance clients. Retain the original volumes, images, configuration,
+   migration logs and complete encrypted backups.
+2. Identify the actual source image/release and how the database was restored.
+   Missing or conflicting migration metadata can indicate an incomplete restore,
+   mixed-version deployment or the wrong target database. Preserve those facts;
+   do not delete existing tables, remove version rows or stamp to head.
+3. Rehearse recovery into new isolated volumes from a verified complete backup.
+   Establish that the recovered schema and migration history belong together.
+   If the source revision is unknown to this release, obtain the corresponding
+   source and review its actual schema transition. There is no force flag to
+   replace this review.
+4. Apply a compatible, reviewed migration with general workers stopped, then
+   verify the resulting schema, representative data, constraints and application
+   behavior before accepting writes. Keep original data until acceptance passes.
+
+For database runtime conversion, use postgres/UPGRADING. For restored snapshots,
+also follow TOKEN-REVOCATION-UPGRADING, redis/QUEUE-BACKUP-RECOVERY and
+SLA-REPORT-DELIVERY. Preserve the vault encryption keys, coordinate fresh JWT
+signing and mail recovery values, and reconcile non-JWT credentials and external
+effects. Fixing migration metadata does not revoke old tokens or prevent replay.
+
+Limits and evidence
+-------------------
+The advisory startup lock serializes cooperating FreeSDN migration processes.
+It does not stop a database administrator or unrelated DDL writer, so the
+maintenance fence is still required. The catalog check does not query a foreign
+table's remote data. It is an accidental-recovery guard, not an access-control
+boundary against a PostgreSQL administrator who can change catalogs or metadata.
+
+Real PostgreSQL regression tests use an immutable old schema, verify that
+ambiguous cases preserve original relations/columns and retained data, and
+exercise fresh startup, extension membership, known incremental upgrades and
+restart. These are synthetic checks; they are not hardware, HA, customer-data
+completeness, independent-security-review or production RTO/RPO certification.

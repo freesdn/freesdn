@@ -143,10 +143,10 @@
       "retentionLabel": "Retention (Days)",
       "encryptionLabel": "Encryption",
       "encryptionHelp": "Encrypt backup data",
-      "fullBackupLabel": "Full backup (includes all secrets)",
-      "fullBackupHelp": "Include every credential, VPN key, and user login. Sealed with a passphrase you set, and portable to another instance. Off = a secret-free config snapshot (.fsdn).",
-      "fullBackupWarnLabel": "This file contains all your passwords.",
-      "fullBackupWarnText": "Anyone with this .fsdnvault file and the passphrase can take over your whole deployment — store it like a password vault. The regular config backup (.fsdn) is the one that's safe to share.",
+      "fullBackupLabel": "Full vault (captured secrets)",
+      "fullBackupHelp": "Include captured credentials and password hashes, sealed with your passphrase. MFA/SSO and complete account-security recovery are not yet qualified; use a verified database and host backup for disaster recovery.",
+      "fullBackupWarnLabel": "This file contains sensitive credentials.",
+      "fullBackupWarnText": "Protect the .fsdnvault file and its passphrase separately. Configuration snapshots (.fsdn) also contain sensitive inventory and account information; review and protect them before sharing.",
       "passphraseLabel": "Backup passphrase",
       "passphrasePlaceholder": "At least 12 characters — you'll need it to restore"
     },
@@ -199,6 +199,11 @@
       "selectedCount": "{{selected}} of {{total}} selected",
       "readingManifest": "Reading backup manifest…",
       "manifestError": "Could not read the backup manifest. The legacy \"What to Restore\" toggles below still apply.",
+      "sealedManifest": "Passphrase required to preview this vault.",
+      "integrityVerified": "Archive integrity verified for this preview.",
+      "integrityRecorded": "Archive identity recorded; file not checked for this preview.",
+      "integrityUnknown": "No recorded archive identity; integrity is unverified.",
+      "integrityInvalid": "The recorded archive identity is invalid. Review or replace this backup before restoring.",
       "restoreModuleAria": "Restore {{module}} module",
       "schemaBadge": "schema {{version}}",
       "itemCount": "{{count}} items",
@@ -382,7 +387,7 @@
         "title": "Restore Started",
         "message": "Restore job has been started"
       },
-      "restoreFailed": "Failed to start restore",
+      "restoreFailed": "Restore request failed",
       "scheduleCreated": {
         "title": "Schedule Created",
         "message": "Backup schedule has been created successfully"
@@ -414,10 +419,38 @@
         "title": "Import Complete",
         "message": "Configuration imported successfully"
       },
-      "importConfigFailed": "Failed to import configuration"
+      "importConfigFailed": "Failed to import configuration",
+      "dryRunFailed": {
+        "title": "Dry run found errors",
+        "message": "The preview found errors. No configuration was applied. Review the report before restoring."
+      },
+      "restorePartialFailure": {
+        "title": "Restore finished with errors",
+        "message": "One or more sections failed. Other sections may have been applied. Review the report before retrying."
+      },
+      "restoreComplete": {
+        "title": "Restore completed",
+        "message": "Review the applied and skipped sections below before closing this result."
+      },
+      "restoreUnconfirmed": {
+        "title": "Restore outcome not confirmed",
+        "message": "The server did not return a completed recovery report. Check the restore job before trying again."
+      }
+    },
+    "restoreResult": {
+      "header": "Restore result · review applied and failed sections"
+    },
+    "permissions": {
+      "archiveAuthorityRequired": "Configuration archives require an organization administrator; full vaults require a super administrator.",
+      "fullVaultAuthorityRequired": "Only a super administrator can create or download a full vault."
     }
   },
   "StorageLocationsPage": {
+    "transport": {
+      "reviewRequired": "Security review required: update this destination before backups can run. A previous successful connection test does not satisfy the new policy.",
+      "ftp": "Plaintext FTP is disabled. FTPS requires TLS for control and data and a trusted certificate matching the configured hostname. Install your private CA in the worker trust store if needed; certificate verification cannot be disabled.",
+      "sftp": "SFTP requires the server’s SHA256 host-key fingerprint before authentication. Obtain the fingerprint through a trusted administrator or console, not from an unverified first connection."
+    },
     "header": {
       "title": "Storage Locations",
       "subtitle": "Configure where backups are stored · local disk, cloud, or remote servers.",
@@ -535,5 +568,26 @@
         "message": "Connection test failed."
       }
     }
+  },
+  "vaultConfirmation": {
+    "title": "Confirm vault export",
+    "description": "This archive contains secrets. Confirm the current account for this one operation. Closing does not undo an issued request.",
+    "legacyWarning": "This archive has no recorded original identity. Checking its current bytes cannot prove historical authenticity. Use only an archive whose origin you trust.",
+    "legacyAck": "I understand the legacy archive limitation.",
+    "unconfirmed": "Confirmation ended or the outcome is unconfirmed. Inspect the backup catalogue before starting another operation. Do not assume a failed response rolled back a backup.",
+    "password": "Current account password",
+    "openIdentity": "Confirm with identity provider",
+    "callbackMissing": "The administrator must configure the vault OIDC callback before this account can export secrets.",
+    "mfa": "Authenticator or remaining recovery code",
+    "close": "Close",
+    "continue": "Check confirmation requirements",
+    "create": "Confirm and create vault",
+    "download": "Confirm and download vault",
+    "alreadyOpen": "Close the current vault confirmation first.",
+    "cannotStart": "Vault confirmation cannot start. Check the current account and archive integrity, and close any earlier confirmation.",
+    "downloadDispatched": "Vault download started",
+    "verifySaved": "Verify the saved file. A browser download request does not prove the file was saved.",
+    "encryptionRequired": "Vault encryption is required.",
+    "individual": "Download vault archives individually. Each needs its own account confirmation."
   }
 }

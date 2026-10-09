@@ -28,11 +28,31 @@ from __future__ import annotations
 
 import pytest
 
+from app.services import release_signing
 from app.services.release_signing import (
     build_release_manifest,
     sign_manifest,
     verify_manifest,
 )
+from tests.api import release_operation_contract as contract
+from tests.db.conftest import maintenance_engine as maintenance_engine
+from tests.services import test_agent_release_publication as publication
+from tests.services.test_public_release_binary import public_reader as public_reader
+from tests.services.test_public_release_operations import command
+
+
+@pytest.fixture(autouse=True)
+def isolated_signing_key(tmp_path, monkeypatch, request):
+    """Use real signing with a private test key, never production storage.
+
+    Hosted runners cannot write /var/lib/freesdn. An externally supplied key
+    directory or a key cached by an earlier test must not mask that assumption.
+    """
+    if "public_reader" in request.fixturenames:
+        return
+    monkeypatch.setenv("FREESDN_SIGNING_KEY_DIR", str(tmp_path))
+    monkeypatch.setattr(release_signing, "_PRIVATE_KEY", None)
+    monkeypatch.setattr(release_signing, "_PUBLIC_KEY_PEM", None)
 
 
 #: Exactly what the publish handler does to the caller's input before it uses
@@ -157,7 +177,7 @@ class _CapturingSession:
         self.statement = statement
 
         class _Result:
-            def scalars(self_inner):  # noqa: N805
+            def mappings(self_inner):  # noqa: N805
                 class _S:
                     def all(self_s):  # noqa: N805
                         return []
@@ -186,7 +206,7 @@ def _from_sql(sql: str) -> list[str]:
 )
 async def test_the_admin_release_filter_matches_lower_cased_rows(raw: str, expected: str) -> None:
     """Fails before the fix: the query compares 'Linux', the rows hold 'linux'."""
-    from app.api.v1.endpoints.agent_release_upload import list_releases
+    from app.api.v1.endpoints.agent_release_upload import _list_visible_releases as list_releases
 
     class _SuperUser:
         organization_id = None
@@ -206,76 +226,32 @@ async def test_the_admin_release_filter_matches_lower_cased_rows(raw: str, expec
     )
 
 
-# ---------------------------------------------------------------------------
-# The round-trip tests above do NOT prove the publish handler normalises
-# ---------------------------------------------------------------------------
-#
-# They re-implement ``_normalise`` and then verify the manifest machinery is
-# self-consistent. Delete ``platform = platform.lower()`` from ``upload_release``
-# and every one of them still passes -- confirmed by mutation. That is the
-# "test re-derives the logic production uses" trap, and it is the same shape as
-# the bug: right in one place, unchecked at the seam.
-#
-# ``upload_release`` takes an UploadFile, a live session and a real signing key,
-# so driving it end-to-end here would be mostly fixture. Instead this asserts the
-# ORDERING invariant on the real function: the normalising assignments must
-# execute BEFORE anything builds or signs a manifest. That is precisely what was
-# violated -- the values were normalised, but only after they had been signed.
+# The generic round-trip cases above retain their original values and assertions.
+# This actual HTTP/SQL test replaces the obsolete AST inspection of upload_release.
+# Supported publication names differ from the generic manifest's arbitrary text.
 
 
-def _upload_release_source() -> tuple[list[int], list[int]]:
-    """(normalisation line numbers, manifest-build/sign line numbers)."""
-    import ast
-    import inspect
-
-    from app.api.v1.endpoints import agent_release_upload as mod
-
-    tree = ast.parse(inspect.getsource(mod))
-    fn = next(
-        n
-        for n in ast.walk(tree)
-        if isinstance(n, ast.AsyncFunctionDef) and n.name == "upload_release"
-    )
-
-    normalises: list[int] = []
-    signs: list[int] = []
-    for node in ast.walk(fn):
-        # platform = platform.lower()  /  agent_type = agent_type.lower()
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
-            func = node.value.func
-            if (
-                isinstance(func, ast.Attribute)
-                and func.attr == "lower"
-                and isinstance(func.value, ast.Name)
-                and func.value.id in {"platform", "agent_type", "checksum_sha256"}
-                and any(isinstance(t, ast.Name) and t.id == func.value.id for t in node.targets)
-            ):
-                normalises.append(node.lineno)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            if node.func.id in {"build_release_manifest", "sign_manifest"}:
-                signs.append(node.lineno)
-    return normalises, signs
-
-
-def test_the_publish_handler_normalises_before_it_signs() -> None:
-    """The invariant the round-trip tests cannot see.
-
-    Fails if the normalising assignments are removed, or moved after signing --
-    which is the exact defect: the row was stored lower-cased while the
-    signature covered the caller's raw strings, so update-check could never
-    reproduce the signed bytes.
-    """
-    normalises, signs = _upload_release_source()
-
-    assert normalises, (
-        "upload_release no longer normalises platform/agent_type before use. "
-        "The row is persisted lower-cased, so the signature will cover bytes "
-        "the update-check rebuild cannot reproduce and every agent will refuse "
-        "the release as a signature mismatch."
-    )
-    assert signs, "upload_release no longer builds or signs a manifest — check this test"
-    assert max(normalises) < min(signs), (
-        f"normalisation happens at line(s) {normalises} but the manifest is "
-        f"built/signed at line(s) {signs}. Signing must see the SAME strings "
-        "that get persisted."
-    )
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform,agent_type,checksum", [
+    ("Linux", "Daemon", "A" * 64),
+    ("WINDOWS", "DESKTOP", "aBcD" * 16),
+    ("MacOS", "daemon", "0123456789AbCdEf" * 4),
+    ("linux", "daemon", "f" * 64),
+])
+async def test_the_publish_handler_normalises_before_it_signs(
+    public_reader, platform, agent_type, checksum
+) -> None:
+    f = public_reader
+    contract.intent(f, storage="external", platform=platform,
+                    agent_type=agent_type, checksum=checksum)
+    headers = await contract.prepare(f)
+    response = await command(f, headers, "publish")
+    assert response.status_code == 200, response.text
+    rows = await publication.releases(f)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["platform"] == platform.lower()
+    assert row["agent_type"] == agent_type.lower()
+    assert row["checksum_sha256"] == checksum.lower()
+    assert row["organization_id"] == f.org
+    await contract.verify_persisted_signature(f, row)

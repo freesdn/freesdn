@@ -1,0 +1,33 @@
+Gateway inventory cache access (2026-09-25)
+=========================================
+
+The firmware, installed-package and installed-plugin read methods previously
+returned warm cache entries before checking the gateway's current organization,
+deletion state and the caller's site grants. The endpoints required their read
+permission, but a permitted caller who knew another gateway UUID could receive
+its cached inventory without passing the normal resource access check.
+
+Each method now performs the existing gateway access check before its cache
+lookup. The cache key also contains the organization UUID, so transferring a
+gateway between tenants does not reuse the previous tenant's cached inventory.
+An authorized cache hit retains the original payload and avoids device I/O.
+A missing, deleted, foreign or inaccessible gateway returns the existing opaque
+404 response, without constructing an adapter or returning cached inventory.
+Endpoint authentication and permission checks remain unchanged.
+
+Thirty-six new PostgreSQL/HTTP cases reproduce 24 old-code failures and retain
+12 controls. They cover foreign callers, changed grants, unscoped or reassigned
+gateways, deletion, both sides of an organization transfer, authorized hits,
+cold denials and endpoint authentication/permission refusal. Separate incoming
+TCP HTTP checks exercise these paths through the actual router and service.
+Fixture identities and device inventory replies are synthetic; the database,
+HTTP transport and cache implementation are real. Source-bound receipts record
+the fresh full and focused results; these probes do not establish device login,
+vendor TLS, hardware compatibility or enterprise acceptance.
+
+This correction applies to these three cache lookups. It preserves the existing
+five-minute inventory TTL and the process-local cache implementation. It does
+not add distributed invalidation, configuration-version cache keys, or a general
+transactional fence for user/session revocation during device I/O. Broader
+active-parent and authority-revalidation work remains separate. No gateway,
+organization or site row is modified by a cache read.

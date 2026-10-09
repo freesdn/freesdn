@@ -176,7 +176,15 @@ class TestAutomationFabricAction:
 
         class _FakeCM:
             async def __aenter__(self):
-                return object()
+                # Routing success needs a resolvable author, not the former
+                # unrestricted fallback after a grant-lookup failure.
+                async def execute(_query):
+                    author = SimpleNamespace(
+                        role="org_admin", is_active=True, deleted_at=None, site_access=[]
+                    )
+                    return SimpleNamespace(scalar_one_or_none=lambda: author)
+
+                return SimpleNamespace(execute=execute)
 
             async def __aexit__(self, *a):
                 return False

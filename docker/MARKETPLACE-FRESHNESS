@@ -1,0 +1,65 @@
+Marketplace catalog freshness and restore safety
+===============================================
+
+A marketplace plugin executes with backend privileges. Pin the publisher's
+Ed25519 public key and retain HTTPS verification. A signature proves the bytes
+came from that key; acceptance also requires signed serial, generated_at and
+expires_at fields. The consumer refuses expired or future-issued catalogs,
+serial rollback, and reuse of one serial for different canonical content.
+The first-party registry published signed serial 1 on 2026-09-24 with the
+existing pinned publisher identity and new immutable package versions. Its
+signed expiry is 2026-12-23T10:03:03Z; publishers must renew before expiry with
+a strictly increasing serial. Verify the live signature and timestamps rather
+than treating this dated record as a permanent freshness guarantee. No key
+rotation or unsigned production exception is automatic.
+
+Migration 019 adds a durable global catalog state and provenance on catalog
+rows. Existing rows keep NULL provenance: sync a valid current catalog before
+installing or updating them. Already running plugins are not stopped by a
+withdrawal, expired catalog, failed sync, or this migration. A valid empty
+signed catalog withdraws all offers, without uninstalling running copies.
+Malformed or conflicting catalogs fail as one transaction; there is no partial
+snapshot with a misleading advanced serial. Concurrent syncs serialize in SQL.
+
+If the registry cannot be reached, the bundled seed supplies browse-only
+metadata on a never-synced installation. It never overwrites existing entries,
+revives withdrawals, or replaces an accepted remote snapshot. Expiry continues
+to apply offline. Sync/install/update error messages state the reason for a
+refusal; the UI also displays the sync result, including seed-only operation.
+
+The accepted identity binds the configured registry URL and publisher key.
+Changing either after the first accepted snapshot fails closed. A deliberate
+publisher migration needs a reviewed transfer of trust and serial history;
+do not clear the state row or lower a floor just to make a refusal disappear.
+MARKETPLACE_ALLOW_UNSIGNED is an explicit development/private-registry opt-out
+of signatures only. Freshness and serial ordering still apply in that mode.
+
+Database recovery requires an independent floor
+----------------------------------------------
+
+A restored database also restores its old serial state. Database persistence
+alone cannot prove that a later withdrawal occurred. Before backup and before
+any restore, retain the highest accepted serial in an independently managed
+operator record, associated with the publisher/feed identity. Read-only query:
+
+  SELECT identity, serial, payload_sha256, generated_at, expires_at
+  FROM core.marketplace_catalog_state WHERE scope = 'global';
+
+Set MARKETPLACE_MIN_SERIAL in the deployment environment to at least that
+independently retained serial BEFORE starting restored API/worker services.
+The shared Compose environment passes it to each backend service. Keep this
+record and configuration outside the database backup being restored, protect
+it from rollback, and use the same value on every node. Defaults to 0 for new
+installations; invalid/negative/out-of-range values disable sync/install/update.
+
+After recovery, verify the identity/floor and UTC clock, then sync a signed,
+unexpired catalog whose serial meets the floor. If the retained state or
+publisher is uncertain, leave catalog installs/updates disabled and reconcile
+with the publisher. Do not infer trust from an old backup's plugin URLs.
+This mechanism is not an external transparency log, trusted-time service, key
+revocation service or automatic recovery of a lost independent floor.
+
+Downgrading migration 019 refuses to discard a nonzero accepted serial. Preserve
+and reconcile that security history before a reviewed software rollback. Test
+customer restores and multi-node configuration separately; the synthetic tests
+do not establish customer RTO/RPO or a full enterprise deployment guarantee.

@@ -1,0 +1,61 @@
+# Gateway aggregate live reads
+
+Candidate 26.09.1; read-only behavior. This document is not release approval.
+
+The following GET routes preserve the existing gateway, organization and site
+admission checks, then validate the normalized adapter result:
+
+- /firewall/gateways/{id}/vpn
+- /firewall/gateways/{id}/device-summary
+- /firewall/gateways/{id}/tailscale
+- /firewall/gateways/{id}/haproxy
+- /firewall/gateways/{id}/haproxy/servers
+- /firewall/gateways/{id}/haproxy/backends
+- /firewall/gateways/{id}/haproxy/frontends
+- /firewall/gateways/{id}/proxy
+- /firewall/gateways/{id}/crowdsec
+- /firewall/gateways/{id}/telegraf
+- /firewall/gateways/{id}/monit
+- /firewall/gateways/{id}/netflow
+
+Unsupported adapter results return 501. Failed connections, failed required
+reads and malformed normalized results return 502 with a fixed public message.
+Scoped or absent gateways retain their existing opaque 404 behavior. Adapter
+metadata cannot replace the admitted gateway identity. Cancellation propagates.
+
+The OPNsense aggregates require every component read to complete successfully.
+A failed request cannot silently become an empty component. This is a transport
+and normalized-envelope guarantee: the underlying endpoint parsers still need
+firmware-specific validation of successful responses. In particular, a malformed
+HTTP 200 body can still be interpreted as defaults by some underlying parsers.
+Do not treat this change as proof that every upstream response schema is correct.
+
+Normalized inventory lists require consistent counts and scalar row fields.
+Service flags must be booleans. The OPNsense summary requires balanced interface
+counts; the separate existing OpenWrt summary retains its own explicit contract.
+The admitted vendor selects the summary contract, not vendor fields from an
+adapter result. Known sensitive keys are redacted before API delivery.
+
+The selected dashboard panels distinguish loading and unavailable reads from
+confirmed data. They hide cached values while refreshing and after failure,
+provide an explicit retry, and reject a response for another gateway. Monit,
+Telegraf, NetFlow and CrowdSec use the normalized API fields. VPN raw-status
+rendering additionally masks known secret fields regardless of value shape and
+masks any container beyond its recursion limit. Key-based redaction does not
+promise to identify arbitrary secret text under an unknown field name.
+
+A configuration flag is not proof of functioning traffic forwarding, monitoring,
+VPN connectivity or security enforcement. CrowdSec's existing bounded result
+window is not a complete incident history. Device-summary updates do not qualify
+other independent overview queries, firmware status or all monitoring metrics.
+
+Qualification uses actual adapter parsers, HTTP client fault injection, isolated
+PostgreSQL/ASGI requests and the actual dashboard. Vendor I/O and focused test
+identities are synthetic; real image/firmware acceptance remains required.
+There are no device writes, service restarts, firewall changes, plugin installs,
+restore operations or production traffic tests in this correction.
+
+Before deployment, rehearse the supported image on the exact intended firmware
+and installed plugins. Confirm failure, recovery and operator-visible states on
+an isolated target. Follow docker/RELEASE-SUPPORT for support and release gates;
+this change does not establish HA, recovery objectives or enterprise readiness.

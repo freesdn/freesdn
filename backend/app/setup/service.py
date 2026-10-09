@@ -24,6 +24,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_password_hash
+from app.core.user_lifecycle import lock_user_lifecycle
 from app.models.core import (
     Controller,
     ControllerStatus,
@@ -58,11 +59,6 @@ from app.setup.schemas import (
 )
 
 logger = logging.getLogger(__name__)
-
-# fixed key for the first-run bootstrap advisory lock (arbitrary
-# constant within signed bigint; "SETU" mnemonic).
-_SETUP_BOOTSTRAP_LOCK_KEY = 0x53455455
-
 
 #: Services that are Celery broker consumers rather than network servers. They
 #: are never dialled, so a DNS or TCP probe says nothing about their health --
@@ -480,6 +476,23 @@ class SetupService:
     # Step 3: Admin User
     # =========================================================================
 
+    async def lock_bootstrap_if_incomplete(self) -> bool:
+        """Hold the shared first-install lock and recheck administrator existence.
+
+        The request dependency is an unlocked early check. Both administrator
+        creation and vault recovery must arbitrate here before any setup writes.
+        PostgreSQL keeps this lock until the caller commits or rolls back, so a
+        waiter checks the state committed by the preceding bootstrap request.
+        """
+        await lock_user_lifecycle(self.db)
+        count = await self.db.scalar(
+            select(func.count(User.id)).where(
+                User.role == UserRole.SUPER_ADMIN,
+                User.deleted_at.is_(None),
+            )
+        )
+        return not bool(count)
+
     async def create_admin_user(self, request: AdminCreateRequest) -> AdminCreateResponse:
         """Create the initial super-admin user via ORM.
 
@@ -502,16 +515,7 @@ class SetupService:
             # pass the gate and each create a super_admin. Take a transaction-
             # scoped advisory lock (held until COMMIT) and re-check the count
             # under it — the second request blocks, then sees count>0 and bails.
-            await self.db.execute(
-                text("SELECT pg_advisory_xact_lock(:k)"), {"k": _SETUP_BOOTSTRAP_LOCK_KEY}
-            )
-            super_admin_count = await self.db.scalar(
-                select(func.count(User.id)).where(
-                    User.role == UserRole.SUPER_ADMIN,
-                    User.deleted_at.is_(None),
-                )
-            )
-            if super_admin_count:
+            if not await self.lock_bootstrap_if_incomplete():
                 return AdminCreateResponse(
                     success=False,
                     error="Setup has already been completed",
@@ -1134,8 +1138,9 @@ class SetupService:
                         ),
                     },
                 )
-                self.db.add(audit_entry)
-                await self.db.flush()
+                from app.services.audit import AuditService
+
+                await AuditService(self.db).persist_record(audit_entry)
             except Exception:
                 # Audit failure must not break setup completion, but
                 # log loudly — this is a security-relevant event.

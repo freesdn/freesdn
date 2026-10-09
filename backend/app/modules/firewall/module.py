@@ -41,22 +41,30 @@ async def _fabric_search_alerts_handler(ctx: Any) -> Any:
     try:
         from app.modules.firewall.service import FirewallService
 
-        svc = FirewallService(ctx.db, ctx.organization_id)
+        svc = FirewallService(
+            ctx.db,
+            ctx.organization_id,
+            accessible_site_ids=getattr(ctx, "accessible_site_ids", None),
+        )
         limit = int(ctx.params.get("limit") or 50)
-        alerts = await svc.search_alerts(
+        alerts, _total = await svc.search_alerts(
             severity=ctx.params.get("severity") or None,
             is_acknowledged=ctx.params.get("is_acknowledged"),
             limit=max(1, min(limit, 200)),
         )
-    except Exception as exc:  # noqa: BLE001 — normalize for the executor
-        return OperationResult.fail(f"firewall.search_alerts failed: {exc}", "READ_ERROR")
+    except Exception:
+        return OperationResult.fail("Firewall alert read unavailable", "READ_ERROR")
 
     def _row(a: Any) -> dict[str, Any]:
         ts = getattr(a, "created_at", None) or getattr(a, "timestamp", None)
         return {
             "id": str(getattr(a, "id", "")),
             "severity": getattr(a, "severity", None),
-            "signature": getattr(a, "signature", None) or getattr(a, "message", None),
+            "signature": (
+                getattr(a, "signature_name", None)
+                or getattr(a, "signature", None)
+                or getattr(a, "message", None)
+            ),
             "device_id": str(getattr(a, "device_id", "") or "") or None,
             "source_ip": getattr(a, "source_ip", None),
             "dest_ip": getattr(a, "dest_ip", None),

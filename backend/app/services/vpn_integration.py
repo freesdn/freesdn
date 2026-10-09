@@ -2568,7 +2568,13 @@ class PersistentVPNService:
     ) -> "SiteVPNConfiguration":
         from sqlalchemy import select
 
+        from app.core.crypto import encrypt_credential
         from app.models.vpn import SiteVPNConfiguration
+
+        data = dict(data)
+        if data.get("openvpn_config_content") is not None:
+            content = _assert_openvpn_config_safe(data["openvpn_config_content"])
+            data["openvpn_config_content"] = encrypt_credential(content) if content else content
 
         # Same multi-row hazard as get_site_config above.
         result = await session.execute(

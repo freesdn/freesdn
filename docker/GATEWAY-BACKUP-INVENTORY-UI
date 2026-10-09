@@ -1,0 +1,41 @@
+Gateway backup inventory availability and confirmation safety
+============================================================
+
+The gateway backup tab treats an unavailable inventory differently from a
+successfully retrieved empty inventory. It validates the response gateway ID,
+vendor field, count, unique safe filenames, timestamps, integer byte sizes and
+descriptions before displaying metadata. It does not infer that no backups
+exist from a failed request or malformed response.
+
+While an inventory request or refresh is pending, old rows and their restore
+and delete controls are hidden. Failed refreshes do not expose cached rows.
+An explicit retry reads only the inventory. Configuration export remains a
+separate action and does not depend on backup history being available.
+
+Restore and delete confirmations are tied to the displayed inventory snapshot.
+A refresh, failed read or changed snapshot invalidates an open confirmation.
+An old confirmation does not reopen when a refresh returns identical metadata.
+File sizes use size_bytes, including zero. English, Spanish and Chinese text
+distinguishes loading, unavailable and retry states.
+
+Validation and limits
+---------------------
+Rendered page regression tests cover failed/malformed results, valid empty
+history, byte sizes, retries, stale rows, confirmation invalidation and normal
+confirmed dispatch. They use the real page, query cache, table and dialogs with
+controlled API functions. Additional Chromium checks use the actual page and
+Axios over owned loopback HTTP with synthetic API responses, including invalid
+array/row shapes and successful confirmation dispatch to a synthetic receiver.
+These are explicitly not tests of real authentication or hardware restoration.
+
+This change is a browser safety guard, not a server-side inventory lock or
+proof that a filename still names the same artifact when a device processes a
+write. It cannot prevent a device changing independently after an inventory
+read. Backend permissions and write policy remain necessary.
+
+Managed gateway backup artifact storage, retention and restore qualification
+remain incomplete. OPNsense create/delete/revert compatibility still requires
+separate protocol review and authorized disposable-device write tests.
+OpenWRT's existing inventory behavior is unchanged here. This change does not
+qualify those operations, provide RPO/RTO measurements, or establish enterprise
+release readiness. See GATEWAY-BACKUP-INVENTORY and GATEWAY-BACKUP-TRIGGER.

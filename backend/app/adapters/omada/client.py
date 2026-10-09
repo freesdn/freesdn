@@ -1571,13 +1571,13 @@ class OmadaApiClient:
         )
 
     async def get_switch_port_overrides(
-        self, site_id: str, mac: str, port_id: int
+        self, site_id: str, mac: str, port_id: int, *, fresh: bool = False
     ) -> dict[str, Any]:
         """Get current port profile override settings for a switch port."""
         port = await self._request(
             "GET",
             f"/sites/{site_id}/switches/{mac}/ports/{port_id}",
-            cache_ttl=self.config.cache_ttl_ports,
+            cache_ttl=0 if fresh else self.config.cache_ttl_ports,
         )
         return port
 

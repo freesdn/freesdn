@@ -194,7 +194,7 @@ class GatewayConnectionCreate(BaseModel):
     vendor: str = Field(..., pattern=r"^(opnsense|pfsense|mikrotik|openwrt)$")
     host: str = Field(..., min_length=1, max_length=255)
     port: int = Field(default=443, ge=1, le=65535)
-    verify_ssl: bool = False
+    verify_ssl: bool = True
     site_id: UUID | None = None
 
     # Credentials
@@ -347,7 +347,7 @@ class GatewayTestRequest(BaseModel):
     vendor: str = Field(..., pattern=r"^(opnsense|pfsense|mikrotik|openwrt)$")
     host: str = Field(..., min_length=1, max_length=255)
     port: int = Field(default=443, ge=1, le=65535)
-    verify_ssl: bool = False
+    verify_ssl: bool = True
 
     api_key: str | None = Field(default=None, min_length=1)
     api_secret: str | None = Field(default=None, min_length=1)

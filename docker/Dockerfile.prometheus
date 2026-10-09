@@ -1,0 +1,36 @@
+# FreeSDN rebuild of Prometheus 3.14.0, including its embedded web UI.
+FROM golang:1.27.2-alpine3.24 AS source
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local
+WORKDIR /build
+COPY prometheus-build/go.mod prometheus-build/go.sum ./
+RUN go mod download all && go mod verify \
+    && cp -R /go/pkg/mod/github.com/prometheus/prometheus@v0.314.0 /source \
+    && chmod -R u+w /source
+
+# Overlay the reviewed security lock onto the checksum-verified upstream UI.
+FROM node:24.21.0-trixie-slim AS ui
+RUN npm install -g npm@12.1.0 pnpm@12.6.0
+COPY --from=source /source /source
+WORKDIR /source/web/ui
+COPY prometheus-build/ui/pnpm-lock.yaml prometheus-build/ui/pnpm-workspace.yaml ./
+# Embedded JS is not visible to Go image scanners; audit it before bundling.
+RUN pnpm install --frozen-lockfile \
+    && pnpm audit --audit-level=high \
+    && pnpm run build:mantine-ui
+WORKDIR /source
+RUN bash scripts/compress_assets.sh
+
+FROM source AS builder
+COPY --from=ui /source/web/ui/static /source/web/ui/static
+COPY --from=ui /source/web/ui/embed.go /source/web/ui/embed.go
+# Only redirect the verified root source to the copy containing generated UI
+# assets. The external dependency graph remains locked and readonly at build.
+RUN go mod edit -replace=github.com/prometheus/prometheus=/source \
+    && go build -mod=readonly -trimpath -tags=netgo,builtinassets \
+       -ldflags="-s -w -X github.com/prometheus/common/version.Version=3.14.0-freesdn -X github.com/prometheus/common/version.Revision=d7598b7141418fa35be2b5ec5d0fefb634199610" \
+       -o /out/ github.com/prometheus/prometheus/cmd/prometheus github.com/prometheus/prometheus/cmd/promtool
+
+FROM prom/prometheus:v3.14.0
+COPY --from=builder /out/prometheus /bin/prometheus
+COPY --from=builder /out/promtool /bin/promtool
+COPY prometheus-build/LICENSE prometheus-build/NOTICE /usr/share/licenses/prometheus/

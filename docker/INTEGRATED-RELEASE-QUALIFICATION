@@ -1,0 +1,56 @@
+Integrated public-source qualification
+=====================================
+
+This snapshot combines the locally reviewed gateway, device, credential and
+backup changes prepared after the last completed qualification candidate,
+together with the HLS election startup repair and explicit unsupported backup
+outcomes. The frozen source manifests, individual regression evidence and
+original failed qualification runs remain retained. Combining the source does
+not convert any incomplete earlier VM run into a pass.
+
+An earlier full backend run stopped with 10,864 passes, 230 skips and 18 setup
+errors in a concurrent HLS worker fixture. Its dependent queues stopped before
+starting later candidates. The integrated snapshot must independently pass the
+complete shipping backend suite, frontend tests/lint/strict build, installation
+and recovery checks, browser routes, image scans and native-binary controls.
+Each result must bind to the integrated source or its exact built image.
+
+Local regression fixtures and synthetic peers are distinguished from real API
+requests, packaged runtime tests and owner-reported hardware use. Historical
+per-candidate independent shipping probes that did not run remain incomplete;
+the integrated full suite is new evidence, not replacement receipts for those
+probes. Dependency scanning is a dated check of known advisories, not proof of
+the absence of all vulnerabilities. Existing typing and static-analysis debt
+remain recorded rather than hidden by the release process.
+
+No document or passing local gate here constitutes an enterprise-production
+certification. Hosted CI must actually execute; signed public image publication
+and independent installation need verification; controlled hardware writes,
+customer restore exercises, sustained soak testing and measured recovery
+objectives require separate evidence. The supported qualification scope remains
+Linux amd64 on one host. ARM, cross-host HA, zero-RPO and enterprise SLAs are not
+claimed. The supported operator and maintenance scope must be stated plainly
+before a public release.
+
+Gateway export and cache follow-up (2026-09-25)
+--------------------------------------------
+The later integrated candidate combines the separately reviewed OpenWrt CGI
+export transport, its dedicated browser control and gateway inventory-cache
+authorization. Their original local results remain attached to their exact
+source snapshots. Three waiting supervisors were deliberately retired before
+any of them launched VM work. They are not presented as individually completed
+shipping qualifications. The active predecessor's VM run was left unchanged.
+
+The combined regression baseline has 108 added backend cases: 90 failures on
+the predecessor source and 18 controls. The latest local after-state passes
+1,188 related PostgreSQL checks and includes every combined backend source byte.
+The 72 independent cache HTTP checks, 40 OpenWrt TLS checks and 13 dedicated-page
+Chromium checks retain their separate origins and synthetic-peer limitations.
+All frontend bytes are unchanged from the dedicated-page correction. Fresh full
+shipping backend, Alpine frontend, runtime/browser, core-image and native-binary
+checks are still required for this integrated candidate before its branch push.
+
+See OPENWRT-CONFIG-TRANSPORT, OPENWRT-EXPORT-UI and GATEWAY-CACHE-AUTHORITY for the
+changes and their limits. This combination does not add managed gateway backup
+storage, retention or restore, and does not close the external hardware, hosted
+CI, signed-publication or operational acceptance gates described above.

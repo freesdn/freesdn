@@ -17,7 +17,8 @@
       "totalVMs": "虚拟机总数",
       "backedUpOk": "已备份（正常）",
       "stale": "过期",
-      "neverBackedUp": "从未备份"
+      "neverBackedUp": "从未备份",
+      "unknown": "未知"
     },
     "table": {
       "vmid": "VMID",
@@ -30,7 +31,8 @@
     "status": {
       "ok": "正常",
       "stale": "过期",
-      "never": "从未"
+      "never": "从未",
+      "unknown": "未知"
     },
     "empty": {
       "noVMs": "备份时长报告中未找到虚拟机。",
@@ -39,7 +41,8 @@
     "errors": {
       "loadBanner": "无法加载备份时长报告。下方数据可能已过期或为空。",
       "loadReport": "无法加载备份时长报告",
-      "selectNodeStorage": "请选择节点和存储"
+      "selectNodeStorage": "请选择节点和存储",
+      "incomplete": "部分备份存储无法读取。在所有存储恢复可访问之前，无法确认备份是否缺失或过期。已观察到的近期备份仍会显示。"
     },
     "actions": {
       "retry": "重试",
@@ -390,14 +393,15 @@
       "delete": "删除 {{count}} 个 VM/CT？此操作无法撤销。请确保全部已停止。"
     },
     "toast": {
-      "actionCompleteTitle": "批量操作完成",
-      "actionCompleteDescription": "{{succeeded}} 成功，{{failed}} 失败",
+      "actionCompleteTitle": "请求已处理",
+      "actionCompleteDescription": "{{succeeded}} 项已确认，{{failed}} 项需要检查。请在待处理更改中查看所跟踪操作的结果。",
       "actionFailedTitle": "批量操作失败",
       "migrationStarted": "已为 {{count}} 个 VM 启动迁移"
     },
     "results": {
       "title": "批量操作结果",
-      "close": "关闭"
+      "close": "关闭",
+      "tracked": "已记录到待处理更改"
     },
     "migrate": {
       "title": "批量迁移 {{count}} 个 VM/CT",
@@ -406,7 +410,7 @@
       "targetNodeLabel": "目标节点",
       "targetNodePlaceholder": "选择目标节点",
       "targetNodeRequired": "请选择目标节点",
-      "onlineLabel": "在线迁移（实时）"
+      "onlineLabel": "在线迁移（仅限 QEMU 虚拟机）"
     }
   },
   "EditConfigDialog": {
@@ -1056,7 +1060,8 @@
       "quorate": "已达到法定人数",
       "noQuorum": "无法定人数",
       "active": "活动",
-      "inactive": "非活动"
+      "inactive": "非活动",
+      "unknown": "未知"
     },
     "taskStatus": {
       "completed": "已完成",
@@ -1352,7 +1357,18 @@
       "restoreStaged": {
         "title": "还原已暂存",
         "description": "请在“待处理更改”中查看并应用。还原会覆盖目标虚拟机。"
-      }
+      },
+      "actionNeedsReview": "操作需要核查",
+      "powerTracked": "操作 {{id}} 已保存。请在待处理更改中查看完成状态。",
+      "powerResponseLost": "再次提交电源操作前，请检查待处理更改。先前的请求可能已到达 Proxmox。",
+      "operationAccepted": "请求已接受",
+      "operationTracked": "操作 {{id}} 已在待处理更改中跟踪。接受请求不代表操作已完成。",
+      "operationResponseLost": "结果需要检查。发起另一项操作前，请检查待处理更改。重新提交未修改的此对话框会复用相同的请求 ID。",
+      "recoveryResponseLost": "结果需要检查。发起另一项恢复操作前，请检查待处理更改。新的请求 ID 可能会提交另一项操作。",
+      "guestChangeVerified": "已验证来宾状态",
+      "pendingRestart": "配置已保存，仍需重启",
+      "reviewUnavailable": "需要已验证的配置和磁盘大小。请关闭后重新打开以重新加载。",
+      "intentChanged": "此请求已提交。更改请求前，请先检查其结果。"
     },
     "snapshotDialog": {
       "title": "创建快照",
@@ -1390,14 +1406,17 @@
       "targetNode": "目标节点",
       "selectTargetNode": "选择目标节点",
       "onlineMigration": "在线迁移（实时）",
-      "migrating": "正在迁移..."
+      "migrating": "正在迁移...",
+      "restartMigration": "允许容器关机并重启",
+      "restartWarning": "容器迁移不支持实时迁移。迁移运行中的容器需启用重启迁移并允许停机；否则只能迁移已停止的容器。"
     },
     "resizeDialog": {
       "title": "调整磁盘大小 · VM {{vmid}}",
       "description": "扩展 {{node}} 上的磁盘大小",
       "sizeHint": "使用 +10G 增加 10GB，或使用 50G 设置绝对大小",
       "resizing": "正在调整大小...",
-      "resize": "调整大小"
+      "resize": "调整大小",
+      "reviewedSize": "已审阅的磁盘大小：{{size}} GiB。来宾文件系统可能需要单独扩容。"
     },
     "backupDialog": {
       "title": "备份 VM {{vmid}}",
@@ -1476,5 +1495,348 @@
       "startAfterRestore": "恢复后启动",
       "uniqueMac": "唯一 MAC 地址"
     }
+  },
+  "DeleteGuestDialog": {
+    "title": "审核客户机删除",
+    "warning": "永久删除这些客户机及其所属磁盘，无法撤销。请先停止客户机；系统会遵守保护设置和提供商锁定。",
+    "limit": "Proxmox 无法在删除时原子校验已审核的配置。请避免在 FreeSDN 之外并发更改。不会清除备份任务或未引用的磁盘。",
+    "loading": "正在读取本次审核的客户机配置…",
+    "reviewFailed": "无法审核、客户机受保护或已锁定，或控制器已更改。请关闭对话框并重新审核。",
+    "readOnly": "只读模式下禁止设备写入。",
+    "accepted": "请求已记录。请在待处理更改中检查提供商任务是否完成；已接受不代表已删除。",
+    "notAccepted": "请求未被接受",
+    "type": "输入 DELETE 以确认这些已审核的目标",
+    "submit": "提交删除"
+  },
+  "CreateGuestDialog": {
+    "title": "审核虚拟机或容器创建",
+    "warning": "请选择明确的 VMID。建议的 ID 不会被预留；分配冲突将阻止本次请求。",
+    "vmid": "VMID",
+    "suggest": "建议可用 ID",
+    "review": "审核创建",
+    "submit": "提交创建",
+    "frozen": "本次审核已固定。如响应丢失，请重新提交同一请求；检查待处理更改后再发起新的创建请求。",
+    "receipt": "已记录创建回执。接受请求并不表示客户机或应用程序已就绪。请在待处理更改中跟踪此操作。",
+    "invalid": "审核前请输入有效的 VMID、节点、名称、磁盘大小以及容器模板。",
+    "suggestFailed": "无法获取建议 ID。请输入并审核明确的 ID。",
+    "changed": "控制器已更改。请关闭对话框并在目标控制器上重新审核。",
+    "password": "容器 root 密码（可选）",
+    "passwordHint": "密码在操作记录中加密存储，不会显示在回执中。"
+  },
+  "ClusterOperationDialog": {
+    "title": "审核集群操作",
+    "review": "审核影响",
+    "warning": "节点电源操作可能中断所有客户机及集群访问。HA 更改可能启动、停止或迁移工作负载。请先确认维护计划、备份及恢复访问。",
+    "limits": "此审核不能证明操作后的仲裁、存储可用性、隔离安全性或所有 ACL 下的完整客户机可见性。外部更改可能与最终检查同时发生。",
+    "manual": "节点电源命令没有提供方任务 ID。在通过独立管理通道验证主机并在待处理更改中解决回执之前，完成状态保持未知。",
+    "ha": "HA 回读仅验证配置，不验证工作负载健康或故障转移。组操作需要旧版组 API。删除资源不会清除 HA 规则。",
+    "failed": "无法审核影响。未发送命令。请关闭对话框并重新审核。",
+    "loading": "正在读取集群影响…",
+    "confirm": "输入准确的目标以确认：{{target}}",
+    "submit": "提交已审核操作",
+    "changed": "所选控制器或操作已更改。请关闭并重新审核。",
+    "receipt": "请求已记录。接受不代表完成；请在待处理更改中检查回执。",
+    "guests": "可见客户机（整个集群）",
+    "nodes": "集群成员",
+    "resources": "HA 配置",
+    "options": "已固定的操作参数",
+    "quorum": "当前仲裁",
+    "retry": "响应丢失或被拒绝。请检查待处理更改。在此手动重试会复用相同请求 ID 和已审核参数。"
+  },
+  "CertificateOperationDialog": {
+    "title": "审核证书操作",
+    "warning": "更改 TLS 可能中断管理访问。请准备独立控制台访问方式，并安全保存恢复证书和私钥。",
+    "limits": "验证私钥匹配、所提供的证书链和有效期。不证明浏览器信任、主机名覆盖、吊销状态或所有集群端点。不会自动回滚或降低 TLS 验证要求。",
+    "acmeWarning": "ACME 续期会重新加载代理，并可能吊销旧证书。此处不会更改账户或 DNS 插件凭据。",
+    "restartWarning": "重启代理可能中断 API 和控制台连接。不重启时，已保存的更改可能尚未生效。",
+    "acmeForce": "在正常到期窗口之前续期",
+    "review": "验证并审核",
+    "reviewFailed": "审核失败，未发送写入。请重试审核，或关闭后修正证书、私钥或选项。",
+    "endpoint": "已配置端点的节点",
+    "options": "覆盖：{{overwrite}} · 重启：{{restart}} · 提前续期：{{acmeForce}}",
+    "candidate": "已验证的候选证书",
+    "current": "当前证书指纹",
+    "domains": "已审核的 ACME 域名",
+    "confirm": "输入准确的节点名称以确认：{{node}}",
+    "changed": "目标已改变。请关闭并重新审核。",
+    "retry": "未收到响应。请先检查待处理更改。此处重试会保留请求 ID 和审核内容；请勿盲目创建新操作。",
+    "receipt": "请求已记录。接受请求不代表证书已生效。请在待处理更改中跟踪操作，并独立核实不确定的结果。",
+    "submit": "提交已审核的证书更改",
+    "remove": "移除自定义证书"
+  },
+  "StorageOperationDialog": {
+    "upload": "审核存储上传",
+    "delete": "审核卷删除",
+    "warning": "删除不可撤销。上传必须使用新文件名。请求已记录不代表操作完成。",
+    "limits": "不支持在此删除虚拟机磁盘。ISO 引用使用控制器凭据检查；外部更改和权限覆盖仍可能使审核失效。完成状态需要匹配的任务和存储回读，并不证明安全擦除或独立验证已存储字节的哈希。",
+    "filePolicy": "最大 4 GiB。使用 ASCII 文件名：.iso、.tar.gz、.tar.xz 或 .tar.zst。不得包含路径、空格或连续句点。",
+    "review": "审核存储状态",
+    "reviewFailed": "存储审核不可用或不安全。重试前请检查存储状态、权限和引用。",
+    "confirm": "输入完整卷 ID：{{volume}}",
+    "changed": "目标已更改。请关闭对话框并重新审核。",
+    "failed": "未收到已验证的回执。发起新请求前请检查待处理更改。在此重试会保留相同请求 ID 和文件。",
+    "cancel": "取消",
+    "submit": "提交已审核操作"
+  },
+  "ReviewedBackupJob": {
+    "create": "创建经审核的备份计划",
+    "update": "更新经审核的备份计划",
+    "delete": "删除经审核的备份计划",
+    "warning": "保存计划不能证明备份已运行或可恢复。删除计划不会删除备份文件或停止正在运行的任务。",
+    "limits": "请明确选择同一节点上的 1 到 64 个客户机 ID。使用 HH:MM 或星期加 HH:MM，时间以节点本地时间为准。新任务保留所有备份，请监控存储容量。现有保留策略和通知设置保持不变。停止或挂起模式可能中断客户机。启用的任务可能在回读验证完成前运行。",
+    "node": "节点",
+    "storage": "备份存储",
+    "schedule": "计划时间",
+    "vmid": "客户机 ID（逗号分隔，无空格）",
+    "snapshot": "已审核的配置、保留策略和客户机选择",
+    "confirm": "输入完整任务 ID：{{id}}",
+    "error": "无法验证审核或请求。重试或创建新请求前，请检查待处理更改。高级原生选项可能需要在原生界面管理。",
+    "review": "审核备份计划",
+    "submit": "提交已审核的计划",
+    "inherited": "继承设置",
+    "nativeSelection": "原生选择"
+  },
+  "TaskStop": {
+    "title": "审核任务终止",
+    "warning": "停止工作进程不会撤销其更改。备份、迁移和其他操作可能仍未完成。收到停止请求不代表任务已停止。",
+    "requirements": "需要节点的 Sys.Audit 和 Sys.Modify 权限。恢复前请检查原始操作及其影响。",
+    "reviewed": "已审核节点 {{node}} 上正在运行的 {{type}} 任务。",
+    "confirm": "输入节点名称以确认：{{node}}",
+    "review": "审核正在运行的任务",
+    "submit": "提交可跟踪的停止请求",
+    "error": "无法审核或提交任务。重试前请检查待处理更改。在此重试将使用相同的请求 ID。",
+    "logUnavailable": "任务日志不可用。这并不表示日志为空。"
+  },
+  "FirewallOps": {
+    "title": "审核防火墙操作",
+    "warning": "防火墙更改可能中断管理和工作负载连接。保存配置不代表实际过滤或连接已验证；不提供自动回滚。",
+    "before": "当前配置",
+    "desired": "预期配置",
+    "confirm": "输入目标以确认：{{target}}",
+    "recovery": "我已验证独立控制台或带外恢复访问。",
+    "error": "无法验证审核或请求。重试前请检查待处理更改；不要使用新请求重复结果不确定的写入。",
+    "review": "审核防火墙更改",
+    "submit": "提交可跟踪的防火墙请求",
+    "scope": "防火墙范围",
+    "cluster": "集群",
+    "refresh": "刷新规则",
+    "pending": "待处理更改",
+    "enable": "审核启用防火墙",
+    "disable": "审核禁用防火墙",
+    "add": "审核新规则",
+    "delete": "审核删除",
+    "loading": "正在加载防火墙规则…",
+    "actions": "操作",
+    "fields": {
+      "source": "源",
+      "dest": "目标",
+      "dport": "目标端口",
+      "proto": "协议",
+      "comment": "注释"
+    },
+    "toggle": "审核切换启用状态",
+    "first": "审核移至首位"
+  },
+  "SdnInspection": {
+    "title": "SDN 配置检查",
+    "refresh": "刷新观测",
+    "writeBoundary": "在经过审查的原生锁工作流程完成验证之前，FreeSDN 暂不支持修改和应用 SDN 配置。",
+    "visibility": "这些观测受权限过滤，并非原子快照或完整快照。运行配置不能证明节点已重载或网络可达。",
+    "recovery": "请使用 Proxmox 原生管理工具进行修改，并确保具有独立的恢复访问方式。不要仅凭本次检查就应用管理网络变更。",
+    "pending": {
+      "changes_detected": "检测到可见变更",
+      "no_visible_changes": "可见配置中没有变更",
+      "unknown": "待应用状态未知"
+    },
+    "observed": "观测时间：{{time}}",
+    "refreshing": "正在读取当前状态…",
+    "permissions": "权限查询：{{status}} · SDN.Audit：{{audit}} · SDN.Allocate：{{allocate}}。/sdn 的权限不能证明所有子对象均可见。",
+    "unknown": "未知",
+    "unobserved": "未检查：{{resources}}。客户机和接口影响以及锁功能仍未验证。",
+    "resources": {
+      "zones": "区域",
+      "vnets": "虚拟网络",
+      "controllers": "SDN 控制器"
+    },
+    "views": {
+      "configured": "已配置（期望）",
+      "running": "运行中（已提交）",
+      "pending": "原生待应用变更"
+    },
+    "status": {
+      "available": "读取可用",
+      "denied": "权限被拒绝",
+      "unsupported_or_missing": "不支持或不存在",
+      "unavailable": "不可用",
+      "invalid": "提供方响应无效"
+    },
+    "failed": "SDN 观测失败。不能将之前的数据视为当前状态。",
+    "empty": "没有可见对象。权限可能隐藏其他对象。",
+    "omitted": "已隐藏或不支持的字段：{{count}}",
+    "dryRun": "节点试运行摘要",
+    "diffBoundary": "只读预览生成的接口和 FRR 变更。原始内容可能包含凭据，因此不会显示。此预览不验证网络可达性，也不授权应用变更。",
+    "node": "准确的 Proxmox 节点名称",
+    "preview": "读取试运行",
+    "interfaces": "接口",
+    "frr": "FRR 路由",
+    "changed": "报告了差异",
+    "unchanged": "未报告差异",
+    "lines": "新增 {{added}} 行，删除 {{removed}} 行"
+  },
+  "SdnDependencies": {
+    "title": "SDN 依赖覆盖情况",
+    "boundary": "只读且按权限过滤的观测。这不是完整的依赖关系图，也不代表批准应用网络更改。检查最多并发执行三次读取，读取预算为 20 秒。秘密和不支持的策略字段会被隐藏。",
+    "inspect": "检查依赖",
+    "refresh": "刷新依赖观测",
+    "reads": "已启动 {{used}} / {{limit}} 次集合读取（不计传输重试）",
+    "parents": "已选择 {{selected}} 个可见 VNet（上限 {{limit}}）；另有 {{omitted}} 个可见 VNet 因数量限制被省略。还可能存在隐藏或不可用的 VNet。",
+    "limited": "已达到响应预算。部分集合未被观测，不能视为空集合。",
+    "unobserved": "仍未验证：{{resources}}。",
+    "resource": "依赖类别",
+    "view": "配置视图",
+    "noCollection": "未观测到此选项对应的集合。这不能证明不存在任何对象。",
+    "parent": "VNet：{{name}}",
+    "notObserved": "未观测",
+    "identitiesOnly": "仅显示目录标识。嵌套规则不属于此目录；请选择相应的策略条目类别查看独立观测。",
+    "displayLimit": "显示返回的 {{total}} 个条目中的前 {{limit}} 个。",
+    "references": "可见对象引用",
+    "referenceBoundary": "不可见可能表示不存在、被权限隐藏或在读取之间发生更改。目标可见不代表配置有效。运行配置中的 IPAM/DNS 引用使用其仅提供当前配置的目录。待处理字段不会被合并成依赖关系图。",
+    "noReferences": "未观测到此选项支持的引用；仍可能有未观测到的依赖。",
+    "resources": {
+      "zones": "区域",
+      "vnets": "虚拟网络",
+      "controllers": "SDN 控制器",
+      "subnets": "按 VNet 划分的子网",
+      "ipams": "IPAM 提供方",
+      "dns": "DNS 提供方",
+      "fabrics": "网络架构",
+      "fabric-nodes": "网络架构节点",
+      "prefix-lists": "前缀列表目录",
+      "route-maps": "路由映射目录",
+      "prefix-list-entries": "前缀列表规则",
+      "route-map-entries": "路由映射条目"
+    },
+    "reasons": {
+      "view_not_exposed": "此原生集合不提供该配置视图。",
+      "inspection_deadline": "此读取完成之前已达到检查时限。",
+      "response_limit": "此集合超出了总响应预算。",
+      "parent_inventory_unavailable": "至少一个 VNet 清单视图不可用；子网枚举不完整。"
+    },
+    "referenceStatus": {
+      "visible": "目标在此观测中可见",
+      "not_visible": "目标不可见；尚未验证是否存在",
+      "target_unavailable": "目标集合不可用"
+    },
+    "unobservedNames": {
+      "guest_nic_references": "客户机网卡引用",
+      "host_network_interfaces": "主机网络接口",
+      "route_map_entries": "路由映射条目",
+      "prefix_list_entries": "前缀列表条目",
+      "fabric_interface_and_peer_details": "网络架构接口和对等端详情",
+      "provider_version_and_plugin_support": "提供方版本和插件支持",
+      "withheld_or_unobserved_policy_fields": "隐藏或未观测的策略字段",
+      "policy_evaluation_and_enforcement": "策略求值和实际执行",
+      "fabric_runtime_and_withheld_fields": "fabric 运行状态和隐藏的配置字段"
+    },
+    "unobservedFallback": "其他依赖项仍未验证；覆盖范围详情不可用。",
+    "policyBoundary": "仅解析策略配置；未验证 FRR 的策略求值和实际执行。原生待应用行的标识可能位于更改层中，删除标记会保留。未知字段和不支持的对等方文本会被隐藏。目录和条目的读取可能使用不同的原生权限过滤。待应用更改不会合并为可执行策略。",
+    "nestedDisplayLimit": "{{field}}：显示返回的 {{total}} 项中的前 {{limit}} 项。",
+    "fabricBoundary": "仅显示 fabric 配置。节点键同时包含 fabric 和节点标识；同一节点可属于多个 fabric。接口和对等节点匹配仅限于同一观测配置视图和同一 fabric。这不能证明主机接口存在、会话活跃、WireGuard 握手成功、路由有效或网络可达。密钥、端点、地址和不支持的字段会被隐藏；待应用更改不会解析为依赖关系图。",
+    "unsupportedFabricProtocol": "此读取器不支持该 fabric 协议。保留标识，但隐藏协议专用详细信息。"
+  },
+  "SdnAttachments": {
+    "title": "客户机网卡与主机接口观测",
+    "boundary": "只读且不完整的观测。名称匹配不能验证连通性，也不能构成完整的影响关系图。SDN 应用操作仍被阻止。",
+    "inspect": "检查客户机与主机连接",
+    "refresh": "刷新连接观测",
+    "guest_inventory": "可见客户机清单",
+    "node_inventory": "可见节点清单",
+    "selection": "已选择 {{total}} 个可见条目中的 {{selected}} 个（上限 {{limit}}）；因选择上限省略 {{omitted}} 个。",
+    "coverage": "隐藏或未选择的客户机和节点、快照、直通设备、主机待应用差异、管理路径、嵌套 SDN 策略、提供方版本及实际连通性仍未验证。",
+    "vnets": "VNet · {{view}}",
+    "visibleVnets": "可见 VNet 标识数量：{{count}}",
+    "guestBoundary": "当前配置不是对客户机实时网络的探测。合并待应用更改的视图包含待应用的编辑和删除。两个视图独立读取，可能与迁移或原生更改发生竞争。",
+    "guest": "所选客户机",
+    "view": "客户机配置视图",
+    "views": {
+      "current": "当前配置",
+      "pending_merged": "包含待应用更改的配置"
+    },
+    "noGuest": "未选择客户机观测",
+    "noNics": "此配置视图中没有可见的网卡条目。这不能排除直通设备或隐藏依赖。",
+    "noBridge": "无显式网桥",
+    "tag": "VLAN 标签：{{tag}}",
+    "trunks": "VLAN 中继：{{trunks}}",
+    "link_down": "配置的链路关闭标志：{{value}}",
+    "firewall": "配置的防火墙标志：{{value}}",
+    "yes": "是",
+    "no": "否",
+    "targets": {
+      "configured_vnet": "配置中的 VNet 名称",
+      "running_vnet": "运行中的 VNet 名称",
+      "host_interface": "客户机所在节点上的接口名称"
+    },
+    "match": {
+      "visible": "名称可见；连通性未验证",
+      "not_visible": "名称不可见；可能不存在、被隐藏或已更改",
+      "target_unavailable": "目标观测不可用",
+      "not_observed": "目标未观测或未选择",
+      "no_bridge": "无显式网桥引用"
+    },
+    "omittedOptions": "已隐藏的其他网卡选项：{{count}}",
+    "hostBoundary": "主机报告结合配置和运行标志，可能包含待应用设置。接口处于活动状态或存在并不能证明可达。未检查主机待应用差异和结果元数据。",
+    "node": "所选主机",
+    "noHost": "未选择主机观测",
+    "active": "原生活动标志：{{value}}",
+    "exists": "原生存在标志：{{value}}",
+    "noMembers": "无显式成员"
+  },
+  "DashboardObservation": {
+    "freshness": {
+      "current": "最近采集",
+      "stale": "观测数据已过期",
+      "unavailable": "观测数据的新鲜度未知"
+    },
+    "coverage": {
+      "complete_visible": "可见观测完整",
+      "partial": "部分观测",
+      "unavailable": "没有可用观测"
+    },
+    "collected": "采集开始于 {{time}} · 观测时间距今 {{age}} 秒",
+    "visibleScope": "计数仅包含控制器凭据可见的资源。采集时间不能确定原生样本的时间；这不是原子快照。",
+    "storageScope": "磁盘容量表示节点文件系统，不代表数据存储容量或可安全分配的工作负载容量。",
+    "registrationScope": "集群总量按已注册控制器计算。未对物理集群去重，重复注册可能重复计算同一基础设施。节点覆盖范围不包括节点数量未知的失败控制器。",
+    "metrics": {
+      "cpu": "CPU 使用率",
+      "memory": "内存使用率",
+      "node_filesystem": "节点文件系统使用率"
+    },
+    "metricStatus": {
+      "available": "已观测",
+      "partial": "部分观测",
+      "unavailable": "不可用"
+    },
+    "contributors": "{{expected}} 个已知节点中有 {{observed}} 个提供数据",
+    "reasons": {
+      "missing_statistics": "统计数据缺失",
+      "invalid_statistics": "统计数据无效",
+      "node_not_online": "未观测到节点在线",
+      "inventory_mismatch": "成员与资源视图不一致"
+    },
+    "incompleteMetric": "完整指标不可用",
+    "refreshRequired": "在获得新的有效观测之前，当前数值将被隐藏。",
+    "readSucceeded": "读取成功",
+    "readFailed": "读取失败",
+    "controllerCoverage": "已观测 {{observed}} / {{total}} 个控制器；{{failed}} 个失败",
+    "separateTasks": "任务计数有独立的采集周期，未通过上述仪表板观测进行验证。",
+    "loading": "正在等待仪表板观测",
+    "exitKiosk": "退出信息屏模式",
+    "nodeStatus": {
+      "online": "在线",
+      "offline": "离线",
+      "unknown": "未知"
+    },
+    "haServices": "可见 HA 服务",
+    "haBoundary": "可见条目不能证明 HA 健康或故障转移就绪。"
   }
 }

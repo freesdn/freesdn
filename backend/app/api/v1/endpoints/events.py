@@ -404,7 +404,8 @@ async def replay_events(
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
     lock_name = f"event_replay:{current_user.organization_id}"
-    if not acquire_solo_lock(lock_name, ttl_seconds=600):
+    lock_token = acquire_solo_lock(lock_name, ttl_seconds=600)
+    if not lock_token:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail="A replay is already running for this organization. Try again shortly.",
@@ -424,7 +425,7 @@ async def replay_events(
             accessible_site_ids=_grant_for(current_user),
         )
     finally:
-        release_solo_lock(lock_name)
+        release_solo_lock(lock_name, lock_token)
 
     return ReplayResponse(
         replayed_count=count,

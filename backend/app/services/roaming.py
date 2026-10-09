@@ -46,15 +46,14 @@ def _safe_decrypt(value: str | None) -> str:
     """Decrypt a credential, falling back to the raw value if not encrypted."""
     if not value:
         return ""
-    try:
-        from app.core.crypto import decrypt_credential, is_encrypted
+    from app.core.crypto import decrypt_credential, is_encrypted
 
-        if not is_encrypted(value):
-            return value
-        return decrypt_credential(value)
-    except Exception:
-        logger.warning("Failed to decrypt credential value, returning raw value", exc_info=True)
+    if not is_encrypted(value):
         return value
+    try:
+        return decrypt_credential(value)
+    except ValueError:
+        raise ValueError("Stored controller credential could not be decrypted") from None
 
 
 class RoamingAnalyticsService:

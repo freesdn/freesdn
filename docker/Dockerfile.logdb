@@ -1,28 +1,84 @@
-# FreeSDN - TimescaleDB Log Database
-# Debian Trixie base - matches all other FreeSDN containers
-# PostgreSQL 18 + TimescaleDB extension from official repo
+# FreeSDN TimescaleDB on PostgreSQL 18 / Debian trixie (glibc), the same runtime
+# as the primary database and the same runtime published 26.09.0 ships.
+#
+# Why Debian and not Alpine: see the measurement recorded in Dockerfile.postgres.
+# The short version is that the two bases have IDENTICAL fixable HIGH/CRITICAL
+# counts, so Alpine bought a lower scanner number rather than a smaller
+# patchable surface, and it cost an in-place upgrade.
+#
+# What is KEPT from the Alpine work, because it was a genuine improvement:
+# TimescaleDB is still built from checksum-verified source tarballs instead of
+# an unversioned package from an external apt repository, and both 2.30.1 and
+# 2.30.2 are installed so an exact logical restore of either is possible.
+# Published 26.09.0 resolves 2.30.2, which this image also selects for fresh
+# databases, so the extension version does not move on upgrade.
+FROM golang:1.27.2-alpine3.24 AS gosu-builder
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local
+WORKDIR /build
+COPY gosu-build/go.mod gosu-build/go.sum ./
+RUN go mod download all && go mod verify
+RUN go build -mod=readonly -trimpath -ldflags="-s -w" -o /out/gosu github.com/tianon/gosu
+
+FROM postgres:18.6-trixie AS timescale-builder
+# The official Debian image carries pg_config but NOT the server headers, so
+# postgresql-server-dev-18 is required here and must not be dropped.
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
+        build-essential cmake libssl-dev libicu-dev uuid-dev \
+        "postgresql-server-dev-${PG_MAJOR}" \
+    && rm -rf /var/lib/apt/lists/*
+# The version and checksum are deliberately reviewed together. Do not fetch
+# a moving branch or install an unversioned extension package at build time.
+ADD --checksum=sha256:4b7af2be944280cc6be397b76fad3d6588ac93e771fdb19a485b358b21a50326 \
+    https://github.com/timescale/timescaledb/archive/refs/tags/2.30.1.tar.gz /tmp/timescaledb.tar.gz
+RUN mkdir /build && tar -xzf /tmp/timescaledb.tar.gz -C /build --strip-components=1
+WORKDIR /build
+RUN ./bootstrap -DCMAKE_BUILD_TYPE=Release -DREGRESS_CHECKS=OFF -DTAP_CHECKS=OFF \
+        -DWARNINGS_AS_ERRORS=OFF -DPROJECT_INSTALL_METHOD=docker \
+    && cmake --build build --parallel 2 \
+    && DESTDIR=/out cmake --install build \
+    && mkdir -p /out/usr/share/licenses/timescaledb \
+    && cp LICENSE LICENSE-APACHE NOTICE /out/usr/share/licenses/timescaledb/ \
+    && cp tsl/LICENSE-TIMESCALE /out/usr/share/licenses/timescaledb/TSL-LICENSE
+
+# Retain 2.30.1's versioned library and install script for exact logical restores.
+# Published v26.09.0 resolves 2.30.2; never downgrade that source extension.
+FROM timescale-builder AS timescale-current-builder
+ADD --checksum=sha256:a7003a70836477dc8d575d95a4c515d8a22ed219d0cb03b3640bb813f04e1b42 \
+    https://github.com/timescale/timescaledb/archive/refs/tags/2.30.2.tar.gz /tmp/timescaledb-current.tar.gz
+WORKDIR /
+RUN rm -rf /build /out && mkdir /build \
+    && tar -xzf /tmp/timescaledb-current.tar.gz -C /build --strip-components=1
+WORKDIR /build
+RUN ./bootstrap -DCMAKE_BUILD_TYPE=Release -DREGRESS_CHECKS=OFF -DTAP_CHECKS=OFF \
+        -DWARNINGS_AS_ERRORS=OFF -DPROJECT_INSTALL_METHOD=docker \
+    && cmake --build build --parallel 2 \
+    && DESTDIR=/out cmake --install build \
+    && mkdir -p /out/usr/share/licenses/timescaledb \
+    && cp LICENSE LICENSE-APACHE NOTICE /out/usr/share/licenses/timescaledb/ \
+    && cp tsl/LICENSE-TIMESCALE /out/usr/share/licenses/timescaledb/TSL-LICENSE
 
 FROM postgres:18.6-trixie
-
 LABEL maintainer="FreeSDN Team"
-LABEL description="TimescaleDB on PostgreSQL 18 (Debian Trixie)"
-
-# Install TimescaleDB from the official packagecloud repo
-RUN apt-get update && apt-get upgrade -y \
-    && apt-get install --no-install-recommends -y \
-       gnupg curl ca-certificates lsb-release \
-    && echo "deb https://packagecloud.io/timescale/timescaledb/debian/ trixie main" \
-       > /etc/apt/sources.list.d/timescaledb.list \
-    && curl -fsSL https://packagecloud.io/timescale/timescaledb/gpgkey \
-       | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescaledb.gpg \
+LABEL description="TimescaleDB 2.30.2 (2.30.1 restore compatibility) on PostgreSQL 18 / Debian trixie"
+COPY --from=gosu-builder /out/gosu /usr/local/bin/gosu
+COPY gosu-build/LICENSE gosu-build/NOTICE /usr/share/licenses/gosu/
+COPY --from=timescale-builder /out/ /
+COPY --from=timescale-current-builder /out/ /
+RUN . /etc/os-release && test "$VERSION_CODENAME" = trixie \
+    && test "$PG_MAJOR" = 18 \
     && apt-get update \
-    && apt-get install --no-install-recommends -y \
-       timescaledb-2-postgresql-18 \
-    && apt-get purge -y --auto-remove gnupg curl lsb-release \
-    && rm -rf /var/lib/apt/lists/*
-
-# Enable TimescaleDB in postgresql.conf via shared_preload_libraries
-RUN echo "shared_preload_libraries = 'timescaledb'" >> /usr/share/postgresql/postgresql.conf.sample
-
-# Run as non-root (matches base postgres image)
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && gosu nobody true \
+    && mv /usr/local/bin/docker-entrypoint.sh /usr/local/bin/docker-entrypoint-upstream.sh \
+    && printf '%s\n' 'postgresql-18-debian-trixie-v1' > /usr/local/share/freesdn-database-runtime \
+    && printf "\nshared_preload_libraries = 'timescaledb'\ninclude_if_exists = '/etc/postgresql/conf.d/custom.conf'\n" \
+       >> /usr/share/postgresql/postgresql.conf.sample
+# Data checksums only; the locale provider stays at the Debian default so a
+# 26.09.0 cluster is adoptable in place.
+ENV POSTGRES_INITDB_ARGS="--data-checksums"
+COPY --chmod=755 postgres/runtime-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY --chmod=644 postgres/zz-freesdn-runtime.sh /docker-entrypoint-initdb.d/zz-freesdn-runtime.sh
 USER postgres

@@ -22,6 +22,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      'vitest-environment-native-fetch': path.resolve(__dirname, './src/test-utils/native-fetch.environment.ts'),
     },
   },
   test: {

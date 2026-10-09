@@ -1,0 +1,34 @@
+Standalone gateway connection-test ownership
+============================================
+
+GatewayService.test_connection owns the adapter it creates and attempts
+disconnect in a finally block after success, a failed AdapterResult, an
+exception, malformed result handling or task cancellation. Saved-gateway
+tests delegate to the same method and retain this ownership behavior.
+The vendor adapter context-manager contract and shared-context operations
+are unchanged. No extra connection or repeated authentication is introduced.
+
+An ordinary exception from disconnect does not replace the original test
+result or cancellation. The service records a fixed warning without the
+cleanup exception text. Other adapter/infrastructure log behavior is not
+changed. Existing low-level cleanup remains compatible, including OPNsense
+test finalization and MikroTik cleanup on HTTP401.
+
+Qualification includes actual HTTPX/vendor clients and TLS keepalive peers,
+authentication refusal, peer disconnect and real asyncio cancellation.
+Closure is observed before the probe's fallback cleanup. The old OpenWRT
+success case retains an open keepalive connection; service-owned cleanup
+closes it. Appliance payloads are synthetic, the fixture hostname and trust
+CA are local overrides, and no device write is performed. Additional unit
+cases exercise result-processing errors and ordinary cleanup exceptions.
+
+Cleanup remains best effort when an underlying close operation itself fails.
+Repeated cancellation, concurrent use of one adapter, permanently blocked
+close calls, server-side session revocation and physical device acceptance
+are not established. This change does not sanitize every adapter diagnostic,
+revalidate caller permissions after device I/O or fix other standalone users
+of a low-level client. Those remain separate boundaries.
+
+Connection-test message and service-exception log projection is covered in
+GATEWAY-TEST-DIAGNOSTICS. Other adapter logs and provider metadata remain
+outside that diagnostic boundary.

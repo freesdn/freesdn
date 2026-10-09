@@ -1,0 +1,34 @@
+New firewall gateway certificate policy defaults
+===============================================
+
+New GatewayConnectionCreate and GatewayTestRequest bodies default verify_ssl
+to true when omitted. Direct GatewayService creation and new ORM inserts use
+the same default. Explicit false remains a deliberate compatibility opt-out.
+Request null is invalid, not a synonym for disabling certificate verification.
+Existing stored true/false values are not rewritten. Partial updates that omit
+verify_ssl preserve the saved value; saved-gateway tests use the stored value
+unless the caller supplies an explicit override, without persisting the override.
+
+The ORM change is an application-side insert default, not a table-shape change
+or data migration. Exported backups carry verify_ssl explicitly and retain that
+choice on restore. Newly inserted records without any saved policy take the
+new default; they do not silently acquire the legacy false value.
+
+The default change is compatible with the verified Add Gateway UI. API clients
+connecting to a self-signed device must provide appropriate trust or consciously
+send false. Untrusted certificates are not retried with verification disabled.
+Generated API default comments are refreshed from the matching source; public
+exports regenerate after source hygiene so canonical/private audit comments
+are not copied into the public contract.
+
+Qualification limits: the real four-vendor TLS probe covers the normal HTTPS
+443 configuration relocated to a private loopback peer, with synthetic appliance
+responses. All four refused an untrusted certificate before authenticated HTTP
+when verification was selected; trusted and explicit opt-out controls passed.
+The probe closes its own transports. It does not establish standalone service
+cleanup, custom-port protocol selection, all firmware interoperability or actual
+hardware acceptance. Custom-port verification policy is now covered separately by
+GATEWAY-HTTPS-POLICY: verified connections require HTTPS, including custom
+ports. Standalone gateway test cleanup is covered by GATEWAY-TEST-LIFECYCLE
+with explicit cancellation and best-effort close limits. This default change
+does not globally change all low-level adapter defaults.

@@ -84,7 +84,8 @@
         "notifications": "通知",
         "modules": "模块",
         "system": "系统信息",
-        "about": "关于"
+        "about": "关于",
+        "access": "只读 / 写入权限"
       }
     },
     "timezones": {
@@ -230,7 +231,34 @@
       },
       "modules": {
         "title": "模块管理",
-        "description": "启用、禁用和配置 FreeSDN 模块。模块可添加摄像头、VoIP、防火墙管理等新功能。"
+        "description": "启用、禁用和配置 FreeSDN 模块。模块可添加摄像头、VoIP、防火墙管理等新功能。",
+        "enablementBoundary": "模块选择控制导航和生命周期钩子。它不会阻止 API 访问，也不会取消所有后台任务。请使用权限、站点访问授权和明确的调度器控制来实现这些目的。"
+      },
+      "access": {
+        "title": "只读 / 写入权限",
+        "description": "控制 FreeSDN 是否可以向设备写入配置。只读模式仅用于监控，平台将拒绝所有设备写入操作。"
+      }
+    },
+    "access": {
+      "title": "只读 / 写入权限",
+      "description": "控制 FreeSDN 是否可以向设备写入配置。只读模式仅用于监控，平台将拒绝所有设备写入操作。",
+      "row": {
+        "labelReadOnly": "只读模式（仅监控）",
+        "labelWrite": "读写模式（管理）",
+        "descReadOnly": "设备写入已禁用。关闭此模式即可管理和配置设备。",
+        "descWrite": "设备写入已启用。开启此模式可将平台限制为仅监控。",
+        "toggleAria": "切换只读模式"
+      },
+      "status": {
+        "readOnly": "只读模式已开启。FreeSDN 不会向任何设备写入配置。",
+        "write": "写入权限已开启。FreeSDN 可以向受管设备应用更改。"
+      },
+      "toast": {
+        "readOnlyTitle": "只读模式已启用",
+        "readOnlyDesc": "整个平台的设备写入操作现已禁用。",
+        "writeTitle": "写入权限已启用",
+        "writeDesc": "现在可以管理和配置设备。",
+        "errorTitle": "无法更新模式"
       }
     }
   },
@@ -925,7 +953,18 @@
       "savedOk": "已保存。",
       "checkTitle": "已保存，但有一项需要确认",
       "secretConfigured": "已配置。输入以替换。",
-      "secretEmpty": "未设置"
+      "secretEmpty": "未设置",
+      "secretChoiceConfigured": "已配置。选择一个选项以替换。",
+      "emptyChoice": "空字符串",
+      "retainedChoice": "{{value}}（已保存的值）",
+      "retainedChoiceHint": "当前选项中没有此已保存的值。请选择一个选项以更改。",
+      "typedChoice": "{{value}}（{{type}}）",
+      "choiceType": {
+        "string": "文本",
+        "number": "数字",
+        "boolean": "布尔值",
+        "null": "空值"
+      }
     }
   },
   "SSOSettingsPage": {

@@ -169,7 +169,8 @@ async def test_error_emits_validation_failure(patched) -> None:
     assert len(emitted) == 1
     assert emitted[0]["org_id"] == org.id
     assert emitted[0]["backup_id"] == backup.id
-    assert "checksum mismatch" in emitted[0]["reason"]
+    assert "checksum mismatch" not in emitted[0]["reason"]
+    assert emitted[0]["reason"]
 
 
 @pytest.mark.asyncio
@@ -358,3 +359,25 @@ def test_alerts_yml_ships_backup_alerts() -> None:
     unenc = alerts_by_name["FreeSDNBackupUnencrypted"]
     assert unenc["labels"]["severity"] == "warning"
     assert "freesdn_pg_backup_encryption_enabled" in unenc["expr"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("database_error", [False, True])
+async def test_validation_failure_event_and_result_exclude_private_text(patched, caplog, database_error):
+    import json
+
+    from sqlalchemy.exc import SQLAlchemyError
+
+    monkeypatch, emitted = patched
+    org = _org()
+    backup = _backup(org_id=org.id)
+    _patch_session(monkeypatch, [org], {org.id: backup})
+    marker = "synthetic-validation-private-detail-must-not-escape"
+    error = SQLAlchemyError(marker) if database_error else ValueError(marker)
+    _patch_service(monkeypatch, restore_side_effect=error)
+    result = await backup_tasks._validate_restore_async()
+    assert result["error"] == 1 and result["ok"] == 0
+    assert len(emitted) == 1 and emitted[0]["reason"]
+    assert marker not in json.dumps(result)
+    assert marker not in json.dumps(emitted, default=str)
+    assert marker not in caplog.text

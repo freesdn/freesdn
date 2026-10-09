@@ -1,16 +1,18 @@
-# FreeSDN - Valkey, OS layer patched at build time.
-#
-# A thin wrapper over the official valkey image. `apt-get upgrade` applies the
-# latest Debian security updates (valkey's -trixie tag is Debian-based) so the
-# RUNNING cache/broker ships with current patched packages regardless of base-tag
-# rebuild lag. We no longer run the stock tag; we run this built, patched image.
-#
-# The version is an ARG so `VALKEY_VERSION` in the environment still selects the
-# base, exactly as the old `image: valkey/valkey:${VALKEY_VERSION}` line did.
-# User/Entrypoint/Cmd are inherited unchanged (base is User=[] root at build; the
-# entrypoint drops to the valkey user at runtime) so behaviour matches stock.
-ARG VALKEY_VERSION=8.1.9-trixie
+# FreeSDN - Valkey with current Alpine security patches.
+# Keep the Debian runtime's UID/GID 999 so existing RDB/AOF volumes and
+# explicitly configured --user values remain usable. GID 999 is otherwise the
+# unused Alpine ping group. Valkey's persistence format is unchanged.
+ARG VALKEY_VERSION=9.1.2-alpine
 FROM valkey/valkey:${VALKEY_VERSION}
 
-RUN apt-get update && apt-get upgrade -y \
-    && rm -rf /var/lib/apt/lists/*
+RUN if command -v apk >/dev/null 2>&1; then \
+        apk upgrade --no-cache \
+        && deluser valkey \
+        && delgroup ping \
+        && addgroup -S -g 999 valkey \
+        && adduser -S -D -H -u 999 -G valkey valkey \
+        && chown valkey:valkey /data; \
+    else \
+        apt-get update && apt-get upgrade -y \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi

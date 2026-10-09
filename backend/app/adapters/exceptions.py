@@ -29,6 +29,14 @@ class AdapterReadOnlyError(AdapterError):
     pass
 
 
+class AdapterOutcomeUnknownError(AdapterError):
+    """A dispatched write may have taken effect, but its outcome is unverified.
+
+    This includes lost write acknowledgements and failed readback. Even a
+    connection failure during readback does not prove the earlier write failed. Staging must retain the change for reconciliation, never replay it.
+    """
+
+
 class AdapterConfirmationRequiredError(AdapterError):
     """Raised when a destructive/irreversible op needs explicit confirmation.
 

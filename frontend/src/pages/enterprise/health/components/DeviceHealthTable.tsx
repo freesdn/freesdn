@@ -52,7 +52,7 @@ function ScoreCell({ value }: { value: number | null }) {
   );
 }
 
-const STATUS_OPTIONS = ['all', 'healthy', 'warning', 'degraded', 'critical'] as const;
+const STATUS_OPTIONS = ['all', 'healthy', 'warning', 'degraded', 'critical', 'unknown'] as const;
 
 export function DeviceHealthTable({ siteId }: DeviceHealthTableProps) {
   const { t } = useTranslation('enterprise');
@@ -217,7 +217,7 @@ export function DeviceHealthTable({ siteId }: DeviceHealthTableProps) {
                             scoreCellColor(device.health_score),
                           )}
                         >
-                          {device.health_score}
+                          {device.health_score ?? t('DeviceHealthTable.common.notAvailable')}
                         </span>
                       </td>
                       <td className="py-2 pr-2"><ScoreCell value={device.reachability_score} /></td>

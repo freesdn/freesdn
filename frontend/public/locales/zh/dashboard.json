@@ -91,7 +91,10 @@
       "downloadMbps": "下载 (Mbps)",
       "uploadMbps": "上传 (Mbps)",
       "noData": "无可用流量数据",
-      "last24h": "最近 24 小时"
+      "last24h": "最近 24 小时",
+      "downloadMiB": "下载（MiB）",
+      "uploadMiB": "上传（MiB）",
+      "counterSnapshot": "当前累计计数器；重置时间各不相同"
     },
     "networkHealth": {
       "notAvailable": "不可用",

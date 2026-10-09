@@ -1,0 +1,163 @@
+rule_files:
+- alerts.yml
+evaluation_interval: 30s
+tests:
+- name: absent-is-not-a-recovery-attestation
+  interval: 1m
+  input_series: []
+  promql_expr_test:
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 10m
+    exp_samples: []
+- name: healthy-zero
+  interval: 1m
+  input_series:
+  - series: freesdn_audit_write_failures_total{job="freesdn-api",instance="api:8000",resource_type="controller"}
+    values: 0+0x30
+  promql_expr_test:
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 0m
+    exp_samples: []
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 1m
+    exp_samples: []
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 20m
+    exp_samples: []
+- name: first-visible-sample-already-one
+  interval: 1m
+  input_series:
+  - series: freesdn_audit_write_failures_total{job="freesdn-api",instance="api:8000",resource_type="controller"}
+    values: 1+0x30
+  promql_expr_test:
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 0m
+    exp_samples: []
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 1m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 20m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+- name: late-label-created-on-first-failure
+  interval: 1m
+  input_series:
+  - series: freesdn_audit_write_failures_total{job="freesdn-api",instance="api:8000",resource_type="controller"}
+    values: _ _ _ 1+0x30
+  promql_expr_test:
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 3m
+    exp_samples: []
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 4m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 20m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+- name: counter-increase-must-not-expire-with-rate-window
+  interval: 1m
+  input_series:
+  - series: freesdn_audit_write_failures_total{job="freesdn-api",instance="api:8000",resource_type="controller"}
+    values: 0 0 1+0x30
+  promql_expr_test:
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 2m
+    exp_samples: []
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 3m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 20m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+- name: ongoing-failures
+  interval: 1m
+  input_series:
+  - series: freesdn_audit_write_failures_total{job="freesdn-api",instance="api:8000",resource_type="controller"}
+    values: 0+1x30
+  promql_expr_test:
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 2m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 20m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+- name: resource-types-stay-distinct
+  interval: 1m
+  input_series:
+  - series: freesdn_audit_write_failures_total{job="freesdn-api",instance="api:8000",resource_type="controller"}
+    values: 1+0x30
+  - series: freesdn_audit_write_failures_total{job="freesdn-api",instance="api:8000",resource_type="device"}
+    values: 0+0x30
+  promql_expr_test:
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 1m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 20m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+- name: targets-stay-distinct
+  interval: 1m
+  input_series:
+  - series: freesdn_audit_write_failures_total{job="freesdn-api",instance="api:8000",resource_type="controller"}
+    values: 1+0x30
+  - series: freesdn_audit_write_failures_total{job="freesdn-api",instance="api-b:8000",resource_type="controller"}
+    values: 2+0x30
+  promql_expr_test:
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 1m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api-b:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+- name: counter-reset-is-a-documented-durability-limit
+  interval: 1m
+  input_series:
+  - series: freesdn_audit_write_failures_total{job="freesdn-api",instance="api:8000",resource_type="controller"}
+    values: 1 1 1 0+0x30
+  promql_expr_test:
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 1m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 4m
+    exp_samples: []
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 20m
+    exp_samples: []
+- name: stale-process-is-a-documented-durability-limit
+  interval: 1m
+  input_series:
+  - series: freesdn_audit_write_failures_total{job="freesdn-api",instance="api:8000",resource_type="controller"}
+    values: 1 1 stale
+  promql_expr_test:
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 1m
+    exp_samples:
+    - labels: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing",component="audit",compliance="true",instance="api:8000",job="freesdn-api",resource_type="controller",severity="critical"}
+      value: 1
+  - expr: ALERTS{alertname="FreeSDNAuditWriteFailing",alertstate="firing"}
+    eval_time: 8m
+    exp_samples: []

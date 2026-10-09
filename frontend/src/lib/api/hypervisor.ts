@@ -9,6 +9,10 @@
 
 import { api } from './client';
 import type { PendingChangeResponse } from './gatewayCommon';
+import type { components } from './generated/openapi';
+
+export type HypervisorOperationReceipt = components['schemas']['VMActionResponse'];
+export type HypervisorPowerReceipt = HypervisorOperationReceipt;
 import type {
   HypervisorBackupJob,
   HypervisorCephStatus,
@@ -42,9 +46,68 @@ import type {
   BulkActionResult,
   BulkMigrateRequest,
   GuestAgentInfo,
-  BackupJobCreateRequest,
-  BackupJobUpdateRequest,
 } from './types';
+
+export type TaskStopIntent = components['schemas']['TaskStopRequest'];
+export type TaskStopReceipt = components['schemas']['TaskStopResponse'];
+export type TaskStopReview = components['schemas']['TaskStopReviewResponse'];
+
+export type BackupJobSettings = components['schemas']['BackupJobSettings'];
+export type BackupJobReviewIntent = components['schemas']['BackupJobReviewRequest'];
+export type BackupJobOperationIntent = components['schemas']['BackupJobOperationRequest'];
+export type BackupJobReceipt = components['schemas']['BackupJobOperationResponse'];
+export type BackupJobReview = components['schemas']['BackupJobReviewResponse'];
+
+export type CertificateReviewIntent = components['schemas']['CertificateReviewRequest'];
+export type CertificateOperationIntent = components['schemas']['CertificateOperationRequest'];
+export type CertificateOperationReceipt = components['schemas']['CertificateOperationResponse'];
+export interface CertificateReview {
+  expected_digest: string;
+  snapshot: {
+    node: string; action: 'upload' | 'delete' | 'renew'; endpoint_node: string;
+    overwrite: boolean; restart: boolean; acme_force: boolean; expected_domains: string[];
+    candidate: { subject: string; san: string[]; notafter: number; fingerprint: string } | null;
+    inventory: Record<string, { fingerprint: string }>;
+  };
+}
+
+export type ClusterOperationIntent = components['schemas']['ClusterOperationRequest'];
+export type ClusterOperationReceipt = components['schemas']['ClusterOperationResponse'];
+export type ClusterOperationAction = 'node.reboot' | 'node.shutdown' | 'ha.resource.create' | 'ha.resource.delete' | 'ha.group.create' | 'ha.group.delete';
+export type ClusterOperationSpec =
+  | { action: 'node.reboot' | 'node.shutdown' | 'ha.resource.delete' | 'ha.group.delete'; target: string }
+  | { action: 'ha.resource.create'; target: string; options: { sid: string; group: string; state: 'started'; max_restart: number; max_relocate: number; comment: string } }
+  | { action: 'ha.group.create'; target: string; options: { group: string; nodes: string; nofailback: boolean; restricted: boolean; comment: string } };
+export interface ClusterOperationReview {
+  expected_digest: string;
+  snapshot: {
+    action: string; target: string; selected_group: string;
+    cluster: { name: string; quorate: number | null };
+    nodes: { name: string; online: number }[];
+    guests: { vmid: number; type: string; node: string; status: string; name: string; template: number }[];
+    resources: Record<string, unknown>[];
+    groups: Record<string, unknown>[];
+  };
+}
+
+export interface ReviewedGuestIntent {
+  request_id: string;
+  expected_digest: string;
+}
+
+export function reviewedGuestDigest(config: Record<string, unknown>): string | null {
+  return typeof config.digest === 'string' && /^[0-9a-f]{40}$/.test(config.digest) ? config.digest : null;
+}
+
+export function reviewedDiskBytes(config: Record<string, unknown>, disk: string): number | null {
+  const raw = config[disk];
+  if (typeof raw !== 'string' || raw.includes('media=cdrom')) return null;
+  const match = /(?:^|,)size=(\d+(?:\.\d+)?)([KMGT]?)(?:,|$)/.exec(raw);
+  if (!match) return null;
+  const units: Record<string, number> = { K: 1024, M: 1024 ** 2, G: 1024 ** 3, T: 1024 ** 4 };
+  const bytes = Number(match[1]) * units[match[2] || 'G'];
+  return Number.isSafeInteger(bytes) && bytes > 0 ? bytes : null;
+}
 
 // ── Request Types ─────────────────────────────────────────────────────
 
@@ -60,24 +123,10 @@ export interface RemoteMigrateRequest {
   delete_source?: boolean;
 }
 
-export interface CreateSdnZoneRequest {
-  zone: string;
-  type: string;
-  nodes?: string;
-  bridge?: string;
-  mtu?: number;
-  dns?: string;
-  dnszone?: string;
-  tag?: number;
-}
-
-export interface CreateSdnVnetRequest {
-  vnet: string;
-  zone: string;
-  alias?: string;
-  tag?: number;
-  vlanaware?: boolean;
-}
+export type SdnInspection = components['schemas']['SdnInspection'];
+export type SdnAttachmentInspection = components['schemas']['SdnAttachmentInspection'];
+export type SdnDependencyInspection = components['schemas']['SdnDependencyInspection'];
+export type SdnDryRunObservation = components['schemas']['SdnDryRunObservation'];
 
 /** Validate vmType to prevent path injection. */
 function safeVmType(vmType: string): 'qemu' | 'lxc' {
@@ -85,8 +134,28 @@ function safeVmType(vmType: string): 'qemu' | 'lxc' {
   throw new Error(`Invalid vmType: ${vmType}`);
 }
 
+export type StorageReviewIntent = components['schemas']['StorageReviewRequest'];
+export type StorageOperationIntent = components['schemas']['StorageOperationRequest'];
+export type StorageOperationReceipt = components['schemas']['StorageOperationResponse'];
+
 /** Encode a path segment (node name, storage, snapshot name, etc.). */
 const enc = encodeURIComponent;
+
+// getRandomValues also works on appliance LAN HTTP origins where randomUUID
+// may be unavailable. Intent IDs must never fall back to Math.random().
+export function newHypervisorRequestId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/** PBS uses ct/vm namespaces, unlike file backups named vzdump-lxc/qemu. */
+export function backupGuestType(archive: string, format?: string): 'qemu' | 'lxc' {
+  if (format === 'pbs-ct' || /:backup\/ct\/[0-9]+\//.test(archive) || /(?:^|\/)vzdump-lxc-/.test(archive)) return 'lxc';
+  return 'qemu';
+}
 
 export const hypervisorApi = {
   // ── Dashboard ──────────────────────────────────────────────────────
@@ -137,10 +206,13 @@ export const hypervisorApi = {
     node: string,
     vmType: string,
     vmid: number,
-    action: string
+    action: string,
+    requestId: string = newHypervisorRequestId()
   ) =>
-    api.post(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/action`, {
+    api.post<HypervisorPowerReceipt>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/action`, {
       action,
+      request_id: requestId,
+      force: true,
     }),
 
   // ── VM/CT Creation ────────────────────────────────────────────────
@@ -156,9 +228,9 @@ export const hypervisorApi = {
   // Destroying a guest is irreversible — this call is only reached after the
   // type-to-confirm dialog (DestructiveConfirmDialog) passes, so we send
   // confirmed=true to satisfy the backend's per-action confirmation gate.
-  deleteVM: (controllerId: string, node: string, vmType: string, vmid: number) =>
-    api.delete(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}`, {
-      params: { confirmed: true },
+  deleteVM: (controllerId: string, node: string, vmType: string, vmid: number, intent: { request_id: string; expected_digest: string }) =>
+    api.delete<HypervisorOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}`, {
+      data: { ...intent, force: true, confirmed: true },
     }),
 
   // ── Snapshots ──────────────────────────────────────────────────────
@@ -172,11 +244,11 @@ export const hypervisorApi = {
     node: string,
     vmType: string,
     vmid: number,
-    data: { snapname: string; description?: string; vmstate?: boolean }
+    data: { snapname: string; description?: string; vmstate?: boolean; request_id?: string }
   ) =>
-    api.post(
+    api.post<HypervisorOperationReceipt>(
       `/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/snapshots`,
-      data
+      { ...data, request_id: data.request_id ?? newHypervisorRequestId(), force: true }
     ),
 
   rollbackSnapshot: (
@@ -184,11 +256,12 @@ export const hypervisorApi = {
     node: string,
     vmType: string,
     vmid: number,
-    snapname: string
+    snapname: string,
+    requestId: string = newHypervisorRequestId()
   ) =>
-    api.post(
+    api.post<HypervisorOperationReceipt>(
       `/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/snapshots/${enc(snapname)}/rollback`,
-      undefined,
+      { request_id: requestId, force: true },
       { params: { confirmed: true } }
     ),
 
@@ -197,11 +270,12 @@ export const hypervisorApi = {
     node: string,
     vmType: string,
     vmid: number,
-    snapname: string
+    snapname: string,
+    requestId: string = newHypervisorRequestId()
   ) =>
-    api.delete(
+    api.delete<HypervisorOperationReceipt>(
       `/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/snapshots/${enc(snapname)}`,
-      { params: { confirmed: true } }
+      { params: { confirmed: true, request_id: requestId, force: true } }
     ),
 
   // ── Storage ────────────────────────────────────────────────────────
@@ -252,11 +326,11 @@ export const hypervisorApi = {
     node: string,
     vmType: string,
     vmid: number,
-    data: { storage: string; mode?: string; compress?: string }
+    data: { storage: string; mode?: string; compress?: string; request_id?: string }
   ) =>
-    api.post(
+    api.post<HypervisorOperationReceipt>(
       `/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/backup`,
-      data
+      { ...data, request_id: data.request_id ?? newHypervisorRequestId(), force: true }
     ),
 
   // ── Clone / Migrate / Resize ───────────────────────────────────────
@@ -265,39 +339,39 @@ export const hypervisorApi = {
     node: string,
     vmType: string,
     vmid: number,
-    data: { newid: number; name?: string; target?: string; full?: boolean; storage?: string; description?: string }
+    data: { newid: number; name?: string; target?: string; full?: boolean; storage?: string; description?: string; request_id?: string }
   ) =>
-    api.post(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/clone`, data),
+    api.post<HypervisorOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/clone`, { ...data, request_id: data.request_id ?? newHypervisorRequestId(), force: true }),
 
   migrateVM: (
     controllerId: string,
     node: string,
     vmType: string,
     vmid: number,
-    data: { target: string; online?: boolean }
+    data: { target: string; online?: boolean; restart?: boolean; request_id?: string }
   ) =>
-    api.post(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/migrate`, data),
+    api.post<HypervisorOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/migrate`, { ...data, request_id: data.request_id ?? newHypervisorRequestId(), force: true }),
 
   resizeDisk: (
     controllerId: string,
     node: string,
     vmType: string,
     vmid: number,
-    data: { disk: string; size: string }
+    data: ReviewedGuestIntent & { disk: string; size: string; current_size_bytes: number }
   ) =>
-    api.put(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/resize`, data),
+    api.put<HypervisorOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/resize`, { ...data, force: true }),
 
   updateConfig: (
     controllerId: string,
     node: string,
     vmType: string,
     vmid: number,
-    data: Record<string, unknown>
+    data: ReviewedGuestIntent & Record<string, unknown>
   ) =>
-    api.put(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/config`, data),
+    api.put<HypervisorOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/config`, { ...data, force: true }),
 
-  convertToTemplate: (controllerId: string, node: string, vmType: string, vmid: number) =>
-    api.post(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/template`),
+  convertToTemplate: (controllerId: string, node: string, vmType: string, vmid: number, data: ReviewedGuestIntent & { confirmed: boolean }) =>
+    api.post<HypervisorOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/template`, { ...data, force: true }),
 
   // ── Console ─────────────────────────────────────────────────────────
   getConsoleProxy: (
@@ -325,8 +399,11 @@ export const hypervisorApi = {
       { params: { start: start || 0, limit: limit || 50 } }
     ),
 
-  stopTask: (controllerId: string, node: string, upid: string) =>
-    api.delete(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/tasks/${enc(upid)}`),
+  reviewTaskStop: (controllerId: string, node: string, upid: string) =>
+    api.post<TaskStopReview>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/tasks/${enc(upid)}/stop-review`),
+
+  stopTask: (controllerId: string, node: string, upid: string, data: TaskStopIntent) =>
+    api.delete<TaskStopReceipt>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/tasks/${enc(upid)}`, { data }),
 
   // ── Firewall ────────────────────────────────────────────────────────
   getClusterFirewallRules: (controllerId: string) =>
@@ -335,31 +412,20 @@ export const hypervisorApi = {
   getNodeFirewallRules: (controllerId: string, node: string) =>
     api.get<HypervisorFirewallRule[]>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/firewall/rules`),
 
-  createNodeFirewallRule: (
-    controllerId: string,
-    node: string,
-    data: { action: string; type?: string; enable?: boolean; source?: string; dest?: string; dport?: string; proto?: string; comment?: string }
-  ) =>
-    api.post(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/firewall/rules`, data),
-
-  deleteNodeFirewallRule: (controllerId: string, node: string, pos: number) =>
-    api.delete(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/firewall/rules/${enc(pos)}`, {
-      params: { confirmed: true },
-    }),
+  reviewFirewallOperation: (cid: string, data: FirewallReviewIntent) =>
+    api.post<FirewallReview>(`/hypervisor/controllers/${enc(cid)}/firewall/operations/review`, data),
+  submitFirewallOperation: (cid: string, data: FirewallOperationIntent) =>
+    api.post<FirewallOperationReceipt>(`/hypervisor/controllers/${enc(cid)}/firewall/operations`, data),
 
   // ── Node Extras ────────────────────────────────────────────────────
-  // Node power ops are catastrophic (whole node + guests offline) and only
-  // reached after the type-to-confirm dialog; thread confirmed=true so the
-  // backend confirmation gate passes (still refused while read-only is on).
-  shutdownNode: (controllerId: string, node: string) =>
-    api.post(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/shutdown`, undefined, {
-      params: { confirmed: true },
-    }),
+  reviewClusterOperation: (controllerId: string, action: ClusterOperationAction, target: string, group = '') =>
+    api.get<ClusterOperationReview>(`/hypervisor/controllers/${enc(controllerId)}/cluster-operations/review`, { params: { action, target, group } }),
 
-  rebootNode: (controllerId: string, node: string) =>
-    api.post(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/reboot`, undefined, {
-      params: { confirmed: true },
-    }),
+  shutdownNode: (controllerId: string, node: string, data: ClusterOperationIntent) =>
+    api.post<ClusterOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/shutdown`, data),
+
+  rebootNode: (controllerId: string, node: string, data: ClusterOperationIntent) =>
+    api.post<ClusterOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/reboot`, data),
 
   getNodeServices: (controllerId: string, node: string) =>
     api.get<HypervisorNodeService[]>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/services`),
@@ -377,10 +443,11 @@ export const hypervisorApi = {
       params: { limit: limit || 50, start: start || 0 },
     }),
 
-  deleteStorageVolume: (controllerId: string, node: string, storage: string, volume: string) =>
-    api.delete(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/storage/${enc(storage)}/content/${enc(volume)}`, {
-      params: { confirmed: true },
-    }),
+  reviewStorageOperation: (controllerId: string, node: string, storage: string, data: StorageReviewIntent) =>
+    api.post<components['schemas']['StorageOperationReview']>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/storage/${enc(storage)}/review`, data),
+
+  deleteStorageVolume: (controllerId: string, node: string, storage: string, volume: string, data: StorageOperationIntent) =>
+    api.delete<StorageOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/storage/${enc(storage)}/content/${enc(volume)}`, { data }),
 
   // ── HA ──────────────────────────────────────────────────────────────
   getHAResources: (controllerId: string) =>
@@ -389,27 +456,17 @@ export const hypervisorApi = {
   getHAGroups: (controllerId: string) =>
     api.get<HypervisorHAGroup[]>(`/hypervisor/controllers/${enc(controllerId)}/ha/groups`),
 
-  createHAResource: (
-    controllerId: string,
-    data: { sid: string; group?: string; max_relocate?: number; max_restart?: number; state?: string; comment?: string }
-  ) =>
-    api.post(`/hypervisor/controllers/${enc(controllerId)}/ha/resources`, data),
+  createHAResource: (controllerId: string, data: components['schemas']['HAResourceCreateRequest']) =>
+    api.post<ClusterOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/ha/resources`, data),
 
-  deleteHAResource: (controllerId: string, sid: string) =>
-    api.delete(`/hypervisor/controllers/${enc(controllerId)}/ha/resources/${enc(sid)}`, {
-      params: { confirmed: true },
-    }),
+  deleteHAResource: (controllerId: string, sid: string, data: ClusterOperationIntent) =>
+    api.delete<ClusterOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/ha/resources/${enc(sid)}`, { data }),
 
-  createHAGroup: (
-    controllerId: string,
-    data: { group: string; nodes: string; nofailback?: boolean; restricted?: boolean; comment?: string }
-  ) =>
-    api.post(`/hypervisor/controllers/${enc(controllerId)}/ha/groups`, data),
+  createHAGroup: (controllerId: string, data: components['schemas']['HAGroupCreateRequest']) =>
+    api.post<ClusterOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/ha/groups`, data),
 
-  deleteHAGroup: (controllerId: string, group: string) =>
-    api.delete(`/hypervisor/controllers/${enc(controllerId)}/ha/groups/${enc(group)}`, {
-      params: { confirmed: true },
-    }),
+  deleteHAGroup: (controllerId: string, group: string, data: ClusterOperationIntent) =>
+    api.delete<ClusterOperationReceipt>(`/hypervisor/controllers/${enc(controllerId)}/ha/groups/${enc(group)}`, { data }),
 
   // ── Resource Pools ──────────────────────────────────────────────────
   getPools: (controllerId: string) =>
@@ -423,30 +480,42 @@ export const hypervisorApi = {
   bulkAction: (controllerId: string, data: BulkActionRequest) =>
     api.post<BulkActionResult[]>(
       `/hypervisor/controllers/${enc(controllerId)}/bulk-action`,
-      data,
+      data.action === 'delete' ? { ...data, force: true } : {
+        ...data,
+        force: true,
+        targets: data.targets.map((target) => ({
+          ...target,
+          request_id: target.request_id ?? newHypervisorRequestId(),
+        })),
+      },
       // Bulk delete is irreversible and only reached after the type-to-confirm
       // dialog; thread confirmed=true so the backend's confirmation gate passes.
       data.action === 'delete' ? { params: { confirmed: true } } : undefined
     ),
 
   bulkMigrate: (controllerId: string, data: BulkMigrateRequest) =>
-    api.post<BulkActionResult[]>(`/hypervisor/controllers/${enc(controllerId)}/bulk-migrate`, data),
+    api.post<BulkActionResult[]>(`/hypervisor/controllers/${enc(controllerId)}/bulk-migrate`, {
+      ...data,
+      force: true,
+      targets: data.targets.map((target) => ({ ...target, request_id: target.request_id ?? newHypervisorRequestId() })),
+    }),
 
   // ── Guest Agent ────────────────────────────────────────────────
   getGuestAgentInfo: (controllerId: string, node: string, vmid: number) =>
     api.get<GuestAgentInfo>(`/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/qemu/${vmid}/agent/info`),
 
   // ── Backup Job CRUD ────────────────────────────────────────────
-  createBackupJob: (controllerId: string, data: BackupJobCreateRequest) =>
-    api.post(`/hypervisor/controllers/${enc(controllerId)}/backup/jobs`, data),
+  reviewBackupJob: (controllerId: string, data: BackupJobReviewIntent) =>
+    api.post<BackupJobReview>(`/hypervisor/controllers/${enc(controllerId)}/backup/jobs/review`, data),
 
-  updateBackupJob: (controllerId: string, jobId: string, data: BackupJobUpdateRequest) =>
-    api.put(`/hypervisor/controllers/${enc(controllerId)}/backup/jobs/${enc(jobId)}`, data),
+  createBackupJob: (controllerId: string, data: BackupJobOperationIntent) =>
+    api.post<BackupJobReceipt>(`/hypervisor/controllers/${enc(controllerId)}/backup/jobs`, data),
 
-  deleteBackupJob: (controllerId: string, jobId: string) =>
-    api.delete(`/hypervisor/controllers/${enc(controllerId)}/backup/jobs/${enc(jobId)}`, {
-      params: { confirmed: true },
-    }),
+  updateBackupJob: (controllerId: string, jobId: string, data: BackupJobOperationIntent) =>
+    api.put<BackupJobReceipt>(`/hypervisor/controllers/${enc(controllerId)}/backup/jobs/${enc(jobId)}`, data),
+
+  deleteBackupJob: (controllerId: string, jobId: string, data: BackupJobOperationIntent) =>
+    api.delete<BackupJobReceipt>(`/hypervisor/controllers/${enc(controllerId)}/backup/jobs/${enc(jobId)}`, { data }),
 
   // ── Container RRD ──────────────────────────────────────────────
   getContainerRRD: (controllerId: string, node: string, vmid: number, timeframe?: string, maxPoints?: number) =>
@@ -456,14 +525,19 @@ export const hypervisorApi = {
     ),
 
   // ── Storage Upload ─────────────────────────────────────────────
-  uploadToStorage: (controllerId: string, node: string, storage: string, file: File, contentType: string) => {
+  uploadToStorage: (controllerId: string, node: string, storage: string, file: File, data: StorageOperationIntent) => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('content', contentType);
-    return api.post(
+    formData.append('content', data.content || 'iso');
+    formData.append('size', String(data.size));
+    formData.append('request_id', data.request_id);
+    formData.append('expected_digest', data.expected_digest);
+    formData.append('force', String(data.force));
+    formData.append('confirmed', String(data.confirmed));
+    return api.post<StorageOperationReceipt>(
       `/hypervisor/controllers/${enc(controllerId)}/nodes/${enc(node)}/storage/${enc(storage)}/upload`,
       formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
+      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 0 }
     );
   },
 
@@ -481,24 +555,17 @@ export const hypervisorApi = {
   getNodeCertificates: (cid: string, node: string) =>
     api.get(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/certificates`),
 
-  renewAcmeCertificate: (cid: string, node: string) =>
-    api.post(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/certificates/acme/renew`),
+  reviewCertificate: (cid: string, node: string, data: CertificateReviewIntent) =>
+    api.post<CertificateReview>(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/certificates/review`, data),
 
-  // `confirmed` is a REQUIRED body field: the endpoint 409s without it
-  // (api.py: `if not body.confirmed`), because replacing a node's TLS cert can
-  // lock the operator out of pveproxy. It was never sent, so the upload failed
-  // 100% of the time. The operator has already supplied the cert and key in the
-  // upload dialog and clicked Upload, so the acknowledgement is real.
-  uploadCustomCertificate: (cid: string, node: string, data: { certificates: string; key: string; force?: boolean; restart?: boolean }) =>
-    api.post(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/certificates/custom`, {
-      ...data,
-      confirmed: true,
-    }),
+  renewAcmeCertificate: (cid: string, node: string, data: CertificateOperationIntent) =>
+    api.post<CertificateOperationReceipt>(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/certificates/acme/renew`, data),
 
-  deleteCustomCertificate: (cid: string, node: string) =>
-    api.delete(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/certificates/custom`, {
-      params: { confirmed: true },
-    }),
+  uploadCustomCertificate: (cid: string, node: string, data: CertificateOperationIntent) =>
+    api.post<CertificateOperationReceipt>(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/certificates/custom`, data),
+
+  deleteCustomCertificate: (cid: string, node: string, data: CertificateOperationIntent) =>
+    api.delete<CertificateOperationReceipt>(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/certificates/custom`, { data }),
 
   // ── Subscription ────────────────────────────────────────────────
   getNodeSubscription: (cid: string, node: string) =>
@@ -521,24 +588,16 @@ export const hypervisorApi = {
   getSdnControllers: (cid: string) =>
     api.get(`/hypervisor/controllers/${enc(cid)}/sdn/controllers`),
 
-  createSdnZone: (cid: string, data: CreateSdnZoneRequest) =>
-    api.post(`/hypervisor/controllers/${enc(cid)}/sdn/zones`, data),
+  inspectSdnAttachments: (cid: string) =>
+    api.get<SdnAttachmentInspection>(`/hypervisor/controllers/${enc(cid)}/sdn/attachments`),
+  inspectSdnDependencies: (cid: string) =>
+    api.get<SdnDependencyInspection>(`/hypervisor/controllers/${enc(cid)}/sdn/dependencies`),
 
-  createSdnVnet: (cid: string, data: CreateSdnVnetRequest) =>
-    api.post(`/hypervisor/controllers/${enc(cid)}/sdn/vnets`, data),
+  inspectSdn: (cid: string) =>
+    api.get<SdnInspection>(`/hypervisor/controllers/${enc(cid)}/sdn/inspection`),
 
-  deleteSdnZone: (cid: string, zone: string) =>
-    api.delete(`/hypervisor/controllers/${enc(cid)}/sdn/zones/${enc(zone)}`, {
-      params: { confirmed: true },
-    }),
-
-  deleteSdnVnet: (cid: string, vnet: string) =>
-    api.delete(`/hypervisor/controllers/${enc(cid)}/sdn/vnets/${enc(vnet)}`, {
-      params: { confirmed: true },
-    }),
-
-  applySdn: (cid: string) =>
-    api.post(`/hypervisor/controllers/${enc(cid)}/sdn/apply`),
+  getSdnDryRun: (cid: string, node: string) =>
+    api.get<SdnDryRunObservation>(`/hypervisor/controllers/${enc(cid)}/sdn/nodes/${enc(node)}/dry-run`),
 
   // ── Guest Agent (exec / file ops) ──────────────────────────────
   agentExec: (cid: string, node: string, vmid: number, data: { command: string; input_data?: string }) =>
@@ -590,31 +649,11 @@ export const hypervisorApi = {
   getGuestFirewallRules: (cid: string, node: string, vmType: string, vmid: number) =>
     api.get(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/firewall/rules`),
 
-  createGuestFirewallRule: (
-    cid: string,
-    node: string,
-    vmType: string,
-    vmid: number,
-    data: { action: string; type?: string; enable?: boolean; source?: string; dest?: string; dport?: string; proto?: string; comment?: string }
-  ) =>
-    api.post(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/firewall/rules`, data),
-
-  deleteGuestFirewallRule: (cid: string, node: string, vmType: string, vmid: number, pos: number) =>
-    api.delete(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/firewall/rules/${enc(String(pos))}`, {
-      params: { confirmed: true },
-    }),
-
   getGuestFirewallOptions: (cid: string, node: string, vmType: string, vmid: number) =>
     api.get(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/firewall/options`),
 
-  updateGuestFirewallOptions: (cid: string, node: string, vmType: string, vmid: number, data: Record<string, unknown>) =>
-    api.put(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/${safeVmType(vmType)}/${vmid}/firewall/options`, data),
-
   getClusterFirewallOptions: (cid: string) =>
     api.get(`/hypervisor/controllers/${enc(cid)}/cluster/firewall/options`),
-
-  updateClusterFirewallOptions: (cid: string, data: Record<string, unknown>) =>
-    api.put(`/hypervisor/controllers/${enc(cid)}/cluster/firewall/options`, data),
 
   // ── Ceph (detailed) ─────────────────────────────────────────────────
   getCephDetail: (cid: string, node: string) =>
@@ -669,10 +708,11 @@ export const hypervisorApi = {
       start?: boolean;
       unique?: boolean;
     },
+    requestId: string = newHypervisorRequestId(),
   ) =>
     api.post<PendingChangeResponse>(
       `/gateway-proxmox-backup/${enc(cid)}/changes/proxmox.backup.restore`,
-      { payload: data, target_id: String(data.vmid) },
+      { payload: data, target_id: String(data.vmid), request_id: requestId },
       { params: { operation: 'create' } },
     ),
 
@@ -710,3 +750,10 @@ export const hypervisorApi = {
   regenerateCloudInit: (cid: string, node: string, vmid: number) =>
     api.post(`/hypervisor/controllers/${enc(cid)}/nodes/${enc(node)}/qemu/${vmid}/cloudinit/regenerate`),
 };
+
+export type FirewallTarget = components['schemas']['FirewallTarget'];
+export type FirewallRuleSettings = components['schemas']['FirewallRuleSettings'];
+export type FirewallReviewIntent = components['schemas']['FirewallReviewRequest'];
+export type FirewallReview = components['schemas']['FirewallReviewResponse'];
+export type FirewallOperationIntent = components['schemas']['FirewallOperationRequest'];
+export type FirewallOperationReceipt = components['schemas']['FirewallOperationResponse'];

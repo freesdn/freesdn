@@ -206,9 +206,9 @@ async def get_audit_logs(
                 timestamp=e.timestamp,
                 action=e.action,
                 resource_type=e.resource_type,
-                resource_id=str(e.resource_id) if e.resource_id else None,
+                resource_id=str(e.resource_id) if e.resource_id is not None else None,
                 resource_name=e.resource_name,
-                actor_id=str(e.actor_id) if e.actor_id else None,
+                actor_id=str(e.actor_id) if e.actor_id is not None else None,
                 actor_name=e.actor_name,
                 actor_type=e.actor_type,
                 status=e.status,
@@ -276,9 +276,9 @@ async def get_resource_audit_logs(
             timestamp=e.timestamp,
             action=e.action,
             resource_type=e.resource_type,
-            resource_id=str(e.resource_id) if e.resource_id else None,
+            resource_id=str(e.resource_id) if e.resource_id is not None else None,
             resource_name=e.resource_name,
-            actor_id=str(e.actor_id) if e.actor_id else None,
+            actor_id=str(e.actor_id) if e.actor_id is not None else None,
             actor_name=e.actor_name,
             actor_type=e.actor_type,
             status=e.status,
@@ -358,9 +358,9 @@ async def get_user_audit_logs(
             timestamp=e.timestamp,
             action=e.action,
             resource_type=e.resource_type,
-            resource_id=str(e.resource_id) if e.resource_id else None,
+            resource_id=str(e.resource_id) if e.resource_id is not None else None,
             resource_name=e.resource_name,
-            actor_id=str(e.actor_id) if e.actor_id else None,
+            actor_id=str(e.actor_id) if e.actor_id is not None else None,
             actor_name=e.actor_name,
             actor_type=e.actor_type,
             status=e.status,
@@ -712,16 +712,27 @@ async def validate_audit_chain(
     end_id: UUID | None = Query(None),
     limit: int = Query(10000, ge=1, le=100000),
 ) -> Any:
-    """Walk the audit hash chain and report any tampering.
+    """Verify a bounded global audit window and its local signed state.
 
-    Admin-only. Returns ``{"valid": bool, "broken_at": id | null,
-    "broken_reason": str | null, "checked": int, "unchained": int}``.
+    Requires an authenticated, unscoped platform superuser. ``valid`` alone
+    does not authenticate the whole retained chain: inspect ``complete``,
+    ``state_authenticated``, ``boundary_verified`` and
+    ``retained_history_authenticated`` together. Explicit bounds or truncation
+    cannot qualify complete retained-history authentication. Counts such as
+    ``checked``, ``legacy_rows`` and ``unchained`` describe the selected window;
+    ``unsigned_history_rows`` discloses earlier unsigned history when sealed.
 
-    NOTE: this is tamper-EVIDENCE, not prevention. A
-    DB admin holding both ``AUDIT_HMAC_KEY`` and direct table access
-    could still re-key the entire chain. The endpoint is intended for
-    SOC2/HIPAA/PCI evidence trails — operators run it on a schedule
-    and alert on any non-``valid`` response.
+    UUID bounds are inclusive in append order. Verification also has an 8 MiB
+    serialized window budget. ``next_start_id`` points to the first unexamined
+    row, but subsequent requests use new snapshots. Missing/reversed bounds or
+    detected inconsistencies produce ``valid: false``.
+
+    ``retention_applied`` records a local retained-prefix boundary, not recovery
+    of deleted bodies. ``history_authenticated`` and
+    ``external_immutability_proven`` remain false: this endpoint cannot prove
+    complete event capture, external immutability or whole-database rollback
+    resistance. A valid unsigned/unsealed result is not a certification.
+    See backend/docs/audit-retention.md for operator actions and trust limits.
     """
     # Super_admin only — chain validation can be expensive and the
     # response leaks structural metadata about audit volume.

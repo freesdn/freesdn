@@ -31,7 +31,10 @@ Architecture notes:
   ``collect_backup_data`` directly. The free function moves no code,
   it just reverses the direction of the call.
 
-- Schema version 1.0.0 corresponds to the data shape produced by
+- Schema version 2.0.0 requires complete portable account/provider/grant security.
+  Version1 configuration snapshots can migrate, but version1 full account
+  vaults are refused because missing protections cannot be inferred safely.
+  The historical1.0.0 data shape produced by
   ``collect_backup_data``: top-level
   ``sites`` / ``controllers`` / ``devices`` / ``users`` /
   ``automation_rules`` keys, each a list of dicts. A future major
@@ -63,9 +66,24 @@ class CoreBackupContributor:
     """
 
     contributor_id: str = "core"
-    schema_version: str = "1.0.0"
+    schema_version: str = "2.0.0"
     depends_on: tuple[str, ...] = ()
     default_included: bool = True
+
+    def migrate_from(
+        self, old_version: str, payload: ContributorPayload
+    ) -> ContributorPayload | None:
+        """Legacy configuration can migrate; unknown account protection cannot."""
+        from .version import parse
+
+        if parse(old_version)[0] != 1:
+            return None
+        return ContributorPayload(
+            schema_version=self.schema_version,
+            counts=dict(payload.counts),
+            data={**payload.data, "_legacy_account_security": True},
+            metadata={**payload.metadata, "migrated_from": old_version},
+        )
 
     async def collect(
         self,
@@ -133,6 +151,8 @@ class CoreBackupContributor:
         # the manifest doesn't need to advertise empty resources.
         counts: dict[str, int] = {}
         for key, value in data.items():
+            if key == "account_security_format":
+                continue
             if isinstance(value, list):
                 counts[key] = len(value)
             elif value is not None:
@@ -180,8 +200,11 @@ class CoreBackupContributor:
           - ``restore_devices`` (bool, default True): include the
             devices subset of the restore.
           - ``restore_users`` (bool, default False): include users.
-            Default OFF because users can carry MFA + session state
-            the operator may not want overwritten.
+            Default OFF. Config-only restores preserve live account security;
+            explicit vault recovery can restore login and permission state.
+          - ``include_secrets`` (bool, default False): explicit vault recovery.
+            Without it, new users are disabled profiles and site grants are
+            left unchanged, with explanatory warnings in the restore report.
         """
         from app.services.backup import BackupService
 
@@ -189,8 +212,17 @@ class CoreBackupContributor:
         svc.org_id = organization_id
 
         start = time.monotonic()
+        from .account_security_codec import AccountSecurityFormatError
 
         try:
+            if (
+                options.get("include_secrets", False)
+                and options.get("restore_users", False)
+                and payload.data.get("_legacy_account_security")
+            ):
+                raise AccountSecurityFormatError(
+                    "Legacy vaults lack complete account security. Re-export a supported full vault from the source instance."
+                )
             per_model = await svc._restore_data(
                 payload.data,
                 dry_run=dry_run,
@@ -199,11 +231,20 @@ class CoreBackupContributor:
                 restore_users=options.get("restore_users", False),
                 include_secrets=options.get("include_secrets", False),
             )
+        except AccountSecurityFormatError as exc:
+            return RestoreResult(
+                contributor_id=self.contributor_id,
+                status="error",
+                errors=[str(exc)],
+                duration_sec=time.monotonic() - start,
+            )
         except Exception as exc:
             return RestoreResult(
                 contributor_id=self.contributor_id,
                 status="error",
-                errors=[f"core restore raised: {exc}"],
+                errors=[
+                    f"Core restore failed ({type(exc).__name__}); review archive and database availability."
+                ],
                 duration_sec=time.monotonic() - start,
             )
 
@@ -230,6 +271,18 @@ class CoreBackupContributor:
                     f"rejected as cross-tenant (NOT restored). This is a "
                     f"normal outcome when restoring a backup taken on a "
                     f"different organization."
+                )
+
+        if not options.get("include_secrets", False):
+            if created.get("users"):
+                warnings.append(
+                    "Config-only recovery creates disabled viewer profiles without usable logins; "
+                    "normal account setup and separate access grants are required."
+                )
+            if skipped.get("user_site_access"):
+                warnings.append(
+                    "Config-only recovery leaves current site grants unchanged; "
+                    "use explicit vault recovery to restore account access."
                 )
 
         return RestoreResult(

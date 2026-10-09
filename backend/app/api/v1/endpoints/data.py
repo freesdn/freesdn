@@ -17,17 +17,20 @@ REST API for data import/export operations:
   POST   /imports/{id}/rollback - Rollback a completed import
 """
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTask
 
 from app.api.v1.deps import get_current_active_user
 from app.core.dependencies import is_unscoped_org_admin
+from app.core.private_files import open_private, unlink_private, write_private
 from app.core.site_access import assert_can_access_site
 from app.db import get_session
 from app.models import User
@@ -312,23 +315,32 @@ async def download_export(
     # sibling-site or org-wide export file (404 shape — no existence oracle).
     if not _export_visible_to(user, job):
         raise HTTPException(status_code=404, detail="Export job not found")
-    if not job.file_path or not Path(job.file_path).exists():
+    if not job.file_path:
         raise HTTPException(status_code=404, detail="Export file not available")
-
-    # Path containment validation to prevent path traversal
-    resolved = Path(job.file_path).resolve()
-    export_base = DATA_DIR.resolve()
+    path = Path(job.file_path).absolute()
     try:
-        resolved.relative_to(export_base)
+        path.relative_to(DATA_DIR.absolute())
     except ValueError:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="Access denied") from None
+    try:
+        handle = open_private(path, 256 * 1024 * 1024)
+    except OSError:
+        raise HTTPException(status_code=404, detail="Export file not available") from None
 
-    filename = Path(job.file_path).name
+    def chunks() -> Iterator[bytes]:
+        try:
+            while block := handle.read(1024 * 1024):
+                yield block
+        finally:
+            handle.close()
+
     media_type = "application/x-yaml" if job.export_format == "yaml" else "application/json"
-    return FileResponse(
-        path=job.file_path,
-        filename=filename,
+    extension = "yaml" if job.export_format == "yaml" else "json"
+    return StreamingResponse(
+        chunks(),
         media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="export_{job.id}.{extension}"'},
+        background=BackgroundTask(handle.close),
     )
 
 
@@ -348,11 +360,9 @@ async def validate_import_file(
 
     # Save temp file
     upload_dir = DATA_DIR / "uploads"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    from app.core.security_utils import MAX_CONFIG_IMPORT_BYTES, sanitize_filename
+    from app.core.security_utils import MAX_CONFIG_IMPORT_BYTES
 
-    safe_name = sanitize_filename(file.filename or "import.json")
-    temp_path = upload_dir / f"validate_{safe_name}"
+    temp_path = upload_dir / f"validate_{uuid4().hex}.upload"
 
     try:
         chunks: list[bytes] = []
@@ -369,14 +379,14 @@ async def validate_import_file(
                 )
             chunks.append(chunk)
         content = b"".join(chunks)
-        with open(temp_path, "wb") as f:
-            f.write(content)
+        write_private(temp_path, content)
 
         result = await Svc.validate_import_file(str(temp_path), source_format)
-        return ImportValidationResult(**result)
+        # Failure results from the service may omit source_format. Preserve a
+        # valid response contract for rejected files instead of raising a 500.
+        return ImportValidationResult(**{"source_format": source_format, **result})
     finally:
-        if temp_path.exists():
-            temp_path.unlink()
+        unlink_private(temp_path)
 
 
 # =============================================================================
@@ -398,11 +408,9 @@ async def create_import(
 
     # Save uploaded file
     upload_dir = DATA_DIR / "uploads"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    from app.core.security_utils import MAX_CONFIG_IMPORT_BYTES, sanitize_filename
+    from app.core.security_utils import MAX_CONFIG_IMPORT_BYTES
 
-    safe_name = sanitize_filename(file.filename or "import.json")
-    dest_path = upload_dir / f"import_{safe_name}"
+    dest_path = upload_dir / f"import_{uuid4().hex}.upload"
 
     chunks: list[bytes] = []
     total = 0
@@ -418,8 +426,7 @@ async def create_import(
             )
         chunks.append(chunk)
     content = b"".join(chunks)
-    with open(dest_path, "wb") as f:
-        f.write(content)
+    write_private(dest_path, content)
 
     job = await Svc.create_import_job(
         session,

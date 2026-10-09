@@ -497,7 +497,7 @@ class FirewallService:
         site_id: UUID | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[Any]:
+    ) -> tuple[list[Any], int]:
         """Search IDS/IPS alerts."""
         from app.modules.firewall.models import IDSAlert
 

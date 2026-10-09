@@ -24,6 +24,7 @@ What we verify:
 from __future__ import annotations
 
 from collections import deque
+from contextlib import nullcontext
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
@@ -65,12 +66,18 @@ class FakeAsyncSession:
         self._store = store or {}
         self.added: list[Any] = []
         self.flush_count = 0
+        self.is_active = True
+
+    def begin_nested(self):
+        # Shape-only unit double: transaction/refresh behavior is qualified by
+        # the real PostgreSQL contributor cases, never by this context manager.
+        return nullcontext()
 
     async def execute(self, _query: Any) -> _Result:
         rows = self._execute_q.popleft() if self._execute_q else []
         return _Result(rows)
 
-    async def get(self, model_cls: type, pk: Any) -> Any:
+    async def get(self, model_cls: type, pk: Any, *, populate_existing=False, with_for_update=None) -> Any:
         return self._store.get((model_cls.__name__, str(pk)))
 
     def add(self, obj: Any) -> None:
@@ -418,7 +425,7 @@ class TestRestore:
         org = uuid4()
         site = uuid4()
         pbx_id = uuid4()
-        existing = SimpleNamespace(id=pbx_id, name="OLD")
+        existing = SimpleNamespace(id=pbx_id, site_id=site, deleted_at=None, name="OLD")
 
         session = FakeAsyncSession(
             execute_results=[[site]],
@@ -446,7 +453,7 @@ class TestRestore:
         org = uuid4()
         site = uuid4()
         pbx_id = uuid4()
-        existing = SimpleNamespace(id=pbx_id, name="OLD", ip_address="0.0.0.0")
+        existing = SimpleNamespace(id=pbx_id, site_id=site, deleted_at=None, name="OLD", ip_address="0.0.0.0")
 
         session = FakeAsyncSession(
             execute_results=[[site]],

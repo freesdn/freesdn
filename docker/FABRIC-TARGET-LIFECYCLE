@@ -1,0 +1,26 @@
+Fabric staged-write target lifecycle
+===================================
+
+The native Fabric write executor resolves a controller only when both its row
+and its owning site are not deleted and the site belongs to the invocation's
+organization. This also applies when site_id is omitted and the author has
+unrestricted site access. A removed target must not be revived implicitly by
+queuing a new write against its retained soft-deleted row.
+
+The caller's existing site-grant and controller/site-mapping checks are unchanged.
+The refusal retains CROSS_TENANT_TARGET, so it does not disclose whether another
+tenant owns the target or the target is missing/deleted. The controller lookup
+still returns a mapped row, preserving site and multi-site mapping information.
+
+This is a lookup-time guard. It does not lock the target across staging, claim
+protection against a deletion after the query, or replace apply-time revalidation.
+Existing queued changes, generic per-site permission ceilings and controller
+resource grants require their own authorization checks. Activity/sync settings
+are not changed by this soft-deletion correction.
+
+The regression fixture executes the actual SQLAlchemy controller/site query
+against an isolated in-memory SQL database and captures staging calls. It covers
+live, deleted, foreign and absent rows for unrestricted and site-limited contexts.
+Its small schema does not qualify PostgreSQL constraints or concurrent updates;
+those require separate production-database acceptance evidence. No device is
+contacted or modified by this fixture.

@@ -32,7 +32,7 @@ organization_id_var: ContextVar[str | None] = ContextVar("organization_id", defa
 # key) and case-insensitive.
 _SENSITIVE_KEY_PATTERN = re.compile(
     r"(?i)(password|passwd|secret|token|api[_-]?key|authorization|bearer|"
-    r"cookie|credential|private[_-]?key|session[_-]?id|csrf|"
+    r"cookie|credential|proof|private[_-]?key|session[_-]?id|csrf|"
     r"client[_-]?secret|access[_-]?key|\brefresh[_-]?token\b)"
 )
 
@@ -167,7 +167,10 @@ class JSONLogFormatter(logging.Formatter):
         if record.exc_info:
             log_entry["exception"] = self.formatException(record.exc_info)
 
-        return json.dumps(log_entry, default=str)
+        # Render first so distinctive secrets are also removed from values,
+        # exception text and custom objects under otherwise ordinary keys.
+        # The fixed replacement strings contain no JSON quoting characters.
+        return _redact_message(json.dumps(log_entry, default=str))
 
 
 class ColoredFormatter(logging.Formatter):
@@ -207,7 +210,7 @@ class ColoredFormatter(logging.Formatter):
 
         # Add exception if present
         if record.exc_info:
-            formatted += f"\n{self.formatException(record.exc_info)}"
+            formatted += f"\n{_redact_message(self.formatException(record.exc_info))}"
 
         return formatted
 

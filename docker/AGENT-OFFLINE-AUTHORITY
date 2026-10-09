@@ -1,0 +1,54 @@
+Agent offline notification authority
+===================================
+
+Scope
+-----
+The detector commits an offline transition before queue submission and includes
+its exact disconnected_at timestamp. The worker resolves the current agent, site
+and organization from the database. It requires an enabled, live agent, active
+live site and organization, consistent tenant ownership, the queued site and
+heartbeat, the exact offline transition, and an unset notification marker.
+
+Queued names, ages and channel settings are retained in the task signature for
+compatibility but do not authorize a send. Current channel settings and the
+current agent name are used; the current site supplies organization scope.
+Disabled or missing channels do not fall back to the queued destinations.
+
+Delivery outcomes
+-----------------
+At least one successful SENT or DELIVERED result is required. Every other result
+must be successful SENT, DELIVERED or intentionally SKIPPED. Empty, all-skipped,
+failed, bounced and pending batches do not set offline_notified_at. Tracking rows
+are committed even for unsuccessful batches. A conditional update repeats the
+transition, tenant and lifecycle conditions and checks the unchanged channel
+configuration before marking delivery. Commit errors never report success.
+Provider/database/broker exception text is not included in task outcomes or logs.
+
+Deployment
+----------
+Deploy the detector and worker from the same release. Tasks queued by an older
+detector without the exact disconnect timestamp are refused; they are not
+silently applied to whatever offline event is current. Drain the old offline
+notification queue before changing releases, or review and reissue affected
+alerts under current authority. Refusal does not create a durable replacement.
+
+Remaining limits
+----------------
+This is not a durable outbox or exactly-once delivery protocol. A broker failure
+after the offline transition commits can still lose that alert. The detector
+does not automatically reselect all offline agents with failed sends. Concurrent
+workers can both produce external effects before one wins the conditional
+marker update. A send accepted by a provider followed by a database failure is
+uncertain and may duplicate on a later attempt. A partial delivery can likewise
+duplicate a successful recipient if the whole alert is retried.
+
+Authority is checked before dispatch and again for the marker; edits after the
+first check cannot retract an external message already in flight. The generic
+in-app helper still controls its own commit and event behavior. This change does
+not claim transaction atomicity across notifications, external providers and
+business records, or solve concurrent heartbeat versus stale-detector updates.
+Those paths need separate lifecycle and crash-recovery qualification.
+
+Tests use owned synthetic recipients and real database fixtures where stated.
+They do not send production mail, webhooks or SMS and do not establish provider
+interoperability or a customer SLA.

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
 import { api } from './client';
+import { testStorageLocation } from './storageProbeTransport';
 import type {
   SystemInfo, HealthCheck,
   Backup, BackupCreate, BackupListResponse, BackupSchedule, BackupScheduleCreate,
@@ -8,7 +9,7 @@ import type {
   BackupManifestPreview,
   BackupType, BackupStatus, BackupStorageType,
   StorageLocation, StorageLocationCreate, StorageLocationUpdate,
-  StorageLocationTestResult, SupportedStorageTypes,
+  SupportedStorageTypes,
   ConfigVersion, ConfigDiff,
   NotificationProvider, NotificationPreference,
   InAppNotification, ProviderType, TestProviderResult,
@@ -115,18 +116,17 @@ export const backupApi = {
 };
 
 export const storageLocationsApi = {
-  list: (params?: { storage_type?: BackupStorageType; is_active?: boolean }) =>
-    api.get<StorageLocation[]>('/backups/storage-locations', { params }),
+  list: (params?: { storage_type?: BackupStorageType; is_active?: boolean }, options?: { signal: AbortSignal }) =>
+    api.get<StorageLocation[]>('/backups/storage-locations', { params, signal: options?.signal }),
   get: (id: string) => api.get<StorageLocation>(`/backups/storage-locations/${id}`),
   create: (data: StorageLocationCreate) =>
     api.post<StorageLocation>('/backups/storage-locations', data),
   update: (id: string, data: StorageLocationUpdate) =>
     api.patch<StorageLocation>(`/backups/storage-locations/${id}`, data),
   delete: (id: string) => api.delete(`/backups/storage-locations/${id}`),
-  test: (id: string) =>
-    api.post<StorageLocationTestResult>(`/backups/storage-locations/${id}/test`),
-  getSupportedTypes: () =>
-    api.get<SupportedStorageTypes>('/backups/storage-locations/types/supported'),
+  test: testStorageLocation,
+  getSupportedTypes: (options?: { signal: AbortSignal }) =>
+    api.get<SupportedStorageTypes>('/backups/storage-locations/types/supported', { signal: options?.signal }),
 };
 
 // Backend response shape from /enterprise/devices/{id}/config-versions

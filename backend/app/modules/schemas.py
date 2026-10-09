@@ -113,10 +113,14 @@ class ModuleListResponse(BaseModel):
 
 
 class OrgModuleRead(BaseModel):
-    """Module enablement for an organization."""
+    """Navigation and lifecycle selection; not an API authorization boundary."""
 
     module_id: str
     is_enabled: bool
+    # Explicit response metadata prevents clients interpreting this preference
+    # as a security control or a platform-wide job cancellation switch.
+    api_access_gated: bool = False
+    background_jobs_cancelled: bool = False
     enabled_at: datetime | None = None
     disabled_at: datetime | None = None
     settings: dict[str, Any] = Field(default_factory=dict)

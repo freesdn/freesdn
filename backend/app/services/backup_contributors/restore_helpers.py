@@ -38,6 +38,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from sqlalchemy import Uuid, inspect
+from sqlalchemy.orm import Mapper
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,13 +100,49 @@ async def restore_records(
     reject_guards = reject_guards or []
     nullable_fks = nullable_fks or []
 
+    mapper: Mapper[Any] = inspect(model_cls)
+    columns = {column.key: column for column in mapper.columns}
+    uuid_fields = {
+        key
+        for key, column in columns.items()
+        if isinstance(column.type, Uuid) and column.type.as_uuid
+    }
     created = updated = skipped = 0
     restored_ids: set[str] = set()
 
-    for rec in records:
+    for archived in records:
+        if not isinstance(archived, dict):
+            skipped += 1
+            result.status = "error"
+            result.errors.append(f"{resource}: invalid archived record.")
+            continue
+        rec = dict(archived)
+        try:
+            for field in uuid_fields:
+                value = rec.get(field)
+                if value is not None and not isinstance(value, UUID):
+                    if not isinstance(value, str):
+                        raise ValueError("Invalid archived UUID")
+                    rec[field] = UUID(value)
+        except ValueError:
+            skipped += 1
+            result.status = "error"
+            result.errors.append(f"{resource}: invalid archived identifier.")
+            continue
         pk = rec.get("id")
         if not pk:
             skipped += 1
+            continue
+
+        if (
+            force_org is not None
+            and rec.get("organization_id") is not None
+            and str(rec["organization_id"]) != str(force_org)
+        ):
+            skipped += 1
+            result.warnings.append(
+                f"{resource} {pk}: organization not in this organization — rejected (cross-tenant)."
+            )
             continue
 
         # Reject guards (tenant + orphan).
@@ -120,7 +159,7 @@ async def restore_records(
             continue
 
         # Build clean column set.
-        clean = {k: v for k, v in rec.items() if hasattr(model_cls, k) and k not in blocked}
+        clean = {k: v for k, v in rec.items() if k in columns and k not in blocked and k != "id"}
 
         # Nullable-FK validation: null dangling references.
         for nfk in nullable_fks:
@@ -129,35 +168,72 @@ async def restore_records(
                 clean[nfk.field] = None
 
         # Force org on models with a direct organization_id column.
-        if force_org is not None and hasattr(model_cls, "organization_id"):
+        if force_org is not None and "organization_id" in columns:
             clean["organization_id"] = force_org
 
-        existing = await session.get(model_cls, pk)
+        existing = await session.get(
+            model_cls,
+            pk,
+            populate_existing=True,
+            with_for_update=not dry_run,
+        )
         if existing is not None:
-            if overwrite and not dry_run:
-                for k, v in clean.items():
-                    if k != "id":
-                        setattr(existing, k, v)
-                updated += 1
-            else:
+            # Uploaded owner fields do not authorize replacing a row that is
+            # currently owned elsewhere. Refresh its real owner before deciding.
+            outside_scope = (
+                getattr(existing, "deleted_at", None) is not None
+                or (
+                    force_org is not None
+                    and "organization_id" in columns
+                    and existing.organization_id != force_org
+                )
+                or any(
+                    str(getattr(existing, guard.field, None)) not in guard.valid
+                    for guard in reject_guards
+                )
+            )
+            if outside_scope:
                 skipped += 1
+                result.warnings.append(
+                    f"{resource} {pk}: existing record is outside the restore scope — rejected."
+                )
+                continue
+            if not overwrite or dry_run:
+                skipped += 1
+                restored_ids.add(str(pk))
+                continue
+
+        if dry_run:
+            created += 1
             restored_ids.add(str(pk))
             continue
 
-        # Insert path.
-        if not dry_run:
-            if preserve_id:
-                clean["id"] = pk
-            try:
-                session.add(model_cls(**clean))
+        action = "update" if existing is not None else "insert"
+        try:
+            # A rejected row must not leave the session in failed-transaction
+            # state. The dispatcher rolls back this contributor if errors remain.
+            async with session.begin_nested():
+                if existing is not None:
+                    for key, value in clean.items():
+                        setattr(existing, key, value)
+                else:
+                    if preserve_id:
+                        clean["id"] = pk
+                    session.add(model_cls(**clean))
                 await session.flush()
-            except Exception as exc:  # noqa: BLE001
-                skipped += 1
-                result.warnings.append(
-                    f"{resource} {pk}: insert failed ({exc}).",
-                )
-                continue
-        created += 1
+        except Exception as exc:  # noqa: BLE001
+            if not session.is_active:
+                raise
+            skipped += 1
+            message = f"{resource} {pk}: {action} failed ({type(exc).__name__})."
+            result.warnings.append(message)
+            result.status = "error"
+            result.errors.append(message)
+            continue
+        if existing is not None:
+            updated += 1
+        else:
+            created += 1
         restored_ids.add(str(pk))
 
     result.created[resource] = created

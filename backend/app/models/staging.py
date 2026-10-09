@@ -74,6 +74,7 @@ class AdapterPendingChange(Base, UUIDMixin, AuditMixin):
         Index("ix_adapter_pending_org_status", "organization_id", "status"),
         Index("ix_adapter_pending_controller", "controller_id", "status"),
         Index("ix_adapter_pending_feature", "feature", "status"),
+        Index("ix_adapter_pending_task_poll", "provider_task_next_poll_at"),
         {"schema": "core"},
     )
 
@@ -139,6 +140,12 @@ class AdapterPendingChange(Base, UUIDMixin, AuditMixin):
     )
     applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     applied_response: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # Acknowledgement is distinct from asynchronous provider completion. These
+    # fields survive worker restarts; observers only GET the recorded task ID.
+    provider_task: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    provider_task_next_poll_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 

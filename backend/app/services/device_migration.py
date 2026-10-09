@@ -315,11 +315,10 @@ class DeviceMigrationService:
         resource_id: str,
         details: dict[str, Any],
     ) -> None:
-        """Append to audit.audit_logs — best effort.
+        """Write sanitized, signed audit metadata and preserve the existing commit.
 
-        Schema lives in app.models.security_audit. The AuditLogRecord
-        has a fixed schema with no JSONB "details" column — we stash
-        the structured info into the ``metadata_json`` field.
+        Persistence errors still propagate to the migration caller. Audit-row
+        rejection uses a savepoint so that caller can explicitly handle it.
         """
         from app.models.security_audit import AuditLogRecord
 
@@ -335,5 +334,8 @@ class DeviceMigrationService:
             status="success",
             extra_metadata=details,
         )
-        self.db.add(log)
+        from app.services.audit import AuditService
+
+        await AuditService(self.db).persist_record(log)
+        # Preserve this helper's existing successful commit boundary.
         await self.db.commit()

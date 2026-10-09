@@ -14,11 +14,11 @@ import logging
 import re
 import uuid
 from collections import defaultdict, deque
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as redis
 
@@ -291,17 +291,25 @@ class EventBus:
             logger.info("EventBus connected to Redis")
 
     async def disconnect(self) -> None:
-        """Disconnect from Redis."""
+        """Release loop-bound resources, including after a partial startup."""
         self._running = False
-        if self._listener_task:
-            self._listener_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._listener_task
-        if self._pubsub:
-            await self._pubsub.unsubscribe()
-            await self._pubsub.close()
-        if self._redis:
-            await self._redis.close()
+        listener, pubsub, client = self._listener_task, self._pubsub, self._redis
+        # Clear references even if closing a broken connection raises. A later
+        # lifespan must never reuse a client owned by the previous event loop.
+        self._listener_task = None
+        self._pubsub = None
+        self._redis = None
+        if listener:
+            listener.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await listener
+        try:
+            if pubsub:
+                # redis's PubSub.aclose is async but lacks its return annotation.
+                await cast(Callable[[], Awaitable[None]], pubsub.aclose)()
+        finally:
+            if client:
+                await client.aclose()
         logger.info("EventBus disconnected from Redis")
 
     async def _listen_redis(self) -> None:
@@ -315,9 +323,10 @@ class EventBus:
         """
         while self._running:
             try:
-                message = await self._pubsub.get_message(
-                    ignore_subscribe_messages=True, timeout=1.0
-                )  # type: ignore[union-attr]
+                pubsub = self._pubsub
+                if pubsub is None:
+                    return
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if message and message["type"] == "pmessage":
                     data = json.loads(message["data"])
                     event = Event.from_dict(data)

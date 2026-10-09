@@ -72,8 +72,12 @@ async def _fabric_storage_health_handler(ctx: Any) -> Any:
             Controller.controller_type.in_(storage_controller_types()),
             Controller.deleted_at.is_(None),
             Site.organization_id == ctx.organization_id,
+            Site.deleted_at.is_(None),
         )
     )
+    grants = getattr(ctx, "accessible_site_ids", None)
+    if grants is not None:
+        q = q.where(Controller.site_id.in_(grants))
     cid_raw = ctx.params.get("controller_id")
     if cid_raw:
         try:
@@ -81,7 +85,10 @@ async def _fabric_storage_health_handler(ctx: Any) -> Any:
         except (ValueError, TypeError):
             return OperationResult.fail("invalid controller_id", "BAD_TARGET")
 
-    controllers = list((await ctx.db.execute(q)).scalars().all())
+    try:
+        controllers = list((await ctx.db.execute(q)).scalars().all())
+    except Exception:
+        return OperationResult.fail("Storage health read unavailable", "READ_ERROR")
     appliances: list[dict[str, Any]] = []
     worst = "ok"
 

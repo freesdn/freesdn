@@ -173,22 +173,46 @@ async def restore_from_vault(
     if len(raw) > 64 * 1024 * 1024:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "backup file too large")
 
-    from app.services.backup import BackupService
+    from app.services.backup import BackupRecoveryError, BackupService, backup_failure_detail
+
+    # The initial dependency can become stale while another bootstrap commits.
+    # Share administrator creation's transaction lock and recheck before restore.
+    if not await service.lock_bootstrap_if_incomplete():
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Setup already complete. Login with existing credentials.",
+        )
 
     try:
         result = await BackupService(service.db).restore_fresh_instance_from_vault(
             raw, passphrase=passphrase, org_name=org_name
         )
         await service.db.commit()
+    except BackupRecoveryError as exc:
+        await service.db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            backup_failure_detail(
+                exc, "Vault restore did not complete; review archive compatibility."
+            ),
+        ) from None
     except ValueError as exc:
         await service.db.rollback()
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
-    except Exception:
-        await service.db.rollback()
-        logger.exception("first-install vault restore failed")
         raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "restore failed — see server logs"
-        )
+            status.HTTP_400_BAD_REQUEST,
+            backup_failure_detail(
+                exc, "Invalid vault archive or passphrase; verify the backup and retry."
+            ),
+        ) from None
+    except Exception as exc:
+        await service.db.rollback()
+        # Parser/database failures can embed decrypted records and credentials.
+        # Keep diagnostics to the error class, without provider text or traceback.
+        logger.error("First-install vault restore failed (%s)", type(exc).__name__)
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Vault restore failed; check archive and database availability.",
+        ) from None
     return {"success": True, **result}
 
 

@@ -19,6 +19,7 @@ import logging
 import os
 import re
 from datetime import UTC
+from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -28,6 +29,7 @@ from fastapi import (
     File,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     status,
 )
@@ -37,7 +39,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_active_user
-from app.core.dependencies import is_unscoped_org_admin, is_unscoped_superuser
+from app.api.v1.endpoints.vault_export import _browser_context
+from app.core.backup_artifacts import BackupArtifactError
+from app.core.backup_download_response import LocalDownloadResponse, RemoteDownloadResponse
+from app.core.backup_downloads import DownloadPool
+from app.core.config import get_settings
+from app.core.dependencies import CurrentUser, is_unscoped_org_admin, is_unscoped_superuser
+from app.core.security_utils import MAX_BACKUP_IMPORT_BYTES
 from app.core.site_access import assert_can_access_site
 from app.db import get_session
 from app.models import User
@@ -60,7 +68,17 @@ from app.schemas.backup import (
     StorageLocationUpdate,
     SupportedStorageTypes,
 )
-from app.services.backup import SUPPORTED_STORAGE_TYPES, BackupService
+from app.schemas.vault_export_openapi import vault_consumption_openapi
+from app.services.backup import (
+    SUPPORTED_STORAGE_TYPES,
+    BackupInputError,
+    BackupService,
+    backup_failure_detail,
+)
+from app.services.backup_download_authority import BackupDownloadAuthority
+from app.services.storage_probe_authority import StorageProbeAuthority
+from app.services.vault_export_creation import create_confirmed_vault
+from app.services.vault_export_public_download import confirmed_vault_download
 
 log = logging.getLogger(__name__)
 
@@ -215,9 +233,12 @@ async def update_storage_location(
     existing = await BackupService(session).get_storage_location(location_id)
     if not existing or existing.organization_id != org_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Storage location not found")
-    loc = await BackupService(session).update_storage_location(
-        location_id, **data.model_dump(exclude_unset=True)
-    )
+    try:
+        loc = await BackupService(session).update_storage_location(
+            location_id, **data.model_dump(exclude_unset=True)
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
     if not loc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Storage location not found")
     return loc
@@ -240,11 +261,33 @@ async def delete_storage_location(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Storage location not found")
 
 
-@storage_router.post("/{location_id}/test", response_model=StorageLocationTestResult)
+@storage_router.post(
+    "/{location_id}/test",
+    response_model=StorageLocationTestResult,
+    openapi_extra={
+        "parameters": [
+            {
+                "name": "X-FreeSDN-Storage-Probe-Actor",
+                "in": "header",
+                "required": False,
+                "schema": {"type": "string", "format": "uuid", "minLength": 36, "maxLength": 36},
+                "description": "Initiating browser account. Send with the organization header; both must match current authentication. Grants no permission. Non-browser clients may omit both.",
+            },
+            {
+                "name": "X-FreeSDN-Storage-Probe-Organization",
+                "in": "header",
+                "required": False,
+                "schema": {"type": "string", "format": "uuid", "minLength": 36, "maxLength": 36},
+                "description": "Initiating browser organization. Equality assertion only, never a target-organization override. Send with the actor header or omit both.",
+            },
+        ]
+    },
+)
 async def test_storage_location(
     location_id: UUID,
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
 ) -> Any:
     # align with create/update — the test endpoint
     # triggers a real outbound connection to the configured storage host, so
@@ -256,7 +299,15 @@ async def test_storage_location(
     existing = await BackupService(session).get_storage_location(location_id)
     if not existing or existing.organization_id != org_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Storage location not found")
-    return await BackupService(session).test_storage_location(location_id)
+    authority = await StorageProbeAuthority.capture(request, current_user, session)
+    service = BackupService(session)
+    service.org_id = authority.organization_id
+    return await service.test_storage_location(
+        location_id,
+        created_by_id=authority.actor_id,
+        authorize=authority.check,
+        authorize_native=authority.check_deadline,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -381,12 +432,21 @@ async def import_config(
         chunks.append(chunk)
     contents = b"".join(chunks)
 
-    result = await BackupService(session).import_config(
-        contents,
-        dry_run=dry_run,
-        overwrite_existing=overwrite_existing,
-        organization_id=org_id,
-    )
+    try:
+        result = await BackupService(session).import_config(
+            contents,
+            dry_run=dry_run,
+            overwrite_existing=overwrite_existing,
+            organization_id=org_id,
+        )
+    except Exception as exc:
+        # The request dependency rolls back the transaction. Do not let an
+        # unexpected database/parser failure reach traceback-reporting middleware.
+        log.error("Config import failed for organization %s (%s)", org_id, type(exc).__name__)
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Configuration import failed; check the configuration and retry.",
+        ) from None
     # A rejected file used to come back as HTTP 200 with success=false. The
     # Backups page never checks `success` and never renders `message`, so a
     # file the importer refused (raw JSON export, an encrypted .fsdn from
@@ -460,7 +520,10 @@ async def create_schedule(
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Site not found")
     await _assert_storage_in_org(session, dump.get("storage_location_id"), org_id)
     dump["organization_id"] = org_id
-    return await BackupService(session).create_schedule(**dump)
+    try:
+        return await BackupService(session).create_schedule(**dump)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
 @router.put("/schedules/{schedule_id}", response_model=BackupScheduleResponse)
@@ -482,7 +545,10 @@ async def update_schedule(
         if not site or site.organization_id != org_id or site.deleted_at is not None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Schedule not found")
     await _assert_storage_in_org(session, updates.get("storage_location_id"), org_id)
-    s = await BackupService(session).update_schedule(schedule_id, **updates)
+    try:
+        s = await BackupService(session).update_schedule(schedule_id, **updates)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     if not s:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Schedule not found")
     return s
@@ -523,7 +589,10 @@ async def toggle_schedule(
     existing = await BackupService(session).get_schedule_for_organization(schedule_id, org_id)
     if not existing:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Schedule not found")
-    s = await BackupService(session).toggle_schedule(schedule_id, body.is_enabled)
+    try:
+        s = await BackupService(session).toggle_schedule(schedule_id, body.is_enabled)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     if not s:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Schedule not found")
     return {"ok": True}
@@ -572,7 +641,16 @@ async def restore_backup(
             passphrase=data.passphrase,
         )
     except ValueError as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            backup_failure_detail(e, "Backup restore input or storage configuration is invalid."),
+        ) from None
+    except Exception as exc:
+        log.error("Backup restore failed for org=%s (%s)", org_id, type(exc).__name__)
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            backup_failure_detail(exc, "Backup restore failed"),
+        ) from None
 
 
 @router.get("/{backup_id}/manifest", response_model=BackupManifestPreview)
@@ -594,7 +672,14 @@ async def preview_backup_manifest(
             org_id,
         )
     except ValueError as e:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, backup_failure_detail(e, "Backup manifest is unavailable.")
+        ) from None
+    except Exception as exc:
+        log.error("Backup manifest failed for org=%s (%s)", org_id, type(exc).__name__)
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "Backup manifest is unavailable"
+        ) from None
 
 
 @router.get("/restore/{job_id}", response_model=RestoreJobResponse)
@@ -672,11 +757,17 @@ async def get_backup(
     return backup
 
 
-@router.post("/", response_model=BackupResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=BackupResponse,
+    status_code=status.HTTP_201_CREATED,
+    openapi_extra=vault_consumption_openapi("create"),
+)
 async def create_backup(
     data: BackupCreate,
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
 ) -> Any:
     """
     Create and execute a backup.
@@ -687,6 +778,13 @@ async def create_backup(
     """
     if not is_unscoped_org_admin(current_user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin required")
+    # A full vault carries account credentials and can recover platform access.
+    # Match the restore authority; choosing the sealing passphrase is not an
+    # authorization grant. Config snapshots retain the existing admin policy.
+    if data.include_secrets and not is_unscoped_superuser(current_user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Super admin required for a full vault backup"
+        )
     org_id = _org_id(current_user)
     # Verify the target site belongs to the user's organization
     if data.site_id:
@@ -696,6 +794,9 @@ async def create_backup(
     await _assert_storage_in_org(session, data.storage_location_id, org_id)
 
     try:
+        if data.include_secrets:
+            _browser_context(request, current_user)
+            return await create_confirmed_vault(session, request, current_user, data)
         return await BackupService(session).create_backup(
             name=data.name,
             description=data.description,
@@ -716,27 +817,40 @@ async def create_backup(
             created_by_id=current_user.id,
             organization_id=org_id,  # NOTE C4: tenant-scope
         )
+    except HTTPException:
+        raise
     except ValueError as e:
         # Operator-actionable input error (e.g. a Full backup without a passphrase) —
         # surface it rather than the generic 500 below, which hides the cause.
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
-    except Exception:
-        # Previously leaked the raw exception string (e.g.
-        # ``type object 'Device' has no attribute 'organization_id'``)
-        # which discloses internal model shape to any admin caller.
-        # Log full traceback for ops, return a generic message.
-        log.exception("Backup creation failed for org=%s user=%s", org_id, current_user.id)
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            backup_failure_detail(e, "Backup input or storage configuration is invalid."),
+        ) from None
+    except Exception as exc:
+        # Provider/database tracebacks may contain credentials or decrypted
+        # archive input. Keep correlation IDs and the class, never raw text.
+        log.error(
+            "Backup creation failed for org=%s user=%s (%s)",
+            org_id,
+            current_user.id,
+            type(exc).__name__,
+        )
         raise HTTPException(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "Backup creation failed",
-        )
+        ) from None
 
 
-@router.get("/{backup_id}/download")
+@router.get(
+    "/{backup_id}/download",
+    response_class=Response,
+    openapi_extra=vault_consumption_openapi("download_recorded"),
+)
 async def download_backup(
     backup_id: UUID,
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
 ) -> Any:
     """Download a backup file."""
     if not is_unscoped_org_admin(current_user):
@@ -747,7 +861,62 @@ async def download_backup(
     if not backup:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Backup not found")
 
-    result = await svc.download_backup(backup_id)
+    # Enforce the account-secret boundary before reading any storage bytes.
+    if backup.include_secrets and not is_unscoped_superuser(current_user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Super admin required to download a full vault backup"
+        )
+
+    if backup.include_secrets:
+        return await confirmed_vault_download(request, current_user, backup)
+
+    try:
+        authority, backend = await BackupDownloadAuthority.start(request, current_user, backup)
+        local_source = await svc.local_download_source(backup, backend=backend)
+        if local_source is not None:
+            settings = get_settings()
+            filename = (backup.storage_path or "").rsplit("/", 1)[-1]
+            safe_name = _safe_download_filename(filename, f"backup_{backup_id}.fsdn")
+            return LocalDownloadResponse(
+                local_source,
+                DownloadPool(
+                    Path(settings.BACKUP_DOWNLOAD_SPOOL),
+                    slots=settings.BACKUP_DOWNLOAD_SLOTS,
+                    limit=MAX_BACKUP_IMPORT_BYTES,
+                    free_floor=settings.BACKUP_DOWNLOAD_FREE_BYTES,
+                ),
+                safe_name,
+                seconds=settings.BACKUP_DOWNLOAD_SECONDS,
+                authorize=authority.check,
+            )
+        remote_source = svc.webdav_download_source(backup, backend=backend)
+        if remote_source is not None:
+            settings = get_settings()
+            filename = (backup.storage_path or "").rsplit("/", 1)[-1]
+            safe_name = _safe_download_filename(filename, f"backup_{backup_id}.fsdn")
+            return RemoteDownloadResponse(
+                remote_source,
+                DownloadPool(
+                    Path(settings.BACKUP_DOWNLOAD_SPOOL),
+                    slots=settings.BACKUP_DOWNLOAD_SLOTS,
+                    limit=MAX_BACKUP_IMPORT_BYTES,
+                    free_floor=settings.BACKUP_DOWNLOAD_FREE_BYTES,
+                ),
+                safe_name,
+                seconds=settings.BACKUP_DOWNLOAD_SECONDS,
+                authorize=authority.check,
+            )
+        result = await svc.download_backup(backup_id, backend=backend)
+        await authority.check()
+    except HTTPException:
+        raise
+    except (BackupInputError, BackupArtifactError) as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except Exception as exc:
+        log.error("Backup download failed for org=%s (%s)", org_id, type(exc).__name__)
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "Backup file is unavailable"
+        ) from None
     if not result:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Backup file not found")
 
@@ -758,7 +927,71 @@ async def download_backup(
     return Response(
         content=data,
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_name}"',
+            # download_backup has verified exactly data against this catalog
+            # snapshot. Legacy absence remains explicitly unverified.
+            "X-FreeSDN-Artifact-Integrity": (
+                "verified" if backup.artifact_integrity == "recorded" else "legacy_unverified"
+            ),
+        },
+    )
+
+
+async def _legacy_vault_response(
+    backup_id: UUID,
+    request: Request,
+    session: AsyncSession,
+    user: CurrentUser,
+    operation: str,
+) -> Response:
+    if not is_unscoped_superuser(user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Super admin required to download a full vault backup"
+        )
+    backup = await BackupService(session).get_backup_for_organization(backup_id, _org_id(user))
+    if backup is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Backup not found")
+    return await confirmed_vault_download(request, user, backup, operation=operation)
+
+
+@router.post(
+    "/{backup_id}/vault-observation", openapi_extra=vault_consumption_openapi("observe_legacy")
+)
+async def observe_legacy_vault(
+    backup_id: UUID,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+) -> Any:
+    """Observe legacy bytes with fresh permission and explicit acknowledgment.
+
+    JSON body: {"legacy_acknowledged": true}. The one-use proof is carried only
+    in X-FreeSDN-Vault-Proof. The response contains a current observed identity
+    and a new purpose-bound proof without extending authentication freshness.
+    """
+    return await _legacy_vault_response(backup_id, request, session, current_user, "observe_legacy")
+
+
+@router.post(
+    "/{backup_id}/vault-download",
+    response_class=Response,
+    openapi_extra=vault_consumption_openapi("download_legacy"),
+)
+async def download_legacy_vault(
+    backup_id: UUID,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+) -> Any:
+    """Download the exact legacy observation under its one-use proof.
+
+    JSON body includes legacy_acknowledged:true and the unchanged
+    observed_identity {version, bytes, sha256}. Current bytes are checked before
+    delivery; the resulting integrity label remains legacy_unverified.
+    """
+    return await _legacy_vault_response(
+        backup_id, request, session, current_user, "download_legacy"
     )
 
 
@@ -766,7 +999,7 @@ async def download_backup(
 async def delete_backup(
     backup_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
 ) -> None:
     """Delete a backup and its storage file."""
     if not is_unscoped_org_admin(current_user):

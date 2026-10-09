@@ -1,0 +1,29 @@
+Delayed controller onboarding checks
+===================================
+
+The automatic connection check created during controller onboarding is bound to
+that controller's original site and organization. It requires an active,
+nondeleted controller, site and organization before it reads credentials and
+contacts the device. A reassigned controller is not contacted by this old check.
+
+The database session closes before adapter connection and test I/O. On completion,
+a new session checks current ownership and compares the connection settings,
+configuration, row update timestamp and stored outcome with the original snapshot.
+If anything changed, the old result is discarded. Current controller, site and
+organization rows are locked through the outcome commit. No authority row lock is
+held during device I/O. Credential decryption errors now enter the same safe error
+bookkeeping as adapter failures, without exposing the credential or exception body.
+
+A configuration edit before execution is allowed in the original active scope;
+that current configuration is tested. An edit during I/O requires a new check.
+Metadata edits that advance the row timestamp also discard the delayed outcome.
+
+Limits
+------
+Creation-time user permissions are not revalidated at execution. This change does
+not cancel a network request already in flight if authority changes after the
+initial check, and it is not distributed operation fencing. Discovery publication
+still occurs separately after committing a successful outcome: broker outages and
+the postcommit authorization race require separate recovery/worker controls. This
+is not a durable job outbox, exactly-once execution, or live appliance certification.
+Deploy every API process; old processes retain the previous delayed-check behavior.

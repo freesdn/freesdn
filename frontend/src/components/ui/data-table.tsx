@@ -17,11 +17,19 @@
 import React, { useState, useMemo, ReactNode, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  useReactTable,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
+  useTable,
+  tableFeatures,
+  columnFilteringFeature,
+  globalFilteringFeature,
+  columnVisibilityFeature,
+  rowPaginationFeature,
+  rowSelectionFeature,
+  rowSortingFeature,
+  createFilteredRowModel,
+  createPaginatedRowModel,
+  createSortedRowModel,
+  filterFns,
+  sortFns,
   flexRender,
   ColumnDef,
   SortingState,
@@ -29,6 +37,8 @@ import {
   RowSelectionState,
   Column,
   Row,
+  type RowData,
+  type ReactTable,
 } from '@tanstack/react-table';
 import {
   ChevronUp,
@@ -46,6 +56,23 @@ import { EmptyState } from './empty-state';
 import { Skeleton } from './skeleton';
 import { SearchBar } from './search-bar';
 import { cn } from '../../lib/utils';
+
+// TanStack v9 registers features explicitly. Keep the feature graph stable so
+// sorting, filtering, selection, and pagination share one reactive table store.
+const dataTableFeatures = tableFeatures({
+  columnFilteringFeature,
+  globalFilteringFeature,
+  columnVisibilityFeature,
+  rowPaginationFeature,
+  rowSelectionFeature,
+  rowSortingFeature,
+  filteredRowModel: createFilteredRowModel(),
+  paginatedRowModel: createPaginatedRowModel(),
+  sortedRowModel: createSortedRowModel(),
+  filterFns,
+  sortFns,
+});
+type DataTableFeatures = typeof dataTableFeatures;
 
 // ============================================================================
 // Types
@@ -154,13 +181,12 @@ function TableCheckbox({ checked, onChange, disabled, 'aria-label': ariaLabel }:
 // Sort Button Component
 // ============================================================================
 
-interface SortButtonProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  column: Column<any, unknown>;
+interface SortButtonProps<T extends RowData> {
+  column: Column<DataTableFeatures, T, unknown>;
   children: ReactNode;
 }
 
-function SortButton({ column, children }: SortButtonProps) {
+function SortButton<T extends RowData>({ column, children }: SortButtonProps<T>) {
   const sorted = column.getIsSorted();
   
   return (
@@ -243,17 +269,16 @@ function DefaultEmptyState({ searchQuery, itemName = 'items' }: { searchQuery?: 
 // Pagination Component
 // ============================================================================
 
-interface PaginationProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  table: ReturnType<typeof useReactTable<any>>;
+interface PaginationProps<T extends RowData> {
+  table: ReactTable<DataTableFeatures, T>;
   pageSizeOptions: number[];
   itemName: string;
   totalCount?: number;
 }
 
-function Pagination({ table, pageSizeOptions, itemName, totalCount }: PaginationProps) {
+function Pagination<T extends RowData>({ table, pageSizeOptions, itemName, totalCount }: PaginationProps<T>) {
   const { t } = useTranslation('common');
-  const { pageIndex, pageSize } = table.getState().pagination;
+  const { pageIndex, pageSize } = table.state.pagination;
   const totalItems = totalCount ?? table.getFilteredRowModel().rows.length;
   const startItem = totalItems > 0 ? pageIndex * pageSize + 1 : 0;
   const endItem = Math.min((pageIndex + 1) * pageSize, totalItems);
@@ -370,8 +395,8 @@ export function DataTable<T extends Record<string, any>>({
   const [globalFilter, setGlobalFilter] = useState('');
 
   // Convert our column definitions to TanStack Table format
-  const columns = useMemo<ColumnDef<T>[]>(() => {
-    const cols: ColumnDef<T>[] = [];
+  const columns = useMemo<ColumnDef<DataTableFeatures, T>[]>(() => {
+    const cols: ColumnDef<DataTableFeatures, T>[] = [];
 
     // Add selection column if selectable
     if (selectable) {
@@ -404,23 +429,24 @@ export function DataTable<T extends Record<string, any>>({
     // Add data columns · only include accessorKey/accessorFn/cell when defined
     // to avoid overriding TanStack Table defaults with undefined
     columnDefs.forEach((col) => {
-      const colDef: ColumnDef<T> = {
+      const colDef: ColumnDef<DataTableFeatures, T> = {
         id: col.id,
         header: col.sortable !== false
-          ? ({ column }: { column: Column<T, unknown> }) => <SortButton column={column}>{col.header}</SortButton>
+          ? ({ column }: { column: Column<DataTableFeatures, T, unknown> }) => <SortButton column={column}>{col.header}</SortButton>
           : () => <span className="font-medium text-muted-foreground text-sm">{col.header}</span>,
         enableSorting: col.sortable !== false,
       };
-      if (col.accessorKey != null) (colDef as ColumnDef<T> & { accessorKey: string }).accessorKey = col.accessorKey as string;
-      if (col.accessorFn) (colDef as ColumnDef<T> & { accessorFn: (row: T) => unknown }).accessorFn = col.accessorFn;
-      if (col.cell) colDef.cell = ({ row }: { row: Row<T> }) => col.cell!(row.original);
+      if (col.accessorKey != null) (colDef as ColumnDef<DataTableFeatures, T> & { accessorKey: string }).accessorKey = col.accessorKey as string;
+      if (col.accessorFn) (colDef as ColumnDef<DataTableFeatures, T> & { accessorFn: (row: T) => unknown }).accessorFn = col.accessorFn;
+      if (col.cell) colDef.cell = ({ row }: { row: Row<DataTableFeatures, T> }) => col.cell!(row.original);
       cols.push(colDef);
     });
 
     return cols;
   }, [columnDefs, selectable, t]);
 
-  const table = useReactTable({
+  const table = useTable({
+    features: dataTableFeatures,
     data,
     columns,
     state: {
@@ -434,13 +460,11 @@ export function DataTable<T extends Record<string, any>>({
     onColumnFiltersChange: setColumnFilters,
     onRowSelectionChange: setRowSelection,
     onGlobalFilterChange: setGlobalFilter,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: paginated ? getPaginationRowModel() : undefined,
-    getSortedRowModel: getSortedRowModel(),
+    manualPagination: !paginated,
     getRowId: (row) => getRowId(row),
     initialState: {
       pagination: {
+        pageIndex: 0,
         pageSize: defaultPageSize,
       },
     },

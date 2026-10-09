@@ -39,6 +39,7 @@ import re
 import xml.etree.ElementTree as ET
 from typing import Any, ClassVar
 
+from app.adapters.backup_inventory import validate_backup_metadata
 from app.adapters.base import (
     AdapterManifest,
     AdapterResult,
@@ -51,7 +52,8 @@ from app.adapters.exceptions import (
     AdapterAuthenticationError,
     AdapterConnectionError,
 )
-from app.adapters.opnsense.client import OPNsenseAPIError, OPNsenseClient
+from app.adapters.opnsense import aggregate_inventory, device_summary_reads, plugin_reads
+from app.adapters.opnsense.client import OPNsenseAPIError, OPNsenseClient, _validate_backup_filename
 from app.adapters.opnsense.models import (
     AliasType,
     DHCPLeaseStatus,
@@ -59,20 +61,15 @@ from app.adapters.opnsense.models import (
     FirewallAction,
     FirewallDirection,
     FirewallProtocol,
-    GatewayStatus,
     IDSAlertSeverity,
     InterfaceStatus,
     NormalizedAlias,
     NormalizedARPEntry,
-    NormalizedBackupInfo,
-    NormalizedDeviceSummary,
     NormalizedDHCPLease,
     NormalizedDHCPStaticMapping,
     NormalizedDNSDomainOverride,
     NormalizedDNSOverride,
     NormalizedFirewallRule,
-    NormalizedFirmwareInfo,
-    NormalizedGateway,
     NormalizedIDSAlert,
     NormalizedIDSSettings,
     NormalizedInterface,
@@ -81,7 +78,6 @@ from app.adapters.opnsense.models import (
     NormalizedService,
     NormalizedStaticRoute,
     # models
-    NormalizedSystemInfo,
     NormalizedTrafficPipe,
     NormalizedTrafficQueue,
     NormalizedTrafficRule,
@@ -89,7 +85,11 @@ from app.adapters.opnsense.models import (
     NormalizedWireGuardServer,
     ServiceStatus,
 )
+from app.adapters.opnsense.system_health_reads import firmware_info, gateway_health, system_info
+from app.adapters.required_reads import gather_required_reads
+from app.adapters.trust_inventory import inventory_rows, inventory_settings, public_metadata
 from app.core.redaction import redact_secrets
+from app.core.xml_utils import UnsafeXML, parse_untrusted_xml
 
 logger = logging.getLogger(__name__)
 
@@ -298,10 +298,8 @@ class OPNsenseAdapter(BaseAdapter):
         return uuid
 
     def _validate_filename(self, filename: str) -> str:
-        """Validate backup filename to prevent path traversal."""
-        if not filename or not self._SAFE_FILENAME_RE.match(filename):
-            raise ValueError("Invalid filename")
-        return filename
+        """Use the same bounded filename policy as direct client callers."""
+        return _validate_backup_filename(filename)
 
     async def connect(self) -> bool:
         try:
@@ -425,46 +423,24 @@ class OPNsenseAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_system_info(self) -> AdapterResult:
-        """Return NormalizedSystemInfo."""
+        """Read documented identity/time and structured firmware product fields."""
         try:
-            raw = await self._api.get_system_status()
-            info = NormalizedSystemInfo(
-                hostname=raw.get("name", ""),
-                domain=raw.get("domain", ""),
-                fqdn=f"{raw.get('name', '')}.{raw.get('domain', '')}".strip("."),
-                version=raw.get("kernel", {}).get("pf_version", ""),
-                architecture=raw.get("versions", {}).get("arch", ""),
-                kernel_version=raw.get("kernel", {}).get("pf_version", ""),
-                uptime_text=raw.get("uptime", ""),
+            information, clock, firmware = await asyncio.gather(
+                self._api.get_system_information(),
+                self._api.get_system_time(),
+                self._api.get_firmware_status(),
             )
-            return AdapterResult.ok(data=info.model_dump())
+            return AdapterResult.ok(data=system_info(information, clock, firmware))
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense system information unavailable: %s", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     async def get_firmware_info(self) -> AdapterResult:
-        """Return NormalizedFirmwareInfo."""
+        """Read firmware status without initiating an update check or a write."""
         try:
-            raw = await self._api.get_firmware_status()
-            info = NormalizedFirmwareInfo(
-                current_version=raw.get("product_version", ""),
-                latest_version=raw.get("product_latest", raw.get("product_version", "")),
-                needs_update=raw.get("needs_reboot", "") == "1"
-                or raw.get("upgrade_needs_reboot", "") == "1",
-                update_available=raw.get("status_upgrade_action", "") != "",
-                product_name=raw.get("product_name", "OPNsense"),
-                product_id=raw.get("product_id", ""),
-                product_target=raw.get("product_target", ""),
-                last_check=raw.get("last_check", {}).get("last_check_iso", None)
-                if isinstance(raw.get("last_check"), dict)
-                else raw.get("last_check"),
-                download_size=raw.get("download_size", None),
-                repository=raw.get("product_repo", None),
-                mirror_url=raw.get("product_mirror", None),
-            )
-            return AdapterResult.ok(data=info.model_dump())
+            return AdapterResult.ok(data=firmware_info(await self._api.get_firmware_status()))
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense firmware information unavailable: %s", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     async def get_system_resources(self) -> AdapterResult:
@@ -584,66 +560,86 @@ class OPNsenseAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_backup_list(self) -> AdapterResult:
-        """Return list of NormalizedBackupInfo."""
+        """Normalize this firewall's backup metadata from the core API."""
         try:
             raw = await self._api.get_backup_list()
-            backups = []
-            for item in raw.get("backups", []) if isinstance(raw.get("backups"), list) else []:
-                backups.append(
-                    NormalizedBackupInfo(
-                        filename=item.get("filename", ""),
-                        timestamp=item.get("timestamp", ""),
-                        size_bytes=int(item.get("size", 0)),
-                        description=item.get("description", ""),
-                    ).model_dump()
+            if not isinstance(raw, dict) or not isinstance(raw.get("items"), list):
+                raise ValueError("Invalid backup inventory")
+            rows = []
+            for item in raw["items"]:
+                if not isinstance(item, dict):
+                    raise ValueError("Invalid backup inventory")
+                rows.append(
+                    {
+                        "filename": item.get("id"),
+                        "timestamp": item.get("time_iso"),
+                        "size_bytes": item.get("filesize"),
+                        "description": item.get("description"),
+                    }
                 )
-            return AdapterResult.ok(data={"backups": backups})
-        except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
-            return AdapterResult.fail(type(exc).__name__)
+            return AdapterResult.ok(data={"backups": validate_backup_metadata(rows)})
+        except Exception:
+            # Provider bodies and exception diagnostics can contain secrets.
+            logger.warning("OPNsense backup inventory retrieval failed")
+            return AdapterResult.fail(
+                "Backup inventory could not be retrieved", error_code="BACKUP_LIST_FAILED"
+            )
 
     async def create_backup(self) -> AdapterResult:
-        # Thread force=True: this is a sanctioned write entry point.
-        try:
-            result = await self._api.create_backup(force=self._direct_write_force)
-            return AdapterResult.ok(data=result, message="Backup created")
-        except Exception as exc:
-            logger.exception("OPNsense create_backup failed")
-            return AdapterResult.fail(type(exc).__name__)
+        """Do not dispatch to a nonexistent endpoint or claim a saved artifact."""
+        return AdapterResult.fail(
+            "OPNsense backup creation is not supported by this API; no backup was created",
+            error_code="NOT_SUPPORTED",
+        )
 
     async def delete_backup(self, filename: str) -> AdapterResult:
-        # validate filename to block path-traversal payloads
-        # before they hit the OPNsense API; force=True opts in to write.
         try:
-            self._validate_filename(filename)
+            filename = self._validate_filename(filename)
+        except ValueError:
+            return AdapterResult.fail("Invalid backup filename", error_code="INVALID_CONFIG")
+        try:
             result = await self._api.delete_backup(filename, force=self._direct_write_force)
-            return AdapterResult.ok(data=result, message="Backup deleted")
-        except ValueError as exc:
-            return AdapterResult.fail(type(exc).__name__)
-        except Exception as exc:
-            logger.exception("OPNsense delete_backup failed")
-            return AdapterResult.fail(type(exc).__name__)
+            status = result.get("status") if isinstance(result, dict) else None
+            if status == "not_found":
+                return AdapterResult.fail("Backup not found", error_code="NOT_FOUND")
+            if status == "deleted":
+                return AdapterResult.ok(
+                    data={"status": "deleted", "filename": filename}, message="Backup deleted"
+                )
+        except Exception:
+            logger.warning("OPNsense backup delete could not be confirmed")
+        return AdapterResult.fail(
+            "Backup operation could not be confirmed", error_code="BACKUP_DELETE_FAILED"
+        )
 
     async def revert_backup(self, filename: str) -> AdapterResult:
-        # same validation + force=True pattern as delete_backup.
         try:
-            self._validate_filename(filename)
+            filename = self._validate_filename(filename)
+        except ValueError:
+            return AdapterResult.fail("Invalid backup filename", error_code="INVALID_CONFIG")
+        try:
             result = await self._api.revert_backup(filename, force=self._direct_write_force)
-            return AdapterResult.ok(data=result, message="Backup reverted")
-        except ValueError as exc:
-            return AdapterResult.fail(type(exc).__name__)
-        except Exception as exc:
-            logger.exception("OPNsense revert_backup failed")
-            return AdapterResult.fail(type(exc).__name__)
+            status = result.get("status") if isinstance(result, dict) else None
+            if status == "not_found":
+                return AdapterResult.fail("Backup not found", error_code="NOT_FOUND")
+            if status == "reverted":
+                return AdapterResult.ok(
+                    data={"status": "reverted", "filename": filename}, message="Backup reverted"
+                )
+        except Exception:
+            logger.warning("OPNsense backup revert could not be confirmed")
+        return AdapterResult.fail(
+            "Backup operation could not be confirmed", error_code="BACKUP_REVERT_FAILED"
+        )
 
     async def download_config(self) -> AdapterResult:
         """Download running configuration (XML)."""
         try:
             result = await self._api.download_config()
             return AdapterResult.ok(data=result)
-        except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
-            return AdapterResult.fail(type(exc).__name__)
+        except Exception:
+            logger.warning("OPNsense configuration download failed")
+            return AdapterResult.fail("Configuration download failed", error_code="DOWNLOAD_FAILED")
 
     # ── Enterprise three-state config overrides ──────────────────────────
 
@@ -997,30 +993,11 @@ class OPNsenseAdapter(BaseAdapter):
         """Parse legacy pfSense/OPNsense ``<filter><rule>`` XML into
         normalised firewall rule dicts.
         """
-        # config.xml is fully device-controlled and downloaded via
-        # get_raw (no body cap). defusedxml blocks entity-expansion but not a
-        # large/deeply-nested document, so a compromised firewall could force
-        # this fallback (MVC search returns 0 rules) then serve a huge config.xml
-        # to exhaust worker memory. Bound the input before parsing.
-        _MAX_CONFIG_XML_BYTES = 16 * 1024 * 1024
-        if xml_text is not None and len(xml_text) > _MAX_CONFIG_XML_BYTES:
-            logger.warning(
-                "config.xml too large (%d bytes > %d cap), refusing to parse",
-                len(xml_text),
-                _MAX_CONFIG_XML_BYTES,
-            )
-            return []
+        # This caps parsing allocation; the transport must also bound downloads.
         try:
-            # CPython's xml.etree.ElementTree does not resolve external entities
-            # by default, but we use defusedxml where available for defense-in-depth
-            try:
-                import defusedxml.ElementTree as SafeET
-
-                root = SafeET.fromstring(xml_text)
-            except ImportError:
-                root = ET.fromstring(xml_text)
-        except ET.ParseError as exc:
-            logger.error("Failed to parse config.xml: %s", exc)
+            root = parse_untrusted_xml(xml_text, max_bytes=16 * 1024 * 1024)
+        except UnsafeXML:
+            logger.warning("Rejected unsafe, malformed or oversized config.xml")
             return []
 
         filter_el = root.find("filter")
@@ -2066,45 +2043,22 @@ class OPNsenseAdapter(BaseAdapter):
     async def get_vpn_status(self) -> AdapterResult:
         """Aggregate WireGuard + OpenVPN + IPsec status."""
         try:
-            import asyncio
-
-            wg, wg_peers, wg_servers, ovpn, ovpn_instances, ipsec_raw = await asyncio.gather(
+            wg, wg_peers, wg_servers, ovpn, ovpn_instances, ipsec_raw = await gather_required_reads(
                 self._api.get_wireguard_status(),
                 self._api.get_wireguard_peers(),
                 self._api.get_wireguard_servers(),
                 self._api.get_openvpn_providers(),
                 self._api.get_openvpn_instances(),
                 self._api.get_ipsec_status(),
-                return_exceptions=True,
             )
 
-            # ``return_exceptions=True`` means each slot may be an
-            # ``Exception`` instance. Stuffing one of those into the
-            # response dict will explode at JSON serialization time
-            # in production (FastAPI's encoder cannot stringify a raw
-            # exception). Coerce every individual sub-result to a
-            # safe shape: dict pass-through, list pass-through, or
-            # the empty-dict sentinel for failures.
-            def _safe(value: Any, default: Any) -> Any:
-                if isinstance(value, BaseException):
-                    return default
-                return value
-
-            wg = _safe(wg, {})
-            wg_peers = _safe(wg_peers, [])
-            wg_servers = _safe(wg_servers, [])
-            ovpn = _safe(ovpn, [])
-            ovpn_instances = _safe(ovpn_instances, [])
-            ipsec = ipsec_raw if isinstance(ipsec_raw, dict) else {}
             return AdapterResult.ok(
-                data={
-                    "wireguard": {"status": wg, "peers": wg_peers, "servers": wg_servers},
-                    "openvpn": {"providers": ovpn, "instances": ovpn_instances},
-                    "ipsec": ipsec,
-                }
+                data=aggregate_inventory.vpn_payload(
+                    wg, wg_peers, wg_servers, ovpn, ovpn_instances, ipsec_raw
+                )
             )
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense aggregate read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -2134,23 +2088,21 @@ class OPNsenseAdapter(BaseAdapter):
 
     async def get_ipsec_status(self) -> AdapterResult:
         try:
-            import asyncio
-
-            sad_raw, spd_raw = await asyncio.gather(
+            sad_raw, spd_raw = await gather_required_reads(
                 self._api.get_ipsec_status(),
                 self._api.get_ipsec_spd(),
             )
             # Unwrap paginated search results to plain lists
-            sad = self._rows(sad_raw) if isinstance(sad_raw, dict) else sad_raw
-            spd = self._rows(spd_raw) if isinstance(spd_raw, dict) else spd_raw
+            sad = aggregate_inventory.complete_rows(sad_raw)
+            spd = aggregate_inventory.complete_rows(spd_raw)
             return AdapterResult.ok(
                 data={
-                    "sad": sad if isinstance(sad, list) else [],
-                    "spd": spd if isinstance(spd, list) else [],
+                    "sad": redact_secrets(sad),
+                    "spd": redact_secrets(spd),
                 }
             )
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense aggregate read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     async def connect_ipsec_tunnel(self, uuid: str) -> AdapterResult:
@@ -2512,54 +2464,14 @@ class OPNsenseAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_gateway_status(self) -> AdapterResult:
-        """Return list of NormalizedGateway."""
+        """Join complete gateway status and active-default configuration reads."""
         try:
-            raw = await self._api.get_gateway_status()
-            gateways = []
-            items = (
-                raw.get("items", raw)
-                if isinstance(raw, dict)
-                else raw
-                if isinstance(raw, list)
-                else []
+            status, routing = await asyncio.gather(
+                self._api.get_gateway_status(), self._api.get_gateway_inventory()
             )
-            if isinstance(items, dict):
-                items = list(items.values())
-            for gw in items:
-                if not isinstance(gw, dict):
-                    continue
-                status_str = str(gw.get("status_translated", gw.get("status", "unknown"))).lower()
-
-                # OPNsense uses '~' for unavailable numeric fields (e.g. DHCPv6 gateways)
-                def _safe_float(val: str, strip_suffix: str = "") -> float:
-                    try:
-                        s = str(val or "0")
-                        if strip_suffix:
-                            s = s.rstrip(strip_suffix).strip()
-                        return float(s) if s and s != "~" else 0.0
-                    except (ValueError, TypeError):
-                        return 0.0
-
-                gateways.append(
-                    NormalizedGateway(
-                        name=gw.get("name", ""),
-                        address=gw.get("address", gw.get("gateway", "")),
-                        status=GatewayStatus(status_str)
-                        if status_str in GatewayStatus.__members__.values()
-                        else GatewayStatus.UNKNOWN,
-                        status_text=gw.get("status_translated", ""),
-                        loss_pct=_safe_float(gw.get("loss", "0"), "%"),
-                        delay_ms=_safe_float(gw.get("delay", "0"), "ms"),
-                        stddev_ms=_safe_float(gw.get("stddev", "0"), "ms"),
-                        interface=gw.get("if", ""),
-                        monitor_ip=gw.get("monitor", "") if gw.get("monitor") != "~" else "",
-                        default_gateway=str(gw.get("default_gw", "false")).lower() in ("true", "1"),
-                        raw=gw,
-                    ).model_dump()
-                )
-            return AdapterResult.ok(data={"gateways": gateways, "count": len(gateways)})
+            return AdapterResult.ok(data=gateway_health(status, routing))
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense gateway health unavailable: %s", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -3223,39 +3135,15 @@ class OPNsenseAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_tailscale_status(self) -> AdapterResult:
-        """Return Tailscale settings + service status."""
+        """Read and validate the documented tailscale status contract."""
         try:
-            import asyncio
-
-            settings_raw, svc_status = await asyncio.gather(
+            components = await gather_required_reads(
                 self._api.get("/api/tailscale/settings/get"),
                 self._api.get("/api/tailscale/service/status"),
-                return_exceptions=True,
             )
-            settings = {}
-            if isinstance(settings_raw, dict):
-                s = settings_raw.get("settings", settings_raw)
-                settings = {
-                    "enabled": s.get("enabled", "0") == "1",
-                    "listen_port": s.get("listenPort", ""),
-                    "accept_dns": s.get("acceptDNS", "0") == "1",
-                    "advertise_exit_node": s.get("advertiseExitNode", "0") == "1",
-                    "accept_subnet_routes": s.get("acceptSubnetRoutes", "0") == "1",
-                    "enable_ssh": s.get("enableSSH", "0") == "1",
-                    "disable_snat": s.get("disableSNAT", "0") == "1",
-                    "login_timeout": s.get("loginTimeout", ""),
-                    "use_exit_node": self._parse_opnsense_multi_select(s.get("useExitNode")),
-                }
-            running = False
-            if isinstance(svc_status, dict):
-                running = svc_status.get("status") == "running"
-            return AdapterResult.ok(
-                data={
-                    "tailscale": {"settings": settings, "running": running},
-                }
-            )
+            return AdapterResult.ok(data={"tailscale": plugin_reads.tailscale(*components)})
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense aggregate read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -3354,81 +3242,30 @@ class OPNsenseAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_device_summary(self) -> AdapterResult:
-        """
-        NormalizedDeviceSummary — high-level overview suitable for the
-        dashboard, cross-adapter inventory, and health-check polling.
-        """
+        """Report observed identity, interfaces and the active default gateway."""
         try:
-            import asyncio
-
-            status, fw, gw_raw, ifaces_raw = await asyncio.gather(
-                self._api.get_system_status(),
+            (
+                information,
+                clock,
+                firmware,
+                gateways,
+                interfaces,
+                routing,
+            ) = await gather_required_reads(
+                self._api.get_system_information(),
+                self._api.get_system_time(),
                 self._api.get_firmware_status(),
                 self._api.get_gateway_status(),
                 self._api.get_interfaces(),
-                return_exceptions=True,
+                self._api.get_gateway_inventory(),
             )
-
-            # interfaces summary
-            if isinstance(ifaces_raw, Exception) or not isinstance(ifaces_raw, dict):
-                iface_count, ifaces_up = 0, 0
-            else:
-                iface_count = len(ifaces_raw)
-                ifaces_up = sum(
-                    1
-                    for v in ifaces_raw.values()
-                    if isinstance(v, dict) and str(v.get("status", "")).lower() == "up"
+            return AdapterResult.ok(
+                data=device_summary_reads.device_summary(
+                    information, clock, firmware, gateways, interfaces, routing
                 )
-
-            # gateway summary (first default)
-            wan_status = GatewayStatus.UNKNOWN
-            wan_ip = ""
-            wan_loss = 0.0
-            wan_delay = 0.0
-            gw_items = (
-                gw_raw.get("items", gw_raw)
-                if isinstance(gw_raw, dict)
-                else gw_raw
-                if isinstance(gw_raw, list)
-                else []
             )
-            if isinstance(gw_items, dict):
-                gw_items = list(gw_items.values())
-            for gw in gw_items:
-                if isinstance(gw, dict):
-                    wan_ip = gw.get("address", gw.get("gateway", ""))
-                    s = str(gw.get("status_translated", gw.get("status", "unknown"))).lower()
-                    wan_status = (
-                        GatewayStatus(s)
-                        if s in GatewayStatus.__members__.values()
-                        else GatewayStatus.UNKNOWN
-                    )
-                    try:
-                        wan_loss = float(str(gw.get("loss", "0")).rstrip("%") or 0)
-                    except ValueError:
-                        wan_loss = 0.0
-                    try:
-                        wan_delay = float(str(gw.get("delay", "0")).rstrip("ms").strip() or 0)
-                    except ValueError:
-                        wan_delay = 0.0
-                    break
-
-            summary = NormalizedDeviceSummary(
-                hostname=status.get("name", ""),
-                version=fw.get("product_version", ""),
-                uptime_text=status.get("uptime", ""),
-                interface_count=iface_count,
-                interfaces_up=ifaces_up,
-                interfaces_down=iface_count - ifaces_up,
-                wan_status=wan_status,
-                wan_ip=wan_ip,
-                wan_loss_pct=wan_loss,
-                wan_delay_ms=wan_delay,
-                firmware_update_available=fw.get("status_upgrade_action", "") != "",
-            )
-            return AdapterResult.ok(data=summary.model_dump())
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense aggregate read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -3442,31 +3279,33 @@ class OPNsenseAdapter(BaseAdapter):
                 "/api/haproxy/settings/searchServers",
                 {"current": 1, "rowCount": -1},
             )
-            rows = self._rows(raw) if isinstance(raw, dict) else []
+            rows = aggregate_inventory.complete_rows(raw, identity="uuid")
             servers = []
             for r in rows:
                 if not isinstance(r, dict):
                     continue
                 servers.append(
                     {
-                        "uuid": r.get("uuid", ""),
-                        "name": r.get("name", ""),
-                        "address": r.get("address", ""),
-                        "port": r.get("port", ""),
-                        "mode": r.get("mode", ""),
-                        "ssl": r.get("ssl", "0") == "1",
-                        "ssl_verify": r.get("sslVerify", "0") == "1",
-                        "weight": r.get("weight", ""),
-                        "check_interval": r.get("checkInterval", ""),
-                        "check_down_interval": r.get("checkDownInterval", ""),
-                        "source": r.get("source", ""),
-                        "linked_resolver": r.get("linkedResolver", ""),
-                        "description": r.get("Description", r.get("description", "")),
+                        "uuid": plugin_reads.text(r.get("uuid", "")),
+                        "name": plugin_reads.text(r.get("name", "")),
+                        "address": plugin_reads.text(r.get("address", "")),
+                        "port": plugin_reads.text(r.get("port", "")),
+                        "mode": plugin_reads.text(r.get("mode", "")),
+                        "ssl": plugin_reads.flag(r.get("ssl")),
+                        "ssl_verify": plugin_reads.flag(r.get("sslVerify")),
+                        "weight": plugin_reads.text(r.get("weight", "")),
+                        "check_interval": plugin_reads.text(r.get("checkInterval", "")),
+                        "check_down_interval": plugin_reads.text(r.get("checkDownInterval", "")),
+                        "source": plugin_reads.text(r.get("source", "")),
+                        "linked_resolver": plugin_reads.text(r.get("linkedResolver", "")),
+                        "description": plugin_reads.text(
+                            r.get("Description", r.get("description", ""))
+                        ),
                     }
                 )
             return AdapterResult.ok(data={"servers": servers, "count": len(servers)})
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense HAProxy read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     async def get_haproxy_backends(self) -> AdapterResult:
@@ -3476,37 +3315,45 @@ class OPNsenseAdapter(BaseAdapter):
                 "/api/haproxy/settings/searchBackends",
                 {"current": 1, "rowCount": -1},
             )
-            rows = self._rows(raw) if isinstance(raw, dict) else []
+            rows = aggregate_inventory.complete_rows(raw, identity="uuid")
             backends = []
             for r in rows:
                 if not isinstance(r, dict):
                     continue
                 backends.append(
                     {
-                        "uuid": r.get("uuid", ""),
-                        "name": r.get("name", ""),
-                        "enabled": r.get("enabled", "0") == "1",
-                        "mode": r.get("mode", ""),
-                        "algorithm": r.get("algorithm", ""),
-                        "proxy_protocol": r.get("proxyProtocol", ""),
-                        "linked_servers": r.get("linkedServers", ""),
-                        "linked_resolver": r.get("linkedResolver", ""),
-                        "health_check_enabled": r.get("healthCheckEnabled", "0") == "1",
-                        "health_check": r.get("healthCheck", ""),
-                        "health_check_fall": r.get("healthCheckFall", ""),
-                        "health_check_rise": r.get("healthCheckRise", ""),
-                        "persistence": r.get("persistence", ""),
-                        "persistence_cookiename": r.get("persistence_cookiename", ""),
-                        "stickiness_pattern": r.get("stickiness_pattern", ""),
-                        "basic_auth_enabled": r.get("basicAuthEnabled", "0") == "1",
-                        "tuning_timeout_connect": r.get("tuning_timeoutConnect", ""),
-                        "tuning_timeout_server": r.get("tuning_timeoutServer", ""),
-                        "description": r.get("Description", r.get("description", "")),
+                        "uuid": plugin_reads.text(r.get("uuid", "")),
+                        "name": plugin_reads.text(r.get("name", "")),
+                        "enabled": plugin_reads.flag(r.get("enabled")),
+                        "mode": plugin_reads.text(r.get("mode", "")),
+                        "algorithm": plugin_reads.text(r.get("algorithm", "")),
+                        "proxy_protocol": plugin_reads.text(r.get("proxyProtocol", "")),
+                        "linked_servers": plugin_reads.text(r.get("linkedServers", "")),
+                        "linked_resolver": plugin_reads.text(r.get("linkedResolver", "")),
+                        "health_check_enabled": plugin_reads.flag(r.get("healthCheckEnabled")),
+                        "health_check": plugin_reads.text(r.get("healthCheck", "")),
+                        "health_check_fall": plugin_reads.text(r.get("healthCheckFall", "")),
+                        "health_check_rise": plugin_reads.text(r.get("healthCheckRise", "")),
+                        "persistence": plugin_reads.text(r.get("persistence", "")),
+                        "persistence_cookiename": plugin_reads.text(
+                            r.get("persistence_cookiename", "")
+                        ),
+                        "stickiness_pattern": plugin_reads.text(r.get("stickiness_pattern", "")),
+                        "basic_auth_enabled": plugin_reads.flag(r.get("basicAuthEnabled")),
+                        "tuning_timeout_connect": plugin_reads.text(
+                            r.get("tuning_timeoutConnect", "")
+                        ),
+                        "tuning_timeout_server": plugin_reads.text(
+                            r.get("tuning_timeoutServer", "")
+                        ),
+                        "description": plugin_reads.text(
+                            r.get("Description", r.get("description", ""))
+                        ),
                     }
                 )
             return AdapterResult.ok(data={"backends": backends, "count": len(backends)})
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense HAProxy read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     async def get_haproxy_frontends(self) -> AdapterResult:
@@ -3516,37 +3363,47 @@ class OPNsenseAdapter(BaseAdapter):
                 "/api/haproxy/settings/searchFrontends",
                 {"current": 1, "rowCount": -1},
             )
-            rows = self._rows(raw) if isinstance(raw, dict) else []
+            rows = aggregate_inventory.complete_rows(raw, identity="uuid")
             frontends = []
             for r in rows:
                 if not isinstance(r, dict):
                     continue
                 frontends.append(
                     {
-                        "uuid": r.get("uuid", ""),
-                        "name": r.get("name", ""),
-                        "enabled": r.get("enabled", "0") == "1",
-                        "bind": r.get("bind", ""),
-                        "bind_options": r.get("bindOptions", ""),
-                        "mode": r.get("mode", ""),
-                        "default_backend": r.get("defaultBackend", ""),
-                        "ssl_enabled": r.get("ssl_enabled", "0") == "1",
-                        "ssl_certificates": r.get("ssl_certificates", ""),
-                        "ssl_default_certificate": r.get("ssl_default_certificate", ""),
-                        "ssl_bind_options": r.get("ssl_bindOptions", ""),
-                        "linked_cpu_affinity_rules": r.get("linkedCpuAffinityRules", ""),
-                        "linked_actions": r.get("linkedActions", ""),
-                        "linked_errorfiles": r.get("linkedErrorfiles", ""),
-                        "forwarded_for": r.get("forwardFor", "0") == "1",
-                        "connection_behaviour": r.get("connectionBehaviour", ""),
-                        "tuning_max_connections": r.get("tuning_maxConnections", ""),
-                        "tuning_timeout_client": r.get("tuning_timeoutClient", ""),
-                        "description": r.get("Description", r.get("description", "")),
+                        "uuid": plugin_reads.text(r.get("uuid", "")),
+                        "name": plugin_reads.text(r.get("name", "")),
+                        "enabled": plugin_reads.flag(r.get("enabled")),
+                        "bind": plugin_reads.text(r.get("bind", "")),
+                        "bind_options": plugin_reads.text(r.get("bindOptions", "")),
+                        "mode": plugin_reads.text(r.get("mode", "")),
+                        "default_backend": plugin_reads.text(r.get("defaultBackend", "")),
+                        "ssl_enabled": plugin_reads.flag(r.get("ssl_enabled")),
+                        "ssl_certificates": plugin_reads.text(r.get("ssl_certificates", "")),
+                        "ssl_default_certificate": plugin_reads.text(
+                            r.get("ssl_default_certificate", "")
+                        ),
+                        "ssl_bind_options": plugin_reads.text(r.get("ssl_bindOptions", "")),
+                        "linked_cpu_affinity_rules": plugin_reads.text(
+                            r.get("linkedCpuAffinityRules", "")
+                        ),
+                        "linked_actions": plugin_reads.text(r.get("linkedActions", "")),
+                        "linked_errorfiles": plugin_reads.text(r.get("linkedErrorfiles", "")),
+                        "forwarded_for": plugin_reads.flag(r.get("forwardFor")),
+                        "connection_behaviour": plugin_reads.text(r.get("connectionBehaviour", "")),
+                        "tuning_max_connections": plugin_reads.text(
+                            r.get("tuning_maxConnections", "")
+                        ),
+                        "tuning_timeout_client": plugin_reads.text(
+                            r.get("tuning_timeoutClient", "")
+                        ),
+                        "description": plugin_reads.text(
+                            r.get("Description", r.get("description", ""))
+                        ),
                     }
                 )
             return AdapterResult.ok(data={"frontends": frontends, "count": len(frontends)})
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense HAProxy read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     async def get_haproxy_acls(self) -> AdapterResult:
@@ -3556,33 +3413,35 @@ class OPNsenseAdapter(BaseAdapter):
                 "/api/haproxy/settings/searchAcls",
                 {"current": 1, "rowCount": -1},
             )
-            rows = self._rows(raw) if isinstance(raw, dict) else []
+            rows = aggregate_inventory.complete_rows(raw, identity="uuid")
             acls = []
             for r in rows:
                 if not isinstance(r, dict):
                     continue
                 acls.append(
                     {
-                        "uuid": r.get("uuid", ""),
-                        "name": r.get("name", ""),
-                        "expression": r.get("expression", ""),
-                        "negate": r.get("negate", "0") == "1",
-                        "hdr_name": r.get("hdr_name", ""),
-                        "hdr_beg": r.get("hdr_beg", ""),
-                        "hdr_end": r.get("hdr_end", ""),
-                        "hdr_sub": r.get("hdr_sub", ""),
-                        "hdr_reg": r.get("hdr_reg", ""),
-                        "hdr_dir": r.get("hdr_dir", ""),
-                        "value": r.get("value", ""),
-                        "query_backend": r.get("queryBackend", ""),
-                        "allowed_users": r.get("allowedUsers", ""),
-                        "allowed_groups": r.get("allowedGroups", ""),
-                        "description": r.get("Description", r.get("description", "")),
+                        "uuid": plugin_reads.text(r.get("uuid", "")),
+                        "name": plugin_reads.text(r.get("name", "")),
+                        "expression": plugin_reads.text(r.get("expression", "")),
+                        "negate": plugin_reads.flag(r.get("negate")),
+                        "hdr_name": plugin_reads.text(r.get("hdr_name", "")),
+                        "hdr_beg": plugin_reads.text(r.get("hdr_beg", "")),
+                        "hdr_end": plugin_reads.text(r.get("hdr_end", "")),
+                        "hdr_sub": plugin_reads.text(r.get("hdr_sub", "")),
+                        "hdr_reg": plugin_reads.text(r.get("hdr_reg", "")),
+                        "hdr_dir": plugin_reads.text(r.get("hdr_dir", "")),
+                        "value": plugin_reads.text(r.get("value", "")),
+                        "query_backend": plugin_reads.text(r.get("queryBackend", "")),
+                        "allowed_users": plugin_reads.text(r.get("allowedUsers", "")),
+                        "allowed_groups": plugin_reads.text(r.get("allowedGroups", "")),
+                        "description": plugin_reads.text(
+                            r.get("Description", r.get("description", ""))
+                        ),
                     }
                 )
             return AdapterResult.ok(data={"acls": acls, "count": len(acls)})
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense HAProxy read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     async def get_haproxy_actions(self) -> AdapterResult:
@@ -3592,46 +3451,49 @@ class OPNsenseAdapter(BaseAdapter):
                 "/api/haproxy/settings/searchActions",
                 {"current": 1, "rowCount": -1},
             )
-            rows = self._rows(raw) if isinstance(raw, dict) else []
+            rows = aggregate_inventory.complete_rows(raw, identity="uuid")
             actions = []
             for r in rows:
                 if not isinstance(r, dict):
                     continue
                 actions.append(
                     {
-                        "uuid": r.get("uuid", ""),
-                        "name": r.get("name", ""),
-                        "test_type": r.get("testType", ""),
-                        "linked_acls": r.get("linkedAcls", ""),
-                        "operator": r.get("operator", ""),
-                        "type": r.get("type", ""),
-                        "use_backend": r.get("useBackend", ""),
-                        "use_server": r.get("useServer", ""),
-                        "map_use_backend_file": r.get("map_use_backend_file", ""),
-                        "http_request_auth": r.get("http_request_auth", ""),
-                        "http_request_redirect": r.get("http_request_redirect", ""),
-                        "http_request_lua": r.get("http_request_lua", ""),
-                        "http_response_lua": r.get("http_response_lua", ""),
-                        "description": r.get("Description", r.get("description", "")),
+                        "uuid": plugin_reads.text(r.get("uuid", "")),
+                        "name": plugin_reads.text(r.get("name", "")),
+                        "test_type": plugin_reads.text(r.get("testType", "")),
+                        "linked_acls": plugin_reads.text(r.get("linkedAcls", "")),
+                        "operator": plugin_reads.text(r.get("operator", "")),
+                        "type": plugin_reads.text(r.get("type", "")),
+                        "use_backend": plugin_reads.text(r.get("useBackend", "")),
+                        "use_server": plugin_reads.text(r.get("useServer", "")),
+                        "map_use_backend_file": plugin_reads.text(
+                            r.get("map_use_backend_file", "")
+                        ),
+                        "http_request_auth": plugin_reads.text(r.get("http_request_auth", "")),
+                        "http_request_redirect": plugin_reads.text(
+                            r.get("http_request_redirect", "")
+                        ),
+                        "http_request_lua": plugin_reads.text(r.get("http_request_lua", "")),
+                        "http_response_lua": plugin_reads.text(r.get("http_response_lua", "")),
+                        "description": plugin_reads.text(
+                            r.get("Description", r.get("description", ""))
+                        ),
                     }
                 )
             return AdapterResult.ok(data={"actions": actions, "count": len(actions)})
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense HAProxy read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     async def get_haproxy_status(self) -> AdapterResult:
         """Return aggregated HAProxy configuration overview."""
         try:
-            import asyncio
-
-            servers_r, backends_r, frontends_r, acls_r, actions_r = await asyncio.gather(
+            servers_r, backends_r, frontends_r, acls_r, actions_r = await gather_required_reads(
                 self.get_haproxy_servers(),
                 self.get_haproxy_backends(),
                 self.get_haproxy_frontends(),
                 self.get_haproxy_acls(),
                 self.get_haproxy_actions(),
-                return_exceptions=True,
             )
 
             def _extract(r, key):
@@ -3654,7 +3516,7 @@ class OPNsenseAdapter(BaseAdapter):
                 }
             )
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense aggregate read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -3668,11 +3530,30 @@ class OPNsenseAdapter(BaseAdapter):
                 "/api/trust/cert/search",
                 {"current": 1, "rowCount": -1},
             )
-            rows = self._rows(raw) if isinstance(raw, dict) else []
+            # Trust/search uses UIModelGrid: rowCount is the returned count,
+            # total is the full count, and current is the requested page. We
+            # request all rows, so a truncated or malformed answer is not healthy.
+            rows = raw.get("rows") if isinstance(raw, dict) else None
+            if not isinstance(rows, list):
+                raise ValueError("Invalid certificate inventory")
+            if any(type(raw.get(key)) is not int for key in ("total", "rowCount", "current")):
+                raise ValueError("Invalid certificate inventory metadata")
+            if raw["total"] != len(rows) or raw["rowCount"] != len(rows) or raw["current"] != 1:
+                raise ValueError("Incomplete certificate inventory")
             certs = []
+            seen = set()
             for r in rows:
-                if not isinstance(r, dict):
-                    continue
+                if (
+                    not isinstance(r, dict)
+                    or not isinstance(r.get("uuid"), str)
+                    or not r["uuid"].strip()
+                    or r["uuid"] in seen
+                ):
+                    raise ValueError("Invalid certificate row")
+                seen.add(r["uuid"])
+                for field in ("descr", "dn_commonname"):
+                    if field in r and not isinstance(r[field], str):
+                        raise ValueError("Invalid certificate identity")
                 certs.append(
                     {
                         "uuid": r.get("uuid", ""),
@@ -3694,10 +3575,42 @@ class OPNsenseAdapter(BaseAdapter):
                         "key_size": r.get("key_size", ""),
                     }
                 )
+            if any(
+                value is not None and not isinstance(value, (str, int, float, bool))
+                for cert in certs
+                for value in cert.values()
+            ):
+                raise ValueError("Invalid certificate metadata")
             return AdapterResult.ok(data={"certificates": certs, "count": len(certs)})
-        except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
-            return AdapterResult.fail(type(exc).__name__)
+        except Exception:
+            # Do not log device bodies or exceptions: they may contain private keys.
+            return AdapterResult.fail(
+                "Certificate inventory could not be retrieved", error_code="CERTIFICATE_LIST_FAILED"
+            )
+
+    @staticmethod
+    def _complete_trust_search(raw: Any, identity: str = "uuid") -> list[dict[str, Any]]:
+        rows = raw.get("rows") if isinstance(raw, dict) else None
+        if not isinstance(rows, list) or any(
+            type(raw.get(key)) is not int for key in ("total", "rowCount", "current")
+        ):
+            raise ValueError("Invalid inventory response")
+        if raw["total"] != len(rows) or raw["rowCount"] != len(rows) or raw["current"] != 1:
+            raise ValueError("Incomplete inventory response")
+        seen = set()
+        for row in rows:
+            if (
+                not isinstance(row, dict)
+                or not isinstance(row.get(identity), str)
+                or not row[identity].strip()
+                or row[identity] in seen
+            ):
+                raise ValueError("Invalid inventory identity")
+            seen.add(row[identity])
+            for key in ("name", "descr", "dn_commonname", "crl_descr"):
+                if key in row and not isinstance(row[key], str):
+                    raise ValueError("Invalid inventory name")
+        return rows
 
     async def get_certificate_authorities(self) -> AdapterResult:
         """Return Certificate Authorities from the OPNsense trust store."""
@@ -3706,11 +3619,9 @@ class OPNsenseAdapter(BaseAdapter):
                 "/api/trust/ca/search",
                 {"current": 1, "rowCount": -1},
             )
-            rows = self._rows(raw) if isinstance(raw, dict) else []
+            rows = self._complete_trust_search(raw)
             cas = []
             for r in rows:
-                if not isinstance(r, dict):
-                    continue
                 cas.append(
                     {
                         "uuid": r.get("uuid", ""),
@@ -3729,70 +3640,65 @@ class OPNsenseAdapter(BaseAdapter):
                         "key_size": r.get("key_size", ""),
                     }
                 )
+            cas = [public_metadata(row, tuple(row)) for row in cas]
             return AdapterResult.ok(data={"certificate_authorities": cas, "count": len(cas)})
-        except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
-            return AdapterResult.fail(type(exc).__name__)
+        except Exception:
+            return AdapterResult.fail(
+                "Trust/ACME inventory could not be retrieved", error_code="TRUST_INVENTORY_FAILED"
+            )
 
     async def get_certificate_revocation_lists(self) -> AdapterResult:
-        """Return Certificate Revocation Lists from the OPNsense trust store."""
+        """Read configured CRL summaries; CA rows without a CRL are not lists."""
         try:
-            raw = await self._api.post(
-                "/api/trust/crl/search",
-                {"current": 1, "rowCount": -1},
+            # This documented GET uses the server recordset limit. Verify total
+            # against returned rows; a truncated inventory is explicitly unavailable.
+            raw = await self._api.get("/api/trust/crl/search", {"current": 1, "rowCount": -1})
+            rows = self._complete_trust_search(raw, "refid")
+            crls = [
+                {"uuid": row["refid"], "caref": row["refid"], "descr": row["crl_descr"]}
+                for row in rows
+                if "crl_descr" in row
+            ]
+            return AdapterResult.ok({"crls": crls, "count": len(crls)})
+        except Exception:
+            return AdapterResult.fail(
+                "Trust/ACME inventory could not be retrieved", error_code="TRUST_INVENTORY_FAILED"
             )
-            rows = self._rows(raw) if isinstance(raw, dict) else []
-            crls = []
-            for r in rows:
-                if not isinstance(r, dict):
-                    continue
-                crls.append(
-                    {
-                        "uuid": r.get("uuid", ""),
-                        "descr": r.get("descr", ""),
-                        "caref": r.get("caref", ""),
-                        "serial": r.get("serial", ""),
-                        "lifetime": r.get("lifetime", ""),
-                        "certificates": r.get("certificates", ""),
-                    }
-                )
-            return AdapterResult.ok(data={"crls": crls, "count": len(crls)})
-        except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
-            return AdapterResult.fail(type(exc).__name__)
 
     async def get_trust_overview(self) -> AdapterResult:
-        """Return full trust-store overview: CAs + certs + CRLs."""
+        """Require all trust inventories; a failed component is never empty."""
         try:
-            import asyncio
-
-            cas_r, certs_r, crls_r = await asyncio.gather(
+            results = await asyncio.gather(
                 self.get_certificate_authorities(),
                 self.get_certificates(),
                 self.get_certificate_revocation_lists(),
                 return_exceptions=True,
             )
-
-            def _extract(r, key):
-                if isinstance(r, AdapterResult) and r.success and isinstance(r.data, dict):
-                    return r.data.get(key, [])
-                return []
-
+            for result in results:
+                if isinstance(result, asyncio.CancelledError):
+                    raise result
+            cas, certs, crls = [
+                inventory_rows(result, key)
+                for result, key in zip(
+                    results, ("certificate_authorities", "certificates", "crls"), strict=True
+                )
+            ]
             return AdapterResult.ok(
-                data={
+                {
                     "trust": {
-                        "certificate_authorities": _extract(cas_r, "certificate_authorities"),
-                        "certificates": _extract(certs_r, "certificates"),
-                        "crls": _extract(crls_r, "crls"),
-                        "ca_count": len(_extract(cas_r, "certificate_authorities")),
-                        "cert_count": len(_extract(certs_r, "certificates")),
-                        "crl_count": len(_extract(crls_r, "crls")),
-                    },
+                        "certificate_authorities": cas,
+                        "certificates": certs,
+                        "crls": crls,
+                        "ca_count": len(cas),
+                        "cert_count": len(certs),
+                        "crl_count": len(crls),
+                    }
                 }
             )
-        except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
-            return AdapterResult.fail(type(exc).__name__)
+        except Exception:
+            return AdapterResult.fail(
+                "Trust/ACME inventory could not be retrieved", error_code="TRUST_INVENTORY_FAILED"
+            )
 
     # ═══════════════════════════════════════════════════════════════════════
     # ACME / Let's Encrypt Client
@@ -3802,19 +3708,20 @@ class OPNsenseAdapter(BaseAdapter):
         """Return ACME-managed certificates."""
         try:
             raw = await self._api.post(
-                "/api/acmeclient/certificates/searchCertificates",
+                "/api/acmeclient/certificates/search",
                 {"current": 1, "rowCount": -1},
             )
-            rows = self._rows(raw) if isinstance(raw, dict) else []
+            rows = self._complete_trust_search(raw)
             certs = []
             for r in rows:
-                if not isinstance(r, dict):
-                    continue
+                if r.get("enabled") not in {"0", "1"}:
+                    raise ValueError("Invalid inventory enabled state")
                 certs.append(
                     {
                         "uuid": r.get("uuid", ""),
                         "enabled": r.get("enabled", "0") == "1",
                         "name": r.get("name", ""),
+                        "alt_names": r.get("altNames", ""),
                         "description": r.get("description", ""),
                         "status_code": r.get("statusCode", ""),
                         "status_last_update": r.get("statusLastUpdate", ""),
@@ -3822,28 +3729,30 @@ class OPNsenseAdapter(BaseAdapter):
                         "validation_method": r.get("validationMethod", ""),
                         "restart_actions": r.get("restartActions", ""),
                         "renewal_interval": r.get("renewInterval", ""),
-                        "cert_private_key": bool(r.get("certPrivateKey")),
+                        "cert_private_key": None,
                         "cert_refid": r.get("certRefId", ""),
                         "last_update": r.get("lastUpdate", ""),
                     }
                 )
+            certs = [public_metadata(row, tuple(row)) for row in certs]
             return AdapterResult.ok(data={"acme_certificates": certs, "count": len(certs)})
-        except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
-            return AdapterResult.fail(type(exc).__name__)
+        except Exception:
+            return AdapterResult.fail(
+                "Trust/ACME inventory could not be retrieved", error_code="TRUST_INVENTORY_FAILED"
+            )
 
     async def get_acme_accounts(self) -> AdapterResult:
         """Return ACME registration accounts (e.g. Let's Encrypt accounts)."""
         try:
             raw = await self._api.post(
-                "/api/acmeclient/accounts/searchAccounts",
+                "/api/acmeclient/accounts/search",
                 {"current": 1, "rowCount": -1},
             )
-            rows = self._rows(raw) if isinstance(raw, dict) else []
+            rows = self._complete_trust_search(raw)
             accounts = []
             for r in rows:
-                if not isinstance(r, dict):
-                    continue
+                if r.get("enabled") not in {"0", "1"}:
+                    raise ValueError("Invalid inventory enabled state")
                 accounts.append(
                     {
                         "uuid": r.get("uuid", ""),
@@ -3856,23 +3765,25 @@ class OPNsenseAdapter(BaseAdapter):
                         "status_last_update": r.get("statusLastUpdate", ""),
                     }
                 )
+            accounts = [public_metadata(row, tuple(row)) for row in accounts]
             return AdapterResult.ok(data={"acme_accounts": accounts, "count": len(accounts)})
-        except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
-            return AdapterResult.fail(type(exc).__name__)
+        except Exception:
+            return AdapterResult.fail(
+                "Trust/ACME inventory could not be retrieved", error_code="TRUST_INVENTORY_FAILED"
+            )
 
     async def get_acme_validations(self) -> AdapterResult:
         """Return ACME domain validation methods."""
         try:
             raw = await self._api.post(
-                "/api/acmeclient/validations/searchValidations",
+                "/api/acmeclient/validations/search",
                 {"current": 1, "rowCount": -1},
             )
-            rows = self._rows(raw) if isinstance(raw, dict) else []
+            rows = self._complete_trust_search(raw)
             validations = []
             for r in rows:
-                if not isinstance(r, dict):
-                    continue
+                if r.get("enabled") not in {"0", "1"}:
+                    raise ValueError("Invalid inventory enabled state")
                 validations.append(
                     {
                         "uuid": r.get("uuid", ""),
@@ -3884,25 +3795,27 @@ class OPNsenseAdapter(BaseAdapter):
                         "dns_sleep": r.get("dns_sleep", ""),
                     }
                 )
+            validations = [public_metadata(row, tuple(row)) for row in validations]
             return AdapterResult.ok(
                 data={"acme_validations": validations, "count": len(validations)}
             )
-        except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
-            return AdapterResult.fail(type(exc).__name__)
+        except Exception:
+            return AdapterResult.fail(
+                "Trust/ACME inventory could not be retrieved", error_code="TRUST_INVENTORY_FAILED"
+            )
 
     async def get_acme_actions(self) -> AdapterResult:
         """Return ACME automation actions (run after cert issuance)."""
         try:
             raw = await self._api.post(
-                "/api/acmeclient/actions/searchActions",
+                "/api/acmeclient/actions/search",
                 {"current": 1, "rowCount": -1},
             )
-            rows = self._rows(raw) if isinstance(raw, dict) else []
+            rows = self._complete_trust_search(raw)
             actions = []
             for r in rows:
-                if not isinstance(r, dict):
-                    continue
+                if r.get("enabled") not in {"0", "1"}:
+                    raise ValueError("Invalid inventory enabled state")
                 actions.append(
                     {
                         "uuid": r.get("uuid", ""),
@@ -3913,38 +3826,62 @@ class OPNsenseAdapter(BaseAdapter):
                         "linked_certificates": r.get("linkedCertificates", ""),
                     }
                 )
+            actions = [public_metadata(row, tuple(row)) for row in actions]
             return AdapterResult.ok(data={"acme_actions": actions, "count": len(actions)})
-        except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
-            return AdapterResult.fail(type(exc).__name__)
+        except Exception:
+            return AdapterResult.fail(
+                "Trust/ACME inventory could not be retrieved", error_code="TRUST_INVENTORY_FAILED"
+            )
 
     async def get_acme_settings(self) -> AdapterResult:
-        """Return ACME client global settings."""
+        """Read the documented nested settings, without exposing account secrets."""
         try:
             raw = await self._api.get("/api/acmeclient/settings/get")
-            settings = {}
-            if isinstance(raw, dict):
-                s = raw.get("acmeclient", raw)
-                settings = {
-                    "enabled": s.get("enabled", "0") == "1",
-                    "environment": s.get("environment", ""),
-                    "log_level": s.get("logLevel", ""),
-                    "auto_renewal": s.get("autoRenewal", "0") == "1",
-                    "renew_interval": s.get("renewInterval", ""),
-                    "challenge_port": s.get("challengePort", ""),
-                    "tls_challenge_port": s.get("tlsChallengePort", ""),
-                }
-            return AdapterResult.ok(data={"acme_settings": settings})
-        except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
-            return AdapterResult.fail(type(exc).__name__)
+            model = raw.get("acmeclient") if isinstance(raw, dict) else None
+            settings = model.get("settings") if isinstance(model, dict) else None
+            if not isinstance(settings, dict) or any(
+                settings.get(key) not in {"0", "1"} for key in ("enabled", "autoRenewal")
+            ):
+                raise ValueError("Invalid ACME settings")
+
+            def option(key: str) -> str:
+                value = settings.get(key, "")
+                if isinstance(value, dict):
+                    selected = [
+                        name
+                        for name, choice in value.items()
+                        if isinstance(choice, dict)
+                        and type(choice.get("selected")) in {str, int}
+                        and choice["selected"] in ("1", 1)
+                    ]
+                    if len(selected) != 1:
+                        raise ValueError("Invalid ACME option selection")
+                    value = selected[0]
+                if not isinstance(value, str):
+                    raise ValueError("Invalid ACME option")
+                return value
+
+            public = {
+                "enabled": settings["enabled"] == "1",
+                "auto_renewal": settings["autoRenewal"] == "1",
+                "environment": option("environment"),
+                "log_level": option("logLevel"),
+                "renew_interval": settings.get("renewInterval", ""),
+                "challenge_port": settings.get("challengePort", ""),
+                "tls_challenge_port": settings.get("TLSchallengePort", ""),
+            }
+            return AdapterResult.ok(
+                {"acme_settings": inventory_settings(AdapterResult.ok({"acme_settings": public}))}
+            )
+        except Exception:
+            return AdapterResult.fail(
+                "Trust/ACME inventory could not be retrieved", error_code="TRUST_INVENTORY_FAILED"
+            )
 
     async def get_acme_overview(self) -> AdapterResult:
-        """Return full ACME overview: settings + certs + accounts + validations + actions."""
+        """Require every ACME component; plugin absence is not an empty inventory."""
         try:
-            import asyncio
-
-            settings_r, certs_r, accounts_r, validations_r, actions_r = await asyncio.gather(
+            results = await asyncio.gather(
                 self.get_acme_settings(),
                 self.get_acme_certificates(),
                 self.get_acme_accounts(),
@@ -3952,33 +3889,35 @@ class OPNsenseAdapter(BaseAdapter):
                 self.get_acme_actions(),
                 return_exceptions=True,
             )
-
-            def _extract(r, key):
-                if isinstance(r, AdapterResult) and r.success and isinstance(r.data, dict):
-                    return r.data.get(key, [])
-                return []
-
-            def _extract_dict(r, key):
-                if isinstance(r, AdapterResult) and r.success and isinstance(r.data, dict):
-                    return r.data.get(key, {})
-                return {}
-
+            for result in results:
+                if isinstance(result, asyncio.CancelledError):
+                    raise result
+            settings = inventory_settings(results[0])
+            certs, accounts, validations, actions = [
+                inventory_rows(result, key)
+                for result, key in zip(
+                    results[1:],
+                    ("acme_certificates", "acme_accounts", "acme_validations", "acme_actions"),
+                    strict=True,
+                )
+            ]
             return AdapterResult.ok(
-                data={
+                {
                     "acme": {
-                        "settings": _extract_dict(settings_r, "acme_settings"),
-                        "certificates": _extract(certs_r, "acme_certificates"),
-                        "accounts": _extract(accounts_r, "acme_accounts"),
-                        "validations": _extract(validations_r, "acme_validations"),
-                        "actions": _extract(actions_r, "acme_actions"),
-                        "cert_count": len(_extract(certs_r, "acme_certificates")),
-                        "account_count": len(_extract(accounts_r, "acme_accounts")),
-                    },
+                        "settings": settings,
+                        "certificates": certs,
+                        "accounts": accounts,
+                        "validations": validations,
+                        "actions": actions,
+                        "cert_count": len(certs),
+                        "account_count": len(accounts),
+                    }
                 }
             )
-        except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
-            return AdapterResult.fail(type(exc).__name__)
+        except Exception:
+            return AdapterResult.fail(
+                "Trust/ACME inventory could not be retrieved", error_code="TRUST_INVENTORY_FAILED"
+            )
 
     # ═══════════════════════════════════════════════════════════════════════
     # Syslog Forwarding
@@ -4402,37 +4341,15 @@ class OPNsenseAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_proxy_settings(self) -> AdapterResult:
-        """Return web proxy (Squid) settings and status."""
+        """Read and validate the documented proxy status contract."""
         try:
-            import asyncio
-
-            settings_raw, status_raw = await asyncio.gather(
+            components = await gather_required_reads(
                 self._api.get("/api/proxy/settings/get"),
                 self._api.get("/api/proxy/service/status"),
-                return_exceptions=True,
             )
-            settings = {}
-            if isinstance(settings_raw, dict):
-                fwd = settings_raw.get("proxy", {}).get("forward", {})
-                general = settings_raw.get("proxy", {}).get("general", {})
-                settings = {
-                    "enabled": self._safe(general, "enabled", False),
-                    "port": general.get("port", "3128"),
-                    "ssl_inspection": self._safe(fwd, "sslbump", False),
-                    "transparent_mode": self._safe(fwd, "transparentMode", False),
-                    "cache_enabled": self._safe(general, "cache", {}).get("enabled", False)
-                    if isinstance(general.get("cache"), dict)
-                    else False,
-                    "logging": self._safe(general, "logging", {}).get("enable", False)
-                    if isinstance(general.get("logging"), dict)
-                    else False,
-                }
-            status = {}
-            if isinstance(status_raw, dict):
-                status = {"running": status_raw.get("status", "") == "running"}
-            return AdapterResult.ok(data={"proxy": {**settings, **status}})
+            return AdapterResult.ok(data={"proxy": plugin_reads.proxy(*components)})
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense aggregate read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     async def get_proxy_blacklists(self) -> AdapterResult:
@@ -4466,57 +4383,16 @@ class OPNsenseAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_crowdsec_status(self) -> AdapterResult:
-        """Return CrowdSec status and statistics."""
+        """Read and validate the documented crowdsec status contract."""
         try:
-            import asyncio
-
-            status_raw, alerts_raw, decisions_raw = await asyncio.gather(
+            components = await gather_required_reads(
                 self._api.get("/api/crowdsec/service/status"),
-                self._api.post("/api/crowdsec/alerts/searchAlert", {"current": 1, "rowCount": 50}),
-                self._api.post(
-                    "/api/crowdsec/decisions/searchDecision", {"current": 1, "rowCount": 50}
-                ),
-                return_exceptions=True,
+                self._api.post("/api/crowdsec/alerts/search", {"current": 1, "rowCount": 50}),
+                self._api.post("/api/crowdsec/decisions/search", {"current": 1, "rowCount": 50}),
             )
-            status = {}
-            if isinstance(status_raw, dict):
-                status = {"running": status_raw.get("status", "") == "running"}
-            alerts = self._rows(alerts_raw) if isinstance(alerts_raw, dict) else []
-            decisions = self._rows(decisions_raw) if isinstance(decisions_raw, dict) else []
-            return AdapterResult.ok(
-                data={
-                    "crowdsec": {
-                        **status,
-                        "alert_count": len(alerts),
-                        "decision_count": len(decisions),
-                        "alerts": [
-                            {
-                                "id": a.get("id", ""),
-                                "value": a.get("value", ""),
-                                "scenario": a.get("scenario", ""),
-                                "scope": a.get("scope", ""),
-                                "created_at": a.get("created_at", ""),
-                            }
-                            for a in alerts[:50]
-                            if isinstance(a, dict)
-                        ],
-                        "decisions": [
-                            {
-                                "id": d.get("id", ""),
-                                "value": d.get("value", ""),
-                                "type": d.get("type", ""),
-                                "scope": d.get("scope", ""),
-                                "origin": d.get("origin", ""),
-                                "duration": d.get("duration", ""),
-                            }
-                            for d in decisions[:50]
-                            if isinstance(d, dict)
-                        ],
-                    },
-                }
-            )
+            return AdapterResult.ok(data={"crowdsec": plugin_reads.crowdsec(*components)})
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense aggregate read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -4524,32 +4400,16 @@ class OPNsenseAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_telegraf_status(self) -> AdapterResult:
-        """Return Telegraf metrics agent config and status."""
+        """Read and validate the documented telegraf status contract."""
         try:
-            import asyncio
-
-            settings_raw, status_raw = await asyncio.gather(
-                self._api.get("/api/telegraf/settings/get"),
+            components = await gather_required_reads(
+                self._api.get("/api/telegraf/general/get"),
+                self._api.get("/api/telegraf/output/get"),
                 self._api.get("/api/telegraf/service/status"),
-                return_exceptions=True,
             )
-            settings = {}
-            if isinstance(settings_raw, dict):
-                general = settings_raw.get("telegraf", {}).get("general", {})
-                settings = {
-                    "enabled": self._safe(general, "enabled", False),
-                    "output_influxdb": self._safe(general, "output_influxdb", False),
-                    "output_graphite": self._safe(general, "output_graphite", False),
-                    "output_prometheus": self._safe(general, "output_prometheus", False),
-                    "influx_url": general.get("influx_url", ""),
-                    "influx_database": general.get("influx_database", ""),
-                }
-            status = {}
-            if isinstance(status_raw, dict):
-                status = {"running": status_raw.get("status", "") == "running"}
-            return AdapterResult.ok(data={"telegraf": {**settings, **status}})
+            return AdapterResult.ok(data={"telegraf": plugin_reads.telegraf(*components)})
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense aggregate read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -4557,68 +4417,17 @@ class OPNsenseAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_monit_status(self) -> AdapterResult:
-        """Return Monit service monitoring configuration and status."""
+        """Read and validate the documented monit status contract."""
         try:
-            import asyncio
-
-            services_raw, tests_raw, alerts_raw, status_raw = await asyncio.gather(
+            components = await gather_required_reads(
                 self._api.post("/api/monit/settings/searchService", {"current": 1, "rowCount": -1}),
                 self._api.post("/api/monit/settings/searchTest", {"current": 1, "rowCount": -1}),
                 self._api.post("/api/monit/settings/searchAlert", {"current": 1, "rowCount": -1}),
                 self._api.get("/api/monit/service/status"),
-                return_exceptions=True,
             )
-            services = self._rows(services_raw) if isinstance(services_raw, dict) else []
-            tests = self._rows(tests_raw) if isinstance(tests_raw, dict) else []
-            alerts = self._rows(alerts_raw) if isinstance(alerts_raw, dict) else []
-            status = {}
-            if isinstance(status_raw, dict):
-                status = {"running": status_raw.get("status", "") == "running"}
-            return AdapterResult.ok(
-                data={
-                    "monit": {
-                        **status,
-                        "service_count": len(services),
-                        "test_count": len(tests),
-                        "alert_count": len(alerts),
-                        "services": [
-                            {
-                                "uuid": s.get("uuid", ""),
-                                "name": s.get("name", ""),
-                                "type": s.get("type", ""),
-                                "address": s.get("address", ""),
-                                "enabled": self._safe(s, "enabled", False),
-                                "description": s.get("description", ""),
-                            }
-                            for s in services
-                            if isinstance(s, dict)
-                        ],
-                        "tests": [
-                            {
-                                "uuid": t.get("uuid", ""),
-                                "name": t.get("name", ""),
-                                "condition": t.get("condition", ""),
-                                "action": t.get("action", ""),
-                            }
-                            for t in tests
-                            if isinstance(t, dict)
-                        ],
-                        "alerts": [
-                            {
-                                "uuid": a.get("uuid", ""),
-                                "recipient": a.get("recipient", ""),
-                                "events": a.get("events", ""),
-                                "description": a.get("description", ""),
-                                "enabled": self._safe(a, "enabled", False),
-                            }
-                            for a in alerts
-                            if isinstance(a, dict)
-                        ],
-                    },
-                }
-            )
+            return AdapterResult.ok(data={"monit": plugin_reads.monit(*components)})
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense aggregate read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -4626,33 +4435,15 @@ class OPNsenseAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_netflow_status(self) -> AdapterResult:
-        """Return NetFlow/sFlow collector configuration and status."""
+        """Read and validate the documented netflow status contract."""
         try:
-            import asyncio
-
-            settings_raw, status_raw = await asyncio.gather(
-                self._api.get("/api/netflow/settings/get"),
-                self._api.get("/api/netflow/service/status"),
-                return_exceptions=True,
+            components = await gather_required_reads(
+                self._api.get("/api/diagnostics/netflow/getconfig"),
+                self._api.get("/api/diagnostics/netflow/status"),
             )
-            settings = {}
-            if isinstance(settings_raw, dict):
-                nf = settings_raw.get("netflow", {})
-                capture = nf.get("capture", {})
-                collect = nf.get("collect", {})
-                settings = {
-                    "enabled": self._safe(capture, "enabled", False),
-                    "interfaces": capture.get("interfaces", ""),
-                    "egress_only": self._safe(capture, "egress_only", False),
-                    "version": capture.get("version", ""),
-                    "collect_enabled": self._safe(collect, "enabled", False),
-                }
-            status = {}
-            if isinstance(status_raw, dict):
-                status = {"running": status_raw.get("status", "") == "running"}
-            return AdapterResult.ok(data={"netflow": {**settings, **status}})
+            return AdapterResult.ok(data={"netflow": plugin_reads.netflow(*components)})
         except Exception as exc:
-            logger.exception("OPNsense adapter operation failed")
+            logger.warning("OPNsense aggregate read unavailable (%s)", type(exc).__name__)
             return AdapterResult.fail(type(exc).__name__)
 
     # ═══════════════════════════════════════════════════════════════════════

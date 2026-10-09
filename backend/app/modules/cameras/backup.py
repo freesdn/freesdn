@@ -442,7 +442,7 @@ class CamerasBackupContributor:
         )
 
         # --- Cameras (channels) — nvr_id nullable → restored NVRs ---
-        await restore_records(
+        restored_camera_ids = await restore_records(
             session,
             model_cls=Camera,
             records=data.get("cameras", []),
@@ -472,14 +472,7 @@ class CamerasBackupContributor:
         )
 
         # --- Group members (FK group_id + camera_id both must exist) ---
-        # camera_id validity = the cameras we just restored. We don't have
-        # a restored-camera-id set returned above, so re-derive it from the
-        # records we accepted: a camera is valid if its site was in-org.
-        restored_camera_ids = {
-            str(c["id"])
-            for c in data.get("cameras", [])
-            if str(c.get("site_id")) in org_site_ids and c.get("id")
-        }
+        # Only actually accepted parent identities may authorize membership.
         await restore_records(
             session,
             model_cls=CameraGroupMember,

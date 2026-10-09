@@ -1,0 +1,37 @@
+Gateway configuration delivery contract
+=======================================
+
+The legacy configuration download endpoint returns a document only after a
+successful AdapterResult with a recognized, nonempty content representation.
+Failed or malformed responses and construction/connection exceptions return
+fixed HTTP 502 diagnostics. Explicit NOT_SUPPORTED/NOT_IMPLEMENTED results
+return 501. Existing gateway-not-found responses, controller:write permission,
+super_admin role, pre-device audit record, cancellation and adapter cleanup are
+preserved. New boundary errors do not include adapter diagnostic text.
+
+The JSON response keeps gateway_id, vendor and config. A textual export uses
+config.config_xml and retains the exact string, without reserialization.
+An OpenWRT-style archive uses config.backup_data as ASCII base64, with explicit
+config.encoding="base64", config.format="tar.gz", and config.scope="/etc/config/".
+Consumers must decode base64 to recover the original bytes; never save the
+base64 characters as a tar.gz file. Previously raw binary data had no defined
+JSON encoding and non-UTF8 data could fail during response serialization.
+Only these recognized content fields are returned; unrelated adapter fields
+and ambiguous documents containing both representations are refused/omitted.
+Each original document is limited to 16 MiB; text size is checked in UTF-8 bytes.
+The full application already supplies no-store/no-cache response headers.
+
+This boundary validates representation and delivery, not archive integrity,
+full vendor schema, restorability or a durable saved backup. The archive scope
+is /etc/config/, not a full OpenWRT system image. The OPNsense XML source is its
+latest device backup, not proof of a separately captured running state; see
+OPNSENSE-CONFIG-DOWNLOAD. Unsupported vendor methods remain unsupported.
+Browser file-saving, the legacy backup trigger that discards content, durable
+storage/history/retention, restore drills, and caller/resource reauthorization
+after device I/O remain separate work. Other adapter logging is unchanged.
+
+Qualification uses actual encrypted PostgreSQL rows and HTTP routes with
+synthetic authenticated identities and adapter results. It covers failures,
+binary round trips, size limits, admission, cancellation, cleanup and pre-I/O
+audit ordering. It does not establish hardware transport, browser saving or
+production backup restoration. No schema or dependency change is introduced.

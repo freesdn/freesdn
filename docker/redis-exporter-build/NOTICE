@@ -1,0 +1,16 @@
+redis_exporter
+Copyright (c) Oliver Eilhard and the redis_exporter contributors
+
+Licensed under the MIT License; see LICENSE in this directory.
+
+Upstream project: https://github.com/oliver006/redis_exporter
+
+FreeSDN rebuilds this binary from the pinned module graph in go.mod/go.sum with
+its own Go toolchain, then overlays it onto the upstream runtime image. The
+upstream runtime contract is preserved; only the compiled binary is replaced.
+
+The rebuild exists because the published image is compiled with an older Go
+toolchain. On 2026-10-09 the current upstream release carried two fixable HIGH
+Go standard-library advisories, CVE-2026-78667 and CVE-2026-97031, both fixed in
+Go 1.26.9 and 1.27.2. It was the only one of the fifteen release components not
+built from source, and the only one with fixable findings.

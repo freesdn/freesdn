@@ -59,9 +59,10 @@ from prometheus_client import (
     Info,
     generate_latest,
 )
-from prometheus_fastapi_instrumentator import Instrumentator, metrics
+from prometheus_fastapi_instrumentator import metrics
 
 from app.core.config import settings
+from app.core.metrics_routing import MetadataInstrumentator as Instrumentator
 
 # ============================================================================
 # Custom metrics — business counters & gauges
@@ -188,12 +189,21 @@ auth_events_total: Counter = Counter(
 )
 
 # Audit-write failures: counts audit log rows that failed to
-# persist. Any non-zero rate here means the audit trail is incomplete and
-# operators must investigate immediately — wire an alert in Prometheus.
+# persist. A label first appears on failure, possibly already at 1; alert on
+# the non-zero total, not only its rate. Quiet/reset/missing telemetry is not
+# evidence of audit recovery. This process counter is not a durable ledger.
 audit_write_failures_total: Counter = Counter(
     "freesdn_audit_write_failures_total",
     "Audit log records that failed to persist to the database",
     ["resource_type"],
+)
+
+# Process-local batch outcomes; no record/user labels. This is not a durable
+# ledger or proof a worker/Beat tick ran. Inspect incomplete/blocked outcomes.
+audit_retention_batches_total: Counter = Counter(
+    "freesdn_audit_retention_batches_total",
+    "Audit cleanup batch outcomes; complete does not authenticate historical data",
+    ["outcome"],
 )
 
 # Rate-limit hits (bounded: use coarse endpoint category, never raw paths).

@@ -1,0 +1,81 @@
+Delivery provider scope and reload behavior
+==========================================
+
+Loading providers for delivery is now distinct from administrative listing.
+NotificationService.load_providers_from_db(organization_id) loads only enabled
+providers owned by that exact organization. An organization_id of None selects
+only platform-owned records; it no longer means every tenant's provider.
+Administrative list_providers(None) retains its existing all-tenant behavior
+behind the caller's authorization checks.
+
+A reload clears the old runtime map before resolving the database records and
+only installs the replacement map after the complete load succeeds. A failed
+lookup or provider construction cannot silently fall back to an old tenant's
+credentials. Disabled or removed providers disappear on the next reload.
+Defaults are preferred, then newer records, with a stable ID tie-breaker.
+
+Compatibility: manually registered runtime providers are not retained across a
+database reload. Configure such providers explicitly after a successful load,
+or keep them on a separately scoped service. Platform-level sends now require a
+platform-owned provider; they will not borrow a tenant's configuration.
+
+This does not turn an already loaded service into a live revocation subscription.
+Provider changes after the lookup are not atomically fenced with external sends.
+Do not share one service/session across concurrent organization reloads. Broker
+durability, dispatch transaction ownership and live provider acceptance remain
+separate release work. Administrative listing is not permission to send with a
+provider selected implicitly from another organization.
+
+NOTIFICATION PROVIDER MANAGEMENT: OWNERSHIP AND CONCURRENCY
+=========================================================
+
+Default promotion demotes providers only in the same owning organization and
+channel. A NULL organization is the platform-provider group, not all tenants.
+An unscoped platform administrator may retain all-tenant management access;
+updating a tenant provider still uses that provider's actual organization when
+choosing which other defaults to demote. Listing and lookup permissions are
+unchanged. Scoped API keys do not gain the unscoped administrator role.
+
+Service create/update/delete calls take a PostgreSQL transaction advisory lock
+for the actual owner, including the platform group. This covers empty groups
+where locking an existing default row would provide no protection. Callers
+must commit or roll back their transaction. Writes for different organizations
+use different scope keys. After waiting, update/delete reload the stored row,
+refuse a missing or moved provider and merge config edits with current committed
+values. A delayed metadata edit therefore cannot restore a superseded secret.
+Sensitive configuration remains encrypted and API summaries remain masked.
+
+The serialization applies to these management service methods. It is not a
+database unique constraint, does not make independent raw SQL or restore writers
+participate, and does not continuously revalidate the caller's session, API key,
+role or grants. Historical duplicate defaults are not globally rewritten;
+explicit promotion demotes other providers in that owner/channel. Defaults in
+other channels and organizations are preserved. Notification transport, pending
+delivery, exactly-once effects and current delivery authority have separate
+controls; management tests send no real notification.
+
+The regression evidence uses real independent PostgreSQL transactions and an
+isolated TCP API with ordinary JWT/API-key dependencies. Fixture identities and
+tokens are provisioned directly. This is not password-login, production middleware,
+external provider, hardware, customer recovery or enterprise release acceptance.
+
+
+CONCURRENT PROVIDER VERIFICATION
+===============================
+
+A verification or test send may finish after a provider was edited, disabled,
+deleted or moved to another owner. The service snapshots its original owner,
+provider type/channel, enabled state, update timestamp and encrypted configuration
+before transport I/O. It records verification/error metadata only when an atomic
+conditional UPDATE still matches that binding. A brief owner advisory lock is
+acquired after I/O; management operations do not wait on the network probe.
+
+A stale verification returns an explicit retry message instead of certifying the
+new configuration. A completed test send retains its actual transport outcome,
+but does not mark a changed provider verified or overwrite its diagnostics. The
+service cannot recall a send already dispatched to the former configuration.
+
+These checks do not fence transport side effects against in-flight caller/grant
+revocation, establish actual SMTP/provider interoperability, or guarantee durable
+or exactly-once delivery. Snapshot restoration and an exact raw-SQL restoration
+of the old binding are not a globally monotonic configuration-generation fence.

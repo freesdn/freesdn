@@ -20,22 +20,19 @@ Admin only:
 import hashlib
 import logging
 import time
-from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.dependencies import CurrentUser, is_unscoped_superuser, require_permissions
+from app.core.dependencies import CurrentUser, require_permissions
 from app.db.session import get_session
 from app.models.agents import AgentRelease, RemoteAgent
 from app.schemas.agent_downloads import (
-    AgentReleaseCreate,
     AgentReleaseLatest,
-    AgentReleaseResponse,
     AgentReleaseSummary,
     AgentUpdateCheckResponse,
     DownloadsPageResponse,
@@ -497,131 +494,20 @@ async def check_for_updates(
 # =============================================================================
 
 
-@router.post(
-    "/downloads/releases",
-    response_model=AgentReleaseResponse,
-    status_code=status.HTTP_201_CREATED,
-)
+@router.post("/downloads/releases", deprecated=True, summary="Retired one-step release mutation")
 async def publish_release(
-    data: AgentReleaseCreate,
+    request: Request,
     current_user: Annotated[CurrentUser, Depends(require_permissions("agent:admin"))],
-    session: AsyncSession = Depends(get_session),
 ) -> Any:
+    """Refuse before consuming a body or changing release rows/files.
+
+    Clients must retain and review an explicit operation intent. There is no
+    redirect or automatic replay, and no inferred recovery from an old request.
     """
-    Publish a new agent release (admin only).
-
-    Automatically sets is_latest=True for this platform/type
-    and clears is_latest on previous releases.
-    """
-    if data.platform.lower() not in VALID_PLATFORMS:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid platform: {data.platform}")
-    if data.agent_type.lower() not in VALID_AGENT_TYPES:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid agent_type: {data.agent_type}")
-
-    # Normalise ONCE and use these for querying, SIGNING and persistence alike.
-    # Signing the raw case while storing the lower case produced a signature over
-    # bytes the update-check endpoint could never reproduce (it rebuilds the
-    # manifest from the stored row), so an upload of "Linux"/"Daemon" made the
-    # agent refuse a legitimate update as a signature mismatch.
-    _platform = data.platform.lower()
-    _agent_type = data.agent_type.lower()
-    # The checksum has the SAME seam. The schema accepts [a-fA-F0-9]{64}, and
-    # build_release_manifest lower-cases the digest before signing -- but the row
-    # persisted the caller's raw string, and the update-check endpoint serves that
-    # raw value. The agent compares it against hashlib.sha256().hexdigest(), which
-    # is lower-case, with ==. So an uppercase checksum published fine, signed
-    # fine, and then failed the agent's precheck forever.
-    _checksum = data.checksum_sha256.lower()
-
-    # SECURITY: only super_admin may publish a GLOBAL
-    # (organization_id IS NULL) release; every other admin's release is forced
-    # to their own organization. This stops a tenant org_admin from publishing a
-    # release that becomes the latest update for agents across all tenants.
-    is_super = is_unscoped_superuser(current_user)
-    release_org = None if is_super else current_user.organization_id
-    if not is_super and release_org is None:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "An organization context is required to publish a release.",
-        )
-
-    # Clear is_latest ONLY within the same org bucket (so a tenant admin can't
-    # demote the global or another org's latest release).
-    await session.execute(
-        update(AgentRelease)
-        .where(
-            and_(
-                AgentRelease.platform == _platform,
-                AgentRelease.agent_type == _agent_type,
-                AgentRelease.is_latest,
-                _release_org_bucket(release_org),
-            )
-        )
-        .values(is_latest=False)
+    raise HTTPException(
+        410,
+        "This one-step release mutation is retired. Use the release-operation "
+        "workflow, retain the original intent, and inspect any earlier uncertain "
+        "outcome before explicitly starting or resuming an operation.",
+        headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
     )
-
-    # sign the release server-side (ECDSA-P256) so the URL-publish path
-    # no longer produces UNSIGNED releases (the agent fails closed on missing
-    # signatures). Mirrors the upload path; signs the checksum the agent re-derives.
-    #
-    # fail closed on signing failure. Every release published
-    # through this endpoint is marked is_latest=True; an unsigned latest release
-    # silently bypasses the agent's signature-verification gate. Roll back the
-    # is_latest demotion already executed above so the previous latest release is
-    # restored before raising.
-    # Sign a MANIFEST, not the bare digest -- see agent_release_upload.py for
-    # why. Mirrors that path exactly so both publish routes produce signatures
-    # the agent can bind to a version/platform/agent-type/channel.
-    from app.services.release_signing import build_release_manifest, sign_manifest
-
-    try:
-        _manifest = build_release_manifest(
-            digest_hex=_checksum,
-            version=data.version,
-            platform=_platform,
-            agent_type=_agent_type,
-            channel="prerelease" if getattr(data, "is_prerelease", False) else "stable",
-        )
-        _signature = sign_manifest(_manifest)
-    except Exception:
-        logger.exception(
-            "Release signing failed at publish version=%s platform=%s — rolling back is_latest demotion",
-            data.version,
-            data.platform,
-        )
-        # The UPDATE above demoted the previous latest; undo it so agents
-        # continue to receive the last known-good signed release.
-        await session.rollback()
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "Release signing failed; the release was not published. "
-            "Check the signing-key configuration and retry.",
-        )
-
-    release = AgentRelease(
-        version=data.version,
-        platform=_platform,
-        agent_type=_agent_type,
-        download_url=data.download_url,
-        checksum_sha256=_checksum,
-        file_size=data.file_size,
-        release_notes=data.release_notes,
-        min_backend_version=data.min_backend_version,
-        is_latest=True,
-        is_prerelease=data.is_prerelease,
-        published_at=datetime.now(UTC),
-        download_count=0,
-        organization_id=release_org,
-        signature=_signature,
-    )
-    session.add(release)
-    await session.commit()
-    await session.refresh(release)
-
-    logger.info(
-        "Published agent release %s for %s/%s",
-        data.version,
-        data.platform,
-        data.agent_type,
-    )
-    return release

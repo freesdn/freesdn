@@ -1,0 +1,24 @@
+Fabric authorization lookup failures
+===================================
+
+Fabric permission checks reject missing, inactive, soft-deleted and foreign-org
+authors. A permission check is not enough to authorize an unrestricted site
+scope: the following grant lookup must also succeed.
+
+For a stored actor ID, resolve_actor_site_grants now refuses an unavailable,
+inactive, deleted or missing author instead of returning an unrestricted scope.
+Database/client exceptions produce a fixed PermissionError without exposing the
+original exception details through caller logs or execution history. Both native
+automation fabric.operation actions and Fabric Connection steps stop before the
+operation executor when this lookup fails.
+
+Successfully resolved org administrators remain unrestricted by site grants.
+The existing hybrid model also preserves an unrestricted scope for an active
+user with zero configured site grants. Missing actor IDs remain neutral only
+for explicitly permission-free native operations; protected operations must
+reject missing identity at their permission gate.
+
+This closes error and missing-author fallbacks. It does not add transaction-wide
+authorization fencing, make an in-flight external effect revocable, or establish
+exactly-once event execution. Other Fabric concerns, including shared event-claim
+and cooldown outages and per-site permission ceilings, need separate evidence.

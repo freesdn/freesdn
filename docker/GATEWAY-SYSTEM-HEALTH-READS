@@ -1,0 +1,31 @@
+Gateway system, firmware and WAN-health reads
+===========================================
+
+OPNsense system identity/time and firmware product fields follow pinned upstream
+contracts. Localized version/update strings are not parsed as structured data.
+Unobserved system resources remain absent. Firmware errors are unavailable;
+unchecked update state is unknown, and a missing latest version is not replaced
+with the installed version. Repository/mirror subscription data is not exposed.
+
+Live monitor rows require successful status, unique names and complete routing
+search metadata. The latter also contains disabled or inactive gateways, so its
+row count need not equal the live-monitor row count. Live rows must have a unique
+configuration match. Default-route flags come from the active routing search.
+Machine states control health labels. Raw none with numeric monitor samples means
+no active alarm; raw none without samples is unmonitored. Missing samples remain
+unknown and measured zero stays zero. Invalid samples are unavailable.
+
+The normalized service boundary validates complete firmware/health envelopes and
+returns generic 501 for declared unsupported reads and 502 for unavailable data.
+Cancellation propagates. Firmware reads recheck scope and contact the adapter on
+every request; packages/plugins keep their existing scoped cache policy. The UI
+validates selected-gateway identity, suppresses stale read data, offers retries
+and distinguishes loading, empty, unavailable and unknown. Sync metadata remains
+visible independently of live firmware status.
+
+These changes introduce no gateway writes. Synthetic transport, identity and
+browser fixtures are not installed-firmware acceptance or normal production
+login on a physical gateway. Other vendor schemas, mutations, operational health,
+managed backup storage/retention/restore, sustained operation and enterprise
+recovery/support objectives require separate evidence. A successful scan or
+finite qualification run is not an enterprise certification.

@@ -11,15 +11,17 @@ step chain with data + artifact threading, the cross-tier permission gate).
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
 from app.core.fabric.artifact_broker import ArtifactBroker, ArtifactError
 from app.core.fabric.execution import OperationContext, OperationResult
 from app.core.fabric.executor import OperationExecutor
-from app.core.fabric.negotiator import Connection, ConnectionStep, Negotiator, _event_matches
+from app.core.fabric.negotiator import Connection, ConnectionStep, _event_matches
 from app.core.fabric.operations import Operation, OperationTier
 from app.core.fabric.templating import resolve_template
+from tests.core.fabric_fakes import coordinated_negotiator
 
 ORG = uuid.uuid4()
 
@@ -466,8 +468,30 @@ class TestExecutorPlugin:
 # ---------------------------------------------------------------------------
 
 
+class _AuthorSession:
+    """Successful author lookup for positive actor-bound chain fixtures."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def commit(self):
+        # This positive fixture models a successful session, including commit.
+        return None
+
+    async def execute(self, _query):
+        return SimpleNamespace(
+            scalar_one_or_none=lambda: SimpleNamespace(
+                role="org_admin", is_active=True, deleted_at=None, site_access=[]
+            )
+        )
+
+
 class _Event:
     def __init__(self, event_type, payload, organization_id):
+        self.id = str(uuid.uuid4())
         self.event_type = event_type
         self.payload = payload
         self.organization_id = organization_id
@@ -497,7 +521,7 @@ class TestNegotiator:
             return OperationResult.ok()
 
         op = _native_read_op(sink)
-        neg = Negotiator(
+        neg = coordinated_negotiator(
             registry=_FakeRegistry([op]), permission_checker=None, session_factory=lambda: None
         )
         neg.add_connection(
@@ -546,7 +570,7 @@ class TestNegotiator:
             tier=OperationTier.NATIVE,
             provider_id="store",
         )
-        neg = Negotiator(
+        neg = coordinated_negotiator(
             registry=_FakeRegistry([prod, cons]),
             executor=executor,
             permission_checker=None,
@@ -584,7 +608,7 @@ class TestNegotiator:
             tier=OperationTier.NATIVE,
             provider_id="x",
         )
-        neg = Negotiator(
+        neg = coordinated_negotiator(
             registry=_FakeRegistry([op]), permission_checker=None, session_factory=lambda: None
         )
         neg.add_connection(
@@ -615,7 +639,7 @@ class TestNegotiator:
             tier=OperationTier.NATIVE,
             provider_id="x",
         )
-        neg = Negotiator(
+        neg = coordinated_negotiator(
             registry=_FakeRegistry([op]), permission_checker=allow, session_factory=lambda: None
         )
         neg.add_connection(
@@ -657,7 +681,7 @@ class TestHardening:
         op = Operation(
             id="plugin.acme.x", title="x", handler=h, tier=OperationTier.PLUGIN, provider_id="acme"
         )
-        neg = Negotiator(
+        neg = coordinated_negotiator(
             registry=_FakeRegistry([op]), permission_checker=None, session_factory=lambda: None
         )
         neg.add_connection(
@@ -688,7 +712,7 @@ class TestHardening:
             tier=OperationTier.NATIVE,
             provider_id="x",
         )
-        neg = Negotiator(
+        neg = coordinated_negotiator(
             registry=_FakeRegistry([op]), permission_checker=boom, session_factory=lambda: None
         )
         neg.add_connection(
@@ -728,9 +752,9 @@ class TestLiveVertical:
             recorded.append((conn.id, run, event_type, payload))
 
         # Default registry (includes the builtin fabric.log sink) + default
-        # executor. session_factory=lambda: None ⇒ no DB needed (log sink is
-        # db-free), proving the full path with zero external dependencies.
-        neg = Negotiator(run_recorder=recorder, session_factory=lambda: None)
+        # executor. The actor-bound chain resolves an active author through a
+        # hermetic session; the log sink itself needs no database writes.
+        neg = coordinated_negotiator(run_recorder=recorder, session_factory=_AuthorSession)
         neg.add_connection(
             Connection(
                 id="live-1",
@@ -755,7 +779,7 @@ class TestLiveVertical:
 
     @pytest.mark.asyncio
     async def test_reload_connections_replaces_store(self) -> None:
-        neg = Negotiator(session_factory=lambda: None)
+        neg = coordinated_negotiator(session_factory=lambda: None)
         neg.reload_connections(
             [
                 Connection(
@@ -774,8 +798,7 @@ class TestLiveVertical:
     @pytest.mark.asyncio
     async def test_cooldown_skips_rapid_refire(self) -> None:
         # a connection with a cooldown fires once, then is skipped within window
-        neg = Negotiator(session_factory=lambda: None)
-        neg._redis = None  # exercise the deterministic in-process cooldown path
+        neg = coordinated_negotiator(session_factory=lambda: None)
         neg.add_connection(
             Connection(
                 id="cd1",
@@ -792,7 +815,7 @@ class TestLiveVertical:
 
     @pytest.mark.asyncio
     async def test_no_cooldown_fires_every_time(self) -> None:
-        neg = Negotiator(session_factory=lambda: None)
+        neg = coordinated_negotiator(session_factory=lambda: None)
         neg.add_connection(
             Connection(
                 id="cd2",
@@ -808,7 +831,7 @@ class TestLiveVertical:
     @pytest.mark.asyncio
     async def test_run_once_applies_same_gates(self) -> None:
         # run_once bypasses event matching but still runs the chain + gates.
-        neg = Negotiator(session_factory=lambda: None)
+        neg = coordinated_negotiator(session_factory=_AuthorSession)
         conn = Connection(
             id="t1",
             organization_id=ORG,
@@ -889,7 +912,7 @@ class TestNegotiatorConcurrentEdits:
                 neg.add_connection(TestNegotiatorConcurrentEdits._conn("c-new"))
             return OperationResult.ok(output={})
 
-        neg = Negotiator(
+        neg = coordinated_negotiator(
             registry=_FakeRegistry([self._op(handler)]),
             permission_checker=None,
             session_factory=lambda: None,
@@ -922,7 +945,7 @@ class TestNegotiatorConcurrentEdits:
                 neg.remove_connection("c3")  # not reached yet
             return OperationResult.ok(output={})
 
-        neg = Negotiator(
+        neg = coordinated_negotiator(
             registry=_FakeRegistry([self._op(handler)]),
             permission_checker=None,
             session_factory=lambda: None,

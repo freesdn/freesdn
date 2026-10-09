@@ -216,7 +216,12 @@
       "confirmTypePrefix": "Escriba",
       "confirmTypeOr": "o",
       "confirmTypeSuffix": "para confirmar",
-      "confirmPlaceholder": "Escriba para confirmar la restauración destructiva"
+      "confirmPlaceholder": "Escriba para confirmar la restauración destructiva",
+      "sealedManifest": "Se necesita la frase de contraseña para previsualizar esta copia completa.",
+      "integrityVerified": "Se ha verificado la integridad del archivo para esta vista previa.",
+      "integrityRecorded": "La identidad del archivo está registrada; el archivo no se ha comprobado para esta vista previa.",
+      "integrityUnknown": "No hay una identidad registrada para el archivo; su integridad no está verificada.",
+      "integrityInvalid": "La identidad registrada del archivo no es válida. Revise o sustituya esta copia de seguridad antes de restaurarla."
     },
     "dryRun": {
       "header": "Vista previa de simulación · aún no se ha aplicado nada",
@@ -414,10 +419,38 @@
         "title": "Importación completada",
         "message": "La configuración se importó correctamente"
       },
-      "importConfigFailed": "No se pudo importar la configuración"
+      "importConfigFailed": "No se pudo importar la configuración",
+      "dryRunFailed": {
+        "title": "La simulación detectó errores",
+        "message": "La vista previa detectó errores. No se aplicó ninguna configuración. Revise el informe antes de restaurar."
+      },
+      "restorePartialFailure": {
+        "title": "La restauración terminó con errores",
+        "message": "Una o más secciones fallaron. Es posible que otras secciones se hayan aplicado. Revise el informe antes de volver a intentarlo."
+      },
+      "restoreComplete": {
+        "title": "Restauración completada",
+        "message": "Revise las secciones aplicadas y omitidas a continuación antes de cerrar este resultado."
+      },
+      "restoreUnconfirmed": {
+        "title": "El resultado de la restauración no está confirmado",
+        "message": "El servidor no devolvió un informe de recuperación completada. Compruebe la tarea de restauración antes de volver a intentarlo."
+      }
+    },
+    "restoreResult": {
+      "header": "Resultado de la restauración · revise las secciones aplicadas y fallidas"
+    },
+    "permissions": {
+      "archiveAuthorityRequired": "Los archivos de configuración requieren un administrador de la organización; las copias completas requieren un superadministrador.",
+      "fullVaultAuthorityRequired": "Solo un superadministrador puede crear o descargar una copia completa."
     }
   },
   "StorageLocationsPage": {
+    "transport": {
+      "reviewRequired": "Se requiere una revisión de seguridad: actualice este destino antes de ejecutar copias de seguridad. Una prueba de conexión anterior no cumple la nueva política.",
+      "ftp": "FTP sin cifrar está deshabilitado. FTPS requiere TLS para control y datos y un certificado de confianza que coincida con el nombre del servidor. Si es necesario, instale la CA privada en el almacén de confianza del trabajador; no se puede desactivar la verificación del certificado.",
+      "sftp": "SFTP requiere la huella SHA256 de la clave del servidor antes de autenticarse. Obtenga la huella de un administrador o una consola de confianza, no de una primera conexión sin verificar."
+    },
     "header": {
       "title": "Ubicaciones de almacenamiento",
       "subtitle": "Configure dónde se guardan las copias de seguridad · disco local, nube o servidores remotos.",
@@ -535,5 +568,26 @@
         "message": "La prueba de conexión falló."
       }
     }
+  },
+  "vaultConfirmation": {
+    "title": "Confirmar exportación de la bóveda",
+    "description": "Este archivo contiene secretos. Confirme la cuenta actual para esta única operación. Cerrar no deshace una solicitud enviada.",
+    "legacyWarning": "Este archivo no tiene una identidad original registrada. Comprobar sus bytes actuales no demuestra su autenticidad histórica. Utilice solo un archivo de origen fiable.",
+    "legacyAck": "Entiendo la limitación de este archivo antiguo.",
+    "unconfirmed": "La confirmación terminó o el resultado no está confirmado. Revise el catálogo antes de iniciar otra operación. Una respuesta fallida no demuestra que se haya revertido la copia.",
+    "password": "Contraseña actual de la cuenta",
+    "openIdentity": "Confirmar con el proveedor de identidad",
+    "callbackMissing": "El administrador debe configurar el retorno OIDC de la bóveda antes de que esta cuenta pueda exportar secretos.",
+    "mfa": "Código del autenticador o código de recuperación restante",
+    "close": "Cerrar",
+    "continue": "Consultar requisitos de confirmación",
+    "create": "Confirmar y crear bóveda",
+    "download": "Confirmar y descargar bóveda",
+    "alreadyOpen": "Cierre primero la confirmación de bóveda actual.",
+    "cannotStart": "No se puede iniciar la confirmación. Compruebe la cuenta actual y la integridad del archivo, y cierre cualquier confirmación anterior.",
+    "encryptionRequired": "El cifrado de la bóveda es obligatorio.",
+    "individual": "Descargue las bóvedas individualmente. Cada archivo requiere su propia confirmación de cuenta.",
+    "downloadDispatched": "Descarga de bóveda iniciada",
+    "verifySaved": "Compruebe el archivo guardado. Una solicitud de descarga del navegador no demuestra que el archivo se haya guardado."
   }
 }

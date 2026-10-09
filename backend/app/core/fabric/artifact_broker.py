@@ -28,6 +28,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import re
 import time
 import uuid
@@ -36,6 +37,7 @@ from typing import Any
 from uuid import UUID
 
 from app.core.fabric.execution import ArtifactRef
+from app.core.private_files import read_private, unlink_private, write_private
 
 logger = logging.getLogger(__name__)
 
@@ -120,9 +122,12 @@ class ArtifactBroker:
         }
 
         def _write() -> None:
-            bin_path.parent.mkdir(parents=True, exist_ok=True)
-            bin_path.write_bytes(data)
-            meta_path.write_text(json.dumps(meta), encoding="utf-8")
+            write_private(bin_path, data)
+            try:
+                write_private(meta_path, json.dumps(meta).encode())
+            except BaseException:
+                unlink_private(bin_path)
+                raise
 
         await asyncio.to_thread(_write)
         logger.debug("Fabric artifact stored: %s (%d bytes, %s)", handle, size, media_type)
@@ -134,10 +139,16 @@ class ArtifactBroker:
         bin_path, meta_path = self._paths(organization_id, handle)
 
         def _read() -> tuple[bytes, dict[str, Any]] | None:
-            if not bin_path.exists() or not meta_path.exists():
+            try:
+                meta = json.loads(read_private(meta_path, 64 * 1024))
+                data = read_private(bin_path, self._max)
+            except FileNotFoundError:
                 return None
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            return bin_path.read_bytes(), meta
+            except (OSError, ValueError) as exc:
+                raise ArtifactError("artifact storage is unsafe or malformed") from exc
+            if not isinstance(meta, dict):
+                raise ArtifactError("artifact metadata is malformed")
+            return data, meta
 
         result = await asyncio.to_thread(_read)
         if result is None:
@@ -147,7 +158,21 @@ class ArtifactBroker:
         # Cross-tenant guard (defense-in-depth on top of the org-dir path).
         if str(meta.get("organization_id")) != str(organization_id):
             raise ArtifactError("artifact does not belong to this organization")
-        if time.time() > float(meta.get("expires_at", 0)):
+        raw_expiry = meta.get("expires_at")
+        if not isinstance(raw_expiry, (int, float)) or isinstance(raw_expiry, bool):
+            raise ArtifactError("artifact metadata is malformed")
+        try:
+            expires_at = float(raw_expiry)
+        except OverflowError:
+            raise ArtifactError("artifact metadata is malformed") from None
+        if (
+            not math.isfinite(expires_at)
+            or type(meta.get("size")) is not int
+            or meta["size"] != len(data)
+            or meta.get("handle") != handle
+        ):
+            raise ArtifactError("artifact metadata is malformed")
+        if time.time() > expires_at:
             await self.delete(handle, organization_id)
             raise ArtifactError("artifact expired")
         if hashlib.sha256(data).hexdigest() != meta.get("sha256"):
@@ -156,7 +181,7 @@ class ArtifactBroker:
         return data, ArtifactRef(
             handle=handle,
             media_type=str(meta.get("media_type") or "application/octet-stream"),
-            size=int(meta.get("size") or len(data)),
+            size=len(data),
             sha256=str(meta.get("sha256")),
         )
 
@@ -164,8 +189,8 @@ class ArtifactBroker:
         bin_path, meta_path = self._paths(organization_id, handle)
 
         def _rm() -> None:
-            bin_path.unlink(missing_ok=True)
-            meta_path.unlink(missing_ok=True)
+            unlink_private(bin_path)
+            unlink_private(meta_path)
 
         await asyncio.to_thread(_rm)
 
@@ -179,10 +204,10 @@ class ArtifactBroker:
                 return 0
             for meta_path in self._base.glob("*/*.json"):
                 try:
-                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    meta = json.loads(read_private(meta_path, 64 * 1024))
                     if now > float(meta.get("expires_at", 0)):
-                        meta_path.with_suffix(".bin").unlink(missing_ok=True)
-                        meta_path.unlink(missing_ok=True)
+                        unlink_private(meta_path.with_suffix(".bin"))
+                        unlink_private(meta_path)
                         removed += 1
                 except Exception:
                     # A corrupt sidecar shouldn't halt the sweep.

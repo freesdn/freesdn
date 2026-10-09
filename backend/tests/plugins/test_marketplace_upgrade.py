@@ -149,9 +149,21 @@ def test_it_stops_the_plugin_before_replacing_its_files():
     scheduler claims belonging to the old code. Swapping files underneath them
     leaves those pointing at a version that no longer exists.
     """
+    from app.plugins.loader import PluginLoader
+
+    # Shutdown moved into the loader so a rejected archive cannot stop the
+    # running plugin. Preserve the stop-before-replacement contract at its
+    # actual owner; the authenticated runtime suite observes this boundary too.
     body = _body()
-    assert "stop_plugin_everywhere(" in body
-    assert body.index("stop_plugin_everywhere(") < body.index("upgrade_plugin(")
+    install = inspect.getsource(PluginLoader.install_plugin)
+    assert "stop_plugin_everywhere(" not in body
+    assert "upgrade_plugin(" in body
+    assert "stop_plugin_everywhere(" in install
+    assert install.index("_check_core_compatibility(") < install.index("stop_plugin_everywhere(")
+    assert install.index("async with lifecycle_lock:") < install.index("stop_plugin_everywhere(")
+    assert install.index("stop_plugin_everywhere(") < install.index("promote()")
+    preservation = inspect.getsource(PluginLoader._preserve_installation)
+    assert preservation.index("plugin_dest.rename(previous)") < preservation.index("candidate.rename(plugin_dest)")
 
 
 def test_it_starts_the_plugin_again_afterwards():

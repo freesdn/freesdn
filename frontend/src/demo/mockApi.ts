@@ -7,20 +7,150 @@ import type {
   InternalAxiosRequestConfig,
 } from 'axios';
 import { demoWriteMessage } from './mode';
+import { getDemoHypervisorDashboard, getDemoHypervisorFleetDashboard } from './hypervisorDashboard';
+
+// Single source for the version the demo reports. It was hardcoded to
+// '26.06.1-demo', which is why Settings > About read 26.06.1 long after the
+// demo had been rebuilt: the bundle was current, this string was not.
+const DEMO_VERSION = '26.10.0-demo';
 import {
+  alertInstances,
+  alertRuleStats,
+  alertRules,
   alerts,
+  apRadios,
+  auditLogs,
+  auditRollup,
   cameras,
   controllers,
+  correlationRules,
+  correlationStats,
   dashboardSummary,
+  demoActiveCalls,
+  demoBackupManifest,
+  demoBackupSchedules,
+  demoBackupStats,
+  demoBackupStorageTypes,
+  demoBackups,
+  demoBoundPhones,
+  demoCallLogs,
+  demoCallQueues,
+  demoCallStats,
+  demoCameraAccessGrants,
+  demoCameraEvents,
+  demoCameraGroups,
+  demoCameraHealth,
+  demoCameraReports,
+  demoCameraViews,
+  demoCameras,
+  demoDids,
+  demoEvidenceArchives,
+  demoHealthHistory,
+  demoHypervisorAptUpdates,
+  demoHypervisorBackupAgeReport,
+  demoHypervisorBackupJobs,
+  demoHypervisorCephDetail,
+  demoHypervisorCephStatus,
+  demoHypervisorCertificates,
+  demoHypervisorClusterConfigNodes,
+  demoHypervisorClusterLog,
+  demoHypervisorClusterResources,
+  demoHypervisorClusterStatus,
+  demoHypervisorDiskSmart,
+  demoHypervisorFirewallRules,
+  demoHypervisorGuestAgent,
+  demoHypervisorGuestRrd,
+  demoHypervisorGuests,
+  demoHypervisorHaGroups,
+  demoHypervisorHaResources,
+  demoHypervisorNodeDisks,
+  demoHypervisorNodeNetwork,
+  demoHypervisorNodeRrd,
+  demoHypervisorNodeSensors,
+  demoHypervisorNodeServices,
+  demoHypervisorNodes,
+  demoHypervisorPools,
+  demoHypervisorPrunePreview,
+  demoHypervisorReplicationJobs,
+  demoHypervisorReplicationLog,
+  demoHypervisorSdnControllers,
+  demoHypervisorSdnVnets,
+  demoHypervisorSdnZones,
+  demoHypervisorSnapshots,
+  demoHypervisorStorageContent,
+  demoHypervisorStorages,
+  demoHypervisorSubscriptions,
+  demoHypervisorTaskLog,
+  demoHypervisorTaskStats,
+  demoHypervisorTasks,
   demoIds,
+  demoIvrs,
+  demoLogHourly,
+  demoNvrHolidays,
+  demoNvrNetwork,
+  demoNvrStorage,
+  demoNvrSystemInfo,
+  demoNvrs,
+  demoPbxSystems,
+  demoRecordingTemplates,
+  demoRestoreJobs,
+  demoRingGroups,
+  demoRxBytes24h,
+  demoSipTrunks,
+  demoStagedChanges,
+  demoStorageInventory,
+  demoStorageLocations,
+  demoSystemLogs,
+  demoTrafficSeries,
+  demoTxBytes24h,
   demoUser,
+  demoVoicemailBoxes,
+  demoVoicemailStats,
+  demoVoicemails,
+  demoVoipDiscoveryScans,
+  demoVoipExtensions,
+  demoVoipFirmwareTracks,
+  demoVoipFleetDashboard,
+  demoVoipPhones,
+  demoVoipTemplates,
   devices,
   enterpriseAnalytics,
+  filterPendingChanges,
+  firewallGatewaySummary,
+  firewallGateways,
+  firewallIdsAlertStats,
+  firewallIdsAlerts,
+  firewallLogs,
+  firewallNatRules,
+  firewallRules,
+  firewallVpnStats,
+  firewallVpnTunnels,
+  gatewayLiveData,
   getDemoCameraSnapshotPath,
+  inAppNotifications,
+  incidentEvents,
+  incidents,
+  logsHealth,
+  metricDefinitions,
   moduleNavItems,
   modules,
+  networkClients,
+  networkDevices,
+  networkVlans,
+  notificationProviderTypes,
+  notificationProviders,
   organizations,
+  pendingChangeDomainPrefixes,
+  pendingChanges,
+  securityAnomalies,
+  securityEventTypes,
+  securityEvents,
+  securitySummary,
   sites,
+  switchLags,
+  switchPortFixtures,
+  topologyLinks,
+  wifiNetworks,
 } from './fixtures';
 
 type AnyRecord = Record<string, unknown>;
@@ -301,12 +431,1719 @@ const marketplacePlugins = [{
   status: 'published',
 }];
 
+
+/* ==== demo: network fleet (devices, switch ports, VLANs, WiFi/SSIDs, clients, topology) ==== */
+/* ── NETWORK FLEET · module-level helpers (place ABOVE `routeGet`) ────────── */
+
+type FleetDevice = (typeof networkDevices)[number];
+
+/** Site filter shared by every fleet route (`?site_id=` from useSiteStore). */
+function bySite<T extends { site_id?: string | null }>(items: T[], q: AnyRecord): T[] {
+  return q.site_id ? items.filter((item) => item.site_id === q.site_id) : items;
+}
+
+function fleetDevices(q: AnyRecord): FleetDevice[] {
+  let list = bySite(networkDevices, q);
+  if (q.device_type) list = list.filter((d) => d.device_type === q.device_type);
+  if (q.status) list = list.filter((d) => d.status === q.status);
+  return list;
+}
+
+/** Fixtures freeze `last_seen` at their own epoch; re-anchor it to the live
+ *  clock so the demo never renders "84 days ago" for a healthy device. */
+function fresh<T extends { seen_minutes: number }>(d: T) {
+  return { ...d, last_seen: iso(d.seen_minutes), updated_at: iso(d.seen_minutes) };
+}
+
+function healthOf(status: string, seed: number) {
+  if (status === 'offline') return { score: 12, label: 'critical' };
+  if (status === 'degraded') return { score: 58 + (seed % 7), label: 'warning' };
+  return { score: 90 + (seed % 9), label: 'healthy' };
+}
+
+function poeClass(watts: number) {
+  if (watts <= 0) return undefined;
+  if (watts <= 4) return 1;
+  if (watts <= 7) return 2;
+  if (watts <= 15.4) return 3;
+  return 4;
+}
+
+/** Ports for any switch: hand-authored where `switchPortFixtures` has them,
+ *  otherwise derived from the device row so all 25 switches show a real panel.
+ *  Uplink ports are labelled and neighboured from `topologyLinks`. */
+function fleetPortSpec(deviceId: string) {
+  const authored = switchPortFixtures.filter((p) => p.sw === deviceId);
+  if (authored.length) return authored;
+
+  const d = networkDevices.find((x) => x.id === deviceId);
+  if (!d || !d.total_ports) return [];
+
+  const total = d.total_ports;
+  const sfpCount = d.sfp_ports;
+  const rj45 = total - sfpCount;
+  // Admin-disabled ports sit at the end of the copper block, never on the SFP
+  // uplinks. Placing them at the end of the whole panel silently downed the
+  // uplinks and made ports_up disagree with the device row.
+  const disabledFrom = (rj45 > 0 ? rj45 : total) - d.ports_disabled + 1;
+  const uplinkSfp = rj45 > 0 ? Math.min(sfpCount, 2, d.ports_up) : 0;
+  const accessUp = d.ports_up - uplinkSfp;
+
+  const peers = topologyLinks
+    .filter((l) => l.source_id === deviceId || l.target_id === deviceId)
+    .map((l) => (l.source_id === deviceId
+      ? { port: l.source_port, remote: l.target_port, peerId: l.target_id }
+      : { port: l.target_port, remote: l.source_port, peerId: l.source_id }));
+
+  const poeUp: number[] = [];
+  const spec = Array.from({ length: total }, (_, index) => {
+    const i = index + 1;
+    const kind = i > rj45 ? 'sfp' : 'ethernet';
+    const sfpIndex = kind === 'sfp' ? i - rj45 : 0;
+    const on = kind === 'sfp' && rj45 > 0 ? true : i < disabledFrom;
+    const up = on && (
+      (kind === 'sfp' && rj45 > 0 && sfpIndex <= uplinkSfp)
+      || (kind === 'ethernet' && i <= accessUp)
+      || (rj45 === 0 && i <= d.ports_up)
+    );
+    const poe = kind === 'ethernet' && i <= d.poe_ports;
+    if (up && poe) poeUp.push(i);
+    return {
+      sw: deviceId,
+      i,
+      name: kind === 'sfp' ? `SFP ${sfpIndex}` : `Port ${i}`,
+      kind,
+      mode: kind === 'sfp' ? 'trunk' : 'access',
+      vlan: kind === 'sfp' ? 99 : on ? 10 : 1,
+      tagged: kind === 'sfp' ? [10, 20, 30, 40, 50] : ([] as number[]),
+      on,
+      poe,
+      w: 0,
+      link: up ? 'up' : 'down',
+      speed: up ? (kind === 'sfp' ? 10000 : 1000) : 0,
+      rxErr: up && i % 17 === 0 ? 2 : 0,
+      txErr: 0,
+      peer: null as string | null,
+      peerPort: null as string | null,
+    };
+  });
+
+  // Spread the switch's reported PoE draw over the ports actually delivering.
+  const share = poeUp.length ? d.poe_used / poeUp.length : 0;
+  poeUp.forEach((portIndex, n) => {
+    spec[portIndex - 1].w = Math.round((share + ((n % 3) - 1) * 1.2) * 10) / 10;
+  });
+  if (poeUp.length) {
+    // Absorb the rounding residual so the ports sum to the switch's poe_used.
+    const drift = d.poe_used - poeUp.reduce((sum, portIndex) => sum + spec[portIndex - 1].w, 0);
+    const last = spec[poeUp[poeUp.length - 1] - 1];
+    last.w = Math.round((last.w + drift) * 10) / 10;
+  }
+
+  // Seat each neighbour on the port its own label names (Te1/0/25 -> port 25)
+  // when that port is up, so LLDP, the ports table and the topology agree.
+  const freeUp = spec.filter((p) => p.link === 'up').map((p) => p.i);
+  const taken = new Set<number>();
+  const seat = (label: string) => {
+    const parsed = Number((label.match(/(\d+)$/) || [])[1]);
+    // A label like Te1/0/25, sfp-sfpplus1 or UniFi's "Port 25" on a 24-copper
+    // switch names a fibre port; seat it on one, so a 10G uplink never lands
+    // on an access port.
+    const wantsSfp = /sfp|te\d|xg/i.test(label) || (parsed > rj45 && parsed <= total);
+    const pool = freeUp.filter((i) => (spec[i - 1].kind === 'sfp') === wantsSfp);
+    if (parsed && pool.includes(parsed) && !taken.has(parsed)) return { slot: parsed, exact: true };
+    const slot = pool.find((i) => !taken.has(i)) ?? freeUp.find((i) => !taken.has(i));
+    return slot ? { slot, exact: false } : null;
+  };
+  peers.forEach((peer) => {
+    const seated = seat(peer.port);
+    if (!seated) return;
+    taken.add(seated.slot);
+    const port = spec[seated.slot - 1];
+    const peerDevice = networkDevices.find((x) => x.id === peer.peerId);
+    if (seated.exact && peer.port) port.name = peer.port;
+    port.peer = peerDevice ? peerDevice.name : null;
+    port.peerPort = peer.remote;
+    if (peerDevice && peerDevice.device_type === 'switch') port.mode = 'trunk';
+  });
+
+  return spec;
+}
+
+/** Nested SwitchPort shape (`SwitchesPage` flattens `status` / `vlan_config`). */
+function fleetPorts(deviceId: string) {
+  return fleetPortSpec(deviceId).map((p) => {
+    const fast = p.speed >= 10000;
+    const rx = p.link === 'up' ? 4_100_000_000 + p.i * 318_000_000 + (fast ? 900_000_000_000 : 0) : 0;
+    const tx = p.link === 'up' ? 2_600_000_000 + p.i * 214_000_000 + (fast ? 640_000_000_000 : 0) : 0;
+    return {
+      id: `${p.sw}-port-${p.i}`,
+      device_id: p.sw,
+      port_index: p.i,
+      port_type: p.kind,
+      name: p.name,
+      description: undefined,
+      enabled: p.on,
+      speed: p.link === 'up' ? String(p.speed) : 'auto',
+      duplex: p.link === 'up' ? 'full' : undefined,
+      auto_negotiation: true,
+      mtu: 1500,
+      flow_control: false,
+      vlan_config: { mode: p.mode, native_vlan: p.vlan, tagged_vlans: p.tagged },
+      poe_config: { enabled: p.poe, mode: p.poe ? 'auto' : 'off', power_limit: p.poe ? 30 : undefined },
+      stp_config: { enabled: true, mode: 'rstp', guard: p.kind === 'sfp' ? 'root' : 'bpdu', bpdu_filter: false, bpdu_guard: p.kind !== 'sfp' },
+      security_config: { enabled: false, mac_limit: undefined, violation_action: undefined, dot1x_enabled: false, dot1x_mode: undefined },
+      status: {
+        link_status: p.link,
+        link_speed: p.link === 'up' ? p.speed : undefined,
+        link_duplex: p.link === 'up' ? 'full' : undefined,
+        tx_bytes: tx,
+        rx_bytes: rx,
+        tx_packets: Math.round(tx / 1180),
+        rx_packets: Math.round(rx / 1240),
+        tx_errors: p.txErr,
+        rx_errors: p.rxErr,
+        tx_utilization: p.link === 'up' ? (fast ? 8 + (p.i % 9) : 2 + (p.i % 11)) : 0,
+        rx_utilization: p.link === 'up' ? (fast ? 14 + (p.i % 11) : 4 + (p.i % 13)) : 0,
+        poe_status: p.poe ? (p.w > 0 ? 'delivering' : 'searching') : undefined,
+        poe_power_draw: p.poe ? p.w : undefined,
+        poe_class: poeClass(p.w),
+        stp_state: p.link === 'up' ? 'forwarding' : 'disabled',
+        stp_role: p.kind === 'sfp' && p.link === 'up' ? 'root' : 'designated',
+        neighbor_device: p.peer ?? undefined,
+        neighbor_port: p.peerPort ?? undefined,
+        neighbor_ip: undefined,
+      },
+      last_status_change: iso(p.i * 37),
+    };
+  });
+}
+
+function switchSummary(d: FleetDevice) {
+  return {
+    ...fresh(d),
+    model_version: d.hardware_version,
+    controller_connection_ip: d.ip_address,
+    temperature: d.temperature || undefined,
+  };
+}
+
+function apSummary(d: FleetDevice) {
+  return {
+    ...fresh(d),
+    clients: d.connected_clients,
+    radios: apRadios.filter((r) => r.device_id === d.id),
+  };
+}
+
+/** Clients associated with one AP (`APClient`). */
+function apClients(apId: string) {
+  // Hand each client the band its SSID actually runs on, drawing down the
+  // per-radio client quota so the Clients tab agrees with the Radios tab.
+  const quota: Record<string, number> = {};
+  apRadios.filter((r) => r.device_id === apId).forEach((r) => { quota[r.band] = r.clients; });
+  const ssidBand = (ssid: string | null) => {
+    const net = wifiNetworks.find((w) => w.ssid === ssid);
+    if (!net) return null;
+    return net.band === '2.4ghz' ? '2g' : net.band === '6ghz' ? '6g' : net.band === '5ghz' ? '5g' : null;
+  };
+  const rows = networkClients.filter((c) => c.dev === apId && c.type === 'wireless' && c.status === 'online');
+  return [...rows].sort((a, b) => Number(!!ssidBand(b.ssid)) - Number(!!ssidBand(a.ssid))).map((c) => {
+    const fixed = ssidBand(c.ssid);
+    const band = fixed && quota[fixed] > 0
+      ? fixed
+      : (['6g', '5g', '2g'].find((b) => quota[b] > 0) || '5g');
+    quota[band] = (quota[band] || 0) - 1;
+    return {
+      mac_address: c.mac,
+      name: c.host || c.mac,
+      ip_address: c.ip || '',
+      ssid: c.ssid || '',
+      band,
+      signal: c.sig ?? 0,
+      rx_rate: band === '2g' ? 144400 : 573000,
+      tx_rate: band === '2g' ? 144400 : 866000,
+      uptime: 3600 + c.m * 60,
+    };
+  });
+}
+
+/** VLAN a client sits on, read off its address inside the site plan. */
+function vlanFromIp(ip: string | null) {
+  const octet = (ip || '').split('.')[2];
+  const known = ['0', '10', '20', '30', '40', '50'];
+  if (!known.includes(octet)) return 10;
+  return octet === '0' ? 99 : Number(octet);
+}
+
+/** Access ports a client could plausibly be patched into, in port order. */
+function clientPorts(switchId: string, needed: number) {
+  const up = fleetPortSpec(switchId).filter((p) => p.link === 'up' && !p.peer);
+  const idle = up.filter((p) => p.w === 0);
+  return (idle.length >= needed ? idle : up).map((p) => p.i);
+}
+
+function switchClients(switchId: string) {
+  // A controller reports current associations, so an offline client (or every
+  // client of an offline switch) is not in this list.
+  const attached = networkClients.filter((c) => c.dev === switchId && c.status === 'online');
+  const ports = clientPorts(switchId, attached.length);
+  return attached.map((c, index) => ({
+    mac_address: c.mac,
+    name: c.host || c.mac,
+    hostname: c.host || undefined,
+    ip_address: c.ip || undefined,
+    connection_type: c.type,
+    ssid: c.ssid || undefined,
+    switch_mac: networkDevices.find((d) => d.id === switchId)?.mac_address,
+    switch_port: ports[index],
+    vlan_id: vlanFromIp(c.ip),
+    uptime: 3600 + c.m * 60,
+    download: c.rx,
+    upload: c.tx,
+    blocked: c.blocked,
+    guest: (c.ssid || '').includes('Guest'),
+    last_seen: iso(c.m),
+  }));
+}
+
+function poePorts(deviceId: string) {
+  const d = networkDevices.find((x) => x.id === deviceId);
+  return fleetPortSpec(deviceId).filter((p) => p.poe).map((p) => ({
+    port_id: `${p.sw}-port-${p.i}`,
+    port_index: p.i,
+    port_name: p.name,
+    device_id: p.sw,
+    device_name: d?.name || p.sw,
+    poe_enabled: p.on,
+    poe_mode: p.on ? 'auto' : 'off',
+    poe_status: !p.on ? 'disabled' : p.w > 0 ? 'delivering' : 'searching',
+    power_draw: p.w,
+    power_limit: 30,
+    power_class: poeClass(p.w),
+    voltage: p.w > 0 ? 53.4 : 0,
+    current: p.w > 0 ? Math.round((p.w / 53.4) * 1000) / 1000 : 0,
+    pd_type: p.w > 15.4 ? '802.3bt' : p.w > 0 ? '802.3at' : undefined,
+  }));
+}
+
+function fleetTopologyGraph(q: AnyRecord) {
+  const nodes = bySite(networkDevices, q).map((d, index) => {
+    const health = healthOf(d.status, index);
+    return {
+      id: d.id,
+      label: d.name,
+      device_type: d.device_type,
+      status: d.status,
+      ip_address: d.ip_address,
+      mac_address: d.mac_address,
+      model: d.model,
+      site_id: d.site_id,
+      site_name: d.site_name,
+      health_score: q.include_health === false ? null : health.score,
+      health_status: q.include_health === false ? null : health.label,
+      x: null,
+      y: null,
+      pinned: false,
+      layer: d.topology_layer,
+      metadata: { vendor: d.vendor, firmware_version: d.firmware_version },
+    };
+  });
+  const ids = new Set(nodes.map((n) => n.id));
+  const statusOf = (id: string) => networkDevices.find((d) => d.id === id)?.status;
+  const edges = topologyLinks
+    .filter((l) => ids.has(l.source_id) && ids.has(l.target_id))
+    .map((l, index) => ({
+      id: `link-${index + 1}`,
+      source_id: l.source_id,
+      target_id: l.target_id,
+      source_port: l.source_port,
+      target_port: l.target_port,
+      speed: l.speed,
+      status: statusOf(l.source_id) === 'offline' || statusOf(l.target_id) === 'offline' ? 'down' : 'up',
+      link_type: l.speed === '10G' ? 'uplink' : 'ethernet',
+      discovered_via: 'lldp',
+      metadata: {},
+    }));
+  const tally = (key: 'device_type' | 'status') => nodes.reduce<Record<string, number>>((acc, n) => {
+    acc[n[key]] = (acc[n[key]] || 0) + 1;
+    return acc;
+  }, {});
+  const connected = new Set(edges.flatMap((e) => [e.source_id, e.target_id]));
+  return {
+    nodes,
+    edges,
+    site_id: (q.site_id as string) || null,
+    // Stable: TopologyPage keys its layout off generated_at and re-lays out the
+    // canvas whenever it changes, so this must not be Date.now().
+    generated_at: '2026-06-07T14:30:00.000Z',
+    stats: {
+      total_nodes: nodes.length,
+      total_edges: edges.length,
+      nodes_by_type: tally('device_type'),
+      nodes_by_status: tally('status'),
+      links_by_status: edges.reduce<Record<string, number>>((acc, e) => {
+        acc[e.status] = (acc[e.status] || 0) + 1;
+        return acc;
+      }, {}),
+      orphan_count: nodes.filter((n) => !connected.has(n.id)).length,
+    },
+  };
+}
+
+function fleetNetworkSummary(q: AnyRecord) {
+  const scoped = bySite(networkDevices, q);
+  const clients = bySite(networkClients.map((c) => ({ ...c, site_id: c.site })), q);
+  return {
+    devices: {
+      total: scoped.length,
+      online: scoped.filter((d) => d.status === 'online').length,
+      offline: scoped.filter((d) => d.status === 'offline').length,
+      by_type: {
+        switch: scoped.filter((d) => d.device_type === 'switch').length,
+        access_point: scoped.filter((d) => d.device_type === 'access_point').length,
+        gateway: scoped.filter((d) => ['gateway', 'firewall'].includes(d.device_type)).length,
+        router: scoped.filter((d) => d.device_type === 'router').length,
+        other: scoped.filter((d) => !['switch', 'access_point', 'gateway', 'firewall', 'router'].includes(d.device_type)).length,
+      },
+    },
+    clients: {
+      total: clients.length,
+      online: clients.filter((c) => c.status === 'online').length,
+      wired: clients.filter((c) => c.type === 'wired').length,
+      wireless: clients.filter((c) => c.type === 'wireless').length,
+      blocked: clients.filter((c) => c.blocked).length,
+    },
+    total_vlans: bySite(networkVlans, q).length,
+    total_wifi_networks: bySite(wifiNetworks, q).length,
+  };
+}
+
+/* ==== demo: Pending/staged changes (the approval queue) + the Firewall module (gateways, rules, NAT, aliases, IDS/event feed) ==== */
+
+/* ==== demo: cameras and VoIP ==== */
+  // ── Cameras ────────────────────────────────────────────────────────────────
+
+/* ==== demo: hypervisor, storage, backup ==== */
+  // ── Storage: live TrueNAS inventory (StoragePage) ─────────────────────
+  // Every controller id answers, because /controllers/ does not yet honour
+  // the controller_type filter the page passes; the page falls back to
+  // devices[0], which is not the TrueNAS row.
+
+/* ==== demo: Dashboard, alerts, analytics, security audit, notifications (the first screens a visitor sees) ==== */
+  // ═══ Dashboard · alerts · analytics · security audit ═══════════════════
+  // Placement matters: every branch below must sit ABOVE the three catch-alls
+  //   if (path.startsWith('/analytics/')) return emptyList();
+  //   if (path.startsWith('/enterprise') || ... '/alert-rules' ... '/correlation') return emptyList();
+  //   if (path.startsWith('/security') || path.startsWith('/audit') || path.startsWith('/logs')) ...
+  // or it is dead code and the page renders empty.
+
+  // ── Analytics · alerts and metrics ──────────────────────────────────────
+
 async function routeGet(path: string, config: InternalAxiosRequestConfig) {
   const q = params(config);
 
+  /* ==== demo: network fleet (devices, switch ports, VLANs, WiFi/SSIDs, clients, topology) ==== */
+
+/* ── NETWORK FLEET · routes (place INSIDE `routeGet`, before the generic
+   /devices, /switches, /access-points, /network, /poe and /topology handlers
+   listed in `notes` -- those must be REPLACED, not kept) ─────────────────── */
+
+  // ── Devices ───────────────────────────────────────────────────────────────
+  if (path === '/devices/stats/summary') {
+    const scoped = fleetDevices(q);
+    const count = (key: 'device_type' | 'status') => scoped.reduce<Record<string, number>>((acc, d) => {
+      acc[d[key]] = (acc[d[key]] || 0) + 1;
+      return acc;
+    }, {});
+    return {
+      // DevicesPage reads total_devices / online_devices / offline_devices
+      // (DeviceAggStats); the old total/online/offline keys rendered zeros.
+      total_devices: scoped.length,
+      online_devices: scoped.filter((d) => d.status === 'online').length,
+      offline_devices: scoped.filter((d) => d.status === 'offline').length,
+      by_type: count('device_type'),
+      by_status: count('status'),
+    };
+  }
+  if (/^\/devices\/[^/]+\/ports/.test(path)) return fleetPorts(path.split('/')[2]);
+  if (/^\/devices\/[^/]+\/capabilities$/.test(path)) return { device_id: path.split('/')[2], capabilities: ['reboot', 'locate', 'poe', 'status'], actions: [] };
+  if (path === '/devices') return paginated(fleetDevices(q).map(fresh), Number(q.page || 1), Number(q.per_page || 500));
+  if (/^\/devices\/[^/]+$/.test(path)) {
+    const raw = networkDevices.find((d) => d.id === path.split('/')[2]);
+    return raw ? fresh(raw) : null;
+  }
+
+  // ── Switches ──────────────────────────────────────────────────────────────
+  if (path === '/switches/profiles') return [];
+  if (/^\/switches\/[^/]+\/ports$/.test(path)) return fleetPorts(path.split('/')[2]);
+  if (/^\/switches\/[^/]+\/ports\/\d+$/.test(path)) {
+    const [, , switchId, , portIndex] = path.split('/');
+    return fleetPorts(switchId).find((p) => p.port_index === Number(portIndex)) || null;
+  }
+  if (/^\/switches\/[^/]+\/vlans$/.test(path)) {
+    const sw = networkDevices.find((d) => d.id === path.split('/')[2]);
+    const ports = fleetPortSpec(sw?.id || '');
+    return networkVlans.filter((v) => v.site_id === sw?.site_id).map((v) => ({
+      id: v.id,
+      vlan_id: v.vlan_id,
+      name: v.name,
+      description: v.description,
+      purpose: v.purpose,
+      gateway: v.gateway,
+      subnet: v.subnet,
+      cidr: v.cidr,
+      dhcp_enabled: v.dhcp_enabled,
+      untagged_ports: ports.filter((p) => p.vlan === v.vlan_id).length,
+      tagged_ports: ports.filter((p) => p.tagged.includes(v.vlan_id)).length,
+    }));
+  }
+  if (/^\/switches\/[^/]+\/lags$/.test(path)) return switchLags.filter((l) => l.device_id === path.split('/')[2]);
+  if (/^\/switches\/[^/]+\/clients$/.test(path)) return switchClients(path.split('/')[2]);
+  if (/^\/switches\/[^/]+\/lldp$/.test(path)) {
+    const switchId = path.split('/')[2];
+    return fleetPortSpec(switchId).filter((p) => p.peer).map((p) => ({
+      port_index: p.i,
+      port_name: p.name,
+      neighbor_device: p.peer,
+      neighbor_port: p.peerPort,
+      neighbor_ip: networkDevices.find((d) => d.name === p.peer)?.ip_address,
+      neighbor_mac: networkDevices.find((d) => d.name === p.peer)?.mac_address,
+      chassis_id: networkDevices.find((d) => d.name === p.peer)?.mac_address,
+      system_name: p.peer,
+      system_description: networkDevices.find((d) => d.name === p.peer)?.model,
+    }));
+  }
+  if (/^\/switches\/[^/]+\/mac-table$/.test(path)) {
+    const switchId = path.split('/')[2];
+    const attached = networkClients.filter((c) => c.dev === switchId && c.status === 'online');
+    const ports = clientPorts(switchId, attached.length);
+    return attached.map((c, index) => ({
+      mac_address: c.mac,
+      vlan_id: vlanFromIp(c.ip),
+      port: ports[index],
+      type: 'dynamic',
+    })).concat(fleetPortSpec(switchId).filter((p) => p.peer).map((p) => ({
+      mac_address: networkDevices.find((d) => d.name === p.peer)?.mac_address || '',
+      vlan_id: 99,
+      port: p.i,
+      type: 'dynamic',
+    })));
+  }
+  if (path === '/switches') {
+    const rows = fleetDevices(q).filter((d) => d.device_type === 'switch').map(switchSummary);
+    return paginated(rows, Number(q.page || 1), Number(q.per_page || 200));
+  }
+  if (/^\/switches\/[^/]+$/.test(path)) {
+    const sw = networkDevices.find((d) => d.id === path.split('/')[2] && d.device_type === 'switch');
+    return sw ? switchSummary(sw) : null;
+  }
+
+  // ── Access points ─────────────────────────────────────────────────────────
+  if (/^\/access-points\/[^/]+\/clients$/.test(path)) return apClients(path.split('/')[2]);
+  if (/^\/access-points\/[^/]+\/radios$/.test(path)) return apRadios.filter((r) => r.device_id === path.split('/')[2]);
+  if (/^\/access-points\/[^/]+\/firmware$/.test(path)) {
+    const ap = networkDevices.find((d) => d.id === path.split('/')[2]);
+    return { curFwVer: ap?.firmware_version || '1.0.0', latestFwVer: ap?.update_available ? '1.1.0' : ap?.firmware_version, needUpgrade: !!ap?.update_available };
+  }
+  if (path === '/access-points') {
+    const rows = fleetDevices(q).filter((d) => d.device_type === 'access_point').map(apSummary);
+    return paginated(rows, Number(q.page || 1), Number(q.per_page || 200));
+  }
+  if (/^\/access-points\/[^/]+$/.test(path)) {
+    const ap = networkDevices.find((d) => d.id === path.split('/')[2] && d.device_type === 'access_point');
+    if (!ap) return null;
+    return { ...apSummary(ap), lan_port_vlan_enabled: true, lan_port_vlan_id: 99, lan_port_poe_enabled: null, ssid_overrides: [], location: null };
+  }
+
+  // ── Network module ────────────────────────────────────────────────────────
+  if (path === '/network/summary') return fleetNetworkSummary(q);
+  if (path === '/network/topology') {
+    const graph = fleetTopologyGraph(q);
+    return {
+      nodes: graph.nodes.map((n) => ({
+        id: n.id,
+        name: n.label,
+        device_type: n.device_type,
+        ip_address: n.ip_address,
+        status: n.status,
+        model: n.model,
+        vendor: networkDevices.find((d) => d.id === n.id)?.vendor,
+      })),
+      links: graph.edges.map((e) => ({
+        source: e.source_id,
+        target: e.target_id,
+        source_port: e.source_port,
+        target_port: e.target_port,
+        speed: e.speed,
+        status: e.status,
+      })),
+    };
+  }
+  if (path === '/network/vlans' || /^\/network\/vlans\/[^/]+$/.test(path)) {
+    const one = networkVlans.find((v) => v.id === path.split('/')[3]);
+    if (one) return one;
+    const items = bySite(networkVlans, q);
+    return { items, total: items.length, skip: Number(q.skip || 0), limit: Number(q.limit || 500) };
+  }
+  if (path === '/network/wifi' || /^\/network\/wifi\/[^/]+$/.test(path)) {
+    const one = wifiNetworks.find((w) => w.id === path.split('/')[3]);
+    if (one) return one;
+    let items = bySite(wifiNetworks, q);
+    if (q.enabled !== undefined) items = items.filter((w) => w.enabled === q.enabled);
+    return { items, total: items.length, skip: Number(q.skip || 0), limit: Number(q.limit || 500) };
+  }
+  if (path === '/network/clients' || /^\/network\/clients\/[^/]+$/.test(path)) {
+    const toClient = (c: (typeof networkClients)[number]) => ({
+      id: c.id,
+      mac_address: c.mac,
+      ip_address: c.ip ?? undefined,
+      hostname: c.host ?? undefined,
+      display_name: c.host ?? undefined,
+      connection_type: c.type,
+      status: c.status,
+      blocked: c.blocked,
+      connected_device_id: c.dev,
+      ssid: c.ssid ?? undefined,
+      signal_strength: c.sig,
+      rx_bytes: c.rx,
+      tx_bytes: c.tx,
+      first_seen: iso(c.m + 60 * 24 * 9),
+      last_seen: iso(c.m),
+      site_id: c.site,
+    });
+    const one = networkClients.find((c) => c.id === path.split('/')[3]);
+    if (one) return toClient(one);
+    let items = networkClients.filter((c) => !q.site_id || c.site === q.site_id).map(toClient);
+    if (q.connection_type) items = items.filter((c) => c.connection_type === q.connection_type);
+    if (q.status) items = items.filter((c) => c.status === q.status);
+    if (q.blocked !== undefined) items = items.filter((c) => c.blocked === q.blocked);
+    return { items, total: items.length, skip: Number(q.skip || 0), limit: Number(q.limit || 500) };
+  }
+  if (/^\/network\/devices\/[^/]+\/ports/.test(path)) {
+    return fleetPorts(path.split('/')[3]).map((p) => ({
+      id: p.id,
+      device_id: p.device_id,
+      port_number: p.port_index,
+      name: p.name,
+      enabled: p.enabled,
+      poe_enabled: p.poe_config.enabled,
+      native_vlan: p.vlan_config.native_vlan,
+      tagged_vlans: p.vlan_config.tagged_vlans,
+      status: p.enabled ? p.status.link_status : 'disabled',
+      speed: p.speed,
+      duplex: p.duplex,
+      poe_power_draw: p.status.poe_power_draw,
+      rx_bytes: p.status.rx_bytes,
+      tx_bytes: p.status.tx_bytes,
+    }));
+  }
+  if (path === '/network/devices' || /^\/network\/devices\/[^/]+$/.test(path)) {
+    const toNetDevice = (d: FleetDevice) => ({
+      id: d.id,
+      name: d.name,
+      device_type: d.device_type,
+      model: d.model,
+      vendor: d.vendor,
+      firmware_version: d.firmware_version,
+      ip_address: d.ip_address,
+      mac_address: d.mac_address,
+      status: d.status,
+      uptime: d.uptime,
+      site_id: d.site_id,
+      capabilities: { poe: d.poe_ports > 0, vlans: d.device_type === 'switch', radios: d.device_type === 'access_point' },
+    });
+    const one = networkDevices.find((d) => d.id === path.split('/')[3]);
+    if (one) return toNetDevice(one);
+    const items = fleetDevices(q).map(toNetDevice);
+    return { items, total: items.length, skip: Number(q.skip || 0), limit: Number(q.limit || 500) };
+  }
+
+  // ── PoE ───────────────────────────────────────────────────────────────────
+  if (path === '/poe/devices' || /^\/poe\/devices\/[^/]+$/.test(path) || /^\/poe\/devices\/[^/]+\/ports$/.test(path)) {
+    const poeSwitch = (d: FleetDevice) => ({
+      device_id: d.id,
+      device_name: d.name,
+      model: d.model,
+      power_budget: d.poe_budget,
+      power_used: d.poe_used,
+      power_available: Math.max(0, d.poe_budget - d.poe_used),
+      power_percentage: d.poe_budget ? Math.round((d.poe_used / d.poe_budget) * 100) : 0,
+      total_poe_ports: d.poe_ports,
+      active_poe_ports: fleetPortSpec(d.id).filter((p) => p.poe && p.w > 0).length,
+      disabled_poe_ports: fleetPortSpec(d.id).filter((p) => p.poe && !p.on).length,
+      fault_poe_ports: 0,
+      near_budget: d.poe_budget > 0 && d.poe_used / d.poe_budget > 0.85,
+      over_budget: false,
+    });
+    if (path.endsWith('/ports')) return poePorts(path.split('/')[3]);
+    const one = networkDevices.find((d) => d.id === path.split('/')[3]);
+    if (one) return poeSwitch(one);
+    return bySite(networkDevices, q).filter((d) => d.poe_budget > 0).map(poeSwitch);
+  }
+  if (path === '/poe/ports') {
+    const scoped = bySite(networkDevices, q).filter((d) => d.poe_budget > 0);
+    const rows = scoped.flatMap((d) => poePorts(d.id));
+    return q.device_id ? rows.filter((p) => p.device_id === q.device_id) : rows;
+  }
+
+  // ── Topology (enterprise graph) ───────────────────────────────────────────
+  if (path === '/topology/graph') return fleetTopologyGraph(q);
+  if (/^\/topology\/layout\/[^/]+$/.test(path)) return null;
+
+  /* ==== demo: Pending/staged changes (the approval queue) + the Firewall module (gateways, rules, NAT, aliases, IDS/event feed) ==== */
+  // ── Staged writes (the approval queue) ──────────────────────────────
+  //
+  // Every device mutation in FreeSDN lands in ``adapter_pending_changes``
+  // and only reaches the device behind an explicit apply, so the demo
+  // serves a real queue. Applying/discarding are POSTs and hit the demo
+  // read-only guard, which is the same wall an operator meets with
+  // ADAPTER_READ_ONLY=true.
+
+  // Batched fast path: PendingChangesDrawer + PendingChangesBadge
+  // (listChangesForGateway). The gateway id doubles as the controller id.
+  const changesByGateway = path.match(/^\/gateway-vpn\/changes\/by-gateway\/([^/]+)$/);
+  if (changesByGateway) {
+    return filterPendingChanges(pendingChanges, {
+      controllerId: changesByGateway[1],
+      status: typeof q.status === 'string' ? q.status : 'all',
+    });
+  }
+
+  // Per-domain lists behind PendingChangesPage (/gateway/pending) and the
+  // feature pages. Each backend route filters on a feature prefix, so the
+  // demo does too, otherwise one change would appear in five domains.
+  const changesByDomain = path.match(
+    /^\/gateway-(vpn|firmware|profiles|firewall|wifi|switch-advanced|routing|hotspot|bulk|system|storage)\/([^/]+)(?:\/sites\/([^/]+))?\/changes$/,
+  );
+  if (changesByDomain) {
+    return filterPendingChanges(pendingChanges, {
+      controllerId: changesByDomain[2],
+      siteId: changesByDomain[3],
+      featurePrefixes: pendingChangeDomainPrefixes[changesByDomain[1]],
+      status: typeof q.status === 'string' ? q.status : 'pending',
+    });
+  }
+
+  // Historical per-vendor fanout (the fallback listChangesForGateway uses
+  // when the batched endpoint 404s).
+  const changesByVendor = path.match(
+    /^\/gateway-(mikrotik|pfsense|opnsense|openwrt|unifi|freepbx|proxmox)-[a-z-]+\/([^/]+)\/changes$/,
+  );
+  if (changesByVendor) {
+    return filterPendingChanges(pendingChanges, {
+      controllerId: changesByVendor[2],
+      featurePrefixes: [`${changesByVendor[1]}.`],
+      status: typeof q.status === 'string' ? q.status : 'pending',
+    });
+  }
+
+  // ── Firewall module: gateway connections ────────────────────────────
+  if (path === '/firewall/gateways/summary') return firewallGatewaySummary;
+  if (path === '/firewall/gateways') {
+    const owned = firewallGateways
+      .filter((g) => !q.site_id || g.site_id === q.site_id)
+      .filter((g) => !q.vendor || g.vendor === q.vendor);
+    return { items: owned, total: owned.length };
+  }
+  const gatewaySub = path.match(/^\/firewall\/gateways\/([^/]+)\/(.+)$/);
+  if (gatewaySub) {
+    // Keyed by the URL tail; an absent key degrades to {} so the detail
+    // page's `?? []` renders an honest empty table instead of crashing.
+    const bundle = gatewayLiveData[gatewaySub[1]] as AnyRecord | undefined;
+    if (bundle && gatewaySub[2] in bundle) return bundle[gatewaySub[2]] as AnyRecord;
+    return {};
+  }
+  const gatewayOne = path.match(/^\/firewall\/gateways\/([^/]+)$/);
+  if (gatewayOne) {
+    return firewallGateways.find((g) => g.id === gatewayOne[1]) ?? firewallGateways[0];
+  }
+
+  // ── Firewall module: normalized local-DB records ────────────────────
+  if (path === '/firewall/rules') {
+    return paginated(firewallRules.filter((r) => !q.site_id || r.site_id === q.site_id));
+  }
+  const oneRule = path.match(/^\/firewall\/rules\/([^/]+)$/);
+  if (oneRule) return firewallRules.find((r) => r.id === oneRule[1]) ?? null;
+  if (path === '/firewall/nat') {
+    return paginated(firewallNatRules.filter((r) => !q.site_id || r.site_id === q.site_id));
+  }
+  const oneNat = path.match(/^\/firewall\/nat\/([^/]+)$/);
+  if (oneNat) return firewallNatRules.find((r) => r.id === oneNat[1]) ?? null;
+  if (path === '/firewall/vpn/stats') return firewallVpnStats;
+  if (path === '/firewall/vpn') {
+    return paginated(firewallVpnTunnels.filter((t) => !q.site_id || t.site_id === q.site_id));
+  }
+  const oneVpn = path.match(/^\/firewall\/vpn\/([^/]+)$/);
+  if (oneVpn) return firewallVpnTunnels.find((t) => t.id === oneVpn[1]) ?? null;
+  if (path === '/firewall/ids/alerts/stats') return firewallIdsAlertStats;
+  if (path === '/firewall/ids/alerts') {
+    return paginated(
+      firewallIdsAlerts
+        .filter((a) => !q.site_id || a.site_id === q.site_id)
+        .filter((a) => !q.severity || a.severity === q.severity),
+    );
+  }
+  if (path === '/firewall/logs') {
+    return paginated(
+      firewallLogs
+        .filter((l) => !q.site_id || l.site_id === q.site_id)
+        .filter((l) => !q.action || l.action === q.action),
+    );
+  }
+
+  /* ==== demo: cameras and VoIP ==== */
+  if (path === '/cameras' || path === '/cameras/') {
+    const limit = Number(q.limit || 100);
+    const offset = Number(q.offset || 0);
+    let rows = demoCameras;
+    if (q.site_id) rows = rows.filter((c) => c.site_id === q.site_id);
+    if (q.status) rows = rows.filter((c) => c.status === q.status);
+    if (q.camera_type) rows = rows.filter((c) => c.camera_type === q.camera_type);
+    if (q.search) {
+      const needle = String(q.search).toLowerCase();
+      rows = rows.filter((c) => `${c.name} ${c.location} ${c.ip_address} ${c.model}`.toLowerCase().includes(needle));
+    }
+    return { ...paginated(rows.slice(offset, offset + limit), 1, limit), total: rows.length };
+  }
+  if (path === '/cameras/streams/stats') return { active_streams: 0, target_fps: 0, frame_interval_ms: 0, per_nvr: {}, overloaded_nvrs: [], snapshot_cache_channels: demoCameras.length };
+  if (path === '/cameras/events/unacknowledged/count') return { count: demoCameraEvents.filter((e) => !e.is_acknowledged).length };
+  if (path === '/cameras/events' || path === '/cameras/events/') {
+    let rows = demoCameraEvents;
+    if (q.camera_id) rows = rows.filter((e) => e.camera_id === q.camera_id);
+    if (q.event_type) rows = rows.filter((e) => e.event_type === q.event_type);
+    // start_time/end_time are deliberately NOT applied: fixtures.ts pins `now`
+    // to a fixed date, so a real "last 24h" window would match nothing and the
+    // events tab would render empty. See notes.
+    if (q.acknowledged !== undefined && q.acknowledged !== null) {
+      const want = q.acknowledged === true || q.acknowledged === 'true';
+      rows = rows.filter((e) => e.is_acknowledged === want);
+    }
+    const limit = Number(q.limit || 50);
+    const offset = Number(q.offset || 0);
+    return { ...paginated(rows.slice(offset, offset + limit), 1, limit), total: rows.length };
+  }
+  if (/^\/cameras\/events\/[^/]+$/.test(path)) return demoCameraEvents.find((e) => e.id === path.split('/')[3]) ?? null;
+  if (path === '/cameras/groups' || path === '/cameras/groups/') {
+    return { items: demoCameraGroups.map((g) => ({ ...g, camera_count: g.camera_ids.length })), total: demoCameraGroups.length };
+  }
+  if (/^\/cameras\/groups\/[^/]+$/.test(path)) {
+    const group = demoCameraGroups.find((g) => g.id === path.split('/')[3]) ?? demoCameraGroups[0];
+    return {
+      ...group,
+      camera_count: group.camera_ids.length,
+      cameras: group.camera_ids.map((cid, i) => {
+        const cam = demoCameras.find((c) => c.id === cid);
+        return { camera_id: cid, sort_order: i, name: cam?.name ?? cid, status: cam?.status ?? 'unknown' };
+      }),
+    };
+  }
+  if (path === '/cameras/views' || path === '/cameras/views/') return { items: demoCameraViews, total: demoCameraViews.length };
+  if (path === '/cameras/health/fleet-summary') {
+    const online = demoCameraHealth.filter((h) => h.is_online);
+    const totalKbps = online.reduce((sum, h) => sum + (h.bitrate_kbps ?? 0), 0);
+    return {
+      total_cameras: demoCameras.length,
+      online_cameras: online.length,
+      offline_cameras: demoCameras.length - online.length,
+      avg_bitrate_kbps: Math.round(totalKbps / Math.max(1, online.length)),
+      total_bandwidth_mbps: Math.round(totalKbps / 100) / 10,
+    };
+  }
+  if (path === '/cameras/reports' || path === '/cameras/reports/') return { items: demoCameraReports, total: demoCameraReports.length };
+  if (/^\/cameras\/reports\/[^/]+$/.test(path)) return demoCameraReports.find((r) => r.id === path.split('/')[3]) ?? demoCameraReports[0];
+  if (path === '/cameras/evidence') {
+    const rows = q.camera_id ? demoEvidenceArchives.filter((e) => e.camera_id === q.camera_id) : demoEvidenceArchives;
+    return { items: rows };
+  }
+  if (path === '/cameras/recording-templates' || path === '/cameras/recording-templates/') return demoRecordingTemplates;
+  if (path === '/cameras/recordings/search') return { items: [], total: 0 };
+  if (path === '/cameras/access/grants') {
+    const rows = q.camera_id
+      ? demoCameraAccessGrants.filter((g) => g.camera_id === q.camera_id || g.camera_id === null)
+      : demoCameraAccessGrants;
+    return { items: rows, total: rows.length };
+  }
+  if (path.startsWith('/cameras/access/check/')) return { has_access: true, access_level: 'full', can_live: true, can_playback: true, can_ptz: true, can_export: true, can_configure: false, grant_source: 'role:super_admin' };
+  if (path === '/cameras/push/vapid-key') return { enabled: false, public_key: '' };
+
+  // NVRs, before the /cameras/{id} catch-alls below.
+  if (path === '/cameras/nvrs/stats') {
+    const rows = q.site_id ? demoNvrs.filter((n) => n.site_id === q.site_id) : demoNvrs;
+    return {
+      total: rows.length,
+      online: rows.filter((n) => n.status === 'online').length,
+      offline: rows.filter((n) => n.status === 'offline').length,
+      error: 0,
+      total_channels: rows.reduce((sum, n) => sum + n.channel_count, 0),
+      total_cameras: demoCameras.filter((c) => rows.some((n) => n.id === c.nvr_id)).length,
+    };
+  }
+  if (path === '/cameras/nvrs/health/time-drift') {
+    return { items: demoNvrs.map((n) => ({ nvr_id: n.id, nvr_name: n.name, drift_seconds: 0, threshold_seconds: 30, checked_at: iso(2), status: 'ok' })), total: demoNvrs.length };
+  }
+  if (path === '/cameras/nvrs' || path === '/cameras/nvrs/') {
+    const rows = q.site_id ? demoNvrs.filter((n) => n.site_id === q.site_id) : demoNvrs;
+    const items = rows.map((n) => ({
+      ...n,
+      cameras: demoCameras.filter((c) => c.nvr_id === n.id).map((c) => ({ id: c.id, name: c.name, status: c.status })),
+    }));
+    return { ...paginated(items, 1, 200), total: rows.length };
+  }
+  if (/^\/cameras\/nvrs\/[^/]+\/channels$/.test(path)) {
+    const nvrId = path.split('/')[3];
+    const items = demoCameras.filter((c) => c.nvr_id === nvrId).map((c) => ({
+      id: c.id, name: c.name, channel_id: c.channel_id, ip_address: c.ip_address, status: c.status,
+      camera_type: c.camera_type, has_ptz: c.has_ptz, has_audio: c.has_audio, model: c.model,
+      vendor: c.vendor, is_recording: c.is_recording,
+    }));
+    return { items, total: items.length };
+  }
+  if (/^\/cameras\/nvrs\/[^/]+\/channel-status$/.test(path)) {
+    const nvrId = path.split('/')[3];
+    return {
+      nvr_id: nvrId,
+      channels: demoCameras.filter((c) => c.nvr_id === nvrId).map((c) => ({ id: c.channel_id, name: c.name, online: c.status !== 'offline', ip_address: c.ip_address })),
+    };
+  }
+  if (/^\/cameras\/nvrs\/[^/]+\/storage$/.test(path)) {
+    const nvrId = path.split('/')[3];
+    const store = demoNvrStorage.find((s) => s.nvr_id === nvrId) ?? demoNvrStorage[0];
+    return store;
+  }
+  if (/^\/cameras\/nvrs\/[^/]+\/system-info$/.test(path)) {
+    const nvrId = path.split('/')[3];
+    const info = demoNvrSystemInfo.find((s) => s.nvr_id === nvrId) ?? demoNvrSystemInfo[0];
+    const store = demoNvrStorage.find((s) => s.nvr_id === nvrId) ?? demoNvrStorage[0];
+    const net = demoNvrNetwork.find((s) => s.nvr_id === nvrId) ?? demoNvrNetwork[0];
+    return {
+      data: {
+        device: info.device,
+        system_status: info.system_status,
+        time: info.time,
+        network_interfaces: net.interfaces,
+        storage: store,
+        recording_tracks: demoCameras.filter((c) => c.nvr_id === nvrId).map((c) => ({
+          id: String(c.channel_id), channel: c.channel_id, track_type: 'video', enabled: c.is_recording,
+          description: c.name, codec: c.vendor === 'hikvision' ? 'H.265' : 'H.264', loop_enable: true, src_url: c.rtsp_main_stream,
+        })),
+      },
+    };
+  }
+  if (/^\/cameras\/nvrs\/[^/]+\/network$/.test(path)) {
+    const net = demoNvrNetwork.find((s) => s.nvr_id === path.split('/')[3]) ?? demoNvrNetwork[0];
+    return { data: { time: net.time, interfaces: net.interfaces } };
+  }
+  if (/^\/cameras\/nvrs\/[^/]+\/recording-status$/.test(path)) {
+    const nvrId = path.split('/')[3];
+    return {
+      data: demoCameras.filter((c) => c.nvr_id === nvrId).map((c) => ({
+        id: String(c.channel_id), channel: c.channel_id, track_type: 'video', enabled: c.is_recording,
+        description: c.name, codec: c.vendor === 'hikvision' ? 'H.265' : 'H.264', loop_enable: true, src_url: c.rtsp_main_stream,
+      })),
+    };
+  }
+  if (/^\/cameras\/nvrs\/[^/]+\/holidays$/.test(path)) return { holidays: demoNvrHolidays };
+  if (/^\/cameras\/nvrs\/[^/]+$/.test(path)) return demoNvrs.find((n) => n.id === path.split('/')[3]) ?? demoNvrs[0];
+
+  // Per-camera routes.
+  if (/^\/cameras\/[^/]+\/snapshot$/.test(path) || /^\/cameras\/[^/]+\/playback-frame$/.test(path)) {
+    const imagePath = getDemoCameraSnapshotPath(path.split('/')[2]);
+    if (typeof fetch === 'function') {
+      const image = await fetch(imagePath);
+      if (image.ok) return image.blob();
+    }
+    return new Blob([], { type: 'image/jpeg' });
+  }
+  if (/^\/cameras\/[^/]+\/stream-token$/.test(path)) return { token: 'demo-stream-token' };
+  if (/^\/cameras\/[^/]+\/timeline$/.test(path)) {
+    // 24 hourly recording segments ending "now", the shape RecordingTimeline reads.
+    const segments = Array.from({ length: 24 }, (_, i) => ({
+      start: iso((24 - i) * 60),
+      end: iso((23 - i) * 60),
+      type: i % 6 === 0 ? 'motion' : 'continuous',
+    }));
+    return { segments, supported: true };
+  }
+  if (/^\/cameras\/[^/]+\/health\/history$/.test(path)) {
+    const cameraId = path.split('/')[2];
+    const base = demoCameraHealth.find((h) => h.camera_id === cameraId) ?? demoCameraHealth[0];
+    return {
+      camera_id: cameraId,
+      snapshots: Array.from({ length: 48 }, (_, i) => ({
+        ...base,
+        bitrate_kbps: base.bitrate_kbps === null ? null : Math.round(base.bitrate_kbps * (0.88 + ((i * 7) % 25) / 100)),
+        captured_at: iso((47 - i) * 30),
+      })),
+    };
+  }
+  if (/^\/cameras\/[^/]+\/health$/.test(path)) {
+    const cameraId = path.split('/')[2];
+    return demoCameraHealth.find((h) => h.camera_id === cameraId) ?? demoCameraHealth[0];
+  }
+  if (/^\/cameras\/[^/]+\/smart-capabilities$/.test(path)) {
+    const cam = demoCameras.find((c) => c.id === path.split('/')[2]);
+    const hik = cam?.vendor === 'hikvision';
+    return { motion_detection: true, line_crossing: hik, intrusion_detection: hik, privacy_mask: hik, face_detection: hik, vehicle_detection: true, person_detection: true };
+  }
+  if (/^\/cameras\/[^/]+\/motion-detection$/.test(path)) return { enabled: true, sensitivity_level: 60, grid_map: 'ffffffffffffffffffffff' };
+  if (/^\/cameras\/[^/]+\/privacy-masks$/.test(path)) return { enabled: false, regions: [] };
+  if (/^\/cameras\/[^/]+\/line-crossing$/.test(path)) return { enabled: true, rules: [{ id: 1, enabled: true, sensitivity: 50, direction: 'both', coordinates: [{ x: 120, y: 540 }, { x: 880, y: 540 }] }] };
+  if (/^\/cameras\/[^/]+\/intrusion-detection$/.test(path)) return { enabled: true, rules: [{ id: 1, enabled: true, sensitivity: 55, time_threshold: 5, coordinates: [{ x: 180, y: 220 }, { x: 820, y: 220 }, { x: 820, y: 780 }, { x: 180, y: 780 }] }] };
+  if (/^\/cameras\/[^/]+\/face-detection$/.test(path)) return { enabled: false, sensitivity: 50, snap_interval: 2, generation_speed: 3, min_width: 64, min_height: 64, max_width: 1024, max_height: 1024 };
+  if (/^\/cameras\/[^/]+\/recording-schedule$/.test(path)) {
+    return {
+      supported: true,
+      enabled: true,
+      days: [1, 2, 3, 4, 5, 6, 7].map((d) => ({
+        id: d,
+        action_type: 'record',
+        time_blocks: [{ id: `${d}-1`, begin_time: '00:00:00', end_time: '24:00:00', record_type: d <= 5 ? 'continuous' : 'motion' }],
+      })),
+    };
+  }
+  if (/^\/cameras\/[^/]+\/holiday-schedule$/.test(path)) return { enabled: false, days: [] };
+  if (/^\/cameras\/[^/]+\/ptz\/tours$/.test(path)) {
+    const cam = demoCameras.find((c) => c.id === path.split('/')[2]);
+    if (!cam?.has_ptz) return [];
+    return [{ id: 1, name: 'Perimeter patrol', enabled: true, actions: [{ id: 1, preset_id: 1, dwell: 20, speed: 40 }, { id: 2, preset_id: 2, dwell: 20, speed: 40 }, { id: 3, preset_id: 3, dwell: 30, speed: 40 }] }];
+  }
+  if (/^\/cameras\/[^/]+\/ptz\/presets$/.test(path)) {
+    const cam = demoCameras.find((c) => c.id === path.split('/')[2]);
+    if (!cam?.has_ptz) return { items: [] };
+    return { items: [{ id: 1, name: 'Home', enabled: true }, { id: 2, name: 'Entrance', enabled: true }, { id: 3, name: 'Car park', enabled: true }, { id: 4, name: 'Loading dock', enabled: true }] };
+  }
+  if (/^\/cameras\/[^/]+\/image$/.test(path)) return { brightness: 50, contrast: 52, saturation: 50, sharpness: 48, hue: 50, wdr_enabled: true, wdr_level: 40, noise_reduction_enabled: true, noise_reduction_level: 30, ir_cut_filter: 'auto', exposure_mode: 'auto', backlight_mode: 'off' };
+  if (/^\/cameras\/[^/]+\/codec-info$/.test(path)) {
+    const health = demoCameraHealth.find((h) => h.camera_id === path.split('/')[2]) ?? demoCameraHealth[0];
+    return { codec: health.codec === 'H.265' ? 'h265' : 'h264', resolution: `${health.resolution_width ?? 0}x${health.resolution_height ?? 0}`, bitrate_kbps: health.bitrate_kbps };
+  }
+  if (/^\/cameras\/[^/]+$/.test(path)) return demoCameras.find((c) => c.id === path.split('/')[2]) ?? null;
+  if (path.startsWith('/cameras')) return emptyList();
+
+  // ── VoIP ───────────────────────────────────────────────────────────────────
+  if (path === '/voip/fleet/dashboard') return demoVoipFleetDashboard;
+  if (path === '/voip/phones/stats') {
+    const rows = q.site_id ? demoVoipPhones.filter((p) => p.site_id === q.site_id) : demoVoipPhones;
+    return {
+      total: rows.length,
+      online: rows.filter((p) => p.status === 'online').length,
+      offline: rows.filter((p) => p.status === 'offline').length,
+      in_call: rows.filter((p) => p.status === 'in_call').length,
+    };
+  }
+  if (path === '/voip/phones' || path === '/voip/phones/') {
+    let rows = demoVoipPhones;
+    if (q.site_id) rows = rows.filter((p) => p.site_id === q.site_id);
+    if (q.pbx_id) rows = rows.filter((p) => p.pbx_id === q.pbx_id);
+    if (q.status) rows = rows.filter((p) => p.status === q.status);
+    if (q.lifecycle_state) rows = rows.filter((p) => p.lifecycle_state === q.lifecycle_state);
+    if (q.vendor) rows = rows.filter((p) => p.vendor === q.vendor);
+    if (q.search) {
+      const needle = String(q.search).toLowerCase();
+      rows = rows.filter((p) => `${p.name} ${p.ip_address} ${p.mac_address} ${p.model} ${p.extension ?? ''}`.toLowerCase().includes(needle));
+    }
+    const limit = Number(q.limit || 100);
+    const offset = Number(q.offset || 0);
+    return { ...paginated(rows.slice(offset, offset + limit), 1, limit), total: rows.length };
+  }
+  if (/^\/voip\/phones\/[^/]+\/config-preview$/.test(path)) {
+    const phone = demoVoipPhones.find((p) => p.id === path.split('/')[3]);
+    return [
+      '# FreeSDN generated provisioning file (demo, credentials omitted)',
+      `# device   : ${phone?.model ?? 'unknown'} ${phone?.mac_address ?? ''}`,
+      `# template : ${phone?.config_template_id ?? 'none'}`,
+      'P270 = ' + (phone?.extension ?? ''),
+      'P271 = 1',
+      'P47  = ' + (phone?.sip_server ?? ''),
+      'P34  = ********  # SIP password is never rendered in the demo',
+      'P8  = 30        # voice VLAN',
+    ].join('\n');
+  }
+  if (/^\/voip\/phones\/[^/]+\/live-status$/.test(path)) {
+    const phone = demoVoipPhones.find((p) => p.id === path.split('/')[3]);
+    return { phone_state: phone?.status === 'in_call' ? 'in_call' : phone?.status === 'ringing' ? 'ringing' : 'available', active_lines: [], total_lines: 2, lockout: 'ok' };
+  }
+  if (/^\/voip\/phones\/[^/]+$/.test(path)) return demoVoipPhones.find((p) => p.id === path.split('/')[3]) ?? null;
+
+  if (path === '/voip/extensions' || path === '/voip/extensions/') {
+    const sitePbxIds = demoPbxSystems.filter((p) => !q.site_id || p.site_id === q.site_id).map((p) => p.id);
+    const rows = demoVoipExtensions.filter((e) => sitePbxIds.includes(e.pbx_id));
+    const limit = Number(q.limit || 100);
+    const offset = Number(q.offset || 0);
+    return { items: rows.slice(offset, offset + limit), total: rows.length };
+  }
+  if (path === '/voip/ring-groups' || path === '/voip/ring-groups/') {
+    const sitePbxIds = demoPbxSystems.filter((p) => !q.site_id || p.site_id === q.site_id).map((p) => p.id);
+    const rows = demoRingGroups
+      .filter((g) => sitePbxIds.includes(g.pbx_id))
+      .filter((g) => !q.pbx_id || g.pbx_id === q.pbx_id);
+    return { items: rows, total: rows.length };
+  }
+  if (path === '/voip/call-logs/stats') return demoCallStats;
+  if (path === '/voip/call-logs' || path === '/voip/call-logs/') {
+    const sitePbxIds = demoPbxSystems.filter((p) => !q.site_id || p.site_id === q.site_id).map((p) => p.id);
+    let rows = demoCallLogs.filter((c) => sitePbxIds.includes(c.pbx_id));
+    if (q.pbx_id) rows = rows.filter((c) => c.pbx_id === q.pbx_id);
+    if (q.direction) rows = rows.filter((c) => c.direction === q.direction);
+    if (q.call_status) rows = rows.filter((c) => c.status === q.call_status);
+    if (q.caller) rows = rows.filter((c) => c.caller_number.includes(String(q.caller)));
+    if (q.callee) rows = rows.filter((c) => c.callee_number.includes(String(q.callee)));
+    const limit = Number(q.limit || 100);
+    return { items: rows.slice(0, limit), total: rows.length };
+  }
+  if (path === '/voip/voicemails/stats') return demoVoicemailStats;
+  if (path === '/voip/voicemails' || path === '/voip/voicemails/') {
+    const sitePbxIds = demoPbxSystems.filter((p) => !q.site_id || p.site_id === q.site_id).map((p) => p.id);
+    let rows = demoVoicemails.filter((v) => sitePbxIds.includes(v.pbx_id));
+    if (q.extension_number) rows = rows.filter((v) => v.extension_number === q.extension_number);
+    if (q.folder) rows = rows.filter((v) => v.folder === q.folder);
+    if (q.is_read !== undefined && q.is_read !== null) rows = rows.filter((v) => v.is_read === (q.is_read === true || q.is_read === 'true'));
+    const limit = Number(q.limit || 100);
+    const offset = Number(q.offset || 0);
+    return { items: rows.slice(offset, offset + limit), total: rows.length };
+  }
+  if (/^\/voip\/voicemails\/[^/]+$/.test(path)) return demoVoicemails.find((v) => v.id === path.split('/')[3]) ?? null;
+
+  if (path === '/voip/templates' || path === '/voip/templates/') {
+    const rows = q.site_id ? demoVoipTemplates.filter((t) => t.site_id === q.site_id) : demoVoipTemplates;
+    return { items: rows, total: rows.length };
+  }
+  if (/^\/voip\/templates\/[^/]+$/.test(path)) return demoVoipTemplates.find((t) => t.id === path.split('/')[3]) ?? demoVoipTemplates[0];
+  if (path === '/voip/firmware/compliance') {
+    const groups = Object.values(
+      demoVoipPhones.reduce<Record<string, { vendor: string; model: string; recommended_version: string | null; total_phones: number; compliant: number; non_compliant: number; unknown: number; versions: Record<string, number> }>>((acc, p) => {
+        const key = `${p.vendor}/${p.model}`;
+        acc[key] = acc[key] ?? { vendor: p.vendor, model: p.model, recommended_version: p.firmware_target, total_phones: 0, compliant: 0, non_compliant: 0, unknown: 0, versions: {} };
+        acc[key].total_phones += 1;
+        if (p.firmware_target === null) acc[key].unknown += 1;
+        else if (p.firmware_version === p.firmware_target) acc[key].compliant += 1;
+        else acc[key].non_compliant += 1;
+        acc[key].versions[p.firmware_version] = (acc[key].versions[p.firmware_version] ?? 0) + 1;
+        return acc;
+      }, {}),
+    );
+    return { groups };
+  }
+  if (path === '/voip/firmware' || path === '/voip/firmware/') {
+    let rows = demoVoipFirmwareTracks;
+    if (q.vendor) rows = rows.filter((f) => f.vendor === q.vendor);
+    if (q.model) rows = rows.filter((f) => f.model === q.model);
+    return { items: rows, total: rows.length };
+  }
+  if (path === '/voip/discovery/scans') {
+    const rows = q.site_id ? demoVoipDiscoveryScans.filter((s) => s.site_id === q.site_id) : demoVoipDiscoveryScans;
+    return { items: rows, total: rows.length };
+  }
+  if (/^\/voip\/discovery\/scans\/[^/]+\/status$/.test(path)) {
+    const scan = demoVoipDiscoveryScans.find((s) => s.id === path.split('/')[4]) ?? demoVoipDiscoveryScans[0];
+    return { scan_id: scan.id, status: scan.status, devices_found: scan.devices_found, started_at: scan.started_at, completed_at: scan.completed_at, progress: { phase: 'done', percent: 100, message: 'Scan complete', devices_found: scan.devices_found, log: [], devices: [] } };
+  }
+  if (/^\/voip\/discovery\/scans\/[^/]+$/.test(path)) return demoVoipDiscoveryScans.find((s) => s.id === path.split('/')[4]) ?? demoVoipDiscoveryScans[0];
+
+  // PBX collection + per-PBX sub-resources.
+  if (path === '/voip/pbx' || path === '/voip/pbx/') {
+    const rows = q.site_id ? demoPbxSystems.filter((p) => p.site_id === q.site_id) : demoPbxSystems;
+    return { items: rows, total: rows.length };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/dashboard$/.test(path)) {
+    const pbxId = path.split('/')[3];
+    const pbx = demoPbxSystems.find((p) => p.id === pbxId) ?? demoPbxSystems[0];
+    const exts = demoVoipExtensions.filter((e) => e.pbx_id === pbx.id);
+    const boxes = demoVoicemailBoxes.filter((b) => b.pbx_id === pbx.id);
+    const phones = demoVoipPhones.filter((p) => p.pbx_id === pbx.id);
+    return {
+      pbx_id: pbx.id,
+      name: pbx.name,
+      pbx_type: pbx.pbx_type,
+      status: 'online',
+      ip_address: pbx.ip_address,
+      api_port: pbx.api_port,
+      sip_port: pbx.sip_port,
+      total_extensions: exts.length,
+      online_extensions: phones.filter((p) => p.sip_registered).length,
+      total_trunks: demoSipTrunks.filter((t) => t.pbx_id === pbx.id).length,
+      active_calls: demoActiveCalls.filter((c) => c.pbx_id === pbx.id).length,
+      calls_today: demoCallLogs.filter((c) => c.pbx_id === pbx.id).length,
+      voicemail_boxes: boxes.length,
+      unread_voicemails: demoVoicemails.filter((v) => v.pbx_id === pbx.id && !v.is_read).length,
+      ring_groups: demoRingGroups.filter((g) => g.pbx_id === pbx.id).length,
+      queues: demoCallQueues.filter((qq) => qq.pbx_id === pbx.id).length,
+      ivrs: demoIvrs.filter((i) => i.pbx_id === pbx.id).length,
+      dids: demoDids.filter((d) => d.pbx_id === pbx.id).length,
+      ami_connected: true,
+      ari_connected: true,
+      rest_available: true,
+      asterisk_version: String(pbx.settings.asterisk_version),
+      last_sync: pbx.last_seen,
+      needs_reload: Boolean(pbx.settings.needs_reload),
+    };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/system-info$/.test(path)) {
+    const pbx = demoPbxSystems.find((p) => p.id === path.split('/')[3]) ?? demoPbxSystems[0];
+    return {
+      host: pbx.ip_address,
+      asterisk_version: String(pbx.settings.asterisk_version),
+      freepbx_version: String(pbx.settings.freepbx_version),
+      ami_connected: true,
+      ari_connected: true,
+      rest_available: true,
+      ari_info: { version: '8.0.0', build: 'demo' },
+      freepbx_status: { modules_enabled: 47, needs_reload: Boolean(pbx.settings.needs_reload) },
+    };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/extensions\/[^/]+$/.test(path)) {
+    const pbxId = path.split('/')[3];
+    const extNumber = path.split('/')[5];
+    const ext = demoVoipExtensions.find((e) => e.pbx_id === pbxId && e.extension_number === extNumber);
+    if (!ext) return null;
+    return { ...ext, bound_phones: demoBoundPhones.filter((b) => b.extension_id === ext.id) };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/extensions$/.test(path)) {
+    const pbxId = path.split('/')[3];
+    const items = demoVoipExtensions
+      .filter((e) => e.pbx_id === pbxId)
+      .map((e) => ({ ...e, bound_phones: demoBoundPhones.filter((b) => b.extension_id === e.id) }));
+    return { items, total: items.length };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/trunks\/[^/]+$/.test(path)) {
+    const pbxId = path.split('/')[3];
+    const trunkId = path.split('/')[5];
+    return demoSipTrunks.find((t) => t.pbx_id === pbxId && t.trunk_id === trunkId) ?? demoSipTrunks[0];
+  }
+  if (/^\/voip\/pbx\/[^/]+\/trunks$/.test(path)) {
+    const rows = demoSipTrunks.filter((t) => t.pbx_id === path.split('/')[3]);
+    return { items: rows, total: rows.length };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/queues$/.test(path)) {
+    const rows = demoCallQueues.filter((c) => c.pbx_id === path.split('/')[3]);
+    return { items: rows, total: rows.length };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/ivrs$/.test(path)) {
+    const rows = demoIvrs.filter((i) => i.pbx_id === path.split('/')[3]);
+    return { items: rows, total: rows.length };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/dids$/.test(path)) {
+    const rows = demoDids.filter((d) => d.pbx_id === path.split('/')[3]);
+    return { items: rows, total: rows.length };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/active-calls$/.test(path)) {
+    const rows = demoActiveCalls.filter((c) => c.pbx_id === path.split('/')[3]);
+    return { items: rows, total: rows.length };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/voicemail-boxes$/.test(path)) {
+    const rows = demoVoicemailBoxes.filter((b) => b.pbx_id === path.split('/')[3]);
+    return { items: rows, total: rows.length };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/ring-groups$/.test(path)) {
+    const rows = demoRingGroups.filter((g) => g.pbx_id === path.split('/')[3]);
+    return { items: rows, total: rows.length };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/call-logs$/.test(path)) {
+    const rows = demoCallLogs.filter((c) => c.pbx_id === path.split('/')[3]);
+    return { items: rows.slice(0, Number(q.limit || 100)), total: rows.length };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/config$/.test(path)) {
+    const pbxId = path.split('/')[3];
+    const pbx = demoPbxSystems.find((p) => p.id === pbxId) ?? demoPbxSystems[0];
+    return {
+      pbx_id: pbx.id,
+      pbx_name: pbx.name,
+      pbx_type: pbx.pbx_type,
+      synced_at: pbx.last_seen,
+      extensions: demoVoipExtensions.filter((e) => e.pbx_id === pbx.id),
+      ring_groups: demoRingGroups.filter((g) => g.pbx_id === pbx.id),
+      trunks: demoSipTrunks.filter((t) => t.pbx_id === pbx.id),
+      queues: demoCallQueues.filter((c) => c.pbx_id === pbx.id),
+      ivrs: demoIvrs.filter((i) => i.pbx_id === pbx.id),
+      dids: demoDids.filter((d) => d.pbx_id === pbx.id),
+      voicemail_boxes: demoVoicemailBoxes.filter((b) => b.pbx_id === pbx.id),
+      outbound_routes: [],
+      followme: [],
+      announcements: [],
+      paging_groups: [],
+      daynight: [],
+      blacklist: [],
+      certificates: [],
+      admin_users: [],
+    };
+  }
+  if (/^\/voip\/pbx\/[^/]+\/(outbound-routes|followme|announcements|paging|daynight|blacklist|certificates|admin-users)$/.test(path)) {
+    return { items: [], total: 0 };
+  }
+  if (/^\/voip\/pbx\/[^/]+$/.test(path)) return demoPbxSystems.find((p) => p.id === path.split('/')[3]) ?? null;
+  if (path.startsWith('/voip')) return emptyList();
+
+  /* ==== demo: hypervisor, storage, backup ==== */
+  if (/^\/controllers\/[^/]+\/storage$/.test(path)) return demoStorageInventory;
+
+  // ── Hypervisor (Proxmox VE) ───────────────────────────────────────────
+  if (path === '/hypervisor/fleet/dashboard') return getDemoHypervisorFleetDashboard();
+  if (path === '/hypervisor/fleet/task-statistics') {
+    // FleetTaskStatistics nests the counters under `aggregate`; the Fleet tab
+    // unwraps that key, and a flat payload leaves every counter undefined.
+    return {
+      controllers: { [demoIds.proxmox]: demoHypervisorTaskStats },
+      aggregate: demoHypervisorTaskStats,
+    };
+  }
+
+  const hv = path.match(/^\/hypervisor\/controllers\/[^/]+(\/.*)?$/);
+  if (hv) {
+    const rest = hv[1] || '';
+    const hvNode = rest.match(/^\/nodes\/([^/]+)(\/.*)?$/);
+
+    if (hvNode) {
+      const node = hvNode[1];
+      const sub = hvNode[2] || '';
+
+      // Guest-scoped: /qemu/<vmid>/… or /lxc/<vmid>/…
+      const guestPath = sub.match(/^\/(?:qemu|lxc)\/(\d+)(\/.*)?$/);
+      if (guestPath) {
+        const vmid = Number(guestPath[1]);
+        const leaf = guestPath[2] || '';
+        const guest = demoHypervisorGuests.find((g) => g.vmid === vmid) || null;
+        if (leaf === '/snapshots') return demoHypervisorSnapshots.filter((s) => s.vmid === vmid);
+        if (leaf === '/rrd') return demoHypervisorGuestRrd;
+        if (leaf === '/agent/info') return demoHypervisorGuestAgent;
+        if (leaf === '/firewall/rules') return demoHypervisorFirewallRules.slice(0, 3);
+        if (leaf === '/firewall/options') {
+          return { enable: true, policy_in: 'DROP', policy_out: 'ACCEPT', dhcp: true, macfilter: true, ndp: true, ipfilter: false, log_level_in: 'nolog', log_level_out: 'nolog' };
+        }
+        if (leaf === '/pending') return [];
+        if (leaf === '/cloudinit') {
+          return { user: 'demo', ssh_keys: [], nameserver: '10.20.0.1', searchdomain: 'demo.local', ipconfig0: 'ip=dhcp' };
+        }
+        if (leaf === '/config') {
+          if (!guest) return {};
+          return {
+            name: guest.name,
+            cores: guest.cpu_cores,
+            sockets: 2,
+            memory: guest.memory_mb,
+            ostype: guest.os_type,
+            onboot: 1,
+            agent: 'enabled=1',
+            boot: 'order=scsi0;ide2;net0',
+            scsihw: 'virtio-scsi-single',
+            scsi0: `ceph-vm:vm-${guest.vmid}-disk-0,size=${guest.disk_gb}G,discard=on`,
+            net0: `virtio=02:00:00:20:10:${String(guest.vmid % 100).padStart(2, '0')},bridge=vmbr0,tag=10`,
+            tags: guest.tags.join(';'),
+            description: `Demo guest ${guest.name} on ${guest.node}`,
+          };
+        }
+        return guest;
+      }
+
+      if (sub === '') return demoHypervisorNodes.find((n) => n.node === node) || demoHypervisorNodes[0];
+      if (sub === '/vms') return demoHypervisorGuests.filter((g) => g.node === node && g.vm_type === 'qemu');
+      if (sub === '/containers') return demoHypervisorGuests.filter((g) => g.node === node && g.vm_type === 'lxc');
+      if (sub === '/storage') return demoHypervisorStorages.filter((s) => s.node === node);
+      if (sub === '/network') return demoHypervisorNodeNetwork.filter((i) => i.node === node);
+      if (sub === '/services') return demoHypervisorNodeServices.filter((s) => s.node === node);
+      if (sub === '/disks') return demoHypervisorNodeDisks.filter((d) => d.node === node);
+      if (sub === '/disks/smart') return demoHypervisorDiskSmart;
+      if (sub === '/sensors') return demoHypervisorNodeSensors.find((s) => s.node === node) || demoHypervisorNodeSensors[0];
+      if (sub === '/subscription') return demoHypervisorSubscriptions.find((s) => s.node === node) || demoHypervisorSubscriptions[0];
+      if (sub === '/apt/updates') return demoHypervisorAptUpdates.filter((u) => u.node === node);
+      if (sub === '/apt/versions') return demoHypervisorAptUpdates.filter((u) => u.node === node);
+      if (sub === '/certificates') return demoHypervisorCertificates.filter((c) => c.node === node);
+      if (sub === '/ceph/status') return demoHypervisorCephStatus;
+      if (sub === '/ceph/detail') return demoHypervisorCephDetail;
+      if (sub === '/firewall/rules') return demoHypervisorFirewallRules;
+      if (sub === '/rrd') return demoHypervisorNodeRrd;
+      if (sub === '/syslog') return demoHypervisorClusterLog.map((e, i) => ({ n: i + 1, t: `${new Date(e.time * 1000).toISOString()} ${e.node} ${e.tag}: ${e.msg}` }));
+      if (sub === '/tasks') return demoHypervisorTasks.filter((t) => t.node === node).slice(0, Number(q.limit || 50));
+      if (/^\/tasks\/[^/]+\/status$/.test(sub)) {
+        const running = demoHypervisorTasks.find((t) => t.node === node && t.is_running) || demoHypervisorTasks[0];
+        return { ...running, exitstatus: running.is_running ? '' : running.status };
+      }
+      if (/^\/tasks\/[^/]+\/log$/.test(sub)) return demoHypervisorTaskLog;
+
+      const hvStore = sub.match(/^\/storage\/([^/]+)\/(content|prune-preview)$/);
+      if (hvStore) {
+        const store = hvStore[1];
+        if (hvStore[2] === 'prune-preview') {
+          return demoHypervisorPrunePreview.filter((p) => !q.vmid || p.vmid === Number(q.vmid));
+        }
+        return demoHypervisorStorageContent
+          .filter((v) => v.storage === store)
+          .filter((v) => !q.content || v.content === q.content)
+          .filter((v) => !q.vmid || v.vmid === Number(q.vmid));
+      }
+      return emptyList();
+    }
+
+    if (rest === '/dashboard') return getDemoHypervisorDashboard();
+    if (rest === '/cluster/status') return demoHypervisorClusterStatus;
+    if (rest === '/cluster/resources') {
+      return q.type ? demoHypervisorClusterResources.filter((r) => r.type === q.type) : demoHypervisorClusterResources;
+    }
+    if (rest === '/cluster/log') return demoHypervisorClusterLog.slice(0, Number(q.max_entries || 200));
+    if (rest === '/cluster/replication') return demoHypervisorReplicationJobs;
+    if (/^\/cluster\/replication\/[^/]+\/log$/.test(rest)) return demoHypervisorReplicationLog;
+    if (rest === '/cluster/config/nodes') return demoHypervisorClusterConfigNodes;
+    if (rest === '/cluster/options') return { keyboard: 'en-us', migration: { type: 'secure', network: '10.20.99.0/24' }, ha: { shutdown_policy: 'migrate' }, mac_prefix: '02:00:00' };
+    if (rest === '/cluster/firewall/options') return { enable: 1, policy_in: 'DROP', policy_out: 'ACCEPT', log_ratelimit: 'enable=1,rate=1/second,burst=5', ebtables: 1 };
+    if (rest === '/firewall/rules') return demoHypervisorFirewallRules;
+    if (rest === '/ha/resources') return demoHypervisorHaResources;
+    if (rest === '/ha/groups') return demoHypervisorHaGroups;
+    if (rest === '/pools') return demoHypervisorPools;
+    if (rest === '/nextid') return { vmid: 171 };
+    if (rest === '/backup/jobs') return demoHypervisorBackupJobs;
+    if (rest === '/backup/age-report') return demoHypervisorBackupAgeReport;
+    if (rest === '/sdn/zones') return demoHypervisorSdnZones;
+    if (rest === '/sdn/vnets') return demoHypervisorSdnVnets;
+    if (rest === '/sdn/controllers') return demoHypervisorSdnControllers;
+    if (rest === '/nodes') return demoHypervisorNodes;
+    if (rest === '/vms') {
+      return q.type ? demoHypervisorGuests.filter((g) => g.vm_type === q.type) : demoHypervisorGuests;
+    }
+    return emptyList();
+  }
+  if (path.startsWith('/hypervisor/nodes')) return demoHypervisorNodes;
+  if (path.startsWith('/hypervisor/vms')) return paginated(demoHypervisorGuests);
+  if (path.startsWith('/hypervisor')) return emptyList();
+
+  // ── Backups: config snapshots, schedules, destinations, restore points ─
+  if (path === '/backups/stats') return demoBackupStats;
+  if (path === '/backups/storage-locations/types/supported') return demoBackupStorageTypes;
+  if (path === '/backups/storage-locations') {
+    return demoStorageLocations
+      .filter((l) => !q.storage_type || l.storage_type === q.storage_type)
+      .filter((l) => q.is_active === undefined || String(l.is_active) === String(q.is_active));
+  }
+  if (/^\/backups\/storage-locations\/[^/]+$/.test(path)) {
+    return findById(demoStorageLocations, path.split('/')[3]);
+  }
+  if (path === '/backups/schedules') {
+    return demoBackupSchedules.filter((s) => !q.site_id || s.site_id === q.site_id || s.site_id === null);
+  }
+  if (/^\/backups\/schedules\/[^/]+$/.test(path)) {
+    return findById(demoBackupSchedules, path.split('/')[3]);
+  }
+  if (/^\/backups\/restore\/[^/]+$/.test(path)) {
+    return findById(demoRestoreJobs, path.split('/')[3]);
+  }
+  if (path === '/backups/export') {
+    return new Blob(
+      [JSON.stringify({ format: 'fsdn', version: '2.1', demo: true, note: 'Read-only FreeSDN demo export. No device credentials are included.' }, null, 2)],
+      { type: 'application/json' },
+    );
+  }
+  if (/^\/backups\/[^/]+\/manifest$/.test(path)) {
+    const backupId = path.split('/')[2];
+    const source = demoBackups.find((b) => b.id === backupId) || demoBackups[0];
+    return { backup_id: source.id, created_at: source.created_at, ...demoBackupManifest };
+  }
+  if (/^\/backups\/[^/]+\/download$/.test(path)) {
+    const backupId = path.split('/')[2];
+    const source = demoBackups.find((b) => b.id === backupId) || demoBackups[0];
+    return new Blob(
+      [JSON.stringify({ format: 'fsdn', version: '2.1', demo: true, backup: source.name, note: 'Placeholder archive for the read-only demo.' }, null, 2)],
+      { type: 'application/json' },
+    );
+  }
+  if (path === '/backups') {
+    const search = String(q.search || '').toLowerCase();
+    const rows = demoBackups
+      .filter((b) => !q.status || b.status === q.status)
+      .filter((b) => !q.backup_type || b.backup_type === q.backup_type)
+      .filter((b) => !q.storage_type || b.storage_type === q.storage_type)
+      // Org-wide backups (site_id null) cover every site, so they stay visible
+      // when the site switcher narrows to one site.
+      .filter((b) => !q.site_id || b.site_id === q.site_id || b.site_id === null)
+      .filter((b) => !search || b.name.toLowerCase().includes(search) || (b.description || '').toLowerCase().includes(search));
+    return paginated(rows, Number(q.page || 1), Number(q.per_page || 50));
+  }
+  if (/^\/backups\/[^/]+$/.test(path)) return findById(demoBackups, path.split('/')[2]);
+  if (path.startsWith('/backups')) return emptyList();
+
+  // ── Staged writes awaiting review (Pending Changes drawer / badge) ─────
+  // Shared route: every gateway vendor's drawer reads it, filtered by ?vendor.
+  if (/^\/gateway-vpn\/changes\/by-gateway\/[^/]+$/.test(path)) {
+    const gatewayId = path.split('/')[4];
+    return demoStagedChanges
+      .filter((c) => c.controller_id === gatewayId)
+      .filter((c) => !q.status || q.status === 'all' || c.status === q.status);
+  }
+  if (/^\/gateway-storage\/[^/]+\/changes$/.test(path)) {
+    return demoStagedChanges.filter((c) => c.controller_id === path.split('/')[2]);
+  }
+
+  /* ==== demo: Dashboard, alerts, analytics, security audit, notifications (the first screens a visitor sees) ==== */
+  if (path === '/analytics/alerts' || path === '/analytics/alerts/') {
+    const filtered = alerts.filter((a) => (
+      (!q.status || a.status === q.status)
+      && (!q.severity || a.severity === q.severity)
+      && (!q.site_id || a.site_id === q.site_id)
+    ));
+    return filtered.slice(0, Number(q.limit || 50));
+  }
+  if (/^\/analytics\/alerts\/[^/]+$/.test(path)) return findById(alerts, path.split('/')[3]);
+  if (path === '/analytics/metrics/definitions') {
+    return metricDefinitions.filter((m) => !q.category || m.category === q.category);
+  }
+  if (/^\/analytics\/metrics\/definitions\/[^/]+$/.test(path)) {
+    const metricName = path.split('/')[4];
+    return metricDefinitions.find((m) => m.name === metricName) || metricDefinitions[0];
+  }
+  if (/^\/analytics\/sites\/[^/]+\/traffic$/.test(path)) {
+    return {
+      site_id: path.split('/')[3],
+      period_hours: Number(q.hours || 24),
+      total_rx_bytes: demoRxBytes24h,
+      total_tx_bytes: demoTxBytes24h,
+      peak_rx_bps: 940_000_000,
+      peak_tx_bps: 316_000_000,
+      avg_rx_bps: Math.round((demoRxBytes24h * 8) / 86_400),
+      avg_tx_bps: Math.round((demoTxBytes24h * 8) / 86_400),
+      data_points: demoTrafficSeries.map((p) => ({
+        timestamp: p.timestamp,
+        rx_bps: p.rx_mbps * 1_000_000,
+        tx_bps: p.tx_mbps * 1_000_000,
+        clients: p.clients,
+      })),
+      top_clients: [
+        { mac: '02:00:00:10:20:01', ip: '10.10.10.44', hostname: 'finance-laptop', rx: 88_400_000_000, tx: 12_100_000_000 },
+        { mac: '02:00:00:10:20:07', ip: '10.10.10.62', hostname: 'design-ws-02', rx: 64_900_000_000, tx: 21_800_000_000 },
+        { mac: '02:00:00:10:40:21', ip: '10.10.40.21', hostname: 'cam-front-door', rx: 1_200_000_000, tx: 48_600_000_000 },
+      ],
+      top_applications: [
+        { app: 'Video conferencing', rx: 96_400_000_000, tx: 74_200_000_000, connections: 1_284 },
+        { app: 'Cloud storage sync', rx: 128_900_000_000, tx: 34_100_000_000, connections: 642 },
+        { app: 'Camera streams (RTSP)', rx: 4_200_000_000, tx: 212_400_000_000, connections: 96 },
+        { app: 'Web browsing', rx: 74_800_000_000, tx: 9_600_000_000, connections: 8_412 },
+      ],
+      traffic_by_category: { productivity: 0.34, video: 0.28, surveillance: 0.21, backup: 0.11, other: 0.06 },
+    };
+  }
+
+  // ── Alert-rules engine ──────────────────────────────────────────────────
+  if (path === '/alert-rules/stats') return alertRuleStats;
+  if (path === '/alert-rules/rules') {
+    const filtered = alertRules.filter((r) => (
+      (!q.status || r.status === q.status) && (!q.type || r.rule_type === q.type)
+    ));
+    return { rules: filtered, total: filtered.length };
+  }
+  if (/^\/alert-rules\/rules\/[^/]+$/.test(path)) return findById(alertRules, path.split('/')[3]);
+  if (path === '/alert-rules/alerts') {
+    const filtered = alertInstances.filter((a) => (
+      (!q.status || a.status === q.status)
+      && (!q.severity || a.severity === q.severity)
+      && (!q.rule_id || a.rule_id === q.rule_id)
+      && (!q.site_id || a.site_id === q.site_id)
+    ));
+    const offset = Number(q.offset || 0);
+    return { alerts: filtered.slice(offset, offset + Number(q.limit || 200)), total: filtered.length };
+  }
+  if (/^\/alert-rules\/alerts\/[^/]+$/.test(path)) return findById(alertInstances, path.split('/')[3]);
+
+  // ── Correlation engine ──────────────────────────────────────────────────
+  if (path === '/correlation/stats') return correlationStats;
+  if (path === '/correlation/rules') {
+    const filtered = correlationRules.filter((r) => !q.status || r.status === q.status);
+    return { rules: filtered, total: filtered.length };
+  }
+  if (/^\/correlation\/rules\/[^/]+$/.test(path)) return findById(correlationRules, path.split('/')[3]);
+  if (path === '/correlation/incidents') {
+    const filtered = incidents.filter((i) => (
+      (!q.status || i.status === q.status)
+      && (!q.severity || i.severity === q.severity)
+      && (!q.site_id || i.site_id === q.site_id)
+    ));
+    const offset = Number(q.offset || 0);
+    return { incidents: filtered.slice(offset, offset + Number(q.limit || 200)), total: filtered.length };
+  }
+  if (/^\/correlation\/incidents\/[^/]+\/events$/.test(path)) return incidentEvents[path.split('/')[3]] ?? [];
+  if (/^\/correlation\/incidents\/[^/]+$/.test(path)) return findById(incidents, path.split('/')[3]);
+
+  // ── Security audit ──────────────────────────────────────────────────────
+  if (path === '/security/events') {
+    // SecurityAuditPage's filter offers `login_failure`; the backend event
+    // name is `login_failed`. Accept both so the dropdown is not a dead end.
+    const wantedType = q.event_type ? String(q.event_type).replace('login_failure', 'login_failed') : '';
+    const search = q.search ? String(q.search).toLowerCase() : '';
+    const filtered = securityEvents.filter((e) => (
+      (!wantedType || e.event_type === wantedType)
+      && (!q.severity || e.severity === q.severity)
+      && (
+        !search
+        || e.event_type.includes(search)
+        || e.user_email.toLowerCase().includes(search)
+        || e.source_ip.includes(search)
+      )
+    ));
+    const page = Number(q.page || 1);
+    const pageSize = Number(q.page_size || 20);
+    return {
+      items: filtered.slice((page - 1) * pageSize, page * pageSize),
+      total: filtered.length,
+      page,
+      page_size: pageSize,
+    };
+  }
+  if (path === '/security/summary') return securitySummary;
+  if (path === '/security/anomalies') return securityAnomalies;
+  if (path === '/security/event-types') return { event_types: securityEventTypes };
+
+  // ── Audit trail ─────────────────────────────────────────────────────────
+  // /audit/security is the unified /alerts console; /audit/security-events is
+  // the Security page. Same rows, same envelope.
+  if (path === '/audit/security' || path === '/audit/security-events') {
+    const search = q.search ? String(q.search).toLowerCase() : '';
+    const filtered = securityEvents.filter((e) => (
+      (!q.severity || e.severity === q.severity)
+      && (
+        !search
+        || e.event_type.includes(search)
+        || e.user_email.toLowerCase().includes(search)
+        || e.ip_address.includes(search)
+      )
+    ));
+    const page = Number(q.page || 1);
+    const perPage = Number(q.per_page || 50);
+    return {
+      items: filtered.slice((page - 1) * perPage, page * perPage),
+      total: filtered.length,
+      page,
+      per_page: perPage,
+      pages: Math.max(1, Math.ceil(filtered.length / perPage)),
+    };
+  }
+  if (path === '/audit/logs') {
+    const action = q.action ? String(q.action) : '';
+    const search = q.search ? String(q.search).toLowerCase() : '';
+    const filtered = auditLogs.filter((l) => (
+      (!action || l.action.includes(action))
+      && (!q.site_id || l.site_id === q.site_id)
+      && (
+        !search
+        || l.action.includes(search)
+        || l.resource_name.toLowerCase().includes(search)
+        || l.actor_name.toLowerCase().includes(search)
+      )
+    ));
+    const page = Number(q.page || 1);
+    const perPage = Number(q.per_page || 50);
+    return {
+      items: filtered.slice((page - 1) * perPage, page * perPage),
+      total: filtered.length,
+      page,
+      per_page: perPage,
+      pages: Math.max(1, Math.ceil(filtered.length / perPage)),
+    };
+  }
+  if (path === '/audit/stats') return auditRollup;
+
+  // ── Notifications ───────────────────────────────────────────────────────
+  if (path === '/notifications/in-app') {
+    const includeDismissed = String(q.include_dismissed) === 'true';
+    const unreadOnly = String(q.unread_only) === 'true';
+    const rows = inAppNotifications
+      .filter((n) => (includeDismissed ? n.dismissed : !n.dismissed))
+      .filter((n) => (unreadOnly ? !n.read : true));
+    const limit = Number(q.limit || 20);
+    const offset = Number(q.offset || 0);
+    return {
+      items: rows.slice(offset, offset + limit),
+      total: rows.length,
+      limit,
+      offset,
+      unread_count: inAppNotifications.filter((n) => !n.read && !n.dismissed).length,
+    };
+  }
+  if (path === '/notifications/in-app/unread-count' || path === '/notifications/unread-count') {
+    const unread = inAppNotifications.filter((n) => !n.read && !n.dismissed);
+    return {
+      total: unread.length,
+      by_severity: unread.reduce<Record<string, number>>((acc, n) => {
+        acc[n.severity] = (acc[n.severity] ?? 0) + 1;
+        return acc;
+      }, {}),
+      by_category: unread.reduce<Record<string, number>>((acc, n) => {
+        acc[n.category] = (acc[n.category] ?? 0) + 1;
+        return acc;
+      }, {}),
+    };
+  }
+  if (path === '/notifications/providers') {
+    return notificationProviders.filter((p) => (
+      (!q.channel || p.channel === q.channel)
+      && (String(q.enabled_only) !== 'true' || p.is_enabled)
+    ));
+  }
+  if (path === '/notifications/providers/types') return notificationProviderTypes;
+
+  // ── System log stream ───────────────────────────────────────────────────
+  if (path === '/logs/health') return logsHealth;
+  if (path === '/logs/stats') {
+    const hours = Math.min(Number(q.hours) || 24, demoLogHourly.length);
+    const buckets = demoLogHourly.slice(-hours);
+    const total = buckets.reduce((sum, b) => sum + b.count, 0);
+    const share = (fraction: number) => Math.round(total * fraction);
+    return {
+      total,
+      by_level: {
+        debug: share(0.246), info: share(0.583), warning: share(0.11),
+        error: share(0.053), critical: share(0.0025), success: share(0.0055),
+      },
+      by_source: {
+        device: share(0.309), api: share(0.291), auth: share(0.128),
+        system: share(0.101), user: share(0.087), database: share(0.084),
+      },
+      by_hour: buckets,
+      error_rate: 5.3,
+      avg_duration_ms: 214,
+    };
+  }
+  if (path === '/logs' || path === '/logs/') {
+    const level = q.level ? String(q.level) : '';
+    const source = q.source ? String(q.source) : '';
+    const search = q.search ? String(q.search).toLowerCase() : '';
+    const filtered = demoSystemLogs.filter((l) => (
+      (!level || l.level === level)
+      && (!source || l.source === source)
+      && (!q.site_id || l.site_id === q.site_id)
+      && (!search || l.message.toLowerCase().includes(search))
+    ));
+    const page = Number(q.page || 1);
+    const perPage = Number(q.per_page || 50);
+    return {
+      items: filtered.slice((page - 1) * perPage, page * perPage),
+      total: filtered.length,
+      page,
+      per_page: perPage,
+      pages: Math.max(1, Math.ceil(filtered.length / perPage)),
+    };
+  }
+
+  // ── Health trend (Enterprise > Health) ──────────────────────────────────
+  if (path === '/enterprise/health/history') {
+    const ranges: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90 };
+    return demoHealthHistory.slice(-(ranges[String(q.range || '7d')] ?? 7));
+  }
+
   if (path === '/auth/me') return demoUser;
   if (path === '/health' || path.startsWith('/health/')) return health();
-  if (path === '/system/info') return { app: 'FreeSDN', version: '26.06.1-demo', environment: 'demo', demo: true };
+  // AboutSettingsTab and the System tab both read platform.app_version from
+  // here. Without it About fell through to its own fallback, which is how the
+  // demo reported 26.06.1 while serving an entirely current bundle.
+  if (path === '/enterprise/health/infrastructure') {
+    return {
+      platform: {
+        app_version: DEMO_VERSION,
+        environment: 'demo',
+        python_version: '3.14.4',
+        uptime_seconds: 1_284_000,
+      },
+      database: { status: 'healthy', latency_ms: 3 },
+      cache: { status: 'healthy', latency_ms: 1 },
+      queue: { status: 'healthy', depth: 0 },
+    };
+  }
+  if (path === '/system/info') return { app: 'FreeSDN', version: DEMO_VERSION, environment: 'demo', demo: true };
   if (path === '/system/frontend-versions') return { react: '19', vite: '8', demo: 'true' };
 
   if (path === '/organizations' || path === '/organizations/') return paginated(organizations);
@@ -378,7 +2215,7 @@ async function routeGet(path: string, config: InternalAxiosRequestConfig) {
       controller_name: controller?.name,
       controller_type: controller?.controller_type,
       status: controller?.status,
-      runtime_status: { cpu_util: 42, mem_util: 58, disk_util: 65, uptime: 18_800_000, version: '26.06.1', model: String(controller?.vendor || 'demo'), device_count: controller?.device_count, site_count: 1, client_count: 128 },
+      runtime_status: { cpu_util: 42, mem_util: 58, disk_util: 65, uptime: 18_800_000, version: '5.15.20.16', model: String(controller?.vendor || 'demo'), device_count: controller?.device_count, site_count: 1, client_count: 128 },
       device_counts: { total: owned.length, online: Math.max(0, owned.length - 1), offline: Math.min(1, owned.length), switches: owned.filter((d) => d.device_type === 'switch').length, access_points: owned.filter((d) => d.device_type === 'access_point').length, gateways: owned.filter((d) => d.device_type === 'firewall').length },
       client_count: 128,
       poe_budget: { total_budget_watts: 384, total_consumed_watts: 184, total_remaining_watts: 200, switches_with_poe: 2 },

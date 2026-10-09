@@ -1,0 +1,97 @@
+FreeSDN Valkey HA: topology, persistence and upgrade limits
+========================================================
+
+This is a single-Docker-host process-failover topology. It does not tolerate
+loss of that host. Three Sentinels on one host are not independent failure
+domains. PostgreSQL promotion is still manual. Do not advertise this preset
+as multi-host enterprise HA or promise zero data loss.
+
+Addressing
+----------
+Use .env.max.example with docker-compose.yml + docker-compose.ha.yml. The five
+Valkey/Sentinel addresses are static and must be inside NETWORK_SUBNET, outside
+NETWORK_IP_RANGE (the dynamic allocation pool), distinct from each other and
+from the gateway. Defaults use 172.30.0.0/16, dynamic 172.30.0.0/17, and static
+172.30.255.10/.11/.21/.22/.23. Choose a non-overlapping network for your site;
+change NETWORK_SUBNET, NETWORK_IP_RANGE, FORWARDED_ALLOW_IPS and all HA_*_IP
+values together. Docker rejects invalid/out-of-subnet/colliding allocations.
+Existing Docker networks must be recreated in a planned maintenance window to
+change their allocation pool. Do not change live HA node addresses in place.
+
+Numeric addressing is deliberate: Docker removes a stopped service's DNS
+record, and Sentinel's synchronous resolver can then stall its event loop and
+trigger TILT. All data nodes and Sentinels announce their reserved addresses;
+application discovery and Celery Sentinel endpoints use those same addresses.
+No Redis/Sentinel ports are published to the host. The existing application
+network is retained, including for the opt-in VPN network namespace.
+
+Durable roles and elections
+--------------------------
+Each of the five nodes has its own named /data volume. Private files under
+/data/ha store its initial configuration and credentials. Sentinel rewrites
+its configuration as elections occur. Data nodes accept CONFIG REWRITE from
+Sentinel to persist promotion/demotion. Restart never regenerates those files
+or reinstates a bootstrap replicaof directive. Both data nodes have matching
+authentication, memory policy, persistence and destructive-command restrictions.
+Keep all five volumes and their identity when replacing containers.
+
+Changing the configured password without coordinated rotation is refused.
+Credential rotation requires a planned outage, stopping application writers
+and all five nodes, backing up the five volumes privately, and replacing the
+requirepass/masterauth/sentinel auth-pass values and /data/ha/password on all
+nodes consistently before restarting. Retain role/epoch state; do not delete
+configuration files to force initialization. Files contain secrets. This manual
+rotation procedure has not yet been qualified as a supported online operation.
+
+Existing installations: do not run an image-only upgrade
+-------------------------------------------------------
+The previous overlay generated Sentinel configuration in /tmp on each start
+and gave the replica no explicit named data volume. It may already have a
+different elected primary from the service named redis. Existing AOF/RDB data
+without the new HA state marker is therefore refused, not silently adopted.
+
+Before upgrading, inventory the actual elected primary, replication status,
+broker queues in DB 0/1/2, Sentinel state and every data volume (including anonymous ones).
+The former Sentinel URL list specified /1 or /2 only on its final endpoint.
+Producers and workers could therefore select different databases after a
+connection change. The corrected endpoints consistently use broker DB 1 and
+result DB 2; do not switch databases without reconciling old queues/results.
+Fence writers and workers, record in-flight jobs, verify application/database
+backups, then preserve offline copies of both data volumes, all configuration
+and exact old images. Queue/RDB recovery needs a separately rehearsed procedure
+which identifies the authoritative dataset and accounts for in-flight tasks.
+Do not discard the old replica's anonymous volume or assume the redis service
+contains the newest data. Do not attach an old volume to a fresh bootstrap
+primary, or use down -v/prune during an upgrade.
+
+A read-only offline review tool is available as scripts/inventory_legacy_queues.py.
+Read QUEUE-INVENTORY before preparing a disposable copy. It inventories all
+DB0/1/2 queues, reserved deliveries and results, but neither loads/verifies the
+backup nor authorizes replay. Unknown formats remain explicit blockers.
+
+An automated in-place migration from the old HA preset is NOT qualified. Use
+this revised topology for fresh isolated qualification until an operator has
+reviewed and rehearsed the site-specific migration. Loss of a node's volume
+also needs operator-controlled rejoin; a new empty primary volume must not
+be bootstrapped against a surviving elected primary. Preserve the evidence
+and backups and restore separately. Do not reset the Sentinel quorum.
+
+Durability and partition limits
+------------------------------
+Replication is asynchronous; AOF uses appendfsync everysec. Acknowledged writes
+can be lost during faults. A partitioned old primary may accept writes until
+clients reconnect to the elected one, and those writes can later be discarded.
+This two-data-node preset favors continued writes after one node fails; it
+does not enforce min-replicas-to-write=1, which would prevent writes on the
+survivor until the other node returns. Do not use it as a consensus store for
+irreversible operations or claim partition fencing/zero-RPO. Durable operation
+records and idempotency must live in the primary database.
+
+Qualification
+-------------
+scripts/check_valkey_ha.py creates only a disposable internal-network project
+with synthetic data and no host ports. It tests the shipped Compose definitions,
+actual stop/SIGKILL, existing sync/async application clients, persisted elections,
+container replacement, reverse failover, rejoin and refusal without quorum.
+It never takes over an existing installation. Its timings are laboratory
+observations, not an SLA, load-tested RTO or a customer RPO measurement.

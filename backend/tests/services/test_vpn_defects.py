@@ -40,7 +40,7 @@ from __future__ import annotations
 import inspect
 
 from app.adapters.base import AdapterResult, BaseAdapter
-from app.services import brain_vpn, vpn_integration, vpn_orchestration
+from app.services import vpn_integration, vpn_orchestration
 from app.tasks import vpn as vpn_task
 
 
@@ -151,9 +151,8 @@ def test_every_site_vpn_config_construction_sets_organization_id() -> None:
     )
 
 
-def test_brain_vpn_resolves_the_org_from_the_site() -> None:
-    src = _code(brain_vpn)
-    assert src.count("organization_id=_site") == 2
+# First-import ownership is exercised through real ORM persistence in
+# test_brain_vpn_import_persistence.py, not a local-variable name check.
 
 
 # ── 4. the discarded push result ─────────────────────────────────

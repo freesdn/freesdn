@@ -93,7 +93,7 @@ export type {
   MikroTikSnmpV3User,
 } from './mikrotik';
 export { enterpriseApi, correlationApi, slaApi, topologyApi, alertRulesApi } from './enterprise';
-export { hypervisorApi, type RemoteMigrateRequest, type CreateSdnZoneRequest, type CreateSdnVnetRequest } from './hypervisor';
+export { hypervisorApi, type RemoteMigrateRequest } from './hypervisor';
 export {
   listChangesForGateway,
   applyChange as applyPendingChange,

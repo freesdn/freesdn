@@ -9,8 +9,8 @@ of it since 002, and every schema change needs one.
 
 Strategy:
   - Fresh DB  → create_all() + alembic stamp head   (full schema, zero migrations)
-  - Existing  → stamp head if schema already current (handles old revision IDs)
-              → alembic upgrade head otherwise        (future incremental migrations)
+  - Existing  → keep the current known head or upgrade a known older revision
+  - Ambiguous → refuse missing, multiple or unrecognized revision metadata
 
 Know what the fresh path costs: it takes its schema straight from the models and
 stamps, so running this script proves NOTHING about the migration chain. CI
@@ -37,6 +37,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, text
 
 from alembic import command
+from scripts.migration_lock import migration_lock
 
 
 def _get_sync_url() -> str:
@@ -45,6 +46,7 @@ def _get_sync_url() -> str:
     if not url:
         # Fallback: try importing settings (may fail if deps missing)
         from app.core.config import settings
+
         url = str(settings.DATABASE_URL)
     # asyncpg → psycopg (sync driver, psycopg3)
     url = re.sub(r"postgresql\+asyncpg://", "postgresql+psycopg://", url)
@@ -52,9 +54,15 @@ def _get_sync_url() -> str:
 
 
 def _is_fresh_db(engine) -> bool:
-    """Return True if the database has no alembic_version table."""
+    """Bootstrap only an unversioned database without user relations.
+
+    Missing migration metadata does not establish an empty database. In
+    particular, create_all does not add missing columns to restored tables;
+    stamping such a database to head would silently skip required upgrades.
+    The caller holds the startup migration lock throughout this check and DDL.
+    """
     with engine.connect() as conn:
-        result = conn.execute(
+        has_revision_table = conn.scalar(
             text(
                 "SELECT EXISTS ("
                 "  SELECT 1 FROM information_schema.tables "
@@ -62,17 +70,44 @@ def _is_fresh_db(engine) -> bool:
                 ")"
             )
         )
-        return not result.scalar()
+        if has_revision_table:
+            return False
+        has_user_relations = conn.scalar(
+            text(
+                "SELECT EXISTS ("
+                "  SELECT 1 FROM pg_catalog.pg_class AS relation "
+                "  JOIN pg_catalog.pg_namespace AS namespace "
+                "    ON namespace.oid = relation.relnamespace "
+                "  WHERE relation.relkind IN ('r', 'p', 'v', 'm', 'S', 'f') "
+                "    AND namespace.nspname <> 'information_schema' "
+                "    AND left(namespace.nspname, 3) <> 'pg_' "
+                "    AND NOT EXISTS ("
+                "      SELECT 1 FROM pg_catalog.pg_depend AS dependency "
+                "      WHERE dependency.classid = 'pg_catalog.pg_class'::regclass "
+                "        AND dependency.objid = relation.oid "
+                "        AND dependency.objsubid = 0 "
+                "        AND dependency.refclassid = 'pg_catalog.pg_extension'::regclass "
+                "        AND dependency.deptype = 'e'"
+                "    )"
+                ")"
+            )
+        )
+        if has_user_relations:
+            raise RuntimeError(
+                "Refusing to initialize a non-empty database without migration metadata. "
+                "Preserve the database and restore its verified migration history; "
+                "do not stamp it to head or delete existing objects to bypass this guard."
+            )
+        return True
 
 
-def _create_all(engine) -> None:
+def _create_all(connection) -> None:
     """Create any missing schemas + tables from the live ORM models.
 
     Idempotent: create_all only CREATES missing tables — it never alters an
     existing table (so it won't add a missing COLUMN to a table that already
-    exists) and never touches data. Used both for a fresh DB and to backfill
-    whole tables an old pre-consolidation DB predates, before running the
-    column-adding migrations.
+    exists) and never touches data. Use only after the empty-database guard;
+    it is not a replacement for incremental upgrades of existing schemas.
     """
     # Import every model module so all tables register on Base.metadata.
     # We only need the import side-effect (registration); order is irrelevant.
@@ -99,27 +134,42 @@ def _create_all(engine) -> None:
     # picked up automatically — this class of drift can't recur.
     schemas = sorted({t.schema for t in Base.metadata.tables.values() if t.schema})
 
-    with engine.begin() as conn:
-        for schema in schemas:
-            conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
-        Base.metadata.create_all(bind=conn)
+    for schema in schemas:
+        connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
+    Base.metadata.create_all(bind=connection)
     print(f"Schema build: created any missing tables across {len(schemas)} schemas")
 
 
 def _create_all_and_stamp(engine) -> None:
     """Create all tables from models and stamp alembic to head (fresh DB)."""
-    _create_all(engine)
-    alembic_cfg = Config("alembic.ini")
-    command.stamp(alembic_cfg, "head")
+    # Schema creation and its revision must commit together. If startup dies
+    # before stamping, a committed schema without history correctly fails the
+    # nonempty-database guard and cannot be retried as a fresh installation.
+    # Existing revision upgrades keep their separate migration/autocommit path.
+    with engine.begin() as connection:
+        _create_all(connection)
+        alembic_cfg = Config("alembic.ini")
+        alembic_cfg.attributes["connection"] = connection
+        command.stamp(alembic_cfg, "head")
     print("Fresh DB: created all tables and stamped to head")
 
 
-def _get_current_revision(engine) -> str | None:
-    """Return the current alembic revision, or None if not stamped."""
+def _get_current_revision(engine) -> str:
+    """Require one nonempty revision; do not guess after partial restores."""
     with engine.connect() as conn:
-        result = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
-        row = result.fetchone()
-        return row[0] if row else None
+        rows = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 2")).all()
+    if (
+        len(rows) != 1
+        or not isinstance(rows[0][0], str)
+        or not rows[0][0]
+        or rows[0][0] != rows[0][0].strip()
+    ):
+        raise RuntimeError(
+            "Refusing database migration with missing or ambiguous revision metadata. "
+            "Preserve the database and restore its verified migration history; "
+            "do not select a revision or stamp to head by guesswork."
+        )
+    return rows[0][0]
 
 
 def _upgrade_head() -> None:
@@ -139,53 +189,34 @@ def main() -> None:
     sync_url = _get_sync_url()
     engine = create_engine(sync_url)
     try:
-        fresh = _is_fresh_db(engine)
-        if fresh:
-            print("Detected fresh database — using create_all + stamp approach")
-            _create_all_and_stamp(engine)
-        else:
-            # Existing DB — check if revision needs transition to consolidated
-            from alembic.script import ScriptDirectory
-
-            alembic_cfg = Config("alembic.ini")
-            script = ScriptDirectory.from_config(alembic_cfg)
-            head_rev = script.get_current_head()
-            current_rev = _get_current_revision(engine)
-
-            if current_rev == head_rev:
-                print(f"Schema already at head ({head_rev}) — nothing to do")
-            elif current_rev and current_rev not in {r.revision for r in script.walk_revisions()}:
-                # Old revision from pre-consolidation era — directly update
-                # the alembic_version table.  We cannot use command.stamp()
-                # because Alembic tries to resolve the *current* DB revision
-                # against the script directory and the old files are gone.
-                # Re-stamp to the consolidated BASELINE (001_initial), not head:
-                # the pre-consolidation DB has all the pre-squash tables but NOT
-                # any column added by post-baseline migrations (002/003 ...), so we
-                # must still RUN those after re-stamping. Stamp to 001_initial, then
-                # `alembic upgrade head` applies 002/003 (their ADD COLUMN IF NOT
-                # EXISTS is a safe no-op for anything already present). Stamping
-                # straight to head here would SKIP 002/003 and leave the new
-                # columns missing → ORM 500s on VPN connections.
-                baseline = "001_initial"
-                print(f"Detected pre-consolidation revision ({current_rev}) — backfilling tables, re-stamping to {baseline}, then upgrading")
-                # First backfill any whole tables this old DB predates (e.g. a DB
-                # stamped before vpn.vpn_connections existed) — create_all only adds
-                # MISSING tables. THEN stamp to baseline and run 002/003, which ALTER
-                # existing tables to add new columns (ADD COLUMN IF NOT EXISTS, so a
-                # no-op for anything create_all just built).
-                _create_all(engine)
-                with engine.begin() as conn:
-                    conn.execute(text("DELETE FROM alembic_version"))
-                    conn.execute(
-                        text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
-                        {"rev": baseline},
-                    )
-                _upgrade_head()
-                print("Existing DB: backfilled tables, re-stamped to baseline, upgraded to head")
+        with migration_lock(engine):
+            fresh = _is_fresh_db(engine)
+            if fresh:
+                print("Detected fresh database — using create_all + stamp approach")
+                _create_all_and_stamp(engine)
             else:
-                print("Detected existing database — running alembic upgrade head")
-                _upgrade_head()
+                # Existing DB — check if revision needs transition to consolidated
+                from alembic.script import ScriptDirectory
+
+                alembic_cfg = Config("alembic.ini")
+                script = ScriptDirectory.from_config(alembic_cfg)
+                head_rev = script.get_current_head()
+                current_rev = _get_current_revision(engine)
+
+                if current_rev == head_rev:
+                    print(f"Schema already at head ({head_rev}) — nothing to do")
+                elif current_rev not in {r.revision for r in script.walk_revisions()}:
+                    # An unknown value may be a future, divergent or incomplete
+                    # schema. Re-stamping it to 001 and replaying migrations can
+                    # modify user data before discovering incompatibility.
+                    raise RuntimeError(
+                        "Refusing database migration from an unrecognized revision. "
+                        "Use its matching release or a separately reviewed legacy migration; "
+                        "preserve the existing schema and revision metadata."
+                    )
+                else:
+                    print("Detected existing database — running alembic upgrade head")
+                    _upgrade_head()
     finally:
         engine.dispose()
 

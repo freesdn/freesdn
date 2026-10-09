@@ -1,0 +1,62 @@
+func (p *StunTurnProbe) probeSTUN(ctx context.Context, uri *stun.URI) (addr string, probeErr error) {
+	defer func() {
+		if probeErr != nil {
+			log.Debugf("stun probe error from %s: %s", uri, probeErr)
+		}
+	}()
+
+	net, err := stdnet.NewNet(ctx, nil)
+	if err != nil {
+		probeErr = fmt.Errorf("new net: %w", err)
+		return
+	}
+
+	client, err := stun.DialURI(uri, &stun.DialConfig{
+		Net: &probeNet{Net: net},
+	})
+	if err != nil {
+		probeErr = fmt.Errorf("dial: %w", err)
+		return
+	}
+
+	defer func() {
+		if err := client.Close(); err != nil && probeErr == nil {
+			probeErr = fmt.Errorf("close: %w", err)
+		}
+	}()
+
+	type response struct {
+		addr string
+		err  error
+	}
+	// A buffered result lets cancellation return without blocking the STUN
+	// reader during client.Close. Only this goroutine writes the named results.
+	results := make(chan response, 1)
+	if err = client.Start(stun.MustBuild(stun.TransactionID, stun.BindingRequest), func(res stun.Event) {
+		var reply response
+		if res.Error != nil {
+			reply.err = fmt.Errorf("request: %w", res.Error)
+		} else {
+			var xorAddr stun.XORMappedAddress
+			if err := xorAddr.GetFrom(res.Message); err != nil {
+				reply.err = fmt.Errorf("get xor addr: %w", err)
+			} else {
+				reply.addr = xorAddr.String()
+			}
+		}
+		select {
+		case results <- reply:
+		default:
+		}
+	}); err != nil {
+		return "", fmt.Errorf("client: %w", err)
+	}
+
+	select {
+	case <-ctx.Done():
+		return "", fmt.Errorf("stun request: %w", ctx.Err())
+	case reply := <-results:
+		return reply.addr, reply.err
+	}
+
+}

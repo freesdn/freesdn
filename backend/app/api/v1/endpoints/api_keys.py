@@ -9,7 +9,7 @@ integrations, and automated scripts.
 """
 
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -117,9 +117,72 @@ async def create_api_key(
     # to commit, then re-counts. This is the same pattern used by
     # the password-reset path (auth.py) and the tier-quota check
     # (controllers.py).
-    await session.execute(
-        select(_UserModel.id).where(_UserModel.id == current_user.id).with_for_update()
+    # Authentication ran before this potentially blocking lock. Preserve its
+    # account snapshot and read columns directly, bypassing ORM identity caching.
+    authenticated_state = (
+        current_user.user.token_version,
+        current_user.role,
+        current_user.organization_id,
     )
+    locked = (
+        await session.execute(
+            select(
+                _UserModel.token_version,
+                _UserModel.role,
+                _UserModel.organization_id,
+                _UserModel.is_active,
+                _UserModel.deleted_at,
+            )
+            .where(_UserModel.id == current_user.id)
+            .with_for_update()
+        )
+    ).one_or_none()
+    if (
+        locked is None
+        or not locked.is_active
+        or locked.deleted_at is not None
+        or authenticated_state != (locked.token_version, locked.role, locked.organization_id)
+    ):
+        raise HTTPException(
+            status_code=401, detail="Authentication changed; retry with current credentials"
+        )
+
+    claims = current_user.token_claims
+    if claims.get("auth_method") == "api_key":
+        try:
+            parent_id = UUID(claims["key_id"])
+        except (ValueError, TypeError, KeyError):
+            raise HTTPException(status_code=401, detail="Invalid API key authentication") from None
+        # A fresh scalar read sees committed revocation without acquiring an
+        # additional key-row lock in a different order from auth mutations.
+        parent = (
+            await session.execute(
+                select(APIKey.is_active, APIKey.expires_at).where(
+                    APIKey.id == parent_id, APIKey.user_id == current_user.id
+                )
+            )
+        ).one_or_none()
+        if (
+            parent is None
+            or not parent.is_active
+            or (parent.expires_at is not None and parent.expires_at <= datetime.now(UTC))
+        ):
+            raise HTTPException(status_code=401, detail="API key was revoked or expired")
+    else:
+        from app.core.session_revocation import is_session_revoked_for_access_jti
+        from app.core.token_blacklist import is_token_blacklisted
+
+        if claims.get("tv", 0) != locked.token_version:
+            raise HTTPException(status_code=401, detail="Session was revoked")
+        expiry = claims.get("exp")
+        if type(expiry) not in (int, float) or cast(float, expiry) <= datetime.now(UTC).timestamp():
+            raise HTTPException(status_code=401, detail="Session expired")
+        jti = claims.get("jti")
+        if jti and (
+            await is_token_blacklisted(str(jti))
+            or await is_session_revoked_for_access_jti(session, str(jti))
+        ):
+            raise HTTPException(status_code=401, detail="Session was revoked")
     active_count_row = await session.execute(
         select(func.count(APIKey.id)).where(
             APIKey.user_id == current_user.id,

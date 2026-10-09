@@ -48,6 +48,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from app.core.private_files import touch_private
+
 logger = logging.getLogger("app.modules.collector.run")
 
 # How often to re-read CollectorConfig so a UI toggle is picked up without a
@@ -265,7 +267,7 @@ async def _run() -> None:
             logger.exception("collector.run config poll failed")
 
         try:
-            _HEARTBEAT.touch()
+            touch_private(_HEARTBEAT)
         except OSError:  # pragma: no cover — heartbeat is best-effort
             pass
 

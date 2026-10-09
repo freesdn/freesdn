@@ -51,19 +51,37 @@ import json
 import re
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import case, func, or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.exceptions import AdapterOutcomeUnknownError
+from app.core.adapter_result import adapter_result_field
 from app.core.site_access import (
     assert_site_access_for_request,
     current_user_var,
     site_scope_filter,
 )
 from app.models.staging import AdapterPendingChange
+
+
+class _ProxmoxApplyView:
+    """Transient confirmation for Proxmox's second, device-aware preflight.
+
+    Never modify the ORM row or pass confirmation to another vendor's applier:
+    some of those forward their entire payload to the provider.
+    """
+
+    def __init__(self, change: AdapterPendingChange, confirmed: bool) -> None:
+        self._change = change
+        self.payload = {**(change.payload or {}), "confirmed": confirmed}
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._change, name)
 
 
 def _jsonable_applied_response(response: Any) -> dict[str, Any]:
@@ -133,6 +151,7 @@ def _jsonable_applied_response(response: Any) -> dict[str, Any]:
 # Catastrophic features (reboot/restore/firmware) emit at CRITICAL.
 
 _CATASTROPHIC_EVENT_PREFIXES = (
+    "proxmox.firewall.operation",
     "mikrotik.system.reboot",
     "mikrotik.system.shutdown",
     "mikrotik.system.firmware.install",
@@ -268,6 +287,10 @@ def outcome_is_unknown(exc: BaseException) -> bool:
     # matching classified it as a definite failure and invited the operator to
     # re-run a write the device may already have applied.
     names = {cls.__name__ for e in chain for cls in type(e).__mro__}
+    if "AdapterOutcomeUnknownError" in names:
+        # An acknowledged write followed by a failed READ is still uncertain,
+        # including when that read failed before opening its own connection.
+        return True
     if names & _NEVER_SENT_EXC_NAMES:
         return False
     return bool(names & _UNKNOWN_OUTCOME_EXC_NAMES)
@@ -605,7 +628,7 @@ class AdapterStagingService:
         try:
             result = await self.db.execute(stmt)
             await self.db.commit()
-            return int(result.rowcount or 0)
+            return int(cast(CursorResult[Any], result).rowcount or 0)
         except Exception:
             await self.db.rollback()
             return 0
@@ -641,8 +664,17 @@ class AdapterStagingService:
         target_id: str | None = None,
         notes: str | None = None,
         actor_id: UUID | None = None,
+        change_id: UUID | None = None,
     ) -> AdapterPendingChange:
-        """Record a write intent. Does NOT touch the controller."""
+        """Record a write intent. Does NOT touch the controller.
+
+        Internal callers may supply a stable ID; a duplicate raises IntegrityError.
+        This never updates or resets an existing operation.
+        """
+        if feature.startswith("proxmox.sdn."):
+            from app.adapters.proxmox.sdn import WRITE_BLOCKED
+
+            raise HTTPException(409, detail=WRITE_BLOCKED)
         # Containment guard: controller_id may be NULL ONLY for the appliance-local
         # daemon families in CONTROLLERLESS_FEATURE_PREFIXES (the ``overlay.*`` VPN
         # plane today — no vendor controller). Every other feature MUST target a
@@ -733,7 +765,72 @@ class AdapterStagingService:
             notes=notes,
             created_by=actor_id,
         )
-        self.db.add(change)
+        from app.services.hypervisor_firewall_operations import FEATURE as FIREWALL_FEATURE
+        from app.services.hypervisor_firewall_operations import LEGACY_FEATURES as FIREWALL_LEGACY
+        from app.services.hypervisor_firewall_operations import validated_plan as firewall_plan
+
+        if feature in FIREWALL_LEGACY:
+            raise HTTPException(400, detail="Use the reviewed firewall operation endpoint")
+        if feature == FIREWALL_FEATURE:
+            if change_id is None:
+                raise HTTPException(400, detail="Use the reviewed firewall operation endpoint")
+            change.id = change_id
+            firewall_plan(change)
+        from app.services.hypervisor_task_control import FEATURE as TASK_STOP_FEATURE
+        from app.services.hypervisor_task_control import validated_plan as task_stop_plan
+
+        if feature == TASK_STOP_FEATURE:
+            if change_id is None:
+                raise HTTPException(400, detail="Use the reviewed hypervisor task-stop endpoint")
+            change.id = change_id
+            task_stop_plan(change)
+        from app.services.hypervisor_backup_jobs import FEATURE as BACKUP_JOB_FEATURE
+        from app.services.hypervisor_backup_jobs import validated_plan as backup_job_plan
+
+        if feature == BACKUP_JOB_FEATURE:
+            if change_id is None:
+                raise HTTPException(400, detail="Use the reviewed hypervisor backup job endpoint")
+            change.id = change_id
+            backup_job_plan(change)
+        from app.services.hypervisor_storage_operations import FEATURES as STORAGE_FEATURES
+        from app.services.hypervisor_storage_operations import validated_plan as storage_plan
+
+        if feature in STORAGE_FEATURES:
+            if change_id is None:
+                raise HTTPException(400, detail="Use the reviewed hypervisor storage endpoint")
+            change.id = change_id
+            storage_plan(change)
+        from app.services.hypervisor_certificates import FEATURES as CERTIFICATE_FEATURES
+        from app.services.hypervisor_certificates import validated_plan as certificate_plan
+
+        if feature in CERTIFICATE_FEATURES:
+            if change_id is None:
+                raise HTTPException(400, detail="Use the reviewed hypervisor certificate endpoint")
+            change.id = change_id
+            certificate_plan(change)
+        from app.services.hypervisor_cluster_operations import FEATURES
+        from app.services.hypervisor_cluster_operations import validated_plan as cluster_plan
+
+        if feature in FEATURES:
+            cluster_plan(change)
+        if feature in {"proxmox.vm.create", "proxmox.container.create"}:
+            from app.services.hypervisor_creation import validated_plan
+
+            # Validate before add/flush so a generic staging client cannot
+            # persist a plaintext root password, even in a rejected intent.
+            if change_id is None:
+                raise HTTPException(400, detail="Use the reviewed hypervisor creation endpoint")
+            change.id = change_id
+            validated_plan(change)
+        if change_id is not None:
+            change.id = change_id
+            # Keep a duplicate stable ID from aborting the caller's outer
+            # transaction (and expiring its authenticated principal/target).
+            async with self.db.begin_nested():
+                self.db.add(change)
+                await self.db.flush()
+        else:
+            self.db.add(change)
         await self.db.commit()
         await self.db.refresh(change)
         await _publish_change_event(
@@ -793,6 +890,21 @@ class AdapterStagingService:
             stmt = stmt.where(or_(*[AdapterPendingChange.feature.like(f"{p}%") for p in prefixes]))
         if status_filter is not None:
             stmt = stmt.where(AdapterPendingChange.status == status_filter)
+        if status_filter is None:
+            # Do not let a long-running or unverified provider task disappear
+            # behind hundreds of newer historical rows in the bounded drawer.
+            stmt = stmt.order_by(
+                case(
+                    (
+                        (AdapterPendingChange.status == "applied")
+                        & AdapterPendingChange.provider_task["status"].astext.in_(
+                            ["pending", "running", "unknown", "warnings", "failed"]
+                        ),
+                        0,
+                    ),
+                    else_=1,
+                )
+            )
         stmt = stmt.order_by(AdapterPendingChange.created_at.desc()).limit(limit)
 
         result = await self.db.execute(stmt)
@@ -870,18 +982,57 @@ class AdapterStagingService:
         allowed = (
             ("pending",) if not force else ("pending", "applying", STATUS_RECONCILIATION_REQUIRED)
         )
-        if change.status not in allowed:
+        # A reviewed guest write with lost observation can be acknowledged
+        # only after explicit operator verification. Preserve its receipt and
+        # timestamps: this resolves uncertainty, never undoes a provider write.
+        from app.services.hypervisor_backup_jobs import is_reviewed_backup_job
+        from app.services.hypervisor_certificates import is_reviewed_certificate
+        from app.services.hypervisor_cluster_operations import is_reviewed_cluster_operation
+        from app.services.hypervisor_creation import is_reviewed_creation
+        from app.services.hypervisor_deletion import is_reviewed_deletion
+        from app.services.hypervisor_firewall_operations import is_reviewed_firewall
+        from app.services.hypervisor_guest_changes import is_reviewed_guest_change
+        from app.services.hypervisor_storage_operations import is_reviewed_storage
+        from app.services.hypervisor_task_control import is_reviewed_task_stop
+
+        resolved_observation = (
+            force
+            and change.status == "applied"
+            and (
+                is_reviewed_cluster_operation(change)
+                or is_reviewed_guest_change(change)
+                or is_reviewed_deletion(change)
+                or is_reviewed_creation(change)
+                or is_reviewed_certificate(change)
+                or is_reviewed_storage(change)
+                or is_reviewed_backup_job(change)
+                or is_reviewed_task_stop(change)
+                or is_reviewed_firewall(change)
+            )
+            and (change.provider_task or {}).get("status") == "unknown"
+        )
+        if change.status not in allowed and not resolved_observation:
             raise HTTPException(
                 409,
                 detail=(f"cannot discard a change with status={change.status!r}"),
             )
         change.status = "discarded"
+        change.provider_task_next_poll_at = None
+        if resolved_observation:
+            change.provider_task = {
+                **(change.provider_task or {}),
+                "detail": "operator_resolved_unknown_outcome",
+            }
         change.updated_by = actor_id
         # Prune any durable Fabric blob this staged write referenced — a
-        # discarded write is never applied, so the blob is now garbage.
+        # terminal row no longer needs a staging artifact. This does not
+        # remove provider data or reverse an already acknowledged write.
         await self._cleanup_durable_artifact(change)
         await self.db.commit()
         await self.db.refresh(change)
+        from app.services.hypervisor_upload_blobs import cleanup_committed
+
+        await cleanup_committed(change)
         # emit an AuditLogRecord on
         # discard for the same reasons we audit on apply — a tenant
         # admin needs the full lifecycle (stage → apply OR discard) to
@@ -905,6 +1056,7 @@ class AdapterStagingService:
                     "operation": change.operation,
                     "target_id": change.target_id,
                     "forced": force,
+                    "resolved_provider_observation": resolved_observation,
                 },
                 extra_metadata={
                     "change_id": str(change.id),
@@ -1067,9 +1219,10 @@ class AdapterStagingService:
         # (a typed ``bool``) means an unconfirmed apply always presents
         # ``confirmed=False`` regardless of what was staged — and the pre-flights
         # still evaluate it through the strict ``payload_confirmed`` helper. The
-        # stored ``change.payload`` is never mutated here (no DB write; stage-time
-        # already strips the reserved key so it can't reach the applier body or a
-        # re-apply either).
+        # stored ``change.payload`` is never mutated here. Proxmox's appliers
+        # need the authoritative flag for their second, device-aware preflight;
+        # they receive a transient view after the claim, not a persisted flag.
+        # Other vendors keep their unchanged, confirmation-free applier payload.
         preflight_payload = {**(change.payload or {}), "confirmed": confirmed}
         # Vendor pre-flight (OPNsense): block a catastrophic/irreversible op
         # — reboot/halt/firmware/backup_restore/backup_delete or ANY delete —
@@ -1177,6 +1330,11 @@ class AdapterStagingService:
                     "with confirmed=true (the Pending-Changes drawer's typed-APPLY step)."
                 ),
             )
+        from app.services.hypervisor_cluster_operations import guard_cluster_conflicts
+        from app.services.hypervisor_guest_changes import guard_guest_conflicts
+
+        await guard_cluster_conflicts(self.db, change)
+        await guard_guest_conflicts(self.db, change)
         change.status = "applying"
         change.updated_by = actor_id
         await self.db.commit()
@@ -1190,7 +1348,16 @@ class AdapterStagingService:
             from app.adapters.apply_context import apply_window
 
             with apply_window():
-                response = await applier(change)
+                # Proxmox repeats confirmation in its device-aware preflights.
+                # Passing the persisted row loses that decision and incorrectly
+                # fails an explicitly confirmed restore/rollback after claiming.
+                # This local view cannot mutate the durable request payload.
+                apply_change_view = (
+                    _ProxmoxApplyView(change, confirmed)
+                    if (change.feature or "").startswith("proxmox.")
+                    else change
+                )
+                response = await applier(apply_change_view)
             # An applier may RETURN a failed AdapterResult (success=False) instead
             # of raising — e.g. the device/controller API rejected the write. Treat
             # that as a FAILED apply so the change is never recorded "applied"
@@ -1198,18 +1365,27 @@ class AdapterStagingService:
             # invariant). Routed through the HTTPException handler below so the
             # real vendor cause lands in failure_reason and surfaces as 502 —
             # rather than a silent "applied" on a write the device refused.
-            if getattr(response, "success", None) is False:
+            # Appliers may serialize AdapterResult before returning it. Its
+            # failure flag must survive that boundary; a mapping is not an
+            # implicit success merely because it lacks object attributes.
+            if adapter_result_field(response, "success") is False:
                 raise HTTPException(
                     status_code=502,
                     detail=(
-                        getattr(response, "error", None)
-                        or getattr(response, "message", None)
+                        adapter_result_field(response, "error")
+                        or adapter_result_field(response, "message")
                         or "adapter reported the write did not succeed"
                     ),
                 )
             change.status = "applied"
             change.applied_at = datetime.now(UTC)
             change.applied_response = _jsonable_applied_response(response)
+            from app.services.proxmox_task_tracking import accepted_task
+
+            change.provider_task = accepted_task(change.feature, change.applied_response)
+            change.provider_task_next_poll_at = (
+                change.applied_at if change.provider_task is not None else None
+            )
             change.updated_by = actor_id
             # emit an AuditLogRecord row on every successful
             # apply so a tenant admin can reconstruct exactly which
@@ -1284,6 +1460,9 @@ class AdapterStagingService:
             await self._cleanup_durable_artifact(change)
             await self.db.commit()
             await self.db.refresh(change)
+            from app.services.hypervisor_upload_blobs import cleanup_committed
+
+            await cleanup_committed(change)
             await _publish_change_event(
                 change,
                 event_type="controller.change.failed",
@@ -1325,11 +1504,19 @@ class AdapterStagingService:
                 if unknown
                 else short
             )
+            if isinstance(exc, AdapterOutcomeUnknownError):
+                change.failure_reason = (
+                    "Write acknowledgement or readback did not verify the outcome. "
+                    "It may already have taken effect. Reconcile the device before re-staging."
+                )
             change.updated_by = actor_id
             # Terminal failure: prune the durable blob this write referenced.
             await self._cleanup_durable_artifact(change)
             await self.db.commit()
             await self.db.refresh(change)
+            from app.services.hypervisor_upload_blobs import cleanup_committed
+
+            await cleanup_committed(change)
             await _publish_change_event(
                 change,
                 event_type="controller.change.failed",
@@ -1340,16 +1527,30 @@ class AdapterStagingService:
             raise HTTPException(
                 502,
                 detail=(
-                    f"the controller did not answer ({short}); the change may or may "
+                    change.failure_reason
+                    if isinstance(exc, AdapterOutcomeUnknownError)
+                    else f"the controller did not answer ({short}); the change may or may "
                     "not have been applied - verify the device"
                     if unknown
                     else f"controller rejected the change ({short})"
                 ),
             ) from exc
 
+        # Capture JSON-safe values before rollback expires the ORM instance.
+        # Losing the acknowledged UPID here would strand an otherwise trackable
+        # task after a transient bookkeeping failure.
+        accepted_values = {
+            "applied_at": change.applied_at,
+            "applied_response": change.applied_response,
+            "provider_task": change.provider_task,
+            "provider_task_next_poll_at": change.provider_task_next_poll_at,
+        }
         try:
             await self.db.commit()
             await self.db.refresh(change)
+            from app.services.hypervisor_upload_blobs import cleanup_committed
+
+            await cleanup_committed(change)
         except Exception:
             # Defensive: if the final
             # commit fails after a successful applier run, roll back
@@ -1375,10 +1576,10 @@ class AdapterStagingService:
                     .where(AdapterPendingChange.id == change_id)
                     .values(
                         status="applied",
-                        applied_at=datetime.now(UTC),
+                        **accepted_values,
                         updated_by=actor_id,
                         failure_reason=(
-                            "device write succeeded but post-write bookkeeping "
+                            "controller acknowledged the write but post-write bookkeeping "
                             "commit failed; recovered to 'applied'"
                         ),
                     )
@@ -1400,6 +1601,7 @@ class AdapterStagingService:
             event_type="controller.change.applied",
             priority=_event_priority_for(change.feature, "high"),
             actor_id=actor_id,
+            extra={"provider_task": change.provider_task},
         )
         return change
 

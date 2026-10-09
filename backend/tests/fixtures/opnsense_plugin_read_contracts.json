@@ -1,0 +1,224 @@
+{
+  "telegraf": {
+    "method": "get_telegraf_status",
+    "wire": {
+      "/api/telegraf/general/get": {
+        "general": {
+          "enabled": "1"
+        }
+      },
+      "/api/telegraf/output/get": {
+        "output": {
+          "influx_enable": "1",
+          "graphite_enable": "0",
+          "prometheus_enable": "0",
+          "influx_url": "https://owned-metrics.example.test",
+          "influx_database": "owned",
+          "influx_v2_enable": "0"
+        }
+      },
+      "/api/telegraf/service/status": {
+        "status": "running"
+      }
+    },
+    "expected": {
+      "enabled": true,
+      "running": true,
+      "output_influxdb": true,
+      "influx_url": "https://owned-metrics.example.test"
+    }
+  },
+  "crowdsec": {
+    "method": "get_crowdsec_status",
+    "wire": {
+      "/api/crowdsec/service/status": {
+        "status": "running"
+      },
+      "/api/crowdsec/alerts/search": {
+        "rows": [],
+        "total": 0,
+        "rowCount": 0,
+        "current": 1
+      },
+      "/api/crowdsec/decisions/search": {
+        "rows": [
+          {
+            "id": "owned",
+            "source": "crowdsec",
+            "scope_value": "Ip:192.0.2.15",
+            "reason": "owned-scenario",
+            "action": "ban",
+            "expiration": "4h",
+            "alert_id": "owned-alert"
+          }
+        ],
+        "total": 1,
+        "rowCount": 1,
+        "current": 1
+      }
+    },
+    "expected": {
+      "running": true,
+      "decision_count": 1
+    }
+  },
+  "netflow": {
+    "method": "get_netflow_status",
+    "wire": {
+      "/api/diagnostics/netflow/getconfig": {
+        "netflow": {
+          "capture": {
+            "interfaces": {
+              "em0": {
+                "value": "em0",
+                "selected": 1
+              }
+            },
+            "targets": "127.0.0.1:2056",
+            "version": {
+              "v9": {
+                "value": "NetFlow version 9",
+                "selected": 1
+              }
+            },
+            "egress_only": {}
+          },
+          "collect": {
+            "enable": "1"
+          }
+        }
+      },
+      "/api/diagnostics/netflow/status": {
+        "status": "active",
+        "collectors": "1"
+      }
+    },
+    "expected": {
+      "enabled": true,
+      "running": true,
+      "collect_enabled": true
+    }
+  },
+  "proxy": {
+    "method": "get_proxy_settings",
+    "wire": {
+      "/api/proxy/settings/get": {
+        "proxy": {
+          "general": {
+            "enabled": "1",
+            "cache": {
+              "local": {
+                "enabled": "1"
+              }
+            },
+            "logging": {
+              "enable": {
+                "accessLog": "1",
+                "storeLog": "0"
+              }
+            }
+          },
+          "forward": {
+            "port": "8080",
+            "sslbump": "0",
+            "transparentMode": "0"
+          }
+        }
+      },
+      "/api/proxy/service/status": {
+        "status": "running"
+      }
+    },
+    "expected": {
+      "enabled": true,
+      "running": true,
+      "port": "8080",
+      "cache_enabled": true,
+      "logging": true
+    }
+  },
+  "monit": {
+    "method": "get_monit_status",
+    "wire": {
+      "/api/monit/settings/searchService": {
+        "rows": [
+          {
+            "uuid": "owned",
+            "name": "Owned",
+            "type": "process",
+            "address": "/owned/pid",
+            "enabled": "1",
+            "description": "owned"
+          }
+        ],
+        "total": 1,
+        "rowCount": 1,
+        "current": 1
+      },
+      "/api/monit/settings/searchTest": {
+        "rows": [],
+        "total": 0,
+        "rowCount": 0,
+        "current": 1
+      },
+      "/api/monit/settings/searchAlert": {
+        "rows": [],
+        "total": 0,
+        "rowCount": 0,
+        "current": 1
+      },
+      "/api/monit/service/status": {
+        "status": "running"
+      }
+    },
+    "expected": {
+      "running": true,
+      "service_count": 1,
+      "services": [
+        {
+          "uuid": "owned",
+          "name": "Owned",
+          "type": "process",
+          "address": "/owned/pid",
+          "enabled": true,
+          "description": "owned"
+        }
+      ]
+    }
+  },
+  "tailscale": {
+    "method": "get_tailscale_status",
+    "wire": {
+      "/api/tailscale/settings/get": {
+        "settings": {
+          "enabled": "1",
+          "listenPort": "41641",
+          "loginTimeout": "10",
+          "acceptDNS": "1",
+          "advertiseExitNode": "0",
+          "acceptSubnetRoutes": "0",
+          "enableSSH": "0",
+          "disableSNAT": "0",
+          "useExitNode": {}
+        }
+      },
+      "/api/tailscale/service/status": {
+        "status": "running"
+      }
+    },
+    "expected": {
+      "running": true,
+      "settings": {
+        "enabled": true,
+        "listen_port": "41641",
+        "login_timeout": "10",
+        "accept_dns": true,
+        "advertise_exit_node": false,
+        "accept_subnet_routes": false,
+        "enable_ssh": false,
+        "disable_snat": false,
+        "use_exit_node": []
+      }
+    }
+  }
+}

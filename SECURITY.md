@@ -1,252 +1,184 @@
 # Security Policy
 
-## Supported Versions
+FreeSDN is maintained by its sole owner and developer. It is Community Edition /
+Early Access software. Automated tests, internal review and the maintainer's
+reported production use do not establish independent security certification,
+enterprise support coverage or acceptance of every firmware and deployment.
+Read the [release support boundary](docker/RELEASE-SUPPORT) before deploying.
 
-Only the latest release is actively maintained. Security fixes are applied
-to the current release only -- older releases do not receive backports.
+## Versions and maintenance
 
-| Version | Supported |
-|---------|-----------|
-| 26.08.x | Active    |
+This checkout identifies the application as `26.10.0`. A version in source does
+not mean that a stable public release or its images have been qualified and
+published. Use the release's actual source commit, image digests and acceptance
+record when deciding what to install. The current appliance qualification scope
+is Linux amd64; agent platforms have separate qualification requirements.
 
-26.06.1 is the first public release. If you are running an older checkout,
-upgrade before reporting -- the issue may already be fixed.
+Security work targets the current code line. There is no promised security
+backport window for older releases. Keep recoverable backups, review upgrade
+instructions and validate the candidate in your environment before upgrading.
 
----
+## Reporting a vulnerability
 
-## Reporting a Vulnerability
+**Do not open a public issue containing vulnerability details or credentials.**
 
-**Do not open a public GitHub issue for security vulnerabilities.**
-Public disclosure before a patch is available puts every self-hosted
-installation at risk.
+- Use the repository's Security tab and "Report a vulnerability" when GitHub
+  Private Vulnerability Reporting is available. The project's reporting link is
+  [private vulnerability reporting](https://github.com/freesdn/freesdn/security/advisories/new).
+- If that option is unavailable, contact **security@freesdn.org**. Ordinary email
+  is not a project-managed end-to-end encrypted channel. No project PGP key is
+  published here; agree on an appropriate channel before transferring secrets.
 
-**Two ways to report:**
+Include the affected version or commit, relevant image digests, module/adapter,
+reproduction steps, impact and redacted logs. Never send production passwords,
+tokens, encryption keys, unredacted backups or customer data in a public report.
 
-1. **GitHub Private Vulnerability Reporting** -- open the repository's
-   Security tab and click "Report a vulnerability". The report is
-   confidential between you and the maintainers until a fix ships, and a
-   CVE/GHSA is coordinated through the same advisory.
-   Direct link: `https://github.com/freesdn/freesdn/security/advisories/new`
+The sole maintainer handles reports as capacity permits. No acknowledgment,
+assessment or remediation deadline, 24-hour coverage or enterprise security SLA
+is promised. See [SUPPORT.md](SUPPORT.md) for the support policy.
 
-2. **Email** -- send to `security@freesdn.org`. No project PGP key is
-   published, so for an encrypted channel prefer the GitHub Private
-   Vulnerability Reporting path above (it is encrypted between you and
-   the maintainers).
+## Controls and their limits
 
-**Please include:**
-- Affected version (from `GET /api/v1/health` or `docker inspect`)
-- Steps to reproduce
-- Potential impact as you understand it
-- A suggested fix, if you have one
+### Tenant and operation authority
 
-**Response timeline:**
-- Acknowledgement: within 48 hours
-- Initial assessment: within 5 business days
-- Patch for critical issues: target 30 days
+Organization, site and role checks are implemented in the application. There is
+no PostgreSQL Row-Level Security isolation boundary. Automated tests cover
+selected cross-tenant, site-grant and privilege-escalation cases; passing them is
+not proof that every route, background job or plugin is free of authorization
+defects. Restrict direct database and broker access to trusted operators.
 
-FreeSDN is maintained by a small in-house team. Response is best-effort but
-taken seriously -- every report gets a real read, not a template dismissal.
+Current resource checks in a background task do not necessarily revalidate the
+initiating user's session or API-key grants. A check before network I/O cannot
+undo an external effect after authority changes. Review operation-specific
+limits, including [discovery job scope](docker/DISCOVERY-JOB-SCOPE),
+[controller onboarding](docker/CONTROLLER-INITIAL-AUTHORITY) and
+[automation authority](docker/AUTOMATION-RUNTIME-AUTHORITY).
 
----
+### Managed-device writes
 
-## Security Posture
+Staged adapter operations use explicit apply/force checks and the global
+`ADAPTER_READ_ONLY` flag. The base Compose configuration defaults that flag to
+`false`; the application setting's fallback outside Compose is `true`. Set it
+explicitly for the intended deployment. Use device credentials with only the
+required privileges and restrict management-network reachability.
 
-This section describes the security controls that ship today. No compliance
-certifications are claimed.
+Do not treat the flag, a UI confirmation or an adapter's maturity label as proof
+that every write family is supported or safe. Some operations have additional
+refusal paths; Proxmox SDN apply remains blocked. Qualify destructive workflows
+on authorized disposable resources before enabling them on production devices.
 
-### Tenant isolation
+### Credentials and diagnostic data
 
-Tenant isolation is enforced at the application layer. Service-layer
-queries that touch an org-scoped resource are gated by an explicit `org_id` check in
-the service layer. There is no PostgreSQL Row-Level Security -- isolation
-is application-layer and fail-closed. Mixing this up matters: "we use RLS" is a claim
-FreeSDN does not make.
+Credential helpers use Fernet encryption. Device/controller credentials derive
+their key from `SECRET_KEY` and `ENCRYPTION_SALT`; the separate `fernet:` secret
+format uses a distinct derivation from `SECRET_KEY`. Both use PBKDF2-HMAC-SHA256
+with 260,000 iterations. Protect and back up the required keys separately from
+the database. Changing a key or salt without migrating encrypted values can make
+stored credentials unreadable; changing one derivation does not rotate both.
 
-### Access control
+Legacy plaintext compatibility exists. This is not database-wide encryption,
+and it does not encrypt every setting, audit record, task result or backup.
+Selected API and provider paths redact secrets or return fixed diagnostics, but
+there is no universal redaction boundary covering every log. Celery's raw result
+storage and built-in worker exception logs remain sensitive even when the tenant
+task API hides failure details. Restrict access and retention accordingly; see
+[task failure privacy](docker/TASK-FAILURE-PRIVACY) and
+[controller credential handling](docker/CONTROLLER-CREDENTIAL-DECRYPTION).
 
-Five assignable RBAC roles: super_admin, org_admin, site_admin, operator, and
-viewer. (Two additional internal levels -- admin, platform-scoped, and guest,
-zero-privilege -- exist in the permission hierarchy for comparison logic but are
-not user-assignable.) Access is further narrowed
-by per-user site grants -- a user may hold different roles at different
-sites within the same org. Privilege escalation attempts (including
-org_admin promoting themselves to super_admin) are blocked server-side
-and covered by invariant tests.
+### Outbound network access
 
-### Staged writes -- the dual gate
+External-download and webhook paths use SSRF guards, including a request helper
+that validates resolved addresses at connection time. Managed-device paths
+intentionally allow suitable private management addresses. The policies differ
+by operation; not every outbound call blocks all private address space.
 
-Every write to a managed device passes a two-condition gate:
-`ADAPTER_READ_ONLY` (one platform-wide flag, not per-adapter) and an explicit
-`force` parameter in the request. Both must clear before a write reaches a
-device.
+URL validation alone is not a DNS-rebinding boundary. Use restricted egress,
+separate management networks and least-privilege credentials. Trusted plugins
+have backend network access and are not constrained by a process sandbox.
 
-The shipped Docker Compose stack sets `ADAPTER_READ_ONLY=false`, so FreeSDN
-manages your gear out of the box. Set `ADAPTER_READ_ONLY=true` in `.env` for a
-monitor-only deployment, in which writes are staged to the local database and
-never pushed. If you run the application outside the shipped Compose file, which
-always supplies this variable, its own fallback is fail-safe `true`.
+### Authentication
 
-Gate 2 is therefore the one that protects an operator on a default install: a
-staged change only reaches a device when it is explicitly applied, and
-destructive operations (delete, destroy, factory reset) require a separate
-per-action confirmation regardless of either flag.
+- Passwords use Argon2id with a 64 MiB memory setting.
+- The configured JWT path uses HS256 and `SECRET_KEY`; access-token revocation
+  depends on Valkey and the checks applicable to that request.
+- TOTP MFA and backup codes are implemented. Secure enrollment, recovery codes
+  and administrative recovery access as authentication credentials.
+- Request limits use Valkey. Authentication routes fail closed when their
+  limiting store is unavailable; general request limiting has a fail-open
+  outage policy. Rate limiting is not a guarantee against credential attacks
+  or denial of service.
 
-### Secret handling
+Database rollback and restore need separate authentication and key-recovery
+planning; an old backup can restore old authorization state. Follow the recovery
+instructions and validate the actual restored deployment before exposing it.
 
-Credentials stored in the database (API keys, RADIUS shared secrets,
-WPA/WPA2 passphrases, IPsec/WireGuard PSKs, LDAP bind passwords,
-VPN credentials) are encrypted at rest with Fernet (AES-128-CBC + HMAC-SHA256)
-using a key derived from `SECRET_KEY` via PBKDF2. A central
-`redact_secrets` pass runs before any credential material is serialised
-to API responses or logs -- including camelCase variants that field-renaming
-can introduce.
+### Deployment exposure
 
-### SSRF protection
+Production profiles use controls such as non-root application processes,
+read-only filesystems, resource limits and `no-new-privileges` where applicable.
+They are not universal across all services. For example, the VPN sidecar needs
+root/network capabilities, and stateful services need writable storage.
 
-Outbound HTTP calls from the backend block RFC 1918 private ranges,
-loopback, link-local, cloud metadata endpoints (AWS/GCP/Azure),
-Tailscale/CGNAT ranges, and IPv4-mapped IPv6 addresses. DNS rebinding is
-mitigated by resolving and re-checking at connection time.
-The block list is not bypassable by percent-encoding or embedded
-credentials.
+The edge HTTP/HTTPS ports and optional UDP collectors can bind host interfaces;
+not all published ports are loopback-only. Inspect the resolved Compose
+configuration and firewall rules for the chosen profiles. Do not expose database,
+broker, worker-management or collector endpoints directly to the Internet.
+Collector source-IP filtering does not cryptographically authenticate a sender.
 
-### Authentication and cryptography
+TLS and security headers depend on the selected edge configuration and the
+deployment's certificates and proxy settings. Test the public endpoint itself;
+a backend response or a configuration file alone does not prove end-to-end TLS.
 
-- Argon2id password hashing (64 MB memory cost, current OWASP recommendation)
-- PBKDF2 key derivation with 260,000 iterations for encryption keys
-- JWT access and refresh tokens signed with HS256 (HMAC-SHA256) from
-  `SECRET_KEY`; JTI-based revocation via Valkey. There is no asymmetric
-  (RS256) signing path: FreeSDN signs and verifies its own tokens with
-  the same symmetric key.
-- MFA: TOTP (pyotp) with backup codes; MFA re-enrolment requires the
-  existing credential
-- Rate limiting is Valkey-backed (a sliding window shared across workers),
-  not in-process. Defaults are 600 requests/minute per principal with a
-  120 requests/second burst ceiling (`RATE_LIMIT_RPM` / `RATE_LIMIT_BURST`),
-  keyed by the signature-verified JWT subject when a valid access cookie is
-  present and by client IP otherwise.
-- Auth endpoints are limited separately and more strictly: 5 attempts per
-  minute per IP, plus 20 failed attempts per 5 minutes per submitted
-  username. When Valkey is unreachable, `/api/v1/auth/*` fails closed with
-  503 rather than skipping the credential-stuffing guards; other routes
-  fail open so a Valkey blip does not take the product down.
+## Plugin trust and registry integrity
 
-### HTTP security headers
+Plugins execute with backend privileges and can access its credentials, database,
+network and filesystem. Import hygiene in the loader is not an isolation boundary.
+Only install code from publishers you trust, and review the package and manifest.
 
-Content-Security-Policy (self-origin), Strict-Transport-Security
-(2-year max-age when HTTPS), X-Frame-Options: DENY,
-X-Content-Type-Options: nosniff, Referrer-Policy:
-strict-origin-when-cross-origin, Permissions-Policy disabling camera,
-microphone, geolocation, and payment.
+The remote marketplace catalog is authenticated with the pinned Ed25519 publisher
+key. Catalog entries bind plugin package hashes, and marketplace downloads are
+checked against those hashes. Serial, expiry and retained state checks limit
+rollback; they require an accurate clock and preservation of trust state during
+restore. See [marketplace freshness](docker/MARKETPLACE-FRESHNESS).
 
-### Infrastructure defaults
+This is authentication through a signed catalog, not a separate signature file
+on every ZIP and not a guarantee that a plugin is safe. An explicit unsigned
+private/development-registry override weakens that trust policy. Keep production
+signature verification enabled; review publisher/feed changes and preserve the
+accepted serial floor rather than resetting trust to make an error disappear.
 
-- All containers run as non-root users in production
-- `no-new-privileges` security option on every container
-- All host-port bindings restricted to 127.0.0.1 by default
-- Read-only filesystems on stateless containers
-- Memory and CPU resource limits on every container
-- API docs hidden in production; registration disabled by default
+## Release integrity
 
-### Plugin trust model
+Source archives, agent binaries, plugin catalogs and container images have
+different verification mechanisms. Check the record for the specific artifact.
+A checksum downloaded from the same host detects changed bytes; by itself it
+does not establish an independently trusted publisher.
 
-Plugins run with full backend permissions. FreeSDN does not provide
-process-level isolation for plugins. A plugin you install has the same
-access to your database, credentials, network, and filesystem as the
-FreeSDN backend itself.
+Do not infer that an image is signed because a signing workflow exists. A
+published-image acceptance record must identify the registry digest, verified
+signer, SBOMs and source/build relationship, and an independent installation of
+those artifacts. The flattened public CI runs source/build checks; it is not an
+image publisher. A local source ZIP is not a signed public release.
 
-The plugin loader (`backend/app/plugins/sandbox.py`) performs load-time
-import hygiene -- it refuses imports of a blocklist of OS/process/network
-modules while a plugin is being loaded and strips accident-prone builtins
-(`exec`, `eval`, `compile`, `open`, `__import__`). This catches ordinary
-mistakes from cooperative plugin authors. It is not a security boundary:
-a malicious plugin can reach `subprocess.Popen` at runtime through Python
-introspection, and nothing in the current design prevents that.
+The in-app agent update mechanism signs release manifests with a deployment's
+ECDSA P-256 key. The manifest binds the binary hash, version, platform, agent
+type and channel. Agents require a public-key pin provisioned through an
+authenticated, operator-approved path and verify the applicable update policy.
+That deployment key is separate from the marketplace publisher and container
+signing identities. It does not establish project signatures for arbitrary
+agent binaries or every release-host download.
 
-Only install plugins from sources you trust. Review the plugin code and
-manifest before installation. Plugin installation is restricted to
-`super_admin` users.
+## Security review and project governance
 
-### Release integrity
+No independent security audit, compliance certification, zero-vulnerability
+guarantee, multi-day capacity qualification or enterprise availability SLA is
+claimed. Package and image scans describe specific artifacts at a particular
+time; updates and new advisories can change the result. Lockfiles record selected
+dependencies but do not make builds immune to upstream or tooling compromise.
 
-Two different things are often conflated here, so both are stated plainly.
-
-**GitHub Release downloads are checksummed, not signed.** Each
-`freesdn-agent` release publishes a `.sha256` sidecar next to every binary
-and a combined `SHA256SUMS.txt` covering all of the release assets, plus an
-SPDX SBOM of the build's Python dependency tree.
-Verify with `sha256sum -c SHA256SUMS.txt`. There are no detached signatures,
-no cosign bundles, and no PGP signatures on those artifacts, and plugin
-packages are not signed either. A checksum served from the same host as the
-binary proves integrity in transit, not provenance.
-
-**The in-app agent auto-update feed is genuinely signed.** When your backend
-serves an agent release to its own agents, it signs the release binary's
-release MANIFEST with an ECDSA P-256 key
-(`backend/app/services/release_signing.py`) and exposes the matching public
-key at `GET /api/v1/agents/releases/public-key`. The signature covers the
-binary's SHA-256 **together with its version, platform, agent type and
-channel** — signing the digest alone would let a backend that does not hold
-the private key re-serve a genuine older release, with its genuine signature,
-as an "update". The agent verifies that signature and then checks the manifest
-against the bytes it downloaded and against itself: same platform, same agent
-type, and a version strictly newer than the one it is running. By default
-(`auto_update_require_signature`) it refuses an unsigned release.
-
-The public key must be **pinned**, and the pin is provisioned out of band — at
-registration, which is authenticated and operator-approved, or at install via
-`release_public_key_sha256`. With no pin the agent refuses to update rather
-than trusting a key handed to it by the same server that serves the binary and
-the signature: trust-on-first-use protects only against a *later* key change,
-and proves nothing on first contact against a control plane that is already
-compromised. The keypair is generated per deployment on your own backend, so
-there is no project-wide fingerprint for us to publish.
-
-### Security testing and review
-
-This release includes automated tests and internal review, but no third-party
-security audit or certification is claimed. The areas given the most attention
-during development include tenant isolation, privilege escalation, secret
-redaction, SSRF, cross-tenant data access, and authentication flow edge cases.
-The security model is documented at
-[docs.freesdn.org/security/model](https://docs.freesdn.org/security/model/).
-
----
-
-## Dependency management
-
-- Dependabot is configured for weekly Python, npm, and Docker image
-  dependency updates
-- `poetry.lock` and `package-lock.json` provide deterministic, auditable
-  builds
-- Security-critical packages are explicitly pinned with minimum versions
-
----
-
-## A note on project governance
-
-FreeSDN is developed in-house by the small team that runs it in production --
-every line is authored and reviewed inside that team. No external pull
-requests are accepted. That is a deliberate trust and security choice: a
-controlled, in-house codebase with full context is a stronger guarantee than
-a committee of outside contributors with mixed incentives and uneven review
-standards. There is no supply-chain risk from drive-by contributions because
-there are no drive-by contributions.
-
-Bug reports and vulnerability reports are welcome and taken seriously.
-If you want to extend FreeSDN, the MIT-licensed SDK lets you build and
-ship your own plugin without touching core.
-
-The project accepts no money. No sponsorships, no tips, no Patreon.
-The two ways to contribute materially are:
-
-- **Donate hardware** -- permanently transfer a device to
-  `hardware@freesdn.org`. Ownership transfers, the device may be modified,
-  reflashed, bricked, or destroyed during reverse-engineering and will not
-  be returned. In exchange, that vendor and model becomes permanently
-  supported and tested in FreeSDN, and donors are credited on the
-  supporters page (opt-in).
-
-- **Fuel the build** -- gift a Claude or OpenAI Codex subscription to
-  `fuel@freesdn.org`. Those are the only two AI products the project uses.
-  This funds the AI-assisted development and review pipeline.
+FreeSDN is owned and developed by one maintainer. External code pull requests
+are not currently accepted; bug reports, vulnerability reports and hardware
+field reports are welcome. This contribution policy does not remove supply-chain
+risk or substitute for independent review. Hardware support and any commercial
+arrangements require their own explicit terms; this security policy promises
+neither permanent model support nor a funding policy.

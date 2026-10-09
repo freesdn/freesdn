@@ -1,0 +1,66 @@
+Committed automation runtime authority
+======================================
+
+Production event and manual execution now use independent database reads of
+committed definitions. The module-global engine and the default service engine
+both require this persistent implementation. The standalone AutomationEngine
+remains an explicitly constructed evaluator for isolated callers and tests;
+there is no production configuration switch to fall back to cached execution.
+
+Events require an explicit tenant, an active non-deleted organization and active
+event rules whose current pattern matches. Changes made by another worker are
+visible without visiting the rules UI. Uncommitted or rolled-back changes to a
+worker's local cache do not authorize execution. Database failures and malformed
+stored definitions refuse execution without exposing raw driver errors.
+
+Manual requests resolve their rule and supplied organization against the database
+and carry that scope into a separate committed-state lookup. Existing explicit
+manual execution of disabled and paused rules remains supported. Event execution
+still requires an active rule. An absent organization remains the existing
+privileged service scope; the API's authentication and authorization checks are
+unchanged.
+
+Each chain retains an isolated definition and revalidates it immediately before
+each handler, AFTER any pre-action delay. A changed definition, changed author,
+missing rule, inactive/deleted organization or unavailable database stops the
+remaining chain even if continue_on_error is true. The chain never mixes newly
+edited actions into an old execution. Execution counters and timestamps are not
+configuration changes. Concurrent and nested chains have separate authority;
+cancellation releases that context. Existing native action author/permission/site
+checks remain in effect.
+
+No database transaction is held open across a configured delay or external action.
+The action refusal is fixed text. History persistence errors also avoid raw SQL
+parameters. Existing history and unrelated application diagnostics are not scrubbed.
+
+Qualification requirements
+--------------------------
+Regression tests cover production construction, fresh selection, caller scope,
+malformed rows, per-action checks, delay-time revocation and cancellation. Private
+SQLite ORM checks additionally cover commit/rollback and concurrent/nested chains.
+The release must separately bind migrated PostgreSQL and independent worker
+processes, the full backend suite, runtime/recovery tests, browser routes, image
+scans and package/source checks to the exact immutable candidate. Synthetic effects
+must not be represented as live device or provider acceptance.
+
+Cost and limits
+---------------
+A scoped event reads current active event definitions for its organization, and
+an executing chain adds one short scoped read per action. The database is now an
+execution dependency. Measure this overhead at the intended fleet/event volume;
+a short single-host qualification does not establish production capacity.
+
+Management/listing caches may still show stale data, including after a flush and
+rollback. This change removes their authority to select production effects; it
+does not provide general cross-worker cache invalidation. The older automation
+edit-integrity runbook documents the preceding change and its then-open runtime
+authority gap.
+
+A commit can race immediately AFTER the final pre-handler check, and disabling a
+rule cannot recall an effect already sent. This is not transactionally fenced
+external execution. A rule deleted during a chain can also prevent its history
+row being saved because the current history schema references that rule. The
+returned refusal remains visible, but durable history retention needs a separate
+schema/lifecycle design. Redis claims, cooldowns and rate limits retain their
+existing fail-closed boundaries and finite lifetimes. Durable event delivery,
+crash recovery, exactly-once effects and multi-host recovery are not claimed.

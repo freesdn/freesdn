@@ -30,10 +30,12 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import CurrentUser, require_permissions
 from app.db.session import get_session
+from app.modules.hypervisor.schemas import BackupRestoreIntentPayload
 from app.schemas.gateway_vpn import (
     PendingChangeRequest,
     PendingChangeResponse,
@@ -42,6 +44,12 @@ from app.services.adapter_proxmox_backup import (
     GatewayProxmoxBackupService,
 )
 from app.services.adapter_staging import AdapterStagingService
+from app.services.hypervisor_operations import HypervisorOperationService
+
+
+class ProxmoxBackupChangeRequest(PendingChangeRequest):
+    request_id: UUID | None = None
+
 
 router = APIRouter(
     prefix="/gateway-proxmox-backup",
@@ -68,7 +76,7 @@ async def stage_proxmox_backup_change(
     controller_id: UUID,
     feature: str,
     operation: Annotated[str, Query(description="create | update | delete")],
-    body: PendingChangeRequest,
+    body: ProxmoxBackupChangeRequest,
     user: Annotated[CurrentUser, Depends(require_permissions("hypervisor:write"))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
@@ -77,6 +85,22 @@ async def stage_proxmox_backup_change(
             400,
             detail=("Proxmox backup endpoint only accepts proxmox.backup.* features"),
         )
+    if body.request_id is not None:
+        if feature != "proxmox.backup.restore" or operation != "create":
+            raise HTTPException(400, detail="request_id is supported only for restore staging")
+        try:
+            restore = BackupRestoreIntentPayload.model_validate(body.payload)
+        except ValidationError:
+            raise HTTPException(422, detail="Invalid restore payload") from None
+        if body.target_id is not None and body.target_id != str(restore.vmid):
+            raise HTTPException(400, detail="Restore target_id must match payload.vmid")
+        change = await HypervisorOperationService(session, user).stage_restore(
+            controller_id,
+            body.request_id,
+            restore,
+            notes=body.notes,
+        )
+        return PendingChangeResponse.from_model(change)
     svc = GatewayProxmoxBackupService(session)
     change = await svc.stage_change(
         feature=feature,

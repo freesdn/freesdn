@@ -1,0 +1,7 @@
+# Keep the upstream entrypoint, config paths and postgres UID 70. Apply vendor
+# security updates to the exact PgBouncer image we ship, not just its tag.
+ARG PGBOUNCER_VERSION=v1.25.2-p0
+FROM edoburu/pgbouncer:${PGBOUNCER_VERSION}
+USER root
+RUN apk upgrade --no-cache
+USER postgres

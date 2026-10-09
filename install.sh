@@ -24,7 +24,7 @@
 #   -h, --help           Show this message.
 #
 # Exit codes:
-#   0  success - stack is running and the edge /health returns 200
+#   0  success - stack is running and the edge /healthz returns 200
 #   1  generic failure
 #   2  prerequisite missing (docker, python3)
 #   3  configuration invalid (bad --tier, --ha without --tier max)
@@ -32,6 +32,9 @@
 # ============================================================================
 
 set -euo pipefail
+
+# Generated files may contain database passwords and credential-vault keys.
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -53,20 +56,20 @@ warn() { printf "${YELLOW}[WARN]${RESET}  %s\n" "$*"; }
 err()  { printf "${RED}[ERR]${RESET}   %s\n" "$*" >&2; }
 info() { printf "${CYAN}[INFO]${RESET}  %s\n" "$*"; }
 hdr()  { printf "\n${BOLD}=== %s ===${RESET}\n" "$*"; }
-usage() { sed -n '2,/^# ===/p' "$0" | sed 's/^# \?//'; exit 0; }
+usage() { sed -n '2,/^# ===/p' "$0" | sed 's/^# \?//'; exit "${1:-0}"; }
 
 # ── Parse args ──────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --tier)         TIER="$2"; shift 2 ;;
+        --tier)         [[ $# -ge 2 && "$2" != -* && -n "$2" ]] || { err "--tier requires a value"; exit 3; }; TIER="$2"; shift 2 ;;
         --dev)          DEV=true; shift ;;
-        --domain)       DOMAIN="$2"; shift 2 ;;
-        --email)        EMAIL="$2"; shift 2 ;;
+        --domain)       [[ $# -ge 2 && "$2" != -* && -n "$2" ]] || { err "--domain requires a value"; exit 3; }; DOMAIN="$2"; shift 2 ;;
+        --email)        [[ $# -ge 2 && "$2" != -* && -n "$2" ]] || { err "--email requires a value"; exit 3; }; EMAIL="$2"; shift 2 ;;
         --ha)           HA=true; shift ;;
         --no-start)     START=false; shift ;;
         --skip-prereqs) SKIP_PREREQS=true; shift ;;
         -h|--help)      usage ;;
-        *) err "unknown flag: $1"; usage ;;
+        *) err "unknown flag"; usage 3 ;;
     esac
 done
 
@@ -96,108 +99,13 @@ if ! $SKIP_PREREQS; then
     ok "docker compose v2 available"
 fi
 
-# ── Generate the tier env file from its template ─────────────────────────────
+# ── Generate/update private configuration without rotating existing secrets ──
 hdr "Configuration ($ENV_NAME)"
-GENERATED=0
-if [[ ! -f "$ENV_NAME" ]]; then
-    [[ -f "$EXAMPLE" ]] || { err "template $EXAMPLE not found"; exit 1; }
-    info "Generating $ENV_NAME from $EXAMPLE with random secrets…"
-    SRC="$EXAMPLE" DST="$ENV_NAME" python3 <<'PYEOF'
-import os, secrets, string
-from pathlib import Path
-
-def rand_pw(n=24):
-    alpha = string.ascii_letters + string.digits
-    return "".join(secrets.choice(alpha) for _ in range(n))
-
-src = Path(os.environ["SRC"]).read_text(encoding="utf-8")
-out = []
-for line in src.splitlines():
-    s = line.strip()
-    if not s or s.startswith("#") or "=" not in s:
-        out.append(line); continue
-    key, _, val = s.partition("=")
-    key, val = key.strip(), val.strip()
-    if "__CHANGE_ME__" in val:
-        if key == "SECRET_KEY":
-            val = secrets.token_urlsafe(48)
-        elif key == "FLOWER_BASIC_AUTH":
-            val = f"admin:{rand_pw(20)}"
-        else:
-            val = rand_pw(32)
-    out.append(f"{key}={val}")
-Path(os.environ["DST"]).write_text("\n".join(out) + "\n", encoding="utf-8")
-print(f"Generated {os.environ['DST']} ({len(out)} lines)")
-PYEOF
-    ok "$ENV_NAME generated with random secrets"
-    GENERATED=1
-else
-    ok "$ENV_NAME already present - leaving it alone"
-fi
-
-# ── Apply --domain (Caddy auto-HTTPS) ────────────────────────────────────────
-if [[ -n "$DOMAIN" ]]; then
-    info "Configuring Caddy auto-HTTPS for $DOMAIN…"
-    DOMAIN="$DOMAIN" EMAIL="$EMAIL" ENVF="$ENV_NAME" python3 <<'PYEOF'
-import os
-from pathlib import Path
-d, e, f = os.environ["DOMAIN"], os.environ.get("EMAIL", ""), os.environ["ENVF"]
-overrides = {
-    "CADDY_SITE_ADDRESS": d,
-    "EDGE_HTTP_PORT": "80",
-    "EDGE_HTTPS_PORT": "443",
-    "PUBLIC_BASE_URL": f"https://{d}",
-    "CORS_ORIGINS": f'["https://{d}"]',
-}
-if e:
-    overrides["CADDY_ACME_EMAIL"] = e
-p = Path(f)
-lines = p.read_text(encoding="utf-8").splitlines()
-seen = set(); out = []
-for line in lines:
-    if "=" in line and not line.lstrip().startswith("#"):
-        k = line.split("=", 1)[0].strip()
-        if k in overrides:
-            out.append(f"{k}={overrides[k]}"); seen.add(k); continue
-    out.append(line)
-for k, v in overrides.items():
-    if k not in seen:
-        out.append(f"{k}={v}")
-p.write_text("\n".join(out) + "\n", encoding="utf-8")
-PYEOF
-    ok "Caddy will auto-obtain a Let's Encrypt cert for $DOMAIN (needs ports 80+443 + public DNS)"
-elif [[ "$GENERATED" == "1" && "$TIER" != "lite" ]]; then
-    # No --domain on a fresh pro/max install: the template ships a placeholder
-    # CADDY_SITE_ADDRESS (a real domain) which makes the edge unreachable on
-    # localhost (it 308-redirects to HTTPS for a domain that does not match
-    # 127.0.0.1). Default to localhost so the box is usable out of the box;
-    # the operator sets a real domain (or re-runs with --domain) for production.
-    info "No --domain given; defaulting CADDY_SITE_ADDRESS=localhost for this local $TIER install…"
-    ENVF="$ENV_NAME" python3 <<'PYEOF'
-import os
-from pathlib import Path
-f = os.environ["ENVF"]
-overrides = {
-    "CADDY_SITE_ADDRESS": "localhost",
-    "PUBLIC_BASE_URL": "https://localhost",
-    "CORS_ORIGINS": '["https://localhost"]',
-}
-p = Path(f)
-lines = p.read_text(encoding="utf-8").splitlines()
-seen = set(); out = []
-for line in lines:
-    if "=" in line and not line.lstrip().startswith("#"):
-        k = line.split("=", 1)[0].strip()
-        if k in overrides:
-            out.append(f"{k}={overrides[k]}"); seen.add(k); continue
-    out.append(line)
-for k, v in overrides.items():
-    if k not in seen:
-        out.append(f"{k}={v}")
-p.write_text("\n".join(out) + "\n", encoding="utf-8")
-PYEOF
-    ok "CADDY_SITE_ADDRESS=localhost (HTTPS via Caddy internal CA). Set your domain in $ENV_NAME (or re-run with --domain) for production."
-fi
+CONFIG_ARGS=(--tier "$TIER")
+if $DEV; then CONFIG_ARGS+=(--dev); fi
+if [[ -n "$DOMAIN" ]]; then CONFIG_ARGS+=(--domain "$DOMAIN"); fi
+if [[ -n "$EMAIL" ]]; then CONFIG_ARGS+=(--email "$EMAIL"); fi
+python3 "$SCRIPT_DIR/scripts/install_config.py" "${CONFIG_ARGS[@]}"
 
 # ── Compose file selection ───────────────────────────────────────────────────
 COMPOSE_ARGS=(--env-file "$ENV_NAME" -f docker-compose.yml)
@@ -242,7 +150,7 @@ CURL_RESOLVE=()
 # the wrong one is worse than not probing: Caddy 308s plain HTTP to HTTPS
 # whenever the site address is a HOSTNAME, and `curl -sf` returns 0 on a 308
 # (--fail only trips on >= 400). So the old fixed http://127.0.0.1:$EDGE_HTTP_PORT
-# probe reported "Healthy" on pro and max without ever reaching /health -- and a
+# probe reported "Healthy" on pro and max without ever reaching /healthz -- and a
 # bare 308 responder serving nothing at all passes it too. Verified both ways on
 # 2026-08-30.
 if $DEV; then
@@ -252,7 +160,7 @@ if $DEV; then
 elif [[ -z "$SITE_ADDR" || "$SITE_ADDR" == :* ]]; then
     # ":80" style -> plain HTTP on the mapped edge port (the lite default)
     HEALTH_PORT="$(get_env EDGE_HTTP_PORT)"; HEALTH_PORT="${HEALTH_PORT:-8080}"
-    URL_HEALTH="http://127.0.0.1:${HEALTH_PORT}/health"
+    URL_HEALTH="http://127.0.0.1:${HEALTH_PORT}/healthz"
     APP_URL="http://localhost:${HEALTH_PORT}"
 else
     # a hostname -> Caddy serves HTTPS there and redirects plain HTTP to it.
@@ -265,7 +173,7 @@ else
     # The shipped pro/max templates set it to 443 explicitly, so they are
     # unaffected either way; this is the omitted-key path.
     HEALTH_PORT="$(get_env EDGE_HTTPS_PORT)"; HEALTH_PORT="${HEALTH_PORT:-8443}"
-    URL_HEALTH="https://${SITE_ADDR}:${HEALTH_PORT}/health"
+    URL_HEALTH="https://${SITE_ADDR}:${HEALTH_PORT}/healthz"
     CURL_RESOLVE=(--resolve "${SITE_ADDR}:${HEALTH_PORT}:127.0.0.1")
     if [[ "$HEALTH_PORT" == "443" ]]; then
         APP_URL="https://${SITE_ADDR}"

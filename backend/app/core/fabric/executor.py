@@ -74,9 +74,11 @@ class OperationExecutor:
             if op.write:
                 return await self._execute_native_write(op, ctx)
             return await self._execute_native_read(op, ctx)
-        except Exception as exc:  # noqa: BLE001 — normalize all failures
-            logger.exception("Fabric executor: operation %s failed", op.id)
-            return OperationResult.fail(f"operation {op.id} failed: {exc}", "EXEC_ERROR")
+        except Exception:  # noqa: BLE001 — normalize without disclosing client internals
+            # Database/adapter exceptions can contain credentials, SQL parameters
+            # and private URLs. Keep them out of operation history and logs alike.
+            logger.warning("Fabric executor: operation %s failed", op.id)
+            return OperationResult.fail(f"operation {op.id} failed", "EXEC_ERROR")
 
     # ── native read ──────────────────────────────────────────────────────
 
@@ -256,9 +258,10 @@ class OperationExecutor:
                 )
                 payload["_artifact"] = ref
                 durable_token = ref.get("durable_token")
-            except Exception as exc:  # noqa: BLE001 — normalize for the negotiator
+            except Exception:  # noqa: BLE001 — normalize for the negotiator
+                logger.warning("Fabric: artifact persistence for operation %s failed", op.id)
                 return OperationResult.fail(
-                    f"could not persist input artifact for staging: {exc}",
+                    "could not persist input artifact for staging",
                     "ARTIFACT_UNAVAILABLE",
                 )
 
@@ -277,7 +280,8 @@ class OperationExecutor:
                 notes=f"Staged by Fabric operation {op.id}",
                 actor_id=ctx.actor_id,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
+            logger.warning("Fabric: staging operation %s failed", op.id)
             # stage_change failed (e.g. the per-org pending cap, or a DB error)
             # AFTER we wrote the durable blob — delete it so it isn't orphaned on
             # the persistent volume (no TTL/sweep on the durable store).
@@ -288,7 +292,7 @@ class OperationExecutor:
 
                 with contextlib.suppress(Exception):
                     await durable_store.delete(durable_token, ctx.organization_id)
-            return OperationResult.fail(f"could not stage change: {exc}", "STAGE_FAILED")
+            return OperationResult.fail("could not stage change", "STAGE_FAILED")
         # STAGED, not applied. An operator applies via the PendingChanges pipeline
         # (dual-gate + force). The Fabric never auto-forces a device write.
         res = OperationResult.ok(
@@ -349,8 +353,9 @@ class OperationExecutor:
                 notes=f"Staged by Fabric operation {op.id}",
                 actor_id=ctx.actor_id,
             )
-        except Exception as exc:  # noqa: BLE001 — normalize for the negotiator
-            return OperationResult.fail(f"could not stage change: {exc}", "STAGE_FAILED")
+        except Exception:  # noqa: BLE001 — normalize for the negotiator
+            logger.warning("Fabric: overlay staging operation %s failed", op.id)
+            return OperationResult.fail("could not stage change", "STAGE_FAILED")
         res = OperationResult.ok(
             output={
                 "staged": True,
@@ -381,7 +386,7 @@ class OperationExecutor:
                 "PLUGIN_TIMEOUT",
             )
         except Exception:  # noqa: BLE001 — sanitize plugin internals
-            logger.exception("Fabric: plugin operation %s raised", op.id)
+            logger.warning("Fabric: plugin operation %s raised", op.id)
             return OperationResult.fail(
                 f"plugin operation {op.id} encountered an internal error", "PLUGIN_ERROR"
             )
@@ -446,7 +451,7 @@ def _sites_served_by(controller: object) -> set[UUID]:
 
 
 async def _controller_in_org(db: object, controller_id: UUID, organization_id: UUID) -> object:
-    """The org-owned ``Controller`` row for ``controller_id``, else ``None``.
+    """The non-deleted ``Controller`` row under a live site in the org for ``controller_id``, else ``None``.
 
     Returns the ROW (not a bool) because the write plane needs the controller's
     own ``site_id`` + ``site_mappings`` to prove the staged ``site_id`` and the
@@ -463,7 +468,12 @@ async def _controller_in_org(db: object, controller_id: UUID, organization_id: U
         await db.execute(  # type: ignore[attr-defined]
             select(Controller)
             .join(Site, Controller.site_id == Site.id)
-            .where(Controller.id == controller_id, Site.organization_id == organization_id)
+            .where(
+                Controller.id == controller_id,
+                Controller.deleted_at.is_(None),
+                Site.organization_id == organization_id,
+                Site.deleted_at.is_(None),
+            )
         )
     ).scalar_one_or_none()
 

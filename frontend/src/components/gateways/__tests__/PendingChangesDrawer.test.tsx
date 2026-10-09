@@ -510,3 +510,88 @@ describe('PendingChangesDrawer', () => {
     expect(screen.queryByText(/no pending changes/i)).not.toBeInTheDocument();
   });
 });
+
+
+describe('Proxmox provider observations', () => {
+  it.each([
+    ['pending', 'Accepted — awaiting observation'],
+    ['running', 'Running on Proxmox'],
+    ['failed', 'Provider task failed — verify changes'],
+    ['unknown', 'Outcome unverified'],
+    ['warnings', 'Completed with warnings'],
+  ] as const)('keeps %s tasks visible without calling them completed', async (status, label) => {
+    mockList.mockResolvedValue([makeChange({ status: 'applied', feature: 'proxmox.vm.start',
+      provider_task: { status, id: 'UPID:pve1:fixture', node: 'pve1' } })]);
+    renderWithProviders(<PendingChangesDrawer {...baseProps} vendor="proxmox" />);
+    expect(await screen.findByText(label)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Provider tasks' })).toBeInTheDocument();
+    expect(screen.queryByText(/recently applied/i)).not.toBeInTheDocument();
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+
+  it('stops bulk writes after a provider accepts an asynchronous task', async () => {
+    const user = userEvent.setup();
+    const first = makeChange({ id: 'first', feature: 'proxmox.vm.config' });
+    const second = makeChange({ id: 'second', feature: 'proxmox.vm.config' });
+    mockList.mockResolvedValue([first, second]);
+    mockApply.mockResolvedValue(ok({ ...first, status: 'applied', provider_task: { status: 'pending' } }));
+    renderWithProviders(<PendingChangesDrawer {...baseProps} vendor="proxmox" />);
+    await user.click(await screen.findByRole('button', { name: /^apply all$/i }));
+    const dialog = await screen.findByRole('alertdialog', { name: /apply all pending changes/i });
+    await user.type(within(dialog).getByPlaceholderText('APPLY ALL'), 'APPLY ALL');
+    await user.click(within(dialog).getByRole('button', { name: 'Apply 2' }));
+    expect(await within(dialog).findByText(/bulk apply paused/i)).toBeInTheDocument();
+    expect(mockApply).toHaveBeenCalledTimes(1);
+    expect(mockApply.mock.calls[0][0]).toBe('first');
+  });
+
+  it('blocks another bulk batch while a provider task remains unverified', async () => {
+    mockList.mockResolvedValue([
+      makeChange({ id: 'one' }), makeChange({ id: 'two' }),
+      makeChange({ id: 'accepted', status: 'applied', provider_task: { status: 'unknown' } }),
+    ]);
+    renderWithProviders(<PendingChangesDrawer {...baseProps} vendor="proxmox" />);
+    expect(await screen.findByRole('button', { name: /^apply all$/i })).toBeDisabled();
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+});
+
+it('explains pending restart without offering to repeat the write', async () => {
+  mockList.mockResolvedValue([makeChange({ status: 'applied', feature: 'proxmox.vm.config',
+    payload: { guest_change_version: 1 }, provider_task: { status: 'pending', detail: 'configuration_pending_restart' } })]);
+  renderWithProviders(<PendingChangesDrawer {...baseProps} vendor="proxmox" />);
+  expect(await screen.findByText(/Arrange a restart/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^apply /i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /mark as resolved/i })).not.toBeInTheDocument();
+});
+
+it('requires explicit operator acknowledgement to clear an unknown guest observation', async () => {
+  const user = userEvent.setup();
+  mockList.mockResolvedValue([makeChange({ id: 'unknown-guest', status: 'applied', feature: 'proxmox.vm.resize_disk',
+    payload: { guest_change_version: 1 }, provider_task: { status: 'unknown', detail: 'observation_unavailable' } })]);
+  mockDiscard.mockResolvedValue(ok(makeChange({ id: 'unknown-guest', status: 'discarded' })));
+  renderWithProviders(<PendingChangesDrawer {...baseProps} vendor="proxmox" />);
+  await user.click(await screen.findByRole('button', { name: /mark as resolved/i }));
+  const dialog = await screen.findByRole('alertdialog', { name: /mark this change as resolved/i });
+  expect(mockDiscard).not.toHaveBeenCalled();
+  await user.click(within(dialog).getByRole('button', { name: /mark as resolved/i }));
+  await waitFor(() => expect(mockDiscard).toHaveBeenCalledWith('unknown-guest', { force: true }));
+  expect(mockApply).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['proxmox.node.shutdown', { cluster_operation_version: 1 }],
+  ['proxmox.vm.create', { creation_version: 1 }],
+])('allows explicit resolution without replay for unknown %s', async (feature, payload) => {
+  const user = userEvent.setup();
+  mockList.mockResolvedValue([makeChange({ id: 'manual-result', status: 'applied', feature, payload,
+    provider_task: { status: 'unknown', detail: 'manual_verification_required' } })]);
+  mockDiscard.mockResolvedValue(ok(makeChange({ id: 'manual-result', status: 'discarded' })));
+  renderWithProviders(<PendingChangesDrawer {...baseProps} vendor="proxmox" />);
+  await user.click(await screen.findByRole('button', { name: /mark as resolved/i }));
+  const dialog = await screen.findByRole('alertdialog', { name: /mark this change as resolved/i });
+  expect(mockDiscard).not.toHaveBeenCalled();
+  await user.click(within(dialog).getByRole('button', { name: /mark as resolved/i }));
+  await waitFor(() => expect(mockDiscard).toHaveBeenCalledWith('manual-result', { force: true }));
+  expect(mockApply).not.toHaveBeenCalled();
+});

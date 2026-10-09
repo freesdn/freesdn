@@ -1,0 +1,34 @@
+Discovery global/per-organization lease ownership
+=================================================
+
+Discovery requires a confirmed SET NX EX acquisition before its registered
+Celery task wrapper runs the controller discovery coroutine. A unique token
+belongs to the lexical invocation. Existing contention returns the existing
+success/skipped/already_running result. Store unavailability or ambiguous
+acquisition acknowledgement raises a fixed safe error before discovery runs.
+An accepted but unacknowledged SET can leave its key until expiry; the worker
+must not assume ownership or automatically repeat external effects.
+
+Cleanup atomically deletes a key only if its stored token still matches this
+invocation. A late or repeated cleanup cannot remove a successor or another
+organization's acquisition. Release transport failures are logged using a fixed
+message and do not mask completed effects or the original body exception.
+Sentinel-aware clients use bounded command/connect timeouts and are closed on
+success and failure. Closing an already-used client cannot change the outcome.
+
+The existing global and per-organization key names and 900-second expiry remain
+unchanged. Different scopes retain their existing independent lease behavior.
+Per-controller locks are a separate layer. This change does not add lease
+renewal, durable submission, exactly-once execution or hardware-operation
+fencing: a paused worker may resume after expiry while a successor is running.
+Stop old workers before rollout. Old code uses unconditional DEL and can remove
+new leases during a mixed-version deployment; new code cannot prevent that.
+Raw Celery infrastructure storage/logging and successful task payload contracts
+remain separate privacy boundaries. Acquisition errors from this helper expose
+only a fixed category; ordinary discovery-body errors are not sanitized here.
+
+Regression tests cover unavailable/ambiguous acquisition, stale ownership,
+contention, cleanup failure, scoped wrapper execution and preserved exceptions.
+Separate-process transport probes use real Redis or the qualified Valkey image
+with a synthetic discovery coroutine: no hardware acceptance, broker-delivery
+qualification or failover/partition safety guarantee is inferred from them.

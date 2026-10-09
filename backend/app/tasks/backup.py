@@ -16,6 +16,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.celery_app import celery_app
@@ -39,7 +40,7 @@ def run_backup(self, backup_params: dict[str, Any]) -> dict[str, Any]:
     async def _run() -> dict[str, Any]:
         from uuid import UUID
 
-        from app.services.backup import BackupService
+        from app.services.backup import BackupService, backup_failure_detail
 
         async with AsyncSessionLocal() as session:
             try:
@@ -67,8 +68,13 @@ def run_backup(self, backup_params: dict[str, Any]) -> dict[str, Any]:
                     "file_size": backup.file_size,
                 }
             except Exception as e:
-                logger.error("Background backup failed: %s", e)
-                return {"success": False, "error": str(e)}
+                logger.error("Background backup failed (%s)", type(e).__name__)
+                return {
+                    "success": False,
+                    "error": backup_failure_detail(
+                        e, "Backup creation failed; review storage access and retry."
+                    ),
+                }
 
     return asyncio.run(_run())
 
@@ -84,160 +90,189 @@ def run_scheduled_backups(self) -> dict[str, Any]:
     NOTE H9: each schedule iteration now opens a fresh AsyncSessionLocal()
     so a failure on one schedule cannot corrupt or leak transactional state
     into the next.
-    NOTE H10: we claim due schedules via ``SELECT ... FOR UPDATE SKIP LOCKED``
-    so concurrent Beat fires do not double-run the same row. Missed runs
+    Each due selection is rechecked under a schedule-row lock held in a
+    separate transaction across BackupService commits. Concurrent workers skip
+    the locked schedule rather than generating another archive for that slot. Missed runs
     are intentionally NOT replayed — we pick the latest "now" instead of
     catching up history. Re-running every cron tick that was missed during
     an outage would create a thundering herd of backups.
     """
 
-    async def _claim_due_ids() -> list[Any]:
-        """Return the list of schedule IDs that are due, locking them."""
+    retention_errors = 0
+
+    async def _select_due_ids() -> list[Any]:
+        """Find candidates; selection alone does not claim an occurrence."""
         from sqlalchemy import select
 
         from app.modules.backup.models import BackupSchedule
 
         async with AsyncSessionLocal() as picker:
             now = datetime.now(UTC)
-            q = (
-                select(BackupSchedule.id)
-                .where(
-                    BackupSchedule.is_enabled.is_(True),
-                    BackupSchedule.next_run_at.isnot(None),
-                    BackupSchedule.next_run_at <= now,
-                )
-                # NOTE H10: SKIP LOCKED prevents double-fire when Beat
-                # accidentally invokes us twice (e.g. on worker restart).
-                .with_for_update(skip_locked=True)
+            q = select(BackupSchedule.id).where(
+                BackupSchedule.is_enabled.is_(True),
+                BackupSchedule.deleted_at.is_(None),
+                BackupSchedule.next_run_at.isnot(None),
+                BackupSchedule.next_run_at <= now,
             )
             result = await picker.execute(q)
             ids = [row[0] for row in result.all()]
-            # Release the locks immediately — each iteration will re-acquire
-            # its own row in its own session below.
-            await picker.commit()
             return ids
 
-    async def _run_one(schedule_id: Any) -> bool:
-        """Process a single schedule in its own session. Returns success."""
+    async def _run_one(schedule_id: Any) -> bool | None:
+        """Return True/False for an attempt, None for an obsolete/locked selection."""
+        nonlocal retention_errors
         from sqlalchemy import select
 
         from app.modules.backup.models import BackupSchedule
         from app.services.backup import BackupService
 
-        # NOTE H9: fresh session per iteration.
-        async with AsyncSessionLocal() as session:
+        # A separate transaction owns the schedule lock. The backup service
+        # and retention operations commit their own session, which must not
+        # release this lock before next_run_at has been updated.
+        async with AsyncSessionLocal() as claim_session:
             try:
-                # Re-acquire & lock the specific schedule row in this session
+                now = datetime.now(UTC)
                 row = (
-                    await session.execute(
+                    await claim_session.execute(
                         select(BackupSchedule)
-                        .where(BackupSchedule.id == schedule_id)
-                        .with_for_update(skip_locked=True)
+                        .where(
+                            BackupSchedule.id == schedule_id,
+                            BackupSchedule.is_enabled.is_(True),
+                            BackupSchedule.deleted_at.is_(None),
+                            BackupSchedule.next_run_at.isnot(None),
+                            BackupSchedule.next_run_at <= now,
+                        )
+                        # NO KEY UPDATE excludes other claims/edits but permits
+                        # the work session to insert Backup.schedule_id FKs.
+                        .with_for_update(skip_locked=True, key_share=True)
                     )
                 ).scalar_one_or_none()
                 if row is None:
-                    # Another worker won the race — silently skip.
-                    return False
+                    # Another worker claimed it, or an operator changed it.
+                    return None
 
                 schedule = row
-                now = datetime.now(UTC)
-                svc = BackupService(session)
-                name = f"{schedule.name} — {now.strftime('%Y-%m-%d %H:%M')}"
-
-                # NOTE C4: forward organization_id so the backup is org-scoped.
-                await svc.create_backup(
-                    name=name,
-                    description=f"Scheduled backup from '{schedule.name}'",
-                    backup_type=schedule.backup_type or "full",
-                    site_id=schedule.site_id,
-                    device_ids=schedule.device_ids,
-                    include_devices=schedule.include_devices,
-                    include_vlans=schedule.include_vlans,
-                    include_ssids=schedule.include_ssids,
-                    include_users=schedule.include_users,
-                    include_automation=schedule.include_automation,
-                    storage_type=schedule.storage_type or "local",
-                    storage_location_id=schedule.storage_location_id,
-                    is_encrypted=schedule.is_encrypted,
-                    retention_days=schedule.retention_days,
-                    schedule_id=schedule.id,
-                    organization_id=schedule.organization_id,
-                )
-
-                # NOTE H10: pick the NEXT scheduled time relative to NOW —
-                # do NOT replay missed runs. This is intentional.
-                schedule.last_run_at = now
-                schedule.next_run_at = svc._calculate_next_run(
-                    schedule.cron_expression or "0 2 * * *",
-                    schedule.timezone or "UTC",
-                )
-
-                # Enforce max_backups: delete oldest if over limit
-                if schedule.max_backups and schedule.max_backups > 0:
-                    from sqlalchemy import func as sqlfunc
-
-                    from app.modules.backup.models import Backup, BackupStatus
-
-                    count_q = select(sqlfunc.count(Backup.id)).where(
-                        Backup.schedule_id == schedule.id,
-                        Backup.status == BackupStatus.COMPLETED,
+                async with AsyncSessionLocal() as session:
+                    svc = BackupService(session)
+                    # Reject invalid legacy timing before creating an archive.
+                    # Recalculate after work too, so slow jobs do not backfill.
+                    svc._calculate_next_run(
+                        "0 2 * * *"
+                        if schedule.cron_expression is None
+                        else schedule.cron_expression,
+                        "UTC" if schedule.timezone is None else schedule.timezone,
                     )
-                    count = (await session.execute(count_q)).scalar() or 0
-                    if count > schedule.max_backups:
-                        excess = count - schedule.max_backups
-                        oldest_q = (
-                            select(Backup.id)
-                            .where(
-                                Backup.schedule_id == schedule.id,
-                                Backup.status == BackupStatus.COMPLETED,
-                            )
-                            .order_by(Backup.created_at.asc())
-                            .limit(excess)
-                        )
-                        oldest = (await session.execute(oldest_q)).scalars().all()
-                        for bid in oldest:
-                            try:
-                                await svc.delete_backup(bid)
-                            except (SQLAlchemyError, OSError) as exc:
-                                logger.error(
-                                    "Failed to delete old backup %s for schedule '%s': %s",
-                                    bid,
-                                    schedule.name,
-                                    exc,
-                                )
+                    name = f"{schedule.name} — {now.strftime('%Y-%m-%d %H:%M')}"
 
-                # NOTE H9: BackupService.create_backup() already commits.
-                # The schedule-row updates above are still pending — flush
-                # them with one final commit. The previous code committed
-                # twice in a row, doubling the round-trips.
-                await session.commit()
+                    # NOTE C4: forward organization_id so the backup is org-scoped.
+                    await svc.create_backup(
+                        name=name,
+                        description=f"Scheduled backup from '{schedule.name}'",
+                        backup_type=schedule.backup_type or "full",
+                        site_id=schedule.site_id,
+                        device_ids=schedule.device_ids,
+                        include_devices=schedule.include_devices,
+                        include_vlans=schedule.include_vlans,
+                        include_ssids=schedule.include_ssids,
+                        include_users=schedule.include_users,
+                        include_automation=schedule.include_automation,
+                        storage_type=schedule.storage_type or "local",
+                        storage_location_id=schedule.storage_location_id,
+                        is_encrypted=schedule.is_encrypted,
+                        retention_days=schedule.retention_days,
+                        schedule_id=schedule.id,
+                        organization_id=schedule.organization_id,
+                    )
+
+                    # NOTE H10: pick the NEXT scheduled time relative to NOW —
+                    # do NOT replay missed runs. This is intentional.
+                    schedule.last_run_at = now
+                    schedule.next_run_at = svc._calculate_next_run(
+                        "0 2 * * *"
+                        if schedule.cron_expression is None
+                        else schedule.cron_expression,
+                        "UTC" if schedule.timezone is None else schedule.timezone,
+                    )
+
+                    # Enforce max_backups: delete oldest if over limit
+                    if schedule.max_backups and schedule.max_backups > 0:
+                        from sqlalchemy import func as sqlfunc
+
+                        from app.modules.backup.models import Backup, BackupStatus
+
+                        count_q = select(sqlfunc.count(Backup.id)).where(
+                            Backup.schedule_id == schedule.id,
+                            Backup.status == BackupStatus.COMPLETED,
+                        )
+                        count = (await session.execute(count_q)).scalar() or 0
+                        if count > schedule.max_backups:
+                            excess = count - schedule.max_backups
+                            oldest_q = (
+                                select(Backup.id)
+                                .where(
+                                    Backup.schedule_id == schedule.id,
+                                    Backup.status == BackupStatus.COMPLETED,
+                                )
+                                .order_by(Backup.created_at.asc())
+                                .limit(excess)
+                            )
+                            oldest = (await session.execute(oldest_q)).scalars().all()
+                            for bid in oldest:
+                                try:
+                                    await svc.delete_backup(bid)
+                                except (SQLAlchemyError, OSError, HTTPException) as exc:
+                                    retention_errors += 1
+                                    await session.rollback()
+                                    logger.error(
+                                        "Failed to prune backup %s for schedule %s (%s)",
+                                        bid,
+                                        schedule_id,
+                                        type(exc).__name__,
+                                    )
+
+                # Publish the next occurrence before releasing the claim lock.
+                await claim_session.commit()
                 return True
             except Exception as e:
                 logger.error(
-                    "Failed to run scheduled backup '%s': %s",
+                    "Failed to run scheduled backup %s (%s)",
                     schedule_id,
-                    e,
+                    type(e).__name__,
                 )
-                await session.rollback()
+                await claim_session.rollback()
                 return False
 
     async def _run() -> dict[str, Any]:
-        ids = await _claim_due_ids()
+        ids = await _select_due_ids()
         triggered = 0
         errors = 0
+        skipped = 0
         for sid in ids:
             ok = await _run_one(sid)
-            if ok:
+            if ok is True:
                 triggered += 1
-            else:
+            elif ok is False:
                 errors += 1
+            else:
+                skipped += 1
+        # A successful archive may still have failed pruning. Include those
+        # failures in the existing error count as well as the explicit field.
+        errors += retention_errors
         logger.info(
-            "Scheduled backups check: %d due, %d triggered, %d errors",
+            "Scheduled backups check: %d due, %d triggered, %d errors, %d skipped; %d retention failures",
             len(ids),
             triggered,
             errors,
+            skipped,
+            retention_errors,
         )
-        return {"due": len(ids), "triggered": triggered, "errors": errors}
+        return {
+            "due": len(ids),
+            "triggered": triggered,
+            "errors": errors,
+            "skipped": skipped,
+            "retention_errors": retention_errors,
+        }
 
     return asyncio.run(_run())
 
@@ -252,7 +287,7 @@ def cleanup_expired_backups(self) -> dict[str, Any]:
     """
 
     async def _run() -> dict[str, Any]:
-        from app.services.backup import BackupService
+        from app.services.backup import BackupService, backup_failure_detail
 
         async with AsyncSessionLocal() as session:
             try:
@@ -261,8 +296,13 @@ def cleanup_expired_backups(self) -> dict[str, Any]:
                 logger.info("Expired backup cleanup: %d deleted", deleted)
                 return {"deleted": deleted}
             except Exception as e:
-                logger.error("Expired backup cleanup failed: %s", e)
-                return {"deleted": 0, "error": str(e)}
+                logger.error("Expired backup cleanup failed (%s)", type(e).__name__)
+                return {
+                    "deleted": 0,
+                    "error": backup_failure_detail(
+                        e, "Backup expiry cleanup failed; review storage and database availability."
+                    ),
+                }
 
     return asyncio.run(_run())
 
@@ -295,7 +335,7 @@ async def _validate_restore_async() -> dict[str, Any]:
 
     from app.models.core import Organization
     from app.modules.backup.models import Backup, BackupStatus
-    from app.services.backup import BackupService
+    from app.services.backup import BackupService, backup_failure_detail
 
     results: list[dict[str, Any]] = []
     cutoff = datetime.now(UTC) - timedelta(days=60)
@@ -409,34 +449,46 @@ async def _validate_restore_async() -> dict[str, Any]:
                 )
             except SQLAlchemyError as e:
                 # DB errors are recoverable across the loop; log and continue.
-                logger.exception("validate_restore DB error for org %s", org.id)
+                logger.error(
+                    "Restore validation DB failure for org %s (%s)", org.id, type(e).__name__
+                )
                 results.append(
                     {
                         "organization_id": str(org.id),
                         "backup_id": str(backup.id),
                         "status": "error",
-                        "reason": str(e)[:200],
+                        "reason": backup_failure_detail(
+                            e,
+                            "Backup restore validation failed; review archive and storage access.",
+                        ),
                     }
                 )
                 await _emit_validation_failure(
                     org_id=org.id,
                     backup_id=backup.id,
-                    reason=str(e)[:200],
+                    reason=backup_failure_detail(
+                        e, "Backup restore validation failed; review archive and storage access."
+                    ),
                 )
             except Exception as e:
-                logger.exception("validate_restore failed for org %s", org.id)
+                logger.error("Restore validation failed for org %s (%s)", org.id, type(e).__name__)
                 results.append(
                     {
                         "organization_id": str(org.id),
                         "backup_id": str(backup.id),
                         "status": "error",
-                        "reason": str(e)[:200],
+                        "reason": backup_failure_detail(
+                            e,
+                            "Backup restore validation failed; review archive and storage access.",
+                        ),
                     }
                 )
                 await _emit_validation_failure(
                     org_id=org.id,
                     backup_id=backup.id,
-                    reason=str(e)[:200],
+                    reason=backup_failure_detail(
+                        e, "Backup restore validation failed; review archive and storage access."
+                    ),
                 )
 
     ok_count = sum(1 for r in results if r["status"] == "ok")
@@ -511,5 +563,5 @@ async def _emit_validation_failure(
                 organization_id=str(org_id),
             )
         )
-    except Exception:
-        logger.debug("failed to emit backup.validation.failed event", exc_info=True)
+    except Exception as exc:
+        logger.debug("Failed to emit backup.validation.failed event (%s)", type(exc).__name__)

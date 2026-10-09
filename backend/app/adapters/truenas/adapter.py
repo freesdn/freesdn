@@ -89,7 +89,7 @@ class TrueNASAdapter(BaseAdapter):
 
         async with TrueNASAdapter(
             host="truenas.lab", username="root", password="",
-            api_key="1-abc...", verify_ssl=False,
+            api_key="1-abc...", verify_ssl=True,
         ) as nas:
             info = await nas.get_system_info()
             pools = await nas.list_pools()
@@ -165,7 +165,7 @@ class TrueNASAdapter(BaseAdapter):
             "password": password,
             "api_key": kwargs.get("api_key"),
             "port": kwargs.get("port", 443),
-            "verify_ssl": kwargs.get("verify_ssl", False),
+            "verify_ssl": kwargs.get("verify_ssl", True),
             "timeout": kwargs.get("timeout"),
         }
         # Populated on connect(); tests may inject a mock here directly.
@@ -207,6 +207,8 @@ class TrueNASAdapter(BaseAdapter):
             return rest
 
     async def connect(self) -> bool:
+        if self._connected:
+            return True
         if self._api is None:
             self._api = await self._open_transport()
         else:
@@ -231,7 +233,6 @@ class TrueNASAdapter(BaseAdapter):
         try:
             await self.connect()
             info = await self._api.get_system_info()
-            await self.disconnect()
             return AdapterResult.ok(
                 data={
                     "version": info.get("version", ""),
@@ -254,6 +255,8 @@ class TrueNASAdapter(BaseAdapter):
                 f"TrueNAS test failed: {exc}",
                 error_code="UNKNOWN",
             )
+        finally:
+            await self.disconnect()
 
     async def discover_devices(self) -> list[DiscoveredDevice]:
         """The appliance itself is a single discovered device.

@@ -21,9 +21,10 @@ SLOT CLAIMS, NOT TIMERS
     A worker does not remember when it last ran something. Each tick computes
     the current slot -- ``floor((now + offset) / interval)`` -- and claims
     ``SET NX EX`` on a key naming that slot. Whoever wins runs it. This is
-    at-most-once across every API worker and every replica, it needs no shared
-    timer state, and it self-heals: a worker that dies mid-slot simply loses the
-    next one to somebody else.
+    duplicate suppression while the shared claim remains present. Redis loss,
+    eviction or restoring an older Redis snapshot can lose that protection;
+    external effects still need their own idempotency. A failed or uncertain
+    claim never authorizes a local fallback. Missed slots are not caught up.
 
     It also disposes of catch-up. If the platform was down for six hours, only
     the CURRENT slot can be claimed, so a 15-minute scan runs once on return
@@ -140,19 +141,17 @@ class _Key:
 
 
 class PluginScheduler:
-    """Runs manifest-declared plugin schedules, once per slot, cluster-wide."""
+    """Run current schedule slots only after a confirmed shared claim."""
 
     def __init__(self) -> None:
         self._task: asyncio.Task[None] | None = None
         self._running: set[tuple[str, UUID, str]] = set()
         self._stats: dict[tuple[str, UUID, str], ScheduleStats] = {}
         self._redis: Any = _REDIS_UNSET
-        #: In-process fallback for the slot claim when Redis is unavailable.
-        #: Correct for a single instance; under multiple workers WITHOUT Redis a
-        #: schedule can run more than once per slot, which is logged once rather
-        #: than papered over.
-        self._local_slots: dict[tuple[str, UUID, str], int] = {}
-        self._warned_no_redis = False
+        # Diagnostics are worker-local and are NOT execution records. A refused
+        # attempt must not increment the count of scheduled methods that ran.
+        self._blocked: dict[tuple[str, UUID, str], dict[str, Any]] = {}
+        self._redis_retry_at = 0.0
         self._inflight: set[asyncio.Task[None]] = set()
 
     # ── lifecycle ────────────────────────────────────────────────────────
@@ -193,7 +192,30 @@ class PluginScheduler:
                     "failures": stat.failures,
                     "last": stat.last.to_dict() if stat.last else None,
                 }
+        for (pid, org, name), blocked in self._blocked.items():
+            if pid == plugin_id and org == organization_id:
+                out.setdefault(name, {"runs": 0, "failures": 0, "last": None})["blocked"] = dict(
+                    blocked
+                )
         return out
+
+    def _block(self, key: _Key, reason: str) -> None:
+        from app.core.startup import SUBSYSTEM_STATUS
+
+        previous = self._blocked.get(key.tuple())
+        if previous is None or previous["reason"] != reason:
+            self._blocked[key.tuple()] = {"reason": reason, "since": time.time()}
+            logger.warning("Plugin schedule %s paused: %s", key.redis_suffix(), reason)
+        SUBSYSTEM_STATUS["plugin_scheduler"] = "degraded"
+
+    def _unblock(self, key: _Key, *, reason: str | None = None) -> None:
+        from app.core.startup import SUBSYSTEM_STATUS
+
+        previous = self._blocked.get(key.tuple())
+        if previous is not None and (reason is None or previous["reason"] == reason):
+            self._blocked.pop(key.tuple())
+        if not self._blocked:
+            SUBSYSTEM_STATUS["plugin_scheduler"] = "healthy"
 
     async def last_run(self, plugin_id: str, organization_id: UUID, name: str) -> dict | None:
         """The last run recorded by ANY worker, or this one's if Redis is down.
@@ -240,9 +262,11 @@ class PluginScheduler:
     async def _tick(self) -> None:
         from app.plugins.loader import plugin_loader
 
+        active_keys = set()
         for (plugin_id, org_id), runtime in list(plugin_loader.get_active().items()):
             for sched in self._schedules_of(runtime):
                 key = _Key(plugin_id, org_id, sched.name)
+                active_keys.add(key.tuple())
                 if key.tuple() in self._running:
                     # Still running from a previous slot. Skipping is right:
                     # stacking a second scan on top of a slow one turns a
@@ -256,6 +280,8 @@ class PluginScheduler:
                 )
                 self._inflight.add(task)
                 task.add_done_callback(self._inflight.discard)
+        for identity in set(self._blocked) - active_keys:
+            self._unblock(_Key(*identity))
 
     @staticmethod
     def _schedules_of(runtime: FreeSDNPlugin) -> list[PluginSchedule]:
@@ -287,34 +313,33 @@ class PluginScheduler:
                     nx=True,
                     ex=interval,
                 )
-                return bool(acquired)
+                if acquired is not True and acquired is not False and acquired is not None:
+                    self._block(key, "coordination_unavailable")
+                    return False
+                self._unblock(key, reason="coordination_unavailable")
+                return acquired is True
             except Exception:
-                logger.warning(
-                    "Plugin scheduler: slot claim failed for %s; falling back in-process",
-                    key.redis_suffix(),
-                )
+                # SET may have committed even when its reply was lost. An
+                # uncertain reply never authorizes a per-process fallback.
+                self._block(key, "coordination_unavailable")
+                return False
 
-        if not self._warned_no_redis:
-            self._warned_no_redis = True
-            logger.warning(
-                "Plugin scheduler has no Redis: slot claims are per-process. Correct on a "
-                "single instance; with multiple API workers a schedule may run once per "
-                "worker per interval."
-            )
-        if self._local_slots.get(key.tuple()) == slot:
-            return False
-        self._local_slots[key.tuple()] = slot
-        return True
+        self._block(key, "coordination_unavailable")
+        return False
 
     async def _get_redis(self) -> Any:
         if self._redis is _REDIS_UNSET:
+            if time.monotonic() < self._redis_retry_at:
+                return None
             try:
                 from app.core.redis_client import get_async_redis
 
                 self._redis = get_async_redis(decode_responses=True)
-            except Exception as exc:
-                logger.warning("Plugin scheduler: Redis unavailable (%s)", exc)
-                self._redis = None
+            except Exception:
+                # Retry client construction on a later tick, not for each
+                # schedule in this tick. Do not cache an outage forever.
+                self._redis_retry_at = time.monotonic() + TICK_SECONDS
+                return None
         return self._redis
 
     # ── running ──────────────────────────────────────────────────────────
@@ -395,8 +420,9 @@ class PluginScheduler:
         from app.plugins.sdk import _plugin_session
 
         session = _plugin_session.get()
-        if session is None:  # pragma: no cover - _run always binds one
-            return not sched.enabled_by_default
+        if session is None:
+            self._block(key, "settings_unavailable")
+            return True
         try:
             result = await session.execute(
                 select(PluginSetting.value).where(
@@ -406,19 +432,16 @@ class PluginScheduler:
                 )
             )
             row = result.first()
+            self._unblock(key, reason="settings_unavailable")
             if row is None:
                 return not sched.enabled_by_default
             return bool(row[0])
         except Exception:
-            # Fall back to what the plugin SHIPS with, not to "run it" and not
-            # to "skip it". Defaulting to run would start netbox-sync's
-            # unattended write because one SELECT failed; defaulting to skip
-            # would silently stop a monitoring scan, and an absence of findings
-            # reads as good news. The manifest default is the answer the author
-            # already gave for "no operator has decided yet", which is exactly
-            # the situation a failed lookup leaves us in.
-            logger.warning("Plugin scheduler: enabled-check failed for %s", key.redis_suffix())
-            return not sched.enabled_by_default
+            # An unreadable row is not proof that no operator choice exists.
+            # In particular it must not re-enable a default-on schedule which
+            # an operator disabled. Surface the pause without recording a run.
+            self._block(key, "settings_unavailable")
+            return True
 
     async def _record(self, key: _Key, run: ScheduleRun) -> None:
         stat = self._stats.setdefault(key.tuple(), ScheduleStats())

@@ -1,0 +1,49 @@
+Backup creation capability boundaries (2026-09-25)
+=================================================
+
+A successful configuration read is not evidence that a saved backup was created.
+The generic pfSense adapter previously issued GET diagnostics/config_history/backup
+and returned arbitrary provider data as "Backup created". Configuration XML strings
+could bypass field-name redaction. Empty replies could also appear successful.
+
+The low-level pfSense create_backup operation now raises a capability error before
+network I/O. The adapter returns NOT_SUPPORTED without invoking the client or
+including provider data. The firewall API maps this result to HTTP 501. The existing
+permission, site visibility, deleted-gateway and anonymous access checks remain.
+Neither read-only mode nor force arguments enable this unsupported operation.
+
+The OPNsense/pfSense backup page no longer offers a create action that the adapters
+do not implement. An English, Spanish and Chinese notice explains that creation,
+history and configuration export are separate operations. History availability,
+export, retry, and existing confirmed history revert/delete controls are preserved.
+OpenWrt and MikroTik use separate page branches; this change does not qualify their
+backup operations. Remaining per-operation capability presentation needs review.
+
+Evidence and limits
+-------------------
+The inspected pfrest REST API v2.10.2 source, commit
+ df41b63c0beaad21c8d96e8c6571c27173921172
+contains GET/DELETE history revision(s) endpoints, not the backup endpoint called by
+the previous implementation. This observation is limited to that inspected package;
+it is not a claim about every pfSense release, plugin or deployment.
+https://github.com/pfrest/pfSense-pkg-RESTAPI/tree/df41b63c0beaad21c8d96e8c6571c27173921172/pfSense-pkg-RESTAPI/files/usr/local/pkg/RESTAPI
+
+36 new backend tests reproduce 24 failures in the previous implementation, with 12
+passing controls. The corrected related suite passes 1,080 tests using an isolated
+PostgreSQL 18.6 instance. Independent probes exercise 32 incoming TCP HTTP/PostgreSQL
+cases and four low-level read controls, before and after, using real HTTPX and
+verified TLS to an owned synthetic vendor server. The previous implementation
+returned four synthetic configuration payloads and two provider diagnostics; the
+corrected creation path returned none and made no backup request. Normal version
+reads still worked. Identity, connection establishment and vendor responses are
+fixtures; these checks do not prove vendor authentication or physical-device backup.
+
+Eight new page tests reproduce six failures in the previous UI and preserve two
+confirmation controls. All 897 frontend tests, lint and a strict production build
+pass locally. Eight independent Chromium cases exercise the actual page and Axios
+over loopback HTTP, including valid, empty and failed history and confirmed synthetic
+revert/delete requests. There are no customer-device writes in these checks.
+
+These local results must be bound to the sanitized public source and requalified in
+the shipping images. They do not establish pfSense history/export interoperability,
+managed backup storage, retention, restore integrity, RTO/RPO or enterprise readiness.

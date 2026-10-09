@@ -484,7 +484,7 @@ def _decrypt_if_needed(value: str | None) -> str:
     try:
         return decrypt_credential(value)
     except ValueError:
-        return value
+        raise ValueError("Stored controller credential could not be decrypted") from None
 
 
 async def _get_adapter_for_controller(ctrl: Controller) -> dict[str, Any]:

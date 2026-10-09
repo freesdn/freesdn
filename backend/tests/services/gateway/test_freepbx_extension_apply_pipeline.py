@@ -42,14 +42,9 @@ class _RecAdapter:
 
 
 def _make_session():
-    s = AsyncMock()
-    s.commit = AsyncMock()
-    s.refresh = AsyncMock()
-    cnt = MagicMock()
-    cnt.scalar.return_value = 0
-    s.execute = AsyncMock(return_value=cnt)
-    s.get = AsyncMock(return_value=None)
-    return s
+    from tests.services.gateway._audit_session import make_audit_session
+
+    return make_audit_session("freepbx")
 
 
 def _change():

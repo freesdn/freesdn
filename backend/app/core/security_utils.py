@@ -38,7 +38,7 @@ def csv_safe(value: Any) -> Any:
 import socket
 import unicodedata
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urlparse
 
 __all__ = [
@@ -348,6 +348,12 @@ def _resolve_and_validate(hostname: str, allow_hosts: frozenset[str] = frozenset
     return resolved_ips[0]
 
 
+class DownloadSink(Protocol):
+    """Minimal binary writer accepted by the bounded downloader."""
+
+    def write(self, data: bytes, /) -> int: ...
+
+
 async def safe_http_request(
     method: str,
     url: str,
@@ -357,6 +363,8 @@ async def safe_http_request(
     verify_tls: bool = True,
     follow_redirects: bool = False,
     allow_hosts: frozenset[str] = frozenset(),
+    download_to: DownloadSink | None = None,
+    max_response_bytes: int | None = None,
     **kwargs: Any,
 ) -> Any:
     """Make an HTTP request with DNS-rebinding-safe SSRF protection.
@@ -475,6 +483,33 @@ async def safe_http_request(
         verify=verify_tls,
         follow_redirects=follow_redirects,
     ) as client:
+        if download_to is not None:
+            if max_response_bytes is None or max_response_bytes <= 0:
+                raise ValueError("A positive byte limit is required for downloads")
+            if follow_redirects:
+                raise ValueError("Streaming downloads may not follow redirects")
+            # Limit actual file bytes without allowing HTTP decompression to
+            # allocate an unbounded expansion before the size check.
+            headers = {
+                key: value for key, value in headers.items() if key.lower() != "accept-encoding"
+            }
+            headers["Accept-Encoding"] = "identity"
+            async with client.stream(
+                method, ip_url, headers=headers, extensions=request_extensions, **kwargs
+            ) as response:
+                response.raise_for_status()
+                if response.headers.get("content-encoding", "identity").lower() != "identity":
+                    raise ValueError("Compressed HTTP transfers are not supported for downloads")
+                length = response.headers.get("content-length")
+                if length is not None and int(length) > max_response_bytes:
+                    raise ValueError("Download exceeds maximum size")
+                received = 0
+                async for chunk in response.aiter_raw(chunk_size=64 * 1024):
+                    received += len(chunk)
+                    if received > max_response_bytes:
+                        raise ValueError("Download exceeds maximum size")
+                    download_to.write(chunk)
+                return response
         return await client.request(
             method,
             ip_url,

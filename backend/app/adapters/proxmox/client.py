@@ -17,8 +17,13 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
+import json
 import logging
+import os
 import re
+import secrets
 import threading
 import time
 from dataclasses import dataclass
@@ -26,7 +31,7 @@ from typing import Any
 
 import httpx
 
-from app.adapters.exceptions import AdapterError, AdapterReadOnlyError
+from app.adapters.exceptions import AdapterError, AdapterOutcomeUnknownError, AdapterReadOnlyError
 from app.adapters.http_utils import CircuitBreaker
 from app.adapters.proxmox.constants import (
     API_BASE,
@@ -46,7 +51,7 @@ logger = logging.getLogger(__name__)
 # example a VM ID that contains ``..`` — would walk the controller
 # API surface. Reject any path containing traversal segments or
 # control characters before httpx sees it.
-_SAFE_PATH_RE = re.compile(r"^/?[A-Za-z0-9_./@:%\-]+/?$")
+_SAFE_PATH_RE = re.compile(r"^/?[A-Za-z0-9_./@!:%\-]+/?$")
 
 # percent-encoded traversal payloads (``%2e``, ``%2f``) and
 # their uppercase variants must be rejected so a payload that bypasses
@@ -68,7 +73,7 @@ def _validate_path(path: str) -> None:
     traversal sequences and dot-segment / repeated-slash normalization
     tells (Item 5).
     """
-    if not path or not _SAFE_PATH_RE.match(path):
+    if not path or not _SAFE_PATH_RE.fullmatch(path):
         raise AdapterError(
             f"unsafe Proxmox API path: {path!r}",
             adapter_id="proxmox",
@@ -190,9 +195,11 @@ class _ConnectionCache:
                 for k in expired:
                     del self._cache[k]
 
-    def invalidate(self, key: str) -> None:
+    def invalidate(self, key: str, client: ProxmoxClient) -> None:
         with self._lock:
-            self._cache.pop(key, None)
+            entry = self._cache.get(key)
+            if entry is not None and entry[1] is client:
+                self._cache.pop(key, None)
 
 
 # ticket cache lives separately from the connection cache.
@@ -200,9 +207,9 @@ class _ConnectionCache:
 # ``finally:`` block, which invalidates the per-instance httpx client
 # (and used to invalidate the connection cache too) — so the
 # connection cache was effectively never reused. The ticket cache is
-# a per-process, ephemeral memo of (ticket, csrf_token, expires_at)
-# keyed by (host, port, realm, username); ``connect()`` checks it
-# before falling back to a full ``/access/ticket`` round-trip, and
+# a bounded per-process, ephemeral memo of (ticket, csrf_token, expires_at)
+# keyed by a process-local credential/endpoint/routing digest; ``connect()`` checks it
+# before making a full ``/access/ticket`` round-trip, and
 # ``close()`` does NOT invalidate it. Useful for high-frequency
 # bursts of independent service calls against the same controller.
 #
@@ -231,11 +238,12 @@ class _TicketCache:
     """
 
     def __init__(self) -> None:
-        self._cache: dict[tuple[str, int, str, str], _CachedTicket] = {}
+        self._cache: dict[str, _CachedTicket] = {}
         self._lock = threading.Lock()
 
-    def get(self, host: str, port: int, realm: str, username: str) -> _CachedTicket | None:
-        key = (host, port, realm, username)
+    def get(self, key: str | None) -> _CachedTicket | None:
+        if key is None:
+            return None
         with self._lock:
             entry = self._cache.get(key)
             if entry is None:
@@ -247,27 +255,32 @@ class _TicketCache:
 
     def put(
         self,
-        host: str,
-        port: int,
-        realm: str,
-        username: str,
+        key: str | None,
         ticket: str,
         csrf_token: str,
     ) -> None:
-        if not ticket:
+        if key is None or not ticket:
             return
-        key = (host, port, realm, username)
         with self._lock:
+            # Credentials/routes can change often; expired identities must not accumulate.
+            for stale in [k for k, entry in self._cache.items() if not entry.is_fresh()]:
+                del self._cache[stale]
+            if key not in self._cache and len(self._cache) >= 256:
+                oldest = min(self._cache, key=lambda k: self._cache[k].cached_at)
+                del self._cache[oldest]
             self._cache[key] = _CachedTicket(
                 ticket=ticket,
                 csrf_token=csrf_token or "",
                 cached_at=time.monotonic(),
             )
 
-    def invalidate(self, host: str, port: int, realm: str, username: str) -> None:
-        key = (host, port, realm, username)
+    def invalidate(self, key: str | None, expected_ticket: str | None) -> None:
+        if key is None:
+            return
         with self._lock:
-            self._cache.pop(key, None)
+            entry = self._cache.get(key)
+            if entry is not None and entry.ticket == expected_ticket:
+                self._cache.pop(key, None)
 
 
 class _ReachabilityTracker:
@@ -275,21 +288,37 @@ class _ReachabilityTracker:
 
     def __init__(self, cooldown: int = 10):
         self._cooldown = cooldown
-        self._failures: dict[str, float] = {}
+        self._failures: dict[tuple[str, str], float] = {}
         self._lock = threading.Lock()
 
-    def is_reachable(self, host: str) -> bool:
+    def is_reachable(self, host: str, context: str = "") -> bool:
         with self._lock:
-            fail_time = self._failures.get(host)
-            return not (fail_time and time.monotonic() - fail_time < self._cooldown)
+            key = (host, context)
+            fail_time = self._failures.get(key)
+            if fail_time is not None and time.monotonic() - fail_time < self._cooldown:
+                return False
+            self._failures.pop(key, None)
+            return True
 
-    def mark_unreachable(self, host: str) -> None:
+    def mark_unreachable(self, host: str, context: str = "") -> None:
         with self._lock:
-            self._failures[host] = time.monotonic()
+            now = time.monotonic()
+            expired = [key for key, at in self._failures.items() if now - at >= self._cooldown]
+            for key in expired:
+                del self._failures[key]
+            key = (host, context)
+            if key not in self._failures and len(self._failures) >= 256:
+                oldest = min(self._failures, key=self._failures.__getitem__)
+                del self._failures[oldest]
+            self._failures[key] = now
 
-    def mark_reachable(self, host: str) -> None:
+    def mark_reachable(self, host: str, context: str | None = None) -> None:
         with self._lock:
-            self._failures.pop(host, None)
+            if context is not None:
+                self._failures.pop((host, context), None)
+            else:
+                for key in [key for key in self._failures if key[0] == host]:
+                    del self._failures[key]
 
 
 # Items 2/3: idempotent HTTP methods can be safely retried after a
@@ -338,6 +367,50 @@ class ProxmoxClientConfig:
     username: str = ""
     password: str = ""
     realm: str = "pam"  # pam, pve, ldap, ad
+
+
+_AUTH_CACHE_KEY = secrets.token_bytes(32)
+
+
+def _authentication_cache_key(config: ProxmoxClientConfig) -> str:
+    """Bind shared authentication to credentials, endpoint, TLS and direct routing.
+
+    Only a process-local keyed digest is stored as the identity. Explicit transports
+    bypass shared caches because their destination/authorization may change in place.
+    """
+    from app.core.http_client import overlay_socks_proxy
+
+    route_environment = [
+        os.environ.get(name)
+        for name in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "NO_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+            "no_proxy",
+            "SSL_CERT_FILE",
+            "SSL_CERT_DIR",
+            "FREESDN_DEVICE_CA_BUNDLE",
+        )
+    ]
+    identity = [
+        config.host,
+        config.port,
+        config.use_ssl,
+        repr(config.verify_ssl),
+        config.timeout,
+        config.username,
+        config.password,
+        config.realm,
+        config.token_id,
+        config.token_secret,
+        overlay_socks_proxy(),
+        route_environment,
+    ]
+    return hmac.new(_AUTH_CACHE_KEY, json.dumps(identity).encode(), hashlib.sha256).hexdigest()
 
 
 # httpx exception messages embed full URLs ("Connection
@@ -390,6 +463,10 @@ class ProxmoxClient:
         # requests through the site's agent (appliance/agent-only sites the
         # controller can't reach directly). None = direct (overlay-aware) reach.
         self._transport = transport
+        # A custom transport can reach a different site at the same private IP.
+        # Its failures are local to this client; direct clients share only an
+        # exact credential/endpoint/trust/routing context.
+        self._transport_reachability = _ReachabilityTracker() if transport is not None else None
         self._http: httpx.AsyncClient | None = None
         self._ticket: str | None = None
         self._csrf_token: str | None = None
@@ -400,6 +477,8 @@ class ProxmoxClient:
         # the 10-slot API queue without cross-blocking.
         self._upload_semaphore = asyncio.Semaphore(2)
         self._authenticated = False
+        self._authentication_mode: str | None = None
+        self._cache_identity: str | None = None
         # Tagged breaker so dashboards graph Proxmox alongside other
         # adapters via ``freesdn_adapter_circuit_state``. After 5
         # consecutive failures the breaker fails-fast for 60s before
@@ -441,21 +520,38 @@ class ProxmoxClient:
         token_id: str = "",
         token_secret: str = "",
         realm: str = "pam",
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> ProxmoxClient | None:
         """Return a cached client if one exists and is still valid, else None.
 
         The caller should fall back to creating a new client and calling connect().
         """
-        cache_key = f"{host}:{port}:{username or token_id}"
+        if transport is not None:
+            return None
+        cache_key = _authentication_cache_key(
+            ProxmoxClientConfig(
+                host=host,
+                port=port,
+                username=username,
+                password=password,
+                use_ssl=use_ssl,
+                verify_ssl=verify_ssl,
+                timeout=timeout,
+                token_id=token_id,
+                token_secret=token_secret,
+                realm=realm,
+            )
+        )
         cached = _connection_cache.get(cache_key)
-        if cached and cached.is_connected:
+        if cached and cached.is_connected and cached._cache_key() == cache_key:
             return cached
         return None
 
-    def _cache_key(self) -> str:
+    def _cache_key(self) -> str | None:
         """Build cache key from config."""
-        identifier = self.config.username or self.config.token_id
-        return f"{self.config.host}:{self.config.port}:{identifier}"
+        if self._transport is not None:
+            return None
+        return _authentication_cache_key(self.config)
 
     async def connect(self) -> None:
         """Create HTTP client and authenticate.
@@ -463,11 +559,16 @@ class ProxmoxClient:
         Reuses cached auth tokens (ticket + CSRF) when available to avoid
         redundant authentication round-trips for the same host/user.
         """
-        if self._http and not self._http.is_closed:
+        if self.is_connected:
             return
+        if self._http is not None:
+            await self.close()
 
         host = self.config.host
-        if not _reachability.is_reachable(host):
+        self._cache_identity = self._cache_key()
+        cooldown_identity = self._cache_identity or _authentication_cache_key(self.config)
+        reachability = self._transport_reachability or _reachability
+        if not reachability.is_reachable(host, cooldown_identity):
             raise ProxmoxApiError(f"Host {host} is in cooldown after a recent connection failure")
 
         self._http = build_async_client(
@@ -481,24 +582,23 @@ class ProxmoxClient:
 
         try:
             # Authenticate
-            if self.config.token_id and self.config.token_secret:
+            if self.config.token_id or self.config.token_secret:
+                if not (self.config.token_id and self.config.token_secret):
+                    raise ProxmoxApiError("Incomplete API token credentials")
                 # API token — no login needed, just set header
+                self._authentication_mode = "token"
                 self._http.headers["Authorization"] = (
                     f"PVEAPIToken={self.config.token_id}={self.config.token_secret}"
                 )
                 self._authenticated = True
                 logger.debug("Proxmox: using API token auth for %s", host)
             elif self.config.username and self.config.password:
+                self._authentication_mode = "password"
                 # check the ticket cache first. The ticket
                 # cache outlives the per-instance httpx client (which
                 # gets closed in every service's ``finally:`` block)
                 # so high-frequency bursts skip the auth round-trip.
-                cached_ticket = _ticket_cache.get(
-                    host,
-                    self.config.port,
-                    self.config.realm,
-                    self.config.username,
-                )
+                cached_ticket = _ticket_cache.get(self._cache_identity)
                 if cached_ticket is not None:
                     self._ticket = cached_ticket.ticket
                     self._csrf_token = cached_ticket.csrf_token
@@ -515,17 +615,25 @@ class ProxmoxClient:
             else:
                 raise ProxmoxApiError("No authentication credentials provided")
 
-            _reachability.mark_reachable(host)
-            _connection_cache.put(self._cache_key(), self)
-        except (ProxmoxApiError, httpx.ConnectError, httpx.TimeoutException) as e:
-            _reachability.mark_unreachable(host)
-            if self._http is not None:
-                await self._http.aclose()
-                self._http = None
-            # don't echo httpx URL strings into the error.
-            raise ProxmoxApiError(
-                f"Connection to {host} failed: {_redact_error_text(str(e))}"
-            ) from e
+            reachability.mark_reachable(host, cooldown_identity)
+            if self._cache_identity is not None:
+                _connection_cache.put(self._cache_identity, self)
+        except BaseException as exc:
+            # Failed __aenter__ calls never reach __aexit__. Release the pool
+            # for malformed responses, transport failures and cancellation too.
+            if isinstance(exc, (httpx.ConnectError, httpx.TimeoutException)):
+                reachability.mark_unreachable(host, cooldown_identity)
+            try:
+                await self.close()
+            except Exception:
+                # close() clears identity/auth state even if transport cleanup
+                # fails. Do not replace the original error or log raw details.
+                logger.warning("Proxmox authentication transport cleanup failed")
+            if isinstance(exc, (ProxmoxApiError, httpx.ConnectError, httpx.TimeoutException)):
+                raise ProxmoxApiError(
+                    f"Connection to {host} failed: {_redact_error_text(str(exc))}"
+                ) from exc
+            raise
 
     async def _ticket_login(self) -> None:
         """Authenticate with username/password to get a ticket + CSRF token."""
@@ -543,12 +651,27 @@ class ProxmoxClient:
                 status_code=resp.status_code,
             )
 
-        body = resp.json().get("data", {})
-        self._ticket = body.get("ticket")
-        self._csrf_token = body.get("CSRFPreventionToken")
-
-        if not self._ticket:
-            raise ProxmoxApiError("No ticket in auth response")
+        try:
+            body = resp.json()
+            data = body.get("data") if isinstance(body, dict) else None
+            if not isinstance(data, dict):
+                raise ValueError("Invalid authentication envelope")
+            ticket = data.get("ticket")
+            csrf = data.get("CSRFPreventionToken")
+            if (
+                not isinstance(ticket, str)
+                or not ticket.strip()
+                or any(char in ticket for char in "\r\n\x00")
+                or (
+                    csrf is not None
+                    and (not isinstance(csrf, str) or any(char in csrf for char in "\r\n\x00"))
+                )
+            ):
+                raise ValueError("Invalid authentication fields")
+        except ValueError:
+            raise ProxmoxApiError("Invalid authentication response") from None
+        self._ticket = ticket
+        self._csrf_token = csrf
 
         # Set cookie and CSRF header for subsequent requests
         self._http.cookies.set("PVEAuthCookie", self._ticket)
@@ -558,10 +681,7 @@ class ProxmoxClient:
         # cross-instance cache so the next call from a different
         # service skips the auth round-trip.
         _ticket_cache.put(
-            self.config.host,
-            self.config.port,
-            self.config.realm,
-            self.config.username,
+            self._cache_identity,
             self._ticket or "",
             self._csrf_token or "",
         )
@@ -575,15 +695,24 @@ class ProxmoxClient:
         valid (Proxmox doesn't revoke it on client disconnect) so a
         subsequent ``connect()`` from a fresh instance can reuse it.
         """
-        if self._http and not self._http.is_closed:
-            await self._http.aclose()
-        self._http = None
-        _connection_cache.invalidate(self._cache_key())
-        self._authenticated = False
-        self._ticket = None
-        self._csrf_token = None
+        try:
+            if self._http and not self._http.is_closed:
+                await self._http.aclose()
+        finally:
+            self._http = None
+            if self._cache_identity is not None:
+                _connection_cache.invalidate(self._cache_identity, self)
+            self._authenticated = False
+            self._authentication_mode = None
+            self._cache_identity = None
+            self._ticket = None
+            self._csrf_token = None
 
     # ── HTTP methods ───────────────────────────────────────────────────────
+
+    async def get_with_peer(self, path: str) -> tuple[Any, str | None]:
+        data, fingerprint = await self._request("GET", path, include_peer=True)
+        return data, fingerprint
 
     async def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         """GET request. Returns the 'data' field from response."""
@@ -626,6 +755,7 @@ class ProxmoxClient:
         data: dict[str, Any] | None = None,
         *,
         force: bool = False,
+        include_peer: bool = False,
     ) -> Any:
         """Execute an API request with concurrency limiting + safety gates."""
         method_upper = method.upper()
@@ -696,11 +826,41 @@ class ProxmoxClient:
                     self._circuit.record_failure()
                     _record_request_metric(method_upper, "timeout")
                     _record_error("timeout")
+                    if method_upper in _WRITE_METHODS and not isinstance(
+                        e, (httpx.ConnectTimeout, httpx.PoolTimeout)
+                    ):
+                        raise AdapterOutcomeUnknownError(
+                            "Proxmox write acknowledgement timed out; reconcile before retrying",
+                            adapter_id="proxmox",
+                        ) from e
                     raise ProxmoxApiError(f"Request timed out: {method_upper} {path}") from e
+                except (
+                    httpx.ReadError,
+                    httpx.WriteError,
+                    httpx.RemoteProtocolError,
+                    httpx.DecodingError,
+                ) as e:
+                    self._circuit.record_failure()
+                    _record_request_metric(method_upper, "transport")
+                    _record_error("transport")
+                    if method_upper in _WRITE_METHODS:
+                        raise AdapterOutcomeUnknownError(
+                            "Proxmox write acknowledgement lost; reconcile before retrying",
+                            adapter_id="proxmox",
+                        ) from e
+                    raise ProxmoxApiError("Proxmox response transport failed") from e
 
-            from app.adapters._response_limits import check_response_size
+            from app.adapters._response_limits import ResponseTooLargeError, check_response_size
 
-            check_response_size(resp)  # bound device body before read
+            try:
+                check_response_size(resp)
+            except ResponseTooLargeError as e:
+                if method_upper in _WRITE_METHODS:
+                    raise AdapterOutcomeUnknownError(
+                        "Proxmox write response exceeded the safety limit; reconcile before retrying",
+                        adapter_id="proxmox",
+                    ) from e
+                raise
 
             # 401 → drop the cached ticket and retry once
             # after re-login. Idempotent methods only — POST/PUT/PATCH/
@@ -709,14 +869,13 @@ class ProxmoxClient:
                 if (
                     is_idempotent
                     and not retried_after_401
+                    and self._authentication_mode == "password"
                     and (self.config.username and self.config.password)
                 ):
                     retried_after_401 = True
                     _ticket_cache.invalidate(
-                        self.config.host,
-                        self.config.port,
-                        self.config.realm,
-                        self.config.username,
+                        self._cache_identity,
+                        self._ticket,
                     )
                     self._authenticated = False
                     self._ticket = None
@@ -766,23 +925,60 @@ class ProxmoxClient:
                 self._circuit.record_failure()
             _record_request_metric(method_upper, f"http_{resp.status_code}")
             _record_error(f"http_{resp.status_code}")
+            # A server/proxy failure may occur after dispatch. It is not proof
+            # that a mutation was rejected, and must never invite a blind replay.
+            if method_upper in _WRITE_METHODS and resp.status_code >= 500:
+                raise AdapterOutcomeUnknownError(
+                    "Proxmox server failed after write dispatch; reconcile before retrying",
+                    adapter_id="proxmox",
+                )
             raise ProxmoxApiError(
                 f"API error {resp.status_code}: {_redact_error_text(msg)}",
                 status_code=resp.status_code,
                 errors=errors,
             )
 
-        # Success path — record metrics + close the breaker.
+        # A successful HTTP status without a valid API envelope is not an
+        # acknowledgement. Legitimate synchronous endpoints return data: null.
+        try:
+            body = resp.json()
+            if (
+                not 200 <= resp.status_code < 300
+                or not isinstance(body, dict)
+                or "data" not in body
+            ):
+                raise ValueError("invalid API acknowledgement")
+        except (ValueError, UnicodeError) as e:
+            self._circuit.record_failure()
+            _record_request_metric(method_upper, "invalid_response")
+            _record_error("invalid_response")
+            if method_upper in _WRITE_METHODS:
+                raise AdapterOutcomeUnknownError(
+                    "Proxmox write returned an invalid acknowledgement; reconcile before retrying",
+                    adapter_id="proxmox",
+                ) from e
+            raise ProxmoxApiError("Invalid Proxmox API response") from e
+
         self._circuit.record_success()
         _record_request_metric(method_upper, "success")
         _record_latency(method_upper, time.monotonic() - request_start)
+        if include_peer:
+            # Read the peer of this exact response, never a cached certificate
+            # from another pooled connection. Closed/unsupported streams remain
+            # unverified. This does not change TLS verification or trust stores.
+            import hashlib
 
-        try:
-            body = resp.json()
-        except Exception:
-            return None
-
-        return body.get("data")
+            fingerprint = None
+            try:
+                stream = resp.extensions.get("network_stream")
+                tls = stream.get_extra_info("ssl_object") if stream is not None else None
+                der = tls.getpeercert(binary_form=True) if tls is not None else None
+                if isinstance(der, bytes) and der:
+                    fingerprint = hashlib.sha256(der).hexdigest()
+            except (AttributeError, ValueError, OSError):
+                pass
+            return body["data"], fingerprint
+        return body["data"]
 
     async def _retry_backoff(self, attempt: int) -> None:
         """Jittered exponential backoff between retry attempts."""
@@ -868,7 +1064,55 @@ class ProxmoxClient:
                 self._circuit.record_failure()
                 _record_request_metric(method, "timeout")
                 _record_error("timeout")
+                if not isinstance(e, (httpx.ConnectTimeout, httpx.PoolTimeout)):
+                    raise AdapterOutcomeUnknownError(
+                        "Proxmox upload acknowledgement timed out; reconcile before retrying",
+                        adapter_id="proxmox",
+                    ) from e
                 raise ProxmoxApiError(f"Request timed out: {method} {path}") from e
+            except (
+                httpx.ReadError,
+                httpx.WriteError,
+                httpx.RemoteProtocolError,
+                httpx.DecodingError,
+            ) as e:
+                self._circuit.record_failure()
+                _record_request_metric(method, "transport")
+                _record_error("transport")
+                raise AdapterOutcomeUnknownError(
+                    "Proxmox upload acknowledgement lost; reconcile before retrying",
+                    adapter_id="proxmox",
+                ) from e
+
+        if resp.status_code < 400:
+            from app.adapters._response_limits import ResponseTooLargeError, check_response_size
+
+            try:
+                check_response_size(resp)
+                body = resp.json()
+                if (
+                    not 200 <= resp.status_code < 300
+                    or not isinstance(body, dict)
+                    or "data" not in body
+                ):
+                    raise ValueError("invalid upload acknowledgement")
+            except (ValueError, UnicodeError, ResponseTooLargeError) as e:
+                self._circuit.record_failure()
+                _record_request_metric(method, "invalid_response")
+                _record_error("invalid_response")
+                raise AdapterOutcomeUnknownError(
+                    "Proxmox upload returned an invalid acknowledgement; reconcile before retrying",
+                    adapter_id="proxmox",
+                ) from e
+
+        if resp.status_code >= 500:
+            self._circuit.record_failure()
+            _record_request_metric(method, f"http_{resp.status_code}")
+            _record_error(f"http_{resp.status_code}")
+            raise AdapterOutcomeUnknownError(
+                "Proxmox server failed after upload dispatch; reconcile before retrying",
+                adapter_id="proxmox",
+            )
 
         if resp.status_code >= 400:
             if resp.status_code >= 500:

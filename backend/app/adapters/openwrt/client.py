@@ -24,8 +24,12 @@ and the ``rpcd`` daemon.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import gzip
+import io
 import logging
+import re
 import time
 from typing import Any
 
@@ -126,6 +130,26 @@ _UBUS_ERRORS = {
 # legitimate reads are well under 1MB.
 _MAX_OPENWRT_RESPONSE_BYTES = 20 * 1024 * 1024  # 20 MB
 
+# Match the configuration delivery API's compressed-byte ceiling. Validation
+# discards inflated chunks instead of extracting files or retaining plaintext.
+_MAX_OPENWRT_BACKUP_BYTES = 16 * 1024 * 1024
+_MAX_OPENWRT_BACKUP_INFLATED_BYTES = 64 * 1024 * 1024
+_BACKUP_DOWNLOAD_ERROR = "OpenWRT configuration download failed"
+
+
+def _validate_backup_gzip(data: bytes) -> None:
+    """Check bounded gzip integrity, not device restore compatibility."""
+    if not data.startswith(b"\x1f\x8b\x08"):
+        raise ValueError(_BACKUP_DOWNLOAD_ERROR)
+    total = 0
+    with gzip.GzipFile(fileobj=io.BytesIO(data)) as archive:
+        while chunk := archive.read(64 * 1024):
+            total += len(chunk)
+            if total > _MAX_OPENWRT_BACKUP_INFLATED_BYTES:
+                raise ValueError(_BACKUP_DOWNLOAD_ERROR)
+    if not total:
+        raise ValueError(_BACKUP_DOWNLOAD_ERROR)
+
 
 class OpenWRTClient:
     """
@@ -169,7 +193,7 @@ class OpenWRTClient:
         self.verify_ssl = verify_ssl
         self.timeout = timeout
 
-        scheme = "https" if port == 443 else "http"
+        scheme = "https" if verify_ssl or port == 443 else "http"
         self.base_url = f"{scheme}://{host}:{port}"
 
         self._session_id: str = "00000000000000000000000000000000"
@@ -583,19 +607,83 @@ class OpenWRTClient:
             return {"packages": {}}
 
     async def create_backup(self) -> bytes:
-        """Generate a backup tar.gz of /etc/config/."""
-        import base64
-        import binascii
+        """Export a LuCI/sysupgrade archive; this does not save backup history.
 
-        result = await self.call("rpc-sys", "backup")
-        # The backup data may be base64-encoded in the response
-        if isinstance(result, dict) and "data" in result:
-            try:
-                return base64.b64decode(result["data"])
-            except (binascii.Error, ValueError) as exc:
-                logger.error("Failed to decode backup data: %s", exc)
-                return b""
-        return b""
+        Keep the historical client method name for adapter compatibility. Stock
+        rpcd has no rpc-sys.backup method. LuCI's cgi-io handler accepts the ubus
+        session in a form body and checks the cgi-io/backup/read ACL.
+        """
+        try:
+            if self._client is None:
+                raise AdapterConnectionError(_BACKUP_DOWNLOAD_ERROR)
+            # HTTPX per-read timeouts alone do not bound a slow streamed body.
+            async with asyncio.timeout(self.timeout):
+                await self._ensure_session()
+                if (
+                    not isinstance(self._session_id, str)
+                    or re.fullmatch(r"[0-9a-fA-F]{32}", self._session_id) is None
+                    or self._session_id == "0" * 32
+                ):
+                    raise AdapterAuthenticationError(
+                        "OpenWRT configuration export authentication failed"
+                    )
+                if not self._breaker.allow_request():
+                    raise AdapterConnectionError(_BACKUP_DOWNLOAD_ERROR)
+                async with self._client.stream(
+                    "POST",
+                    "/cgi-bin/cgi-backup",
+                    data={"sessionid": self._session_id},
+                    headers={"Accept-Encoding": "identity"},
+                    follow_redirects=False,
+                ) as response:
+                    if response.status_code in (401, 403):
+                        raise AdapterAuthenticationError(
+                            "OpenWRT configuration export authentication failed"
+                        )
+                    if response.status_code != 200:
+                        raise AdapterConnectionError(_BACKUP_DOWNLOAD_ERROR)
+                    if response.headers.get("content-encoding", "identity").lower() != "identity":
+                        raise AdapterConnectionError(_BACKUP_DOWNLOAD_ERROR)
+                    content_type = (
+                        response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+                    )
+                    if content_type not in {
+                        "application/x-targz",
+                        "application/gzip",
+                        "application/x-gzip",
+                        "application/octet-stream",
+                    }:
+                        raise AdapterConnectionError(_BACKUP_DOWNLOAD_ERROR)
+                    length = response.headers.get("content-length")
+                    if length is not None and (
+                        re.fullmatch(r"[0-9]{1,10}", length) is None
+                        or not 0 < int(length) <= _MAX_OPENWRT_BACKUP_BYTES
+                    ):
+                        raise AdapterConnectionError(_BACKUP_DOWNLOAD_ERROR)
+                    data = bytearray()
+                    async for chunk in response.aiter_raw():
+                        if len(data) + len(chunk) > _MAX_OPENWRT_BACKUP_BYTES:
+                            raise AdapterConnectionError(_BACKUP_DOWNLOAD_ERROR)
+                        data.extend(chunk)
+                    if length is not None and len(data) != int(length):
+                        raise AdapterConnectionError(_BACKUP_DOWNLOAD_ERROR)
+                result = bytes(data)
+                # Bounded CPU work stays off the event loop. A cancelled worker
+                # can finish this bounded read but never opens/extracts any file.
+                await asyncio.to_thread(_validate_backup_gzip, result)
+            self._breaker.record_success()
+            return result
+        except AdapterAuthenticationError:
+            self._breaker.record_failure()
+            raise AdapterAuthenticationError(
+                "OpenWRT configuration export authentication failed"
+            ) from None
+        except (TimeoutError, httpx.TimeoutException):
+            self._breaker.record_failure()
+            raise AdapterTimeoutError("OpenWRT configuration export timed out") from None
+        except Exception:
+            self._breaker.record_failure()
+            raise AdapterConnectionError(_BACKUP_DOWNLOAD_ERROR) from None
 
     async def get_filesystem_usage(self) -> dict[str, Any]:
         """Disk/flash usage stats."""

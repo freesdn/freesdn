@@ -399,12 +399,13 @@ def sync_all_device_statuses(
         if organization_id
         else "sync_all_device_statuses"
     )
-    if not acquire_solo_lock(lock_name, ttl_seconds=120):
+    lock_token = acquire_solo_lock(lock_name, ttl_seconds=120)
+    if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:
         return asyncio.run(_sync_all_device_statuses(organization_id, site_id))
     finally:
-        release_solo_lock(lock_name)
+        release_solo_lock(lock_name, lock_token)
 
 
 async def _mark_stale_devices_offline() -> dict[str, Any]:
@@ -474,12 +475,13 @@ def mark_stale_devices_offline() -> dict[str, Any]:
     """
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    if not acquire_solo_lock("mark_stale_devices_offline", ttl_seconds=90):
+    lock_token = acquire_solo_lock("mark_stale_devices_offline", ttl_seconds=90)
+    if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:
         return asyncio.run(_mark_stale_devices_offline())
     finally:
-        release_solo_lock("mark_stale_devices_offline")
+        release_solo_lock("mark_stale_devices_offline", lock_token)
 
 
 # ===========================================
@@ -629,12 +631,13 @@ def check_controller_health(self) -> dict[str, Any]:
     """
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    if not acquire_solo_lock("sync.check_controller_health", ttl_seconds=180):
+    lock_token = acquire_solo_lock("sync.check_controller_health", ttl_seconds=180)
+    if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:
         return asyncio.run(_check_controller_health())
     finally:
-        release_solo_lock("sync.check_controller_health")
+        release_solo_lock("sync.check_controller_health", lock_token)
 
 
 # =============================================================================

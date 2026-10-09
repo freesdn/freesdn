@@ -12,24 +12,33 @@ SQLAlchemy models for the enhanced security audit module:
 - SecurityAnomalyRecord: Detected security anomalies
 """
 
+from collections.abc import Callable
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from sqlalchemy import (
+    DDL,
+    BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
+    Sequence,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
+    event,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, UUIDMixin
@@ -140,6 +149,8 @@ class AnomalyType(StrEnum):
 # Models
 # =============================================================================
 
+AUDIT_APPEND_SEQUENCE = Sequence("audit_append_sequence", schema="audit", data_type=BigInteger)
+
 
 class AuditLogRecord(Base, UUIDMixin):
     """Persistent audit log entry stored in the database."""
@@ -155,6 +166,16 @@ class AuditLogRecord(Base, UUIDMixin):
         # Tamper-evidence hash-chain index — mirrors migration 010 so a fresh
         # create_all() matches the upgraded schema (index-parity).
         Index("ix_audit_logs_row_hmac", "row_hmac", postgresql_where=text("row_hmac IS NOT NULL")),
+        Index(
+            "ix_audit_logs_append_sequence",
+            "append_sequence",
+            unique=True,
+            postgresql_where=text("append_sequence IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "append_sequence IS NULL OR append_sequence > 0", name="audit_append_sequence_positive"
+        ),
+        Index("ix_audit_logs_chain_order", text("COALESCE(append_sequence, 0)"), "timestamp", "id"),
         {"schema": "audit"},
     )
 
@@ -174,10 +195,11 @@ class AuditLogRecord(Base, UUIDMixin):
     actor_email: Mapped[str | None] = mapped_column(String(255))
 
     # Organization context
-    organization_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("core.organizations.id", ondelete="SET NULL")
-    )
-    site_id: Mapped[UUID | None] = mapped_column(ForeignKey("core.sites.id", ondelete="SET NULL"))
+    # Immutable audit context, not a live ownership reference. Tenant/site
+    # retirement must not silently modify a signed historical row. Access is
+    # still scoped by the authenticated caller, and audit retention still applies.
+    organization_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    site_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
 
     # Request context
     ip_address: Mapped[str | None] = mapped_column(String(45))
@@ -215,6 +237,89 @@ class AuditLogRecord(Base, UUIDMixin):
     # written before the migration ran. New rows always populate both.
     prev_hash: Mapped[str | None] = mapped_column(String(64))
     row_hmac: Mapped[str | None] = mapped_column(String(64))
+
+    # NULL identifies preserved historical format-1 rows. New application writes
+    # reserve this value under the common advisory lock BEFORE computing the
+    # format-2 signature. Sequence gaps after rollback are normal, not missing
+    # audit records. This is append order, never an event occurrence timestamp.
+    append_sequence: Mapped[int | None] = mapped_column(
+        BigInteger,
+        AUDIT_APPEND_SEQUENCE,
+        nullable=True,
+    )
+
+
+# No server default: an older application that omits append_sequence must be
+# refused rather than silently inserting a legacy/unsigned row after upgrade.
+# Historical rows are not updated, renumbered, re-signed or authenticated by DDL.
+_AUDIT_APPEND_DDL = (
+    """CREATE FUNCTION audit.guard_audit_append() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$ BEGIN
+      IF NEW.append_sequence IS NULL OR NEW.append_sequence <= 0
+         OR NEW.row_hmac IS NULL OR NEW.row_hmac !~ '^[0-9a-f]{64}$'
+         OR (NEW.prev_hash IS NOT NULL AND NEW.prev_hash !~ '^[0-9a-f]{64}$') THEN
+        RAISE EXCEPTION 'Audit insert requires a signed append sequence';
+      END IF;
+      RETURN NEW;
+    END $$""",
+    """CREATE TRIGGER guard_audit_append BEFORE INSERT ON audit.audit_logs
+    FOR EACH ROW EXECUTE FUNCTION audit.guard_audit_append()""",
+)
+# SQLAlchemy's DDL constructor is unannotated; these calls pass only its documented
+# SQL-string argument. This type boundary preserves the exact emitted statements.
+_audit_ddl = cast(Callable[[str], DDL], DDL)
+for _audit_statement in _AUDIT_APPEND_DDL:
+    event.listen(
+        AuditLogRecord.__table__,
+        "after_create",
+        _audit_ddl(_audit_statement).execute_if(dialect="postgresql"),
+    )
+
+
+class AuditChainState(Base):
+    """One authenticated local tail and retention boundary, never a WORM claim."""
+
+    __tablename__ = "audit_chain_state"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="audit_chain_singleton"),
+        CheckConstraint("revision >= 0", name="audit_chain_revision"),
+        CheckConstraint("octet_length(state_bytes) BETWEEN 1 AND 8192", name="audit_chain_size"),
+        CheckConstraint(
+            "state_hmac IS NULL OR state_hmac ~ '^[0-9a-f]{64}$'", name="audit_chain_hmac"
+        ),
+        {"schema": "audit"},
+    )
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, autoincrement=False)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    state_bytes: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    state_hmac: Mapped[str | None] = mapped_column(String(64))
+
+
+_AUDIT_STATE_DDL = (
+    """INSERT INTO audit.audit_chain_state (id,revision,state_bytes,state_hmac)
+    VALUES (1,0,convert_to('{"state":"uninitialized","v":1}','UTF8'),NULL)""",
+    """CREATE FUNCTION audit.guard_audit_chain_state() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$ BEGIN
+      IF TG_OP <> 'UPDATE' THEN
+        RAISE EXCEPTION 'Audit chain state must be retained';
+      END IF;
+      IF NEW.id <> OLD.id OR OLD.revision = 9223372036854775807
+         OR NEW.revision <> OLD.revision + 1 OR NEW.state_hmac IS NULL THEN
+        RAISE EXCEPTION 'Invalid audit state transition';
+      END IF;
+      RETURN NEW;
+    END $$""",
+    """CREATE TRIGGER guard_audit_chain_state BEFORE INSERT OR UPDATE OR DELETE
+    ON audit.audit_chain_state FOR EACH ROW EXECUTE FUNCTION audit.guard_audit_chain_state()""",
+    """CREATE TRIGGER guard_audit_chain_state_truncate BEFORE TRUNCATE
+    ON audit.audit_chain_state FOR EACH STATEMENT EXECUTE FUNCTION audit.guard_audit_chain_state()""",
+)
+for _audit_state_statement in _AUDIT_STATE_DDL:
+    event.listen(
+        AuditChainState.__table__,
+        "after_create",
+        _audit_ddl(_audit_state_statement).execute_if(dialect="postgresql"),
+    )
 
 
 class SecurityEventRecord(Base, UUIDMixin):

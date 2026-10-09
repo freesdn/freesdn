@@ -463,7 +463,9 @@ export function SiteHealthWidget({ sites }: { sites?: SiteHealthSummary[] }) {
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
       {sites.slice(0, 6).map((site) => {
         const tone =
-          site.avg_health_score >= 90
+          site.avg_health_score == null
+            ? 'border-border bg-muted/30'
+            : site.avg_health_score >= 90
             ? 'border-success/40 bg-success/5'
             : site.avg_health_score >= 70
               ? 'border-warning/40 bg-warning/5'
@@ -480,8 +482,8 @@ export function SiteHealthWidget({ sites }: { sites?: SiteHealthSummary[] }) {
             <div className="text-xs font-medium truncate">{site.site_name}</div>
             <div className="flex items-baseline justify-between mt-1">
               <span className="text-lg font-bold tabular-nums">
-                {Math.round(site.avg_health_score)}
-                <span className="text-xs text-muted-foreground">%</span>
+                {site.avg_health_score == null ? 'N/A' : Math.round(site.avg_health_score)}
+                <span className="text-xs text-muted-foreground">/ 100</span>
               </span>
               <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
                 {t('extraWidgets.siteHealth.deviceCount', { count: site.device_count })}

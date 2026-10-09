@@ -4,6 +4,7 @@
  * FreeSDN - Setup Wizard API
  */
 import { api } from './api';
+import type { RestoreReport } from './api/types';
 
 // Types
 export type SetupStep = 
@@ -365,7 +366,7 @@ export const setupApi = {
     file: File,
     passphrase: string,
     orgName?: string,
-  ): Promise<{ success: boolean; organization_id: string }> => {
+  ): Promise<{ success: boolean; organization_id: string; result: RestoreReport }> => {
     const form = new FormData();
     form.append('file', file);
     form.append('passphrase', passphrase);

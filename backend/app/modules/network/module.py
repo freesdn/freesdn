@@ -42,11 +42,12 @@ async def _fabric_client_list_handler(ctx: Any) -> Any:
         clients, total = await NetworkClientService(ctx.db).list(
             ctx.organization_id,
             site_id=site_uuid,
+            site_ids=getattr(ctx, "accessible_site_ids", None),
             is_online=ctx.params.get("is_online"),
             limit=max(1, min(limit, 200)),
         )
-    except Exception as exc:  # noqa: BLE001
-        return OperationResult.fail(f"network.client.list failed: {exc}", "READ_ERROR")
+    except Exception:
+        return OperationResult.fail("Network client read unavailable", "READ_ERROR")
 
     def _row(c: Any) -> dict[str, Any]:
         return {
@@ -91,8 +92,8 @@ async def _fabric_overlay_status_handler(ctx: Any) -> Any:
         from app.services.vpn_integration import VPNManagerService
 
         summary = await VPNManagerService().get_status_summary()
-    except Exception as exc:  # noqa: BLE001 - normalize for the executor
-        return OperationResult.fail(f"vpn.overlay.status failed: {exc}", "READ_ERROR")
+    except Exception:  # noqa: BLE001 - normalize for the executor
+        return OperationResult.fail("vpn.overlay.status failed", "READ_ERROR")
     summary.setdefault("mode", settings.resolved_vpn_mode)
     return OperationResult.ok(output=summary)
 
@@ -108,8 +109,8 @@ async def _fabric_overlay_peers_handler(ctx: Any) -> Any:
         from app.services.overlay_discovery import discover_overlay_devices
 
         peers = await discover_overlay_devices()
-    except Exception as exc:  # noqa: BLE001 - normalize for the executor
-        return OperationResult.fail(f"vpn.overlay.peers failed: {exc}", "READ_ERROR")
+    except Exception:  # noqa: BLE001 - normalize for the executor
+        return OperationResult.fail("vpn.overlay.peers failed", "READ_ERROR")
     return OperationResult.ok(output={"peers": peers, "count": len(peers)})
 
 
@@ -127,8 +128,8 @@ async def _fabric_vpn_routes_handler(ctx: Any) -> Any:
         from app.services.vpn_integration import VPNManagerService
 
         routes = await VPNManagerService().discover_vpn_accessible_subnets()
-    except Exception as exc:  # noqa: BLE001 - normalize for the executor
-        return OperationResult.fail(f"vpn.routes.list failed: {exc}", "READ_ERROR")
+    except Exception:  # noqa: BLE001 - normalize for the executor
+        return OperationResult.fail("vpn.routes.list failed", "READ_ERROR")
     return OperationResult.ok(output={"routes": routes, "count": len(routes)})
 
 

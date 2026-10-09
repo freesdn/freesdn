@@ -2,6 +2,9 @@
 # Copyright (C) 2024-2026 FreeSDN
 from __future__ import annotations
 
+import ssl
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -50,10 +53,14 @@ class _CapturingAsyncClient:
     created_verify: list[bool] = []
     calls: list[dict[str, object]] = []
 
-    def __init__(self, *, verify: bool, timeout: int) -> None:
-        self.verify = verify
+    def __init__(self, *, verify: ssl.SSLContext, timeout: int, trust_env: bool) -> None:
+        assert isinstance(verify, ssl.SSLContext)
+        assert trust_env is False
+        required = verify.verify_mode == ssl.CERT_REQUIRED
+        assert verify.check_hostname is required
+        self.verify = required
         self.timeout = timeout
-        type(self).created_verify.append(verify)
+        type(self).created_verify.append(required)
 
     async def __aenter__(self) -> _CapturingAsyncClient:
         return self
@@ -61,7 +68,9 @@ class _CapturingAsyncClient:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         return None
 
-    async def get(self, url: str, **kwargs: object) -> _FakeResponse:
+    @asynccontextmanager
+    async def stream(self, method: str, url: str, **kwargs: object) -> AsyncIterator[_FakeResponse]:
+        assert method == "GET"
         type(self).calls.append(
             {
                 "verify": self.verify,
@@ -70,7 +79,7 @@ class _CapturingAsyncClient:
                 "kwargs": kwargs,
             }
         )
-        return _FakeResponse()
+        yield _FakeResponse()
 
     @classmethod
     def reset(cls) -> None:
@@ -163,9 +172,7 @@ def _patch_safe_http(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]
         auth: object = None,
         **_kw: object,
     ) -> _FakeResponse:
-        calls.append(
-            {"verify_tls": verify_tls, "follow_redirects": follow_redirects, "url": url}
-        )
+        calls.append({"verify_tls": verify_tls, "follow_redirects": follow_redirects, "url": url})
         return _FakeResponse(200)
 
     monkeypatch.setattr(su, "safe_http_request", _fake_shr)

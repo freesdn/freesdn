@@ -1,0 +1,31 @@
+Notification dispatch and session ownership
+===========================================
+
+The shared alert/SLA notification helper sends network recipients sequentially.
+Provider policy checks and delivery tracking share the caller's AsyncSession;
+that session is one mutable transaction and cannot safely flush concurrently.
+Previously, multi-recipient batches could lose returned delivery identities
+while logging tracking failures, and failed attempts without IDs were not retried.
+
+A provider exception remains a failed result and does not prevent the helper
+from attempting later recipients. Cancellation propagates immediately: recipients
+not yet started remain unsent, and the helper does not publish batch retries.
+Earlier external sends may already have occurred. Network recipient order follows
+the configured channel and recipient order. Slow providers therefore add to batch
+latency; this correction does not establish a throughput or latency guarantee.
+
+For network delivery, the helper does not commit or roll back the caller's
+transaction. Returned delivery IDs describe flushed rows, not committed records
+or final recipient acceptance. The existing in-app path still explicitly commits;
+its transaction ownership is not changed by this correction.
+
+Retry publication still occurs before the caller's eventual commit. A rollback,
+broker outage, or process crash can leave missing work or externally delivered
+messages without durable tracking. A transactional outbox and end-to-end provider
+idempotency remain separate work. No exactly-once or automatic crash recovery
+claim is made. Never rerun a whole batch blindly after uncertain delivery.
+
+Unit guards cover shared-session exclusivity, identity association, ordinary
+provider errors and cancellation. Qualification additionally uses actual mapped
+asynchronous database operations with synthetic providers; it does not contact
+live mail, messaging, SMS, or customer hardware endpoints.

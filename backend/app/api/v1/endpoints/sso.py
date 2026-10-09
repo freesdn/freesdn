@@ -10,17 +10,20 @@ Endpoints for SSO provider management and OIDC/SAML/LDAP auth flows.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.deps import require_roles
+from app.api.v1.deps import CurrentUser, require_roles
+from app.core.user_lifecycle import lock_user_lifecycle
 from app.db import get_session
+from app.models.api_keys import APIKey, verify_api_key
 from app.models.core import Organization, User, UserRole
-from app.models.sso import SSOProtocol
+from app.models.sso import SSOProtocol, SSOProvider
 from app.schemas.sso import (
     LDAPAuthRequest,
     SSOAuthorizeRequest,
@@ -38,6 +41,7 @@ from app.services.sso import (
     SSOCallbackError,
     SSOConfigError,
     SSONotSupportedError,
+    SSOProviderInUseError,
     SSOService,
 )
 
@@ -46,7 +50,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _org_id(user: User) -> Any:
+def _org_id(user: User | CurrentUser) -> Any:
     """Extract the organisation ID from the authenticated user's token."""
     oid = getattr(user, "organization_id", None)
     if not oid:
@@ -84,7 +88,7 @@ _ROLE_TIER: dict[str, int] = {
 }
 
 
-def _validate_default_role(default_role: Any, current_user: User) -> None:
+def _validate_default_role(default_role: Any, current_user: User | CurrentUser) -> None:
     """
     Bound the SSO provider's JIT ``default_role`` so an admin cannot
     configure a provider that auto-provisions accounts above the admin's own
@@ -130,7 +134,7 @@ def _validate_default_role(default_role: Any, current_user: User) -> None:
         )
 
 
-def _validate_role_mapping(role_mapping: Any, current_user: User) -> None:
+def _validate_role_mapping(role_mapping: Any, current_user: User | CurrentUser) -> None:
     """
     (symmetry)cap the provider's group->role ``role_mapping`` the same
     way ``default_role`` is capped. ``_map_role`` already refuses to grant
@@ -485,23 +489,123 @@ async def create_provider(
     return SSOProviderResponse.model_validate(provider)
 
 
+async def _locked_provider_mutation(
+    db: AsyncSession,
+    request: Request,
+    current_user: CurrentUser,
+    provider_id: UUID,
+) -> SSOProvider:
+    """Check current ownership and authority after lifecycle/provider waits.
+
+    Lifecycle precedes resource rows, matching core recovery. Scalar actor/key
+    reads avoid cached authentication state without reversing the row-lock
+    order or invoking API-key authentication that commits usage. This rechecks
+    queued requests; it does not serialize every subsequent credential writer.
+    """
+    actor_id = current_user.id
+    org_id = _org_id(current_user)
+    original = (
+        current_user.user.token_version,
+        current_user.role,
+        org_id,
+        current_user.user.hashed_password,
+    )
+    await lock_user_lifecycle(db)
+    provider = (
+        await db.execute(
+            select(SSOProvider)
+            .where(SSOProvider.id == provider_id, SSOProvider.deleted_at.is_(None))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if provider is None or provider.organization_id != org_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "SSO provider not found")
+    actor = (
+        await db.execute(
+            select(
+                User.token_version,
+                User.role,
+                User.organization_id,
+                User.hashed_password,
+                User.is_active,
+                User.deleted_at,
+            ).where(User.id == actor_id)
+        )
+    ).one_or_none()
+    if (
+        actor is None
+        or not actor.is_active
+        or actor.deleted_at is not None
+        or original
+        != (actor.token_version, actor.role, actor.organization_id, actor.hashed_password)
+    ):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Authentication changed; retry with current credentials"
+        )
+    if current_user.is_scoped or actor.role not in (UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    claims = current_user.token_claims
+    if claims.get("auth_method") == "api_key":
+        try:
+            key_id = UUID(claims["key_id"])
+        except (ValueError, TypeError, KeyError):
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED, "Invalid API key authentication"
+            ) from None
+        key = (
+            await db.execute(
+                select(APIKey.is_active, APIKey.expires_at, APIKey.key_hash, APIKey.scopes).where(
+                    APIKey.id == key_id, APIKey.user_id == actor_id
+                )
+            )
+        ).one_or_none()
+        if (
+            key is None
+            or not key.is_active
+            or (key.expires_at is not None and key.expires_at <= datetime.now(UTC))
+            or not verify_api_key(request.headers.get("x-api-key", ""), key.key_hash)
+        ):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "API key was revoked or expired")
+        # Provider management is a role-only gate: even newly broad scopes
+        # cannot substitute for the initiating unscoped credential.
+        if key.scopes:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Scoped API keys cannot satisfy role-based gates"
+            )
+    else:
+        from app.core.session_revocation import is_session_revoked_for_access_jti
+        from app.core.token_blacklist import is_token_blacklisted
+
+        if claims.get("tv", 0) != actor.token_version:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session was revoked")
+        jti = claims.get("jti")
+        if jti and (
+            await is_token_blacklisted(str(jti))
+            or await is_session_revoked_for_access_jti(db, str(jti))
+        ):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session was revoked")
+        expiry = claims.get("exp")
+        if type(expiry) not in (int, float) or cast(float, expiry) <= datetime.now(UTC).timestamp():
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session expired")
+    return provider
+
+
 @router.patch(
     "/providers/{provider_id}",
     response_model=SSOProviderResponse,
     summary="Update SSO provider",
 )
 async def update_provider(
+    request: Request,
     provider_id: UUID,
     body: SSOProviderUpdate,
     db: AsyncSession = Depends(get_session),
-    current_user: User = Depends(require_roles([UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN])),
+    current_user: CurrentUser = Depends(require_roles([UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN])),
 ) -> SSOProviderResponse:
     """Update an existing SSO provider."""
-    org_id = _org_id(current_user)
     svc = SSOService(db)
-    existing = await svc.get_provider(provider_id)
-    if not existing or existing.organization_id != org_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "SSO provider not found")
+    existing = await _locked_provider_mutation(db, request, current_user, provider_id)
     # enforce signing-certificate requirement at update time.
     # Protocol may come from the patch body or remain unchanged on existing.
     effective_protocol = getattr(body, "protocol", None) or existing.protocol
@@ -517,8 +621,12 @@ async def update_provider(
     provider = await svc.update_provider(provider_id, body, updated_by=current_user.id)
     if not provider:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "SSO provider not found")
+    # UPDATE expires server-generated updated_at. Materialize it explicitly
+    # and validate the response before committing any provider changes.
+    await db.refresh(provider)
+    response = SSOProviderResponse.model_validate(provider)
     await db.commit()
-    return SSOProviderResponse.model_validate(provider)
+    return response
 
 
 @router.delete(
@@ -528,17 +636,18 @@ async def update_provider(
     summary="Delete SSO provider",
 )
 async def delete_provider(
+    request: Request,
     provider_id: UUID,
     db: AsyncSession = Depends(get_session),
-    current_user: User = Depends(require_roles([UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN])),
+    current_user: CurrentUser = Depends(require_roles([UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN])),
 ) -> None:
     """Soft-delete an SSO provider."""
-    org_id = _org_id(current_user)
     svc = SSOService(db)
-    existing = await svc.get_provider(provider_id)
-    if not existing or existing.organization_id != org_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "SSO provider not found")
-    deleted = await svc.delete_provider(provider_id)
+    await _locked_provider_mutation(db, request, current_user, provider_id)
+    try:
+        deleted = await svc.delete_provider(provider_id)
+    except SSOProviderInUseError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     if not deleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "SSO provider not found")
     await db.commit()

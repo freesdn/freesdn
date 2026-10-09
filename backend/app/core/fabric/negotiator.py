@@ -8,7 +8,7 @@ flowing the trigger payload and prior-step outputs/artifacts into each step via
 safe templating, and invoking each step's Operation through the tier-aware
 :class:`OperationExecutor`.
 
-Enterprise-grade safety, enforced here + in the executor:
+Execution safeguards, enforced here and in the executor:
   * **Fail-closed org-scoping** — a Connection only fires on events of its own
     organization.
   * **Authoring authority** — a Connection executes with its *author's*
@@ -21,9 +21,10 @@ Enterprise-grade safety, enforced here + in the executor:
     matched/conditioned/templated like any event and only ever feeds an
     operation the operator-author is permitted to invoke.
 
-This phase uses an in-memory Connection store + direct ``handle_event`` so the
-engine + the camera→storage-style verticals can be proven end-to-end; DB-backed
-persistence, the CRUD API, and live bus subscription land in the next increment.
+The runtime hydrates this worker's in-memory Connection store from the database
+and subscribes it to the event bus. Shared event and cooldown claims must be
+confirmed before an unattended chain can run. These expiring claims do not
+provide durable delivery or exactly-once external effects.
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Sentinel for "Redis not yet probed" (distinct from None = "probed, unavailable").
+# Sentinel for a shared client that has not been constructed yet.
 _REDIS_UNSET: Any = object()
 
 #: ``(actor_id, permission, organization_id) -> bool`` — does the Connection
@@ -122,13 +123,8 @@ class Negotiator:
         # the run outcome.
         self._run_recorder = run_recorder
         self._connections: dict[str, Connection] = {}
-        # connection_id -> last-fire monotonic timestamp. IN-PROCESS FALLBACK only,
-        # used when Redis is unavailable (unit tests / single-instance). Under
-        # multiple workers the cooldown + at-most-once guards are Redis-backed so
-        # they hold cluster-wide — see _claim_event / _cooldown_ok.
-        self._last_fire: dict[str, float] = {}
-        # Lazily-created shared Redis client (None once we've determined Redis is
-        # unavailable; the sentinel means "not yet attempted").
+        # Cache only a successfully constructed shared client. A construction
+        # failure is retried on a later event, never replaced by worker memory.
         self._redis: Any = _REDIS_UNSET
 
     # ── connection store ─────────────────────────────────────────────────
@@ -138,7 +134,6 @@ class Negotiator:
 
     def remove_connection(self, connection_id: str) -> None:
         self._connections.pop(connection_id, None)
-        self._last_fire.pop(connection_id, None)  # bound in-process fallback growth
 
     def list_connections(self) -> list[Connection]:
         return list(self._connections.values())
@@ -163,10 +158,6 @@ class Negotiator:
     def reload_connections(self, connections: list[Connection]) -> None:
         """Replace the in-memory store (used to prime/refresh from the DB)."""
         self._connections = {c.id: c for c in connections}
-        # Drop cooldown timestamps for connections no longer present so the
-        # in-process fallback map can't grow unboundedly across reloads.
-        live = set(self._connections)
-        self._last_fire = {k: v for k, v in self._last_fire.items() if k in live}
 
     def configure_runtime(
         self,
@@ -215,72 +206,69 @@ class Negotiator:
     # ── cluster-wide guards (Redis) ──────────────────────────────────────
 
     async def _get_redis(self) -> Any:
-        """Lazily return a shared Redis client, or None if unavailable.
-
-        None (after probing) makes the at-most-once + cooldown guards fail-OPEN —
-        i.e. fall back to single-instance behavior — so the engine stays usable
-        in unit tests / a Redis-less single process.
-        """
-        if self._redis is _REDIS_UNSET:
-            self._redis = None
+        """Return the shared client; retry construction on a later event if needed."""
+        if self._redis is _REDIS_UNSET or self._redis is None:
             try:
-                from app.core.config import settings
+                from redis.asyncio.retry import Retry
+                from redis.backoff import NoBackoff
 
-                if settings.REDIS_URL:
-                    from app.core.redis_client import get_async_redis
+                from app.core.redis_client import get_async_redis
 
-                    self._redis = get_async_redis(
-                        decode_responses=True,
-                        # Fail fast instead of hanging the request coroutine on a
-                        # black-holed/restarting Redis (matches the event-bus client).
-                        socket_connect_timeout=5,
-                        socket_timeout=5,
-                    )
+                self._redis = get_async_redis(
+                    decode_responses=True,
+                    socket_connect_timeout=5,
+                    socket_timeout=5,
+                    retry=Retry(NoBackoff(), 0),
+                )
             except Exception:
-                logger.debug("Fabric: Redis unavailable; cluster guards fail-open", exc_info=True)
-                self._redis = None
+                # Client/connection errors can contain credentials or URLs.
+                logger.warning("Fabric: shared coordination client unavailable; refusing event")
+                return None
         return self._redis
 
     async def _claim_event(self, conn: Connection, event: Any) -> bool:
-        """At-most-once per (connection, event) across all workers (Redis SET NX).
+        """Claim a stable event identity with shared SET NX and a 300-second TTL.
 
-        Returns True if THIS worker should run the connection for this event.
-        Fail-open (True) when there is no event id or Redis is unavailable.
+        An absent identity, unavailable client or uncertain reply cannot authorize
+        unattended effects. Keep the existing key namespace so upgrading workers
+        coordinate with older workers. Claims are never released after an error:
+        the server may have committed the claim even if its reply was lost.
         """
         event_id = getattr(event, "id", None)
         if not event_id:
-            return True
-        r = await self._get_redis()
-        if r is None:
-            return True
+            logger.warning("Fabric: event identity unavailable; refusing connection %s", conn.id)
+            return False
         try:
+            r = await self._get_redis()
+            if r is None:
+                return False
             acquired = await r.set(f"fabric:fired:{conn.id}:{event_id}", "1", nx=True, ex=300)
-            return bool(acquired)
+            if acquired is True:
+                return True
+            if acquired is not None and acquired is not False:
+                logger.warning(
+                    "Fabric: event claim reply uncertain; refusing connection %s", conn.id
+                )
         except Exception:
-            logger.warning("Fabric: idempotency check failed for %s (proceeding)", conn.id)
-            return True
+            logger.warning("Fabric: event claim unavailable; refusing connection %s", conn.id)
+        return False
 
     async def _cooldown_ok(self, conn: Connection) -> bool:
-        """Cluster-wide cooldown via Redis SET NX EX; in-process fallback otherwise.
-
-        Returns True if the connection may fire now (and starts a new cooldown
-        window), False if it is still cooling down.
-        """
-        r = await self._get_redis()
-        if r is not None:
-            try:
-                acquired = await r.set(
-                    f"fabric:cooldown:{conn.id}", "1", nx=True, ex=int(conn.cooldown_seconds)
-                )
-                return bool(acquired)
-            except Exception:
-                logger.warning("Fabric: cooldown check failed for %s (in-process)", conn.id)
-        last = self._last_fire.get(conn.id)
-        now = time.monotonic()
-        if last is not None and (now - last) < conn.cooldown_seconds:
-            return False
-        self._last_fire[conn.id] = now
-        return True
+        """Require an affirmative shared cooldown claim; never fall back locally."""
+        try:
+            r = await self._get_redis()
+            if r is None:
+                return False
+            acquired = await r.set(
+                f"fabric:cooldown:{conn.id}", "1", nx=True, ex=int(conn.cooldown_seconds)
+            )
+            if acquired is True:
+                return True
+            if acquired is not None and acquired is not False:
+                logger.warning("Fabric: cooldown reply uncertain; refusing connection %s", conn.id)
+        except Exception:
+            logger.warning("Fabric: cooldown unavailable; refusing connection %s", conn.id)
+        return False
 
     # ── event handling ───────────────────────────────────────────────────
 
@@ -358,18 +346,17 @@ class Negotiator:
                 except Exception:
                     logger.exception("Fabric: bad conditions on connection %s", conn.id)
                     continue
-            # At-most-once across workers. Under multiple gunicorn workers the
+            # Deduplicate within the shared claim lifetime. Under multiple gunicorn workers the
             # same bus event fans out (Redis pub/sub) to EVERY worker's negotiator;
             # without a cluster-wide guard each worker would independently run the
             # chain — duplicate staged writes / webhooks / notifications. A Redis
             # SET NX per (connection, event) lets exactly ONE worker proceed
-            # (mirrors the automation engine). Fail-open if Redis is unavailable.
+            # (mirrors the automation engine). Uncertain coordination refuses.
             if not await self._claim_event(conn, event):
                 continue
             # Cooldown guard: bound self-amplifying loops (e.g. a connection wired
             # ingest.external → fabric.webhook whose external target posts back to
-            # /fabric/ingest) and flood. Cluster-wide via Redis when available,
-            # else in-process.
+            # /fabric/ingest) and flood. A shared cooldown claim is required.
             if conn.cooldown_seconds and conn.cooldown_seconds > 0:
                 if not await self._cooldown_ok(conn):
                     continue
@@ -466,8 +453,24 @@ class Negotiator:
             # finally below (implicit rollback). Staged writes already committed
             # their own change rows via AdapterStagingService, so this is additive.
             if db is not None:
-                with contextlib.suppress(Exception):
+                try:
                     await db.commit()
+                except Exception:
+                    # A lost acknowledgement can follow a successful commit.
+                    # Keep each step's outcome: external effects and separately
+                    # committed staging rows cannot be undone by this rollback.
+                    run["success"] = False
+                    run["error_code"] = "COMMIT_FAILED"
+                    run["commit_status"] = "unconfirmed"
+                    run["error"] = (
+                        "Connection persistence could not be confirmed; "
+                        "step effects may already have occurred"
+                    )
+                    logger.warning("Fabric: connection %s commit unconfirmed", conn.id)
+                    try:
+                        await db.rollback()
+                    except Exception:
+                        logger.warning("Fabric: connection %s rollback unavailable", conn.id)
         finally:
             if session_cm is not None:
                 with contextlib.suppress(Exception):
@@ -537,5 +540,5 @@ class Negotiator:
         }
 
 
-# Module-level singleton (DB-backed store + bus subscription wired in the next phase).
+# Module-level singleton; runtime.py wires database hydration and bus subscription.
 negotiator = Negotiator()

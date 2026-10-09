@@ -484,17 +484,17 @@ class SiteVPNConfigResponse(TimestampSchema):
     """Matches frontend SiteVPNConfig interface."""
 
     id: UUID
-    site_id: str
+    site_id: UUID
     vpn_type: str
     enabled: bool = True
     auto_connect: bool = True
     is_primary: bool = False
     priority: int = 0
     # Brain-VPN
-    controller_id: str | None = None
+    controller_id: UUID | None = None
     vpn_source: str = "manual"
     brain_vpn_server_id: str | None = None
-    last_config_sync: str | None = None
+    last_config_sync: datetime | None = None
     # Tailscale
     tailscale_node: str | None = None
     tailscale_hostname: str | None = None
@@ -524,12 +524,12 @@ class SiteVPNConfigResponse(TimestampSchema):
     netbird_group: str | None = None
     # Status
     status: str = "not_configured"
-    last_health_check: str | None = None
+    last_health_check: datetime | None = None
     # Certificate metadata
     cert_metadata: dict[str, Any] | None = None
-    cert_expires_at: str | None = None
+    cert_expires_at: datetime | None = None
     # Organization scope
-    organization_id: str | None = None
+    organization_id: UUID | None = None
 
 
 class SiteVPNConfigCreate(BaseSchema):

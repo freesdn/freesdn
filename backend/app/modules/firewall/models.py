@@ -200,7 +200,7 @@ class GatewayConnection(Base, UUIDMixin, AuditMixin, SoftDeleteMixin):
     # Network
     host: Mapped[str] = mapped_column(String(255), nullable=False)  # hostname or IP
     port: Mapped[int] = mapped_column(Integer, default=443)
-    verify_ssl: Mapped[bool] = mapped_column(Boolean, default=False)
+    verify_ssl: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Credentials (stored as encrypted JSON)
     credentials: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=lambda: {})

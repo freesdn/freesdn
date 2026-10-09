@@ -16,9 +16,9 @@ TrueNAS 25.x **auto-revokes** an API key the instant it is used over a
 plaintext (``ws://``) connection — the revoke reason is literally
 "Attempt to use over an insecure transport". So this client connects
 over ``wss://`` **only**, and maps the plain-HTTP port 80 to 443 (the
-HTTPS listener carries the WS endpoint). Self-signed appliance certs
-are the norm, so verification follows the adapter's ``verify_ssl``
-flag (default False) rather than the system trust store.
+HTTPS listener carries the WS endpoint). Verification defaults to True.
+Private appliance CAs can be mounted through FREESDN_DEVICE_CA_BUNDLE;
+False remains an explicit insecure exception.
 
 Auth: ``auth.login_ex`` with the ``API_KEY_PLAIN`` mechanism — the
 ``username`` MUST be the key's owning account, and that account must be
@@ -40,10 +40,12 @@ import logging
 import ssl
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
-import websockets
+from websockets.asyncio.client import connect as WebSocketConnect
 from websockets.exceptions import WebSocketException
 
+from app.adapters.appliance_tls import appliance_tls_context
 from app.adapters.exceptions import (
     AdapterAuthenticationError,
     AdapterConnectionError,
@@ -95,6 +97,17 @@ _JSONRPC_METHOD_NOT_FOUND = -32601
 _ERRNAME_NOT_AUTHENTICATED = "ENOTAUTHENTICATED"
 
 
+class _NoRedirectConnect(WebSocketConnect):
+    """Credentials are sent in the first frame, not HTTP headers.
+
+    The library strips authentication headers on cross-origin redirects, but
+    cannot protect our subsequent auth.login_ex frame. Refuse all redirects.
+    """
+
+    def process_redirect(self, exc: Exception) -> Exception:
+        return exc
+
+
 class TrueNASWSClient:
     """Async JSON-RPC-over-WebSocket client for TrueNAS 25.04+ / 26.0.
 
@@ -116,7 +129,7 @@ class TrueNASWSClient:
         *,
         api_key: str | None = None,
         port: int = 443,
-        verify_ssl: bool = False,
+        verify_ssl: bool = True,
         timeout: float | None = None,
     ):
         self.host = host
@@ -147,14 +160,7 @@ class TrueNASWSClient:
     # ------------------------------------------------------------------
 
     def _ssl_context(self) -> ssl.SSLContext:
-        ctx = ssl.create_default_context()
-        if not self.verify_ssl:
-            # Appliances ship self-signed certs; the MagicDNS / IP host
-            # also won't match the cert CN. Match the REST client's
-            # verify_ssl=False default for lab + self-host installs.
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-        return ctx
+        return appliance_tls_context(self.verify_ssl, adapter_id="truenas")
 
     async def connect(self) -> None:
         """Open the WebSocket and authenticate.
@@ -170,13 +176,16 @@ class TrueNASWSClient:
             rejected — do NOT fall back, surface the auth failure.
         """
         try:
-            self._ws = await websockets.connect(
+            self._ws = await _NoRedirectConnect(
                 self._uri,
                 ssl=self._ssl_context(),
                 max_size=MAX_RESPONSE_BYTES,
                 open_timeout=DEFAULT_CONNECT_TIMEOUT,
                 ping_interval=None,  # we drive traffic; no idle pings needed
             )
+        except ssl.SSLCertVerificationError as exc:
+            # Certificate failure is terminal; do not try the legacy transport.
+            raise AdapterAuthenticationError("TrueNAS TLS certificate verification failed") from exc
         except TimeoutError as exc:
             # A handshake TIMEOUT means the host is unreachable — surface it as a
             # timeout (504) so the adapter does NOT fall back to a doomed REST
@@ -482,7 +491,11 @@ class TrueNASWSClient:
             # NOT the (short) WS read timeout, so a slow multi-MB upload isn't
             # cut off mid-stream (which would orphan a half-created job).
             async with httpx.AsyncClient(
-                base_url=base, verify=self.verify_ssl, timeout=UPLOAD_POST_TIMEOUT_SEC
+                base_url=base,
+                verify=self._ssl_context(),
+                trust_env=False,
+                follow_redirects=False,
+                timeout=UPLOAD_POST_TIMEOUT_SEC,
             ) as client:
                 resp = await client.post(UPLOAD_PATH, data=data, files=files, headers=headers)
                 resp.raise_for_status()
@@ -579,13 +592,29 @@ class TrueNASWSClient:
             raise AdapterAuthenticationError("TrueNAS API key contains illegal control characters")
 
         job_id, url = await self._begin_download(path)
+        # The appliance returns a relative, one-shot download path. Never send
+        # the API key to a response-selected origin or downgrade it to HTTP.
+        target = urlsplit(url)
+        if (
+            target.scheme
+            or target.netloc
+            or target.fragment
+            or not target.path.startswith("/_download/")
+            or "\\" in url
+            or any(ord(char) < 33 or ord(char) == 127 for char in url)
+        ):
+            raise AdapterConnectionError("TrueNAS returned an unsafe download URL")
 
         tls_port = 443 if self.port in (80, 0) else self.port
         base = f"https://{self.host}:{tls_port}"
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         try:
             async with httpx.AsyncClient(
-                base_url=base, verify=self.verify_ssl, timeout=UPLOAD_POST_TIMEOUT_SEC
+                base_url=base,
+                verify=self._ssl_context(),
+                trust_env=False,
+                follow_redirects=False,
+                timeout=UPLOAD_POST_TIMEOUT_SEC,
             ) as client:
                 resp = await client.get(url, headers=headers)
                 resp.raise_for_status()

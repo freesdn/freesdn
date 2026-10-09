@@ -120,6 +120,29 @@ describe('FormDialog', () => {
     expect(await screen.findByText('Controller name already exists')).toBeInTheDocument();
   });
 
+  it('shows the standardized backend conflict message instead of the HTTP wrapper', async () => {
+    const onSubmit = vi.fn().mockRejectedValue(Object.assign(new Error('Request failed with status code 400'), {
+      response: { data: { error: { message: 'Multiple matching VPN profiles; select a profile' } } },
+    }));
+    const user = userEvent.setup();
+    render(<Harness onSubmit={onSubmit} defaultValues={{ name: 'profile', port: 1194 }} />);
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    expect(await screen.findByText('Multiple matching VPN profiles; select a profile')).toBeInTheDocument();
+    expect(screen.queryByText('Request failed with status code 400')).not.toBeInTheDocument();
+  });
+
+  it('preserves field details from a standardized validation response', async () => {
+    const onSubmit = vi.fn().mockRejectedValue({
+      response: { data: { error: { message: 'Validation error', details: [
+        { field: 'body.port', message: 'must be between 1 and 65535', type: 'value_error' },
+      ] } } },
+    });
+    const user = userEvent.setup();
+    render(<Harness onSubmit={onSubmit} defaultValues={{ name: 'profile', port: 70000 }} />);
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    expect(await screen.findByText('port: must be between 1 and 65535')).toBeInTheDocument();
+  });
+
   it('calls onOpenChange(false) when Cancel is clicked', async () => {
     const onOpenChange = vi.fn();
     const user = userEvent.setup();

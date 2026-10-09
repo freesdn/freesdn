@@ -41,12 +41,14 @@ import ast
 import asyncio
 import inspect
 import textwrap
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
 from app.api.v1.endpoints import plugins as ep
+from app.core.dependencies import DEFAULT_ROLE_PERMISSIONS
 from app.plugins.loader import PluginLoader, plugin_loader
 
 PLUGIN_ID = "acme-widget"
@@ -68,7 +70,10 @@ class _Session:
 
     async def execute(self, _query):
         plugin = self._plugin
-        return SimpleNamespace(scalar_one_or_none=lambda: plugin, scalars=lambda: [])
+        return SimpleNamespace(
+            scalar_one_or_none=lambda: plugin, scalars=lambda: [],
+            one_or_none=lambda: self._actor,
+        )
 
     async def commit(self) -> None:
         self.commits += 1
@@ -120,6 +125,38 @@ def wired(monkeypatch):
     here is what makes this a behavioural test rather than a source assertion.
     """
     state: dict = {"started": False, "held_during_start": None}
+
+    # These tests already use a synthetic principal and SQL session. Supply the
+    # authenticated-account fields now consumed by the real boundary check;
+    # this fixture is not an authentication/SQL qualification. The independent
+    # HTTP/PostgreSQL queued-authority cases exercise that security contract.
+    original_capture = ep.capture_plugin_mutation_authority
+
+    def capture(request, current_user, session):
+        current_user.user = SimpleNamespace(
+            token_version=17, hashed_password="owned-deadlock-fixture-hash",
+        )
+        current_user.permissions = list(DEFAULT_ROLE_PERMISSIONS[current_user.role])
+        current_user.is_scoped = False
+        current_user.token_claims = {
+            "tv": 17, "exp": (datetime.now(UTC) + timedelta(minutes=5)).timestamp(),
+        }
+        request.headers = {}
+        session._actor = SimpleNamespace(
+            token_version=current_user.user.token_version, role=current_user.role,
+            organization_id=current_user.organization_id,
+            hashed_password=current_user.user.hashed_password,
+            is_active=True, deleted_at=None,
+        )
+        actual_check = original_capture(request, current_user, session)
+
+        async def check():
+            assert plugin_loader.lifecycle_lock(PLUGIN_ID).locked()
+            await actual_check()
+
+        return check
+
+    monkeypatch.setattr(ep, "capture_plugin_mutation_authority", capture)
 
     async def _fake_start_everywhere(plugin_id, session, app=None):
         # Exactly what load_plugin does: re-acquire the per-plugin lock.
@@ -324,7 +361,7 @@ class _UpgradeSession:
 
 @pytest.fixture
 def upgrade_row(monkeypatch):
-    row = SimpleNamespace(plugin_id=PLUGIN_ID, version="1.0.0", status="installed", is_active=True)
+    row = SimpleNamespace(plugin_id=PLUGIN_ID, version="1.0.0", status="installed", is_active=True, manifest_cache={})
 
     async def _get(_db, plugin_id):
         return row if plugin_id == PLUGIN_ID else None

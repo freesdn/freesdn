@@ -1,0 +1,1766 @@
+# Runs the shipped rules with normal and faulted time series, including alert hold times.
+rule_files:
+- alerts.yml
+evaluation_interval: 1m
+tests:
+- name: healthy
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: exporter-down
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: critical
+        component: backup
+      exp_annotations: &id001
+        summary: Backup metrics cannot be collected
+        description: Check the backup-metrics container and Prometheus scrape target.
+          Missing observations do not establish backup health.
+        runbook_url: https://docs.freesdn.org/deploy/backups-and-restore/
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: exporter-missing
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        severity: critical
+        component: backup
+      exp_annotations: *id001
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: status-missing
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: critical
+        component: backup
+      exp_annotations: &id002
+        summary: Backup status or completed database pair is missing or invalid
+        description: Check both database archives, the completion pointer, timing
+          settings and pg-backup logs. This also fires before the first successful
+          backup.
+        runbook_url: https://docs.freesdn.org/deploy/backups-and-restore/
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: pair-missing
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: critical
+        component: backup
+      exp_annotations: *id002
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: configuration-invalid
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: critical
+        component: backup
+      exp_annotations: *id002
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: disabled
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: critical
+        component: backup
+      exp_annotations: &id003
+        summary: Database backups are disabled
+        description: Without a working encryption recipient/key the service fails
+          closed. Configure GPG; plaintext requires an explicit development-only opt-in.
+        runbook_url: https://docs.freesdn.org/deploy/backups-and-restore/
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: dump-failed
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: critical
+        component: backup
+      exp_annotations:
+        summary: The latest database backup attempt failed
+        description: A previous success does not clear a newer failed attempt. Check
+          pg-backup logs, database access, encryption and free space.
+        runbook_url: https://docs.freesdn.org/deploy/backups-and-restore/
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: custom-cadence
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 2000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 60+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: critical
+        component: backup
+      exp_annotations:
+        summary: The last completed database backup exceeds its configured age limit
+        description: The threshold uses BACKUP_INTERVAL_SECONDS plus BACKUP_FRESHNESS_GRACE_SECONDS.
+          Check pg-backup logs and complete a restore drill separately.
+        runbook_url: https://docs.freesdn.org/deploy/backups-and-restore/
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: plaintext
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: warning
+        component: backup
+      exp_annotations:
+        summary: Database backups are running without GPG encryption
+        description: Plaintext was explicitly enabled. Configure BACKUP_GPG_RECIPIENT
+          and BACKUP_GPG_PUBLIC_KEY_PATH for production.
+        runbook_url: https://docs.freesdn.org/deploy/backups-and-restore/
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: disabled-not-plaintext
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: critical
+        component: backup
+      exp_annotations: *id003
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: remote-missing
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: critical
+        component: backup
+      exp_annotations: &id004
+        summary: Required off-site backup has no valid completion evidence
+        description: Check the dr profile, rclone configuration and pg-backup-offsite
+          logs. Enabling a service is not proof of remote completion.
+        runbook_url: https://docs.freesdn.org/deploy/backups-and-restore/
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: remote-never-completed
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: critical
+        component: backup
+      exp_annotations: *id004
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: remote-failed
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: critical
+        component: backup
+      exp_annotations:
+        summary: The latest off-site backup attempt failed verification
+        description: Both database files and their completion marker must pass verification.
+          A previous successful copy is retained as history only.
+        runbook_url: https://docs.freesdn.org/deploy/backups-and-restore/
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: recent-copy-old-source
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: critical
+        component: backup
+      exp_annotations:
+        summary: The database pair verified off-site is too old
+        description: Age is measured from the source backup, not the most recent copy.
+          Copying the same old pair repeatedly cannot reset this alert.
+        runbook_url: https://docs.freesdn.org/deploy/backups-and-restore/
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+- name: retention-failed
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts:
+    - exp_labels:
+        job: freesdn-backups
+        instance: backup-metrics:9788
+        severity: warning
+        component: backup
+      exp_annotations:
+        summary: Off-site backup retention failed
+        description: Copy verification succeeded but old-object deletion failed. Check
+          quota, permissions and object-lock policy; do not weaken retention protection
+          automatically.
+        runbook_url: https://docs.freesdn.org/deploy/backups-and-restore/
+- name: optional-remote
+  interval: 1m
+  input_series:
+  - series: freesdn_pg_backup_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_config_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_pair_present{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_encryption_enabled{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 3000+0x60
+  - series: freesdn_pg_backup_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1000+0x60
+  - series: freesdn_pg_backup_offsite_required{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_status_valid{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_last_attempt_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: freesdn_pg_backup_offsite_last_success_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_source_timestamp{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 0+0x60
+  - series: freesdn_pg_backup_offsite_max_age_seconds{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1500+0x60
+  - series: freesdn_pg_backup_offsite_retention_failed{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  - series: up{job="freesdn-backups",instance="backup-metrics:9788"}
+    values: 1+0x60
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupMetricsUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStateInvalid
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupDisabled
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNBackupUnencrypted
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupUnavailable
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupFailed
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteBackupStale
+    exp_alerts: []
+  - eval_time: 60m
+    alertname: FreeSDNOffsiteRetentionFailed
+    exp_alerts: []

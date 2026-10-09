@@ -22,11 +22,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -102,7 +103,7 @@ class PushService:
             )
         )
         await self.db.commit()
-        return result.rowcount or 0
+        return cast(CursorResult[Any], result).rowcount or 0
 
     @staticmethod
     def _send_one(sub_info: dict[str, Any], data: str) -> int | None:

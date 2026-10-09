@@ -1109,11 +1109,11 @@ class AgentRegistryService:
                             duration_seconds=duration,
                             error_message=error_message,
                         )
+                        await bg_session.commit()
                     except Exception:
-                        logger.exception(
-                            "Failed to dispatch notifications for schedule %s",
-                            schedule_to_notify.name,
-                        )
+                        with contextlib.suppress(Exception):
+                            await bg_session.rollback()
+                        logger.warning("Scheduled scan notification persistence failed")
         except Exception:
             logger.exception(
                 "Failed to persist scan_result from agent %s",

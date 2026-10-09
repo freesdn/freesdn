@@ -14,20 +14,11 @@ Production-safety contract:
 - Apply uses the existing dispatcher in ``gateway_vpn.apply_change``
   and the dual-gate (``ADAPTER_READ_ONLY=false`` AND ``force=true``).
 
-Supported features::
-
-    proxmox.firewall.cluster_rule    create | delete  (target_id = pos)
-    proxmox.firewall.guest_rule      create | delete  (target_id = pos;
-                                                       payload includes
-                                                       node + vmid +
-                                                       vm_type)
-    proxmox.firewall.guest_options   update           (payload includes
-                                                       node + vmid +
-                                                       vm_type + options)
-
-Node-level firewall reads (``get_node_firewall_rules``) are exposed by
-the agent-2 node service — this domain owns cluster-scope and
-guest-scope only.
+Reviewed writes use ``proxmox.firewall.operation`` through the hypervisor
+review/submit endpoints, including cluster, node and guest scopes. Legacy
+cluster_rule, guest_rule and guest_options entries remain recognizable for
+compatibility but are refused before credentials; review those intents again.
+Node-level legacy reads remain exposed by the node service.
 """
 
 from __future__ import annotations
@@ -49,6 +40,7 @@ from app.services.adapter_redaction import redact_list, redact_secrets
 logger = logging.getLogger(__name__)
 
 _APPLY: dict[tuple[str, str], str] = {
+    ("proxmox.firewall.operation", "create"): "apply_firewall_operation",
     ("proxmox.firewall.cluster_rule", "create"): "create_firewall_rule",
     ("proxmox.firewall.cluster_rule", "delete"): "delete_firewall_rule",
     ("proxmox.firewall.guest_rule", "create"): "create_guest_firewall_rule",
@@ -238,206 +230,8 @@ class GatewayProxmoxFirewallService(GatewayServiceBase):
 
     def build_applier(self, change: Any) -> Any:
         async def _apply(c: Any) -> Any:
-            adapter: ProxmoxAdapter | None = None
-            try:
-                ctrl = await self._get_controller(c.controller_id, c.organization_id)
-                adapter = await self._build_adapter(ctrl)
-                payload = c.payload or {}
-                target_id = c.target_id
+            from app.services.hypervisor_firewall_operations import apply_firewall
 
-                method_name = _APPLY.get((c.feature, c.operation))
-                if method_name is None:
-                    raise HTTPException(
-                        400,
-                        detail=(f"no applier for feature={c.feature!r} operation={c.operation!r}"),
-                    )
-                method = getattr(adapter, method_name, None)
-                if method is None:
-                    raise HTTPException(
-                        501,
-                        detail=(
-                            f"Proxmox adapter has no method {method_name!r}; missing implementation"
-                        ),
-                    )
-
-                # CATASTROPHIC-by-default gate: any firewall-rule delete is blocked
-                # unless the staged payload carries confirmed=true. The other Proxmox
-                # appliers (vm/snapshot/storage/node) gate per-op; firewall did not,
-                # letting cluster/guest rule deletes apply blind (sweep critical/high).
-                from app.services.adapter_proxmox_preflight import preflight_gate
-
-                await preflight_gate(adapter, c.feature, c.operation, payload)
-
-                if c.feature == "proxmox.firewall.cluster_rule":
-                    if c.operation == "create":
-                        action = payload.get("action")
-                        if not action or not isinstance(action, str):
-                            raise HTTPException(
-                                400,
-                                detail="cluster_rule create requires action",
-                            )
-                        # enforce action / type / proto
-                        # allow-lists. The adapter takes these strings
-                        # straight to URL params; an unexpected value
-                        # would either be silently accepted by Proxmox
-                        # or surface a 4xx far from this layer.
-                        if action not in _FIREWALL_ACTIONS:
-                            raise HTTPException(
-                                400,
-                                detail=(
-                                    "cluster_rule.action must be one of "
-                                    f"{sorted(_FIREWALL_ACTIONS)}"
-                                ),
-                            )
-                        rule_type = str(payload.get("type", "in"))
-                        if rule_type not in _FIREWALL_RULE_TYPES:
-                            raise HTTPException(
-                                400,
-                                detail=(
-                                    "cluster_rule.type must be one of "
-                                    f"{sorted(_FIREWALL_RULE_TYPES)}"
-                                ),
-                            )
-                        proto = payload.get("proto")
-                        if proto is not None and proto != "":
-                            if not isinstance(proto, str) or proto not in _FIREWALL_PROTOCOLS:
-                                raise HTTPException(
-                                    400,
-                                    detail=(
-                                        "cluster_rule.proto must be one of "
-                                        f"{sorted(_FIREWALL_PROTOCOLS)}"
-                                    ),
-                                )
-                        return await method(
-                            action=action,
-                            rule_type=rule_type,
-                            enable=bool(payload.get("enable", True)),
-                            source=payload.get("source"),
-                            dest=payload.get("dest"),
-                            sport=payload.get("sport"),
-                            dport=payload.get("dport"),
-                            proto=proto,
-                            macro=payload.get("macro"),
-                            comment=payload.get("comment"),
-                            force=True,
-                        )
-                    if c.operation == "delete":
-                        if not target_id:
-                            raise HTTPException(
-                                400,
-                                detail="cluster_rule delete requires target_id (pos)",
-                            )
-                        pos = _validate_pos(target_id)
-                        return await method(pos, force=True)
-
-                if c.feature == "proxmox.firewall.guest_rule":
-                    node = payload.get("node")
-                    vm_type = payload.get("vm_type")
-                    vmid = payload.get("vmid")
-                    if not isinstance(node, str) or not node:
-                        raise HTTPException(
-                            400,
-                            detail="guest_rule payload must include node",
-                        )
-                    if vmid is None:
-                        raise HTTPException(
-                            400,
-                            detail="guest_rule payload must include vmid",
-                        )
-                    node = validate_id(node, label="node")
-                    vm_type = _validate_vm_type(vm_type)
-                    vmid = _validate_vmid(vmid)
-
-                    if c.operation == "create":
-                        rule = payload.get("rule")
-                        if not isinstance(rule, dict) or not rule:
-                            raise HTTPException(
-                                400,
-                                detail="guest_rule create requires rule dict",
-                            )
-                        # Same allow-list applied to the inner rule
-                        # dict; the adapter passes these straight
-                        # through to Proxmox.
-                        rule_action = rule.get("action")
-                        if rule_action and rule_action not in _FIREWALL_ACTIONS:
-                            raise HTTPException(
-                                400,
-                                detail=(
-                                    f"guest_rule.action must be one of {sorted(_FIREWALL_ACTIONS)}"
-                                ),
-                            )
-                        rule_type_inner = rule.get("type")
-                        if rule_type_inner and rule_type_inner not in _FIREWALL_RULE_TYPES:
-                            raise HTTPException(
-                                400,
-                                detail=(
-                                    f"guest_rule.type must be one of {sorted(_FIREWALL_RULE_TYPES)}"
-                                ),
-                            )
-                        rule_proto = rule.get("proto")
-                        if rule_proto and rule_proto not in _FIREWALL_PROTOCOLS:
-                            raise HTTPException(
-                                400,
-                                detail=(
-                                    f"guest_rule.proto must be one of {sorted(_FIREWALL_PROTOCOLS)}"
-                                ),
-                            )
-                        return await method(
-                            node=node,
-                            vm_type=vm_type,
-                            vmid=vmid,
-                            rule=rule,
-                            force=True,
-                        )
-                    if c.operation == "delete":
-                        if not target_id:
-                            raise HTTPException(
-                                400,
-                                detail="guest_rule delete requires target_id (pos)",
-                            )
-                        pos = _validate_pos(target_id)
-                        return await method(
-                            node=node,
-                            vm_type=vm_type,
-                            vmid=vmid,
-                            pos=pos,
-                            force=True,
-                        )
-
-                if c.feature == "proxmox.firewall.guest_options":
-                    node = payload.get("node")
-                    vm_type = payload.get("vm_type")
-                    vmid = payload.get("vmid")
-                    options = payload.get("options")
-                    if not isinstance(node, str) or not node:
-                        raise HTTPException(
-                            400,
-                            detail="guest_options payload must include node",
-                        )
-                    if vmid is None:
-                        raise HTTPException(
-                            400,
-                            detail="guest_options payload must include vmid",
-                        )
-                    if not isinstance(options, dict):
-                        raise HTTPException(
-                            400,
-                            detail="guest_options payload must include options dict",
-                        )
-                    node = validate_id(node, label="node")
-                    vm_type = _validate_vm_type(vm_type)
-                    vmid = _validate_vmid(vmid)
-                    return await method(
-                        node=node,
-                        vm_type=vm_type,
-                        vmid=vmid,
-                        options=options,
-                        force=True,
-                    )
-
-                raise HTTPException(400, detail=f"unhandled feature={c.feature!r}")
-            finally:
-                if adapter is not None:
-                    await adapter.disconnect()
+            return await apply_firewall(self, c)
 
         return _apply

@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { useSiteStore } from '@/stores/siteStore';
+import { useAuthStore, type User } from '@/stores/authStore';
 import {
   Archive,
   Plus,
@@ -77,10 +78,12 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatsGrid } from '@/components/ui/stats-grid';
 import { api, getApiErrorMessage, backupApi } from '@/lib/api';
-import type { BackupManifestPreview } from '@/lib/api';
+import type { BackupManifestPreview, RestoreJob } from '@/lib/api';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { beginVaultExport } from '@/lib/api/vaultExportTransport';
+import { VaultExportDialog, type OwnedVaultScope } from './VaultExportDialog';
 
 interface Backup {
   id: string;
@@ -104,6 +107,7 @@ interface Backup {
   include_automation: boolean;
   is_encrypted: boolean;
   include_secrets: boolean;
+  artifact_integrity?: 'recorded' | 'legacy_unverified' | 'invalid';
   retention_days: number;
   expires_at: string | null;
   error_message: string | null;
@@ -192,29 +196,20 @@ interface RestoreOptions {
   passphrase: string;
 }
 
-// Shape of RestoreJobResponse.dry_run_report, the per-contributor
-// preview the backend computes for a dry run. Surfaced inline in the
-// restore dialog so "Preview Changes" actually shows what would change.
-interface DryRunContributor {
-  contributor_id: string;
-  status: string;
-  created: Record<string, number>;
-  updated: Record<string, number>;
-  skipped: Record<string, number>;
-  errors: string[];
-  warnings: string[];
-  duration_sec?: number;
-}
-interface DryRunReport {
-  contributors: DryRunContributor[];
-  summary: {
-    total_created: number;
-    total_updated: number;
-    total_skipped: number;
-    total_errors: number;
-    contributors_ok: number;
-    contributors_failed: number;
-  };
+// Older servers can return completed with contributor errors. Inspect both
+// the job and its structured report before presenting a successful recovery.
+function restoreOutcome(job: RestoreJob) {
+  const report = job.dry_run ? job.dry_run_report : job.restore_log;
+  const failed = job.status === 'failed' || (report?.summary.contributors_failed ?? 0) > 0 ||
+    (report?.summary.total_errors ?? 0) > 0 ||
+    Boolean(report?.contributors.some((section) =>
+      section.status === 'error' || section.status === 'schema_mismatch' || section.errors?.length,
+    ));
+  const confirmed = job.status === 'completed' && Boolean(report) && !failed;
+  const messageKey = failed
+    ? job.dry_run ? 'dryRunFailed' : 'restorePartialFailure'
+    : confirmed ? job.dry_run ? 'dryRunComplete' : 'restoreComplete' : 'restoreUnconfirmed';
+  return { report, failed, confirmed, messageKey };
 }
 
 const BACKUP_STATUS_VARIANT: Record<string, StatusVariant> = {
@@ -416,10 +411,31 @@ function getNextCronRun(t: TFn, cronExpression: string | null | undefined): stri
   return t('BackupsPage.cron.dailyAt', { time: `${hour}:${minute.padStart(2, '0')}` });
 }
 
+// Browser affordances mirror the server policy; the API remains authoritative.
+function mayAccessArchive(user: User | null, secrets: boolean): boolean {
+  return Boolean(user?.is_active && (secrets ? user.is_superuser : user.is_org_admin || user.is_superuser));
+}
+
+type ArchiveActor = Pick<User, 'id' | 'organization_id'>;
+
+function captureArchiveActor(): ArchiveActor | null {
+  const user = useAuthStore.getState().user;
+  return user ? { id: user.id, organization_id: user.organization_id } : null;
+}
+
+function mayDispatchArchive(actor: ArchiveActor | null, secrets: boolean): boolean {
+  const current = useAuthStore.getState().user;
+  return Boolean(actor && current && actor.id === current.id &&
+    actor.organization_id === current.organization_id && mayAccessArchive(current, secrets));
+}
+
 export default function BackupsPage() {
   const { t } = useTranslation('backup');
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const archiveUser = useAuthStore((state) => state.user);
+  const canManageArchives = mayAccessArchive(archiveUser, false);
+  const canManageVaults = mayAccessArchive(archiveUser, true);
   // Build the zod schema with localized validation messages. Memoized on t
   // so it only rebuilds when the active language changes.
   const backupFormSchema = useMemo(() => buildBackupFormSchema(t), [t]);
@@ -440,6 +456,21 @@ export default function BackupsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedBackupIds, setSelectedBackupIds] = useState<Set<string>>(new Set());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [archiveFormEpoch, setArchiveFormEpoch] = useState(0);
+  useEffect(() => {
+    // FormDialog normally resets only on reopen. Remount this particular form
+    // on identity/authority changes so its stored passphrase is discarded now.
+    setIsDialogOpen(false);
+    setArchiveFormEpoch((epoch) => epoch + 1);
+  }, [archiveUser?.id, archiveUser?.organization_id, canManageVaults, canManageArchives]);
+  const [vaultFlow, setVaultFlow] = useState<{ scope: OwnedVaultScope; kind: 'create' | 'recorded' | 'legacy' } | null>(null);
+  const vaultOwned = useRef<OwnedVaultScope | null>(null);
+  const closeVault = () => { vaultOwned.current?.dispose(); vaultOwned.current = null; setVaultFlow(null); };
+  const openVault = (intent: Parameters<typeof beginVaultExport>[0], kind: 'create' | 'recorded' | 'legacy') => {
+    if (vaultOwned.current) throw new Error(t('vaultConfirmation.alreadyOpen', 'Close the current vault confirmation first.'));
+    const scope = beginVaultExport(intent); vaultOwned.current = scope; setVaultFlow({ scope, kind });
+  };
+  useEffect(() => () => { vaultOwned.current?.dispose(); vaultOwned.current = null; }, []);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [restoreDialogBackup, setRestoreDialogBackup] = useState<Backup | null>(null);
   
@@ -451,11 +482,12 @@ export default function BackupsPage() {
   // typed-confirmation required before destructive (non-dry-run)
   // restore can be triggered. User must type the backup name OR "RESTORE".
   const [restoreConfirmText, setRestoreConfirmText] = useState('');
-  // Result of the most recent "Preview Changes" (dry run) for the open
-  // restore dialog. Rendered inline so the operator can actually review
-  // the previewed changes before committing. Cleared whenever the
-  // selection changes (the preview would be stale) or the dialog closes.
-  const [dryRunResult, setDryRunResult] = useState<DryRunReport | null>(null);
+  // Retain the completed request's preview or applied report for review.
+  // Transport success alone does not establish successful recovery.
+  const [restoreResult, setRestoreResult] = useState<RestoreJob | null>(null);
+  const restoreResultOutcome = restoreResult ? restoreOutcome(restoreResult) : null;
+  const restoreReport = restoreResultOutcome?.report ?? null;
+  const restoreConfirmed = restoreResultOutcome?.confirmed ?? false;
   // Enterprise backup v2: which manifest contributors the operator has
   // selected to restore. null = "all" (the default before the manifest
   // loads, and the value sent when every restorable contributor is
@@ -537,7 +569,11 @@ export default function BackupsPage() {
 
   // Create backup mutation
   const createMutation = useMutation({
-    mutationFn: async (data: BackupFormData) => {
+    mutationFn: async ({ data, actor }: { data: BackupFormData; actor: ArchiveActor | null }) => {
+      // Bind queued work to the initiating account and organization as well as live authority.
+      if (data.include_secrets || !mayDispatchArchive(actor, false)) {
+        throw new Error(t('BackupsPage.permissions.archiveAuthorityRequired'));
+      }
       const response = await api.post('/backups', data);
       return response.data;
     },
@@ -604,37 +640,31 @@ export default function BackupsPage() {
     },
   });
 
-  // Restore mutation
+  // Restore mutation. The endpoint returns the final job, including failures.
   const restoreMutation = useMutation({
     mutationFn: async (
       data: { backup_id: string; contributors?: string[] } & RestoreOptions,
     ) => {
-      const response = await api.post('/backups/restore', data);
+      const response = await api.post<RestoreJob>('/backups/restore', data);
       return response.data;
     },
+    onMutate: () => setRestoreResult(null),
     onSuccess: (data) => {
-      if (data?.dry_run) {
-        // Keep the dialog OPEN and surface what the dry run found, so
-        // "Preview Changes" is actually reviewable (it previously just
-        // closed the dialog with a toast and discarded the report).
-        setDryRunResult((data.dry_run_report as DryRunReport) ?? null);
-        queryClient.invalidateQueries({ queryKey: ['backups'] });
-        toast({
-          title: t('BackupsPage.toasts.dryRunComplete.title'),
-          description: t('BackupsPage.toasts.dryRunComplete.message'),
-        });
-        return;
-      }
-      setRestoreDialogBackup(null);
+      const outcome = restoreOutcome(data);
+      setRestoreResult(data);
       setRestoreConfirmText('');
-      setDryRunResult(null);
+      setRestoreOptions((options) => ({ ...options, passphrase: '' }));
       queryClient.invalidateQueries({ queryKey: ['backups'] });
+      queryClient.invalidateQueries({ queryKey: ['backup-stats'] });
       toast({
-        title: t('BackupsPage.toasts.restoreStarted.title'),
-        description: t('BackupsPage.toasts.restoreStarted.message'),
+        title: t(`BackupsPage.toasts.${outcome.messageKey}.title`),
+        description: t(`BackupsPage.toasts.${outcome.messageKey}.message`),
+        ...(!outcome.confirmed ? { variant: 'destructive' as const } : {}),
       });
     },
     onError: (error: any) => {
+      setRestoreConfirmText('');
+      setRestoreOptions((options) => ({ ...options, passphrase: '' }));
       toast({
         title: t('BackupsPage.toasts.error'),
         description: getApiErrorMessage(error, t('BackupsPage.toasts.restoreFailed')),
@@ -668,7 +698,7 @@ export default function BackupsPage() {
 
   const toggleContributor = (id: string, restorableIds: string[]): void => {
     // Any selection change invalidates a previously-run preview.
-    setDryRunResult(null);
+    setRestoreResult(null);
     setSelectedContributors((prev) => {
       // Start from the explicit set, or the full restorable set if we
       // were in "all" mode.
@@ -695,7 +725,7 @@ export default function BackupsPage() {
   // would no longer reflect the new options.
   const updateRestoreOption = (patch: Partial<RestoreOptions>): void => {
     setRestoreOptions((prev) => ({ ...prev, ...patch }));
-    setDryRunResult(null);
+    setRestoreResult(null);
   };
 
   // Reset the contributor selection to "all" whenever the restore dialog
@@ -704,7 +734,7 @@ export default function BackupsPage() {
   // every open/close call site.
   useEffect(() => {
     setSelectedContributors(null);
-    setDryRunResult(null);
+    setRestoreResult(null);
   }, [restoreDialogBackup?.id]);
 
   // Create schedule mutation
@@ -780,10 +810,17 @@ export default function BackupsPage() {
 
   // Download backup mutation
   const downloadBackupMutation = useMutation({
-    mutationFn: async (backup: Backup) => {
+    mutationFn: async ({ backup, actor }: { backup: Backup; actor: ArchiveActor | null }) => {
+      if (backup.include_secrets || !mayDispatchArchive(actor, false)) {
+        throw new Error(t('BackupsPage.permissions.archiveAuthorityRequired'));
+      }
       const response = await api.get(`/backups/${backup.id}/download`, {
         responseType: 'blob',
       });
+      // A response can arrive after an account switch even if dispatch was authorized.
+      if (!mayDispatchArchive(actor, backup.include_secrets)) {
+        throw new Error(t('BackupsPage.permissions.archiveAuthorityRequired'));
+      }
       // Get filename from Content-Disposition header or use .fsdn extension
       const contentDisposition = response.headers?.['content-disposition'];
       let filename = `${backup.name}.fsdn`;
@@ -809,6 +846,25 @@ export default function BackupsPage() {
       });
     },
   });
+
+  const requestDownload = (backup: Backup) => {
+    if (!backup.include_secrets) {
+      downloadBackupMutation.mutate({ backup, actor: captureArchiveActor() }); return;
+    }
+    try {
+      if (!mayAccessArchive(useAuthStore.getState().user, true)) throw new Error();
+      if (backup.artifact_integrity === 'recorded') {
+        openVault({ kind: 'download_recorded', backup_id: backup.id }, 'recorded');
+      } else if (backup.artifact_integrity === 'legacy_unverified' || backup.artifact_integrity === undefined) {
+        // No request is issued until the dialog's explicit legacy acknowledgment.
+        openVault({ kind: 'observe_legacy', backup_id: backup.id, legacy_acknowledged: true }, 'legacy');
+      } else throw new Error();
+      setViewHistoryBackup(null);
+    } catch {
+      toast({ title: t('BackupsPage.toasts.downloadFailed.title'),
+        description: t('vaultConfirmation.cannotStart', 'Vault confirmation cannot start. Check the current account and archive integrity, and close any earlier confirmation.'), variant: 'destructive' });
+    }
+  };
 
   const resetScheduleForm = () => {
     setScheduleFormData(defaultScheduleFormData);
@@ -981,14 +1037,14 @@ export default function BackupsPage() {
     try {
       const formData = new FormData();
       formData.append('file', importFile);
-      await api.post('/backups/import', formData, {
+      const response = await api.post('/backups/import', formData, {
         params: { dry_run: false },
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       
       toast({
         title: t('BackupsPage.toasts.importComplete.title'),
-        description: t('BackupsPage.toasts.importComplete.message'),
+        description: response.data.message || t('BackupsPage.toasts.importComplete.message'),
       });
 
       setShowImportDialog(false);
@@ -1054,11 +1110,18 @@ export default function BackupsPage() {
           primaryAction={{
             label: t('BackupsPage.actions.newBackup'),
             icon: Plus,
+            disabled: !canManageArchives,
             onClick: () => {
               setIsDialogOpen(true);
             }
           }}
         />
+
+        {!canManageVaults && (
+          <p role="note" className="text-sm text-muted-foreground">
+            {t('BackupsPage.permissions.archiveAuthorityRequired')}
+          </p>
+        )}
 
         {/* Scope banner, readiness distinguish this
             portable-config feature from full-system disaster recovery. */}
@@ -1312,7 +1375,7 @@ export default function BackupsPage() {
                 icon={Archive}
                 title={t('BackupsPage.empty.noBackups.title')}
                 description={t('BackupsPage.empty.noBackups.description')}
-                action={{ label: t('BackupsPage.actions.newBackup'), onClick: () => setIsDialogOpen(true), icon: Plus }}
+                action={canManageArchives ? { label: t('BackupsPage.actions.newBackup'), onClick: () => setIsDialogOpen(true), icon: Plus } : undefined}
                 variant="card"
               />
             ) : (
@@ -1389,7 +1452,8 @@ export default function BackupsPage() {
                             {backup.status === 'completed' && (
                               <>
                                 <DropdownMenuItem
-                                  onClick={() => downloadBackupMutation.mutate(backup)}
+                                  disabled={!mayAccessArchive(archiveUser, backup.include_secrets)}
+                                  onClick={() => requestDownload(backup)}
                                 >
                                   <Download className="h-4 w-4 mr-2" />
                                   {t('BackupsPage.actions.download')}
@@ -1609,7 +1673,7 @@ export default function BackupsPage() {
                                   is_encrypted: schedule.is_encrypted,
                                   retention_days: schedule.retention_days,
                                 };
-                                createMutation.mutate(submitData);
+                                createMutation.mutate({ data: submitData, actor: captureArchiveActor() });
                               }}
                             >
                               <RefreshCw className="h-4 w-4 mr-2" />
@@ -1716,7 +1780,8 @@ export default function BackupsPage() {
                           <Button 
                             variant="ghost" 
                             size="sm"
-                            onClick={() => downloadBackupMutation.mutate(backup)}
+                            disabled={!mayAccessArchive(archiveUser, backup.include_secrets)}
+                                  onClick={() => requestDownload(backup)}
                           >
                             <Download className="h-4 w-4" />
                           </Button>
@@ -1744,8 +1809,19 @@ export default function BackupsPage() {
           ] satisfies PageTab[]}
         />
 
+        {vaultFlow && <VaultExportDialog scope={vaultFlow.scope} kind={vaultFlow.kind} onClose={closeVault}
+          onComplete={result => {
+            closeVault();
+            queryClient.invalidateQueries({ queryKey: ['backups'] });
+            queryClient.invalidateQueries({ queryKey: ['backup-stats'] });
+            toast({ title: result.kind === 'created' ? t('BackupsPage.toasts.backupStarted.title')
+              : t('vaultConfirmation.downloadDispatched', 'Vault download started'),
+              description: result.kind === 'downloaded' ? t('vaultConfirmation.verifySaved', 'Verify the saved file. A browser download request does not prove the file was saved.') : undefined });
+          }} />}
+
         {/* Create Backup Dialog · built on FormDialog */}
         <FormDialog<BackupFormSchemaValues>
+          key={`archive-create-${archiveFormEpoch}`}
           open={isDialogOpen}
           onOpenChange={setIsDialogOpen}
           title={t('BackupsPage.createDialog.title')}
@@ -1783,7 +1859,15 @@ export default function BackupsPage() {
               passphrase: values.include_secrets ? values.passphrase : undefined,
               retention_days: values.retention_days,
             };
-            await createMutation.mutateAsync(submitData as any);
+            if (values.include_secrets) {
+              if (!values.is_encrypted) throw new Error(t('vaultConfirmation.encryptionRequired', 'Vault encryption is required.'));
+              openVault({ kind: 'create', backup: { ...submitData, passphrase: values.passphrase, include_secrets: true, is_encrypted: true } }, 'create');
+              // Discard the form's copy immediately. The owned transport retains
+              // the original intent; no passphrase enters a mutation cache.
+              setIsDialogOpen(false); setArchiveFormEpoch(epoch => epoch + 1);
+              return;
+            }
+            await createMutation.mutateAsync({ data: submitData as any, actor: captureArchiveActor() });
           }}
         >
           {(form) => (
@@ -1978,7 +2062,7 @@ export default function BackupsPage() {
                         <p className="text-sm text-muted-foreground">{t('BackupsPage.createDialog.encryptionHelp')}</p>
                       </div>
                       <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        <Switch checked={field.value} onCheckedChange={field.onChange} disabled={form.watch('include_secrets')} />
                       </FormControl>
                     </div>
                     <FormMessage />
@@ -1997,9 +2081,10 @@ export default function BackupsPage() {
                       <div>
                         <FormLabel>{t('BackupsPage.createDialog.fullBackupLabel')}</FormLabel>
                         <p className="text-sm text-muted-foreground">{t('BackupsPage.createDialog.fullBackupHelp')}</p>
+                        {!canManageVaults && <p className="text-sm text-muted-foreground">{t('BackupsPage.permissions.fullVaultAuthorityRequired')}</p>}
                       </div>
                       <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        <Switch checked={field.value} onCheckedChange={value => { field.onChange(value); if (value) form.setValue('is_encrypted', true); }} disabled={!canManageVaults} />
                       </FormControl>
                     </div>
                     <FormMessage />
@@ -2130,7 +2215,7 @@ export default function BackupsPage() {
             setRestoreDialogBackup(null);
             setRestoreOptions(defaultRestoreOptions);
             setRestoreConfirmText('');
-            setDryRunResult(null);
+            setRestoreResult(null);
           }}
         >
           <DialogContent className="max-w-2xl">
@@ -2178,7 +2263,7 @@ export default function BackupsPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-base">{t('BackupsPage.restoreDialog.modulesTitle')}</Label>
-                  {restoreManifest && (
+                  {restoreManifest && !restoreManifest.requires_passphrase && (
                     <span className="text-xs text-muted-foreground">
                       {selectedContributors === null
                         ? t('BackupsPage.restoreDialog.allModules')
@@ -2203,7 +2288,24 @@ export default function BackupsPage() {
                   </div>
                 )}
 
-                {restoreManifest && (() => {
+                {restoreManifest && (
+                  <div className="bg-muted/30 rounded-lg p-3 text-sm text-muted-foreground">
+                    {restoreManifest.requires_passphrase && (
+                      <p>{t('BackupsPage.restoreDialog.sealedManifest')}</p>
+                    )}
+                    <p>{t(
+                      restoreManifest.artifact_integrity === 'verified'
+                        ? 'BackupsPage.restoreDialog.integrityVerified'
+                        : restoreManifest.artifact_integrity === 'recorded'
+                          ? 'BackupsPage.restoreDialog.integrityRecorded'
+                          : restoreManifest.artifact_integrity === 'invalid'
+                            ? 'BackupsPage.restoreDialog.integrityInvalid'
+                            : 'BackupsPage.restoreDialog.integrityUnknown',
+                    )}</p>
+                  </div>
+                )}
+
+                {restoreManifest && !restoreManifest.requires_passphrase && (() => {
                   const restorableIds = restoreManifest.contributors
                     .filter((c) => c.restorable)
                     .map((c) => c.id);
@@ -2360,29 +2462,35 @@ export default function BackupsPage() {
                 </div>
               </div>
 
-              {/* Dry-run preview result, populated by "Preview Changes".
-                  Renders the per-contributor would-create / would-update /
-                  would-skip counts so the dry run is actually reviewable
-                  (previously the result was discarded and the dialog just
-                  closed with a vague toast). */}
-              {dryRunResult && (
+              {/* Keep applied and preview outcomes visible, including failures. */}
+              {restoreResult && restoreResultOutcome && (
+                <Alert variant={!restoreConfirmed ? 'destructive' : 'default'}>
+                  {!restoreConfirmed ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                  <AlertTitle>{t(`BackupsPage.toasts.${restoreResultOutcome.messageKey}.title`)}</AlertTitle>
+                  <AlertDescription>
+                    {t(`BackupsPage.toasts.${restoreResultOutcome.messageKey}.message`)}
+                    {restoreResult.error_message && <p className="mt-1">{restoreResult.error_message}</p>}
+                  </AlertDescription>
+                </Alert>
+              )}
+              {restoreReport && (
                 <div className="rounded-lg border border-info/30 bg-info/5 p-3 space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                       <Eye className="h-4 w-4 text-info" />
-                      {t('BackupsPage.dryRun.header')}
+                      {t(restoreResult?.dry_run ? 'BackupsPage.dryRun.header' : 'BackupsPage.restoreResult.header')}
                     </div>
                     <div className="flex items-center gap-3 text-xs">
-                      <span className="text-success">{t('BackupsPage.dryRun.createCount', { count: dryRunResult.summary.total_created })}</span>
-                      <span className="text-info">{t('BackupsPage.dryRun.updateCount', { count: dryRunResult.summary.total_updated })}</span>
-                      <span className="text-muted-foreground">{t('BackupsPage.dryRun.skipCount', { count: dryRunResult.summary.total_skipped })}</span>
-                      {dryRunResult.summary.total_errors > 0 && (
-                        <span className="text-destructive">{t('BackupsPage.dryRun.errorCount', { count: dryRunResult.summary.total_errors })}</span>
+                      <span className="text-success">{t('BackupsPage.dryRun.createCount', { count: restoreReport.summary.total_created })}</span>
+                      <span className="text-info">{t('BackupsPage.dryRun.updateCount', { count: restoreReport.summary.total_updated })}</span>
+                      <span className="text-muted-foreground">{t('BackupsPage.dryRun.skipCount', { count: restoreReport.summary.total_skipped })}</span>
+                      {restoreReport.summary.total_errors > 0 && (
+                        <span className="text-destructive">{t('BackupsPage.dryRun.errorCount', { count: restoreReport.summary.total_errors })}</span>
                       )}
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    {dryRunResult.contributors.map((c) => {
+                    {restoreReport.contributors.map((c) => {
                       const sum = (o: Record<string, number>) =>
                         Object.values(o ?? {}).reduce((a, b) => a + b, 0);
                       const created = sum(c.created);
@@ -2419,11 +2527,11 @@ export default function BackupsPage() {
                   {/* Surface per-contributor errors + warnings (e.g.
                       cross-tenant rejects) so the operator sees them
                       before committing. */}
-                  {dryRunResult.contributors.some(
+                  {restoreReport.contributors.some(
                     (c) => c.warnings?.length || c.errors?.length,
                   ) && (
                     <div className="space-y-1 border-t border-border/50 pt-2">
-                      {dryRunResult.contributors
+                      {restoreReport.contributors
                         .flatMap((c) => [
                           ...(c.errors ?? []).map((msg) => ({
                             kind: 'error' as const,
@@ -3023,7 +3131,8 @@ export default function BackupsPage() {
                 <>
                   <Button
                     variant="outline"
-                    onClick={() => viewHistoryBackup && downloadBackupMutation.mutate(viewHistoryBackup)}
+                    disabled={!mayAccessArchive(archiveUser, Boolean(viewHistoryBackup?.include_secrets))}
+                    onClick={() => viewHistoryBackup && requestDownload(viewHistoryBackup)}
                     className="gap-2"
                   >
                     <Download className="h-4 w-4" />
@@ -3182,9 +3291,16 @@ export default function BackupsPage() {
             {
               label: t('BackupsPage.actions.download'),
               icon: Download,
+              disabled: !backups.some((b: Backup) => selectedBackupIds.has(b.id) && b.status === 'completed')
+                || backups.some((b: Backup) => selectedBackupIds.has(b.id) && !mayAccessArchive(archiveUser, b.include_secrets)),
               onClick: () => {
-                backups.filter((b: Backup) => selectedBackupIds.has(b.id) && b.status === 'completed')
-                  .forEach((b: Backup) => downloadBackupMutation.mutate(b));
+                const selected = backups.filter((b: Backup) => selectedBackupIds.has(b.id) && b.status === 'completed');
+                if (selected.some((b: Backup) => !mayAccessArchive(useAuthStore.getState().user, b.include_secrets))) return;
+                if (selected.some((b: Backup) => b.include_secrets)) {
+                  toast({ title: t('vaultConfirmation.title', 'Confirm vault export'), description: t('vaultConfirmation.individual', 'Download vault archives individually. Each needs its own account confirmation.') });
+                  return;
+                }
+                selected.forEach((b: Backup) => requestDownload(b));
                 setSelectedBackupIds(new Set());
               },
             },

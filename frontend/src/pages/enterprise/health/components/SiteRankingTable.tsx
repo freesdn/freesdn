@@ -11,7 +11,8 @@ interface SiteRankingTableProps {
   siteId?: string;
 }
 
-function scoreColor(score: number): string {
+function scoreColor(score: number | null): string {
+  if (score == null) return 'text-muted-foreground';
   if (score >= 90) return 'text-green-600 dark:text-green-400';
   if (score >= 70) return 'text-amber-600 dark:text-amber-400';
   if (score >= 50) return 'text-orange-600 dark:text-orange-400';
@@ -25,7 +26,10 @@ function uptimeColor(pct: number | null | undefined): string {
   return 'text-red-600 dark:text-red-400';
 }
 
-function TrendIndicator({ trend, delta }: { trend: string; delta: number }) {
+function TrendIndicator({ trend, delta }: { trend: string; delta: number | null }) {
+  if (trend === 'unknown' || delta == null) {
+    return <span className="text-xs text-muted-foreground">N/A</span>;
+  }
   if (trend === 'up') {
     return (
       <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 text-xs font-medium">
@@ -67,7 +71,7 @@ export function SiteRankingTable({ siteId }: SiteRankingTableProps) {
   // Highlight the currently-selected site if there is one.
   const highlightedId = siteId;
 
-  const sorted = (rankings ?? []).slice().sort((a, b) => b.avg_health_score - a.avg_health_score);
+  const sorted = (rankings ?? []).slice().sort((a, b) => (b.avg_health_score ?? -Infinity) - (a.avg_health_score ?? -Infinity));
 
   return (
     <Card>
@@ -121,7 +125,7 @@ export function SiteRankingTable({ siteId }: SiteRankingTableProps) {
                     <td className="py-2 pr-3 font-medium">{site.site_name}</td>
                     <td className="py-2 pr-3">
                       <span className={cn('font-semibold tabular-nums', scoreColor(site.avg_health_score))}>
-                        {Math.round(site.avg_health_score)}
+                        {site.avg_health_score == null ? 'N/A' : Math.round(site.avg_health_score)}
                       </span>
                     </td>
                     <td className="py-2 pr-3">

@@ -15,10 +15,13 @@ DB-backed service for firmware lifecycle management:
 
 import hashlib
 import logging
-from datetime import UTC, datetime, timedelta
+import os
+import re
+import tempfile
+from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +31,11 @@ from app.core.security_utils import escape_like
 logger = logging.getLogger(__name__)
 
 FIRMWARE_DIR = Path("/data/freesdn_firmware")
+CATALOG_EXECUTION_UNAVAILABLE = (
+    "Catalog firmware execution is unavailable: no verified binary deployment "
+    "driver is connected. Use the controller-specific staged firmware workflow. "
+    "Catalog jobs do not provide automatic backup or rollback."
+)
 
 
 def _site_grant_clause(site_id_column: Any, site_ids: Any) -> Any:
@@ -182,7 +190,7 @@ class PersistentFirmwareService:
         safe_model = sanitize_filename(model)
         safe_version = sanitize_filename(version)
         safe_file = sanitize_filename(filename)
-        safe_name = f"{safe_vendor}_{safe_model}_{safe_version}_{safe_file}"
+        safe_name = f"{uuid4().hex}_{safe_vendor}_{safe_model}_{safe_version}_{safe_file}"
         dest = FIRMWARE_DIR / safe_name
 
         # Verify the resolved path is within FIRMWARE_DIR
@@ -213,17 +221,76 @@ class PersistentFirmwareService:
 
     @staticmethod
     async def cache_firmware(session: AsyncSession, fw_id: UUID) -> Any:
-        """Mark a firmware as cached (simulate download from URL)."""
+        """Cache bounded, checksum-verified bytes using an atomic file rename.
+
+        A catalog checksum is required for remote downloads. This validates
+        bytes against the supplied digest; it is not a vendor signature check.
+        The shared downloader pins DNS and verifies TLS, and rejects redirects.
+        """
+        import asyncio
+
+        from app.core.security_utils import MAX_FIRMWARE_UPLOAD_BYTES, safe_http_request
 
         fw = await PersistentFirmwareService.get_firmware(session, fw_id)
         if not fw:
             return None
+        expected = (fw.checksum_sha256 or "").lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", expected):
+            raise ValueError("A valid vendor SHA-256 checksum is required before caching")
+        if fw.file_path:
+            existing = Path(fw.file_path)
+            if existing.resolve().is_relative_to(FIRMWARE_DIR.resolve()) and existing.is_file():
+                with existing.open("rb") as source:
+                    digest = hashlib.file_digest(source, "sha256").hexdigest()
+                if digest == expected:
+                    fw.is_cached = True
+                    fw.file_size_bytes = existing.stat().st_size
+                    fw.cached_at = datetime.now(UTC)
+                    await session.flush()
+                    return fw
+        if not fw.download_url:
+            raise ValueError("Firmware has no download URL or verified local file")
 
-        fw.is_cached = True
-        fw.cached_at = datetime.now(UTC)
-        await session.flush()
-        await session.refresh(fw)
-        return fw
+        FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=FIRMWARE_DIR, suffix=".part", delete=False
+            ) as sink:
+                temporary = Path(sink.name)
+                # A total deadline also limits a server that sends tiny chunks
+                # forever, which a per-read HTTP timeout alone cannot prevent.
+                async with asyncio.timeout(300):
+                    await safe_http_request(
+                        "GET",
+                        fw.download_url,
+                        allowed_schemes=frozenset({"https"}),
+                        timeout=30,
+                        download_to=sink,
+                        max_response_bytes=MAX_FIRMWARE_UPLOAD_BYTES,
+                    )
+                sink.flush()
+                os.fsync(sink.fileno())
+            if temporary.stat().st_size == 0:
+                raise ValueError("Firmware download was empty")
+            with temporary.open("rb") as source:
+                actual = hashlib.file_digest(source, "sha256").hexdigest()
+            if actual != expected:
+                raise ValueError("Firmware SHA-256 checksum mismatch")
+            # Immutable unique paths prevent one tenant or concurrent request
+            # from overwriting another artifact. Orphan cleanup is separate.
+            destination = FIRMWARE_DIR / f"{fw.id}_{uuid4().hex}.bin"
+            temporary.replace(destination)
+            fw.file_path = str(destination)
+            fw.file_size_bytes = destination.stat().st_size
+            fw.is_cached = True
+            fw.cached_at = datetime.now(UTC)
+            await session.flush()
+            await session.refresh(fw)
+            return fw
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     # =====================================================================
     # Device Firmware Status
@@ -572,6 +639,32 @@ class PersistentFirmwareService:
     ) -> Any:
         from app.models.firmware import FirmwareUpgradeJob
 
+        # Normalize only JSON fields; UUID foreign keys and datetimes retain
+        # their native database types. Copy to avoid mutating the caller.
+        data = {**data, "device_ids": [str(value) for value in data.get("device_ids", [])]}
+        organization_id = data.get("organization_id")
+        if organization_id is None:
+            raise ValueError("Firmware job organization_id is required")
+        from app.models.core import Site
+        from app.models.devices import Device
+
+        targets = (
+            await session.execute(
+                select(Device.id, Device.site_id)
+                .join(Site, Device.site_id == Site.id)
+                .where(
+                    Device.id.in_(data["device_ids"]),
+                    Site.organization_id == organization_id,
+                    Site.deleted_at.is_(None),
+                    Device.deleted_at.is_(None),
+                )
+            )
+        ).all()
+        if {str(row.id) for row in targets} != set(data["device_ids"]):
+            raise ValueError("Firmware targets must belong to the job organization")
+        if data.get("site_id") and any(row.site_id != data["site_id"] for row in targets):
+            raise ValueError("Firmware job site does not match every target")
+        data["target_site_ids"] = sorted({str(row.site_id) for row in targets})
         job = FirmwareUpgradeJob(
             **data,
             total_devices=len(data.get("device_ids", [])),
@@ -608,26 +701,26 @@ class PersistentFirmwareService:
         count_q = select(func.count(FirmwareUpgradeJob.id))
 
         if organization_id is not None:
-            from app.models.core import Site
-
-            site_sub = (
-                select(Site.id).where(Site.organization_id == organization_id).scalar_subquery()
+            q = q.where(FirmwareUpgradeJob.organization_id == organization_id)
+            count_q = count_q.where(FirmwareUpgradeJob.organization_id == organization_id)
+        if site_ids is not None:
+            # Every target must be granted; NULL/empty historical snapshots
+            # cannot authorize a restricted caller.
+            scope = (
+                FirmwareUpgradeJob.target_site_ids.is_not(None)
+                & (FirmwareUpgradeJob.target_site_ids != [])
+                & FirmwareUpgradeJob.target_site_ids.contained_by([str(v) for v in site_ids])
             )
-            q = q.where(FirmwareUpgradeJob.site_id.in_(site_sub))
-            count_q = count_q.where(FirmwareUpgradeJob.site_id.in_(site_sub))
-
-        # scope to the caller's granted sites.
-        grant_clause = _site_grant_clause(FirmwareUpgradeJob.site_id, site_ids)
-        if grant_clause is not None:
-            q = q.where(grant_clause)
-            count_q = count_q.where(grant_clause)
+            q = q.where(scope)
+            count_q = count_q.where(scope)
 
         if status:
             q = q.where(FirmwareUpgradeJob.status == status)
             count_q = count_q.where(FirmwareUpgradeJob.status == status)
         if site_id:
-            q = q.where(FirmwareUpgradeJob.site_id == site_id)
-            count_q = count_q.where(FirmwareUpgradeJob.site_id == site_id)
+            scope = FirmwareUpgradeJob.target_site_ids.contains([str(site_id)])
+            q = q.where(scope)
+            count_q = count_q.where(scope)
 
         total = (await session.execute(count_q)).scalar() or 0
         offset = (page - 1) * page_size
@@ -672,6 +765,8 @@ class PersistentFirmwareService:
 
         new_job = FirmwareUpgradeJob(
             status=FirmwareJobStatus.PENDING,
+            organization_id=original.organization_id,
+            target_site_ids=original.target_site_ids,
             firmware_id=original.firmware_id,
             firmware_version=original.firmware_version,
             device_ids=retry_ids,
@@ -694,7 +789,8 @@ class PersistentFirmwareService:
     async def run_upgrade_job(session: AsyncSession, job_id: UUID) -> dict[str, Any]:
         """
         Execute a firmware upgrade job. Called by Celery task.
-        In production, this would call device adapters to push firmware.
+        Fail closed until a verified catalog-binary executor is implemented.
+        Controller-native staged firmware workflows are separate and unaffected.
         """
         from app.models.firmware import FirmwareJobStatus
 
@@ -719,41 +815,34 @@ class PersistentFirmwareService:
                 "skipped": "already terminal",
             }
 
-        job.status = FirmwareJobStatus.RUNNING
-        job.started_at = datetime.now(UTC)
-        # Reset counters so a legitimate redelivery of a still-non-terminal job
-        # is idempotent rather than additive.
+        # Old queued messages must also fail visibly, even after a deployment.
+        # Recording failure is not evidence that any device operation occurred.
+        now = datetime.now(UTC)
+        job.status = FirmwareJobStatus.FAILED
+        job.started_at = now
+        job.completed_at = now
         job.successful = 0
-        job.failed = 0
-        device_results = []
-
-        for i, device_id in enumerate(job.device_ids):
-            # Simulate per-device upgrade
-            device_results.append(
-                {
-                    "device_id": str(device_id),
-                    "status": "completed",
-                    "started_at": datetime.now(UTC).isoformat(),
-                    "completed_at": datetime.now(UTC).isoformat(),
-                }
-            )
-            job.successful += 1
-            job.progress = ((i + 1) / job.total_devices) * 100.0
-            await session.flush()
-
-        job.devices = device_results
-        job.status = (
-            FirmwareJobStatus.COMPLETED if job.failed == 0 else FirmwareJobStatus.PARTIALLY_FAILED
-        )
-        job.completed_at = datetime.now(UTC)
-        job.progress = 100.0
+        job.failed = len(job.device_ids)
+        job.progress = 0.0
+        job.error_message = CATALOG_EXECUTION_UNAVAILABLE
+        job.devices = [
+            {
+                "device_id": str(device_id),
+                "status": "failed",
+                "message": CATALOG_EXECUTION_UNAVAILABLE,
+                "operation_attempted": False,
+                "completed_at": now.isoformat(),
+            }
+            for device_id in job.device_ids
+        ]
         await session.flush()
-
         return {
             "job_id": str(job_id),
             "status": job.status,
-            "successful": job.successful,
+            "successful": 0,
             "failed": job.failed,
+            "error": CATALOG_EXECUTION_UNAVAILABLE,
+            "operation_attempted": False,
         }
 
     # =====================================================================
@@ -802,7 +891,7 @@ class PersistentFirmwareService:
         hour = max(0, min(23, hour))
         minute = max(0, min(59, minute))
 
-        tz = UTC
+        tz: tzinfo = UTC
         tz_name = getattr(schedule, "timezone", None)
         if tz_name:
             try:
@@ -842,6 +931,9 @@ class PersistentFirmwareService:
     ) -> Any:
         from app.models.firmware import FirmwareSchedule
 
+        data = dict(data)
+        if data.get("device_ids") is not None:
+            data["device_ids"] = [str(value) for value in data["device_ids"]]
         schedule = FirmwareSchedule(**data, created_by=user_id)
         if schedule.next_run_at is None:
             schedule.next_run_at = PersistentFirmwareService.compute_next_run(schedule)
@@ -894,6 +986,9 @@ class PersistentFirmwareService:
         if not schedule:
             return None
 
+        data = dict(data)
+        if data.get("device_ids") is not None:
+            data["device_ids"] = [str(value) for value in data["device_ids"]]
         timing_fields = {"frequency", "time_of_day", "day_of_week", "day_of_month", "timezone"}
         retimed = any(k in timing_fields for k in data)
 
@@ -940,6 +1035,7 @@ class PersistentFirmwareService:
             return None
 
         job_data = {
+            "organization_id": schedule.organization_id,
             "device_ids": schedule.device_ids or [],
             "site_id": schedule.site_id,
             "backup_before": schedule.backup_before,

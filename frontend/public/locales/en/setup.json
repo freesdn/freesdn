@@ -430,7 +430,8 @@
       "passLabel": "Backup passphrase",
       "passPlaceholder": "The passphrase the backup was created with",
       "submit": "Restore this instance",
-      "failed": "Restore failed — check the file and passphrase."
+      "failed": "Restore failed — check the file and passphrase.",
+      "unconfirmed": "Recovery was not confirmed. Review the server status before retrying."
     },
     "hero": {
       "title": "Welcome to {{appName}}",

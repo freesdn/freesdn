@@ -238,19 +238,6 @@ async def test_logout_survives_a_session_row_that_was_never_written() -> None:
     )
 
 
-class _FakeRedis:
-    """Enough of the async client for token_blacklist's setex/exists."""
-
-    def __init__(self) -> None:
-        self.keys: set[str] = set()
-
-    async def setex(self, key: str, ttl: int, value: str) -> None:
-        self.keys.add(key)
-
-    async def exists(self, key: str) -> int:
-        return 1 if key in self.keys else 0
-
-
 @pytest.mark.asyncio
 async def test_after_logout_the_refresh_token_no_longer_verifies() -> None:
     """The end of the chain, with a REAL blacklist rather than a mock.
@@ -278,13 +265,12 @@ async def test_after_logout_the_refresh_token_no_longer_verifies() -> None:
     result.scalar_one_or_none.return_value = row
     session.execute = AsyncMock(return_value=result)
 
-    fake = _FakeRedis()
+    access_jti = uuid4().hex
     with (
-        patch.object(tb, "_get_redis", new=AsyncMock(return_value=fake)),
         patch("app.api.v1.endpoints.auth._audit_auth_event", new=AsyncMock()),
         patch(
             "app.api.v1.endpoints.auth.decode_token",
-            new=AsyncMock(return_value={"jti": "access-jti-3", "exp": 9999999999}),
+            new=AsyncMock(return_value={"jti": access_jti, "exp": 9999999999}),
         ),
     ):
         # Sanity: the token is good before logout, so the assertion after the
@@ -301,4 +287,15 @@ async def test_after_logout_the_refresh_token_no_longer_verifies() -> None:
 
         assert await verify_token(refresh_token, token_type="refresh") is None, (
             "the refresh token still verifies after logout"
+        )
+
+    from sqlalchemy import delete
+
+    from app.models.core import TokenRevocation
+
+    async with tb.security_session_factory() as cleanup, cleanup.begin():
+        await cleanup.execute(
+            delete(TokenRevocation).where(
+                TokenRevocation.jti_hash.in_([tb._identity(access_jti), tb._identity(refresh_jti)])
+            )
         )

@@ -54,15 +54,17 @@ chmod 700 "${DATA_DIR}"
 # so we don't need an archive on the primary for the initial sync.
 echo "[standby-entrypoint] running pg_basebackup from ${PRIMARY_HOST}:${PRIMARY_PORT}"
 export PGPASSWORD="${REPL_PASSWORD}"
-su postgres -c "pg_basebackup \
-    --host=${PRIMARY_HOST} \
-    --port=${PRIMARY_PORT} \
-    --username=${REPL_USER} \
-    --pgdata=${DATA_DIR} \
+gosu postgres pg_basebackup \
+    --host="${PRIMARY_HOST}" \
+    --port="${PRIMARY_PORT}" \
+    --username="${REPL_USER}" \
+    --pgdata="${DATA_DIR}" \
     --wal-method=stream \
     --progress \
     --verbose \
-    --write-recovery-conf"
+    --write-recovery-conf
+unset PGPASSWORD
+
 
 # pg_basebackup --write-recovery-conf already drops standby.signal +
 # primary_conninfo into postgresql.auto.conf since Postgres 12. Double-check.

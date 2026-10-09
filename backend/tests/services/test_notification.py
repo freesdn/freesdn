@@ -174,8 +174,8 @@ class TestDispatchNotifications:
         assert results[0].error == "SMTP down"
 
     @pytest.mark.asyncio
-    async def test_exception_in_send_returns_none_filtered_out(self, mock_db):
-        """If send() raises, the result is filtered out (returns None)."""
+    async def test_exception_in_send_returns_failed_attempt(self, mock_db):
+        """A raised attempt remains visible as a sanitized failure."""
         config = {"email": {"to": ["x@ex.com"]}}
 
         with patch("app.services.notification_helpers.NotificationService") as MockSvc:
@@ -183,8 +183,11 @@ class TestDispatchNotifications:
             MockSvc.return_value.send = AsyncMock(side_effect=RuntimeError("connection reset"))
             results = await dispatch_notifications(mock_db, config, "t", "b")
 
-        # The exception is caught inside _send_one; None is returned and filtered
-        assert results == []
+        assert len(results) == 1
+        assert not results[0].success
+        assert results[0].status == DeliveryStatus.FAILED
+        assert results[0].error == "Notification attempt failed"
+        assert results[0].delivery_id is None
 
     @pytest.mark.asyncio
     async def test_organization_id_passed_through(self, mock_db):

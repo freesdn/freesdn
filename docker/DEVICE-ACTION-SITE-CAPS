@@ -1,0 +1,35 @@
+Device mutation site permission caps
+====================================
+
+Legacy device deletion, reboot, locate, LED, adoption, forgetting and firmware
+upgrade now enforce their existing route permission at the resolved device site
+before any adapter is constructed or state changes. Existing organization and
+site visibility checks remain first, and role/API-key permission ceilings and
+destructive-action confirmation remain unchanged. Insufficient site level gives
+403. Read-only and invalid site levels cannot mutate devices; a write-level
+site cannot delete, adopt, forget or batch-reboot under the existing admin/delete
+permission classification. Firmware still requires firmware:upgrade at the route;
+this change does not grant that permission to any role.
+
+Batch routes pass their exact route permission to the shared helper. Each device
+is checked before it enters a controller group. Mixed batches retain per-device
+results, operate only on eligible devices, and do not construct an adapter when
+none qualify. Individual and batch actions retain their existing result shapes.
+
+Administrator, grant-less-user and null-level inheritance rules stay consistent
+with CurrentUser.has_site_permission. Reads using the device loader remain
+unchanged; the additional permission argument is explicit on mutation callers.
+Other device modules, controller/credential resolution, lifecycle consistency,
+concurrent principal revocation and sensitive adapter diagnostics are separate
+work. Existing reference links are not rewritten.
+
+Qualification uses actual PostgreSQL rows and HTTP-ASGI plus independent TCP
+loopback HTTP. The authenticated principal and controller adapters are synthetic;
+the actual permission dependency, endpoint, batch grouping and database commits
+execute. Checks cover read/write/admin/inherited/invalid caps, scoped read keys,
+organization admins, grant-less users, inaccessible devices, confirmations and
+mixed batches. Denials perform no adapter construction, no adapter call and no
+database mutation. Accepted fake-adapter calls and closure counts are checked.
+This does not prove hardware command execution, real login, concurrent authority
+revocation or enterprise operational acceptance. Shipping-image checks are
+separately gated and recorded.

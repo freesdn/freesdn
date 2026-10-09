@@ -6,7 +6,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";  -- For fuzzy text search
 
 -- Grant privileges (already done by POSTGRES_USER but explicit is good)
-GRANT ALL PRIVILEGES ON DATABASE freesdn TO freesdn;
+SELECT format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', current_database(), current_user)
+\gexec
 
 -- Log successful initialization
 DO $$

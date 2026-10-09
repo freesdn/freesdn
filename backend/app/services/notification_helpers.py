@@ -9,8 +9,8 @@ Parses the notification_channels JSONB config and calls NotificationService.
 
 Retry behavior
 --------------
-``asyncio.gather`` runs all channels concurrently. Before the retry queue
-existed, any transient SMTP / Slack 5xx returned
+Recipients are sent sequentially because provider checks and tracking share the
+caller's mutable database session. Before the retry queue existed, a transient SMTP / Slack 5xx returned
 ``DeliveryResult(success=False)`` and was silently dropped. Now, every
 unsuccessful result whose error shape looks transient is enqueued onto
 :func:`app.tasks.notification_retry.schedule_retry` for exponential
@@ -19,7 +19,6 @@ short-circuit and skip the retry queue. See ``notification_retry.py``
 for the classification logic.
 """
 
-import asyncio
 import logging
 from typing import Any
 from uuid import UUID
@@ -27,7 +26,6 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.notification import NotificationDelivery
 from app.services.notification import (
     DeliveryResult,
     DeliveryStatus,
@@ -78,10 +76,10 @@ async def dispatch_notifications(
     service = NotificationService(db)
     results: list[DeliveryResult] = []
 
-    # Build all send tasks, then dispatch concurrently
+    # Prepare sends without sharing the session across concurrent tasks
     async def _send_one(
         ch_name: str, ch_enum: NotificationChannel, recipient: str
-    ) -> tuple[str, NotificationChannel, str, DeliveryResult] | None:
+    ) -> tuple[str, NotificationChannel, str, DeliveryResult]:
         try:
             result = await service.send(
                 channel=ch_enum,
@@ -92,25 +90,27 @@ async def dispatch_notifications(
                 organization_id=organization_id,
             )
             if result.success:
-                logger.debug("Notification sent via %s to %s", ch_name, recipient)
+                logger.debug("Notification attempt completed via %s", ch_name)
             else:
-                logger.warning(
-                    "Notification failed via %s to %s: %s",
-                    ch_name,
-                    recipient,
-                    result.error,
-                )
-            return (ch_name, ch_enum, recipient, result)
-        except Exception as e:
-            logger.error("Error sending notification via %s: %s", ch_name, e)
-            return None
+                logger.warning("Notification attempt failed via %s", ch_name)
+        except Exception:
+            # Retain the failed attempt without disclosing transport credentials
+            # or looking up an unrelated row for an untracked exception.
+            logger.error("Error sending notification via %s", ch_name)
+            result = DeliveryResult(
+                success=False,
+                channel=ch_enum,
+                status=DeliveryStatus.FAILED,
+                error="Notification attempt failed",
+            )
+        return (ch_name, ch_enum, recipient, result)
 
     # The in_app channel has NO provider in NotificationService.send (only
     # email/slack/teams/webhook are registered), so routing it through send()
     # always returns "No provider configured for channel: in_app" and the bell
     # row is never written. Write the real InAppNotification row directly via
-    # create_in_app (which also publishes the notification.created event for the
-    # realtime toast). Handled before the generic provider loop so it doesn't
+    # create_in_app (which queues its event in the same transaction for a
+    # worker to publish after the caller commits). Handled before the generic provider loop so it doesn't
     # produce a spurious FAILED DeliveryResult / retry-queue entry.
     in_app_cfg = channels_config.get("in_app")
     if in_app_cfg is not None:
@@ -138,7 +138,7 @@ async def dispatch_notifications(
                     title=title,
                     body=body,
                     organization_id=organization_id,
-                    commit=True,
+                    commit=False,
                 )
                 results.append(
                     DeliveryResult(
@@ -147,8 +147,16 @@ async def dispatch_notifications(
                         status=DeliveryStatus.SENT,
                     )
                 )
-            except Exception as e:  # one bad user_id must not abort the batch
-                logger.warning("in_app notification failed for user %s: %s", uid, e)
+            except Exception:  # one bad user_id must not abort the batch
+                logger.warning("In-app notification attempt failed")
+                results.append(
+                    DeliveryResult(
+                        success=False,
+                        channel=NotificationChannel.IN_APP,
+                        status=DeliveryStatus.FAILED,
+                        error="In-app notification attempt failed",
+                    )
+                )
 
     # Load the org's configured providers into the service BEFORE sending. Without
     # this, send() finds no provider for email/slack/teams/webhook/sms and every
@@ -169,23 +177,23 @@ async def dispatch_notifications(
 
         recipients = _extract_recipients(channel_name, config)
         for recipient in recipients:
-            tasks.append(_send_one(channel_name, channel_enum, recipient))
+            tasks.append((channel_name, channel_enum, recipient))
 
     if not tasks:
         return results
 
-    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+    # SQLAlchemy sessions represent one mutable transaction. Provider policy
+    # queries and tracking flushes must finish before another recipient uses
+    # that session. Construct no background coroutines: cancellation propagates
+    # immediately and later recipients have not started. Collect all outcomes
+    # before retry publication so a cancelled dispatch publishes no retries.
+    raw_results = [await _send_one(*task) for task in tasks]
 
     # Import here to avoid pulling Celery into hot import paths.
     from app.tasks.notification_retry import schedule_retry
 
-    for r in raw_results:
-        if isinstance(r, BaseException):
-            logger.error("Notification dispatch raised exception: %s", r)
-            continue
-        if not isinstance(r, tuple):
-            continue
-        ch_name, _ch_enum, recipient, result = r
+    for outcome in raw_results:
+        ch_name, _ch_enum, recipient, result = outcome
         results.append(result)
 
         # Only retry failed sends. SKIPPED (preference / quiet hours) is a
@@ -194,22 +202,11 @@ async def dispatch_notifications(
         if result.success or result.status == DeliveryStatus.SKIPPED:
             continue
 
-        delivery_id = await _find_latest_delivery_id(
-            db,
-            organization_id=organization_id,
-            channel=result.channel.value,
-            subject=title,
-        )
+        delivery_id = result.delivery_id
         if delivery_id is None:
-            # We could not correlate a delivery row to this result —
-            # still emit the structured log so an external runner can
-            # see the failure.
-            logger.warning(
-                "notification.delivery.retry_no_row channel=%s recipient=%s err=%s",
-                ch_name,
-                recipient,
-                result.error,
-            )
+            # An absent tracking identity is not permission to guess by title,
+            # channel or organization. Two recipients can share all three.
+            logger.warning("notification.delivery.retry_no_row channel=%s", ch_name)
             continue
 
         schedule_retry(
@@ -226,39 +223,6 @@ async def dispatch_notifications(
         )
 
     return results
-
-
-async def _find_latest_delivery_id(
-    db: AsyncSession,
-    *,
-    organization_id: UUID | None,
-    channel: str,
-    subject: str,
-) -> str | None:
-    """Look up the NotificationDelivery row written by the most recent send.
-
-    ``NotificationService._track_delivery`` flushes a row before returning
-    the ``DeliveryResult``, so by the time we get here the row exists in
-    the same session. We match on (org, channel, subject) ordered by
-    sent_at desc — close enough for the retry queue without adding a
-    surrogate key path.
-    """
-    try:
-        stmt = (
-            select(NotificationDelivery.id)
-            .where(NotificationDelivery.channel == channel)
-            .where(NotificationDelivery.subject == subject)
-            .order_by(NotificationDelivery.sent_at.desc())
-            .limit(1)
-        )
-        if organization_id is not None:
-            stmt = stmt.where(NotificationDelivery.organization_id == organization_id)
-        result = await db.execute(stmt)
-        row = result.scalar_one_or_none()
-        return str(row) if row else None
-    except Exception as exc:  # pragma: no cover — defensive
-        logger.warning("Failed to look up delivery row: %s", exc)
-        return None
 
 
 # Which config keys hold the recipients, per channel.
@@ -328,7 +292,6 @@ async def _org_user_ids(db: Any, organization_id: Any) -> list[Any]:
     Used only as the in_app fallback when a rule enables the channel without
     naming anyone. Org-scoped by construction.
     """
-    from sqlalchemy import select
 
     from app.models.core import User
 

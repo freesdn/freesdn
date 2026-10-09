@@ -61,6 +61,9 @@ self.addEventListener('fetch', (event) => {
   // Never intercept API / websocket / cross-origin traffic.
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
+  // Identity confirmation is never an offline SPA navigation.
+  // On network failure, do not boot a cached application with callback codes.
+  if (url.pathname === '/vault-export-callback.html' || url.pathname === '/vault-export-callback.js') return;
 
   // SPA navigations: network-first, fall back to the cached shell when offline
   // (so a hard refresh / cold open still renders the app, which then hydrates

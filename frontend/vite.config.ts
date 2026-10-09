@@ -1,12 +1,12 @@
 /// <reference types="vitest" />
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
+const pkg = JSON.parse(readFileSync(path.resolve(import.meta.dirname, 'package.json'), 'utf-8'));
 
 // Detect Node and npm versions at build time
 const nodeVersion = process.versions.node;
@@ -28,7 +28,7 @@ export const FRONTEND_VERSIONS: Record<string, string> = ${JSON.stringify({
   zustand: pkg.dependencies.zustand?.replace(/^\^/, '') ?? 'unknown',
 }, null, 2)};
 `;
-writeFileSync(path.resolve(__dirname, 'src/lib/build-info.ts'), buildInfoContent);
+writeFileSync(path.resolve(import.meta.dirname, 'src/lib/build-info.ts'), buildInfoContent);
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -38,7 +38,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
   server: {
@@ -85,6 +85,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    manifest: true,
     sourcemap: process.env.NODE_ENV === 'production' ? false : true,
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
@@ -92,14 +93,20 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return;
 
+          // These feature libraries are not needed by the application shell.
+          // Keep their React dependencies in vendor, but load video decoding,
+          // topology and chart implementations only with the relevant pages.
+          if (id.includes('/hls.js/')) return 'vendor-video';
+          if (id.includes('/@xyflow/')) return 'vendor-topology';
+          if (id.includes('/recharts/')) return 'vendor-charts';
+
           // vendor-tanstack: data & virtualisation (isolated, no circular deps)
           if (id.includes('@tanstack/')) {
             return 'vendor-tanstack';
           }
 
-          // vendor: all other node_modules in one chunk
-          // (React ecosystem has inherent circular imports between react,
-          // radix-ui, recharts, d3, etc., splitting causes warnings)
+          // Shared React/runtime dependencies stay together to avoid splitting
+          // their circular imports across independently evaluated chunks.
           return 'vendor';
         },
       },

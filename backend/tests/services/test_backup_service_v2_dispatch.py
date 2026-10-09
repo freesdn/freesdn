@@ -420,7 +420,8 @@ class TestDispatchRestore:
 
         by_id = {c["contributor_id"]: c for c in report["contributors"]}
         assert by_id["core"]["status"] == "error"
-        assert "FK violation" in by_id["core"]["errors"][0]
+        assert by_id["core"]["errors"][0]
+        assert "FK violation" not in by_id["core"]["errors"][0]
         # ``voip`` STILL ran despite core's failure — per-module
         # independence. This is the headline behavior of the chapter.
         assert by_id["voip"]["status"] == "dry_run_ok"
@@ -771,7 +772,8 @@ class TestCollectOmissionsAreRecorded:
         assert [e.id for e in archive.manifest.contributors] == ["core"]
         assert len(svc._collect_omissions) == 1
         assert "voip" in svc._collect_omissions[0]
-        assert "PBX adapter timeout" in svc._collect_omissions[0]
+        assert "RuntimeError" in svc._collect_omissions[0]
+        assert "PBX adapter timeout" not in svc._collect_omissions[0]
 
     @pytest.mark.asyncio
     async def test_clean_collect_records_no_omission(
@@ -818,8 +820,16 @@ class TestCollectOmissionsAreRecorded:
         clean_registry.register(_FakeContributor(contributor_id="core"))
 
         class _Backend:
+            def __init__(self):
+                self.files = {}
+
             async def save(self, backup_id, data, filename):
-                return f"/backups/{filename}"
+                path = f"/backups/{filename}"
+                self.files[path] = data
+                return path
+
+            async def load(self, path):
+                return self.files[path]
 
         class _Session:
             def add(self, obj): pass
@@ -844,3 +854,75 @@ class TestCollectOmissionsAreRecorded:
 
 async def _coro(value):
     return value
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [ValueError, RuntimeError])
+async def test_collect_diagnostics_exclude_exception_text(clean_registry, mock_session, caplog, failure):
+    marker = "synthetic-contributor-private-detail-must-not-escape"
+    clean_registry.register(_FakeContributor(contributor_id="voip", collect_raises=failure(marker)))
+    clean_registry.register(_FakeContributor(contributor_id="core"))
+    svc = _make_service(mock_session)
+    archive = await svc._assemble_backup_archive(backup_id=uuid4(), organization_id=uuid4(), options={})
+    assert [e.id for e in archive.manifest.contributors] == ["core"]
+    assert len(svc._collect_omissions) == 1 and "voip" in svc._collect_omissions[0]
+    assert marker not in svc._collect_omissions[0]
+    assert marker not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dry_run", [True, False])
+async def test_restore_report_excludes_contributor_exception_text(clean_registry, mock_session, caplog, dry_run):
+    import json
+    marker = "synthetic-contributor-restore-private-detail-must-not-escape"
+    clean_registry.register(_FakeContributor(contributor_id="core", restore_raises=RuntimeError(marker)))
+    svc = _make_service(mock_session)
+    archive = await svc._assemble_backup_archive(backup_id=uuid4(), organization_id=uuid4(), options={})
+    report = await svc._dispatch_restore_via_contributors(archive, organization_id=uuid4(), dry_run=dry_run, restore_options={})
+    assert report["summary"]["contributors_failed"] == 1
+    assert report["summary"]["total_errors"] >= 1
+    assert marker not in json.dumps(report)
+    assert marker not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_core_restore_result_excludes_private_exception_text(mock_session, monkeypatch):
+    import json
+    from dataclasses import asdict
+    from unittest.mock import AsyncMock
+
+    from app.services.backup import BackupService
+    from app.services.backup_contributors.core import CoreBackupContributor
+
+    marker = "synthetic-core-restore-private-detail-must-not-escape"
+    monkeypatch.setattr(BackupService, "_restore_data", AsyncMock(side_effect=RuntimeError(marker)))
+    result = await CoreBackupContributor().restore(
+        mock_session, uuid4(), ContributorPayload(schema_version="1.0.0", data={}),
+        dry_run=True, options={},
+    )
+    assert result.status == "error" and result.errors
+    assert marker not in json.dumps(asdict(result))
+
+
+@pytest.mark.asyncio
+async def test_record_insert_warning_excludes_private_exception_text():
+    import json
+    from dataclasses import asdict
+    from unittest.mock import AsyncMock
+
+    from app.models.core import Organization
+    from app.services.backup_contributors.restore_helpers import restore_records
+
+    marker = "synthetic-insert-private-detail-must-not-escape"
+    session = MagicMock()
+    session.get = AsyncMock(return_value=None)
+    session.flush = AsyncMock(side_effect=RuntimeError(marker))
+    result = RestoreResult(contributor_id="owned", status="ok")
+    restored = await restore_records(
+        session, model_cls=Organization,
+        records=[{"id": uuid4(), "name": "Owned", "slug": uuid4().hex}],
+        result=result, resource="organizations", dry_run=False, overwrite=False,
+    )
+    assert not restored and result.skipped["organizations"] == 1
+    assert result.warnings and "insert failed" in result.warnings[0]
+    assert marker not in json.dumps(asdict(result))

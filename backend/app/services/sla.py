@@ -9,6 +9,7 @@ detects breaches, tracks compliance over time.
 """
 
 import logging
+import math
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -167,9 +168,23 @@ class SLAMonitoringService:
         if thresholds and hasattr(thresholds, "model_dump"):
             data["thresholds"] = thresholds.model_dump(exclude_none=True)
 
+        reset_observation = any(
+            key in data and data[key] is not None and data[key] != getattr(policy, key)
+            for key in (
+                "status",
+                "thresholds",
+                "scope",
+                "scope_id",
+                "breach_after_consecutive",
+                "evaluation_window_minutes",
+            )
+        )
         for key, value in data.items():
             if value is not None:
                 setattr(policy, key, value)
+        if reset_observation:
+            policy.current_compliance_percent = None
+            policy.last_evaluated_at = None
         await self.db.flush()
         return policy
 
@@ -246,6 +261,8 @@ class SLAMonitoringService:
         breach = result.scalar_one_or_none()
         if not breach:
             return None
+        if breach.status == SLABreachStatus.RESOLVED.value:
+            return breach
 
         breach.status = SLABreachStatus.ACKNOWLEDGED.value
         breach.acknowledged_at = datetime.now(UTC)
@@ -289,7 +306,11 @@ class SLAMonitoringService:
         grant = self._policy_grant_predicate(current_user)
         if grant is not None:
             stmt = stmt.where(grant)
-        result = await self.db.execute(stmt)
+        # The scheduler and an operator may evaluate the same organization.
+        # Keep each policy's read/update/create sequence in one transaction;
+        # a concurrent pass skips policies already being evaluated.
+        stmt = stmt.order_by(SLAPolicy.id).with_for_update(skip_locked=True)
+        result = await self.db.execute(stmt.execution_options(populate_existing=True))
         policies = list(result.scalars().all())
 
         evaluated = 0
@@ -312,7 +333,15 @@ class SLAMonitoringService:
 
     async def _evaluate_policy(self, policy: SLAPolicy, now: datetime) -> dict[str, Any]:
         """Evaluate a single SLA policy against current metrics."""
-        thresholds = policy.thresholds or {}
+        thresholds = {
+            key: value for key, value in (policy.thresholds or {}).items() if value is not None
+        }
+        previous_evaluated_at = policy.last_evaluated_at
+        previous_compliance = policy.current_compliance_percent
+        # An evaluation attempt is not evidence of compliance. Clear stale
+        # current values even when no configured target can be measured.
+        policy.current_compliance_percent = None
+        policy.last_evaluated_at = now
         if not thresholds:
             return {"breaches_created": 0, "breaches_resolved": 0}
 
@@ -322,29 +351,56 @@ class SLAMonitoringService:
         if not health_data:
             return {"breaches_created": 0, "breaches_resolved": 0}
 
+        required = max(1, min(policy.breach_after_consecutive or 1, 100))
+        observations = {key: self._extract_metric(health_data, key) for key in thresholds}
+        complete_observation = all(value is not None for value in observations.values())
+        previous_metrics: dict[str, Any] = {}
+        # A numeric snapshot exists only for a complete observation. Match the
+        # previous attempt exactly so missing/partial passes break the sequence.
+        # Legacy snapshots lack counter metadata and start a fresh sequence.
+        if (
+            required > 1
+            and complete_observation
+            and previous_compliance is not None
+            and previous_evaluated_at is not None
+        ):
+            previous = await self.db.execute(
+                select(SLASnapshot.metrics)
+                .where(
+                    SLASnapshot.policy_id == policy.id,
+                    SLASnapshot.recorded_at == previous_evaluated_at,
+                )
+                .order_by(SLASnapshot.id)
+                .limit(1)
+            )
+            previous_metrics = previous.scalar_one_or_none() or {}
+
         breaches_created = 0
         breaches_resolved = 0
         metrics_snapshot = {}
         any_breach = False
         breached_metric_count = 0
 
-        # Fetch this policy's active breaches ONCE instead of a
-        # per-metric _find_active_breach SELECT. At most one ACTIVE breach exists
-        # per (policy, metric), so a dict keyed by violated_metric is exact.
+        # Acknowledged incidents remain unresolved. Keep every matching row
+        # so historical duplicates also recover; do not silently discard one.
         _active_rows = await self.db.execute(
             select(SLABreach).where(
                 SLABreach.policy_id == policy.id,
-                SLABreach.status == SLABreachStatus.ACTIVE.value,
+                SLABreach.status.in_(
+                    [SLABreachStatus.ACTIVE.value, SLABreachStatus.ACKNOWLEDGED.value]
+                ),
             )
         )
-        active_breaches = {b.violated_metric: b for b in _active_rows.scalars()}
+        active_breaches: dict[str, list[SLABreach]] = {}
+        for breach_row in _active_rows.scalars():
+            active_breaches.setdefault(breach_row.violated_metric, []).append(breach_row)
 
         # Evaluate each threshold
         for metric_name, threshold_value in thresholds.items():
             if threshold_value is None:
                 continue
 
-            actual_value = self._extract_metric(health_data, metric_name)
+            actual_value = observations[metric_name]
             if actual_value is None:
                 continue
 
@@ -354,16 +410,32 @@ class SLAMonitoringService:
             }
 
             is_violated = self._is_threshold_violated(metric_name, threshold_value, actual_value)
+            consecutive = 0
+            if is_violated:
+                previous_metric = previous_metrics.get(metric_name, {})
+                prior_count = previous_metric.get("consecutive_violations", 0)
+                if (
+                    previous_metric.get("threshold") != threshold_value
+                    or previous_metric.get("required_consecutive") != required
+                    or type(prior_count) is not int
+                    or prior_count < 0
+                ):
+                    prior_count = 0
+                consecutive = min(required, prior_count + 1)
+            metrics_snapshot[metric_name]["consecutive_violations"] = consecutive
+            metrics_snapshot[metric_name]["required_consecutive"] = required
 
             if is_violated:
-                any_breach = True
                 breached_metric_count += 1
                 deviation = abs(actual_value - threshold_value) / max(threshold_value, 0.01) * 100
 
                 # Check for existing active breach on this metric (fetched once)
-                existing_breach = active_breaches.get(metric_name)
+                existing_breaches = active_breaches.get(metric_name, [])
+                if not existing_breaches and consecutive < required:
+                    continue
+                any_breach = True
 
-                if not existing_breach:
+                if not existing_breaches:
                     severity = (
                         SLABreachSeverity.CRITICAL.value
                         if deviation > 20
@@ -384,7 +456,7 @@ class SLAMonitoringService:
                         },
                     )
                     self.db.add(breach)
-                    active_breaches[metric_name] = breach
+                    active_breaches[metric_name] = [breach]
                     breaches_created += 1
 
                     # Notify on new breach
@@ -429,13 +501,12 @@ class SLAMonitoringService:
                     except Exception as e:
                         logger.error("Failed to publish sla.breach.created event: %s", e)
                 else:
-                    # Update existing breach with latest values
-                    existing_breach.actual_value = actual_value
-                    existing_breach.deviation_percent = round(deviation, 2)
+                    for existing_breach in existing_breaches:
+                        existing_breach.actual_value = actual_value
+                        existing_breach.deviation_percent = round(deviation, 2)
             else:
                 # Metric is compliant — resolve any active breach (fetched once)
-                existing_breach = active_breaches.get(metric_name)
-                if existing_breach:
+                for existing_breach in active_breaches.get(metric_name, []):
                     existing_breach.status = SLABreachStatus.RESOLVED.value
                     existing_breach.resolved_at = now
                     existing_breach.duration_minutes = int(
@@ -463,10 +534,17 @@ class SLAMonitoringService:
                     except Exception as e:
                         logger.error("Failed to publish sla.breach.resolved event: %s", e)
 
-        # Compute compliance percentage
-        total_metrics = len([v for v in thresholds.values() if v is not None])
+        # Breaches from measured targets still matter when other targets are
+        # unavailable. Missing targets are neither successes nor recoveries;
+        # do not manufacture a whole-policy percentage or numeric snapshot.
+        if len(metrics_snapshot) != len(thresholds):
+            return {
+                "breaches_created": breaches_created,
+                "breaches_resolved": breaches_resolved,
+            }
+        total_metrics = len(thresholds)
         compliant_metrics = total_metrics - breached_metric_count
-        compliance_pct = (compliant_metrics / total_metrics * 100) if total_metrics > 0 else 100.0
+        compliance_pct = compliant_metrics / total_metrics * 100
 
         # Update policy stats
         policy.current_compliance_percent = round(compliance_pct, 2)
@@ -476,6 +554,7 @@ class SLAMonitoringService:
         self.db.add(
             SLASnapshot(
                 policy_id=policy.id,
+                recorded_at=now,
                 compliance_percent=round(compliance_pct, 2),
                 metrics=metrics_snapshot,
                 in_breach=any_breach,
@@ -493,37 +572,38 @@ class SLAMonitoringService:
             # Average health for all devices in this site
             result = await self.db.execute(
                 select(
-                    func.avg(DeviceHealth.health_score),
+                    func.avg(DeviceHealth.measured_score),
                     func.count(DeviceHealth.id),
                     func.count().filter(DeviceHealth.health_status == HealthStatus.HEALTHY.value),
                     func.count().filter(DeviceHealth.health_status == HealthStatus.CRITICAL.value),
-                ).where(DeviceHealth.site_id == policy.scope_id)
+                ).where(
+                    DeviceHealth.site_id == policy.scope_id,
+                    DeviceHealth.organization_id == policy.organization_id,
+                )
             )
             row = result.one_or_none()
-            if not row or not row[0]:
+            if row is None or row[0] is None:
                 return {}
             return {
                 "avg_health_score": float(row[0]),
                 "total_devices": row[1],
                 "healthy_count": row[2],
                 "critical_count": row[3],
-                "uptime_percent": float(row[0]),  # approximate from health
             }
 
         elif policy.scope == SLAPolicyScope.ORGANIZATION.value:
             result = await self.db.execute(
                 select(
-                    func.avg(DeviceHealth.health_score),
+                    func.avg(DeviceHealth.measured_score),
                     func.count(DeviceHealth.id),
                 ).where(DeviceHealth.organization_id == policy.organization_id)
             )
             row = result.one_or_none()
-            if not row or not row[0]:
+            if row is None or row[0] is None:
                 return {}
             return {
                 "avg_health_score": float(row[0]),
                 "total_devices": row[1],
-                "uptime_percent": float(row[0]),
             }
 
         elif policy.scope == SLAPolicyScope.CAMERA.value and policy.scope_id:
@@ -548,7 +628,7 @@ class SLAMonitoringService:
             )
             row = result.one_or_none()
             total = row[0] if row else 0
-            if not total:
+            if row is None or not total:
                 return {}
             online = row[1] or 0
             uptime = float(online) / float(total) * 100.0
@@ -582,7 +662,7 @@ class SLAMonitoringService:
             )
             row = result.one_or_none()
             total = row[0] if row else 0
-            if not total:
+            if row is None or not total:
                 return {}
             online = row[1] or 0
             uptime = float(online) / float(total) * 100.0
@@ -603,12 +683,15 @@ class SLAMonitoringService:
             "uptime_percent_min": "uptime_percent",
             "latency_ms_max": "avg_latency_ms",
             "packet_loss_percent_max": "avg_packet_loss",
-            "client_satisfaction_min": "avg_health_score",
+            "client_satisfaction_min": "client_satisfaction",
             "error_rate_max": "error_rate",
         }
         key = metric_map.get(metric_name, metric_name)
         value = health_data.get(key)
-        return float(value) if value is not None else None
+        if value is None:
+            return None
+        measured = float(value)
+        return measured if math.isfinite(measured) else None
 
     def _is_threshold_violated(self, metric_name: str, threshold: float, actual: float) -> bool:
         """Check if a metric violates its threshold (min or max)."""
@@ -620,11 +703,16 @@ class SLAMonitoringService:
 
     async def _find_active_breach(self, policy_id: UUID, metric: str) -> SLABreach | None:
         result = await self.db.execute(
-            select(SLABreach).where(
+            select(SLABreach)
+            .where(
                 SLABreach.policy_id == policy_id,
                 SLABreach.violated_metric == metric,
-                SLABreach.status == SLABreachStatus.ACTIVE.value,
+                SLABreach.status.in_(
+                    [SLABreachStatus.ACTIVE.value, SLABreachStatus.ACKNOWLEDGED.value]
+                ),
             )
+            .order_by(SLABreach.started_at, SLABreach.id)
+            .limit(1)
         )
         return result.scalar_one_or_none()
 
@@ -688,7 +776,9 @@ class SLAMonitoringService:
             .select_from(SLABreach)
             .where(
                 SLABreach.organization_id == organization_id,
-                SLABreach.status == SLABreachStatus.ACTIVE.value,
+                SLABreach.status.in_(
+                    [SLABreachStatus.ACTIVE.value, SLABreachStatus.ACKNOWLEDGED.value]
+                ),
             )
         )
         if site_id:
@@ -772,7 +862,9 @@ class SLAMonitoringService:
             "total_policies": total,
             "active_policies": active,
             "active_breaches": active_breaches,
-            "avg_compliance_percent": round(float(avg_compliance), 2) if avg_compliance else None,
+            "avg_compliance_percent": round(float(avg_compliance), 2)
+            if avg_compliance is not None
+            else None,
             "worst_policy": worst_policy,
             "breaches_last_24h": breaches_24h,
             "compliance_trend": trend,

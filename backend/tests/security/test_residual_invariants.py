@@ -133,24 +133,42 @@ async def world(db_session: AsyncSession):
 class TestSsoCrossOrgTakeover:
     @pytest.mark.asyncio
     async def test_foreign_org_email_is_refused(self, db_session, world):
+        from sqlalchemy import select
+
+        from app.models.core import User
+        from app.models.sso import SSOProtocol, SSOProvider, SSOProviderStatus
         from app.services.sso import SSOAuthError, SSOService
 
         # A provider in org B asserts org-A user alice's email. The org-scoped
         # lookup misses (alice is org A), and the foreign-org defense refuses
         # rather than minting a token for / JIT-duplicating the victim.
-        provider_b = SimpleNamespace(
+        provider_b = SSOProvider(
             id=uuid4(),
+            name="Foreign organization provider",
+            slug=f"foreign-provider-{uuid4().hex}",
             organization_id=world.org_b.id,
-            protocol=SimpleNamespace(value="oidc"),
+            protocol=SSOProtocol.OIDC,
+            status=SSOProviderStatus.ACTIVE,
             jit_provisioning=True,
             role_mapping={},
             default_role="viewer",
         )
+        # Use the persisted provider contract: the service refreshes actual
+        # trust settings before making the foreign-account decision.
+        db_session.add(provider_b)
+        await db_session.flush()
+        before = SSOService._account_security_state(world.user_a)
         svc = SSOService(db_session)
-        with pytest.raises(SSOAuthError):
+        with pytest.raises(SSOAuthError) as refusal:
             await svc._provision_or_update_user(
                 provider_b, {"email": world.user_a.email}, {"sub": "x"}
             )
+        assert str(refusal.value) == "Existing account requires explicit authenticated linking"
+        await db_session.refresh(world.user_a)
+        assert SSOService._account_security_state(world.user_a) == before
+        assert await db_session.scalar(select(User.id).where(
+            User.sso_provider_id == provider_b.id,
+        )) is None
 
 
 # ── TI-13: full-system export only collects the requesting org's data ──

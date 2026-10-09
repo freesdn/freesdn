@@ -30,6 +30,7 @@ from typing import Any
 
 import httpx
 
+from app.adapters.appliance_tls import appliance_tls_context
 from app.adapters.exceptions import (
     AdapterAuthenticationError,
     AdapterConnectionError,
@@ -87,9 +88,8 @@ class TrueNASClient:
     port : int
         HTTPS port (default 443).
     verify_ssl : bool
-        Whether to verify the TLS certificate. TrueNAS appliances
-        ship with self-signed certs by default, so the BaseAdapter
-        default of ``False`` is intentional for lab installs.
+        Verify the server certificate by default. Deploy a private CA bundle
+        for self-signed appliances; False is an explicit insecure exception.
     timeout : int | None
         Override the read timeout. ``connect`` is fixed lower so
         firewalled hosts fail fast.
@@ -103,7 +103,7 @@ class TrueNASClient:
         *,
         api_key: str | None = None,
         port: int = 443,
-        verify_ssl: bool = False,
+        verify_ssl: bool = True,
         timeout: float | None = None,
     ):
         self.host = host
@@ -114,8 +114,10 @@ class TrueNASClient:
         self.verify_ssl = verify_ssl
         self.timeout = timeout or DEFAULT_READ_TIMEOUT
 
-        scheme = "https" if port == 443 or port == 8443 else "http"
-        self.base_url = f"{scheme}://{host}:{port}"
+        # Match the WS transport: never downgrade authenticated REST to HTTP
+        # merely because the appliance uses a nonstandard HTTPS port.
+        tls_port = 443 if port in (80, 0) else port
+        self.base_url = f"https://{host}:{tls_port}"
 
         self._client: httpx.AsyncClient | None = None
         self._breaker = CircuitBreaker(
@@ -136,9 +138,10 @@ class TrueNASClient:
         """
         self._client = build_async_client(
             base_url=self.base_url,
-            verify=self.verify_ssl,
+            verify=appliance_tls_context(self.verify_ssl, adapter_id="truenas"),
+            trust_env=False,
             timeout=httpx.Timeout(self.timeout, connect=DEFAULT_CONNECT_TIMEOUT),
-            follow_redirects=True,
+            follow_redirects=False,
             headers=self._auth_headers(),
             # TrueNAS Basic auth still respects ``auth=`` even when
             # Bearer is used; we pass auth explicitly only when no key.
@@ -198,7 +201,7 @@ class TrueNASClient:
             raise AdapterAuthenticationError(
                 f"TrueNAS rejected credentials at {self.host} (HTTP {resp.status_code})",
             )
-        if resp.status_code >= 500:
+        if not 200 <= resp.status_code < 300:
             raise AdapterConnectionError(
                 f"TrueNAS at {self.host} returned HTTP {resp.status_code} during auth probe",
             )

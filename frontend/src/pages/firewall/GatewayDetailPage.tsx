@@ -10,7 +10,10 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { type MouseEvent, useState, useCallback } from 'react';
+import { validatedAggregate } from './gateway-tabs/gatewayAggregateRead';
+import { validatedSystemRead } from './gateway-tabs/gatewaySystemRead';
+import { GatewayLiveReadNotice } from './gateway-tabs/GatewayLiveReadNotice';
+import { type MouseEvent, useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -30,7 +33,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatsGrid } from '@/components/ui/stats-grid';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -48,6 +51,8 @@ import {
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useGatewayConfigDownload } from '@/hooks/use-gateway-config-download';
+import { useAuthStore } from '@/stores/authStore';
 import {
   gatewayApi,
   sitesApiV2,
@@ -56,6 +61,7 @@ import {
   type Site,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { parseGatewayBackupInventory, type GatewayBackupMetadata } from '@/lib/gateway-backup-inventory';
 import {
   DeleteResourceDialog,
   FirewallRuleFormDialog,
@@ -80,6 +86,7 @@ import { GatewayDnsTab } from './gateway-tabs/GatewayDnsTab';
 import { GatewayIdsTab } from './gateway-tabs/GatewayIdsTab';
 import { GatewayInterfacesTab } from './gateway-tabs/GatewayInterfacesTab';
 import { GatewayLogsTab } from './gateway-tabs/GatewayLogsTab';
+import { parseGatewayLogInventory, type GatewayLogEntry } from '@/lib/gateway-log-inventory';
 import { GatewayMonitoringTab } from './gateway-tabs/GatewayMonitoringTab';
 import { GatewayNatTab } from './gateway-tabs/GatewayNatTab';
 import { GatewayOverviewTab } from './gateway-tabs/GatewayOverviewTab';
@@ -118,6 +125,10 @@ export default function GatewayDetailPage() {
   const { t } = useTranslation('firewall');
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const configDownload = useGatewayConfigDownload(id);
+  const canExportOpenWrtConfig = useAuthStore((state) =>
+    state.user?.role === 'super_admin' && state.hasPermission('controller:write'),
+  );
 
   // Valid tab keys · URL param is validated against this set
   const VALID_TABS = new Set([
@@ -189,9 +200,10 @@ export default function GatewayDetailPage() {
   const [showIdsSettings, setShowIdsSettings] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean; label: string; name: string; fn: () => Promise<any>; keys: string[];
+    backupInventory?: GatewayBackupMetadata[];
   }>({ open: false, label: '', name: '', fn: async () => {}, keys: [] });
-  const openDelete = (label: string, name: string, fn: () => Promise<any>, keys: string[]) =>
-    setDeleteDialog({ open: true, label, name, fn, keys });
+  const openDelete = (label: string, name: string, fn: () => Promise<any>, keys: string[], backupInventory?: GatewayBackupMetadata[]) =>
+    setDeleteDialog({ open: true, label, name, fn, keys, backupInventory });
 
   // ─── Gateway data ─────────────────────────────────────────────────
 
@@ -223,12 +235,14 @@ export default function GatewayDetailPage() {
     refetchInterval: 30_000,
   });
 
-  const { data: deviceSummaryData } = useQuery({
+  const { data: deviceSummaryData, isPending: deviceSummaryPending, isFetching: deviceSummaryFetching, isError: deviceSummaryError, refetch: retryDeviceSummary } = useQuery({
     queryKey: ['gateways', id, 'device-summary'],
-    queryFn: () => gatewayApi.getDeviceSummary(id!),
+    queryFn: async () => validatedAggregate(await gatewayApi.getDeviceSummary(id!), id!, 'device-summary'),
+    retry: false,
     enabled: !!id && activeTab === 'overview',
     refetchInterval: 60_000,
   });
+  const deviceSummaryLoading = deviceSummaryPending || deviceSummaryFetching;
 
   const { data: rulesData, isLoading: rulesLoading, isError: rulesError } = useQuery({
     queryKey: ['gateways', id, 'firewall-rules'],
@@ -248,11 +262,13 @@ export default function GatewayDetailPage() {
     enabled: !!id && activeTab === 'nat',
   });
 
-  const { data: vpnData, isLoading: vpnLoading, isError: vpnError } = useQuery({
+  const { data: vpnData, isPending: vpnPending, isFetching: vpnFetching, isError: vpnError, refetch: retryVpn } = useQuery({
     queryKey: ['gateways', id, 'vpn'],
-    queryFn: () => gatewayApi.getVPN(id!),
+    queryFn: async () => validatedAggregate(await gatewayApi.getVPN(id!), id!, 'vpn'),
+    retry: false,
     enabled: !!id && activeTab === 'vpn',
   });
+  const vpnLoading = vpnPending || vpnFetching;
 
   const { data: wireguardData, isLoading: wgLoading, isError: wgError } = useQuery({
     queryKey: ['gateways', id, 'wireguard'],
@@ -362,32 +378,46 @@ export default function GatewayDetailPage() {
     enabled: !!id && activeTab === 'services',
   });
 
-  const { data: backupsData, isLoading: backupsLoading, isError: backupsErrorFlag } = useQuery({
+  const { data: backupsData, isLoading: backupsLoading, isFetching: backupsFetching, isError: backupsErrorFlag, refetch: refetchBackups } = useQuery({
     queryKey: ['gateways', id, 'backups'],
     queryFn: () => gatewayApi.getBackups(id!),
     enabled: !!id && activeTab === 'backups',
   });
 
-  const { data: firmwareData } = useQuery({
+  const backups = useMemo(
+    () => backupsErrorFlag ? null : parseGatewayBackupInventory(backupsData?.data, id ?? ''),
+    [backupsData, backupsErrorFlag, id],
+  );
+  const backupDeleteCurrent = !deleteDialog.keys.includes('backups')
+    || (backups !== null && !backupsLoading && !backupsFetching
+      && deleteDialog.backupInventory === backups
+      && backups.some((backup) => backup.filename === deleteDialog.name));
+  useEffect(() => {
+    if (!backupDeleteCurrent) setDeleteDialog((current) => current.open ? { ...current, open: false } : current);
+  }, [backupDeleteCurrent]);
+
+  const { data: firmwareData, isPending: firmwarePending, isFetching: firmwareFetching, isError: firmwareError, refetch: retryFirmware } = useQuery({
     queryKey: ['gateways', id, 'firmware'],
-    queryFn: () => gatewayApi.getFirmware(id!),
+    queryFn: async () => validatedSystemRead(await gatewayApi.getFirmware(id!), id!, 'firmware'),
+    retry: false,
     enabled: !!id && activeTab === 'overview',
   });
 
-  const { data: healthData } = useQuery({
+  const { data: healthData, isPending: healthPending, isFetching: healthFetching, isError: healthError, refetch: retryHealth } = useQuery({
     queryKey: ['gateways', id, 'health'],
-    queryFn: () => gatewayApi.getGatewayHealth(id!),
+    queryFn: async () => validatedSystemRead(await gatewayApi.getGatewayHealth(id!), id!, 'health'),
+    retry: false,
     enabled: !!id && activeTab === 'overview',
     refetchInterval: 30_000,
   });
 
-  const { data: sysLogData, isLoading: sysLogLoading } = useQuery({
+  const { data: sysLogData, isLoading: sysLogLoading, isFetching: sysLogFetching, isError: sysLogError, refetch: refetchSystemLogs } = useQuery({
     queryKey: ['gateways', id, 'logs-system'],
     queryFn: () => gatewayApi.getSystemLog(id!, { limit: 200 }),
     enabled: !!id && activeTab === 'logs',
   });
 
-  const { data: fwLogData, isLoading: fwLogLoading } = useQuery({
+  const { data: fwLogData, isLoading: fwLogLoading, isFetching: fwLogFetching, isError: fwLogError, refetch: refetchFirewallLogs } = useQuery({
     queryKey: ['gateways', id, 'logs-firewall'],
     queryFn: () => gatewayApi.getFirewallLog(id!, { limit: 200 }),
     enabled: !!id && activeTab === 'logs',
@@ -437,11 +467,13 @@ export default function GatewayDetailPage() {
     enabled: !!id && activeTab === 'dns',
   });
 
-  const { data: tailscaleData, isLoading: tailscaleLoading } = useQuery({
+  const { data: tailscaleData, isPending: tailscalePending, isFetching: tailscaleFetching, isError: tailscaleError, refetch: retryTailscale } = useQuery({
     queryKey: ['gateways', id, 'tailscale'],
-    queryFn: () => gatewayApi.getTailscaleStatus(id!),
+    queryFn: async () => validatedAggregate(await gatewayApi.getTailscaleStatus(id!), id!, 'tailscale'),
+    retry: false,
     enabled: !!id && activeTab === 'vpn',
   });
+  const tailscaleLoading = tailscalePending || tailscaleFetching;
 
   const { data: vlanDevicesData, isLoading: vlanDevicesLoading } = useQuery({
     queryKey: ['gateways', id, 'vlan-devices'],
@@ -462,24 +494,28 @@ export default function GatewayDetailPage() {
   });
 
   // ─── HAProxy (Load Balancer) ────────────────────────────────────────
-  const { data: haproxyData, isLoading: haproxyLoading } = useQuery({
+  const { data: haproxyData, isPending: haproxyPending, isFetching: haproxyFetching, isError: haproxyError, refetch: retryHaproxy } = useQuery({
     queryKey: ['gateways', id, 'haproxy'],
-    queryFn: () => gatewayApi.getHAProxyStatus(id!),
+    queryFn: async () => validatedAggregate(await gatewayApi.getHAProxyStatus(id!), id!, 'haproxy'),
+    retry: false,
     enabled: !!id && activeTab === 'services',
   });
+  const haproxyLoading = haproxyPending || haproxyFetching;
 
   // ─── Certificate Management ─────────────────────────────────────────
-  const { data: trustData, isLoading: trustLoading } = useQuery({
+  const { data: trustData, isPending: trustPending, isFetching: trustFetching, isError: trustError, refetch: refetchTrust } = useQuery({
     queryKey: ['gateways', id, 'trust-overview'],
     queryFn: () => gatewayApi.getTrustOverview(id!),
     enabled: !!id && activeTab === 'system',
+    retry: false,
   });
 
   // ─── ACME / Let's Encrypt ──────────────────────────────────────────
-  const { data: acmeData, isLoading: acmeLoading } = useQuery({
+  const { data: acmeData, isPending: acmePending, isFetching: acmeFetching, isError: acmeError, refetch: refetchAcme } = useQuery({
     queryKey: ['gateways', id, 'acme-overview'],
     queryFn: () => gatewayApi.getACMEOverview(id!),
     enabled: !!id && activeTab === 'system',
+    retry: false,
   });
 
   // ─── Syslog Forwarding ─────────────────────────────────────────────
@@ -590,11 +626,13 @@ export default function GatewayDetailPage() {
   });
 
   // ─── Web Proxy / Squid ────────────────────────────────────────────
-  const { data: proxyData, isLoading: proxyLoading } = useQuery({
+  const { data: proxyData, isPending: proxyPending, isFetching: proxyFetching, isError: proxyError, refetch: retryProxy } = useQuery({
     queryKey: ['gateways', id, 'proxy'],
-    queryFn: () => gatewayApi.getProxySettings(id!),
+    queryFn: async () => validatedAggregate(await gatewayApi.getProxySettings(id!), id!, 'proxy'),
+    retry: false,
     enabled: !!id && activeTab === 'services',
   });
+  const proxyLoading = proxyPending || proxyFetching;
   const { data: proxyBlacklistsData, isLoading: proxyBlacklistsLoading } = useQuery({
     queryKey: ['gateways', id, 'proxy-blacklists'],
     queryFn: () => gatewayApi.getProxyBlacklists(id!),
@@ -602,26 +640,30 @@ export default function GatewayDetailPage() {
   });
 
   // ─── CrowdSec ────────────────────────────────────────────────────
-  const { data: crowdsecData, isLoading: crowdsecLoading } = useQuery({
+  const { data: crowdsecData, isPending: crowdsecPending, isFetching: crowdsecFetching, isError: crowdsecError, refetch: retryCrowdsec } = useQuery({
     queryKey: ['gateways', id, 'crowdsec'],
-    queryFn: () => gatewayApi.getCrowdSecStatus(id!),
+    queryFn: async () => validatedAggregate(await gatewayApi.getCrowdSecStatus(id!), id!, 'crowdsec'),
+    retry: false,
     enabled: !!id && activeTab === 'ids',
   });
+  const crowdsecLoading = crowdsecPending || crowdsecFetching;
 
   // Telegraf/Monit/NetFlow/HealthCheck queries moved into GatewayMonitoringTab.
 
   // ─── Cross-cutting: Config Diff ───────────────────────────────────
-  const { data: configDiffData, isLoading: configDiffLoading } = useQuery({
+  const { data: configDiffData, isPending: configDiffPending, isFetching: configDiffFetching, isError: configDiffError, refetch: refetchConfigDiff } = useQuery({
     queryKey: ['gateways', id, 'config-diff'],
     queryFn: () => gatewayApi.getConfigDiff(id!),
     enabled: !!id && activeTab === 'backups',
+    retry: false,
   });
 
   // ─── Cross-cutting: Certificate Expiry ────────────────────────────
-  const { data: certExpiryData, isLoading: certExpiryLoading } = useQuery({
+  const { data: certExpiryData, isPending: certExpiryPending, isFetching: certExpiryFetching, isError: certExpiryError, refetch: refetchCertExpiry } = useQuery({
     queryKey: ['gateways', id, 'cert-expiry'],
     queryFn: () => gatewayApi.getCertificateExpiry(id!, 30),
     enabled: !!id && activeTab === 'system',
+    retry: false,
   });
 
   // ─── Mutations ────────────────────────────────────────────────────
@@ -686,17 +728,6 @@ export default function GatewayDetailPage() {
     },
     onError: (err: any) => {
       toast({ title: t('GatewayDetailPage.toasts.error'), description: err?.response?.data?.detail || t('GatewayDetailPage.toasts.serviceControlFailed'), variant: 'destructive' });
-    },
-  });
-
-  const backupMutation = useMutation({
-    mutationFn: () => gatewayApi.createBackup(id!),
-    onSuccess: () => {
-      toast({ title: t('GatewayDetailPage.toasts.backupCreated') });
-      queryClient.invalidateQueries({ queryKey: ['gateways', id, 'backups'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('GatewayDetailPage.toasts.backupFailed'), description: err?.response?.data?.detail || t('GatewayDetailPage.toasts.error'), variant: 'destructive' });
     },
   });
 
@@ -989,6 +1020,17 @@ export default function GatewayDetailPage() {
               <Button variant="outline" size="sm" onClick={() => navigate('/firewall/gateways')}>
                 <ArrowLeft className="h-4 w-4 mr-2" /> {t('GatewayDetailPage.actions.back')}
               </Button>
+              {canExportOpenWrtConfig && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { void configDownload.download(); }}
+                  disabled={configDownload.isDownloading}
+                  aria-busy={configDownload.isDownloading}
+                >
+                  {t('GatewaySystemTab.actions.downloadConfig')}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -1058,9 +1100,11 @@ export default function GatewayDetailPage() {
 
   const vendorLabel = vendorLabels[gw.vendor] || gw.vendor;
   const liveStatus = statusData?.data;
-  const deviceSummary = deviceSummaryData?.data?.summary ?? {};
-  const firmware = firmwareData?.data?.firmware ?? {};
-  const gwHealth = healthData?.data?.gateways ?? [];
+  const deviceSummary = deviceSummaryLoading || deviceSummaryError ? {} : deviceSummaryData?.data?.summary ?? {};
+  const firmwareLoading = firmwarePending || firmwareFetching;
+  const healthLoading = healthPending || healthFetching;
+  const firmware = firmwareLoading || firmwareError ? {} : firmwareData?.data?.firmware ?? {};
+  const gwHealth = healthLoading || healthError ? [] : healthData?.data?.gateways ?? [];
   const rules = rulesData?.data?.rules ?? [];
   const natRules = natData?.data?.rules ?? [];
   const portForwards = portFwdData?.data?.port_forwards ?? [];
@@ -1086,9 +1130,8 @@ export default function GatewayDetailPage() {
   const shaperQueues = shaperQueuesData?.data?.queues ?? [];
   const shaperRules = shaperRulesData?.data?.rules ?? [];
   const services = servicesData?.data?.services ?? [];
-  const backups = backupsData?.data?.backups ?? [];
-  const sysLogs = sysLogData?.data?.logs ?? [];
-  const fwLogs = fwLogData?.data?.logs ?? [];
+  const sysLogs = sysLogError || sysLogFetching ? null : parseGatewayLogInventory(sysLogData?.data, id ?? '', gw.vendor);
+  const fwLogs = fwLogError || fwLogFetching ? null : parseGatewayLogInventory(fwLogData?.data, id ?? '', gw.vendor);
   const syncLogs = syncLogsData?.data ?? [];
 
   // ─── Column definitions ───────────────────────────────────────────
@@ -1116,13 +1159,13 @@ export default function GatewayDetailPage() {
 
   // ─── Deep integration columns ─────────────────────────────────────
 
-  const logColumns: DataTableColumn<any>[] = [
-    { id: 'timestamp', header: t('GatewayDetailPage.logColumns.time'), accessorFn: (r: any) => r.timestamp || r.date || r.__timestamp__ || '-', sortable: true, cell: (r: any) => (
-      <span className="text-xs font-mono">{r.timestamp || r.date || '-'}</span>
+  const logColumns: DataTableColumn<GatewayLogEntry>[] = [
+    { id: 'timestamp', header: t('GatewayDetailPage.logColumns.time'), accessorKey: 'timestamp', sortable: true, cell: (r) => (
+      <span className="text-xs font-mono">{r.timestamp}</span>
     )},
-    { id: 'process', header: t('GatewayDetailPage.logColumns.process'), accessorFn: (r: any) => r.process_name || r.process || r.facility || '-' },
-    { id: 'message', header: t('GatewayDetailPage.logColumns.message'), accessorFn: (r: any) => r.line || r.message || r.msg || '-', cell: (r: any) => (
-      <span className="text-xs font-mono max-w-[600px] truncate block">{r.line || r.message || r.msg || '-'}</span>
+    { id: 'process', header: t('GatewayDetailPage.logColumns.process'), accessorKey: 'process' },
+    { id: 'message', header: t('GatewayDetailPage.logColumns.message'), accessorKey: 'message', cell: (r) => (
+      <span className="text-xs font-mono max-w-[600px] truncate block">{r.message}</span>
     )},
   ];
 
@@ -1203,7 +1246,7 @@ export default function GatewayDetailPage() {
           },
           {
             title: t('GatewayDetailPage.stats.version'),
-            value: gw.detected_version || firmware.current_version || deviceSummary.version || '-',
+            value: firmware.current_version || firmware.product_version || firmware.version || '-',
             icon: Settings,
             variant: 'primary',
             description: gw.detected_hostname || deviceSummary.hostname || undefined,
@@ -1250,12 +1293,19 @@ export default function GatewayDetailPage() {
 
         {/* ─── Overview Tab ─────────────────────────────────────────── */}
         <TabsContent value="overview" className="mt-6 space-y-6">
+          {(deviceSummaryLoading || deviceSummaryError) && <Card><CardHeader><CardTitle>{t('GatewayLiveRead.summary')}</CardTitle></CardHeader><GatewayLiveReadNotice loading={deviceSummaryLoading} onRetry={() => { void retryDeviceSummary(); }} /></Card>}
           <GatewayOverviewTab
             gw={gw}
             vendorLabel={vendorLabel}
             deviceSummary={deviceSummary}
             firmware={firmware}
+            firmwareLoading={firmwareLoading}
+            firmwareError={firmwareError}
+            onRetryFirmware={() => { void retryFirmware(); }}
             gwHealth={gwHealth}
+            healthLoading={healthLoading}
+            healthError={healthError}
+            onRetryHealth={() => { void retryHealth(); }}
             liveStatus={liveStatus}
           />
         </TabsContent>
@@ -1314,8 +1364,12 @@ export default function GatewayDetailPage() {
             onDisconnectIpsec={(vid) => writeOp(() => gatewayApi.disconnectIPsecTunnel(id!, vid), t('GatewayDetailPage.success.tunnelDisconnected'), ['ipsec'])}
             tailscaleData={tailscaleData}
             tailscaleLoading={tailscaleLoading}
+            tailscaleError={tailscaleError}
+            onRetryTailscale={() => { void retryTailscale(); }}
             vpn={vpn}
             vpnLoading={vpnLoading}
+            vpnError={vpnError}
+            onRetryVpn={() => { void retryVpn(); }}
           />
         </TabsContent>
 
@@ -1415,6 +1469,8 @@ export default function GatewayDetailPage() {
             idsRulesLoading={idsRulesLoading}
             crowdsecData={crowdsecData}
             crowdsecLoading={crowdsecLoading}
+            crowdsecError={crowdsecError}
+            onRetryCrowdsec={() => { void retryCrowdsec(); }}
             onControl={(action) => {
               const msgMap: Record<string, string> = {
                 start: t('GatewayDetailPage.success.idsStarted'),
@@ -1453,6 +1509,8 @@ export default function GatewayDetailPage() {
             vendorLabel={vendorLabel}
             haproxyData={haproxyData}
             haproxyLoading={haproxyLoading}
+            haproxyError={haproxyError}
+            onRetryHaproxy={() => { void retryHaproxy(); }}
             captivePortalData={captivePortalData}
             captivePortalLoading={captivePortalLoading}
             services={services}
@@ -1463,6 +1521,8 @@ export default function GatewayDetailPage() {
             serviceActionPending={serviceControlMutation.isPending}
             proxyData={proxyData}
             proxyLoading={proxyLoading}
+            proxyError={proxyError}
+            onRetryProxy={() => { void retryProxy(); }}
             proxyBlacklistsData={proxyBlacklistsData}
             proxyBlacklistsLoading={proxyBlacklistsLoading}
           />
@@ -1472,14 +1532,20 @@ export default function GatewayDetailPage() {
         <TabsContent value="backups" className="mt-6 space-y-6">
           <GatewayBackupsTab
             backups={backups}
-            backupsLoading={backupsLoading}
-            onCreateBackup={() => backupMutation.mutate()}
-            isCreating={backupMutation.isPending}
+            backupsLoading={backupsLoading || backupsFetching}
+            onRetryBackups={() => { void refetchBackups(); }}
             onRevertBackup={(filename) => writeOp(() => gatewayApi.revertBackup(id!, filename), t('GatewayDetailPage.success.backupReverted'), ['backups'])}
-            onDeleteBackup={(filename) => openDelete(t('GatewayDetailPage.resources.backup'), filename || '', () => gatewayApi.deleteBackup(id!, filename), ['backups'])}
-            onDownloadConfig={() => writeOp(() => gatewayApi.downloadConfig(id!), t('GatewayDetailPage.success.configDownloaded'), [])}
+            onDeleteBackup={(filename) => {
+              if (backups && !backupsLoading && !backupsFetching && backups.some((backup) => backup.filename === filename)) {
+                openDelete(t('GatewayDetailPage.resources.backup'), filename, () => gatewayApi.deleteBackup(id!, filename), ['backups'], backups);
+              }
+            }}
+            onDownloadConfig={() => { void configDownload.download(); }}
+            isDownloadingConfig={configDownload.isDownloading}
             configDiffData={configDiffData}
-            configDiffLoading={configDiffLoading}
+            configDiffLoading={configDiffPending || configDiffFetching}
+            configDiffError={configDiffError}
+            onRetryConfigDiff={() => { void refetchConfigDiff(); }}
           />
         </TabsContent>
 
@@ -1498,10 +1564,12 @@ export default function GatewayDetailPage() {
         <TabsContent value="logs" className="mt-6">
           <GatewayLogsTab
             fwLogs={fwLogs}
-            fwLogLoading={fwLogLoading}
+            fwLogLoading={fwLogLoading || fwLogFetching}
             sysLogs={sysLogs}
-            sysLogLoading={sysLogLoading}
+            sysLogLoading={sysLogLoading || sysLogFetching}
             logColumns={logColumns}
+            onRetryFirewallLogs={() => { void refetchFirewallLogs(); }}
+            onRetrySystemLogs={() => { void refetchSystemLogs(); }}
           />
         </TabsContent>
 
@@ -1519,23 +1587,31 @@ export default function GatewayDetailPage() {
         {/* ─── System Tab · extracted to GatewaySystemTab ─── */}
         <TabsContent value="system" className="mt-6 space-y-6">
           <GatewaySystemTab
+            gatewayId={id!}
             packagesData={packagesData}
             packagesLoading={packagesLoading}
             pluginsData={pluginsData}
             cronData={cronData}
             cronLoading={cronLoading}
             trustData={trustData}
-            trustLoading={trustLoading}
+            trustLoading={trustPending || trustFetching}
+            trustError={trustError}
+            onRetryTrust={() => { void refetchTrust(); }}
             acmeData={acmeData}
-            acmeLoading={acmeLoading}
+            acmeLoading={acmePending || acmeFetching}
+            acmeError={acmeError}
+            onRetryAcme={() => { void refetchAcme(); }}
             syslogData={syslogData}
             syslogLoading={syslogLoading}
             haStatusData={haStatusData}
             haStatusLoading={haStatusLoading}
             certExpiryData={certExpiryData}
-            certExpiryLoading={certExpiryLoading}
+            certExpiryLoading={certExpiryPending || certExpiryFetching}
+            certExpiryError={certExpiryError}
+            onRetryCertificateExpiry={() => { void refetchCertExpiry(); }}
             onCheckUpdates={() => writeOp(() => gatewayApi.firmwareCheck(id!), t('GatewayDetailPage.success.firmwareCheckComplete'), ['firmware'])}
-            onDownloadConfig={() => writeOp(() => gatewayApi.downloadConfig(id!), t('GatewayDetailPage.success.configDownloaded'), [])}
+            onDownloadConfig={() => { void configDownload.download(); }}
+            isDownloadingConfig={configDownload.isDownloading}
             onHaltGateway={() => writeOp(() => gatewayApi.haltGateway(id!), t('GatewayDetailPage.success.gatewayHalted'), [])}
           />
         </TabsContent>
@@ -1573,12 +1649,12 @@ export default function GatewayDetailPage() {
 
       {/* ─── CRUD Dialogs ────────────────────────────────────────────── */}
       <DeleteResourceDialog
-        open={deleteDialog.open}
+        open={deleteDialog.open && backupDeleteCurrent}
         onOpenChange={(o) => setDeleteDialog((p) => ({ ...p, open: o }))}
         gatewayId={id!}
         resourceLabel={deleteDialog.label}
         resourceName={deleteDialog.name}
-        deleteFn={deleteDialog.fn}
+        deleteFn={() => backupDeleteCurrent ? deleteDialog.fn() : Promise.reject(new Error('Backup inventory is no longer current'))}
         queryKeys={deleteDialog.keys}
       />
       <FirewallRuleFormDialog open={showRuleForm} onOpenChange={setShowRuleForm} gatewayId={id!} />

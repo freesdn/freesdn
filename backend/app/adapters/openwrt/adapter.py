@@ -25,7 +25,7 @@ Domains covered:
   Services    — procd service list / restart
   VPN         — WireGuard, OpenVPN (package-dependent)
   Diagnostics — ping, traceroute (best-effort)
-  Backup      — /etc/config/ tarball
+  Backup      — LuCI/sysupgrade configuration archive
 """
 
 from __future__ import annotations
@@ -1594,14 +1594,23 @@ class OpenWRTAdapter(BaseAdapter):
             return AdapterResult.fail(str(exc))
 
     async def get_backup_list(self) -> AdapterResult:
-        # OpenWRT doesn't maintain a backup history
-        return AdapterResult.ok(data={"backups": [], "count": 0})
+        """This adapter cannot enumerate backup history on the gateway."""
+        return AdapterResult.fail(
+            "OpenWRT backup inventory is not supported", error_code="NOT_SUPPORTED"
+        )
 
     async def download_config(self) -> AdapterResult:
         try:
-            return await self.create_backup()
-        except Exception as exc:
-            return AdapterResult.fail(str(exc))
+            data = await self._api.create_backup()
+            return AdapterResult.ok(
+                data={
+                    "backup_data": data,
+                    "format": "tar.gz",
+                    "scope": "sysupgrade",
+                }
+            )
+        except Exception:
+            return AdapterResult.fail("Configuration download failed", error_code="DOWNLOAD_FAILED")
 
     async def delete_backup(self, filename: str) -> AdapterResult:
         return AdapterResult.fail(
@@ -2238,17 +2247,11 @@ class OpenWRTAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def create_backup(self) -> AdapterResult:
-        try:
-            data = await self._api.create_backup()
-            return AdapterResult.ok(
-                data={
-                    "backup_data": data,
-                    "format": "tar.gz",
-                    "scope": "/etc/config/",
-                }
-            )
-        except Exception as exc:
-            return AdapterResult.fail(str(exc))
+        """An archive export does not create a saved backup on the gateway."""
+        return AdapterResult.fail(
+            "OpenWRT backup creation is not supported; use configuration download to export an archive",
+            error_code="NOT_SUPPORTED",
+        )
 
     # ═══════════════════════════════════════════════════════════════════════
     # Diagnostics

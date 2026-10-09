@@ -38,8 +38,8 @@ since it is often a variable holding exactly that constant.
 
 Usage
 -----
-    python freesdn/scripts/check_api_contract.py            # from the repo root
-    python freesdn/scripts/check_api_contract.py --list     # print the route table
+    python scripts/check_api_contract.py            # from the repo root
+    python scripts/check_api_contract.py --list     # print the route table
 
 Requires the backend importable (``poetry install`` in ``freesdn/backend``).
 """

@@ -1,0 +1,34 @@
+Device controller adapter construction
+======================================
+
+The legacy device adapter helper now uses build_adapter_for_controller, the
+same builder used elsewhere for stored controller authentication. Proxmox token
+ID/secret and custom password realm reach the adapter; tokens retain precedence
+over ticket/password login. Omada cloud fields, local credentials, ports and
+explicit TLS verification settings are preserved. The old helper dropped the
+Proxmox settings even though other paths supported them.
+
+Invalid stored secrets and unexpected constructor failures return a fixed 502
+Controller adapter unavailable, without raw error text in that response or the
+helper's warning. Construction stops before using a corrupt credential. Existing
+AdapterError policy handling and cancellation propagate unchanged; a missing
+controller remains 400. Two catch-and-pass decryption fallbacks are removed.
+Real Controller password/client-secret properties already raised on corrupted
+ciphertext before the old local try block: no plaintext/ciphertext exfiltration
+through the real ORM model was demonstrated by this qualification.
+
+Tests use actual PostgreSQL Controller/Device rows, encrypted and legacy secret
+forms, token-versus-password precedence, default/custom realms, TLS settings,
+cloud fields, wrong-key/malformed ciphertext, constructor failures, adapter
+policy errors and cancellation. Focused client tests use MockTransport. The
+independent probe uses actual Proxmox adapter/client code against an isolated
+TLS socket server, a fixture CA and an explicit loopback URL override. It checks
+both the shared factory control and the corrected device path, plus failed token
+authentication and HTTP client cleanup. No hardware, caller login, actual device
+command or concurrent authority revocation is exercised.
+
+This construction correction does not implement generic Proxmox device reboot,
+firmware or other methods that the adapter does not support. Those retain their
+existing unsupported behavior; hypervisor operation routes are separate. It also
+does not qualify referenced-controller lifecycle/tenant consistency or all batch
+error diagnostics. Full shipping/runtime acceptance is separately recorded.

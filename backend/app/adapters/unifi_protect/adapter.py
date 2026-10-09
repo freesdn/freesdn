@@ -45,14 +45,15 @@ from typing import Any, ClassVar
 
 import httpx
 
+from app.adapters.appliance_tls import appliance_tls_context
 from app.adapters.base import (
     AdapterManifest,
     AdapterResult,
     BaseAdapter,
-    Capability,
     DeviceTypeCapabilities,
     DiscoveredDevice,
 )
+from app.adapters.capabilities import Capability
 from app.adapters.exceptions import (
     AdapterAuthenticationError,
     AdapterConnectionError,
@@ -135,7 +136,7 @@ class UniFiProtectAdapter(BaseAdapter):
         password: str,
         *,
         port: int = 443,
-        verify_ssl: bool = False,
+        verify_ssl: bool = True,
         timeout: float = 15.0,
         **kwargs: Any,
     ) -> None:
@@ -148,9 +149,10 @@ class UniFiProtectAdapter(BaseAdapter):
         self.base_url = f"{scheme}://{host}:{port}"
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
-            verify=verify_ssl,
+            verify=appliance_tls_context(verify_ssl, adapter_id="unifi_protect"),
+            trust_env=False,
             timeout=httpx.Timeout(timeout),
-            follow_redirects=True,
+            follow_redirects=False,
             limits=httpx.Limits(
                 max_connections=10,
                 max_keepalive_connections=5,
@@ -288,17 +290,17 @@ class UniFiProtectAdapter(BaseAdapter):
                     device_type="nvr",
                     status="online" if nvr.get("isStation") else "online",
                     serial_number=nvr.get("hardwareId"),
-                    capabilities=[Capability.STREAM_VIEW],
+                    capabilities=[Capability.CAMERA_STREAM_RTSP],
                     raw_data=nvr,
                 )
             )
 
         for cam in self._bootstrap.get("cameras") or []:
-            caps = [Capability.STREAM_VIEW]
+            caps = [Capability.CAMERA_STREAM_RTSP]
             if cam.get("featureFlags", {}).get("hasMotionZones"):
-                caps.append(Capability.MOTION_DETECTION)
+                caps.append(Capability.CAMERA_MOTION_DETECTION)
             if cam.get("featureFlags", {}).get("hasPanTilt"):
-                caps.append(Capability.PTZ)
+                caps.append(Capability.CAMERA_PTZ)
             devices.append(
                 DiscoveredDevice(
                     mac_address=cam.get("mac", "") or "",

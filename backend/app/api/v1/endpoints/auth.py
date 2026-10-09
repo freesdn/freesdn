@@ -835,6 +835,65 @@ async def _get_active_user(
     return current_user
 
 
+async def _get_security_mutation_user(
+    request: Request,
+    current_user: Annotated[User, Depends(_get_active_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    token: Annotated[str | None, Depends(oauth2_scheme)] = None,
+) -> User:
+    """Serialize credential changes before touching keys or verifying passwords.
+
+    Authentication may have become stale while another transaction owns the
+    account. Refresh the identity under its row lock, then recheck the original
+    credential. Keep this lock until the endpoint commits or rolls back.
+    """
+    authenticated_state = (
+        current_user.token_version,
+        current_user.hashed_password,
+        current_user.role,
+        current_user.organization_id,
+    )
+    result = await session.execute(
+        select(User)
+        .where(User.id == current_user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    user = result.scalar_one_or_none()
+    if (
+        user is None
+        or not user.is_active
+        or user.deleted_at is not None
+        or authenticated_state
+        != (user.token_version, user.hashed_password, user.role, user.organization_id)
+    ):
+        raise HTTPException(
+            status_code=401, detail="Authentication changed; retry with current credentials"
+        )
+
+    if not token:
+        from app.core.cookies import ACCESS_COOKIE
+
+        token = request.cookies.get(ACCESS_COOKIE)
+    # verify_token defaults to the access-token contract.
+    payload = await verify_token(token) if token else None
+    if (
+        payload is None
+        or payload.get("scope")
+        or payload.get("sub") != str(user.id)
+        or payload.get("tv", 0) != user.token_version
+    ):
+        raise HTTPException(status_code=401, detail="Session was revoked or expired")
+    jti = payload.get("jti")
+    if jti and await _session_is_revoked_for_access_jti(session, str(jti)):
+        raise HTTPException(status_code=401, detail="Session was revoked")
+    if type(user.token_version) is not int or not 0 <= user.token_version < 2**31 - 1:
+        raise HTTPException(
+            status_code=409, detail="Account revocation counter cannot be advanced safely"
+        )
+    return user
+
+
 @router.post("/token", response_model=TokenResponse)
 async def login_for_access_token(
     request: Request,
@@ -1194,7 +1253,7 @@ async def refresh_token(
         )
 
     # Atomically consume the old refresh token (rotation). R6: use a
-    # SET-NX claim instead of a plain blacklist write so two concurrent
+    # Durable unique claim instead of a plain blacklist write so two concurrent
     # requests presenting the SAME refresh token can't both pass and both mint
     # a fresh pair (which would orphan a per-device session row and defeat
     # targeted revocation). Exactly one caller wins the claim; the loser 401s.
@@ -1329,7 +1388,7 @@ async def get_current_user_info(
 async def change_password(
     request: Request,
     password_data: PasswordChangeRequest,
-    current_user: Annotated[User, Depends(_get_active_user)],
+    current_user: Annotated[User, Depends(_get_security_mutation_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
     """Change current user's password."""
@@ -1453,7 +1512,7 @@ async def logout(
 @router.post("/logout-all")
 async def logout_all(
     response: Response,
-    current_user: Annotated[User, Depends(_get_active_user)],
+    current_user: Annotated[User, Depends(_get_security_mutation_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
     """
@@ -1873,22 +1932,17 @@ async def reset_password(
             detail="Invalid or expired reset token",
         )
 
-    from app.core.token_blacklist import blacklist_token as _blacklist
-    from app.core.token_blacklist import is_token_blacklisted as _is_blacklisted
+    from app.core.token_blacklist import claim_token_jti
 
     reset_jti = payload.get("jti")
     reset_exp = payload.get("exp")
 
-    # SECURITY: blacklist the reset token FIRST to prevent race conditions.
-    # If two requests arrive simultaneously, only the first will proceed.
-    if reset_jti:
-        if await _is_blacklisted(reset_jti):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid or expired reset token",
-            )
-        if reset_exp:
-            await _blacklist(reset_jti, reset_exp)
+    # A committed unique claim serializes consumption across all processes.
+    if not reset_jti or not reset_exp or not await claim_token_jti(reset_jti, reset_exp):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
 
     user_id = payload.get("sub")
     # SECURITY: SELECT FOR UPDATE to prevent concurrent password resets
@@ -1896,7 +1950,7 @@ async def reset_password(
         select(User).where(User.id == UUID(user_id), User.deleted_at.is_(None)).with_for_update()
     )
     user = result.scalar_one_or_none()
-    if user is None:
+    if user is None or int(reset_exp) <= datetime.now(UTC).timestamp():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired reset token",
@@ -1915,6 +1969,12 @@ async def reset_password(
             detail="Reset token is no longer valid. Request a new reset link.",
         )
 
+    # Refuse invalid or exhausted database counters before changing credentials.
+    if type(user.token_version) is not int or not 0 <= user.token_version < 2**31 - 1:
+        raise HTTPException(
+            status_code=409, detail="Account revocation counter cannot be advanced safely"
+        )
+
     # Validate new password strength
     is_valid, errors = validate_password_strength(data.new_password)
     if not is_valid:
@@ -1927,7 +1987,7 @@ async def reset_password(
     user.failed_login_attempts = 0
     user.locked_until = None
     # SECURITY: invalidate ALL existing sessions — attacker's stolen tokens die instantly
-    user.token_version = (getattr(user, "token_version", 0) or 0) + 1
+    user.token_version = user_tv + 1
     # SECURITY: also revoke API keys so they die with the bump
     from app.models.api_keys import revoke_user_api_keys
 
@@ -1946,7 +2006,7 @@ async def reset_password(
 
 @router.post("/mfa/setup", response_model=MfaSetupResponse)
 async def mfa_setup(
-    current_user: Annotated[User, Depends(_get_active_user)],
+    current_user: Annotated[User, Depends(_get_security_mutation_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
     data: MfaSetupRequest | None = None,
 ) -> Any:
@@ -2013,7 +2073,7 @@ async def mfa_setup(
 @router.post("/mfa/enable")
 async def mfa_enable(
     data: MfaEnableRequest,
-    current_user: Annotated[User, Depends(_get_active_user)],
+    current_user: Annotated[User, Depends(_get_security_mutation_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
     """Confirm MFA enrolment by verifying a TOTP code."""
@@ -2073,7 +2133,7 @@ async def mfa_enable(
 @router.post("/mfa/disable")
 async def mfa_disable(
     data: MfaDisableRequest,
-    current_user: Annotated[User, Depends(_get_active_user)],
+    current_user: Annotated[User, Depends(_get_security_mutation_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
     """Disable MFA (requires password confirmation)."""
@@ -2125,7 +2185,7 @@ async def login_mfa(
     try:
         payload = _jwt.decode(
             data.mfa_token,
-            settings.SECRET_KEY,
+            settings.jwt_signing_key,
             algorithms=[settings.ALGORITHM],
             options={"require": ["exp", "iat", "sub"]},
             audience="freesdn-mfa",
@@ -2262,10 +2322,13 @@ async def login_mfa(
     # it must not be replayable to mint a second session. This runs AFTER
     # verification on purpose; running it before meant a wrong code consumed
     # the challenge and the user could never retry with the right one.
-    from app.core.token_blacklist import blacklist_token as _blacklist
+    from app.core.token_blacklist import claim_token_jti
 
-    if mfa_jti and mfa_exp:
-        await _blacklist(mfa_jti, mfa_exp)
+    if not mfa_jti or not mfa_exp or not await claim_token_jti(mfa_jti, mfa_exp):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA token",
+        )
 
     # Successful MFA verification — issue tokens
     user.last_login = datetime.now(UTC)

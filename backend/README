@@ -1,0 +1,45 @@
+FreeSDN backend
+===============
+
+The backend provides the FastAPI API, PostgreSQL data model and migrations,
+Celery workers, and managed-device adapters for FreeSDN Community Edition /
+Early Access. It is one component of the appliance, not a standalone supported
+deployment or an independently qualified PyPI distribution.
+
+Use the repository's root README, install.sh and docker/RELEASE-SUPPORT for
+installation and supported deployment boundaries. The qualified appliance
+build uses the committed Poetry lockfile and the shipped Docker recipes.
+Do not substitute a bare uvicorn process for the complete deployment.
+
+Development
+-----------
+Create an isolated environment with the Python and Poetry versions used by the
+Dockerfile and CI. From this directory, validate metadata with:
+
+    poetry check --lock
+
+Install development dependencies with:
+
+    poetry install --no-root
+
+Configure disposable database and broker services before running integration
+tests or migrations. The application migration entry point is:
+
+    poetry run python scripts/migrate.py
+
+Use ADAPTER_READ_ONLY=true and synthetic/disposable device targets for tests.
+Keep credentials out of source control. Preserve the vault encryption keys
+separately from data backups; authentication recovery may require a separate
+JWT signing-key change. Follow docker/TOKEN-REVOCATION-UPGRADING in the parent
+directory for the qualified recovery boundary.
+
+Release status
+--------------
+A version string, metadata check or wheel build is not evidence that a public
+release, upgrade, hardware workflow, backup restore or enterprise service level
+has passed acceptance. Refer to the exact candidate commit and its qualification
+record. The backend's runtime version comes from app/__init__.py; pyproject.toml
+and the frontend metadata mirror it.
+
+License: AGPL-3.0-only. See LICENSE in the repository root. Bundled dependencies
+have their own terms, listed in THIRD_PARTY_LICENSES.md where applicable.

@@ -1,34 +1,3 @@
-# Trivy ignore file — documented, time-bounded suppressions.
-# Each entry records WHY a finding is accepted and the trigger to revisit it.
-# Reviewed every release; remove entries the moment the upstream gate clears.
-
-# ---------------------------------------------------------------------------
-# starlette 1.x advisories — RESOLVED 2026-08-15, suppressions REMOVED.
-#
-# These entries (CVE-2026-48818, CVE-2026-54283) were held because the fixed
-# starlette required fastapi >= 0.137, whose internal `_IncludedRouter` route
-# type broke prometheus-fastapi-instrumentator. That revisit trigger has since
-# fired and nobody deleted the entries: the project now ships fastapi 0.138.2,
-# starlette 1.3.1 and instrumentator 8.0.2 (see backend/poetry.lock).
-#
-# Verified 2026-08-15: `pip-audit` against the current lock with NO --ignore-vuln
-# flags reports "No known vulnerabilities found". Keeping the suppressions would
-# have silently blinded the gate to any FUTURE advisory carrying these IDs.
-#
-# Lesson worth keeping: a time-bounded suppression only works if someone checks
-# the trigger. Re-run pip-audit with no ignores before adding another one.
-
-# ---------------------------------------------------------------------------
-# caddy edge binary — Go stdlib advisory, UPSTREAM-GATED (cannot remediate yet).
-#
-# CVE-2026-42504 — net/textproto MIME header decode (DoS) in the Go stdlib that
-# the official caddy:2.11.4-alpine image is compiled with (Go 1.26.3; fixed in
-# Go 1.26.4). 2.11.4 is the latest caddy release, so the bundled toolchain only
-# advances when caddy publishes a rebuild. The edge image already runs
-# `apk upgrade` for OS packages (openssl, etc.); the caddy binary itself is the
-# remaining gap. Exposure is limited: the edge terminates TLS and reverse-proxies
-# trusted internal services; it is not a general-purpose mail/MIME processor.
-#
-# Revisit trigger: caddy ships a release built with Go >= 1.26.4 -> bump the
-# `caddy:` base tag in frontend/Dockerfile and delete this line.
-CVE-2026-42504
+# No active vulnerability suppressions.
+# Scan final release images with --ignorefile /dev/null and include unfixed findings.
+# The former Caddy Go waiver was resolved by the pinned source build.

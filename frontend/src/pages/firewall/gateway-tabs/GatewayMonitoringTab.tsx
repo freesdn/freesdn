@@ -9,9 +9,11 @@
  * since they are only consumed by this tab and only run when the tab is active.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { validatedAggregate } from './gatewayAggregateRead';
+import { GatewayLiveReadNotice } from './GatewayLiveReadNotice';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Activity, HardDrive, RefreshCw, Shield } from 'lucide-react';
+import { Activity, HardDrive, Shield } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatsGrid, type StatItem } from '@/components/ui/stats-grid';
@@ -52,23 +54,29 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
     enabled: !!gatewayId && isActive,
   });
 
-  const { data: telegrafData, isLoading: telegrafLoading } = useQuery({
+  const { data: telegrafData, isPending: telegrafPending, isFetching: telegrafFetching, isError: telegrafError, refetch: retryTelegraf } = useQuery({
     queryKey: ['gateways', gatewayId, 'telegraf'],
-    queryFn: () => gatewayApi.getTelegrafStatus(gatewayId),
+    queryFn: async () => validatedAggregate(await gatewayApi.getTelegrafStatus(gatewayId), gatewayId, 'telegraf'),
+    retry: false,
     enabled: !!gatewayId && isActive,
   });
+  const telegrafLoading = telegrafPending || telegrafFetching;
 
-  const { data: monitData, isLoading: monitLoading } = useQuery({
+  const { data: monitData, isPending: monitPending, isFetching: monitFetching, isError: monitError, refetch: retryMonit } = useQuery({
     queryKey: ['gateways', gatewayId, 'monit'],
-    queryFn: () => gatewayApi.getMonitStatus(gatewayId),
+    queryFn: async () => validatedAggregate(await gatewayApi.getMonitStatus(gatewayId), gatewayId, 'monit'),
+    retry: false,
     enabled: !!gatewayId && isActive,
   });
+  const monitLoading = monitPending || monitFetching;
 
-  const { data: netflowData, isLoading: netflowLoading } = useQuery({
+  const { data: netflowData, isPending: netflowPending, isFetching: netflowFetching, isError: netflowError, refetch: retryNetflow } = useQuery({
     queryKey: ['gateways', gatewayId, 'netflow'],
-    queryFn: () => gatewayApi.getNetFlowStatus(gatewayId),
+    queryFn: async () => validatedAggregate(await gatewayApi.getNetFlowStatus(gatewayId), gatewayId, 'netflow'),
+    retry: false,
     enabled: !!gatewayId && isActive,
   });
+  const netflowLoading = netflowPending || netflowFetching;
 
   const { data: healthCheckData } = useQuery({
     queryKey: ['gateways', gatewayId, 'health-check'],
@@ -228,10 +236,12 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
           <CardDescription>{t('GatewayMonitoringTab.monit.description')}</CardDescription>
         </CardHeader>
         {monitLoading ? (
-          <CardContent><div className="flex items-center gap-2 text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" /> {t('GatewayMonitoringTab.monit.loading')}</div></CardContent>
+          <GatewayLiveReadNotice loading />
+        ) : monitError || !monitData ? (
+          <GatewayLiveReadNotice onRetry={() => { void retryMonit(); }} />
         ) : (() => {
-          const m = monitData?.data || {};
-          const svc = m.service || {};
+          const m = monitData?.data?.monit || {};
+
           const services = m.services || [];
           const tests = m.tests || [];
           const alerts = m.alerts || [];
@@ -240,7 +250,7 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
               <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
                   <dt className="text-muted-foreground">{t('GatewayMonitoringTab.monit.service')}</dt>
-                  <dd><Badge variant={svc.status === 'running' ? 'default' : 'secondary'}>{svc.status || t('GatewayMonitoringTab.common.unknown')}</Badge></dd>
+                  <dd><Badge variant={m.running ? 'default' : 'secondary'}>{m.running ? t('GatewayLiveRead.running') : t('GatewayLiveRead.stopped')}</Badge></dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground">{t('GatewayMonitoringTab.monit.monitoredServices')}</dt>
@@ -263,7 +273,7 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
                       <thead className="bg-muted sticky top-0"><tr><th className="px-3 py-2 text-left">{t('GatewayMonitoringTab.monit.table.name')}</th><th className="px-3 py-2 text-left">{t('GatewayMonitoringTab.monit.table.type')}</th><th className="px-3 py-2 text-left">{t('GatewayMonitoringTab.monit.table.address')}</th><th className="px-3 py-2 text-left">{t('GatewayMonitoringTab.monit.table.enabled')}</th></tr></thead>
                       <tbody>
                         {services.map((s: any, i: number) => (
-                          <tr key={i} className="border-t"><td className="px-3 py-1.5 font-medium">{s.name}</td><td className="px-3 py-1.5">{s.type}</td><td className="px-3 py-1.5 font-mono">{s.address || s.path || '-'}</td><td className="px-3 py-1.5"><Badge variant={String(s.enabled) === '1' ? 'default' : 'secondary'}>{String(s.enabled) === '1' ? t('GatewayMonitoringTab.common.yes') : t('GatewayMonitoringTab.common.no')}</Badge></td></tr>
+                          <tr key={i} className="border-t"><td className="px-3 py-1.5 font-medium">{s.name}</td><td className="px-3 py-1.5">{s.type}</td><td className="px-3 py-1.5 font-mono">{s.address || s.path || '-'}</td><td className="px-3 py-1.5"><Badge variant={s.enabled === true ? 'default' : 'secondary'}>{s.enabled === true ? t('GatewayMonitoringTab.common.yes') : t('GatewayMonitoringTab.common.no')}</Badge></td></tr>
                         ))}
                       </tbody>
                     </table>
@@ -282,11 +292,13 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
           <CardDescription>{t('GatewayMonitoringTab.telegraf.description')}</CardDescription>
         </CardHeader>
         {telegrafLoading ? (
-          <CardContent><div className="flex items-center gap-2 text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" /> {t('GatewayMonitoringTab.telegraf.loading')}</div></CardContent>
+          <GatewayLiveReadNotice loading />
+        ) : telegrafError || !telegrafData ? (
+          <GatewayLiveReadNotice onRetry={() => { void retryTelegraf(); }} />
         ) : (() => {
-          const tg = telegrafData?.data || {};
-          const settings = tg.settings || {};
-          const svc = tg.service || {};
+          const tg = telegrafData?.data?.telegraf || {};
+          const settings = tg;
+
           const tEnabled = settings.enabled === '1' || settings.enabled === true;
           return (
             <CardContent noOffset>
@@ -297,7 +309,7 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
                 </div>
                 <div>
                   <dt className="text-muted-foreground">{t('GatewayMonitoringTab.telegraf.service')}</dt>
-                  <dd><Badge variant={svc.status === 'running' ? 'default' : 'secondary'}>{svc.status || t('GatewayMonitoringTab.common.unknown')}</Badge></dd>
+                  <dd><Badge variant={tg.running ? 'default' : 'secondary'}>{tg.running ? t('GatewayLiveRead.running') : t('GatewayLiveRead.stopped')}</Badge></dd>
                 </div>
                 {settings.graphite_server && (
                   <div>
@@ -309,6 +321,12 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
                   <div>
                     <dt className="text-muted-foreground">{t('GatewayMonitoringTab.telegraf.influxUrl')}</dt>
                     <dd className="font-mono text-xs">{settings.influx_url}</dd>
+                  </div>
+                )}
+                {settings.influx_v2_url && (
+                  <div>
+                    <dt className="text-muted-foreground">{t('GatewayMonitoringTab.telegraf.influxV2Url')}</dt>
+                    <dd className="font-mono text-xs">{settings.influx_v2_url}</dd>
                   </div>
                 )}
                 {settings.influx_database && (
@@ -330,12 +348,14 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
           <CardDescription>{t('GatewayMonitoringTab.netflow.description')}</CardDescription>
         </CardHeader>
         {netflowLoading ? (
-          <CardContent><div className="flex items-center gap-2 text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" /> {t('GatewayMonitoringTab.netflow.loading')}</div></CardContent>
+          <GatewayLiveReadNotice loading />
+        ) : netflowError || !netflowData ? (
+          <GatewayLiveReadNotice onRetry={() => { void retryNetflow(); }} />
         ) : (() => {
-          const nf = netflowData?.data || {};
-          const settings = nf.settings || {};
-          const svc = nf.service || {};
-          const nfEnabled = settings.capture_enabled === '1' || settings.capture_enabled === true;
+          const nf = netflowData?.data?.netflow || {};
+          const settings = nf;
+
+          const nfEnabled = settings.enabled === true;
           return (
             <CardContent noOffset>
               <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -345,7 +365,7 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
                 </div>
                 <div>
                   <dt className="text-muted-foreground">{t('GatewayMonitoringTab.netflow.service')}</dt>
-                  <dd><Badge variant={svc.status === 'running' ? 'default' : 'secondary'}>{svc.status || t('GatewayMonitoringTab.common.unknown')}</Badge></dd>
+                  <dd><Badge variant={nf.running ? 'default' : 'secondary'}>{nf.running ? t('GatewayLiveRead.running') : t('GatewayLiveRead.stopped')}</Badge></dd>
                 </div>
                 {settings.interfaces && (
                   <div>
@@ -353,10 +373,10 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
                     <dd className="font-mono text-xs">{settings.interfaces}</dd>
                   </div>
                 )}
-                {settings.collect_version && (
+                {settings.version && (
                   <div>
                     <dt className="text-muted-foreground">{t('GatewayMonitoringTab.netflow.version')}</dt>
-                    <dd className="font-medium">v{settings.collect_version}</dd>
+                    <dd className="font-medium">v{settings.version}</dd>
                   </div>
                 )}
                 {settings.collect_port && (

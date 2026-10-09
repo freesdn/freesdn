@@ -11,6 +11,7 @@
 - Destructive direct gateway ops (system reboot/halt, bulk rule delete) require
   an explicit confirm.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -67,14 +68,21 @@ async def test_push_vlan_reports_unsynced_on_nonthrowing_fail(monkeypatch):
     from app.api.v1.endpoints import network as net
 
     netobj = SimpleNamespace(
-        vlan_id=10, name="v10", description="", external_id="e", controller_id=uuid4(), site_id=uuid4()
+        vlan_id=10,
+        name="v10",
+        description="",
+        external_id="e",
+        controller_id=uuid4(),
+        site_id=uuid4(),
     )
     ctrl = SimpleNamespace(id=netobj.controller_id)
     session = MagicMock()
     session.execute = AsyncMock(
         return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=ctrl))
     )
-    monkeypatch.setattr(net, "_get_adapter_for_controller", AsyncMock(return_value=_FakeAdapter(ok=False)))
+    monkeypatch.setattr(
+        net, "_get_adapter_for_controller", AsyncMock(return_value=_FakeAdapter(ok=False))
+    )
 
     out = await net._push_vlan_to_controller(session, netobj, "create")
     assert out["controller_synced"] is False
@@ -86,14 +94,21 @@ async def test_push_vlan_synced_on_nonthrowing_success(monkeypatch):
     from app.api.v1.endpoints import network as net
 
     netobj = SimpleNamespace(
-        vlan_id=10, name="v10", description="", external_id="e", controller_id=uuid4(), site_id=uuid4()
+        vlan_id=10,
+        name="v10",
+        description="",
+        external_id="e",
+        controller_id=uuid4(),
+        site_id=uuid4(),
     )
     ctrl = SimpleNamespace(id=netobj.controller_id)
     session = MagicMock()
     session.execute = AsyncMock(
         return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=ctrl))
     )
-    monkeypatch.setattr(net, "_get_adapter_for_controller", AsyncMock(return_value=_FakeAdapter(ok=True)))
+    monkeypatch.setattr(
+        net, "_get_adapter_for_controller", AsyncMock(return_value=_FakeAdapter(ok=True))
+    )
 
     out = await net._push_vlan_to_controller(session, netobj, "update")
     assert out["controller_synced"] is True
@@ -166,7 +181,9 @@ class _BlockAdapter:
         return False
 
     async def block_client(self, mac):
-        return SimpleNamespace(success=False, error_code=None, error="controller rejected", message=None)
+        return SimpleNamespace(
+            success=False, error_code=None, error="controller rejected", message=None
+        )
 
 
 @pytest.mark.asyncio
@@ -202,9 +219,15 @@ def test_fabric_run_dict_redacts_for_non_author():
     from app.api.v1.endpoints.fabric import _run_dict
 
     r = SimpleNamespace(
-        id=uuid4(), connection_id=uuid4(), source_event_type="x",
-        trigger_payload={"secret": "v"}, success=True, steps=[{"a": 1}], error="boom",
-        duration_ms=5, created_at=None,
+        id=uuid4(),
+        connection_id=uuid4(),
+        source_event_type="x",
+        trigger_payload={"secret": "v"},
+        success=True,
+        steps=[{"a": 1}],
+        error="boom",
+        duration_ms=5,
+        created_at=None,
     )
     full = _run_dict(r, full=True)
     assert full["trigger_payload"] == {"secret": "v"} and full["steps"] == [{"a": 1}]
@@ -286,7 +309,9 @@ async def test_collector_reload_restricted_to_super_admin(monkeypatch):
     from app.modules.collector.services import manager as cmgr
 
     reload_mock = AsyncMock()
-    monkeypatch.setattr(cmgr, "get_collector_manager", lambda: SimpleNamespace(reload_config=reload_mock))
+    monkeypatch.setattr(
+        cmgr, "get_collector_manager", lambda: SimpleNamespace(reload_config=reload_mock)
+    )
 
     def _session():
         cfg = SimpleNamespace(organization_id=uuid4())
@@ -389,9 +414,18 @@ async def test_gateway_create_rejects_null_site_for_site_limited(monkeypatch):
 
     with pytest.raises(HTTPException) as exc:
         await svc.create_gateway(
-            org_id=uuid4(), name="g", description=None, vendor=GatewayVendor.OPNSENSE,
-            host="10.0.0.1", port=443, verify_ssl=False, site_id=None,
-            api_key="k", api_secret="s", username=None, password=None,
+            org_id=uuid4(),
+            name="g",
+            description=None,
+            vendor=GatewayVendor.OPNSENSE,
+            host="10.0.0.1",
+            port=443,
+            verify_ssl=False,
+            site_id=None,
+            api_key="k",
+            api_secret="s",
+            username=None,
+            password=None,
         )
     assert exc.value.status_code == 422
 
@@ -439,9 +473,7 @@ async def test_session_revocation_helper_blocks_revoked_jti():
     assert await is_session_revoked_for_access_jti(revoked_session, "jti-1") is True
 
     legacy_session = MagicMock()
-    legacy_session.execute = AsyncMock(
-        return_value=MagicMock(first=MagicMock(return_value=None))
-    )
+    legacy_session.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=None)))
     assert await is_session_revoked_for_access_jti(legacy_session, "jti-2") is False
 
 
@@ -499,8 +531,13 @@ def test_validate_target_host_blocks_metadata_and_linklocal():
 
     # blocked: metadata (incl. non-link-local Alibaba/Oracle/AWS-IPv6), loopback, link-local
     for bad in (
-        "169.254.169.254", "100.100.100.200", "192.0.0.192", "fd00:ec2::254",
-        "127.0.0.1", "fe80::1", "::1",
+        "169.254.169.254",
+        "100.100.100.200",
+        "192.0.0.192",
+        "fd00:ec2::254",
+        "127.0.0.1",
+        "fe80::1",
+        "::1",
     ):
         with pytest.raises(ValueError):
             validate_target_host(bad, allow_private=True)
@@ -644,7 +681,11 @@ def test_mikrotik_tool_fetch_blocks_metadata_allows_rfc1918():
     blocklist), while still allowing RFC1918 (LAN artifact fetch)."""
     from app.services.adapter_mikrotik_system import _validate_tool_fetch_payload
 
-    for bad in ("http://100.100.100.200/latest/meta-data/", "http://169.254.169.254/", "http://127.0.0.1/x"):
+    for bad in (
+        "http://100.100.100.200/latest/meta-data/",
+        "http://169.254.169.254/",
+        "http://127.0.0.1/x",
+    ):
         with pytest.raises(HTTPException):
             _validate_tool_fetch_payload({"url": bad, "mode": "http"})
     # RFC1918 LAN target is allowed (no raise)
@@ -874,7 +915,12 @@ async def test_remote_migrate_vm_requires_confirm_when_deleting_source(monkeypat
     )
     with pytest.raises(HTTPException) as exc:
         await hv.remote_migrate_vm(
-            uuid4(), body, node="pve1", vmid=100, session=MagicMock(), current_user=_user(role="site_admin")
+            uuid4(),
+            body,
+            node="pve1",
+            vmid=100,
+            session=MagicMock(),
+            current_user=_user(role="site_admin"),
         )
     assert exc.value.status_code == 409
 
@@ -888,7 +934,14 @@ async def test_cert_upload_requires_confirm(monkeypatch):
     from app.modules.hypervisor.schemas import UploadCertificateRequest
 
     monkeypatch.setattr(hv, "_get_controller", AsyncMock(return_value=SimpleNamespace(id=uuid4())))
+    monkeypatch.setattr(
+        "app.services.adapter_staging.AdapterStagingService.is_read_only",
+        staticmethod(lambda: False),
+    )
     body = UploadCertificateRequest(
+        request_id=uuid4(),
+        expected_digest="a" * 64,
+        force=True,
         certificates="-----BEGIN CERTIFICATE-----",
         key="-----BEGIN PRIVATE KEY-----",
         confirmed=False,
@@ -935,7 +988,9 @@ async def test_opnsense_get_raw_enforces_response_size_guard():
     from app.adapters._response_limits import ResponseTooLargeError
     from app.adapters.opnsense.client import OPNsenseClient
 
-    client = OPNsenseClient(host="192.0.2.1", api_key="k", api_secret="s", port=443, verify_ssl=False)
+    client = OPNsenseClient(
+        host="192.0.2.1", api_key="k", api_secret="s", port=443, verify_ssl=False
+    )
     huge = MagicMock(status_code=200)
     huge.headers = {"Content-Length": str(65 * 1024 * 1024)}  # > 64 MB cap
     client._client = AsyncMock()

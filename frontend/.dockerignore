@@ -13,3 +13,16 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 README.md
+
+# Generated duplicates of the authoritative .ts configs. freesdn/.gitignore
+# ignores these, so they never reach the public repo -- but they DO sit in the
+# build context, and Vite resolves vite.config.js BEFORE vite.config.ts. A stale
+# compiled copy therefore silently overrides the real config in every local and
+# Docker build while the published repo, which only has the .ts, builds
+# correctly. That is how the image came to be built from a config that does not
+# ship: it produced a 35% larger initial bundle (835,723 vs 617,734 gzip bytes)
+# and left build.manifest off, so scripts/check-build-budget.mjs died on ENOENT
+# before it measured anything.
+vite.config.js
+vite.config.d.ts
+tailwind.config.js

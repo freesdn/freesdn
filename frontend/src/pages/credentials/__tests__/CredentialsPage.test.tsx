@@ -104,3 +104,75 @@ describe('CredentialsPage surfaces mutation outcomes to the operator', () => {
     ).not.toBeInTheDocument();
   });
 });
+
+
+const mockTest = credentialsApi.test as unknown as Mock;
+
+async function openHttpCheck(user: ReturnType<typeof userEvent.setup>) {
+  expect(await screen.findByText('core-switch-admin')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: /actions for core-switch-admin/i }));
+  await user.click(await screen.findByRole('menuitem', { name: /^test$/i }));
+  return screen.findByRole('dialog');
+}
+
+async function submitHttpCheck(user: ReturnType<typeof userEvent.setup>) {
+  const dialog = await openHttpCheck(user);
+  await user.type(within(dialog).getByRole('textbox', { name: /target host/i }), '10.251.9.1');
+  await user.click(within(dialog).getByRole('button', { name: /test connection/i }));
+  await waitFor(() => expect(mockTest).toHaveBeenCalledWith('cred-1', '10.251.9.1'));
+}
+
+describe('CredentialsPage distinguishes HTTP connectivity from authentication', () => {
+  beforeEach(() => { mockTest.mockReset(); });
+
+  it('explains before submission that the HTTP check does not verify authentication', async () => {
+    renderWithProviders(<CredentialsPage />);
+    const dialog = await openHttpCheck(userEvent.setup());
+    expect(within(dialog).getByText(/does not verify authentication/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/does not prove that the credential is valid/i)).toBeInTheDocument();
+    expect(mockTest).not.toHaveBeenCalled();
+  });
+
+  it('shows the successful backend diagnostic without claiming credential validation', async () => {
+    const message = 'HTTP connectivity check returned HTTP 204 via HTTPS; authentication was not verified.';
+    mockTest.mockResolvedValue({ data: { success: true, message } });
+    renderWithProviders(<CredentialsPage />);
+    await submitHttpCheck(userEvent.setup());
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.getByText('HTTP Target Reachable')).toBeInTheDocument();
+    expect(screen.queryByText(/credential was validated/i)).not.toBeInTheDocument();
+  });
+
+  it('uses an honest fallback when a successful response has no diagnostic', async () => {
+    mockTest.mockResolvedValue({ data: { success: true, message: '' } });
+    renderWithProviders(<CredentialsPage />);
+    await submitHttpCheck(userEvent.setup());
+    expect(await screen.findByText('The HTTP target responded; authentication was not verified.')).toBeInTheDocument();
+    expect(screen.queryByText(/credential was validated/i)).not.toBeInTheDocument();
+  });
+
+  it.each([401, 403, 500])('shows HTTP %i as a failed connectivity check', async (status) => {
+    const message = `HTTP connectivity check returned HTTP ${status} via HTTPS; authentication was not verified.`;
+    mockTest.mockResolvedValue({ data: { success: false, message } });
+    renderWithProviders(<CredentialsPage />);
+    await submitHttpCheck(userEvent.setup());
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.getByText('HTTP Check Failed')).toBeInTheDocument();
+    expect(screen.queryByText('HTTP Target Reachable')).not.toBeInTheDocument();
+  });
+
+  it('does not claim authentication failed when an unsuccessful response has no diagnostic', async () => {
+    mockTest.mockResolvedValue({ data: { success: false, message: '' } });
+    renderWithProviders(<CredentialsPage />);
+    await submitHttpCheck(userEvent.setup());
+    expect(await screen.findByText('The HTTP connectivity check did not succeed; authentication was not verified.')).toBeInTheDocument();
+  });
+
+  it('shows a permission rejection without turning it into an authentication result', async () => {
+    mockTest.mockRejectedValue({ response: { data: { detail: 'Write permission required for this site' }, status: 403 } });
+    renderWithProviders(<CredentialsPage />);
+    await submitHttpCheck(userEvent.setup());
+    expect(await screen.findByText('Write permission required for this site')).toBeInTheDocument();
+    expect(screen.queryByText('HTTP Target Reachable')).not.toBeInTheDocument();
+  });
+});

@@ -1,0 +1,14 @@
+FROM python:3.14.8-alpine3.24
+# Exact upstream security backports; unknown Python source fails the build.
+COPY python-security/ /usr/local/share/freesdn/python-security/
+RUN python -B /usr/local/share/freesdn/python-security/apply_backports.py \
+    && python -B /usr/local/share/freesdn/python-security/apply_backports.py --verify
+RUN apk upgrade --no-cache
+# This service uses only the standard library. Remove the installer and its
+# vendored packages, including bootstrap wheels; no pip code runs in production.
+RUN python -m pip uninstall -y pip && rm -rf /usr/local/lib/python3.14/ensurepip
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+COPY backup_metrics.py /app/backup_metrics.py
+USER 65534:65534
+EXPOSE 9788
+ENTRYPOINT ["python", "/app/backup_metrics.py"]

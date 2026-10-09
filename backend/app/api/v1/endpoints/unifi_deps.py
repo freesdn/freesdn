@@ -43,10 +43,8 @@ def _decrypt_if_needed(value: str | None) -> str:
         return value
     try:
         return decrypt_credential(value)
-    except Exception:
-        # Bare value — return as-is so a mis-formatted credential
-        # row doesn't 500 the entire UniFi surface.
-        return value
+    except ValueError:
+        raise ValueError("Stored controller credential could not be decrypted") from None
 
 
 async def _get_controller(

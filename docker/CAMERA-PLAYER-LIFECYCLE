@@ -1,0 +1,30 @@
+Recorded playback browser ownership and failure cleanup
+========================================================
+
+RecordedHlsPlayer owns its session for one camera/time/quality selection. It
+releases that session once on unmount, selection change or terminal playback
+failure, even when the parent leaves the failed component visible. Release
+clears heartbeats and startup timers and aborts its pending manifest request
+and polling delay. A start response arriving after unmount is stopped without
+starting media polling. Late errors from an old player cannot affect its
+replacement session.
+
+The 30-second manifest deadline is independent of fetch and response-body
+completion, so a stalled network request does not bypass it. Not-ready404
+manifests and transient network errors can retry until that deadline. Successful
+playback, including a deliberately paused player, keeps its regular heartbeat.
+A transient heartbeat503 does not alone terminate working playback.
+
+A definitive heartbeat401/403/404 stops local activity and attempts cleanup.
+Start/manifest/heartbeat401/403 display failure without snapshot fallback;
+authority refusal is not repaired by changing transport. Heartbeat404 may use
+the existing unavailable callback to select another playback path. Existing
+recorded-source422 (undecodable, no fallback) and501 (unsupported, fallback)
+semantics remain. Demo mode still makes no real HLS start or manifest requests.
+
+Stop is best effort: a disconnected client or revoked permission may prevent
+its stop request from reaching/succeeding at the server. Server idle expiry
+remains necessary. This browser lifecycle fix is not a server-side viewer lease,
+aggregate quota, vendor interoperability guarantee or seamless owner failover.
+Component tests exercise actual React effects/timers with explicit API/media
+fixtures; packaged runtime/browser and hardware qualification remain separate.

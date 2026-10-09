@@ -102,6 +102,7 @@ from app.api.v1.endpoints import (
     adapters,
     agent_detail,
     agent_downloads,
+    agent_release_runtime,
     agent_release_upload,
     agent_schedules,
     agents,
@@ -212,6 +213,7 @@ api_router.include_router(tasks.router, prefix="/tasks", tags=["Tasks"])
 # FastAPI's first-match-wins doesn't swallow `/agents/schedules`,
 # `/agents/releases`, etc. as `agent_id="schedules"` etc.
 api_router.include_router(agent_downloads.router, prefix="/agents", tags=["Agent Downloads"])
+api_router.include_router(agent_release_runtime.router, prefix="/agents", tags=["Agent Releases"])
 api_router.include_router(agent_release_upload.router, prefix="/agents", tags=["Agent Releases"])
 api_router.include_router(agent_schedules.router, prefix="/agents", tags=["Agent Schedules"])
 api_router.include_router(agents.router, prefix="/agents", tags=["Agents"])

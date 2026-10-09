@@ -8,10 +8,11 @@ REST API endpoints for network management functionality.
 Implements CRUD operations for VLANs, WiFi networks, switch ports, and clients.
 """
 
+import asyncio
 import logging
 from datetime import UTC
 from typing import Annotated, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -42,6 +43,14 @@ from app.modules.network.service import (
     WifiNetworkService,
 )
 from app.services.device_control import DeviceControlService
+from app.services.discovery_jobs import (
+    DISCOVERY_TASK,
+    DiscoveryJobScope,
+    DiscoveryScopeUnavailable,
+    discovery_status,
+    get_discovery_scope,
+    reserve_discovery_scope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +136,68 @@ def _scope_job_site_id(
     granted = site_ids_for_request(user)
     detail = "A granted site_id is required for this operation" if granted else "Site not found"
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+
+async def _authorize_discovery_site(
+    db: AsyncSession, user: CurrentUser, site_id: UUID | None
+) -> UUID:
+    organization_id = _org_id(user)
+    _scope_job_site_id(user, site_id)
+    if site_id is not None:
+        from app.models.core import Site
+
+        query = select(Site.id).where(
+            Site.id == site_id,
+            Site.organization_id == organization_id,
+            Site.deleted_at.is_(None),
+            Site.is_active.is_(True),
+        )
+        if (await db.execute(query)).scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Site not found")
+    return organization_id
+
+
+async def _submit_discovery_job(db: AsyncSession, user: CurrentUser, site_id: UUID | None) -> str:
+    organization_id = await _authorize_discovery_site(db, user, site_id)
+    from app.tasks.discovery import discover_all_devices
+
+    task_id = str(uuid4())
+    scope = DiscoveryJobScope(
+        version=1,
+        task_id=UUID(task_id),
+        task_name=DISCOVERY_TASK,
+        organization_id=organization_id,
+        site_id=site_id,
+    )
+    try:
+        reserved = await reserve_discovery_scope(scope)
+    except DiscoveryScopeUnavailable:
+        reserved = False
+    if not reserved:
+        raise HTTPException(
+            status_code=503,
+            detail="Discovery ownership could not be reserved; task was not submitted",
+        )
+    try:
+        discover_all_devices.apply_async(
+            task_id=task_id,
+            kwargs={
+                "organization_id": str(organization_id),
+                "site_id": str(site_id) if site_id else None,
+            },
+        )
+    except Exception:
+        # Publication can succeed before acknowledgement fails. Keep the scope
+        # and exact task ID; never publish a second copy or delete its owner.
+        logger.warning("Discovery submission acknowledgement unavailable (task_id=%s)", task_id)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "Discovery submission outcome is unknown; inspect this task before retrying",
+                "task_id": task_id,
+            },
+        ) from None
+    return task_id
 
 
 # ============================================================================
@@ -528,19 +599,8 @@ async def _resolve_control_device_id(
 # ============================================================================
 
 
-@router.get(
-    "/vlans",
-    response_model=VlanListResponse,
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py list_vlans
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def list_vlans(
     db: DBSession,
     current_user: DeviceReadUser,
@@ -570,20 +630,8 @@ async def list_vlans(
     )
 
 
-@router.post(
-    "/vlans",
-    response_model=VlanResponse,
-    status_code=status.HTTP_201_CREATED,
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py create_vlan
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def create_vlan(
     vlan: VlanCreate,
     db: DBSession,
@@ -615,19 +663,8 @@ async def create_vlan(
         )
 
 
-@router.get(
-    "/vlans/{vlan_uuid}",
-    response_model=VlanResponse,
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py get_vlan (/vlans/{vlan_id})
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def get_vlan(
     vlan_uuid: UUID,
     db: DBSession,
@@ -673,19 +710,8 @@ async def update_vlan(
         )
 
 
-@router.delete(
-    "/vlans/{vlan_uuid}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py delete_vlan (/vlans/{vlan_id})
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def delete_vlan(
     vlan_uuid: UUID,
     db: DBSession,
@@ -710,19 +736,8 @@ async def delete_vlan(
 # ============================================================================
 
 
-@router.get(
-    "/wifi",
-    response_model=WifiNetworkListResponse,
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py list_wifi
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def list_wifi_networks(
     db: DBSession,
     current_user: DeviceReadUser,
@@ -750,20 +765,8 @@ async def list_wifi_networks(
     )
 
 
-@router.post(
-    "/wifi",
-    response_model=WifiNetworkResponse,
-    status_code=status.HTTP_201_CREATED,
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py create_wifi
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def create_wifi_network(
     wifi: WifiNetworkCreate,
     db: DBSession,
@@ -805,19 +808,8 @@ async def create_wifi_network(
         )
 
 
-@router.get(
-    "/wifi/{wifi_id}",
-    response_model=WifiNetworkResponse,
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py get_wifi
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def get_wifi_network(
     wifi_id: UUID,
     db: DBSession,
@@ -874,19 +866,8 @@ async def update_wifi_network(
         )
 
 
-@router.delete(
-    "/wifi/{wifi_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py delete_wifi
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def delete_wifi_network(
     wifi_id: UUID,
     db: DBSession,
@@ -959,19 +940,8 @@ async def disable_wifi_network(
 # ============================================================================
 
 
-@router.get(
-    "/devices/{device_id}/ports",
-    response_model=list[SwitchPortResponse],
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py list_ports
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def list_switch_ports(
     device_id: UUID,
     db: DBSession,
@@ -1151,19 +1121,8 @@ async def disable_port(
 # ============================================================================
 
 
-@router.get(
-    "/clients",
-    response_model=NetworkClientListResponse,
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py list_clients
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def list_network_clients(
     db: DBSession,
     current_user: DeviceReadUser,
@@ -1193,19 +1152,8 @@ async def list_network_clients(
     )
 
 
-@router.get(
-    "/clients/{client_id}",
-    response_model=NetworkClientResponse,
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py get_client
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def get_network_client(
     client_id: UUID,
     db: DBSession,
@@ -1266,19 +1214,8 @@ async def get_client_stats(
 # ============================================================================
 
 
-@router.get(
-    "/devices",
-    response_model=NetworkDeviceListResponse,
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py list_network_devices
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def list_network_devices(
     db: DBSession,
     current_user: DeviceReadUser,
@@ -1355,19 +1292,8 @@ async def get_device_stats(
 # ============================================================================
 
 
-@router.get(
-    "/topology",
-    response_model=TopologyResponse,
-    # SHADOWED, therefore hidden from the schema: this router is mounted at
-    # /api/v1/network by the LIFESPAN, after endpoints/network.py get_topology
-    # is mounted at the same prefix at app construction. Starlette returns the
-    # first full match, so no request can reach this handler. It was still
-    # published in the OpenAPI schema, which meant the generated frontend types
-    # described THIS response model while the core handler answered.
-    # Do not edit this body expecting an effect. See OPEN-ISSUES (network router
-    # collision) for the decision to remove or re-point these.
-    include_in_schema=False,
-)
+# Retired route: the canonical core network endpoint owns this method/path.
+# Kept as an internal compatibility helper; intentionally not registered.
 async def get_network_topology(
     db: DBSession,
     current_user: DeviceReadUser,
@@ -1399,15 +1325,8 @@ async def refresh_topology(
         f"Topology refresh requested by {current_user.user.email} "
         f"for org {current_user.organization_id}, site {site_id}"
     )
-    from app.tasks.discovery import discover_all_devices
-
-    # Scope to the caller's org (+ site) — never trigger a global,
-    # all-tenant discovery from a tenant-facing route.
-    task = discover_all_devices.delay(
-        organization_id=str(_org_id(current_user)),
-        site_id=str(site_id) if site_id else None,
-    )
-    return {"status": "accepted", "message": "Topology refresh started", "task_id": task.id}
+    task_id = await _submit_discovery_job(db, current_user, site_id)
+    return {"status": "accepted", "message": "Topology refresh started", "task_id": task_id}
 
 
 # ============================================================================
@@ -1539,16 +1458,11 @@ async def start_discovery(
         f"Discovery started by {current_user.user.email} "
         f"for org {current_user.organization_id}, site {site_id}, subnet {subnet}"
     )
-    from app.tasks.discovery import discover_all_devices
-
-    task = discover_all_devices.delay(
-        organization_id=str(_org_id(current_user)),
-        site_id=str(site_id) if site_id else None,
-    )
+    task_id = await _submit_discovery_job(db, current_user, site_id)
     return {
         "status": "accepted",
         "message": "Discovery started",
-        "task_id": task.id,
+        "task_id": task_id,
     }
 
 
@@ -1558,47 +1472,24 @@ async def get_discovery_status(
     current_user: DeviceReadUser,
     task_id: str = Query(..., description="Discovery task ID"),
 ) -> dict[str, Any]:
-    """Get the status of a discovery task."""
-    from celery.result import AsyncResult
-
-    from app.core.celery_app import celery_app
-    from app.tasks.base import get_task_progress
-
-    # First check the in-memory progress store (populated by FreeSDN tasks)
-    progress = get_task_progress(task_id)
-    if progress is not None:
-        result_data = progress.result or {}
-        return {
-            "task_id": progress.task_id,
-            "status": progress.status,
-            "progress": progress.progress,
-            "devices_found": result_data.get("devices_found", 0)
-            if isinstance(result_data, dict)
-            else 0,
-            "message": progress.message,
-            "started_at": progress.started_at.isoformat() if progress.started_at else None,
-            "completed_at": progress.completed_at.isoformat() if progress.completed_at else None,
-        }
-
-    # Fall back to the Celery result backend for tasks not tracked in-memory
-    async_result = AsyncResult(task_id, app=celery_app)
-    celery_state = async_result.state  # PENDING, STARTED, SUCCESS, FAILURE, etc.
-
-    response: dict[str, Any] = {
-        "task_id": task_id,
-        "status": celery_state.lower(),
-        "progress": 100 if celery_state == "SUCCESS" else 0,
-        "devices_found": 0,
-        "started_at": None,
-        "completed_at": None,
-    }
-
-    if celery_state == "SUCCESS" and isinstance(async_result.result, dict):
-        response["devices_found"] = async_result.result.get("devices_found", 0)
-    elif celery_state == "FAILURE":
-        response["message"] = str(async_result.result) if async_result.result else "Task failed"
-
-    return response
+    """Read a discovery result only after current tenant/site authorization."""
+    organization_id = _org_id(current_user)
+    try:
+        scope = await get_discovery_scope(task_id)
+    except DiscoveryScopeUnavailable:
+        raise HTTPException(
+            status_code=503, detail="Discovery status temporarily unavailable"
+        ) from None
+    if scope is None or str(scope.organization_id) != str(organization_id):
+        raise HTTPException(status_code=404, detail="Task not found")
+    await _authorize_discovery_site(db, current_user, scope.site_id)
+    try:
+        return await asyncio.to_thread(discovery_status, scope.task_id)
+    except Exception:
+        logger.warning("Discovery status backend unavailable (task_id=%s)", scope.task_id)
+        raise HTTPException(
+            status_code=503, detail="Discovery status temporarily unavailable"
+        ) from None
 
 
 # ============================================================================

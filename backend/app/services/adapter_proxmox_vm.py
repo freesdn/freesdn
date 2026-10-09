@@ -50,6 +50,8 @@ client layer by the ``ADAPTER_READ_ONLY`` gate.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import re
 from datetime import UTC, datetime
@@ -144,13 +146,34 @@ async def build_proxmox_adapter(ctrl: Controller) -> ProxmoxAdapter:
         token_secret=token_secret,
         realm=config.get("realm", "pam"),
     )
-    connected = await adapter.connect()
-    if not connected:
-        raise HTTPException(
-            502,
-            detail=f"failed to connect to Proxmox at {ctrl.host}",
-        )
+    try:
+        connected = await adapter.connect()
+        if not connected:
+            raise HTTPException(502, detail="failed to connect to Proxmox")
+    except BaseException:
+        # The caller cannot close an adapter that was never returned. This also
+        # covers cancellation by the bounded read-only task observer.
+        with contextlib.suppress(Exception):
+            async with asyncio.timeout(2):
+                await adapter.disconnect()
+        raise
     return adapter
+
+
+async def close_proxmox_adapter(adapter: ProxmoxAdapter) -> None:
+    """Bound cleanup without replacing an acknowledged result or write error.
+
+    Cancellation still propagates: an interrupted apply must retain its durable
+    claim, never turn into an invitation to redispatch.
+    """
+    try:
+        async with asyncio.timeout(2):
+            await adapter.disconnect()
+    except Exception as exc:
+        logger.warning(
+            "Proxmox adapter cleanup failed (%s); preserving operation outcome",
+            type(exc).__name__,
+        )
 
 
 def _validate_disk_size(size: str) -> str:
@@ -611,6 +634,18 @@ class GatewayProxmoxVmService(GatewayServiceBase):
         """
 
         async def _apply(c: Any) -> Any:
+            if c.feature in {"proxmox.vm.create", "proxmox.container.create"}:
+                from app.services.hypervisor_creation import apply_creation
+
+                return await apply_creation(self, c)
+            if c.feature in {"proxmox.vm.destroy", "proxmox.container.destroy"}:
+                from app.services.hypervisor_deletion import apply_deletion
+
+                return await apply_deletion(self, c)
+            if (c.payload or {}).get("guest_change_version") == 1:
+                from app.services.hypervisor_guest_changes import apply_guest_change
+
+                return await apply_guest_change(self, c)
             # Adapter assignment INSIDE try so a raise in
             # ``_get_controller`` / ``_get_proxmox_adapter`` doesn't
             # leak a half-built adapter.
@@ -652,15 +687,6 @@ class GatewayProxmoxVmService(GatewayServiceBase):
 
                 # Dispatch by feature. Each branch knows the arg shape.
                 f = c.feature
-                if f == "proxmox.vm.create":
-                    # create takes node + vmid + many kwargs from payload.
-                    # Allow-list filter (Item 9) drops any payload key
-                    # outside the documented Proxmox create grammar so a
-                    # malicious staging row can't smuggle ``script`` or
-                    # similar arbitrary-execution flags.
-                    raw = {k: v for k, v in payload.items() if k not in ("node", "vmid")}
-                    kwargs = _filter_vm_create_payload(raw)
-                    return await method(node, vmid, force=True, **kwargs)
                 if f == "proxmox.vm.config":
                     config = payload.get("config") or {
                         k: v for k, v in payload.items() if k not in ("node", "vmid")
@@ -668,11 +694,6 @@ class GatewayProxmoxVmService(GatewayServiceBase):
                     if isinstance(config, dict):
                         config = _filter_vm_create_payload(config)
                     return await method(node, vmid, config, force=True)
-                if f == "proxmox.vm.destroy":
-                    vm_type = payload.get("vm_type", "qemu")
-                    if vm_type not in ("qemu", "lxc"):
-                        raise HTTPException(400, detail="vm_type must be 'qemu' or 'lxc'")
-                    return await method(node, vmid, vm_type, force=True)
                 if f == "proxmox.vm.clone":
                     newid = int(payload.get("newid", 0))
                     if newid <= 0:
@@ -759,7 +780,7 @@ class GatewayProxmoxVmService(GatewayServiceBase):
                 raise HTTPException(400, detail=f"unhandled feature={c.feature!r}")
             finally:
                 if adapter is not None:
-                    await adapter.disconnect()
+                    await close_proxmox_adapter(adapter)
 
         return _apply
 

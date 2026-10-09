@@ -1,0 +1,17 @@
+Proxmox authentication on generic controller paths
+=================================================
+
+Generic discovery and the shared controller adapter factory now carry stored
+Proxmox token IDs, decrypted token secrets and configured realms. The later
+deep-sync adapter receives the same options. API-token preference over ticket
+login, encrypted and legacy plaintext credentials, and default pam behavior
+match the existing controller connection tests. No vendor registry expansion
+or change to hypervisor inventory ownership is included.
+
+Qualification exercises the actual Proxmox adapter/client and PostgreSQL
+against synthetic protocol peers. It does not establish new live hardware
+compatibility or modify a Proxmox node. Generic discovery still excludes
+hypervisor nodes from network inventory; the hypervisor module owns them.
+Provider discovery error propagation, ticket/connection cache authority,
+malformed legacy secret handling, background caller grants and concurrent
+post-check effects remain separate reviews.

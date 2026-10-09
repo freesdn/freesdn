@@ -1,0 +1,25 @@
+# FreeSDN security rebuild; upstream runtime contract is preserved.
+#
+# This was the only one of the fifteen release components pulled rather than
+# built, and the only one with FIXABLE findings. The published image is compiled
+# with an older Go toolchain: on 2026-10-09 both the pinned v1.91.1 and the then
+# current v1.93.0 carried CVE-2026-78667 and CVE-2026-97031, two HIGH Go
+# standard-library advisories fixed in 1.26.9 and 1.27.2. Upstream had not
+# rebuilt, so there was no clean tag to move to.
+#
+# Rebuilding it here brings it into line with the other thirteen source-built
+# components and takes the release set to zero fixable HIGH/CRITICAL findings.
+# Only the compiled binary is replaced; the entrypoint, user and runtime
+# configuration all remain upstream's.
+FROM golang:1.27.2-alpine3.24 AS builder
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local
+WORKDIR /build
+COPY redis-exporter-build/go.mod redis-exporter-build/go.sum ./
+RUN go mod download all && go mod verify
+RUN go build -mod=readonly -trimpath \
+        -ldflags="-s -w -X main.BuildVersion=1.93.0-freesdn" \
+        -o /out/redis_exporter github.com/oliver006/redis_exporter
+
+FROM oliver006/redis_exporter:v1.93.0
+COPY --from=builder /out/redis_exporter /redis_exporter
+COPY redis-exporter-build/LICENSE redis-exporter-build/NOTICE /usr/share/licenses/redis-exporter/

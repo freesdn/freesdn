@@ -118,6 +118,7 @@ celery_app = Celery(
         # Notification retry queue — re-drives transient SMTP/Slack/5xx
         # failures with exponential backoff before flipping rows to DLQ.
         "app.tasks.notification_retry",
+        "app.tasks.notification_outbox",
         # Webhook delivery retry — exponential backoff before WebhookDeadLetter.
         # Every dispatch site imports this lazily inside a function (so only the
         # API process ever imports the module); without this entry no worker
@@ -253,6 +254,11 @@ celery_app.conf.update(
     beat_schedule_filename="celerybeat-schedule",
     # Periodic task schedule
     beat_schedule={
+        "publish-in-app-events": {
+            "task": "notifications.publish_in_app_events",
+            "schedule": 5.0,
+            "options": {"queue": "default"},
+        },
         # Worker heartbeat - every 30 seconds
         # Proves worker is alive for the health endpoint (O(1) Redis GET)
         # Routed to "default" queue so the main worker (which always listens
@@ -293,6 +299,11 @@ celery_app.conf.update(
             "options": {"queue": "sync"},
         },
         # Cleanup old events - daily at 3 AM
+        "cleanup-token-revocations": {
+            "task": "app.tasks.maintenance.cleanup_token_revocations",
+            "schedule": crontab(minute="*/5"),
+            "options": {"queue": "default"},
+        },
         "cleanup-old-events": {
             "task": "app.tasks.maintenance.cleanup_old_events",
             "schedule": crontab(hour=3, minute=0),
@@ -448,10 +459,11 @@ celery_app.conf.update(
             "schedule": crontab(minute="*/15"),
             "options": {"queue": "default"},
         },
-        # Security: audit data cleanup - daily at 4:30 AM
+        # Security: bounded audit cleanup; continued work comes from database
+        # state at the next tick, not an unbounded transaction or chained task.
         "security-cleanup-audit-data": {
             "task": "security.cleanup_audit_data",
-            "schedule": crontab(hour=4, minute=30),
+            "schedule": crontab(minute="*/5"),
             "options": {"queue": "default"},
         },
         # Security: anomaly detection - every 30 minutes
@@ -537,10 +549,16 @@ celery_app.conf.update(
             "schedule": crontab(minute="7"),
             "options": {"queue": "metrics"},
         },
-        # Backup: run scheduled backups - every 15 minutes
+        "sla-deliver-scheduled-reports": {
+            "task": "app.tasks.sla.deliver_scheduled_reports",
+            "schedule": crontab(minute="*"),
+            "options": {"queue": "metrics"},
+        },
+        # Five-field user calendars have minute precision. A 15-minute picker
+        # delays non-quarter-hour deadlines even when their next_run_at is correct.
         "backup-run-scheduled": {
             "task": "backup.run_scheduled",
-            "schedule": crontab(minute="*/15"),
+            "schedule": crontab(minute="*"),
             "options": {"queue": "default"},
         },
         # Backup: cleanup expired backups - daily at 2:30 AM
@@ -702,6 +720,12 @@ celery_app.conf.update(
         },
         # Proxmox: poll cluster quorum + node up/down + emit hypervisor.*
         # on transitions (node offline/online, inquorate, unreachable) - every 2 min.
+        # Resume observation from durable UPIDs; never resubmit the mutation.
+        "hypervisor-poll-tasks": {
+            "task": "hypervisor.poll_tasks",
+            "schedule": 30.0,
+            "options": {"queue": "sync"},
+        },
         "hypervisor-poll-health": {
             "task": "hypervisor.poll_health",
             "schedule": crontab(minute="*/2"),
@@ -760,17 +784,31 @@ celery_app.conf.update(
 # via transport options so it can resolve + follow the promoted master on a
 # failover. Merge — don't clobber the existing visibility_timeout.
 if str(broker_url).startswith("sentinel://") or str(result_backend).startswith("sentinel://"):
-    _sentinel_opts: dict[str, object] = {"master_name": settings.REDIS_MASTER_NAME}
-    if settings.REDIS_PASSWORD:
-        _sentinel_opts["sentinel_kwargs"] = {"password": settings.REDIS_PASSWORD}
+    _sentinel_opts: dict[str, object] = {
+        "master_name": settings.REDIS_MASTER_NAME,
+        "sentinel_kwargs": {
+            "password": settings.REDIS_PASSWORD or None,
+            "socket_connect_timeout": 1,
+            "socket_timeout": 1,
+        },
+    }
     celery_app.conf.broker_transport_options = {
         **(celery_app.conf.broker_transport_options or {}),
         **_sentinel_opts,
+        # A removed Docker endpoint may black-hole TCP until the kernel's
+        # timeout. Bound each attempt so Kombu can rediscover the new master.
+        "socket_connect_timeout": 5,
+        "socket_timeout": 5,
+        "retry_on_timeout": False,
     }
     celery_app.conf.result_backend_transport_options = {
         **(celery_app.conf.result_backend_transport_options or {}),
         **_sentinel_opts,
     }
+    # The Redis result backend reads these top-level settings, not the broker
+    # transport options. Both producers and worker result writers need bounds.
+    celery_app.conf.redis_socket_connect_timeout = 5
+    celery_app.conf.redis_socket_timeout = 5
 
 
 # ===========================================
@@ -917,7 +955,7 @@ def on_task_failure(
     **_: Any,
 ) -> None:
     """Log task failure."""
-    logger.error("Task failed: %s[%s] error=%s", sender.name, task_id, exception)
+    logger.error("Task failed: %s[%s]", sender.name, task_id)
 
 
 # ===========================================
@@ -942,47 +980,38 @@ def _get_solo_redis() -> _redis.Redis:
     return _solo_redis
 
 
-# Per-acquisition lock tokens, so release only deletes a lock THIS run still
-# owns. Keyed by task_name → token. Without this, an unconditional DEL let a slow
-# run (that outran its TTL) delete a DIFFERENT run's freshly-acquired lock,
-# defeating the overlap guard precisely under the slow-run condition it exists
-# for. Keeping the bool/str-name signatures means no caller changes.
-_solo_lock_tokens: dict[str, str] = {}
-
+# The token belongs to the caller's acquisition, not a shared task-name slot.
+# A stale run must not release a newer run after expiration and reacquisition.
 # Compare-and-delete: only DEL if the value still matches our token.
 _SOLO_RELEASE_LUA = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
 
 
-def acquire_solo_lock(task_name: str, ttl_seconds: int = 300) -> bool:
-    """Try to acquire a distributed solo-lock for *task_name*.
+def acquire_solo_lock(task_name: str, ttl_seconds: int = 300) -> str | None:
+    """Return this acquisition's token, or None while another lease is held.
 
-    Returns True if the lock was acquired (caller should proceed).
-    Returns False if another instance is already running (caller should skip).
-    The lock auto-expires after *ttl_seconds* as a safety net, and release is
-    owner-checked so a run can never delete a foreign run's lock.
+    The caller must retain the returned token and pass it to release_solo_lock.
+    Expiry bounds abandoned leases; it does not fence a run that outlives one.
     """
     import uuid
 
     r = _get_solo_redis()
     key = f"freesdn:solo:{task_name}"
     token = uuid.uuid4().hex
-    acquired = r.set(key, token, nx=True, ex=ttl_seconds)
-    if acquired:
-        _solo_lock_tokens[task_name] = token
-    return bool(acquired)
+    return token if r.set(key, token, nx=True, ex=ttl_seconds) else None
 
 
-def release_solo_lock(task_name: str) -> None:
-    """Release the solo-lock for *task_name* — only if we still own it."""
-    token = _solo_lock_tokens.pop(task_name, None)
-    if token is None:
-        return  # never acquired here, or already released — don't touch the key
-    r = _get_solo_redis()
+def release_solo_lock(task_name: str, token: str) -> None:
+    """Release only this acquisition; never look up another run's token."""
+    if not isinstance(token, str) or not token:
+        raise ValueError("A solo-lock acquisition token is required")
     key = f"freesdn:solo:{task_name}"
     try:
+        r = _get_solo_redis()
         r.eval(_SOLO_RELEASE_LUA, 1, key, token)
-    except Exception:  # pragma: no cover - release must never raise into a task finally
-        logger.debug("solo-lock release failed for %s", task_name, exc_info=True)
+    except Exception:
+        # Cleanup failure must not retry already-completed task effects or mask
+        # the original task error. The lease will expire at its existing TTL.
+        logger.warning("Solo-lock release unavailable for %s", task_name)
 
 
 # ===========================================

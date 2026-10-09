@@ -1,0 +1,40 @@
+Security coverage for source-built FFmpeg
+========================================
+
+The FFmpeg source build is not an Alpine FFmpeg package. OS/language package
+scanners alone may miss it, and binary autodetection did not identify the
+inspected shared build. An empty package scan is insufficient evidence.
+
+scripts/check_native_media_security.py resolves a local image to an immutable
+ID and creates an inspection container that is never started. It disables pulls
+and networking and overrides declared image volumes with tmpfs to avoid creating
+anonymous persistent volumes. It removes only its own labeled container. It does
+not contact cameras, start media streams, mount the Docker socket into an image,
+or execute the inspected image's programs. Docker CLI access remains privileged.
+
+The checker reads bounded regular files from docker cp's tar stream without
+extracting archive paths. It compares the source lock and recipes with the
+checked-out repository, verifies the bundled upstream archive against its pin,
+and verifies all four media executables and seven shared-library files against
+the recorded build hashes. The source signature is verified during the image
+build; this inspection checks the pinned material. A self-reported build ledger
+is not signed container provenance or proof of reproducible compilation. Keep
+image signing/attestation and actual runtime qualification as separate gates.
+
+It creates an explicit CycloneDX FFmpeg component bound to the inspected image,
+source archive and runtime inventory, then scans its CPE with Grype. Matching
+must be enabled, the database valid and no more than 24 hours old, and findings
+must not be suppressed. A synthetic FFmpeg 4.0 metadata-only control must match
+known vulnerabilities; no old executable is installed or run. Any actual native
+finding requires review and fails this gate. Current database results cannot
+establish the absence of undisclosed or unrecorded vulnerabilities.
+
+CI requires this check for backend and go2rtc alongside the complete-image
+Trivy scan, preserving JSON evidence even on failure. CI pins the Grype download
+by version and SHA-256. The local security-audit.py --docker/all path requires
+the native check for BACKEND_IMAGE and, when selected, GO2RTC_IMAGE, using the
+immutable image ID from Trivy's report. Missing tools, source material, scanner
+results or identity binding fail rather than becoming a clean scan. Use Linux
+and a new --work-dir for each attempt; the evidence directory is intentionally
+not overwritten. These checks do not expand the supported architecture/hardware
+matrix or establish an enterprise service-level guarantee.

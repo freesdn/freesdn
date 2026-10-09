@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from app.models.core import CredentialScope, CredentialType
 
@@ -49,9 +50,9 @@ class CredentialCreate(BaseSchema):
     description: str | None = Field(None, max_length=2000)
     credential_type: CredentialType = CredentialType.BASIC_AUTH
     scope: CredentialScope = CredentialScope.GLOBAL
-    vendor: str | None = Field(None, max_length=128)
+    vendor: str | None = Field(None, max_length=100)
     site_id: UUID | None = None
-    username: str | None = Field(None, max_length=512)
+    username: str | None = Field(None, max_length=255)
     password: str | None = Field(None, max_length=16384)  # Will be stored encrypted
     api_key: str | None = Field(None, max_length=16384)
     token: str | None = Field(None, max_length=16384)
@@ -71,29 +72,50 @@ class CredentialCreate(BaseSchema):
         return _validate_options_size(v) or v
 
 
+def _omit_update_default(schema: dict[str, Any]) -> None:
+    schema.pop("default", None)
+
+
 class CredentialUpdate(BaseSchema):
     """Update an existing credential."""
 
-    name: str | None = Field(None, min_length=1, max_length=255)
+    name: str | SkipJsonSchema[None] = Field(
+        None, min_length=1, max_length=255, json_schema_extra=_omit_update_default
+    )
     description: str | None = Field(None, max_length=2000)
-    credential_type: CredentialType | None = None
-    scope: CredentialScope | None = None
-    vendor: str | None = Field(None, max_length=128)
+    credential_type: CredentialType | SkipJsonSchema[None] = Field(
+        None, json_schema_extra=_omit_update_default
+    )
+    scope: CredentialScope | SkipJsonSchema[None] = Field(
+        None, json_schema_extra=_omit_update_default
+    )
+    vendor: str | None = Field(None, max_length=100)
     site_id: UUID | None = None
-    username: str | None = Field(None, max_length=512)
+    username: str | None = Field(None, max_length=255)
     password: str | None = Field(None, max_length=16384)
     api_key: str | None = Field(None, max_length=16384)
     token: str | None = Field(None, max_length=16384)
     snmp_community: str | None = Field(None, max_length=512)
     ssh_private_key: str | None = Field(None, max_length=16384)
     certificate: str | None = Field(None, max_length=16384)
-    is_default: bool | None = None
-    options: dict[str, Any] | None = None
+    is_default: bool | SkipJsonSchema[None] = Field(None, json_schema_extra=_omit_update_default)
+    options: dict[str, Any] | SkipJsonSchema[None] = Field(
+        None, json_schema_extra=_omit_update_default
+    )
 
     @field_validator("options")
     @classmethod
     def _options_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
         return _validate_options_size(v)
+
+    @field_validator("name", "credential_type", "scope", "is_default", "options", mode="before")
+    @classmethod
+    def _reject_explicit_null(cls, value: Any) -> Any:
+        # Omitted update fields are excluded from the patch. Explicit null must
+        # not violate a required column or persist JSON null in options.
+        if value is None:
+            raise ValueError("Field cannot be null; omit it to leave the value unchanged")
+        return value
 
 
 class CredentialResponse(BaseSchema):

@@ -1,0 +1,25 @@
+Camera snapshots through Fabric
+================================
+
+The cameras.snapshot Fabric operation now resolves its stored actor from the
+current database state before asking StreamService to capture a frame. It requires
+an active, undeleted author in the invocation organization, the cameras.view
+permission at the camera's site, and the camera/group live-access grant enforced
+by the normal camera API. The camera itself must be undeleted and belong to that
+organization. Missing identity, unknown targets and failed authorization lookups
+refuse before credentials are decrypted or a snapshot connection is opened.
+
+Current author grants cannot widen an explicitly narrower accessible_site_ids
+supplied by the invocation context. An empty explicit set denies site-bound
+cameras. Existing hybrid behavior for authors with no grants and org-level
+resources with no site is unchanged, as are the administrator rules implemented
+by the shared CurrentUser and camera-access services.
+
+Successful snapshots still return their image/jpeg artifact, size and hash.
+Authorization refusals and capture failures use fixed messages, avoiding raw
+client exceptions that could contain device URLs or credentials.
+
+This covers the Fabric snapshot handler, separately from native automation camera
+actions. It does not add transaction-wide authorization fencing, revoke a frame
+already captured, change camera group policy, or claim that other Fabric handlers
+have all been qualified. No device write operation is introduced.

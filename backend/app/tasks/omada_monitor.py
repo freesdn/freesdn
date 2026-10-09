@@ -264,9 +264,10 @@ async def _poll_omada_health() -> dict[str, Any]:
 @celery_app.task(bind=True, name="omada.poll_health", soft_time_limit=240, time_limit=300)
 def poll_health(self) -> dict[str, Any]:
     """Periodic Omada controller poll → omada.event.* transitions."""
-    if not acquire_solo_lock("omada.poll_health", ttl_seconds=180):
+    lock_token = acquire_solo_lock("omada.poll_health", ttl_seconds=180)
+    if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:
         return asyncio.run(_poll_omada_health())
     finally:
-        release_solo_lock("omada.poll_health")
+        release_solo_lock("omada.poll_health", lock_token)

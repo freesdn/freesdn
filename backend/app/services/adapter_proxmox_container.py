@@ -49,7 +49,7 @@ from app.adapters.proxmox.adapter import ProxmoxAdapter
 from app.adapters.validation import validate_id
 from app.models.core import Controller
 from app.services.adapter_base import GatewayServiceBase
-from app.services.adapter_proxmox_vm import build_proxmox_adapter
+from app.services.adapter_proxmox_vm import build_proxmox_adapter, close_proxmox_adapter
 from app.services.adapter_redaction import redact_list, redact_secrets
 
 logger = logging.getLogger(__name__)
@@ -292,6 +292,18 @@ class GatewayProxmoxContainerService(GatewayServiceBase):
         """
 
         async def _apply(c: Any) -> Any:
+            if c.feature in {"proxmox.vm.create", "proxmox.container.create"}:
+                from app.services.hypervisor_creation import apply_creation
+
+                return await apply_creation(self, c)
+            if c.feature in {"proxmox.vm.destroy", "proxmox.container.destroy"}:
+                from app.services.hypervisor_deletion import apply_deletion
+
+                return await apply_deletion(self, c)
+            if (c.payload or {}).get("guest_change_version") == 1:
+                from app.services.hypervisor_guest_changes import apply_guest_change
+
+                return await apply_guest_change(self, c)
             adapter: ProxmoxAdapter | None = None
             try:
                 ctrl = await self._get_controller(c.controller_id, c.organization_id)
@@ -328,15 +340,6 @@ class GatewayProxmoxContainerService(GatewayServiceBase):
                 await preflight_gate(adapter, c.feature, c.operation, payload)
 
                 f = c.feature
-                if f == "proxmox.container.create":
-                    if not payload.get("ostemplate"):
-                        raise HTTPException(
-                            400,
-                            detail="container.create requires ostemplate",
-                        )
-                    raw = {k: v for k, v in payload.items() if k not in ("node", "vmid")}
-                    kwargs = _filter_ct_create_payload(raw)
-                    return await method(node, vmid, force=True, **kwargs)
                 if f == "proxmox.container.config":
                     config = payload.get("config") or {
                         k: v for k, v in payload.items() if k not in ("node", "vmid")
@@ -344,9 +347,6 @@ class GatewayProxmoxContainerService(GatewayServiceBase):
                     if isinstance(config, dict):
                         config = _filter_ct_create_payload(config)
                     return await method(node, vmid, config, force=True)
-                if f == "proxmox.container.destroy":
-                    # delete_vm reuses for LXC — pass vm_type="lxc"
-                    return await method(node, vmid, "lxc", force=True)
                 if f == "proxmox.container.clone":
                     newid = int(payload.get("newid", 0))
                     if newid <= 0:
@@ -364,7 +364,10 @@ class GatewayProxmoxContainerService(GatewayServiceBase):
                 if f == "proxmox.container.migrate":
                     target = validate_id(str(payload.get("target", "")), label="target")
                     online = bool(payload.get("online", False))
-                    return await method(node, vmid, target, online, force=True)
+                    restart = payload.get("restart", False)
+                    if not isinstance(restart, bool):
+                        raise HTTPException(400, detail="restart must be a boolean")
+                    return await method(node, vmid, target, online, restart=restart, force=True)
                 if f == "proxmox.container.remote_migrate":
                     target_endpoint = payload.get("target_endpoint", "")
                     target_storage = payload.get("target_storage", "")
@@ -394,7 +397,7 @@ class GatewayProxmoxContainerService(GatewayServiceBase):
                 raise HTTPException(400, detail=f"unhandled feature={c.feature!r}")
             finally:
                 if adapter is not None:
-                    await adapter.disconnect()
+                    await close_proxmox_adapter(adapter)
 
         return _apply
 

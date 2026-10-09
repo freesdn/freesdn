@@ -43,6 +43,7 @@ import { useForm, type DefaultValues, type UseFormReturn, type FieldValues } fro
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { ZodType } from 'zod';
 import { Loader2, AlertCircle } from 'lucide-react';
+import { getApiErrorMessage } from '@/lib/api/client';
 import {
   Dialog,
   DialogContent,
@@ -202,14 +203,5 @@ export function FormDialog<T extends FieldValues>({
 /** Extract a human-readable error message from anything thrown during submit. */
 function extractErrorMessage(err: unknown): string {
   if (!err) return 'An unexpected error occurred';
-  // Axios-style error
-  if (typeof err === 'object' && err !== null && 'response' in err) {
-    const r = (err as { response?: { data?: { detail?: unknown; message?: unknown } } }).response;
-    const detail = r?.data?.detail;
-    if (typeof detail === 'string') return detail;
-    const message = r?.data?.message;
-    if (typeof message === 'string') return message;
-  }
-  if (err instanceof Error) return err.message;
-  return String(err);
+  return getApiErrorMessage(err, String(err));
 }

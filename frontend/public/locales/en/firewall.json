@@ -106,6 +106,7 @@
       "siteBindHintOmada": "Bind to a site for cross-device referencing with Omada and other controllers",
       "cannotBeChanged": "(cannot be changed)",
       "verifySsl": "Verify SSL certificate",
+      "insecureTlsWarning": "Certificate verification is disabled. The gateway identity will not be checked, exposing credentials to interception. Prefer a trusted certificate or install the device CA in the backend trust store.",
       "syncConfiguration": "Sync Configuration",
       "enableAutoSync": "Enable automatic sync",
       "syncInterval": "Sync Interval (seconds)"
@@ -525,7 +526,7 @@
       "certificates": "Certificates",
       "certificateAuthorities": "Certificate Authorities",
       "revocationLists": "Revocation Lists",
-      "empty": "No certificates or CAs found in the trust store.",
+      "empty": "No certificates, CAs or configured revocation lists were returned.",
       "columns": {
         "name": "Name",
         "dn": "DN",
@@ -533,7 +534,9 @@
         "inUse": "In Use",
         "ca": "CA",
         "type": "Type"
-      }
+      },
+      "unavailable": "Trust-store inventory is unavailable. No counts can be confirmed.",
+      "retry": "Retry trust-store check"
     },
     "acme": {
       "title": "ACME / Let's Encrypt",
@@ -544,16 +547,20 @@
       "actions": "Actions",
       "certificatesHeading": "ACME Certificates",
       "accountsHeading": "ACME Accounts",
-      "empty": "No ACME configuration found. Install os-acme-client to manage Let's Encrypt certificates.",
+      "empty": "No ACME certificates, accounts, validations or actions were returned.",
       "columns": {
         "name": "Name",
         "domains": "Domain(s)",
         "account": "Account",
         "lastUpdate": "Last Update",
-        "status": "Status",
+        "status": "Configuration",
         "email": "Email",
         "ca": "CA"
-      }
+      },
+      "unavailable": "ACME inventory is unavailable. Check plugin support and gateway access.",
+      "retry": "Retry ACME check",
+      "enabled": "Enabled in configuration",
+      "disabled": "Disabled in configuration"
     },
     "syslog": {
       "title": "Syslog Destinations",
@@ -589,7 +596,12 @@
         "status": "Status",
         "daysRemaining": "Days Remaining",
         "expires": "Expires"
-      }
+      },
+      "unavailable": "Certificate status is unavailable. No health assessment can be made.",
+      "retry": "Retry certificate check",
+      "unknown": "Unknown expiry",
+      "unknownExpiry": "Some certificate expiry dates could not be read. Verify them on the gateway.",
+      "empty": "No certificates were returned."
     }
   },
   "GatewayServicesTab": {
@@ -1071,7 +1083,9 @@
       "uptime": "Uptime",
       "version": "Version",
       "wanIp": "WAN IP",
-      "wanIpDescription": "Latency: {{latency}}ms, Loss: {{loss}}%",
+      "wanIpDescription": "Latency: {{latency}}, Loss: {{loss}}",
+      "latencyValue": "{{value}} ms",
+      "lossValue": "{{value}}%",
       "services": "Services",
       "servicesRunning": "{{count}} running",
       "servicesStopped": "{{count}} stopped",
@@ -1116,13 +1130,24 @@
       "latency": "Latency:",
       "loss": "Loss:",
       "jitter": "Jitter:",
-      "default": "Default"
+      "default": "Default",
+      "empty": "No WAN gateways reported",
+      "states": {
+        "online": "Online",
+        "offline": "Offline",
+        "none": "Unmonitored",
+        "pending": "Pending",
+        "loss": "Packet loss",
+        "delay": "High latency",
+        "unknown": "Unknown"
+      }
     },
     "liveStatus": {
       "title": "Live System Status",
       "description": "Real-time data from the gateway"
     },
     "common": {
+      "unknown": "Unknown",
       "yes": "Yes",
       "no": "No",
       "enabled": "Enabled",
@@ -1138,16 +1163,23 @@
     "actions": {
       "revert": "Revert",
       "createBackup": "Create Backup",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "deleteBackup": "Delete backup {{filename}}"
     },
     "backups": {
+      "creationUnsupported": "Creating a saved backup is not supported by this adapter. Available history and configuration export are separate operations.",
       "title": "Configuration Backups",
-      "description": "Gateway configuration snapshots"
+      "description": "Gateway configuration snapshots",
+      "loading": "Loading backup history…",
+      "unavailable": "Backup history is unavailable. No conclusion can be made about saved backups.",
+      "retry": "Retry backup history"
     },
     "diff": {
       "title": "Configuration Diff",
       "description": "Compare running config vs last backup",
       "generating": "Generating diff…",
+      "unavailable": "Comparison unavailable. Both configuration documents must be retrieved successfully; no conclusion about changes can be made.",
+      "retry": "Retry comparison",
       "changesDetected": "Changes Detected",
       "noChanges": "No Changes"
     },
@@ -1985,10 +2017,13 @@
       "activeDecisions": "Active Decisions",
       "columns": {
         "ipRange": "IP/Range",
-        "reason": "Reason",
+        "reason": "Origin / scope",
         "action": "Action",
-        "expires": "Expires"
-      }
+        "expires": "Duration",
+        "source": "Source"
+      },
+      "alertWindow": "Showing {{shown}} of {{total}} alerts. Only the first 50 records are retrieved.",
+      "decisionWindow": "Showing {{shown}} of {{total}} decisions. Only the first 50 records are retrieved."
     },
     "dialogs": {
       "clearAlerts": {
@@ -2060,7 +2095,8 @@
       "service": "Service",
       "graphiteServer": "Graphite Server",
       "influxUrl": "InfluxDB URL",
-      "influxDatabase": "InfluxDB Database"
+      "influxDatabase": "InfluxDB Database",
+      "influxV2Url": "InfluxDB v2 URL"
     },
     "netflow": {
       "title": "NetFlow / sFlow",
@@ -2287,7 +2323,10 @@
       "system": "System"
     },
     "searchFirewall": "Search firewall logs...",
-    "searchSystem": "Search system logs..."
+    "searchSystem": "Search system logs...",
+    "loading": "Loading current logs…",
+    "unavailable": "Logs are unavailable. A successful empty read has not been confirmed.",
+    "retry": "Retry logs"
   },
   "OpenWrtTab": {
     "common": {
@@ -3681,22 +3720,34 @@
     "title": "RADIUS Users",
     "siteLabel": "Site:",
     "description": "Stage built-in RADIUS user create / delete (WPA-Enterprise + port auth). Changes apply via the Pending Changes drawer.",
-    "form": { "create": "Stage a new RADIUS user" },
+    "form": {
+      "create": "Stage a new RADIUS user"
+    },
     "fields": {
       "name": "Username",
       "namePlaceholder": "e.g. alice",
       "password": "Password",
       "passwordPlaceholder": "RADIUS secret"
     },
-    "actions": { "stageCreate": "Stage create", "cancel": "Cancel", "stage": "Stage" },
+    "actions": {
+      "stageCreate": "Stage create",
+      "cancel": "Cancel",
+      "stage": "Stage"
+    },
     "loadError": "Failed to load RADIUS users:",
     "unknownError": "Unknown error",
     "loading": "Loading RADIUS users…",
     "empty": "No RADIUS users on this controller. Use the form above to stage one.",
     "toast": {
-      "created": { "title": "RADIUS user create staged" },
-      "deleted": { "title": "RADIUS user delete staged" },
-      "stageFailed": { "title": "Failed to stage change" }
+      "created": {
+        "title": "RADIUS user create staged"
+      },
+      "deleted": {
+        "title": "RADIUS user delete staged"
+      },
+      "stageFailed": {
+        "title": "Failed to stage change"
+      }
     },
     "dialog": {
       "createTitle": "Stage RADIUS user?",
@@ -3710,8 +3761,14 @@
     "title": "Hotspot",
     "siteLabel": "Site:",
     "description": "Stage guest vouchers + portal operators. Changes apply via the Pending Changes drawer.",
-    "kinds": { "voucher": "Vouchers", "operator": "Operators" },
-    "form": { "createVoucher": "Generate guest vouchers", "createOperator": "Stage a portal operator" },
+    "kinds": {
+      "voucher": "Vouchers",
+      "operator": "Operators"
+    },
+    "form": {
+      "createVoucher": "Generate guest vouchers",
+      "createOperator": "Stage a portal operator"
+    },
     "fields": {
       "kind": "Resource",
       "count": "Count",
@@ -3733,9 +3790,15 @@
     "loading": "Loading…",
     "empty": "Nothing here yet. Use the form above to stage a create.",
     "toast": {
-      "created": { "title": "Hotspot create staged" },
-      "deleted": { "title": "Hotspot delete staged" },
-      "stageFailed": { "title": "Failed to stage change" }
+      "created": {
+        "title": "Hotspot create staged"
+      },
+      "deleted": {
+        "title": "Hotspot delete staged"
+      },
+      "stageFailed": {
+        "title": "Failed to stage change"
+      }
     },
     "dialog": {
       "createTitle": "Stage hotspot create?",
@@ -3783,5 +3846,13 @@
     "actions": {
       "syncNow": "Sync Now"
     }
+  },
+  "GatewayLiveRead": {
+    "loading": "Loading gateway status...",
+    "unavailable": "Gateway status is unavailable. Retry the read or check the device connection and support.",
+    "retry": "Retry",
+    "running": "Running",
+    "stopped": "Stopped",
+    "summary": "Live device summary"
   }
 }

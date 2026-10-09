@@ -1,0 +1,48 @@
+Manual task publication and progress ownership
+=============================================
+
+Manual submission first reserves an organization-scoped progress row under a
+new UUID using Redis SET NX with the existing 24-hour retention period. If the
+reservation fails or the key already exists, the endpoint returns 503 and does
+not call the publisher. The selected ID is passed explicitly to Celery. There
+is no progress write after publication, so a fast worker completion cannot be
+replaced with a pending row.
+
+If publishing raises, delivery is uncertain: the broker may already have
+accepted the message. The endpoint returns 503 with the task ID and instructions
+to inspect it before retrying. It retains ownership and any worker result. It
+does not delete the row, mark execution failed, or automatically publish again.
+Storage and submission warnings omit connection exception text.
+
+FreeSDNTask keeps cached progress and its start clock on the Celery request,
+which separates nested and concurrent invocations of the reusable task object.
+The startup hook preserves the seeded organization. Cached and stored progress
+must match the requested task ID; a task payload's organization is not trusted
+as monitoring authority. Retry progress remains in the owner's active list.
+The existing API organization checks continue to hide other organizations and
+unscoped tasks. Redis/broker access must remain restricted to trusted services.
+
+Limits
+------
+This is not a durable outbox, exactly-once delivery, a task-idempotency protocol,
+or reconciliation after broker/database/worker crashes. Expired or unavailable
+progress can make a completed task unavailable through the tenant API. A
+prepared row may remain pending until its TTL expires if no worker receives the
+message. Operators must inspect uncertain submissions before manually retrying.
+Duplicate deliveries with the same ID are not serialized by this change.
+
+Celery SUCCESS still means that a function returned normally. Application
+results such as {"success": false} must be interpreted separately; generic
+business-outcome classification is not changed here. Worker exception hooks,
+Celery's own logs and its result backend still require a separate diagnostic
+privacy review. This change does not sanitize arbitrary task return values or
+progress messages. A monitoring owner does not constrain a global scheduled
+sweep; existing manual trigger authorization and argument checks are preserved.
+
+Qualification
+-------------
+The regressions cover request isolation, actual eager Celery lifecycle hooks,
+owner retention, fast completion, uncertain acknowledgements, active retries,
+reservation refusal and storage diagnostics. In-memory transport tests are not
+a substitute for the separately recorded isolated Valkey and worker checks.
+No external hardware action, email, SMS or webhook is part of these fixtures.

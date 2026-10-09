@@ -92,7 +92,10 @@
       "downloadMbps": "Download (Mbps)",
       "uploadMbps": "Upload (Mbps)",
       "noData": "No traffic data available",
-      "last24h": "Last 24h"
+      "last24h": "Last 24h",
+      "downloadMiB": "Download (MiB)",
+      "uploadMiB": "Upload (MiB)",
+      "counterSnapshot": "Current cumulative counters; reset times vary"
     },
     "networkHealth": {
       "notAvailable": "N/A",

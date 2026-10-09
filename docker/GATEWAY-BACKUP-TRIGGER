@@ -1,0 +1,30 @@
+Gateway backup trigger limitation
+================================
+
+POST /api/v1/firewall/gateways/{gateway_id}/backup/trigger does not have a
+managed artifact storage implementation. Earlier versions downloaded the
+configuration, discarded it, and could report a successful capture, including
+for an empty result. No retained gateway configuration could be recovered from
+that response. A previously returned success is not evidence of a saved backup.
+
+The route now returns HTTP 501 with a fixed message that no backup was saved.
+Its existing permission, tenant, site, deletion and existence checks still run;
+inaccessible resources remain opaque 404 responses. It does not construct an
+adapter, download secret-bearing configuration, or invoke a vendor mutation.
+Provider messages and configuration contents cannot be returned by this path.
+
+The separate /config/download operation remains available with its existing
+controller:write and super_admin requirements. Its artifact is delivered to the
+caller and must be securely retained by that caller. The /backups vendor
+operation is separate and remains subject to vendor support and write policy.
+Neither operation establishes FreeSDN-managed off-device backup retention.
+
+Managed gateway artifact retention, storage selection, secret protection,
+integrity verification, lifecycle policy and a tested restore workflow remain
+unimplemented for the legacy trigger. This change removes a false success; it
+does not claim those missing capabilities or enterprise backup readiness.
+
+Qualification uses synthetic principals and owned PostgreSQL. Regression
+adapter I/O is explicitly doubled; no customer hardware backup or restore is
+performed. Existing protected download and separate vendor-route controls
+confirm dispatch only, not a real device backup or restore.

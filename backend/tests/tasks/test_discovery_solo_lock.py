@@ -8,6 +8,7 @@ overlap) ran two discoveries for the SAME controller concurrently; the dedup's
 in-flight rows and INSERT duplicate devices. The lock makes discovery one-at-a-
 time per controller — an overlapping call returns early without touching the DB.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
@@ -21,7 +22,9 @@ import app.tasks.discovery as d
 async def test_overlapping_discovery_is_skipped(monkeypatch) -> None:
     monkeypatch.setattr("app.core.celery_app.acquire_solo_lock", lambda *_a, **_k: False)
     released: list = []
-    monkeypatch.setattr("app.core.celery_app.release_solo_lock", lambda key: released.append(key))
+    monkeypatch.setattr(
+        "app.core.celery_app.release_solo_lock", lambda key, token: released.append((key, token))
+    )
     impl = AsyncMock(return_value={"ok": True})
     monkeypatch.setattr(d, "_discover_devices_for_controller_impl", impl)
 
@@ -34,9 +37,11 @@ async def test_overlapping_discovery_is_skipped(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_discovery_runs_and_releases_lock(monkeypatch) -> None:
-    monkeypatch.setattr("app.core.celery_app.acquire_solo_lock", lambda *_a, **_k: True)
+    monkeypatch.setattr("app.core.celery_app.acquire_solo_lock", lambda *_a, **_k: "owned-token")
     released: list = []
-    monkeypatch.setattr("app.core.celery_app.release_solo_lock", lambda key: released.append(key))
+    monkeypatch.setattr(
+        "app.core.celery_app.release_solo_lock", lambda key, token: released.append((key, token))
+    )
     impl = AsyncMock(return_value={"ok": True, "synced": 10})
     monkeypatch.setattr(d, "_discover_devices_for_controller_impl", impl)
 
@@ -44,14 +49,16 @@ async def test_discovery_runs_and_releases_lock(monkeypatch) -> None:
 
     assert res == {"ok": True, "synced": 10}
     impl.assert_awaited_once_with("cid-1")
-    assert released == ["discover_devices:cid-1"]  # lock released after run
+    assert released == [("discover_devices:cid-1", "owned-token")]  # lock released after run
 
 
 @pytest.mark.asyncio
 async def test_lock_released_even_if_impl_raises(monkeypatch) -> None:
-    monkeypatch.setattr("app.core.celery_app.acquire_solo_lock", lambda *_a, **_k: True)
+    monkeypatch.setattr("app.core.celery_app.acquire_solo_lock", lambda *_a, **_k: "owned-token")
     released: list = []
-    monkeypatch.setattr("app.core.celery_app.release_solo_lock", lambda key: released.append(key))
+    monkeypatch.setattr(
+        "app.core.celery_app.release_solo_lock", lambda key, token: released.append((key, token))
+    )
 
     async def _boom(_cid):
         raise RuntimeError("adapter down")
@@ -60,4 +67,4 @@ async def test_lock_released_even_if_impl_raises(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError):
         await d._discover_devices_for_controller("cid-1")
-    assert released == ["discover_devices:cid-1"]  # finally released the lock
+    assert released == [("discover_devices:cid-1", "owned-token")]  # finally released the lock

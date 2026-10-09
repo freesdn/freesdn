@@ -15,13 +15,11 @@ for Proxmox. The contract:
 - Apply uses the existing dispatcher in ``gateway_vpn.apply_change``
   and the dual-gate (``ADAPTER_READ_ONLY=false`` AND ``force=true``).
 
-Supported features::
-
-    proxmox.storage.delete_volume   delete   (volid as target_id;
-                                              payload = {node, storage})
-    proxmox.storage.upload          create   (payload = {node, storage,
-                                              filename, content_type,
-                                              file_path})
+Supported features are ``proxmox.storage.delete_volume`` and
+``proxmox.storage.upload``. Both require the versioned reviewed contract from
+``hypervisor_storage_operations``. Legacy server-path and confirmation-only
+payloads are refused before credentials are used. Upload sources belong to a
+stable operation ID on the persistent upload volume.
 
 Hard production-safety constraint: Proxmox is in PRODUCTION. Storage
 volume deletion is irreversible — dropping a backup volume here means
@@ -291,133 +289,9 @@ class GatewayProxmoxStorageService(GatewayServiceBase):
     # ── Apply path ───────────────────────────────────────────────────
 
     def build_applier(self, change: Any) -> Any:
-        """Return an awaitable that pushes ``change`` to the cluster.
-
-        Every call passes ``force=True`` to the Proxmox adapter so it
-        satisfies the client-layer read-only check — that gate is
-        the bottom-of-stack safety; this applier is the top of the
-        sanctioned write path. The dispatcher
-        (``gateway_vpn.apply_change``) is what actually opens the gate
-        via ``AdapterStagingService.apply_change``'s dual-gate check.
-        """
-
         async def _apply(c: Any) -> Any:
-            # Adapter assignment INSIDE try so a raise in
-            # ``_get_controller`` / ``_get_proxmox_adapter`` doesn't
-            # leak a half-built adapter.
-            adapter: ProxmoxAdapter | None = None
-            try:
-                adapter = await self._get_proxmox_adapter(c.controller_id, c.organization_id)
-                payload = c.payload or {}
-                target_id = c.target_id or ""
+            from app.services.hypervisor_storage_operations import apply_storage
 
-                method_name = _APPLY.get((c.feature, c.operation))
-                if method_name is None:
-                    raise HTTPException(
-                        400,
-                        detail=(f"no applier for feature={c.feature!r} operation={c.operation!r}"),
-                    )
-                method = getattr(adapter, method_name, None)
-                if method is None:
-                    raise HTTPException(
-                        501,
-                        detail=(
-                            f"Proxmox adapter has no method {method_name!r}; missing implementation"
-                        ),
-                    )
-
-                if c.feature == "proxmox.storage.delete_volume":
-                    # target_id IS the volid (e.g. ``local-lvm:vm-100-disk-0``).
-                    # payload carries node + storage scope.
-                    volid = _validate_volid(target_id)
-                    node = validate_id(str(payload.get("node", "")), label="node")
-                    storage = validate_id(str(payload.get("storage", "")), label="storage")
-
-                    # Ownership IDOR guard: the volid format check above only
-                    # validates the GRAMMAR — not that the volume
-                    # actually lives in this storage on this controller.
-                    # An operator who knows or guesses a volid string
-                    # from a sibling tenant's box could trigger a
-                    # delete against their own controller, and Proxmox
-                    # would happily blast the named volume.
-                    #
-                    # Fetch the storage's live content list, confirm
-                    # the volid is in it. 404 on mismatch (not 403 —
-                    # same don't-leak-existence rule as the OpenWrt /
-                    # MikroTik IDOR guards).
-                    content_result = await adapter.get_storage_content(
-                        node=node,
-                        storage=storage,
-                    )
-                    if not content_result.success:
-                        raise HTTPException(
-                            502,
-                            detail=(
-                                f"could not fetch live storage content "
-                                f"to verify volid={volid!r}: "
-                                f"{content_result.error or 'unknown error'}"
-                            ),
-                        )
-                    items = content_result.data or []
-                    if not any(
-                        isinstance(item, dict) and str(item.get("volid")) == volid for item in items
-                    ):
-                        raise HTTPException(
-                            404,
-                            detail=(
-                                f"volid={volid!r} not found in storage {storage!r} on node {node!r}"
-                            ),
-                        )
-
-                    # Pre-flight safety: deleting a volume is CATASTROPHIC /
-                    # irreversible data-loss — refuse unless the staged payload
-                    # carries confirmed=true (only after the IDOR guard above
-                    # has confirmed the volid really lives in this storage).
-                    from app.services.adapter_proxmox_preflight import preflight_gate
-
-                    await preflight_gate(
-                        adapter,
-                        c.feature,
-                        c.operation,
-                        {**payload, "node": node, "storage": storage, "volid": volid},
-                    )
-                    return await method(node, storage, volid, force=True)
-
-                if c.feature == "proxmox.storage.upload":
-                    # Large payload — file content streamed via multipart.
-                    # Required keys: node, storage, filename, content_type,
-                    # file_path (server-side path the worker can read,
-                    # confined to ``settings.PROXMOX_UPLOAD_DIR``).
-                    node = validate_id(str(payload.get("node", "")), label="node")
-                    storage = validate_id(str(payload.get("storage", "")), label="storage")
-                    filename = str(payload.get("filename", ""))
-                    content_type = str(payload.get("content_type", ""))
-                    file_path = str(payload.get("file_path", ""))
-                    if not (filename and content_type and file_path):
-                        raise HTTPException(
-                            400,
-                            detail=(
-                                "proxmox.storage.upload payload requires "
-                                "filename, content_type, and file_path"
-                            ),
-                        )
-                    # Restrict filename and confine source path to the
-                    # configured sandbox dir (defends against LFI to
-                    # ``/etc/passwd`` / ``/app/.env``).
-                    filename = _validate_upload_filename(filename)
-                    file_path = _validate_upload_path(file_path)
-                    return await method(
-                        node,
-                        storage,
-                        filename,
-                        content_type,
-                        file_path,
-                        force=True,
-                    )
-
-                raise HTTPException(400, detail=f"unhandled feature={c.feature!r}")
-            finally:
-                if adapter is not None:
-                    await adapter.disconnect()
+            return await apply_storage(self, c)
 
         return _apply

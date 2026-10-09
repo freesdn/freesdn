@@ -8,6 +8,7 @@
  * IDS-control / per-rule-toggle / clear-alerts callbacks via props.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { GatewayLiveReadNotice } from './GatewayLiveReadNotice';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pencil, Play, RefreshCw, RotateCcw, ShieldAlert, Square, Trash2 } from 'lucide-react';
@@ -38,6 +39,8 @@ export interface GatewayIdsTabProps {
   idsRulesLoading: boolean;
   crowdsecData: any;
   crowdsecLoading: boolean;
+  crowdsecError?: boolean;
+  onRetryCrowdsec?: () => void;
   onControl: (action: IdsAction) => void;
   onEditSettings: () => void;
   onClearAlerts: () => void;
@@ -54,6 +57,8 @@ export function GatewayIdsTab({
   idsRulesLoading,
   crowdsecData,
   crowdsecLoading,
+  crowdsecError,
+  onRetryCrowdsec,
   onControl,
   onEditSettings,
   onClearAlerts,
@@ -199,10 +204,12 @@ export function GatewayIdsTab({
           <CardDescription>{t('GatewayIdsTab.crowdsec.description')}</CardDescription>
         </CardHeader>
         {crowdsecLoading ? (
-          <CardContent><div className="flex items-center gap-2 text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" /> {t('GatewayIdsTab.crowdsec.loading')}</div></CardContent>
+          <GatewayLiveReadNotice loading />
+        ) : crowdsecError || !crowdsecData ? (
+          <GatewayLiveReadNotice onRetry={onRetryCrowdsec} />
         ) : (() => {
-          const cs = crowdsecData?.data || {};
-          const svc = cs.service || {};
+          const cs = crowdsecData?.data?.crowdsec || {};
+
           const alerts = cs.alerts || [];
           const decisions = cs.decisions || [];
           return (
@@ -210,26 +217,28 @@ export function GatewayIdsTab({
               <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
                   <dt className="text-muted-foreground">{t('GatewayIdsTab.crowdsec.service')}</dt>
-                  <dd><Badge variant={svc.status === 'running' ? 'default' : 'secondary'}>{svc.status || t('GatewayIdsTab.crowdsec.unknown')}</Badge></dd>
+                  <dd><Badge variant={cs.running ? 'default' : 'secondary'}>{cs.running ? t('GatewayLiveRead.running') : t('GatewayLiveRead.stopped')}</Badge></dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground">{t('GatewayIdsTab.crowdsec.alerts')}</dt>
-                  <dd className="font-medium">{alerts.length}</dd>
+                  <dd className="font-medium">{cs.alert_total ?? alerts.length}</dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground">{t('GatewayIdsTab.crowdsec.activeDecisions')}</dt>
-                  <dd className="font-medium">{decisions.length}</dd>
+                  <dd className="font-medium">{cs.decision_total ?? decisions.length}</dd>
                 </div>
               </dl>
+              {cs.alert_truncated && <p role="status" className="text-sm text-muted-foreground">{t('GatewayIdsTab.crowdsec.alertWindow', { shown: alerts.length, total: cs.alert_total })}</p>}
+              {cs.decision_truncated && <p role="status" className="text-sm text-muted-foreground">{t('GatewayIdsTab.crowdsec.decisionWindow', { shown: decisions.length, total: cs.decision_total })}</p>}
               {decisions.length > 0 && (
                 <div>
                   <h4 className="text-sm font-medium mb-2">{t('GatewayIdsTab.crowdsec.activeDecisions')}</h4>
                   <div className="overflow-auto max-h-[200px] rounded border">
                     <table className="w-full text-xs">
-                      <thead className="bg-muted sticky top-0"><tr><th className="px-3 py-2 text-left">{t('GatewayIdsTab.crowdsec.columns.ipRange')}</th><th className="px-3 py-2 text-left">{t('GatewayIdsTab.crowdsec.columns.reason')}</th><th className="px-3 py-2 text-left">{t('GatewayIdsTab.crowdsec.columns.action')}</th><th className="px-3 py-2 text-left">{t('GatewayIdsTab.crowdsec.columns.expires')}</th></tr></thead>
+                      <thead className="bg-muted sticky top-0"><tr><th className="px-3 py-2 text-left">{t('GatewayIdsTab.crowdsec.columns.ipRange')}</th><th className="px-3 py-2 text-left">{t('GatewayIdsTab.crowdsec.columns.source')}</th><th className="px-3 py-2 text-left">{t('GatewayIdsTab.crowdsec.columns.action')}</th><th className="px-3 py-2 text-left">{t('GatewayIdsTab.crowdsec.columns.expires')}</th></tr></thead>
                       <tbody>
                         {decisions.slice(0, 50).map((d: any, i: number) => (
-                          <tr key={i} className="border-t"><td className="px-3 py-1.5 font-mono">{d.value || d.ip}</td><td className="px-3 py-1.5">{d.scenario || d.reason}</td><td className="px-3 py-1.5">{d.type || d.action}</td><td className="px-3 py-1.5">{d.until || d.expires || '-'}</td></tr>
+                          <tr key={i} className="border-t"><td className="px-3 py-1.5 font-mono">{d.value || d.ip}</td><td className="px-3 py-1.5">{d.origin || d.scope || '-'}</td><td className="px-3 py-1.5">{d.type || d.action}</td><td className="px-3 py-1.5">{d.duration || '-'}</td></tr>
                         ))}
                       </tbody>
                     </table>

@@ -686,13 +686,22 @@ class NetworkClientService:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _org_scope(self, organization_id: UUID):
-        """Subquery: device IDs belonging to an organization."""
-        return (
-            select(NetworkDevice.id)
-            .where(NetworkDevice.site_id.in_(_sites_for_org(organization_id)))
-            .scalar_subquery()
+    def _org_scope(
+        self,
+        organization_id: UUID,
+        *,
+        site_id: UUID | None = None,
+        site_ids: set[UUID] | None = None,
+    ):
+        """Device IDs within the tenant AND every supplied site restriction."""
+        query = select(NetworkDevice.id).where(
+            NetworkDevice.site_id.in_(_sites_for_org(organization_id))
         )
+        if site_ids is not None:
+            query = query.where(NetworkDevice.site_id.in_(site_ids))
+        if site_id is not None:
+            query = query.where(NetworkDevice.site_id == site_id)
+        return query.scalar_subquery()
 
     # ------------------------------------------------------------------
 
@@ -714,20 +723,7 @@ class NetworkClientService:
         clients) to a site-limited user's granted sites. None = no
         site-limit (org scope only).
         """
-        if site_ids is not None:
-            # Site-limited user: only clients on devices at granted sites.
-            device_ids = (
-                select(NetworkDevice.id)
-                .where(NetworkDevice.site_id.in_(site_ids))
-                .scalar_subquery()
-            )
-        elif site_id:
-            # Narrow to devices at a specific site
-            device_ids = (
-                select(NetworkDevice.id).where(NetworkDevice.site_id == site_id).scalar_subquery()
-            )
-        else:
-            device_ids = self._org_scope(organization_id)
+        device_ids = self._org_scope(organization_id, site_id=site_id, site_ids=site_ids)
 
         query = select(NetworkClient).where(NetworkClient.device_id.in_(device_ids))
 
@@ -846,18 +842,7 @@ class NetworkClientService:
         ``site_ids`` restricts the device set to a
         site-limited user's granted sites. None = no site-limit.
         """
-        if site_ids is not None:
-            device_ids = (
-                select(NetworkDevice.id)
-                .where(NetworkDevice.site_id.in_(site_ids))
-                .scalar_subquery()
-            )
-        elif site_id:
-            device_ids = (
-                select(NetworkDevice.id).where(NetworkDevice.site_id == site_id).scalar_subquery()
-            )
-        else:
-            device_ids = self._org_scope(organization_id)
+        device_ids = self._org_scope(organization_id, site_id=site_id, site_ids=site_ids)
 
         base = select(NetworkClient).where(NetworkClient.device_id.in_(device_ids))
 

@@ -1,12 +1,13 @@
 # FreeSDN Frontend Dockerfile
-# Debian Trixie base - matches all other FreeSDN containers
+# Node LTS build; patched Alpine production runtime
 # Multi-stage build for development and production
 
 # ============================================
 # Stage 1: Base Node image (Trixie)
 # ============================================
-FROM node:26.7.0-trixie-slim AS base
-RUN npm install -g npm@11.17.0
+# Release policy: stay on Node 24 LTS; qualify LTS major migrations explicitly.
+FROM node:24.21.0-trixie-slim AS base
+RUN npm install -g npm@12.2.0
 WORKDIR /app
 
 # ============================================
@@ -47,40 +48,38 @@ COPY . .
 # Build the application
 RUN npm run build
 
+# Rebuild the released Caddy source with a patched Go toolchain and dependency
+# graph. apk upgrade cannot replace libraries compiled into the upstream binary.
+# go.sum verifies downloaded modules; -mod=readonly forbids resolution at build.
+FROM golang:1.27.2-alpine3.24 AS caddy-builder
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local
+WORKDIR /build
+COPY caddy-build/go.mod caddy-build/go.sum ./
+RUN go mod download && go mod verify
+COPY caddy-build/ ./
+# Patch a private, checksum-verified vendor tree. Module versions remain in the
+# binary inventory; no shared module-cache files or upstream imports are changed.
+RUN go mod vendor && go run -mod=vendor ./prepare.go \
+    && go test -mod=vendor . \
+    && go build -mod=vendor -trimpath \
+       -ldflags="-s -w -X github.com/caddyserver/caddy/v2.CustomVersion=v2.11.4-freesdn" \
+       -o /usr/bin/caddy .
+
 # ============================================
-# Stage 4: Production image with Nginx (Trixie)
-# Uses official nginx.org mainline repo for latest version.
-# F5/NGINX recommends mainline for all deployments - it receives
-# all bug fixes, performance improvements, and security patches
-# immediately (stable only gets critical fixes).
+# Stage 4: Production image with Nginx (Alpine)
+# Uses the official NGINX stable branch with current Alpine security patches.
+# Keep the explicit patch version aligned with the upstream stable/security
+# advisories and the HA proxy default; do not silently switch release channels.
 # Non-root 'nginx' user for security hardening.
 # ============================================
-FROM debian:trixie-slim AS production
-
-# Pre-create nginx user/group with a fixed UID/GID (999) BEFORE installing
-# the nginx package. The package detects the existing user and skips creation.
-# This ensures the UID matches docker-compose tmpfs uid=999,gid=999 mounts.
-RUN groupadd -g 999 nginx && useradd -r -u 999 -g 999 -d /var/cache/nginx -s /sbin/nologin nginx
-
-# Install nginx from the official nginx.org mainline repo (1.29.x)
-# Mainline is recommended by NGINX for production - it's the same
-# branch used for NGINX Plus (commercial). Stable only receives
-# critical-severity fixes and third-party module compat patches.
-# curl is kept in the image for Docker healthcheck probes.
-RUN apt-get update && apt-get upgrade -y \
-    && apt-get install --no-install-recommends -y \
-       curl gnupg ca-certificates \
-    && curl -fsSL https://nginx.org/keys/nginx_signing.key \
-       | gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] \
-       https://nginx.org/packages/mainline/debian/ trixie nginx" \
-       > /etc/apt/sources.list.d/nginx.list \
-    && apt-get update \
-    && apt-get install --no-install-recommends -y nginx \
-    && apt-get purge -y --auto-remove gnupg \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /dev/stdout /var/log/nginx/access.log \
-    && ln -sf /dev/stderr /var/log/nginx/error.log
+# The patched Alpine variant avoids Debian media/system packages that have
+# unresolved advisories. Preserve UID/GID 999 for existing Compose tmpfs mounts.
+FROM nginx:1.30.5-alpine AS production
+RUN apk upgrade --no-cache && apk add --no-cache curl \
+    && deluser nginx \
+    && delgroup ping \
+    && addgroup -S -g 999 nginx \
+    && adduser -S -D -H -u 999 -G nginx nginx
 
 # Prepare for non-root operation.
 # The nginx.org package creates a 'nginx' user/group automatically.
@@ -130,9 +129,12 @@ FROM caddy:2.11.4-alpine AS caddy
 
 # Apply the latest Alpine security patches (openssl libcrypto3/libssl3, etc.) on
 # top of the pinned caddy base, so a freshly built edge image picks up CVE fixes
-# even before caddy ships a new tag. The caddy binary's bundled Go stdlib is
-# upstream-gated and updates only when caddy publishes a rebuild.
+# even before caddy ships a new tag. Replace its compiled binary with the
+# versioned, checksum-locked build above; see caddy-build/README.md.
 RUN apk upgrade --no-cache
+COPY --from=caddy-builder /usr/bin/caddy /usr/bin/caddy
+COPY caddy-build/LICENSE /usr/share/licenses/caddy/LICENSE
+COPY caddy-build/NOTICE /usr/share/licenses/caddy/NOTICE
 
 # Built SPA assets (fingerprinted) served from /srv.
 COPY --from=builder /app/dist /srv

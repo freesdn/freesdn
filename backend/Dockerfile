@@ -1,11 +1,58 @@
 # FreeSDN Backend Dockerfile
-# Enterprise-grade Debian Trixie base - security-first
-# Python 3.14 + FastAPI latest + full apt security patches
+# Patched Alpine runtime; keep build tools out of the deployed image.
+# Python 3.14 with the committed Poetry dependency graph
 
 # ============================================
 # Stage 1: Base Python image with Poetry
 # ============================================
-FROM python:3.14.7-slim-trixie AS python-base
+# Tailscale source and its patched module graph are checksum-locked separately.
+FROM golang:1.27.2-alpine3.24 AS tailscale-builder
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local
+WORKDIR /build
+COPY tailscale-build/go.mod tailscale-build/go.sum ./
+RUN go mod download all && go mod verify
+RUN go build -mod=readonly -trimpath \
+    -ldflags="-s -w -X tailscale.com/version.longStamp=1.102.4-freesdn -X tailscale.com/version.shortStamp=1.102.4" \
+    -o /out/ tailscale.com/cmd/tailscale tailscale.com/cmd/tailscaled tailscale.com/cmd/containerboot
+
+# Optional private-access image. No Python, media stack or app credentials.
+FROM alpine:3.24 AS tailscale-access
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates iptables ip6tables iproute2
+COPY --from=tailscale-builder /out/ /usr/local/bin/
+COPY tailscale-build/LICENSE tailscale-build/NOTICE /usr/share/licenses/tailscale/
+RUN mkdir -p /var/lib/tailscale /tailscale \
+    && ln -s /usr/local/bin/containerboot /tailscale/run.sh
+ENTRYPOINT ["/usr/local/bin/containerboot"]
+
+FROM golang:1.27.2-alpine3.24 AS netbird-builder
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local
+WORKDIR /build
+COPY netbird-build/go.mod netbird-build/go.sum ./
+RUN go mod download all && go mod verify
+COPY netbird-build/ ./
+# Preserve NetBird routing hooks while using fixed STUN/DTLS dependencies and
+# removing the legacy TURN/DTLS v2 path. Patches reject unreviewed source hashes.
+# The compiler is only for race detection in this builder; runtime stays static.
+RUN apk add --no-cache build-base \
+    && go mod vendor && go run -mod=vendor ./prepare.go \
+    && CGO_ENABLED=1 go test -mod=vendor -race -count=3 -timeout=120s \
+       github.com/netbirdio/netbird/client/internal/relay
+RUN go build -mod=vendor -trimpath \
+    -ldflags="-s -w -X github.com/netbirdio/netbird/version.version=0.79.0-freesdn" \
+    -o /out/netbird github.com/netbirdio/netbird/client
+
+# Signed upstream stable media build; stable Alpine dependencies only.
+FROM alpine:3.24 AS ffmpeg-builder
+WORKDIR /build
+COPY ffmpeg-build/ ./
+RUN sh /build/build.sh
+
+FROM python:3.14.8-alpine3.24 AS python-base
+# Exact upstream security backports; unknown Python source fails the build.
+COPY python-security/ /usr/local/share/freesdn/python-security/
+RUN python -B /usr/local/share/freesdn/python-security/apply_backports.py \
+    && python -B /usr/local/share/freesdn/python-security/apply_backports.py --verify
+RUN apk upgrade --no-cache
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -13,7 +60,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=off \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
     PIP_DEFAULT_TIMEOUT=100 \
-    POETRY_VERSION=2.4.1 \
+    POETRY_VERSION=2.5.1 \
     POETRY_HOME="/opt/poetry" \
     POETRY_VIRTUALENVS_IN_PROJECT=true \
     POETRY_NO_INTERACTION=1 \
@@ -36,13 +83,7 @@ ENV PATH="$VENV_PATH/bin:$POETRY_HOME/bin:$PATH"
 # ============================================
 FROM python-base AS builder-base
 
-RUN apt-get update && apt-get upgrade -y \
-    && apt-get install --no-install-recommends -y \
-    curl \
-    build-essential \
-    libpq-dev \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache build-base libffi-dev openssl-dev postgresql-dev git
 
 # Install Poetry (W06-REL-002): install the pinned version from PyPI into an
 # isolated venv at $POETRY_HOME instead of piping an unauthenticated remote
@@ -57,40 +98,27 @@ RUN python3 -m venv "$POETRY_HOME" \
     && ln -sf "$POETRY_HOME/bin/poetry" /usr/local/bin/poetry
 
 WORKDIR $PYSETUP_PATH
-COPY pyproject.toml poetry.lock* ./
+COPY pyproject.toml poetry.lock* README ./
 
 # Install runtime dependencies only (poetry.lock ensures deterministic builds)
-RUN poetry install --only main --no-root
+RUN poetry check --lock \
+    && poetry install --only main --no-root
 
 # ============================================
 # Stage 3: Development image
 # ============================================
 FROM python-base AS development
 
-# Install system deps + Tailscale VPN agent + full security patches
-RUN apt-get update && apt-get upgrade -y \
-    && apt-get install --no-install-recommends -y \
-    libpq5 \
-    ffmpeg \
-    curl \
-    git \
-    iptables \
-    iproute2 \
-    iputils-ping \
-    gnupg \
-    && curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null \
-    && curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list | tee /etc/apt/sources.list.d/tailscale.list \
-    && apt-get update \
-    && apt-get install --no-install-recommends -y tailscale \
-    && rm -rf /var/lib/apt/lists/*
-
-# Tailscale state directory (will be mounted as volume)
-RUN mkdir -p /var/lib/tailscale /var/run/tailscale
-
-# Create non-root user for development
-RUN addgroup --system --gid 1001 appgroup \
-    && adduser --system --uid 1001 --gid 1001 appuser \
+RUN apk add --no-cache libpq curl git iptables ip6tables iproute2 iputils \
+    openvpn wireguard-tools bash ca-certificates tzdata openresolv \
+    && addgroup -S -g 1001 appgroup \
+    && adduser -S -D -H -u 1001 -G appgroup appuser \
+    && mkdir -p /var/lib/tailscale /var/run/tailscale \
     && chown -R appuser:appgroup /var/lib/tailscale /var/run/tailscale
+COPY --from=tailscale-builder /out/tailscale /out/tailscaled /usr/local/bin/
+COPY --from=netbird-builder /out/netbird /usr/local/bin/netbird
+COPY --from=ffmpeg-builder /out/ /
+RUN sh /usr/share/freesdn-sources/ffmpeg/install-runtime.sh
 
 WORKDIR $PYSETUP_PATH
 
@@ -105,11 +133,12 @@ WORKDIR /app
 COPY . .
 
 # Create directories that need to be writable by appuser
-RUN mkdir -p /app/celerybeat /data/freesdn_firmware \
-    && chown -R appuser:appgroup /app /data
+RUN mkdir -p /app/celerybeat /data/freesdn_firmware /tmp/freesdn-hls \
+    && chown -R appuser:appgroup /app /data /tmp/freesdn-hls \
+    && chmod 0700 /tmp/freesdn-hls
 
-# Install the project
-RUN poetry install --only-root
+# Source is imported from /app; the public export omits the private README
+# referenced by the package metadata, so do not install the root package here.
 
 # NOTE: Non-root user is used in production stage below.
 # Development stage runs as root because tailscaled and alembic require it.
@@ -124,43 +153,18 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload
 # ============================================
 FROM python-base AS production
 
-RUN apt-get update && apt-get upgrade -y \
-    && apt-get install --no-install-recommends -y \
-    libpq5 \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/* \
-    && addgroup --system --gid 1001 appgroup \
-    && adduser --system --uid 1001 --gid 1001 appuser
-
-# ── VPN overlay binaries — Tailscale + NetBird + OpenVPN ────────────────────
-# FreeSDN's site-to-site / remote-agent overlay shells out to these CLIs/daemons
-# (app/services/vpn_integration.py). They MUST be in the PRODUCTION image, not
-# just the dev stage, or every VPN feature reports "not installed in this
-# container".
-#
-# We DELIBERATELY do NOT setcap these binaries. In the shipped topology the
-# privileged `vpn` sidecar runs the daemons AS ROOT (user 0:0 + cap_add
-# NET_ADMIN + /dev/net/tun), so they create tun devices without any file
-# capabilities. Conversely the api/worker containers run these as plain CLIs
-# (`tailscale up`, `netbird status`, …) under `no-new-privileges:true` — and a
-# binary carrying file capabilities CANNOT be exec'd there (the kernel returns
-# EPERM, "Operation not permitted"). setcap would therefore be both unnecessary
-# (the sidecar is root) AND actively break the api's ability to drive the VPN.
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y \
-        curl gnupg ca-certificates iproute2 iptables iputils-ping \
-        openvpn wireguard-tools \
-    && curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg \
-        | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null \
-    && curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list \
-        | tee /etc/apt/sources.list.d/tailscale.list >/dev/null \
-    && curl -fsSL https://pkgs.netbird.io/debian/public.key \
-        | gpg --dearmor -o /usr/share/keyrings/netbird-archive-keyring.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/netbird-archive-keyring.gpg] https://pkgs.netbird.io/debian stable main" \
-        | tee /etc/apt/sources.list.d/netbird.list >/dev/null \
-    && apt-get update \
-    && apt-get install --no-install-recommends -y tailscale netbird \
-    && rm -rf /var/lib/apt/lists/*
+# Preserve the existing app UID and VPN CLI/socket contract. VPN daemons run
+# only in the explicitly privileged sidecar; no binary receives file capabilities.
+RUN apk add --no-cache libpq curl iproute2 iptables ip6tables iputils \
+    openvpn wireguard-tools bash ca-certificates tzdata openresolv \
+    && addgroup -S -g 1001 appgroup \
+    && adduser -S -D -H -u 1001 -G appgroup appuser
+COPY --from=tailscale-builder /out/tailscale /out/tailscaled /usr/local/bin/
+COPY --from=netbird-builder /out/netbird /usr/local/bin/netbird
+COPY --from=ffmpeg-builder /out/ /
+RUN sh /usr/share/freesdn-sources/ffmpeg/install-runtime.sh
+COPY tailscale-build/LICENSE tailscale-build/NOTICE /usr/share/licenses/tailscale/
+COPY netbird-build/LICENSE netbird-build/NOTICE /usr/share/licenses/netbird/
 
 # VPN state / config / run dirs, owned by the non-root appuser so the daemons
 # (started by the entrypoint) and the openvpn processes (spawned by the app) can
@@ -177,6 +181,12 @@ RUN mkdir -p \
         /etc/netbird /var/lib/netbird
 
 COPY --from=builder-base $VENV_PATH $VENV_PATH
+# Optional plugin installs use the locked uv binary in the app environment.
+# Remove pip and its embedded bootstrap wheel from BOTH interpreter locations;
+# venv --without-pip still works without ensurepip and does not restore old code.
+RUN "$VENV_PATH/bin/python" -m pip uninstall -y pip \
+    && /usr/local/bin/python -m pip uninstall -y pip \
+    && rm -rf /usr/local/lib/python3.14/ensurepip
 
 WORKDIR /app
 COPY --chown=appuser:appgroup app ./app
@@ -191,6 +201,8 @@ COPY --chown=appuser:appgroup scripts/migrate.py ./scripts/migrate.py
 # omitting migrate_logdb.py made the prod api container crash-loop on startup
 # (python: can't open file 'scripts/migrate_logdb.py') before gunicorn ever ran.
 COPY --chown=appuser:appgroup scripts/migrate_logdb.py ./scripts/migrate_logdb.py
+COPY --chown=appuser:appgroup scripts/migration_lock.py ./scripts/migration_lock.py
+COPY --chown=appuser:appgroup scripts/encrypt_vpn_site_configs.py ./scripts/encrypt_vpn_site_configs.py
 
 # Create writable directories for appuser (celerybeat schedule, plus the
 # persistent /data subdirs that get backed by named volumes at runtime). Owning
@@ -209,8 +221,9 @@ RUN mkdir -p \
         /data/agent-releases /data/proxmox-uploads \
         /data/fabric_artifacts /data/evidence /data/freesdn_firmware \
         /data/plugins /data/backups /data/sla_reports \
-        /data/provisioning/voip /tmp/freesdn_data \
-    && chown -R appuser:appgroup /app/celerybeat /app/scripts /data /tmp/freesdn_data
+        /data/provisioning/voip /tmp/freesdn_data /tmp/freesdn-hls \
+    && chown -R appuser:appgroup /app/celerybeat /app/scripts /data /tmp/freesdn_data /tmp/freesdn-hls \
+    && chmod 0700 /tmp/freesdn-hls
 
 # Fix line endings and make entrypoint executable
 RUN sed -i 's/\r$//' docker-entrypoint.sh vpn-sidecar-entrypoint.sh \

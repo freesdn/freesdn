@@ -68,7 +68,9 @@ class AgentRegisterResponse(BaseSchema):
     websocket_url: str = Field(description="WebSocket endpoint for agent connection")
     instructions: str = Field(description="Setup instructions")
     release_key_sha256: str = Field(
-        default="",
+        min_length=64,
+        max_length=64,
+        pattern="^[0-9a-f]{64}$",
         description=(
             "SHA-256 of the release-signing public key, to pin for update "
             "verification. Delivered here because registration is the "

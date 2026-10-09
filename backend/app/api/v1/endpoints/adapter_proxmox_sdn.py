@@ -1,24 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2024-2026 FreeSDN
-"""
-FreeSDN — Gateway Proxmox SDN endpoint.
+"""SDN inventory and historical staged changes.
 
-URL layout::
-
-    GET   /api/v1/gateway-proxmox-sdn/{controller_id}/zones
-    GET   /api/v1/gateway-proxmox-sdn/{controller_id}/vnets
-    POST  /api/v1/gateway-proxmox-sdn/{controller_id}/changes/{feature}
-    GET   /api/v1/gateway-proxmox-sdn/{controller_id}/changes
-
-Reads run live; writes stage. Apply path is the shared
-``/gateway-vpn/changes/{change_id}/apply`` endpoint.
-
-Stage endpoint locks ``feature`` to ``proxmox.sdn.*``.
-
-The ``proxmox.sdn.apply`` feature is a sentinel write that commits
-pending SDN config (zones/VNets stay in pending state on the cluster
-until ``apply`` is called). Treat it as the SDN-equivalent of a
-``commit`` button.
+New SDN staging is rejected by the shared staging service. Previously saved
+plans remain inspectable, but their applier rejects before credential access.
+Use the hypervisor SDN inspection endpoints to distinguish configured, running
+and pending observations; native Proxmox remains the operational handoff.
 """
 
 from __future__ import annotations

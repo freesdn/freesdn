@@ -182,6 +182,23 @@ class AutomationRuleUpdate(BaseModel):
     cooldown_seconds: int | None = Field(None, ge=0, le=86400)
     max_triggers_per_hour: int | None = Field(None, ge=1, le=1000)
 
+    @field_validator(
+        "name",
+        "trigger_type",
+        "trigger_config",
+        "actions",
+        "priority",
+        "cooldown_seconds",
+        "max_triggers_per_hour",
+    )
+    @classmethod
+    def _required_fields_cannot_be_cleared(cls, value: Any) -> Any:
+        # Omitted patch fields keep their defaults without running this validator.
+        # Explicit null cannot clear a required persisted field or runtime value.
+        if value is None:
+            raise ValueError("This automation rule field cannot be null")
+        return value
+
     @field_validator("trigger_config")
     @classmethod
     def _trigger_config_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -411,6 +428,7 @@ async def get_automation_summary(
         "successful_executions": exec_success,
         "failed_executions": exec_total - exec_success,
         "by_trigger_type": by_trigger_type,
+        "coordination_blocked_this_worker": automation_engine.coordination_blocks(org_id),
     }
 
 

@@ -1,0 +1,25 @@
+API route cache and worker startup
+=================================
+
+Static trailing-slash aliases are built from the registered FastAPI route
+metadata. Ordinary requests no longer generate the complete OpenAPI document
+just to discover static paths. Documentation remains available and is generated
+when requested. Nested router prefixes and include_in_schema visibility retain
+the previous alias boundary. Dynamic paths retain their registered spelling.
+
+Installing or removing plugin routes must call invalidate_route_cache(). The
+next request rebuilds the static path inventory and clears the memoized OpenAPI
+document. This does not authorize requests or bypass endpoint dependencies.
+
+The pinned FastAPI version retains included routers with prefix and visibility
+contexts. The inventory walker relies on that representation. On upgrades, run
+tests/core/test_route_cache_inventory.py and tests/plugins/test_plugin_install_e2e.py;
+the full-application inventory comparison must agree with the OpenAPI static
+path set. An upstream route representation change requires review, not a blanket
+fallback to generating schemas on every worker's first request.
+
+This removes one measured source of cold-request work. It does not establish a
+latency SLA, solve process-local camera stream ownership, change Gunicorn worker
+counts or enable preload. Check packaged worker recycling under real load before
+making availability or capacity claims. Customer hardware, database recovery and
+multi-host failover require their separate release qualifications.

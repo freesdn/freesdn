@@ -1,0 +1,109 @@
+# In-application backup storage and downloads
+
+This document describes the local-file and WebDAV transfer implementation. It
+does not certify a deployment, replace a database/volume recovery plan, or extend
+these limits to every storage provider, export, import or decryption operation.
+The `pg-backup` database-dump service has a separate lifecycle and policy.
+
+## Transfer storage and capacity
+
+Catalogue downloads through the local-file and WebDAV paths use an independently
+owned disk snapshot. A snapshot is copied, read back and checked before delivery.
+Transfer buffers are at most 64 KiB per read; the archive limit is 200 MiB. A saved
+whole-file identity is verified when available. Legacy archives without that
+identity remain explicitly unverified; copying or hashing one does not invent
+historical authenticity or prove that it is safe to restore.
+
+The API uses these settings:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `BACKUP_DOWNLOAD_SPOOL` | `/data/backups/.transfers` | Shared local disk directory for transfer policy, admission locks and temporary snapshots. |
+| `BACKUP_DOWNLOAD_SLOTS` | `4` | Concurrent adopted downloads sharing this directory; valid range 1–16. |
+| `BACKUP_DOWNLOAD_FREE_BYTES` | `1073741824` | Free-space floor used in the conservative admission calculation. |
+| `BACKUP_DOWNLOAD_SECONDS` | `900` | Deadline from response adoption through preparation and outer application delivery; valid range 1–86400 seconds. |
+
+The spool requires Linux mount metadata and an actual ext4, xfs, btrfs or zfs
+filesystem. Memory-backed `/tmp`, overlay filesystems, NFS and other filesystem
+types are refused for the spool. Use a suitable disk-backed volume. A configured
+archive location may be separate from the spool; an NFS archive location does
+not make NFS a supported transfer spool or establish NFS durability.
+
+All API processes sharing a spool must use the same slot count, size limit and
+free-space policy. On admission, the current available space must cover the
+configured floor **plus slot count × maximum archive size**. With the defaults,
+that is 1 GiB plus 800 MiB. This is a check, not an exclusive filesystem space
+reservation: unrelated writers can still exhaust the disk.
+
+Capacity is shared through file locks, without a queue waiting for a transfer
+slot. A busy metadata lock can wait for up to one second. Capacity refusal is
+HTTP 503 with `Retry-After: 5`. The adopted request keeps its admission ownership
+through outer application delivery and mandatory cleanup, including small
+archives whose disk snapshot has already reached EOF.
+
+Do not delete policy or slot files while any process may still use the spool;
+replacing a locked inode can defeat shared admission. Coordinate configuration
+changes across all API processes. Preserve the previous directory and policy
+until all owners have stopped and recovery has been assessed; a new, correctly
+owned spool may be configured consistently for the replacement processes.
+Different spool paths create separate pools, not a host-wide capacity limit.
+
+## Existing archive paths and permissions
+
+Local archive operations walk relative path components with pinned directory
+descriptors and do not follow symlinks. Absolute paths, empty or dot components,
+parent traversal, special files and multiply linked archive files are refused.
+Archive directories and files must have supported ownership: root or the
+application's effective user. World-writable objects are refused; group-writable
+objects require the application's primary group. The implementation has a
+limited root-owned sticky-ancestor exception, not a general writable-root policy.
+Existing modes and ownership are inspected, never silently repaired.
+
+New archive files and pool metadata are mode 0600. Pool files specifically must
+belong to the effective application user and have no group/other permissions.
+Processes sharing that user or trusted primary group, and privileged operators,
+remain trusted writers; these checks do not isolate hostile same-UID processes.
+The shipped API/worker identity is UID/GID 1001. Verify actual volume ownership
+and mounts before an upgrade; native test fixtures do not qualify your volumes.
+
+Before changing ownership, permissions or archive layout, stop the relevant
+writers, preserve a separate copy, inspect the exact refused path and verify a
+restore on an isolated target. Do not use recursive permission changes or alias
+replacement as an automatic repair. An old path being rejected is not proof that
+the archive is corrupt or disposable.
+
+## Failures, cancellation and integrity
+
+Local saves use a unique owned temporary file, file synchronization, replacement
+and directory synchronization. If a complete destination exists but final
+publication cannot be acknowledged, the backup remains failed with its locator
+retained. It must not be reported as completed, verified or rolled back merely
+because an error occurred. Preserve the object for operator recovery; a failed
+catalogue row is not permission to delete a potentially useful backup.
+
+Local/WebDAV download authority is checked again after preparation, against the
+current account, initiating credential, catalogue and storage state. This does
+not revoke bytes already delivered. Full-vault downloads retain their separate
+role/credential rules; these checks are not purpose-bound fresh authentication.
+
+WebDAV operations own and close their clients, retain pinned destination and
+TLS hostname checks, refuse redirects, and bound response data. Their operation
+deadline is 60 seconds, separate from the adopted download deadline above.
+Neither setting is a guarantee that a blocked kernel operation can be forcibly
+stopped safely.
+
+A preparation timeout before response headers returns HTTP 504 with the normal
+error and request headers. After headers have started, the application terminates
+with an error rather than sending a second status or a fabricated success body.
+Cancellation drains owned filesystem work and cleanup before releasing its
+resources. If cleanup cannot be confirmed, investigate the retained diagnostic
+and failed operation; do not infer durable recovery from a disconnected client.
+
+## Limits still requiring deployment acceptance
+
+These paths do not bound arbitrary storage SDK buffers, every concurrent API
+request, proxy/client buffering, exports, decryptors or uploads. Shared Docker
+volumes, NFS behavior, external disconnects, full configured deadlines, process
+or host loss, quotas, other providers, and measured recovery objectives require
+their own acceptance. No complete resource budget, high-availability guarantee,
+independent security audit or enterprise production clearance is implied.

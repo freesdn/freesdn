@@ -1,0 +1,32 @@
+OPNsense configuration download boundary
+========================================
+
+The legacy OPNsense client download_config method reads the fixed
+/api/core/backup/download/this endpoint as raw XML through the existing guarded
+HTTP client. It returns the original decoded XML string in config_xml, without
+JSON parsing or XML reserialization. The bounded safe XML parser rejects DTDs,
+entities, malformed documents, other root elements and input exceeding 16 MiB.
+This parsing bound is separate from the existing HTTP response-size limits.
+
+The adapter returns fixed failed-download diagnostics and logs no exception
+traceback or response body for this operation. Cancellation still propagates;
+the caller continues to own client cleanup. Other adapter operations and the
+lower-level raw-text helper retain their existing contracts and logging.
+
+The upstream OPNsense stable/26.7 BackupController serves the latest backup
+from /conf/backup when no backup name is supplied. This is a device configuration
+export, not evidence that FreeSDN persisted a new backup or measured live drift.
+Legacy method names referring to running configuration do not establish a
+separate live-state snapshot. XML validation checks safe syntax and the opnsense
+root, not full configuration schema or restoration compatibility.
+
+The isolated qualification exercises actual HTTPX clients and adapters over TLS
+with a private fixture CA, synthetic XML/status responses, authentication and
+caller-owned cleanup. It does not prove hardware compatibility, backup storage,
+restoration, operator reauthorization or generic gateway diff/backup-trigger
+honesty. Those workflows require separate qualification. No dependency, schema,
+device-write or trust-policy change is made here.
+
+Primary protocol sources:
+https://docs.opnsense.org/development/api/core/core.html
+https://github.com/opnsense/core/blob/stable/26.7/src/opnsense/mvc/app/controllers/OPNsense/Core/Api/BackupController.php

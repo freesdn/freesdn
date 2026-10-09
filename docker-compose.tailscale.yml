@@ -33,7 +33,12 @@
 
 services:
   tailscale-access:
-    image: tailscale/tailscale:${TAILSCALE_VERSION:-stable}
+    # Rebuild the stable client with the committed patched Go dependency graph.
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: tailscale-access
+    image: ${TAILSCALE_IMAGE:-freesdn-tailscale-access:local}
     container_name: freesdn-tailscale-access
     hostname: ${TS_HOSTNAME:-freesdn}
     restart: unless-stopped

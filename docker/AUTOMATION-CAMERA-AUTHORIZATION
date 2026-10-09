@@ -1,0 +1,33 @@
+Native camera automation authorization
+======================================
+
+Before opening a camera adapter, native camera automation resolves the rule's
+stored author in the action's fresh database session. The author must exist,
+remain active and undeleted, and belong to the rule's organization. Identity in
+the action payload cannot replace the trusted execution context.
+
+The action then requires the author's current module permission and the same
+site and per-camera/group access checks used by camera access:
+
+  camera.ptz                cameras.ptz       PTZ access
+  camera.snapshot           cameras.view      Live access
+  camera.motion_detection   cameras.manage    Configure access
+  camera.reboot             cameras.manage    Configure access
+
+Explicit site permission ceilings apply too: a read-only site grant cannot
+authorize PTZ, motion configuration or reboot; an unknown access level refuses
+all four actions. A permitted live snapshot remains a read operation.
+
+Missing authors, permission loss, restricted sites, refused camera grants and
+authorization lookup failures return a failed action before adapter creation.
+Database/client exception details are not copied into that refusal's execution
+history. Authorized operations keep their existing adapter calls and disconnect
+handling. Administrators should review old rules with no stored author: those
+rules are refused rather than given an implicit system camera identity.
+
+These are authorization checks at action dispatch, not an in-flight cancellation
+or exactly-once mechanism. An operation already sent to hardware cannot be
+recalled by a later permission change. Rule-cache synchronization, transaction
+rollback, staged-write parity and hardware/firmware qualification remain separate
+release concerns. This change does not qualify the external camera command's
+behavior or claim that every automation action now has equivalent controls.

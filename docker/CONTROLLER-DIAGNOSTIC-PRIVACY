@@ -1,0 +1,35 @@
+Controller public diagnostic boundary
+====================================
+
+ControllerResponse/ControllerWithStats and the metadata sync response project
+last_error and error_history through a fixed local diagnostic vocabulary.
+Unknown legacy/provider text becomes a generic category, not a pattern-based
+redaction. History contains at most ten valid bounded timestamps and safe error
+labels. Arbitrary historical extra fields are not returned. Projection copies
+the response and does not rewrite controller configuration or legacy DB records.
+Existing credential-key redaction and tenant/site authorization remain in place.
+
+Saved and precreation connection tests preserve success/failure and ordinary
+controller details but do not echo provider message/error strings. Successful
+responses clear the public error. Failed responses and newly persisted last_error
+use fixed diagnostics. Initial background connection checks use the same safe
+boundary. Saved/precreation site-probe handlers log fixed failure categories and
+use type-based hints. Proxmox unknown responses expose only a validated integer
+HTTP status in 100..599; exception text and untyped status values are not copied.
+Connectivity guidance refers to trusted TLS configuration rather than disabling
+certificate verification.
+
+The documented scope is diagnostic fields and these connection/site-probe
+handlers. This is not recursive sanitization of arbitrary provider data, version,
+name or runtime/configuration payloads. Existing untouched DB diagnostic bytes
+remain sensitive until a separate retention/migration policy removes them.
+Other controller operations, infrastructure/Celery logs and asynchronous errors
+outside the adapter-handling block require separate review. This change does not
+add execution-time authorization fencing to initial background connection work.
+
+Qualification uses real PostgreSQL and HTTP-ASGI response serialization, including
+committed background connection tests. Authentication context, adapters and the
+creation quota check are synthetic; no hardware or external notification/broker
+publication is performed. Read-only projection preserves exact stored errors,
+config and update timestamps. Foreign-tenant/site denials remain compatibility
+controls, and known authentication hints are retained.

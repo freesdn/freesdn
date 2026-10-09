@@ -9,6 +9,7 @@
  * callback so the parent can keep the mutation + queryClient invalidation.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { GatewayLiveReadNotice } from './GatewayLiveReadNotice';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Play, RefreshCw, RotateCcw, Server, Square, Wifi } from 'lucide-react';
@@ -32,6 +33,8 @@ export interface GatewayServicesTabProps {
   vendorLabel: string;
   haproxyData: any;
   haproxyLoading: boolean;
+  haproxyError?: boolean;
+  onRetryHaproxy?: () => void;
   captivePortalData: any;
   captivePortalLoading: boolean;
   services: any[];
@@ -40,6 +43,8 @@ export interface GatewayServicesTabProps {
   serviceActionPending: boolean;
   proxyData: any;
   proxyLoading: boolean;
+  proxyError?: boolean;
+  onRetryProxy?: () => void;
   proxyBlacklistsData: any;
   proxyBlacklistsLoading: boolean;
 }
@@ -48,6 +53,8 @@ export function GatewayServicesTab({
   vendorLabel,
   haproxyData,
   haproxyLoading,
+  haproxyError,
+  onRetryHaproxy,
   captivePortalData,
   captivePortalLoading,
   services,
@@ -56,6 +63,8 @@ export function GatewayServicesTab({
   serviceActionPending,
   proxyData,
   proxyLoading,
+  proxyError,
+  onRetryProxy,
   proxyBlacklistsData,
   proxyBlacklistsLoading,
 }: GatewayServicesTabProps) {
@@ -72,7 +81,9 @@ export function GatewayServicesTab({
           <CardDescription>{t('GatewayServicesTab.haproxy.description')}</CardDescription>
         </CardHeader>
         {haproxyLoading ? (
-          <CardContent><Skeleton className="h-24" /></CardContent>
+          <GatewayLiveReadNotice loading />
+        ) : haproxyError || !haproxyData ? (
+          <GatewayLiveReadNotice onRetry={onRetryHaproxy} />
         ) : (() => {
           const hp = haproxyData?.data?.haproxy;
           const frontends = hp?.frontends || [];
@@ -296,7 +307,9 @@ export function GatewayServicesTab({
           <CardDescription>{t('GatewayServicesTab.proxy.description')}</CardDescription>
         </CardHeader>
         {proxyLoading ? (
-          <CardContent><div className="flex items-center gap-2 text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" /> {t('GatewayServicesTab.proxy.loading')}</div></CardContent>
+          <GatewayLiveReadNotice loading />
+        ) : proxyError || !proxyData ? (
+          <GatewayLiveReadNotice onRetry={onRetryProxy} />
         ) : (() => {
           const proxy = proxyData?.data?.proxy || {};
           const proxyEnabled = proxy.enabled === true || proxy.enabled === '1';

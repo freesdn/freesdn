@@ -1,0 +1,54 @@
+# Site VPN profiles and legacy OpenVPN credential maintenance
+
+Imports now preserve independent profiles. A controller import identifies its
+profile by organization, site, VPN type, controller and server ID. A different
+server creates another profile. Reimport updates only the matching profile;
+legacy duplicate identities produce an explicit conflict. Imports lock the
+parent site to serialize competing first imports through these service paths.
+This does not establish a uniqueness constraint across arbitrary SQL writers.
+
+Manual OpenVPN import selects only manual OpenVPN profiles in the requested
+organization and site. With several matches, the operator must choose the
+profile in the import dialog or supply config_id to /vpn/openvpn/import-config.
+It cannot replace a controller-managed profile or convert another VPN type.
+Importing stored configuration is not evidence of a successful live tunnel.
+
+New profile creation, site configuration updates and manual imports encrypt
+OpenVPN content before storage. Responses omit that write-only content. Older
+versions could persist plaintext through the site create/update paths, even
+though the standalone connection and manual-import paths encrypted it.
+
+## Existing installations
+
+Upgrade every application writer first and retain a verified encrypted backup
+and the ORIGINAL vault SECRET_KEY and ENCRYPTION_SALT. Do not rotate vault keys
+to run this maintenance. Use the upgraded application's existing environment,
+not a separately configured shell with a new/default key. Inspect the scope in
+a qualification copy before applying it to a customer database.
+
+From the configured Compose project, audit without changing profile data:
+
+    docker compose exec -T api python -m scripts.encrypt_vpn_site_configs
+
+After reviewing the audit, explicitly encrypt legacy plaintext:
+
+    docker compose exec -T api python -m scripts.encrypt_vpn_site_configs --apply
+
+The default processes up to 100 batches of 100 nonempty profile values. Each
+apply batch takes row locks and commits atomically; a busy row, invalid token or
+wrong encryption key stops that batch. Existing ciphertext is verified and left
+byte-for-byte unchanged. No profile is connected, deleted or reassigned. Output
+contains counts and the last successful UUID cursor, never configuration content.
+Exit 0 means the requested scan finished, 1 means failure and 2 means the batch
+limit was reached. If incomplete, review the result and resume with --after-id
+set to its last_id; --batch-size and --max-batches each accept only 1..1000.
+A completed audit can report plaintext without changing it; rerun from the
+beginning after maintenance and require plaintext=0 and complete=true.
+
+This changes current database values, not old pages, WAL, replicas, dumps or
+snapshots. Treat historical plaintext-bearing copies as sensitive credentials.
+Encrypting current rows cannot retract an exposed private key: review access to
+old copies and rotate affected VPN identities if those copies were exposed or
+outside your control. Do not delete required recovery copies as an automatic
+cleanup. Customer backup handling and real tunnel/rotation acceptance remain
+operator tasks; this tool is not a secure-erasure or VPN connectivity guarantee.

@@ -11,7 +11,6 @@
  */
 import axios from 'axios';
 import { useAuthStore } from '../../stores/authStore';
-import { installDemoApi } from '@/demo/mockApi';
 import { isDemoMode } from '@/demo/mode';
 
 // Default to the current origin so the SPA uses the same-origin /api
@@ -82,7 +81,13 @@ export const api = axios.create({
 export const apiClient = api;
 
 if (isDemoMode) {
-  installDemoApi(api);
+  // Install the isolated adapter synchronously. Loading its fixture data can
+  // wait until the first request; an import failure must never fall back to HTTP.
+  let demoApi: Promise<typeof import('@/demo/mockApi')> | undefined;
+  api.defaults.adapter = async (config) => {
+    const { demoAxiosAdapter } = await (demoApi ??= import('@/demo/mockApi'));
+    return demoAxiosAdapter(config);
+  };
 }
 
 // Request interceptor: attach CSRF token on state-changing requests
@@ -116,6 +121,12 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    // Explicit release, vault and storage-probe actions must never refresh,
+    // queue or replay here. Their workflows own confirmation and recovery.
+    if (originalRequest?._freesdnReleaseNoReplay === true || originalRequest?._freesdnVaultNoReplay === true || originalRequest?._freesdnStorageProbeNoReplay === true) {
+      return Promise.reject(error);
+    }
 
     // Only attempt refresh on 401 and not already retried
     if (error.response?.status !== 401 || originalRequest._retry) {

@@ -102,7 +102,7 @@ export function ModuleHealthGrid({ siteId }: ModuleHealthGridProps) {
                       <Icon className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm font-medium capitalize">{mod.module}</span>
                     </div>
-                    <HealthGauge score={Math.round(mod.avg_health_score)} size="sm" />
+                    <HealthGauge score={mod.avg_health_score} size="sm" />
                   </div>
                   <div className="text-xs text-muted-foreground mb-2">
                     {mod.device_count === 1

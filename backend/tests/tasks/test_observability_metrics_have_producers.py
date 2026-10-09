@@ -75,17 +75,17 @@ _WRITE_ATTRS = frozenset(
     }
 )
 
-# freesdn_* series that do NOT come from app/core/metrics.py. Both are written by
-# the pg-backup container as a Prometheus textfile (docker-compose.yml, the
-# ``pg-backup`` service). Asserted as an EQUALITY below, so a third
-# externally-produced name -- or a typo in one of these two -- fails the suite
-# instead of quietly joining the exemption.
-_TEXTFILE_METRICS = frozenset(
-    {
-        "freesdn_pg_backup_last_success_timestamp",
-        "freesdn_pg_backup_encryption_enabled",
-    }
-)
+
+def _backup_produced() -> set[str]:
+    """Execute the status exporter; comments or declarations are not producers."""
+    import runpy
+    import tempfile
+
+    exporter = FREESDN_DIR / "docker" / "backup_metrics.py"
+    _require(exporter)
+    namespace = runpy.run_path(str(exporter))
+    with tempfile.TemporaryDirectory() as directory:
+        return set(namespace["collect"](Path(directory), Path(directory), {}, 1_800_000_000))
 
 
 def _require(path: Path) -> None:
@@ -198,12 +198,12 @@ def _base_name(name: str, produced: set[str]) -> str:
 
 
 def _assert_all_produced(pairs: list[tuple[str, str]], what: str) -> None:
-    produced = _produced()
+    produced = _produced() | _backup_produced()
     dead = sorted(
         (owner, name)
         for owner, expr in pairs
         for name in _metrics_in(expr)
-        if name not in _TEXTFILE_METRICS and _base_name(name, produced) not in produced
+        if _base_name(name, produced) not in produced
     )
     assert not dead, (
         f"{what} reads metric(s) that no code under app/ ever writes. A declared-"
@@ -262,11 +262,7 @@ def test_every_dashboard_expression_reads_a_metric_something_writes() -> None:
     _assert_all_produced(panels, "the Grafana dashboards")
 
 
-def test_the_only_non_backend_metrics_are_the_pg_backup_textfile_pair() -> None:
-    """The exemption above must stay exactly these two names, and stay real.
-
-    Otherwise ``_TEXTFILE_METRICS`` becomes the place a dead metric hides.
-    """
+def test_non_backend_metrics_are_emitted_by_the_scraped_backup_exporter() -> None:
     _require(ALERTS)
     _require(GRAFANA)
     produced = _produced()
@@ -276,16 +272,10 @@ def test_the_only_non_backend_metrics_are_the_pg_backup_textfile_pair() -> None:
         for name in _metrics_in(expr)
     }
     external = {name for name in used if _base_name(name, produced) not in produced}
-    assert external == set(_TEXTFILE_METRICS), (
-        "the set of freesdn_* metrics that come from outside app/core/metrics.py "
-        f"changed: {sorted(external)}"
-    )
-
-    if not COMPOSE.is_file():
-        pytest.skip(f"compose file not reachable ({COMPOSE}); backend-only mount")
-    compose = COMPOSE.read_text(encoding="utf-8")
-    missing = sorted(name for name in _TEXTFILE_METRICS if name not in compose)
-    assert not missing, (
-        "docker-compose.yml no longer emits the pg-backup textfile metric(s) "
-        f"{missing}, so the alerts that read them are dead too"
-    )
+    assert external == _backup_produced()
+    _require(COMPOSE)
+    compose = yaml.safe_load(COMPOSE.read_text())
+    assert "backup-metrics" in compose["services"]
+    scrape = yaml.safe_load((FREESDN_DIR / "docker/prometheus/prometheus.yml").read_text())
+    job = next(job for job in scrape["scrape_configs"] if job["job_name"] == "freesdn-backups")
+    assert job["static_configs"] == [{"targets": ["backup-metrics:9788"]}]

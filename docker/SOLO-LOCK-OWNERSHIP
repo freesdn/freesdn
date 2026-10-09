@@ -1,0 +1,45 @@
+Solo task locks: acquisition ownership
+=====================================
+
+acquire_solo_lock(name, ttl_seconds) returns the acquisition's opaque token, or
+None while the key is occupied. A caller retains that token and passes it to
+release_solo_lock(name, token) in its finally block. Redis compares the exact
+token and deletes only that acquisition. A process-global dictionary is no
+longer used to find a token by task name.
+
+This matters when a slow run outlives its lease and another run acquires the
+same name in the same worker/API process. The old run cannot release the new
+run's token, even if completion order is reversed. Repeated releases and a
+token for a different key also leave the current owner's lease intact.
+
+All 15 release sites are migrated: discovery, metrics, hypervisor/storage/
+firewall/Omada/overlay polling, status synchronization, reconciliation and
+health aggregation, gateway synchronization, and event replay. The existing
+on-demand reconciliation cooldown still intentionally leaves its key to expire;
+it uses acquisition truthiness and does not need a release token.
+
+Custom extensions using these internal Python helpers must retain the returned
+token and pass it explicitly on release. Old one-argument release calls are no
+longer accepted. Deploy the complete API/worker revision together; replacing
+only the helper while retaining old caller code is unsupported.
+
+Acquisition failures propagate before work starts. Release transport failures
+are logged without exception details and do not mask a task result or trigger
+a repeat of effects that have already completed. Existing lease expiry still
+provides abandoned-lock cleanup. Invalid/missing tokens are programmer errors.
+
+Limits
+------
+A finite Redis lease does not prevent overlap after expiration, pause, a network
+partition, or lost Redis state. There is no renewal thread, durable fencing
+token checked by devices/databases, exactly-once execution, or transaction
+around a remote side effect. This change prevents an old release from deleting
+a newer lease. It does not make a stale worker stop work after losing ownership.
+The lock key continues to carry the caller's existing scope; no authorization or
+tenant boundaries are broadened by this helper change.
+
+Qualification distinguishes deterministic unit checks, private Redis checks,
+and the shipping Valkey image. Real-server checks force expiration of owned
+fixture keys and reacquire them in the same process, including through all 15
+actual wrappers. Device and database work is synthetic; no hardware action or
+external notification is sent. Atomic contention remains a separate control.

@@ -46,7 +46,7 @@ from app.schemas import (
     DeviceWithStats,
     PaginatedResponse,
 )
-from app.services.adapter_factory import get_adapter
+from app.services.adapter_factory import build_adapter_for_controller
 
 logger = logging.getLogger(__name__)
 
@@ -293,6 +293,14 @@ async def update_device(
                 detail="Device not found",
             )
 
+    # The route permission is only the role/API-key ceiling. Enforce the
+    # resolved device site's read/write cap before applying any field changes.
+    if not current_user.has_site_permission("device:update", device.site_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient site access for device update",
+        )
+
     # Update fields
     update_data = device_data.model_dump(exclude_unset=True)
 
@@ -318,6 +326,9 @@ async def update_device(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Credential not found",
             )
+        # Attaching a secret reference must respect the same site visibility
+        # as credential reads. Organization-wide credentials remain usable.
+        assert_can_access_site(current_user, cred.site_id, detail="Credential not found")
 
     for field, value in update_data.items():
         setattr(device, field, value)
@@ -371,6 +382,12 @@ async def delete_device(
                 detail="Device not found",
             )
 
+    if not current_user.has_site_permission("device:delete", device.site_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient site access for device deletion",
+        )
+
     # Soft delete
     device.deleted_at = datetime.now(UTC)
 
@@ -383,56 +400,35 @@ async def delete_device(
 
 
 async def _get_adapter_for_device(device: Device) -> Any:
-    """Create adapter from device's controller credentials."""
+    """Build with the shared controller authentication and TLS configuration."""
     ctrl = device.controller
     if not ctrl:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Device has no controller",
         )
-
-    # Decrypt password if stored encrypted
-    password = ctrl.password or ""
     try:
-        from app.core.crypto import decrypt_credential, is_encrypted
-
-        if password and is_encrypted(password):
-            password = decrypt_credential(password)
+        return build_adapter_for_controller(ctrl)
+    except AdapterError:
+        # Preserve established adapter policy/error handling at the app boundary.
+        raise
     except Exception:
-        pass  # Use as-is if decryption fails
-
-    cloud_kwargs: dict[str, Any] = {}
-    if ctrl.connection_mode == "cloud":
-        client_secret = ctrl.client_secret or ""
-        try:
-            if client_secret and is_encrypted(client_secret):
-                client_secret = decrypt_credential(client_secret)
-        except Exception:
-            pass
-        cloud_kwargs = {
-            "client_id": ctrl.client_id or "",
-            "client_secret": client_secret,
-            "omada_id": ctrl.omada_id or "",
-            "cloud_region": ctrl.cloud_region or "us",
-        }
-
-    return get_adapter(
-        controller_type=ctrl.controller_type,
-        host=ctrl.host,
-        username=ctrl.username or "",
-        password=password,
-        port=ctrl.port,
-        use_ssl=ctrl.use_ssl,
-        verify_ssl=ctrl.verify_ssl,
-        mode=ctrl.connection_mode or "local",
-        **cloud_kwargs,
-    )
+        # Stored-secret getters and constructor validation can fail before an
+        # adapter exists. Never expose their raw diagnostics or use ciphertext
+        # as an authentication fallback. Cancellation is not caught here.
+        logger.warning("Device controller adapter construction failed")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Controller adapter unavailable",
+        ) from None
 
 
 async def _load_device(
     device_id: UUID,
     current_user: CurrentUser,
     session: AsyncSession,
+    *,
+    permission: str | None = None,
 ) -> Device:
     """Load device with controller + site, checking access."""
     result = await session.execute(
@@ -455,6 +451,11 @@ async def _load_device(
         # it here so every action path inherits the boundary.
         if not current_user.can_access_site(device.site_id):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    if permission is not None and not current_user.has_site_permission(permission, device.site_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient site access for device action",
+        )
     return device
 
 
@@ -494,7 +495,9 @@ async def batch_reboot_devices(
         raise HTTPException(
             400, detail="Bulk reboot disrupts the fleet; pass confirm=true to proceed."
         )
-    return await _batch_action(data.device_ids, "reboot_device", current_user, session)
+    return await _batch_action(
+        data.device_ids, "reboot_device", current_user, session, permission="device:admin"
+    )
 
 
 @router.post("/batch/upgrade")
@@ -518,7 +521,9 @@ async def batch_upgrade_firmware(
             status_code=status.HTTP_409_CONFLICT,
             detail="Batch firmware flash can brick devices. Re-issue with confirm=true.",
         )
-    return await _batch_action(data.device_ids, "upgrade_firmware", current_user, session)
+    return await _batch_action(
+        data.device_ids, "upgrade_firmware", current_user, session, permission="firmware:upgrade"
+    )
 
 
 async def _batch_action(
@@ -526,6 +531,8 @@ async def _batch_action(
     action: str,
     current_user: CurrentUser,
     session: AsyncSession,
+    *,
+    permission: str,
 ) -> dict[str, Any]:
     """
     Execute a batch device action efficiently.
@@ -533,6 +540,16 @@ async def _batch_action(
     Loads all devices in one query, groups by controller, and reuses
     a single adapter connection per controller instead of N separate ones.
     """
+    from app.adapters.base import AdapterResult
+    from app.adapters.exceptions import (
+        AdapterConfirmationRequiredError,
+        AdapterReadOnlyError,
+        CapabilityNotSupportedError,
+    )
+
+    # A duplicate identifier must never dispatch the same command twice.
+    device_ids = list(dict.fromkeys(device_ids))
+
     # Single query to load all requested devices with controller + site
     result = await session.execute(
         select(Device)
@@ -553,60 +570,167 @@ async def _batch_action(
     for did in device_ids:
         device = devices_by_id.get(did)
         if not device:
-            results.append({"device_id": str(did), "success": False, "message": "Device not found"})
+            results.append(
+                {
+                    "device_id": str(did),
+                    "success": False,
+                    "outcome": "not_attempted",
+                    "message": "Device not found",
+                }
+            )
             continue
         if not is_unscoped_superuser(current_user):
             if device.site.organization_id != current_user.organization_id:
                 results.append(
-                    {"device_id": str(did), "success": False, "message": "Access denied"}
+                    {
+                        "device_id": str(did),
+                        "success": False,
+                        "outcome": "not_attempted",
+                        "message": "Access denied",
+                    }
                 )
                 continue
             # site boundary on batch actions too.
             if not current_user.can_access_site(device.site_id):
                 results.append(
-                    {"device_id": str(did), "success": False, "message": "Access denied"}
+                    {
+                        "device_id": str(did),
+                        "success": False,
+                        "outcome": "not_attempted",
+                        "message": "Access denied",
+                    }
                 )
                 continue
+        if not current_user.has_site_permission(permission, device.site_id):
+            results.append(
+                {
+                    "device_id": str(did),
+                    "success": False,
+                    "outcome": "not_attempted",
+                    "message": "Insufficient site access",
+                }
+            )
+            continue
         if not device.controller_id:
             results.append(
                 {
                     "device_id": str(did),
                     "success": False,
+                    "outcome": "not_attempted",
                     "message": "Device not managed by a controller",
                 }
             )
             continue
         ctrl_groups[device.controller_id].append(device)
 
-    # Execute per-controller group (one adapter per controller)
+    def outcome(device: Device, kind: str, message: str) -> dict[str, Any]:
+        return {
+            "device_id": str(device.id),
+            "success": kind == "accepted",
+            "outcome": kind,
+            "message": message,
+        }
+
+    unknown_message = "Command outcome is unknown; verify device state before retrying."
+    rejected_codes = {
+        "READ_ONLY",
+        "CONFIRMATION_REQUIRED",
+        "CONFIRM",
+        "NOT_SUPPORTED",
+        "NOT_IMPLEMENTED",
+        "INVALID_CONFIG",
+        "SERVICE_NOT_ALLOWED",
+    }
+
+    # Keep one outcome per device even when connection cleanup fails after an
+    # acknowledged command. Provider diagnostics are not public response text.
     for _ctrl_id, group in ctrl_groups.items():
+        group_results: dict[UUID, dict[str, Any]] = {}
+        adapter = None
+        entered = False
+        interrupted: BaseException | None = None
+        cleanup_failed = False
         try:
             adapter = await _get_adapter_for_device(group[0])
             async with adapter:
-                for device in group:
-                    try:
-                        method = getattr(adapter, action)
-                        r = await method(device.mac_address)
-                        results.append(
-                            {
-                                "device_id": str(device.id),
-                                "success": r.success,
-                                "message": r.message,
-                            }
-                        )
-                    except Exception as e:
-                        results.append(
-                            {"device_id": str(device.id), "success": False, "message": str(e)}
-                        )
-        except Exception as e:
-            for device in group:
-                results.append(
-                    {
-                        "device_id": str(device.id),
-                        "success": False,
-                        "message": f"Controller error: {e}",
-                    }
+                entered = True
+                try:
+                    for device in group:
+                        invoked = False
+                        try:
+                            method = getattr(adapter, action)
+                            invoked = True
+                            result = await method(device.mac_address)
+                            if isinstance(result, AdapterResult) and result.success is True:
+                                item = outcome(
+                                    device, "accepted", "Command accepted by controller."
+                                )
+                            elif (
+                                isinstance(result, AdapterResult)
+                                and result.success is False
+                                and isinstance(result.error_code, str)
+                                and result.error_code in rejected_codes
+                            ):
+                                item = outcome(
+                                    device,
+                                    "rejected",
+                                    "Command refused by controller policy or capability.",
+                                )
+                            else:
+                                item = outcome(device, "unknown", unknown_message)
+                        except (
+                            AdapterReadOnlyError,
+                            AdapterConfirmationRequiredError,
+                            CapabilityNotSupportedError,
+                        ):
+                            item = outcome(
+                                device,
+                                "rejected",
+                                "Command refused by controller policy or capability.",
+                            )
+                        except Exception:
+                            item = (
+                                outcome(device, "unknown", unknown_message)
+                                if invoked
+                                else outcome(
+                                    device,
+                                    "not_attempted",
+                                    "Command not attempted; adapter operation unavailable.",
+                                )
+                            )
+                        group_results[device.id] = item
+                except BaseException as exc:
+                    # Preserve cancellation even if __aexit__ raises or suppresses
+                    # it. Returning failure here could invite a dangerous retry.
+                    interrupted = exc
+                    raise
+        except BaseException as exc:
+            if not isinstance(exc, Exception):
+                interrupted = interrupted if interrupted is not None else exc
+            elif entered:
+                cleanup_failed = True
+            logger.warning("Device batch controller session did not complete normally")
+        finally:
+            if adapter is not None and not entered:
+                # __aexit__ is not invoked when __aenter__ fails.
+                try:
+                    await adapter.disconnect()
+                except BaseException as exc:
+                    if not isinstance(exc, Exception) and interrupted is None:
+                        interrupted = exc
+                    cleanup_failed = True
+                    logger.warning("Device batch controller cleanup failed")
+        if interrupted is not None:
+            raise interrupted
+        for device in group:
+            item = group_results.get(device.id) or outcome(
+                device, "not_attempted", "Command not attempted; controller session unavailable."
+            )
+            if cleanup_failed:
+                item["warning"] = (
+                    "Controller cleanup failed; accepted commands must not be replayed."
                 )
+            results.append(item)
 
     return {"results": results}
 
@@ -627,7 +751,7 @@ async def reboot_device(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Rebooting disrupts the device; pass confirm=true to proceed.",
         )
-    device = await _load_device(device_id, current_user, session)
+    device = await _load_device(device_id, current_user, session, permission="device:reboot")
 
     if not device.controller_id:
         raise HTTPException(
@@ -665,7 +789,7 @@ async def locate_device(
     duration: int = Query(30, ge=5, le=120),
 ) -> dict[str, Any]:
     """Flash LEDs to physically locate a device (APs only)."""
-    device = await _load_device(device_id, current_user, session)
+    device = await _load_device(device_id, current_user, session, permission="device:action")
     adapter = await _get_adapter_for_device(device)
 
     try:
@@ -691,7 +815,7 @@ async def set_device_led(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, Any]:
     """Set device LED mode (0=off, 1=on, 2=site_settings)."""
-    device = await _load_device(device_id, current_user, session)
+    device = await _load_device(device_id, current_user, session, permission="device:action")
     adapter = await _get_adapter_for_device(device)
 
     try:
@@ -716,7 +840,7 @@ async def adopt_device(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, Any]:
     """Adopt a pending device into the controller."""
-    device = await _load_device(device_id, current_user, session)
+    device = await _load_device(device_id, current_user, session, permission="device:admin")
     # Serialize concurrent adopts of the SAME device (mirrors discovery.py's
     # FOR UPDATE): lock the row + re-read is_adopted so a second concurrent
     # request waits, then bails with 409 — instead of both firing adopt at the
@@ -771,7 +895,7 @@ async def forget_device(
             status_code=400,
             detail="Forgetting a device unadopts it (irreversible); pass confirm=true to proceed.",
         )
-    device = await _load_device(device_id, current_user, session)
+    device = await _load_device(device_id, current_user, session, permission="device:admin")
     adapter = await _get_adapter_for_device(device)
 
     try:
@@ -816,7 +940,7 @@ async def upgrade_device_firmware(
             status_code=status.HTTP_409_CONFLICT,
             detail="Firmware flash reboots the device and can brick it. Re-issue with confirm=true.",
         )
-    device = await _load_device(device_id, current_user, session)
+    device = await _load_device(device_id, current_user, session, permission="firmware:upgrade")
     adapter = await _get_adapter_for_device(device)
 
     try:

@@ -13,6 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from app.models.devices import ConnectionType, DeviceStatus, DeviceType
 
@@ -118,6 +119,11 @@ class DeviceCreate(DeviceBase):
         return v
 
 
+def _omit_patch_default(schema: dict[str, Any]) -> None:
+    """An omitted PATCH value is not a valid explicit null default."""
+    schema.pop("default", None)
+
+
 class DeviceUpdate(BaseSchema):
     """Device update schema.
 
@@ -127,17 +133,31 @@ class DeviceUpdate(BaseSchema):
     blob was 200'd into the column.
     """
 
-    name: str | None = Field(None, min_length=1, max_length=255)
+    name: str | SkipJsonSchema[None] = Field(
+        None,
+        min_length=1,
+        max_length=255,
+        json_schema_extra=_omit_patch_default,
+    )
     location: str | None = Field(None, max_length=255)
     floor: str | None = Field(None, max_length=50)
     room: str | None = Field(None, max_length=100)
     notes: str | None = Field(None, max_length=10000)
-    is_active: bool | None = None
-    is_managed: bool | None = None
+    is_active: bool | SkipJsonSchema[None] = Field(None, json_schema_extra=_omit_patch_default)
+    is_managed: bool | SkipJsonSchema[None] = Field(None, json_schema_extra=_omit_patch_default)
     # Operator escape-hatch: assign / change a credential after adoption
     # (e.g. an agent-discovered device that needs creds to be fully
     # manageable). Validated against the caller's org in the endpoint.
     credential_id: UUID | None = None
+
+    @field_validator("name", "is_active", "is_managed", mode="before")
+    @classmethod
+    def _reject_null_required_fields(cls, value: Any) -> Any:
+        # Omitted fields keep their default and are excluded from a PATCH.
+        # Explicit null must fail before it reaches a NOT NULL DB column.
+        if value is None:
+            raise ValueError("Field cannot be null; omit it to leave the value unchanged")
+        return value
 
 
 class DeviceResponse(DeviceBase, TimestampSchema):

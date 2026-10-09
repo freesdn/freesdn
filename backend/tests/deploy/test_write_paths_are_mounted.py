@@ -86,14 +86,13 @@ WRITE_PATH_EXEMPTIONS: dict[str, set[str]] = {
     # executes a task body; collector and vpn run their own narrow entrypoints.
     "/data/evidence": {"scheduler", "flower", "collector", "vpn"},
     "/data/proxmox-uploads": {"scheduler", "flower", "collector", "vpn"},
-    # NOTE: /data/plugins and /data/agent-releases used to be listed here. They
-    # never belonged: this table only applies to paths _declared_write_paths()
-    # yields, i.e. Settings fields, and neither path is one (PLUGIN_DIR is a
-    # module constant, the release dir is a bare os.environ.get in an endpoint).
-    # So both entries exempted nothing while reading as though those paths were
-    # covered -- which is why the missing per-service check on them went unseen.
-    # They are in HARDCODED_WRITE_PATHS now. test_no_exemption_is_dead below
-    # stops another one being written.
+    # The release path is now also a Settings field. Match the existing
+    # HARDCODED_WRITE_PATHS policy: beat only enqueues, Flower runs no task
+    # bodies, and collector/vpn have dedicated non-HTTP entrypoints. The API
+    # and both workers must still mount this directory in BOTH checks.
+    "/data/agent-releases": {"scheduler", "flower", "collector", "vpn"},
+    # PLUGIN_DIR remains a module constant, so only HARDCODED_WRITE_PATHS can
+    # check it. test_no_exemption_is_dead rejects exemptions for invisible paths.
 }
 
 

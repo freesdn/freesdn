@@ -57,8 +57,8 @@ async def _fabric_phone_status_handler(ctx: Any) -> Any:
             accessible_site_ids=getattr(ctx, "accessible_site_ids", None),
         )
         status = await svc.get_phone_live_status(phone_id)
-    except Exception as exc:  # noqa: BLE001
-        return OperationResult.fail(f"voip.phone.live_status failed: {exc}", "READ_ERROR")
+    except Exception:  # noqa: BLE001
+        return OperationResult.fail("voip.phone.live_status failed", "READ_ERROR")
     return OperationResult.ok(output=status if isinstance(status, dict) else {"status": status})
 
 
@@ -97,8 +97,8 @@ async def _fabric_active_calls_handler(ctx: Any) -> Any:
             accessible_site_ids=getattr(ctx, "accessible_site_ids", None),
         )
         calls = await svc.get_pbx_active_calls(pbx_id)
-    except Exception as exc:  # noqa: BLE001
-        return OperationResult.fail(f"voip.pbx.active_calls failed: {exc}", "READ_ERROR")
+    except Exception:  # noqa: BLE001
+        return OperationResult.fail("voip.pbx.active_calls failed", "READ_ERROR")
     return OperationResult.ok(output={"count": len(calls), "calls": calls})
 
 
@@ -123,8 +123,8 @@ async def _fabric_list_extensions_handler(ctx: Any) -> Any:
             accessible_site_ids=getattr(ctx, "accessible_site_ids", None),
         )
         items, total = await svc.list_extensions(pbx_id, limit=500)
-    except Exception as exc:  # noqa: BLE001
-        return OperationResult.fail(f"voip.pbx.list_extensions failed: {exc}", "READ_ERROR")
+    except Exception:  # noqa: BLE001
+        return OperationResult.fail("voip.pbx.list_extensions failed", "READ_ERROR")
     return OperationResult.ok(
         output={
             "total": total,
@@ -180,8 +180,8 @@ async def _fabric_originate_handler(ctx: Any) -> Any:
             caller_id=ctx.params.get("caller_id") or None,
             context=str(ctx.params.get("context") or "from-internal"),
         )
-    except Exception as exc:  # noqa: BLE001
-        return OperationResult.fail(f"voip.pbx.originate_call failed: {exc}", "ORIGINATE_ERROR")
+    except Exception:  # noqa: BLE001
+        return OperationResult.fail("voip.pbx.originate_call failed", "ORIGINATE_ERROR")
     return OperationResult.ok(output=result if isinstance(result, dict) else {"result": result})
 
 

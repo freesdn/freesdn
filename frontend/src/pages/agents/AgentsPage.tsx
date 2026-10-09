@@ -654,7 +654,7 @@ export default function AgentsPage() {
       {/* Stats, top row: agent connection state. These come from the
           org-scoped /agents/stats endpoint (site filter does not apply). */}
       <div className="text-xs font-medium text-muted-foreground">
-        {t('common:allSites')}
+        {t('common:SiteSelector.allSites')}
       </div>
       <StatsGrid
         columns={4}

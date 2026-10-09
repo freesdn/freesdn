@@ -28,10 +28,10 @@ from app.adapters.proxmox.models import (
     ProxmoxNodeInfo,
     ProxmoxVM,
 )
+from app.modules.hypervisor import dashboard_metrics
 from app.modules.hypervisor.models import ProxmoxNode
 from app.modules.hypervisor.schemas import (
     AlertHysteresisConfig,
-    BackupAgeReport,
     BackupAgeResponse,
     BackupJobResponse,
     CephDetailResponse,
@@ -40,7 +40,6 @@ from app.modules.hypervisor.schemas import (
     ClusterResourceItem,
     ClusterStatusResponse,
     ConsoleProxyResponse,
-    CreateVMResponse,
     DiskInfoResponse,
     FirewallRuleResponse,
     FleetClusterSummary,
@@ -64,6 +63,7 @@ from app.modules.hypervisor.schemas import (
     TaskLogEntry,
     TaskResponse,
     TaskStatistics,
+    VMActionResponse,
     VMResponse,
 )
 
@@ -204,9 +204,10 @@ def evaluate_with_hysteresis(
 # MODULE-LEVEL CACHING & CONCURRENCY LIMITS
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Dashboard TTL cache: {controller_id: (response, timestamp)}
-_dashboard_cache: dict[str, tuple[Any, float]] = {}
+# Short-lived observations: {controller_id: (response, collection start, config digest)}
+_dashboard_cache: dict[str, tuple[HypervisorDashboardResponse, float, str]] = {}
 _DASHBOARD_TTL = 10.0  # seconds
+_DASHBOARD_READ_TIMEOUT = 15.0
 _MAX_DASHBOARD_CACHE_SIZE = 100
 
 # Fleet concurrency limit (max 5 simultaneous Proxmox connections)
@@ -218,7 +219,8 @@ _FLEET_TIMEOUT = 20.0  # seconds per-cluster timeout
 # DIRECT-PATH CATASTROPHIC GUARD
 # ═══════════════════════════════════════════════════════════════════════════
 #
-# This service is the DIRECT (un-staged) write path: unlike the staging
+# Power actions now use hypervisor_power and the staging chokepoint. Other
+# writes below remain on the DIRECT (un-staged) path: unlike the staging
 # applier (app/services/adapter_proxmox_vm.py) it runs NO catastrophic
 # pre-flight (adapter_proxmox_preflight.assess/gate) and carries NO
 # ``confirmed=true`` second factor. Under the default ``ADAPTER_READ_ONLY=True``
@@ -341,88 +343,57 @@ class HypervisorService:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_dashboard(self, controller: Any) -> HypervisorDashboardResponse:
-        """Get aggregated cluster dashboard with TTL cache."""
+        """Return an explicitly aged observation; never extend TTL on cache hits."""
         ctrl_id = str(controller.id)
+        fingerprint = dashboard_metrics.controller_fingerprint(controller)
+        now = time.monotonic()
         cached = _dashboard_cache.get(ctrl_id)
-        if cached and (time.monotonic() - cached[1]) < _DASHBOARD_TTL:
-            return cached[0]
-
+        if cached and cached[2] == fingerprint and 0 <= now - cached[1] < _DASHBOARD_TTL:
+            result = cached[0].model_copy(deep=True)
+            result.observation_age_seconds = round(now - cached[1], 3)
+            result.served_at = datetime.now(UTC)
+            return result
+        # An expired/config-changed entry must not survive a failed refresh.
+        _dashboard_cache.pop(ctrl_id, None)
         result = await self._get_dashboard_uncached(controller)
+        result.observation_age_seconds = round(max(0.0, time.monotonic() - now), 3)
+        result.served_at = datetime.now(UTC)
         if len(_dashboard_cache) >= _MAX_DASHBOARD_CACHE_SIZE:
-            # Evict oldest entries
-            oldest_keys = sorted(
-                _dashboard_cache.keys(),
-                key=lambda k: _dashboard_cache[k][1],
-            )[:10]
-            for k in oldest_keys:
-                _dashboard_cache.pop(k, None)
-        _dashboard_cache[ctrl_id] = (result, time.monotonic())
+            oldest_keys = sorted(_dashboard_cache, key=lambda key: _dashboard_cache[key][1])[:10]
+            for key in oldest_keys:
+                _dashboard_cache.pop(key, None)
+        _dashboard_cache[ctrl_id] = (result.model_copy(deep=True), now, fingerprint)
         return result
 
     async def _get_dashboard_uncached(self, controller: Any) -> HypervisorDashboardResponse:
-        """Get aggregated cluster dashboard (no cache)."""
+        started = datetime.now(UTC)
         async with await self._get_adapter(controller) as adapter:
-            # Fetch cluster status and all resources in parallel
-            cluster_result, resources_result, ha_result = await asyncio.gather(
-                adapter.get_cluster_status(),
-                adapter.get_cluster_resources(),
-                adapter.get_ha_status(),
-                return_exceptions=True,
+            try:
+                cluster, resources, ha = await asyncio.wait_for(
+                    asyncio.gather(
+                        adapter.get_cluster_status(),
+                        adapter.get_cluster_resources(),
+                        adapter.get_ha_status(),
+                        return_exceptions=True,
+                    ),
+                    timeout=_DASHBOARD_READ_TIMEOUT,
+                )
+            except TimeoutError as exc:
+                raise ConnectionError("Proxmox dashboard read deadline exceeded") from exc
+            for label, result in (("cluster status", cluster), ("resources", resources)):
+                if not isinstance(result, AdapterResult) or not result.success:
+                    raise ConnectionError(f"Proxmox {label} is unavailable")
+            if not isinstance(cluster.data, ProxmoxClusterStatus) or not isinstance(
+                resources.data, list
+            ):
+                raise ConnectionError("Proxmox dashboard response is malformed")
+            return dashboard_metrics.aggregate(
+                str(controller.id),
+                cluster.data,
+                resources.data,
+                ha.data if isinstance(ha, AdapterResult) and ha.success else None,
+                started,
             )
-
-            dashboard = HypervisorDashboardResponse()
-
-            # Cluster info
-            if not isinstance(cluster_result, Exception) and cluster_result.success:
-                cs: ProxmoxClusterStatus = cluster_result.data
-                dashboard.cluster_name = cs.name
-                dashboard.quorate = cs.quorate
-                dashboard.total_nodes = cs.node_count
-                dashboard.online_nodes = sum(1 for n in cs.nodes if n.status == "online")
-
-            # Resources
-            if not isinstance(resources_result, Exception) and resources_result.success:
-                resources = resources_result.data or []
-                for r in resources:
-                    rtype = r.get("type", "") if isinstance(r, dict) else ""
-                    if rtype == "node":
-                        dashboard.total_cpu_cores += int(r.get("maxcpu", 0))
-                        cpu_frac = float(r.get("cpu", 0))
-                        dashboard.cpu_usage_percent += cpu_frac * int(r.get("maxcpu", 0))
-                        dashboard.total_memory_bytes += int(r.get("maxmem", 0))
-                        dashboard.used_memory_bytes += int(r.get("mem", 0))
-                        dashboard.total_storage_bytes += int(r.get("maxdisk", 0))
-                        dashboard.used_storage_bytes += int(r.get("disk", 0))
-                    elif rtype == "qemu":
-                        dashboard.total_vms += 1
-                        if r.get("status") == "running":
-                            dashboard.running_vms += 1
-                    elif rtype == "lxc":
-                        dashboard.total_containers += 1
-                        if r.get("status") == "running":
-                            dashboard.running_containers += 1
-
-                # Compute percentages
-                if dashboard.total_cpu_cores > 0:
-                    dashboard.cpu_usage_percent = round(
-                        dashboard.cpu_usage_percent / dashboard.total_cpu_cores * 100, 1
-                    )
-                if dashboard.total_memory_bytes > 0:
-                    dashboard.memory_usage_percent = round(
-                        dashboard.used_memory_bytes / dashboard.total_memory_bytes * 100, 1
-                    )
-                if dashboard.total_storage_bytes > 0:
-                    dashboard.storage_usage_percent = round(
-                        dashboard.used_storage_bytes / dashboard.total_storage_bytes * 100, 1
-                    )
-
-            # HA
-            if not isinstance(ha_result, Exception) and ha_result.success:
-                ha_data = ha_result.data
-                if isinstance(ha_data, list) and len(ha_data) > 0:
-                    dashboard.ha_active = True
-
-            return dashboard
 
     # ═══════════════════════════════════════════════════════════════════════
     # CLUSTER
@@ -572,35 +543,27 @@ class HypervisorService:
         vmid: int,
         action: str,
         vm_type: str = "qemu",
-    ) -> dict:
-        """Execute a VM/container power action."""
-        async with await self._get_adapter(controller) as adapter:
-            action_map = {
-                "qemu": {
-                    "start": adapter.start_vm,
-                    "stop": adapter.stop_vm,
-                    "shutdown": adapter.shutdown_vm,
-                    "reboot": adapter.reboot_vm,
-                    "suspend": adapter.suspend_vm,
-                    "resume": adapter.resume_vm,
-                },
-                "lxc": {
-                    "start": adapter.start_container,
-                    "stop": adapter.stop_container,
-                    "shutdown": adapter.shutdown_container,
-                    "reboot": adapter.reboot_container,
-                },
-            }
+        *,
+        current_user: Any = None,
+        request_id: UUID | None = None,
+        force: bool = False,
+    ):
+        """Submit one power intent through the durable staging claim."""
+        from fastapi import HTTPException
 
-            type_actions = action_map.get(vm_type, {})
-            fn = type_actions.get(action)
-            if not fn:
-                raise ValueError(f"Unsupported action '{action}' for type '{vm_type}'")
+        from app.services.hypervisor_power import HypervisorPowerService
 
-            result = await fn(node, vmid)
-            if not result.success:
-                raise ValueError(result.error or f"Action '{action}' failed")
-            return result.data or {}
+        if current_user is None or request_id is None:
+            raise HTTPException(400, detail="Power actions require an actor and request_id")
+        return await HypervisorPowerService(self.db, current_user).execute(
+            controller.id,
+            node,
+            vmid,
+            action,
+            vm_type,
+            request_id=request_id,
+            force=force,
+        )
 
     # ═══════════════════════════════════════════════════════════════════════
     # SNAPSHOTS
@@ -634,15 +597,29 @@ class HypervisorService:
         description: str = "",
         vm_type: str = "qemu",
         vmstate: bool = False,
-    ) -> dict:
-        """Create a snapshot."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.create_snapshot(
-                node, vmid, snapname, description, vm_type, vmstate
-            )
-            if not result.success:
-                raise ValueError(result.error or "Snapshot creation failed")
-            return {"upid": result.data}
+        *,
+        current_user: Any = None,
+        request_id: UUID | None = None,
+        force: bool = False,
+    ):
+        from fastapi import HTTPException
+
+        from app.services.hypervisor_operations import HypervisorOperationService
+
+        if current_user is None or request_id is None:
+            raise HTTPException(400, detail="Snapshot requires an actor and request_id")
+        return await HypervisorOperationService(self.db, current_user).snapshot(
+            controller.id,
+            node,
+            vmid,
+            vm_type,
+            "create",
+            snapname,
+            request_id=request_id,
+            force=force,
+            description=description,
+            vmstate=vmstate,
+        )
 
     async def rollback_snapshot(
         self,
@@ -653,38 +630,64 @@ class HypervisorService:
         vm_type: str = "qemu",
         *,
         confirmed: bool = False,
-    ) -> dict:
-        """Rollback to a snapshot — discards all guest state since the snapshot.
+        current_user: Any = None,
+        request_id: UUID | None = None,
+        force: bool = False,
+    ):
+        from fastapi import HTTPException
 
-        A guest-scoped destructive op: allowed on the direct path with an explicit
-        ``confirmed`` second factor (the UI's type-to-confirm dialog supplies it).
-        We do NOT pass ``force``, so the Proxmox client read-only gate still
-        applies: a confirmed rollback is refused while read-only is ON (→ 403) and
-        proceeds only in read-write mode.
-        """
+        from app.adapters.exceptions import AdapterConfirmationRequiredError
+        from app.services.hypervisor_operations import HypervisorOperationService
+
         if not confirmed:
-            from app.adapters.exceptions import AdapterConfirmationRequiredError
-
             raise AdapterConfirmationRequiredError(
-                "Rolling back a snapshot discards all guest state since it — "
-                "resubmit with confirmed=true to proceed.",
+                "Rolling back a snapshot discards guest state; confirmed=true is required",
                 adapter_id="proxmox",
             )
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.rollback_snapshot(node, vmid, snapname, vm_type)
-            if not result.success:
-                raise ValueError(result.error or "Snapshot rollback failed")
-            return {"upid": result.data}
+        if current_user is None or request_id is None:
+            raise HTTPException(400, detail="Snapshot requires an actor and request_id")
+        return await HypervisorOperationService(self.db, current_user).snapshot(
+            controller.id,
+            node,
+            vmid,
+            vm_type,
+            "rollback",
+            snapname,
+            request_id=request_id,
+            force=force,
+            confirmed=confirmed,
+        )
 
     async def delete_snapshot(
-        self, controller: Any, node: str, vmid: int, snapname: str, vm_type: str = "qemu"
-    ) -> dict:
-        """Delete a snapshot."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.delete_snapshot(node, vmid, snapname, vm_type)
-            if not result.success:
-                raise ValueError(result.error or "Snapshot deletion failed")
-            return {"upid": result.data}
+        self,
+        controller: Any,
+        node: str,
+        vmid: int,
+        snapname: str,
+        vm_type: str = "qemu",
+        *,
+        confirmed: bool = False,
+        current_user: Any = None,
+        request_id: UUID | None = None,
+        force: bool = False,
+    ):
+        from fastapi import HTTPException
+
+        from app.services.hypervisor_operations import HypervisorOperationService
+
+        if current_user is None or request_id is None:
+            raise HTTPException(400, detail="Snapshot requires an actor and request_id")
+        return await HypervisorOperationService(self.db, current_user).snapshot(
+            controller.id,
+            node,
+            vmid,
+            vm_type,
+            "delete",
+            snapname,
+            request_id=request_id,
+            force=force,
+            confirmed=confirmed,
+        )
 
     # ═══════════════════════════════════════════════════════════════════════
     # STORAGE
@@ -785,7 +788,7 @@ class HypervisorService:
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_tasks(node, limit)
             if not result.success:
-                return []
+                raise ConnectionError("Task inventory unavailable")
             return [
                 TaskResponse(
                     upid=t.upid,
@@ -880,7 +883,7 @@ class HypervisorService:
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_backup_jobs()
             if not result.success:
-                return []
+                raise ConnectionError("Proxmox backup schedule inventory is unavailable")
             return [
                 BackupJobResponse(
                     id=b.id,
@@ -904,13 +907,28 @@ class HypervisorService:
         storage: str,
         mode: str = "snapshot",
         compress: str = "zstd",
-    ) -> dict:
-        """Trigger a manual backup."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.run_backup(node, vmid, storage, mode, compress)
-            if not result.success:
-                raise ValueError(result.error or "Backup failed")
-            return {"upid": result.data}
+        *,
+        vm_type: str = "qemu",
+        current_user: Any = None,
+        request_id: UUID | None = None,
+        force: bool = False,
+    ):
+        from fastapi import HTTPException
+
+        from app.modules.hypervisor.schemas import BackupRunRequest
+        from app.services.hypervisor_operations import HypervisorOperationService
+
+        if current_user is None or request_id is None:
+            raise HTTPException(400, detail="Backup requires an actor and request_id")
+        return await HypervisorOperationService(self.db, current_user).backup(
+            controller.id,
+            node,
+            vmid,
+            vm_type,
+            BackupRunRequest(
+                request_id=request_id, force=force, storage=storage, mode=mode, compress=compress
+            ),
+        )
 
     # ═══════════════════════════════════════════════════════════════════════
     # CLONE / MIGRATE / RESIZE
@@ -929,34 +947,34 @@ class HypervisorService:
         full: bool = True,
         storage: str = "",
         description: str = "",
-    ) -> dict:
-        """Clone a VM or container."""
-        async with await self._get_adapter(controller) as adapter:
-            if vm_type == "lxc":
-                result = await adapter.clone_container(
-                    node,
-                    vmid,
-                    newid,
-                    hostname=name,
-                    target=target,
-                    full=full,
-                    storage=storage,
-                    description=description,
-                )
-            else:
-                result = await adapter.clone_vm(
-                    node,
-                    vmid,
-                    newid,
-                    name=name,
-                    target=target,
-                    full=full,
-                    storage=storage,
-                    description=description,
-                )
-            if not result.success:
-                raise ValueError(result.error or "Clone failed")
-            return result.data or {}
+        current_user: Any = None,
+        request_id: UUID | None = None,
+        force: bool = False,
+    ):
+        """Persist and claim a clone intent before dispatching it."""
+        from fastapi import HTTPException
+
+        from app.modules.hypervisor.schemas import CloneRequest
+        from app.services.hypervisor_operations import HypervisorOperationService
+
+        if current_user is None or request_id is None:
+            raise HTTPException(400, detail="Clone requires an actor and request_id")
+        return await HypervisorOperationService(self.db, current_user).clone(
+            controller.id,
+            node,
+            vmid,
+            vm_type,
+            CloneRequest(
+                request_id=request_id,
+                force=force,
+                newid=newid,
+                name=name,
+                target=target,
+                full=full,
+                storage=storage,
+                description=description,
+            ),
+        )
 
     async def migrate_vm(
         self,
@@ -965,68 +983,92 @@ class HypervisorService:
         vmid: int,
         target: str,
         vm_type: str = "qemu",
-        online: bool = True,
-    ) -> dict:
-        """Migrate a VM or container to another node."""
-        async with await self._get_adapter(controller) as adapter:
-            if vm_type == "lxc":
-                result = await adapter.migrate_container(node, vmid, target, online=online)
-            else:
-                result = await adapter.migrate_vm(node, vmid, target, online=online)
-            if not result.success:
-                raise ValueError(result.error or "Migration failed")
-            return result.data or {}
+        online: bool = False,
+        *,
+        restart: bool = False,
+        current_user: Any = None,
+        request_id: UUID | None = None,
+        force: bool = False,
+    ):
+        """Persist and claim a migration intent before dispatching it."""
+        from fastapi import HTTPException
+
+        from app.modules.hypervisor.schemas import MigrateRequest
+        from app.services.hypervisor_operations import HypervisorOperationService
+
+        if current_user is None or request_id is None:
+            raise HTTPException(400, detail="Migration requires an actor and request_id")
+        return await HypervisorOperationService(self.db, current_user).migrate(
+            controller.id,
+            node,
+            vmid,
+            vm_type,
+            MigrateRequest(
+                request_id=request_id, force=force, target=target, online=online, restart=restart
+            ),
+        )
 
     async def resize_disk(
         self,
         controller: Any,
         node: str,
         vmid: int,
-        disk: str,
-        size: str,
+        body: Any,
         vm_type: str = "qemu",
-    ) -> dict:
-        """Resize a VM/CT disk."""
-        async with await self._get_adapter(controller) as adapter:
-            if vm_type == "lxc":
-                result = await adapter.resize_container_disk(node, vmid, disk, size)
-            else:
-                result = await adapter.resize_vm_disk(node, vmid, disk, size)
-            if not result.success:
-                raise ValueError(result.error or "Resize failed")
-            return {"status": "ok"}
+        *,
+        current_user: Any = None,
+    ):
+        return await self._guest_change(
+            controller, node, vmid, vm_type, "resize", body, current_user
+        )
 
     async def update_config(
         self,
         controller: Any,
         node: str,
         vmid: int,
-        config: dict,
+        body: Any,
         vm_type: str = "qemu",
-    ) -> dict:
-        """Update VM/CT configuration."""
-        async with await self._get_adapter(controller) as adapter:
-            if vm_type == "lxc":
-                result = await adapter.update_container_config(node, vmid, config)
-            else:
-                result = await adapter.update_vm_config(node, vmid, config)
-            if not result.success:
-                raise ValueError(result.error or "Config update failed")
-            return {"status": "ok"}
+        *,
+        current_user: Any = None,
+    ):
+        return await self._guest_change(
+            controller, node, vmid, vm_type, "config", body, current_user
+        )
 
     async def convert_to_template(
         self,
         controller: Any,
         node: str,
         vmid: int,
+        body: Any,
         vm_type: str = "qemu",
-    ) -> dict:
-        """Convert VM/CT to template."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.convert_to_template(node, vmid, vm_type)
-            if not result.success:
-                raise ValueError(result.error or "Template conversion failed")
-            return {"status": "ok"}
+        *,
+        current_user: Any = None,
+    ):
+        return await self._guest_change(
+            controller, node, vmid, vm_type, "template", body, current_user
+        )
+
+    async def _guest_change(
+        self,
+        controller: Any,
+        node: str,
+        vmid: int,
+        vm_type: str,
+        action: str,
+        body: Any,
+        current_user: Any,
+    ):
+        from fastapi import HTTPException
+
+        from app.services.hypervisor_operations import HypervisorOperationService
+
+        if current_user is None:
+            raise HTTPException(400, detail="Guest changes require an actor and reviewed intent")
+        return await HypervisorOperationService(self.db, current_user).guest_change(
+            controller.id, node, vmid, vm_type, action, body
+        )
 
     # ═══════════════════════════════════════════════════════════════════════
     # CONSOLE
@@ -1085,16 +1127,8 @@ class HypervisorService:
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_task_log(node, upid, start, limit)
             if not result.success:
-                return []
+                raise ConnectionError("Task log unavailable")
             return [TaskLogEntry(n=l.n, t=l.t) for l in (result.data or [])]
-
-    async def stop_task(self, controller: Any, node: str, upid: str) -> dict:
-        """Stop a running task."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.stop_task(node, upid)
-            if not result.success:
-                raise ValueError(result.error or "Failed to stop task")
-            return {"status": "ok"}
 
     # ═══════════════════════════════════════════════════════════════════════
     # FIREWALL
@@ -1111,7 +1145,7 @@ class HypervisorService:
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_firewall_rules(node, vmid, vm_type)
             if not result.success:
-                return []
+                raise ConnectionError("Firewall rules unavailable")
             return [
                 FirewallRuleResponse(
                     pos=r.pos,
@@ -1131,36 +1165,6 @@ class HypervisorService:
                 for r in (result.data or [])
             ]
 
-    async def create_firewall_rule(
-        self,
-        controller: Any,
-        node: str | None = None,
-        vmid: int | None = None,
-        vm_type: str = "qemu",
-        **kwargs: Any,
-    ) -> dict:
-        """Create a firewall rule."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.create_firewall_rule(
-                node=node, vmid=vmid, vm_type=vm_type, **kwargs
-            )
-            if not result.success:
-                raise ValueError(result.error or "Failed to create firewall rule")
-            return {"status": "ok"}
-
-    async def delete_firewall_rule(
-        self,
-        controller: Any,
-        pos: int,
-        node: str | None = None,
-    ) -> dict:
-        """Delete a firewall rule."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.delete_firewall_rule(pos, node)
-            if not result.success:
-                raise ValueError(result.error or "Failed to delete firewall rule")
-            return {"status": "ok"}
-
     # ═══════════════════════════════════════════════════════════════════════
     # GUEST FIREWALL (per VM/CT)
     # ═══════════════════════════════════════════════════════════════════════
@@ -1172,28 +1176,8 @@ class HypervisorService:
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_guest_firewall_rules(node, vm_type, vmid)
             if not result.success:
-                return []
+                raise ConnectionError("Firewall rules unavailable")
             return result.data or []
-
-    async def create_guest_firewall_rule(
-        self, controller: Any, node: str, vm_type: str, vmid: int, rule: dict
-    ) -> dict:
-        """Create a firewall rule on a VM/CT."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.create_guest_firewall_rule(node, vm_type, vmid, rule)
-            if not result.success:
-                raise ValueError(result.error or "Failed to create guest firewall rule")
-            return {"status": "ok"}
-
-    async def delete_guest_firewall_rule(
-        self, controller: Any, node: str, vm_type: str, vmid: int, pos: int
-    ) -> dict:
-        """Delete a firewall rule on a VM/CT."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.delete_guest_firewall_rule(node, vm_type, vmid, pos)
-            if not result.success:
-                raise ValueError(result.error or "Failed to delete guest firewall rule")
-            return {"status": "ok"}
 
     async def get_guest_firewall_options(
         self, controller: Any, node: str, vm_type: str, vmid: int
@@ -1202,69 +1186,27 @@ class HypervisorService:
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_guest_firewall_options(node, vm_type, vmid)
             if not result.success:
-                return {}
+                raise ConnectionError("Firewall options unavailable")
             return result.data or {}
-
-    async def update_guest_firewall_options(
-        self, controller: Any, node: str, vm_type: str, vmid: int, options: dict
-    ) -> dict:
-        """Update firewall options for a VM/CT."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.update_guest_firewall_options(node, vm_type, vmid, options)
-            if not result.success:
-                raise ValueError(result.error or "Failed to update guest firewall options")
-            return {"status": "ok"}
 
     async def get_cluster_firewall_options(self, controller: Any) -> dict:
         """Get cluster-level firewall options."""
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_cluster_firewall_options()
             if not result.success:
-                return {}
+                raise ConnectionError("Firewall options unavailable")
             return result.data or {}
-
-    async def update_cluster_firewall_options(self, controller: Any, options: dict) -> dict:
-        """Update cluster-level firewall options."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.update_cluster_firewall_options(options)
-            if not result.success:
-                raise ValueError(result.error or "Failed to update cluster firewall options")
-            return {"status": "ok"}
 
     # ═══════════════════════════════════════════════════════════════════════
     # NODE EXTRAS
     # ═══════════════════════════════════════════════════════════════════════
-
-    async def shutdown_node(self, controller: Any, node: str, *, confirmed: bool = False) -> dict:
-        """Shutdown a node (catastrophic — whole node offline, no auto-recovery).
-
-        ``confirmed`` is the type-to-confirm second factor; we never pass force,
-        so the read-only gate still applies (refused under read-only → 403).
-        """
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.shutdown_node(node, confirmed=confirmed)
-            if not result.success:
-                raise ValueError(result.error or "Node shutdown failed")
-            return {"status": "ok"}
-
-    async def reboot_node(self, controller: Any, node: str, *, confirmed: bool = False) -> dict:
-        """Reboot a node (catastrophic — whole node and its guests offline).
-
-        ``confirmed`` is the type-to-confirm second factor; we never pass force,
-        so the read-only gate still applies (refused under read-only → 403).
-        """
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.reboot_node(node, confirmed=confirmed)
-            if not result.success:
-                raise ValueError(result.error or "Node reboot failed")
-            return {"status": "ok"}
 
     async def get_node_services(self, controller: Any, node: str) -> list[NodeServiceResponse]:
         """Get node services."""
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_node_services(node)
             if not result.success:
-                return []
+                raise ConnectionError("Firewall rules unavailable")
             return [
                 NodeServiceResponse(
                     service=s.service,
@@ -1280,7 +1222,7 @@ class HypervisorService:
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_node_disks(node)
             if not result.success:
-                return []
+                raise ConnectionError("Firewall rules unavailable")
             return [
                 DiskInfoResponse(
                     devpath=d.devpath,
@@ -1304,7 +1246,7 @@ class HypervisorService:
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_node_syslog(node, limit, start)
             if not result.success:
-                return []
+                raise ConnectionError("Firewall rules unavailable")
             return [
                 SyslogEntry(n=int(e.get("n", 0)), t=e.get("t", ""))
                 for e in (result.data or [])
@@ -1320,7 +1262,7 @@ class HypervisorService:
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_ha_resources()
             if not result.success:
-                return []
+                raise ConnectionError("Firewall rules unavailable")
             return [
                 HAResourceResponse(
                     sid=r.sid,
@@ -1342,7 +1284,7 @@ class HypervisorService:
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_ha_groups()
             if not result.success:
-                return []
+                raise ConnectionError("Firewall rules unavailable")
             return [
                 HAGroupResponse(
                     group=g.group,
@@ -1520,21 +1462,6 @@ class HypervisorService:
     # STORAGE VOLUME DELETE
     # ═══════════════════════════════════════════════════════════════════════
 
-    async def delete_storage_volume(
-        self, controller: Any, node: str, storage: str, volume: str
-    ) -> dict:
-        """Delete a storage volume."""
-        _refuse_direct_catastrophic("delete_storage_volume")
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.delete_storage_volume(node, storage, volume)
-            if not result.success:
-                raise ValueError(result.error or "Failed to delete volume")
-            return {"status": "ok"}
-
-    # ═══════════════════════════════════════════════════════════════════════
-    # VM / CT CREATION
-    # ═══════════════════════════════════════════════════════════════════════
-
     async def get_next_vmid(self, controller: Any) -> NextVMIDResponse:
         """Get next available VMID."""
         async with await self._get_adapter(controller) as adapter:
@@ -1542,138 +1469,6 @@ class HypervisorService:
             if not result.success:
                 raise ValueError(result.error or "Failed to get next VMID")
             return NextVMIDResponse(vmid=int(result.data))
-
-    async def create_vm(
-        self,
-        controller: Any,
-        *,
-        vmid: int | None = None,
-        name: str = "",
-        node: str,
-        cores: int = 1,
-        sockets: int = 1,
-        memory: int = 2048,
-        balloon: int = 0,
-        ostype: str = "l26",
-        storage: str = "local-lvm",
-        disk_size: str = "32G",
-        iso: str = "",
-        net_bridge: str = "vmbr0",
-        net_model: str = "virtio",
-        cpu_type: str = "host",
-        bios: str = "seabios",
-        machine: str = "",
-        start: bool = False,
-        pool: str = "",
-        description: str = "",
-        onboot: bool = False,
-        tags: str = "",
-    ) -> CreateVMResponse:
-        """Create a new QEMU VM."""
-        async with await self._get_adapter(controller) as adapter:
-            if vmid is None:
-                id_result = await adapter.get_next_vmid()
-                if not id_result.success:
-                    raise ValueError("Failed to allocate VMID")
-                vmid = int(id_result.data)
-
-            result = await adapter.create_vm(
-                node,
-                vmid,
-                name=name,
-                cores=cores,
-                sockets=sockets,
-                memory=memory,
-                balloon=balloon,
-                ostype=ostype,
-                storage=storage,
-                disk_size=disk_size,
-                iso=iso,
-                net_bridge=net_bridge,
-                net_model=net_model,
-                cpu_type=cpu_type,
-                bios=bios,
-                machine=machine,
-                start=start,
-                pool=pool,
-                description=description,
-                onboot=onboot,
-                tags=tags,
-            )
-            if not result.success:
-                raise ValueError(result.error or "Failed to create VM")
-            data = result.data or {}
-            return CreateVMResponse(
-                vmid=vmid,
-                upid=str(data.get("upid", "")),
-                message=f"VM {vmid} creation started on {node}",
-            )
-
-    async def create_container(
-        self,
-        controller: Any,
-        *,
-        vmid: int | None = None,
-        hostname: str = "",
-        node: str,
-        ostemplate: str,
-        cores: int = 1,
-        memory: int = 512,
-        swap: int = 512,
-        storage: str = "local-lvm",
-        rootfs_size: str = "8",
-        net_bridge: str = "vmbr0",
-        net_ip: str = "dhcp",
-        password: str = "",
-        ssh_public_keys: str = "",
-        start: bool = False,
-        pool: str = "",
-        description: str = "",
-        unprivileged: bool = True,
-        onboot: bool = False,
-        tags: str = "",
-        nameserver: str = "",
-        searchdomain: str = "",
-    ) -> CreateVMResponse:
-        """Create a new LXC container."""
-        async with await self._get_adapter(controller) as adapter:
-            if vmid is None:
-                id_result = await adapter.get_next_vmid()
-                if not id_result.success:
-                    raise ValueError("Failed to allocate VMID")
-                vmid = int(id_result.data)
-
-            result = await adapter.create_container(
-                node,
-                vmid,
-                ostemplate=ostemplate,
-                hostname=hostname,
-                cores=cores,
-                memory=memory,
-                swap=swap,
-                storage=storage,
-                rootfs_size=rootfs_size,
-                net_bridge=net_bridge,
-                net_ip=net_ip,
-                password=password,
-                ssh_public_keys=ssh_public_keys,
-                start=start,
-                pool=pool,
-                description=description,
-                unprivileged=unprivileged,
-                onboot=onboot,
-                tags=tags,
-                nameserver=nameserver,
-                searchdomain=searchdomain,
-            )
-            if not result.success:
-                raise ValueError(result.error or "Failed to create container")
-            data = result.data or {}
-            return CreateVMResponse(
-                vmid=vmid,
-                upid=str(data.get("upid", "")),
-                message=f"Container {vmid} creation started on {node}",
-            )
 
     async def delete_vm(
         self,
@@ -1683,339 +1478,190 @@ class HypervisorService:
         vm_type: str = "qemu",
         *,
         confirmed: bool = False,
-    ) -> dict:
-        """Delete a VM or container.
+        current_user: Any = None,
+        request_id: UUID | None = None,
+        expected_digest: str | None = None,
+        force: bool = False,
+    ) -> VMActionResponse:
+        from fastapi import HTTPException
 
-        Destroying a guest is irreversible, so ``confirmed`` must be true — the
-        UI's type-to-confirm dialog supplies it. Without it the adapter's
-        guard raises AdapterConfirmationRequiredError (→ HTTP 409), prompting the
-        caller to confirm. ``confirmed`` is the second factor ONLY — we do NOT
-        pass ``force`` (the staging read-only bypass), so the Proxmox client
-        read-only gate still applies: a confirmed delete is refused while
-        read-only is ON (→ 403) and proceeds only in read-write mode.
-        """
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.delete_vm(node, vmid, vm_type, confirmed=confirmed)
-            if not result.success:
-                raise ValueError(result.error or f"Failed to delete {vm_type} {vmid}")
-            return result.data or {}
+        from app.modules.hypervisor.schemas import DeleteVMRequest
+        from app.services.hypervisor_operations import HypervisorOperationService
+
+        if current_user is None or request_id is None or expected_digest is None:
+            raise HTTPException(
+                400, detail="Deletion requires an actor, request_id and reviewed digest"
+            )
+        return await HypervisorOperationService(self.db, current_user).delete(
+            controller.id,
+            node,
+            vmid,
+            vm_type,
+            DeleteVMRequest(
+                request_id=request_id,
+                expected_digest=expected_digest,
+                force=force,
+                confirmed=confirmed,
+            ),
+        )
 
     # ═══════════════════════════════════════════════════════════════════════
     # HA MANAGEMENT
     # ═══════════════════════════════════════════════════════════════════════
-
-    async def create_ha_resource(
-        self,
-        controller: Any,
-        sid: str,
-        *,
-        group: str = "",
-        max_relocate: int = 1,
-        max_restart: int = 1,
-        state: str = "started",
-        comment: str = "",
-    ) -> dict:
-        """Add a VM/CT to HA management."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.create_ha_resource(
-                sid,
-                group=group,
-                max_relocate=max_relocate,
-                max_restart=max_restart,
-                state=state,
-                comment=comment,
-            )
-            if not result.success:
-                raise ValueError(result.error or "Failed to create HA resource")
-            return {"status": "ok"}
-
-    async def delete_ha_resource(self, controller: Any, sid: str) -> dict:
-        """Remove a VM/CT from HA management."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.delete_ha_resource(sid)
-            if not result.success:
-                raise ValueError(result.error or "Failed to delete HA resource")
-            return {"status": "ok"}
-
-    async def create_ha_group(
-        self,
-        controller: Any,
-        group: str,
-        nodes: str,
-        *,
-        nofailback: bool = False,
-        restricted: bool = False,
-        comment: str = "",
-    ) -> dict:
-        """Create an HA group."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.create_ha_group(
-                group,
-                nodes,
-                nofailback=nofailback,
-                restricted=restricted,
-                comment=comment,
-            )
-            if not result.success:
-                raise ValueError(result.error or "Failed to create HA group")
-            return {"status": "ok"}
-
-    async def delete_ha_group(self, controller: Any, group: str) -> dict:
-        """Delete an HA group."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.delete_ha_group(group)
-            if not result.success:
-                raise ValueError(result.error or "Failed to delete HA group")
-            return {"status": "ok"}
 
     # ═══════════════════════════════════════════════════════════════════════
     # FLEET DASHBOARD (MULTI-CLUSTER)
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_fleet_dashboard(self, controllers: list[Any]) -> FleetDashboardResponse:
-        """Get aggregated fleet dashboard across multiple Proxmox clusters."""
-        fleet = FleetDashboardResponse()
-        fleet.total_clusters = len(controllers)
+        """Aggregate registrations with explicit unknowns and per-controller failures."""
+        started = datetime.now(UTC)
 
         async def _fetch_one(ctrl: Any) -> FleetClusterSummary:
-            summary = FleetClusterSummary(
+            try:
+                # Include semaphore wait and connection setup in the deadline.
+                async with asyncio.timeout(_FLEET_TIMEOUT):
+                    async with _fleet_semaphore:
+                        dashboard = await self.get_dashboard(ctrl)
+                return FleetClusterSummary(
+                    **dashboard.model_dump(),
+                    controller_name=ctrl.name or ctrl.host,
+                    status="online",
+                )
+            except TimeoutError:
+                error = "Cluster response timed out"
+                logger.warning("Fleet dashboard: timeout for controller %s", ctrl.id)
+            except Exception as exc:
+                error = "Failed to observe cluster"
+                logger.warning(
+                    "Fleet dashboard failed for controller %s (%s)", ctrl.id, type(exc).__name__
+                )
+            return FleetClusterSummary(
                 controller_id=str(ctrl.id),
                 controller_name=ctrl.name or ctrl.host,
-            )
-            try:
-                async with _fleet_semaphore:
-                    dashboard = await asyncio.wait_for(
-                        self.get_dashboard(ctrl),
-                        timeout=_FLEET_TIMEOUT,
-                    )
-                summary.cluster_name = dashboard.cluster_name
-                summary.quorate = dashboard.quorate
-                summary.total_nodes = dashboard.total_nodes
-                summary.online_nodes = dashboard.online_nodes
-                summary.total_vms = dashboard.total_vms
-                summary.running_vms = dashboard.running_vms
-                summary.total_containers = dashboard.total_containers
-                summary.running_containers = dashboard.running_containers
-                summary.total_cpu_cores = dashboard.total_cpu_cores
-                summary.cpu_usage_percent = dashboard.cpu_usage_percent
-                summary.total_memory_bytes = dashboard.total_memory_bytes
-                summary.used_memory_bytes = dashboard.used_memory_bytes
-                summary.memory_usage_percent = dashboard.memory_usage_percent
-                summary.total_storage_bytes = dashboard.total_storage_bytes
-                summary.used_storage_bytes = dashboard.used_storage_bytes
-                summary.storage_usage_percent = dashboard.storage_usage_percent
-                summary.status = "online"
-            except TimeoutError:
-                summary.status = "error"
-                summary.error = "Cluster response timed out"
-                logger.warning("Fleet dashboard: timeout for %s", ctrl.host)
-            except Exception as e:
-                summary.status = "error"
-                summary.error = "Failed to connect to cluster"
-                logger.error("Fleet dashboard error for %s: %s", ctrl.host, e)
-            return summary
-
-        results = await asyncio.gather(
-            *[_fetch_one(c) for c in controllers],
-            return_exceptions=True,
-        )
-
-        for r in results:
-            if isinstance(r, Exception):
-                continue
-            fleet.clusters.append(r)
-            if r.status == "online":
-                fleet.online_clusters += 1
-                fleet.total_nodes += r.total_nodes
-                fleet.online_nodes += r.online_nodes
-                fleet.total_vms += r.total_vms
-                fleet.running_vms += r.running_vms
-                fleet.total_containers += r.total_containers
-                fleet.running_containers += r.running_containers
-                fleet.total_cpu_cores += r.total_cpu_cores
-                fleet.total_memory_bytes += r.total_memory_bytes
-                fleet.used_memory_bytes += r.used_memory_bytes
-                fleet.total_storage_bytes += r.total_storage_bytes
-                fleet.used_storage_bytes += r.used_storage_bytes
-
-        # Compute aggregate percentages
-        if fleet.total_cpu_cores > 0:
-            weighted_cpu = sum(
-                c.cpu_usage_percent * c.total_cpu_cores
-                for c in fleet.clusters
-                if c.status == "online"
-            )
-            fleet.cpu_usage_percent = round(weighted_cpu / fleet.total_cpu_cores, 1)
-        if fleet.total_memory_bytes > 0:
-            fleet.memory_usage_percent = round(
-                fleet.used_memory_bytes / fleet.total_memory_bytes * 100, 1
-            )
-        if fleet.total_storage_bytes > 0:
-            fleet.storage_usage_percent = round(
-                fleet.used_storage_bytes / fleet.total_storage_bytes * 100, 1
+                error=error,
             )
 
-        return fleet
+        results = await asyncio.gather(*[_fetch_one(controller) for controller in controllers])
+        return dashboard_metrics.fleet(results, started)
 
     # ═══════════════════════════════════════════════════════════════════════
     # BULK OPERATIONS
     # ═══════════════════════════════════════════════════════════════════════
 
     async def bulk_action(
-        self, controller: Any, targets: list[dict], action: str, *, confirmed: bool = False
+        self,
+        controller: Any,
+        targets: list[dict],
+        action: str,
+        *,
+        confirmed: bool = False,
+        current_user: Any = None,
+        force: bool = False,
     ) -> list[dict]:
-        """Execute an action on multiple VMs/CTs concurrently.
+        """Each target has its own durable claim; partial batches can be resumed by ID."""
+        from types import SimpleNamespace
 
-        ``confirmed`` is the type-to-confirm second factor for action="delete"
-        (irreversible). It is passed as confirmed= only — never as force — so each
-        delete still honors the read-only gate (refused while read-only is ON).
-        """
-        sem = asyncio.Semaphore(5)
+        from fastapi import HTTPException
 
-        async def _do_one(t: dict, adapter: Any) -> dict:
-            async with sem:
-                try:
-                    if action == "delete":
-                        result = await adapter.delete_vm(
-                            t["node"], t["vmid"], vm_type=t["vm_type"], confirmed=confirmed
-                        )
-                    else:
-                        method_map = {
-                            "start": "start_vm" if t["vm_type"] == "qemu" else "start_container",
-                            "stop": "stop_vm" if t["vm_type"] == "qemu" else "stop_container",
-                            "shutdown": "shutdown_vm"
-                            if t["vm_type"] == "qemu"
-                            else "shutdown_container",
-                            "reboot": "reboot_vm" if t["vm_type"] == "qemu" else "reboot_container",
-                        }
-                        method_name = method_map.get(action)
-                        if not method_name:
-                            return {
-                                "vmid": t["vmid"],
-                                "node": t["node"],
-                                "success": False,
-                                "error": f"Unknown action: {action}",
-                            }
-                        method = getattr(adapter, method_name)
-                        result = await method(t["node"], t["vmid"])
-                    if not result.success:
-                        return {
-                            "vmid": t["vmid"],
-                            "node": t["node"],
-                            "success": False,
-                            "error": (result.error or "Unknown error")[:200],
-                        }
-                    upid = result.data
-                    return {
-                        "vmid": t["vmid"],
-                        "node": t["node"],
-                        "success": True,
-                        "upid": str(upid) if upid else None,
-                    }
-                except Exception as e:
-                    return {
-                        "vmid": t["vmid"],
-                        "node": t["node"],
+        controller_id = controller.id
+
+        target_controller = SimpleNamespace(id=controller_id)
+        results = []
+        for target in targets:
+            try:
+                if action == "delete":
+                    receipt = await self.delete_vm(
+                        target_controller,
+                        target["node"],
+                        target["vmid"],
+                        target["vm_type"],
+                        confirmed=confirmed,
+                        current_user=current_user,
+                        request_id=target.get("request_id"),
+                        expected_digest=target.get("expected_digest"),
+                        force=force,
+                    )
+                else:
+                    receipt = await self.vm_action(
+                        target_controller,
+                        target["node"],
+                        target["vmid"],
+                        action,
+                        target["vm_type"],
+                        current_user=current_user,
+                        request_id=target.get("request_id"),
+                        force=force,
+                    )
+                data = receipt.model_dump()
+                data.update(node=target["node"], success=receipt.status == "applied")
+                if not data["success"]:
+                    data["error"] = receipt.message
+                results.append(data)
+            except HTTPException as exc:
+                results.append(
+                    {
+                        "vmid": target["vmid"],
+                        "node": target["node"],
                         "success": False,
-                        "error": str(e)[:200],
+                        "request_id": target.get("request_id"),
+                        "error": str(exc.detail),
                     }
-
-        async with await self._get_adapter(controller) as adapter:
-            results = await asyncio.gather(
-                *[_do_one(t, adapter) for t in targets], return_exceptions=True
-            )
-        return [
-            r
-            if isinstance(r, dict)
-            else {"vmid": 0, "node": "", "success": False, "error": str(r)[:200]}
-            for r in results
-        ]
+                )
+        return results
 
     async def bulk_migrate(
-        self, controller: Any, targets: list[dict], target_node: str, online: bool = True
+        self,
+        controller: Any,
+        targets: list[dict],
+        target_node: str,
+        online: bool = True,
+        *,
+        restart: bool = False,
+        current_user: Any = None,
+        force: bool = False,
     ) -> list[dict]:
-        """Migrate multiple VMs/CTs to a target node concurrently."""
-        sem = asyncio.Semaphore(3)
+        """Claim targets individually; a partial batch can resume with the same IDs."""
+        from fastapi import HTTPException
 
-        async def _do_one(t: dict, adapter: Any) -> dict:
-            async with sem:
-                try:
-                    if t["vm_type"] == "qemu":
-                        result = await adapter.migrate_vm(t["node"], t["vmid"], target_node, online)
-                    else:
-                        result = await adapter.migrate_container(
-                            t["node"], t["vmid"], target_node, online
-                        )
-                    if not result.success:
-                        return {
-                            "vmid": t["vmid"],
-                            "node": t["node"],
-                            "success": False,
-                            "error": (result.error or "Unknown error")[:200],
-                        }
-                    upid = result.data
-                    return {
-                        "vmid": t["vmid"],
-                        "node": t["node"],
-                        "success": True,
-                        "upid": str(upid) if upid else None,
-                    }
-                except Exception as e:
-                    return {
-                        "vmid": t["vmid"],
-                        "node": t["node"],
+        results = []
+        # One AsyncSession must not run concurrent transactions. Provider tasks
+        # run asynchronously after each accepted dispatch, without blocking here.
+        for target in targets:
+            try:
+                receipt = await self.migrate_vm(
+                    controller,
+                    target["node"],
+                    target["vmid"],
+                    target_node,
+                    target["vm_type"],
+                    online=online if target["vm_type"] == "qemu" else False,
+                    restart=restart if target["vm_type"] == "lxc" else False,
+                    current_user=current_user,
+                    request_id=target.get("request_id"),
+                    force=force,
+                )
+                data = receipt.model_dump()
+                data.update(node=target["node"], success=receipt.status == "applied")
+                if not data["success"]:
+                    data["error"] = receipt.message
+                results.append(data)
+            except HTTPException as exc:
+                results.append(
+                    {
+                        "vmid": target["vmid"],
+                        "node": target["node"],
+                        "request_id": target.get("request_id"),
                         "success": False,
-                        "error": str(e)[:200],
+                        "error": str(exc.detail),
                     }
-
-        async with await self._get_adapter(controller) as adapter:
-            results = await asyncio.gather(
-                *[_do_one(t, adapter) for t in targets], return_exceptions=True
-            )
-        return [
-            r
-            if isinstance(r, dict)
-            else {"vmid": 0, "node": "", "success": False, "error": str(r)[:200]}
-            for r in results
-        ]
+                )
+        return results
 
     async def get_guest_agent_info(self, controller: Any, node: str, vmid: int) -> AdapterResult:
         """Get guest agent network info from a running QEMU VM."""
         async with await self._get_adapter(controller) as adapter:
             return await adapter.get_guest_agent_info(node, vmid)
-
-    async def create_backup_job(self, controller: Any, **kwargs) -> AdapterResult:
-        """Create a scheduled backup job."""
-        async with await self._get_adapter(controller) as adapter:
-            return await adapter.create_backup_job(**kwargs)
-
-    async def update_backup_job(self, controller: Any, job_id: str, **kwargs) -> AdapterResult:
-        """Update a backup job."""
-        async with await self._get_adapter(controller) as adapter:
-            return await adapter.update_backup_job(job_id, **kwargs)
-
-    async def delete_backup_job(self, controller: Any, job_id: str) -> AdapterResult:
-        """Delete a backup job."""
-        async with await self._get_adapter(controller) as adapter:
-            return await adapter.delete_backup_job(job_id)
-
-    async def upload_to_storage(
-        self,
-        controller: Any,
-        node: str,
-        storage: str,
-        filename: str,
-        content_type: str,
-        file_path: str,
-    ) -> dict:
-        """Upload a file (ISO/template) to storage."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.upload_to_storage(
-                node, storage, filename, content_type, file_path
-            )
-            if not result.success:
-                raise ValueError(result.error or "Upload failed")
-            return result.data or {}
 
     async def get_container_rrd(
         self,
@@ -2078,34 +1724,6 @@ class HypervisorService:
         """Get node TLS certificates."""
         async with await self._get_adapter(controller) as adapter:
             return await adapter.get_node_certificates(node)
-
-    async def renew_node_acme_certificate(
-        self, controller: Any, node: str, force: bool = False
-    ) -> AdapterResult:
-        """Renew ACME certificate on a node."""
-        async with await self._get_adapter(controller) as adapter:
-            return await adapter.renew_node_acme_certificate(node, force)
-
-    async def upload_custom_certificate(
-        self,
-        controller: Any,
-        node: str,
-        *,
-        certificates: str,
-        key: str,
-        force: bool = False,
-        restart: bool = False,
-    ) -> AdapterResult:
-        """Upload a custom TLS certificate to a node."""
-        async with await self._get_adapter(controller) as adapter:
-            return await adapter.upload_custom_certificate(node, certificates, key, force, restart)
-
-    async def delete_custom_certificate(
-        self, controller: Any, node: str, restart: bool = False
-    ) -> AdapterResult:
-        """Delete custom certificate from a node."""
-        async with await self._get_adapter(controller) as adapter:
-            return await adapter.delete_custom_certificate(node, restart)
 
     # ═══════════════════════════════════════════════════════════════════════
     # SUBSCRIPTION
@@ -2188,35 +1806,6 @@ class HypervisorService:
         """Get SDN controllers."""
         async with await self._get_adapter(controller) as adapter:
             return await adapter.get_sdn_controllers()
-
-    async def create_sdn_zone(
-        self, controller: Any, zone: str, zone_type: str, **kwargs: Any
-    ) -> AdapterResult:
-        """Create an SDN zone."""
-        async with await self._get_adapter(controller) as adapter:
-            return await adapter.create_sdn_zone(zone, zone_type, **kwargs)
-
-    async def create_sdn_vnet(
-        self, controller: Any, vnet: str, zone: str, **kwargs: Any
-    ) -> AdapterResult:
-        """Create an SDN vnet."""
-        async with await self._get_adapter(controller) as adapter:
-            return await adapter.create_sdn_vnet(vnet, zone, **kwargs)
-
-    async def delete_sdn_zone(self, controller: Any, zone: str) -> AdapterResult:
-        """Delete an SDN zone."""
-        async with await self._get_adapter(controller) as adapter:
-            return await adapter.delete_sdn_zone(zone)
-
-    async def delete_sdn_vnet(self, controller: Any, vnet: str) -> AdapterResult:
-        """Delete an SDN vnet."""
-        async with await self._get_adapter(controller) as adapter:
-            return await adapter.delete_sdn_vnet(vnet)
-
-    async def apply_sdn(self, controller: Any) -> AdapterResult:
-        """Apply pending SDN configuration changes."""
-        async with await self._get_adapter(controller) as adapter:
-            return await adapter.apply_sdn()
 
     # ═══════════════════════════════════════════════════════════════════════
     # GUEST AGENT (EXEC / FILE)
@@ -2405,132 +1994,11 @@ class HypervisorService:
     async def get_backup_age_report(
         self, controller: Any, threshold_hours: int = 24
     ) -> BackupAgeResponse:
-        """Generate a backup age report across all VMs.
+        """Collect archive observations with explicit incomplete/unknown states."""
+        from app.modules.hypervisor.backup_age import collect_backup_age
 
-        Fetches all VMs/CTs via cluster resources, then checks all
-        backup-capable storage for the latest backup per VMID.
-        """
         async with await self._get_adapter(controller) as adapter:
-            # 1. Get all VMs and CTs
-            res_result = await adapter.get_cluster_resources("vm")
-            resources = res_result.data if res_result.success else []
-            if not isinstance(resources, list):
-                resources = []
-
-            vm_map: dict[int, dict] = {}
-            for r in resources:
-                if not isinstance(r, dict):
-                    continue
-                vmid = r.get("vmid")
-                if vmid is None:
-                    continue
-                vm_map[vmid] = {
-                    "name": r.get("name", ""),
-                    "node": r.get("node", ""),
-                }
-
-            # 2. Get storage list from ALL distinct nodes to find backup-capable storage
-            distinct_nodes = list({v.get("node", "") for v in vm_map.values() if v.get("node")})
-            if not distinct_nodes:
-                first_node = next(iter(vm_map.values()), {}).get("node", "") if vm_map else ""
-                distinct_nodes = [first_node] if first_node else []
-
-            backup_storages: list[tuple[str, str]] = []  # (node, storage_name)
-            # Fetch storage lists from all nodes in parallel
-            storage_list_tasks = [adapter.get_storage(n) for n in distinct_nodes]
-            storage_list_results = await asyncio.gather(*storage_list_tasks, return_exceptions=True)
-            for node_name, result in zip(distinct_nodes, storage_list_results, strict=False):
-                if isinstance(result, Exception):
-                    continue
-                storages = result.data if hasattr(result, "data") and result.data else []
-                if not isinstance(storages, list):
-                    continue
-                for s in storages:
-                    content = ""
-                    if hasattr(s, "content"):
-                        content = s.content
-                    elif isinstance(s, dict):
-                        content = s.get("content", "")
-                    if "backup" in str(content):
-                        storage_name = ""
-                        if hasattr(s, "storage"):
-                            storage_name = s.storage
-                        elif isinstance(s, dict):
-                            storage_name = s.get("storage", "")
-                        if storage_name:
-                            backup_storages.append((node_name, storage_name))
-
-            # 3. Fetch backup content from each storage in parallel
-            latest_backup: dict[int, float] = {}  # vmid -> epoch timestamp
-            storage_tasks = []
-            for node_name, storage_name in backup_storages:
-                storage_tasks.append(
-                    adapter.get_storage_content(node_name, storage_name, content_type="backup")
-                )
-            storage_results = await asyncio.gather(*storage_tasks, return_exceptions=True)
-            for result in storage_results:
-                if isinstance(result, Exception):
-                    continue
-                items = []
-                if hasattr(result, "data") and result.data:
-                    items = result.data if isinstance(result.data, list) else [result.data]
-                elif isinstance(result, list):
-                    items = result
-                for item in items:
-                    if not isinstance(item, dict):
-                        continue
-                    item_vmid = item.get("vmid")
-                    ctime = item.get("ctime", 0)
-                    if item_vmid is not None and ctime:
-                        existing = latest_backup.get(item_vmid, 0)
-                        if ctime > existing:
-                            latest_backup[item_vmid] = ctime
-
-            # 4. Build report
-            now = datetime.now(tz=UTC)
-            reports: list[BackupAgeReport] = []
-            backed_up_count = 0
-            stale_count = 0
-            never_count = 0
-
-            for vmid, info in sorted(vm_map.items()):
-                last_ts = latest_backup.get(vmid)
-                if last_ts:
-                    last_dt = datetime.fromtimestamp(last_ts, tz=UTC)
-                    age_h = (now - last_dt).total_seconds() / 3600
-                    is_stale = age_h > threshold_hours
-                    backed_up_count += 1
-                    if is_stale:
-                        stale_count += 1
-                    reports.append(
-                        BackupAgeReport(
-                            vmid=vmid,
-                            name=info.get("name"),
-                            node=info.get("node", ""),
-                            last_backup_time=last_dt,
-                            age_hours=round(age_h, 1),
-                            is_stale=is_stale,
-                        )
-                    )
-                else:
-                    never_count += 1
-                    reports.append(
-                        BackupAgeReport(
-                            vmid=vmid,
-                            name=info.get("name"),
-                            node=info.get("node", ""),
-                            is_stale=True,
-                        )
-                    )
-
-            return BackupAgeResponse(
-                threshold_hours=threshold_hours,
-                total_vms=len(vm_map),
-                backed_up=backed_up_count,
-                stale=stale_count,
-                never_backed_up=never_count,
-                vms=reports,
-            )
+            return await collect_backup_age(adapter, threshold_hours)
 
     # ═══════════════════════════════════════════════════════════════════════
     # PRIVATE HELPERS

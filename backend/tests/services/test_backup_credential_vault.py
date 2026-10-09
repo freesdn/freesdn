@@ -55,6 +55,13 @@ class _Result:
     def scalars(self):
         return self
 
+    def mappings(self):
+        return self
+
+    def one(self):
+        assert len(self._rows) == 1
+        return self._rows[0]
+
     def all(self):
         return self._rows
 
@@ -66,6 +73,10 @@ class _Session:
         self.cred = cred
 
     async def execute(self, query):
+        # This credential-only unit double has no accounts or providers. The
+        # actual scoped snapshot/SQL isolation is qualified by PostgreSQL tests.
+        if "vault_security_users" in str(query):
+            return _Result([{"users": [], "sso_providers": [], "user_site_access": []}])
         return _Result([self.cred] if "core.credentials" in str(query) else [])
 
 

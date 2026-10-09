@@ -1,0 +1,92 @@
+{
+  "format": 2,
+  "python_version": "3.14.8",
+  "files": [
+    {
+      "name": "poplib.py",
+      "before_sha256": "527e714523264093910a0a0b1a55c6583f952835c89061537fc40ad98c347056",
+      "after_sha256": "a6ffff188814b56d95b043c31d9e0dfee51ac6d6e92afe74ab070cb6136b076f",
+      "upstream_commit": "b234a2b67539f787e191d2ef19a7cbdce32874e7",
+      "upstream_url": "https://github.com/python/cpython/commit/b234a2b67539f787e191d2ef19a7cbdce32874e7",
+      "advisory": "CVE-2025-15367",
+      "patches": [
+        {
+          "old_text": "    def _putcmd(self, line):\n        if self._debugging: print('*cmd*', repr(line))\n        line = bytes(line, self.encoding)\n        self._putline(line)\n\n",
+          "new_text": "    def _putcmd(self, line):\n        if self._debugging: print('*cmd*', repr(line))\n        line = bytes(line, self.encoding)\n        if re.search(b'[\\x00-\\x1F\\x7F]', line):\n            raise ValueError('Control characters not allowed in commands')\n        self._putline(line)\n\n"
+        }
+      ]
+    },
+    {
+      "name": "tarfile.py",
+      "before_sha256": "825de0990d0bedf6ed8db97b4a0fc98f25617a692c3d38c0bbba800beb9952fb",
+      "after_sha256": "82ac045a2d97396a295405268a5f14393620b0ebf50e9305e56f34731e1d89ea",
+      "upstream_commit": "a4919937a4e1e69a0d178909c6f20557eca5d1d0",
+      "upstream_url": "https://github.com/python/cpython/commit/a4919937a4e1e69a0d178909c6f20557eca5d1d0",
+      "advisory": "CVE-2026-87910",
+      "patches": [
+        {
+          "old_text": "                    \"makelink_with_filter: if filter_function is not None, \"\n                    + \"extraction_root must also not be None\")\n            try:\n                filter_function(\n                    unfiltered.replace(name=tarinfo.name, deep=False),\n                    extraction_root)\n                filtered = filter_function(unfiltered, extraction_root)\n            except _FILTER_ERRORS as cause:\n                raise LinkFallbackError(tarinfo, unfiltered.name) from cause",
+          "new_text": "                    \"makelink_with_filter: if filter_function is not None, \"\n                    + \"extraction_root must also not be None\")\n            try:\n                filtered = filter_function(\n                    unfiltered.replace(name=tarinfo.name, deep=False),\n                    extraction_root)\n                if filtered is None:\n                    return\n                filtered = filter_function(unfiltered, extraction_root)\n            except _FILTER_ERRORS as cause:\n                raise LinkFallbackError(tarinfo, unfiltered.name) from cause"
+        }
+      ]
+    },
+    {
+      "name": "tempfile.py",
+      "before_sha256": "3714372b63f6bc05a5273425d446f6ad3a2112a659c71c321bb4575fd082d634",
+      "after_sha256": "5e2a8c5539e2aa3f4d39a364c701711ba54eeca88c17e95d31ebb83ea84de27d",
+      "patches": [
+        {
+          "old_text": "import shutil as _shutil\nimport errno as _errno\nfrom random import Random as _Random\nimport sys as _sys\nimport types as _types\nimport weakref as _weakref\n",
+          "new_text": "import shutil as _shutil\nimport errno as _errno\nfrom random import Random as _Random\nimport stat as _stat\nimport sys as _sys\nimport types as _types\nimport weakref as _weakref\n"
+        },
+        {
+          "old_text": "    elif not _os.path.islink(path):\n        func(path, *args)\n\ndef _resetperms(path):\n    try:\n        chflags = _os.chflags\n    except AttributeError:\n        pass\n    else:\n        _dont_follow_symlinks(chflags, path, 0)\n    _dont_follow_symlinks(_os.chmod, path, 0o700)\n\n\n# User visible interfaces.\n\n",
+          "new_text": "    elif not _os.path.islink(path):\n        func(path, *args)\n\ndef _resetflags(path):\n    try:\n        chflags = _os.chflags\n    except AttributeError:\n        pass\n    else:\n        _dont_follow_symlinks(chflags, path, 0)\n\ndef _resetperms(path):\n    _resetflags(path)\n    _dont_follow_symlinks(_os.chmod, path, 0o700)\n\n# True if TemporaryDirectory._rmtree() can work relative to open directories\n# instead of resolving paths again.\n_rmtree_use_dir_fd = (\n    {_os.chmod, _os.unlink, _os.lstat} <= _os.supports_dir_fd\n    and _os.chmod in _os.supports_fd\n)\n\ndef _resetperms_fd(dir_fd, path):\n    # Same as _resetperms(), but for the directory referred to by dir_fd.\n    if dir_fd is None:\n        _resetperms(path)\n        return\n    _resetflags(path)\n    _os.chmod(dir_fd, 0o700)\n\ntry:\n    _nofollow_mode = _os.O_RDONLY | _os.O_NONBLOCK | _os.O_NOFOLLOW\nexcept AttributeError:\n    _nofollow_mode = None\n\ndef _resetperms_at(name, dir_fd, path):\n    # Same as _resetperms(), but name is resolved relative to the directory\n    # file descriptor dir_fd. path is only used for os.chflags(), which\n    # doesn't support dir_fd or file descriptors.\n    if dir_fd is None:\n        _resetperms(path)\n        return\n    _resetflags(path)\n    if _os.chmod in _os.supports_follow_symlinks:\n        _os.chmod(name, 0o700, dir_fd=dir_fd, follow_symlinks=False)\n    else:\n        # dir_fd & follow_symlinks is not supported on this platform.\n        # Try chmod opening the file with O_NOFOLLOW.\n        if _nofollow_mode is not None:\n            try:\n                fd = _os.open(name, _nofollow_mode, dir_fd=dir_fd)\n            except OSError:\n                pass\n            else:\n                try:\n                    _os.chmod(fd, 0o700)\n                finally:\n                    _os.close(fd)\n                return\n        # If that did not work, we change by name, which is subject to a race\n        # condition.\n        stat = _os.lstat(name, dir_fd=dir_fd)\n        if not _stat.S_ISLNK(stat.st_mode):\n            _os.chmod(name, 0o700, dir_fd=dir_fd)\n\n\n# User visible interfaces.\n\n"
+        },
+        {
+          "old_text": "            ignore_errors=self._ignore_cleanup_errors, delete=self._delete)\n\n    @classmethod\n    def _rmtree(cls, name, ignore_errors=False, repeated=False):\n        def onexc(func, path, exc):\n            # On DragonFly BSD, UF_NOUNLINK removal fails with EISDIR, not EPERM.\n            if isinstance(exc, (PermissionError, IsADirectoryError)):\n                if repeated and path == name:\n                    if ignore_errors:\n                        return\n                    raise\n\n                try:\n                    if path != name:\n                        _resetperms(_os.path.dirname(path))\n                    _resetperms(path)\n\n                    try:\n                        _os.unlink(path)\n                    except IsADirectoryError:\n                        cls._rmtree(path, ignore_errors=ignore_errors)\n                    except PermissionError:\n                        # The PermissionError handler was originally added for\n                        # FreeBSD in directories, but it seems that it is raised\n",
+          "new_text": "            ignore_errors=self._ignore_cleanup_errors, delete=self._delete)\n\n    @classmethod\n    def _rmtree(cls, name, ignore_errors=False, repeated=False, dir_fd=None,\n                fullname=None):\n        if fullname is None:\n            fullname = name\n\n        def onexc(func, path, exc, direntry=None, dir_fd=None):\n            # On DragonFly BSD, UF_NOUNLINK removal fails with EISDIR, not EPERM.\n            if isinstance(exc, (PermissionError, IsADirectoryError)):\n                if repeated and path == name:\n                    if ignore_errors:\n                        return\n                    raise\n\n                # fullpath is path as seen from the working directory\n                fullpath = fullname + path[len(name):]\n                # base is path relative to dir_fd, the directory rmtree()\n                # reached it through, or the whole path when there is none\n                if dir_fd is None or not _rmtree_use_dir_fd:\n                    base, dir_fd = path, None\n                elif direntry is None:\n                    base = path\n                else:\n                    base = direntry.name\n\n                try:\n                    if path != name:\n                        # The parent directory of path is the one referred to\n                        # by dir_fd.\n                        _resetperms_fd(dir_fd, _os.path.dirname(fullpath))\n                    _resetperms_at(base, dir_fd, fullpath)\n\n                    try:\n                        _os.unlink(base, dir_fd=dir_fd)\n                    except IsADirectoryError:\n                        cls._rmtree(base, ignore_errors=ignore_errors,\n                                    repeated=(path == name),\n                                    dir_fd=dir_fd, fullname=fullpath)\n                    except PermissionError:\n                        # The PermissionError handler was originally added for\n                        # FreeBSD in directories, but it seems that it is raised\n"
+        },
+        {
+          "old_text": "                        # raise NotADirectoryError and mask the PermissionError.\n                        # So we must re-raise the current PermissionError if\n                        # path is not a directory.\n                        if not _os.path.isdir(path) or _os.path.isjunction(path):\n                            if ignore_errors:\n                                return\n                            raise\n                        cls._rmtree(path, ignore_errors=ignore_errors,\n                                    repeated=(path == name))\n                except FileNotFoundError:\n                    pass\n            elif isinstance(exc, FileNotFoundError):\n                pass\n            else:\n                if not ignore_errors:\n                    raise\n\n        _shutil.rmtree(name, onexc=onexc)\n\n    @classmethod\n    def _cleanup(cls, name, warn_message, ignore_errors=False, delete=True):",
+          "new_text": "                        # raise NotADirectoryError and mask the PermissionError.\n                        # So we must re-raise the current PermissionError if\n                        # path is not a directory.\n                        if (not _os.path.isdir(fullpath)\n                                or _os.path.isjunction(fullpath)):\n                            if ignore_errors:\n                                return\n                            raise\n                        cls._rmtree(base, ignore_errors=ignore_errors,\n                                    repeated=(path == name),\n                                    dir_fd=dir_fd, fullname=fullpath)\n                except FileNotFoundError:\n                    pass\n                except OSError:\n                    if ignore_errors:\n                        return\n                    raise\n            elif isinstance(exc, FileNotFoundError):\n                pass\n            else:\n                if not ignore_errors:\n                    raise\n\n        _shutil.rmtree(name, onexc=onexc, dir_fd=dir_fd, _onexc_kwargs=True)\n\n    @classmethod\n    def _cleanup(cls, name, warn_message, ignore_errors=False, delete=True):"
+        }
+      ],
+      "upstream_commit": "5c20517a4fc56683efe63a7751020db9573f538d",
+      "upstream_url": "https://github.com/python/cpython/commit/5c20517a4fc56683efe63a7751020db9573f538d",
+      "backport_head": "fb187f1eaace3d4f47397b754cf928a73c5b0d9f",
+      "backport_url": "https://github.com/python/cpython/pull/158430",
+      "backport_status_at_review": "open_unmerged",
+      "changed_lines_equal_merged_main": true,
+      "issue_url": "https://github.com/python/cpython/issues/157579",
+      "scope": "Linux fd-relative cleanup mitigation; remaining upstream platform limitations apply."
+    },
+    {
+      "name": "shutil.py",
+      "before_sha256": "28a5df6415bf1a7ab36cbd544d6d35ae0f056a198e3872a786dc4e156d5fcd7d",
+      "after_sha256": "b6e01921d7f8a6dcac774c07d1d7f858b2d536ee9535ae576120503fcc559261",
+      "patches": [
+        {
+          "old_text": "    #   save a call to os.lstat() when walking subdirectories.\n    func, dirfd, path, orig_entry = stack.pop()\n    name = path if orig_entry is None else orig_entry.name\n    try:\n        if func is os.close:\n            os.close(dirfd)\n",
+          "new_text": "    #   save a call to os.lstat() when walking subdirectories.\n    func, dirfd, path, orig_entry = stack.pop()\n    name = path if orig_entry is None else orig_entry.name\n    parent_fd = None if func is os.close else dirfd\n    try:\n        if func is os.close:\n            os.close(dirfd)\n"
+        },
+        {
+          "old_text": "            except FileNotFoundError:\n                continue\n            except OSError as err:\n                onexc(os.unlink, fullname, err)\n    except FileNotFoundError as err:\n        if orig_entry is None or func is os.close:\n            err.filename = path\n            onexc(func, path, err)\n    except OSError as err:\n        err.filename = path\n        onexc(func, path, err)\n\n_use_fd_functions = ({os.open, os.stat, os.unlink, os.rmdir} <=\n                     os.supports_dir_fd and\n                     os.scandir in os.supports_fd and\n                     os.stat in os.supports_follow_symlinks)\n_rmtree_impl = _rmtree_safe_fd if _use_fd_functions else _rmtree_unsafe\n\ndef rmtree(path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None):\n    \"\"\"Recursively delete a directory tree.\n\n    If dir_fd is not None, it should be a file descriptor open to a directory;\n",
+          "new_text": "            except FileNotFoundError:\n                continue\n            except OSError as err:\n                onexc(os.unlink, fullname, err, direntry=entry, dir_fd=topfd)\n    except FileNotFoundError as err:\n        if orig_entry is None or func is os.close:\n            err.filename = path\n            onexc(func, path, err, direntry=orig_entry, dir_fd=parent_fd)\n    except OSError as err:\n        err.filename = path\n        onexc(func, path, err, direntry=orig_entry, dir_fd=parent_fd)\n\n_use_fd_functions = ({os.open, os.stat, os.unlink, os.rmdir} <=\n                     os.supports_dir_fd and\n                     os.scandir in os.supports_fd and\n                     os.stat in os.supports_follow_symlinks)\n_rmtree_impl = _rmtree_safe_fd if _use_fd_functions else _rmtree_unsafe\n\ndef rmtree(path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None,\n           _onexc_kwargs=False):\n    \"\"\"Recursively delete a directory tree.\n\n    If dir_fd is not None, it should be a file descriptor open to a directory;\n"
+        },
+        {
+          "old_text": "\n    sys.audit(\"shutil.rmtree\", path, dir_fd)\n    if ignore_errors:\n        def onexc(*args):\n            pass\n    elif onerror is None and onexc is None:\n        def onexc(*args):\n            raise\n    elif onexc is None:\n        if onerror is None:\n            def onexc(*args):\n                raise\n        else:\n            # delegate to onerror\n            def onexc(*args):\n                func, path, exc = args\n                if exc is None:\n                    exc_info = None, None, None\n                else:\n                    exc_info = type(exc), exc, exc.__traceback__\n                return onerror(func, path, exc_info)\n\n    _rmtree_impl(path, dir_fd, onexc)\n",
+          "new_text": "\n    sys.audit(\"shutil.rmtree\", path, dir_fd)\n    if ignore_errors:\n        def onexc(*args, **kwargs):\n            pass\n    elif onerror is None and onexc is None:\n        def onexc(*args, **kwargs):\n            raise\n    elif onexc is None:\n        if onerror is None:\n            def onexc(*args, **kwargs):\n                raise\n        else:\n            # delegate to onerror\n            def onexc(*args, **kwargs):\n                func, path, exc = args\n                if exc is None:\n                    exc_info = None, None, None\n                else:\n                    exc_info = type(exc), exc, exc.__traceback__\n                return onerror(func, path, exc_info)\n    elif not _onexc_kwargs:\n        # Only the internal caller in tempfile asks for the extra arguments.\n        _onexc = onexc\n        def onexc(func, path, err, **kwargs):\n            return _onexc(func, path, err)\n\n    _rmtree_impl(path, dir_fd, onexc)\n"
+        }
+      ],
+      "upstream_commit": "5c20517a4fc56683efe63a7751020db9573f538d",
+      "upstream_url": "https://github.com/python/cpython/commit/5c20517a4fc56683efe63a7751020db9573f538d",
+      "backport_head": "fb187f1eaace3d4f47397b754cf928a73c5b0d9f",
+      "backport_url": "https://github.com/python/cpython/pull/158430",
+      "backport_status_at_review": "open_unmerged",
+      "changed_lines_equal_merged_main": true,
+      "issue_url": "https://github.com/python/cpython/issues/157579",
+      "scope": "Linux fd-relative cleanup mitigation; remaining upstream platform limitations apply."
+    }
+  ]
+}

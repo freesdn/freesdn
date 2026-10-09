@@ -240,7 +240,10 @@
         "title": "导入 OpenVPN 配置",
         "description": "粘贴你的 .ovpn 文件内容。适用于任何 OpenVPN 服务器（OPNsense、pfSense、MikroTik 或独立部署）。",
         "submit": "导入配置",
-        "hint": "支持内嵌证书（<ca>、<cert>、<key>）。出于安全考虑，脚本指令（up/down/plugin）会被拒绝。"
+        "hint": "支持内嵌证书（<ca>、<cert>、<key>）。出于安全考虑，脚本指令（up/down/plugin）会被拒绝。",
+        "profileLabel": "现有的手动 OpenVPN 配置",
+        "automaticProfile": "自动（使用唯一匹配的配置或创建新配置）",
+        "profileHint": "如果存在多个手动配置，请明确选择一个。其他 VPN 类型及控制器管理的配置将保持不变。"
       },
       "methods": {
         "title": "连接方式",

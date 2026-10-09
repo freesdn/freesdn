@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { buildNetworkHealth, buildTrafficChartData } from './dashboardMetrics';
 import type { TFunction } from 'i18next';
 import {
   DndContext,
@@ -46,7 +47,6 @@ import {
   camerasApi,
   controllersApi,
   type DashboardSummary,
-  type EnterpriseAnalytics,
   type AnalyticsAlert,
   type HealthCheck,
 } from '@/lib/api';
@@ -314,8 +314,8 @@ export default function DashboardPage() {
   const trafficData = useMemo(() => buildTrafficChartData(analytics, t), [analytics, t]);
   const trafficSeries = useMemo(
     () => [
-      { key: 'download', label: t('DashboardPage.traffic.downloadMbps'), color: '#10b981' },
-      { key: 'upload', label: t('DashboardPage.traffic.uploadMbps'), color: '#3b82f6' },
+      { key: 'download', label: t('DashboardPage.traffic.downloadMiB'), color: '#10b981' },
+      { key: 'upload', label: t('DashboardPage.traffic.uploadMiB'), color: '#3b82f6' },
     ],
     [t],
   );
@@ -815,84 +815,6 @@ export default function DashboardPage() {
       )}
     </div>
   );
-}
-
-// ── Helper: build traffic chart data from enterprise analytics ──────
-
-function buildTrafficChartData(
-  analytics: EnterpriseAnalytics | undefined,
-  t: TFunction,
-): { timestamp: string; download: number; upload: number }[] {
-  if (!analytics) return [];
-
-  // The enterprise analytics provides aggregate TX/RX bytes.
-  // Without per-hour data points we cannot render a time-series.
-  // Return an empty array so the chart shows the "no data" state
-  // rather than fabricated numbers.  When the analytics API starts
-  // returning `data_points` in the future, this function can be
-  // extended to map them.
-  const totalTx = analytics.ports?.total_tx_bytes ?? 0;
-  const totalRx = analytics.ports?.total_rx_bytes ?? 0;
-
-  // If there is at least some data, show a single summary point so the
-  // chart area is not entirely empty.
-  if (totalTx === 0 && totalRx === 0) return [];
-
-  // Show a single aggregated data point so the user sees real numbers.
-  return [
-    {
-      timestamp: t('DashboardPage.traffic.last24h'),
-      download: Math.round((totalRx / (1024 * 1024)) * 100) / 100,
-      upload: Math.round((totalTx / (1024 * 1024)) * 100) / 100,
-    },
-  ];
-}
-
-// ── Helper: build network health from enterprise analytics ──────────
-
-function buildNetworkHealth(analytics: EnterpriseAnalytics | undefined, t: TFunction) {
-  if (!analytics) {
-    return {
-      latency: { value: 0, history: [] as number[] },
-      throughput: { download: 0, upload: 0, history: [] as { download: number; upload: number }[] },
-      packetLoss: { value: 0, history: [] as number[] },
-      uptime: { value: 0, label: t('DashboardPage.networkHealth.notAvailable') },
-    };
-  }
-
-  const txBytes = analytics.ports?.total_tx_bytes ?? 0;
-  const rxBytes = analytics.ports?.total_rx_bytes ?? 0;
-  const hours = analytics.hours || 24;
-
-  // Convert aggregate bytes to average Mbps over the period
-  const avgDownloadMbps = (rxBytes * 8) / (hours * 3600) / 1_000_000;
-  const avgUploadMbps = (txBytes * 8) / (hours * 3600) / 1_000_000;
-
-  // Health score as a proxy for uptime
-  const healthScore = analytics.health_score ?? 0;
-
-  return {
-    latency: { value: 0, history: [] as number[] },
-    throughput: {
-      download: Math.round(avgDownloadMbps * 100) / 100,
-      upload: Math.round(avgUploadMbps * 100) / 100,
-      history: [] as { download: number; upload: number }[],
-    },
-    packetLoss: {
-      value: analytics.ports?.total_errors
-        ? Math.round(
-            (analytics.ports.total_errors /
-              Math.max(1, (analytics.ports.total_tx_bytes + analytics.ports.total_rx_bytes))) *
-              10000,
-          ) / 100
-        : 0,
-      history: [] as number[],
-    },
-    uptime: {
-      value: healthScore,
-      label: t('DashboardPage.networkHealth.windowLabel', { hours }),
-    },
-  };
 }
 
 // ── Helper: build camera preview list ───────────────────────────────

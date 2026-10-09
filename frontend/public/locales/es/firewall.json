@@ -108,7 +108,8 @@
       "verifySsl": "Verificar certificado SSL",
       "syncConfiguration": "Configuración de sincronización",
       "enableAutoSync": "Habilitar sincronización automática",
-      "syncInterval": "Intervalo de sincronización (segundos)"
+      "syncInterval": "Intervalo de sincronización (segundos)",
+      "insecureTlsWarning": "La verificación del certificado está desactivada. No se comprobará la identidad del gateway, lo que expone las credenciales a la interceptación. Utilice preferiblemente un certificado de confianza o instale la CA del dispositivo en el almacén de confianza del backend."
     },
     "vendorFilter": {
       "all": "Todos los proveedores"
@@ -525,7 +526,7 @@
       "certificates": "Certificados",
       "certificateAuthorities": "Autoridades de certificación",
       "revocationLists": "Listas de revocación",
-      "empty": "No se encontraron certificados ni CA en el almacén de confianza.",
+      "empty": "No se devolvieron certificados, CA ni listas de revocación configuradas.",
       "columns": {
         "name": "Nombre",
         "dn": "DN",
@@ -533,7 +534,9 @@
         "inUse": "En uso",
         "ca": "CA",
         "type": "Tipo"
-      }
+      },
+      "unavailable": "El inventario de confianza no está disponible. No se puede confirmar ningún recuento.",
+      "retry": "Reintentar comprobación de confianza"
     },
     "acme": {
       "title": "ACME / Let's Encrypt",
@@ -544,16 +547,20 @@
       "actions": "Acciones",
       "certificatesHeading": "Certificados ACME",
       "accountsHeading": "Cuentas ACME",
-      "empty": "No se encontró configuración ACME. Instale os-acme-client para gestionar certificados de Let's Encrypt.",
+      "empty": "No se devolvieron certificados, cuentas, validaciones ni acciones ACME.",
       "columns": {
         "name": "Nombre",
         "domains": "Dominio(s)",
         "account": "Cuenta",
         "lastUpdate": "Última actualización",
-        "status": "Estado",
+        "status": "Configuración",
         "email": "Correo electrónico",
         "ca": "CA"
-      }
+      },
+      "unavailable": "El inventario ACME no está disponible. Compruebe la compatibilidad del complemento y el acceso a la puerta de enlace.",
+      "retry": "Reintentar comprobación ACME",
+      "enabled": "Habilitado en la configuración",
+      "disabled": "Deshabilitado en la configuración"
     },
     "syslog": {
       "title": "Destinos de syslog",
@@ -589,7 +596,12 @@
         "status": "Estado",
         "daysRemaining": "Días restantes",
         "expires": "Caduca"
-      }
+      },
+      "unavailable": "El estado de los certificados no está disponible. No se puede evaluar su estado.",
+      "retry": "Reintentar la comprobación",
+      "unknown": "Caducidad desconocida",
+      "unknownExpiry": "No se pudieron leer algunas fechas de caducidad. Compruébelas en la puerta de enlace.",
+      "empty": "No se devolvieron certificados."
     }
   },
   "GatewayServicesTab": {
@@ -1071,7 +1083,9 @@
       "uptime": "Tiempo activo",
       "version": "Versión",
       "wanIp": "IP de WAN",
-      "wanIpDescription": "Latencia: {{latency}}ms, Pérdida: {{loss}}%",
+      "wanIpDescription": "Latencia: {{latency}}, Pérdida: {{loss}}",
+      "latencyValue": "{{value}} ms",
+      "lossValue": "{{value}}%",
       "services": "Servicios",
       "servicesRunning": "{{count}} en ejecución",
       "servicesStopped": "{{count}} detenidos",
@@ -1116,13 +1130,24 @@
       "latency": "Latencia:",
       "loss": "Pérdida:",
       "jitter": "Fluctuación:",
-      "default": "Predeterminada"
+      "default": "Predeterminada",
+      "empty": "No se informaron puertas de enlace WAN",
+      "states": {
+        "online": "En línea",
+        "offline": "Sin conexión",
+        "none": "Sin monitorización",
+        "pending": "Pendiente",
+        "loss": "Pérdida de paquetes",
+        "delay": "Latencia alta",
+        "unknown": "Desconocido"
+      }
     },
     "liveStatus": {
       "title": "Estado del sistema en vivo",
       "description": "Datos en tiempo real de la puerta de enlace"
     },
     "common": {
+      "unknown": "Desconocido",
       "yes": "Sí",
       "no": "No",
       "enabled": "Habilitada",
@@ -1138,18 +1163,25 @@
     "actions": {
       "revert": "Revertir",
       "createBackup": "Crear copia de seguridad",
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "deleteBackup": "Eliminar la copia de seguridad {{filename}}"
     },
     "backups": {
+      "creationUnsupported": "Este adaptador no admite la creación de copias de seguridad guardadas. El historial disponible y la exportación de la configuración son operaciones independientes.",
       "title": "Copias de seguridad de configuración",
-      "description": "Instantáneas de la configuración del gateway"
+      "description": "Instantáneas de la configuración del gateway",
+      "loading": "Cargando el historial de copias de seguridad…",
+      "unavailable": "El historial de copias de seguridad no está disponible. No se puede determinar si hay copias guardadas.",
+      "retry": "Reintentar el historial de copias de seguridad"
     },
     "diff": {
       "title": "Diferencias de configuración",
       "description": "Comparar la configuración en ejecución con la última copia de seguridad",
       "generating": "Generando diferencias…",
       "changesDetected": "Cambios detectados",
-      "noChanges": "Sin cambios"
+      "noChanges": "Sin cambios",
+      "unavailable": "La comparación no está disponible. Es necesario recuperar correctamente ambos documentos de configuración; no se puede determinar si hay cambios.",
+      "retry": "Reintentar comparación"
     },
     "revertDialog": {
       "title": "¿Revertir configuración?",
@@ -1985,10 +2017,13 @@
       "activeDecisions": "Decisiones activas",
       "columns": {
         "ipRange": "IP/Rango",
-        "reason": "Motivo",
+        "reason": "Origen / ámbito",
         "action": "Acción",
-        "expires": "Caduca"
-      }
+        "expires": "Duración",
+        "source": "Origen"
+      },
+      "alertWindow": "Se muestran {{shown}} de {{total}} alertas. Solo se recuperan los primeros 50 registros.",
+      "decisionWindow": "Se muestran {{shown}} de {{total}} decisiones. Solo se recuperan los primeros 50 registros."
     },
     "dialogs": {
       "clearAlerts": {
@@ -2060,7 +2095,8 @@
       "service": "Servicio",
       "graphiteServer": "Servidor Graphite",
       "influxUrl": "URL de InfluxDB",
-      "influxDatabase": "Base de datos InfluxDB"
+      "influxDatabase": "Base de datos InfluxDB",
+      "influxV2Url": "URL de InfluxDB v2"
     },
     "netflow": {
       "title": "NetFlow / sFlow",
@@ -2287,7 +2323,10 @@
       "system": "Sistema"
     },
     "searchFirewall": "Buscar registros del firewall...",
-    "searchSystem": "Buscar registros del sistema..."
+    "searchSystem": "Buscar registros del sistema...",
+    "loading": "Cargando los registros actuales…",
+    "unavailable": "Los registros no están disponibles. No se ha confirmado una lectura vacía correcta.",
+    "retry": "Reintentar registros"
   },
   "OpenWrtTab": {
     "common": {
@@ -3681,22 +3720,34 @@
     "title": "Usuarios RADIUS",
     "siteLabel": "Sitio:",
     "description": "Prepara la creación/eliminación de usuarios RADIUS integrados (WPA-Enterprise + autenticación de puertos). Los cambios se aplican desde el panel de Cambios pendientes.",
-    "form": { "create": "Preparar un nuevo usuario RADIUS" },
+    "form": {
+      "create": "Preparar un nuevo usuario RADIUS"
+    },
     "fields": {
       "name": "Usuario",
       "namePlaceholder": "p. ej. alice",
       "password": "Contraseña",
       "passwordPlaceholder": "secreto RADIUS"
     },
-    "actions": { "stageCreate": "Preparar creación", "cancel": "Cancelar", "stage": "Preparar" },
+    "actions": {
+      "stageCreate": "Preparar creación",
+      "cancel": "Cancelar",
+      "stage": "Preparar"
+    },
     "loadError": "No se pudieron cargar los usuarios RADIUS:",
     "unknownError": "Error desconocido",
     "loading": "Cargando usuarios RADIUS…",
     "empty": "No hay usuarios RADIUS en este controlador. Usa el formulario de arriba para preparar uno.",
     "toast": {
-      "created": { "title": "Creación de usuario RADIUS preparada" },
-      "deleted": { "title": "Eliminación de usuario RADIUS preparada" },
-      "stageFailed": { "title": "No se pudo preparar el cambio" }
+      "created": {
+        "title": "Creación de usuario RADIUS preparada"
+      },
+      "deleted": {
+        "title": "Eliminación de usuario RADIUS preparada"
+      },
+      "stageFailed": {
+        "title": "No se pudo preparar el cambio"
+      }
     },
     "dialog": {
       "createTitle": "¿Preparar usuario RADIUS?",
@@ -3710,8 +3761,14 @@
     "title": "Hotspot",
     "siteLabel": "Sitio:",
     "description": "Prepara vales de invitado y operadores del portal. Los cambios se aplican desde el panel de Cambios pendientes.",
-    "kinds": { "voucher": "Vales", "operator": "Operadores" },
-    "form": { "createVoucher": "Generar vales de invitado", "createOperator": "Preparar un operador del portal" },
+    "kinds": {
+      "voucher": "Vales",
+      "operator": "Operadores"
+    },
+    "form": {
+      "createVoucher": "Generar vales de invitado",
+      "createOperator": "Preparar un operador del portal"
+    },
     "fields": {
       "kind": "Recurso",
       "count": "Cantidad",
@@ -3733,9 +3790,15 @@
     "loading": "Cargando…",
     "empty": "Aún no hay nada. Usa el formulario de arriba para preparar una creación.",
     "toast": {
-      "created": { "title": "Creación de hotspot preparada" },
-      "deleted": { "title": "Eliminación de hotspot preparada" },
-      "stageFailed": { "title": "No se pudo preparar el cambio" }
+      "created": {
+        "title": "Creación de hotspot preparada"
+      },
+      "deleted": {
+        "title": "Eliminación de hotspot preparada"
+      },
+      "stageFailed": {
+        "title": "No se pudo preparar el cambio"
+      }
     },
     "dialog": {
       "createTitle": "¿Preparar creación de hotspot?",
@@ -3783,5 +3846,13 @@
     "actions": {
       "syncNow": "Sincronizar ahora"
     }
+  },
+  "GatewayLiveRead": {
+    "loading": "Cargando el estado de la puerta de enlace...",
+    "unavailable": "El estado de la puerta de enlace no está disponible. Reintente la lectura o compruebe la conexión y compatibilidad del dispositivo.",
+    "retry": "Reintentar",
+    "running": "En ejecución",
+    "stopped": "Detenido",
+    "summary": "Resumen en vivo del dispositivo"
   }
 }

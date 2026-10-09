@@ -28,10 +28,11 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter
+from sqlalchemy.engine import CursorResult
 
 from app.modules.base import BaseModule
 from app.modules.manifest import ModuleManifest
@@ -1112,8 +1113,11 @@ class AlertSDK(_SessionBound, _PermissionMixin):
                 body=alert.message,
                 organization_id=self._org_id,
             )
+            await _persist(self._db)
         except Exception:
-            logger.exception("Plugin %s: alert notification dispatch failed", self._plugin_id)
+            logger.warning(
+                "Plugin %s: alert notification dispatch or persistence failed", self._plugin_id
+            )
 
     async def _publish_fired(self, alert: Any, rule: Any) -> None:
         """Publish ``alert.fired`` with the same payload the native path uses.
@@ -1703,7 +1707,7 @@ class PluginSettingsSDK(_SessionBound):
             )
         )
         await _persist(self._db)
-        return bool(result.rowcount)
+        return bool(cast(CursorResult[Any], result).rowcount)
 
     async def get_secret(self, key: str) -> str | None:
         """Read an encrypted setting. Returns decrypted plaintext."""

@@ -11,9 +11,29 @@ Request/response schemas for the hypervisor API.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    StrictBool,
+    field_validator,
+    model_validator,
+)
+
+from app.modules.hypervisor.dashboard_schemas import (
+    FleetClusterSummary as FleetClusterSummary,
+)
+from app.modules.hypervisor.dashboard_schemas import (
+    FleetDashboardResponse as FleetDashboardResponse,
+)
+from app.modules.hypervisor.dashboard_schemas import (
+    HypervisorDashboardResponse as HypervisorDashboardResponse,
+)
+from app.schemas.gateway_vpn import ProviderTaskResponse
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CLUSTER
@@ -113,6 +133,8 @@ class VMResponse(BaseModel):
 
 
 class VMActionRequest(BaseModel):
+    request_id: UUID = Field(description="Stable ID for this intent; reuse it on transport retries")
+    force: bool = False
     action: str = Field(
         ...,
         pattern="^(start|stop|shutdown|reboot|suspend|resume)$",
@@ -121,6 +143,10 @@ class VMActionRequest(BaseModel):
 
 
 class VMActionResponse(BaseModel):
+    request_id: UUID
+    change_id: UUID
+    status: str
+    provider_task: ProviderTaskResponse | None = None
     action: str
     vmid: int
     upid: str | None = None
@@ -140,7 +166,12 @@ class SnapshotResponse(BaseModel):
     parent: str | None = None
 
 
-class SnapshotCreateRequest(BaseModel):
+class HypervisorIntentRequest(BaseModel):
+    request_id: UUID = Field(description="Stable intent ID; reuse on transport retries")
+    force: bool = False
+
+
+class SnapshotCreateRequest(HypervisorIntentRequest):
     snapname: str = Field(..., min_length=1, max_length=40, pattern="^[a-zA-Z0-9_-]+$")
     description: str = Field("", max_length=255)
     vmstate: bool = False
@@ -246,7 +277,7 @@ class BackupJobResponse(BaseModel):
     node: str | None = None
 
 
-class BackupRunRequest(BaseModel):
+class BackupRunRequest(HypervisorIntentRequest):
     storage: str = Field(..., min_length=1, max_length=100)
     mode: str = Field("snapshot", pattern="^(snapshot|suspend|stop)$")
     compress: str = Field("zstd", pattern="^(zstd|lzo|gzip|none)$")
@@ -258,6 +289,8 @@ class BackupRunRequest(BaseModel):
 
 
 class CloneRequest(BaseModel):
+    request_id: UUID = Field(description="Stable intent ID; reuse on transport retries")
+    force: bool = False
     newid: int = Field(..., ge=100, le=999999999, description="New VMID for the clone")
     name: str = Field("", max_length=128)
     target: str = Field("", max_length=63, description="Target node (empty = same node)")
@@ -267,11 +300,30 @@ class CloneRequest(BaseModel):
 
 
 class MigrateRequest(BaseModel):
+    request_id: UUID = Field(description="Stable intent ID; reuse on transport retries")
+    force: bool = False
     target: str = Field(..., min_length=1, max_length=63, description="Target node name")
-    online: bool = True
+    online: bool = False
+    restart: bool = Field(False, description="LXC only: permit shutdown, migration and restart")
 
 
-class ResizeDiskRequest(BaseModel):
+class ReviewedGuestIntent(HypervisorIntentRequest):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_digest: str = Field(
+        pattern=r"^[0-9a-f]{40}$",
+        description="Digest of the guest configuration reviewed by the operator",
+    )
+
+
+class TemplateConversionRequest(ReviewedGuestIntent):
+    confirmed: StrictBool = False
+
+
+class ResizeDiskRequest(ReviewedGuestIntent):
+    current_size_bytes: int = Field(
+        strict=True, gt=0, le=2**53 - 1, description="Reviewed disk size in bytes"
+    )
     disk: str = Field(
         ...,
         min_length=1,
@@ -288,7 +340,7 @@ class ResizeDiskRequest(BaseModel):
     )
 
 
-class UpdateConfigRequest(BaseModel):
+class UpdateConfigRequest(ReviewedGuestIntent):
     """Partial VM/CT config update. All fields optional."""
 
     cores: int | None = Field(None, ge=1, le=512)
@@ -317,6 +369,47 @@ class ConsoleProxyResponse(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════
 # TASK DETAIL
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+class TaskStopTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    node: str = Field(min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9-]+$")
+    upid: str = Field(min_length=10, max_length=512)
+
+    @model_validator(mode="after")
+    def matching_node(self) -> TaskStopTarget:
+        from app.services.proxmox_task_tracking import task_node
+
+        if task_node(self.upid) != self.node:
+            raise ValueError("Task identity must belong to the selected node")
+        return self
+
+
+class TaskStopRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: UUID
+    expected_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    force: StrictBool = False
+    confirmed: StrictBool = False
+
+
+class TaskStopSnapshot(TaskStopTarget):
+    task_type: str
+    status: Literal["running"]
+
+
+class TaskStopReviewResponse(BaseModel):
+    expected_digest: str
+    snapshot: TaskStopSnapshot
+    warnings: list[str]
+
+
+class TaskStopResponse(TaskStopTarget):
+    request_id: UUID
+    change_id: UUID
+    status: str
+    provider_task: ProviderTaskResponse | None = None
+    message: str
 
 
 class TaskDetailResponse(BaseModel):
@@ -608,37 +701,24 @@ class NodeSensors(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class HypervisorDashboardResponse(BaseModel):
-    """Aggregated cluster overview for the hypervisor dashboard."""
-
-    cluster_name: str = ""
-    quorate: bool = True
-    total_nodes: int = 0
-    online_nodes: int = 0
-    total_vms: int = 0
-    running_vms: int = 0
-    total_containers: int = 0
-    running_containers: int = 0
-    total_cpu_cores: int = 0
-    cpu_usage_percent: float = 0.0
-    total_memory_bytes: int = 0
-    used_memory_bytes: int = 0
-    memory_usage_percent: float = 0.0
-    total_storage_bytes: int = 0
-    used_storage_bytes: int = 0
-    storage_usage_percent: float = 0.0
-    ha_active: bool = False
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 # VM/CT CREATION
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class CreateVMRequest(BaseModel):
+class CreateVMRequest(HypervisorIntentRequest):
     """Request to create a new QEMU virtual machine."""
 
-    vmid: int | None = Field(None, ge=100, le=999999999, description="VMID (auto if omitted)")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    force: StrictBool = False
+
+    vmid: int = Field(
+        ...,
+        strict=True,
+        ge=100,
+        le=999999999,
+        description="Reviewed VMID; next-id lookup is only a suggestion",
+    )
     name: str = Field("", max_length=128)
     node: str = Field(..., min_length=1, max_length=63, description="Target node")
     cores: int = Field(1, ge=1, le=512)
@@ -656,15 +736,24 @@ class CreateVMRequest(BaseModel):
     machine: str = Field("", max_length=40)
     start_after_create: bool = False
     pool: str = Field("", max_length=63)
-    description: str = Field("", max_length=8192)
+    description: str = Field("", max_length=8000)
     onboot: bool = False
     tags: str = Field("", max_length=255)
 
 
-class CreateContainerRequest(BaseModel):
+class CreateContainerRequest(HypervisorIntentRequest):
     """Request to create a new LXC container."""
 
-    vmid: int | None = Field(None, ge=100, le=999999999, description="VMID (auto if omitted)")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    force: StrictBool = False
+
+    vmid: int = Field(
+        ...,
+        strict=True,
+        ge=100,
+        le=999999999,
+        description="Reviewed VMID; next-id lookup is only a suggestion",
+    )
     hostname: str = Field("", max_length=128)
     node: str = Field(..., min_length=1, max_length=63, description="Target node")
     ostemplate: str = Field(
@@ -680,11 +769,11 @@ class CreateContainerRequest(BaseModel):
     rootfs_size: str = Field("8", max_length=20, description="Root disk size in GB")
     net_bridge: str = Field("vmbr0", max_length=20)
     net_ip: str = Field("dhcp", max_length=50, description="IP address or 'dhcp'")
-    password: str = Field("", max_length=128, json_schema_extra={"writeOnly": True})
+    password: SecretStr = Field(default_factory=lambda: SecretStr(""), max_length=128)
     ssh_public_keys: str = Field("", max_length=4096)
     start_after_create: bool = False
     pool: str = Field("", max_length=63)
-    description: str = Field("", max_length=8192)
+    description: str = Field("", max_length=8000)
     unprivileged: bool = True
     onboot: bool = False
     tags: str = Field("", max_length=255)
@@ -692,14 +781,14 @@ class CreateContainerRequest(BaseModel):
     searchdomain: str = Field("", max_length=256)
 
 
-class CreateVMResponse(BaseModel):
-    vmid: int
-    upid: str = ""
-    message: str = ""
+class CreateVMResponse(VMActionResponse):
+    """Durable creation receipt; acceptance is not guest readiness."""
 
 
-class DeleteVMRequest(BaseModel):
-    purge: bool = Field(False, description="Remove from backup jobs and HA too")
+class DeleteVMRequest(ReviewedGuestIntent):
+    """Reviewed deletion, without purge, force-stop or extra disk destruction."""
+
+    confirmed: StrictBool = False
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -707,8 +796,30 @@ class DeleteVMRequest(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class HAResourceCreateRequest(BaseModel):
-    sid: str = Field(..., min_length=1, max_length=128, description="VM/CT SID (e.g. vm:100)")
+class ClusterOperationRequest(HypervisorIntentRequest):
+    model_config = ConfigDict(extra="forbid")
+    force: StrictBool = False
+    expected_digest: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    confirmed: StrictBool = False
+
+
+class ClusterOperationResponse(BaseModel):
+    action: str
+    target: str
+    request_id: UUID
+    change_id: UUID
+    status: str
+    provider_task: ProviderTaskResponse | None = None
+    message: str
+
+
+class ClusterOperationReview(BaseModel):
+    expected_digest: str
+    snapshot: dict
+
+
+class HAResourceCreateRequest(ClusterOperationRequest):
+    sid: str = Field(..., pattern=r"^(vm|ct):[1-9][0-9]{2,8}$")
     group: str = Field("", max_length=63)
     max_relocate: int = Field(1, ge=0, le=10)
     max_restart: int = Field(1, ge=0, le=10)
@@ -716,7 +827,7 @@ class HAResourceCreateRequest(BaseModel):
     comment: str = Field("", max_length=512)
 
 
-class HAGroupCreateRequest(BaseModel):
+class HAGroupCreateRequest(ClusterOperationRequest):
     group: str = Field(..., min_length=1, max_length=63, pattern="^[a-zA-Z0-9_-]+$")
     nodes: str = Field(
         ...,
@@ -734,53 +845,6 @@ class HAGroupCreateRequest(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class FleetClusterSummary(BaseModel):
-    """Summary of a single Proxmox cluster within the fleet."""
-
-    controller_id: str
-    controller_name: str
-    cluster_name: str = ""
-    quorate: bool = True
-    total_nodes: int = 0
-    online_nodes: int = 0
-    total_vms: int = 0
-    running_vms: int = 0
-    total_containers: int = 0
-    running_containers: int = 0
-    total_cpu_cores: int = 0
-    cpu_usage_percent: float = 0.0
-    total_memory_bytes: int = 0
-    used_memory_bytes: int = 0
-    memory_usage_percent: float = 0.0
-    total_storage_bytes: int = 0
-    used_storage_bytes: int = 0
-    storage_usage_percent: float = 0.0
-    status: str = "online"  # online, offline, error
-    error: str = ""
-
-
-class FleetDashboardResponse(BaseModel):
-    """Aggregated fleet dashboard across all Proxmox controllers."""
-
-    total_clusters: int = 0
-    online_clusters: int = 0
-    total_nodes: int = 0
-    online_nodes: int = 0
-    total_vms: int = 0
-    running_vms: int = 0
-    total_containers: int = 0
-    running_containers: int = 0
-    total_cpu_cores: int = 0
-    cpu_usage_percent: float = 0.0
-    total_memory_bytes: int = 0
-    used_memory_bytes: int = 0
-    memory_usage_percent: float = 0.0
-    total_storage_bytes: int = 0
-    used_storage_bytes: int = 0
-    storage_usage_percent: float = 0.0
-    clusters: list[FleetClusterSummary] = []
-
-
 class NextVMIDResponse(BaseModel):
     vmid: int
 
@@ -791,23 +855,54 @@ class NextVMIDResponse(BaseModel):
 
 
 class BulkVMTarget(BaseModel):
-    node: str = Field(..., min_length=1, max_length=63)
+    request_id: UUID | None = None
+    expected_digest: str | None = Field(None, pattern=r"^[0-9a-f]{40}$")
+    node: str = Field(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$")
     vm_type: str = Field(..., pattern="^(qemu|lxc)$")
-    vmid: int = Field(..., ge=100)
+    vmid: int = Field(..., ge=100, le=999999999)
 
 
 class BulkActionRequest(BaseModel):
     targets: list[BulkVMTarget] = Field(..., min_length=1, max_length=50)
     action: str = Field(..., pattern="^(start|stop|shutdown|reboot|delete)$")
+    force: bool = False
+
+    @model_validator(mode="after")
+    def power_request_ids(self):
+        ids = [target.request_id for target in self.targets]
+        guests = [target.vmid for target in self.targets]
+        if any(key is None for key in ids) or len(set(ids)) != len(ids):
+            raise ValueError("Each target requires a distinct request_id")
+        if len(set(guests)) != len(guests):
+            raise ValueError("A guest may appear only once per request")
+        if self.action == "delete" and any(t.expected_digest is None for t in self.targets):
+            raise ValueError("Each deletion target requires a reviewed expected_digest")
+        return self
 
 
 class BulkMigrateRequest(BaseModel):
     targets: list[BulkVMTarget] = Field(..., min_length=1, max_length=50)
-    target_node: str = Field(..., min_length=1, max_length=63)
-    online: bool = True
+    target_node: str = Field(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$")
+    online: bool = Field(True, description="Online migration for QEMU VMs only")
+    restart: bool = Field(False, description="Permit LXC shutdown, migration and restart")
+    force: bool = False
+
+    @model_validator(mode="after")
+    def migration_request_ids(self):
+        ids = [target.request_id for target in self.targets]
+        guests = [(target.vm_type, target.vmid) for target in self.targets]
+        if any(key is None for key in ids) or len(set(ids)) != len(ids):
+            raise ValueError("Each migration target requires a distinct request_id")
+        if len(set(guests)) != len(guests):
+            raise ValueError("A guest may appear only once per migration request")
+        return self
 
 
 class BulkActionResult(BaseModel):
+    request_id: UUID | None = None
+    change_id: UUID | None = None
+    status: str | None = None
+    provider_task: ProviderTaskResponse | None = None
     vmid: int
     node: str
     success: bool
@@ -820,29 +915,77 @@ class BulkActionResult(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class BackupJobCreateRequest(BaseModel):
-    storage: str = Field(..., min_length=1, max_length=100)
+class BackupJobSettings(BaseModel):
+    """Explicit guest selection; no implicit all-guests or inherited create retention."""
+
+    model_config = ConfigDict(extra="forbid")
+    storage: str = Field(min_length=1, max_length=63, pattern=r"^[A-Za-z][A-Za-z0-9_-]*$")
+    node: str = Field(min_length=1, max_length=63, pattern=r"^[A-Za-z0-9][A-Za-z0-9.-]*$")
     schedule: str = Field(
-        ..., min_length=1, max_length=128, description="Proxmox schedule format e.g. 'sat 02:00'"
+        min_length=5,
+        max_length=128,
+        pattern=r"^(?:(?:mon|tue|wed|thu|fri|sat|sun)(?:,(?:mon|tue|wed|thu|fri|sat|sun))* )?(?:[01][0-9]|2[0-3]):[0-5][0-9]$",
+        description="Daily HH:MM or comma-separated weekdays followed by HH:MM; node local time",
     )
-    vmid: str = Field("", max_length=255, description="Comma-separated VMIDs or empty for all")
-    mode: str = Field("snapshot", pattern="^(snapshot|suspend|stop)$")
-    compress: str = Field("zstd", pattern="^(zstd|lzo|gzip|none)$")
-    node: str | None = Field(None, max_length=63)
-    enabled: bool = True
-    mailto: str = Field("", max_length=512)
-    mailnotification: str = Field("always", pattern="^(always|failure)$")
+    vmid: str = Field(
+        min_length=3, max_length=640, pattern=r"^[1-9][0-9]{2,8}(?:,[1-9][0-9]{2,8})*$"
+    )
+    mode: Literal["snapshot", "suspend", "stop"] = "snapshot"
+    compress: Literal["zstd", "lzo", "gzip", "0"] = "zstd"
+    enabled: StrictBool = False
+
+    @field_validator("vmid")
+    @classmethod
+    def explicit_guests(cls, value: str) -> str:
+        ids = value.split(",")
+        if len(ids) > 64 or len(set(ids)) != len(ids):
+            raise ValueError("Select 1 to 64 distinct guest IDs")
+        return ",".join(sorted(ids, key=int))
+
+    @field_validator("node")
+    @classmethod
+    def node_path(cls, value: str) -> str:
+        if ".." in value:
+            raise ValueError("Invalid node name")
+        return value
 
 
-class BackupJobUpdateRequest(BaseModel):
-    storage: str | None = Field(None, max_length=100)
-    schedule: str | None = Field(None, max_length=128)
-    vmid: str | None = Field(None, max_length=255)
-    mode: str | None = Field(None, pattern="^(snapshot|suspend|stop)$")
-    compress: str | None = Field(None, pattern="^(zstd|lzo|gzip|none)$")
-    node: str | None = Field(None, max_length=63)
-    enabled: bool | None = None
-    mailto: str | None = Field(None, max_length=512)
+class BackupJobReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["create", "update", "delete"]
+    job_id: str = Field(min_length=1, max_length=50, pattern=r"^[A-Za-z0-9][A-Za-z0-9_:-]*$")
+    settings: BackupJobSettings | None = None
+
+    @model_validator(mode="after")
+    def action_settings(self) -> BackupJobReviewRequest:
+        if self.action == "create" and ":" in self.job_id:
+            raise ValueError("New job IDs cannot contain a legacy separator")
+        if (self.action == "delete") != (self.settings is None):
+            raise ValueError("Create/update require settings; delete must not include settings")
+        return self
+
+
+class BackupJobOperationRequest(BackupJobReviewRequest):
+    request_id: UUID
+    expected_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    force: StrictBool = False
+    confirmed: StrictBool = False
+
+
+class BackupJobReviewResponse(BaseModel):
+    expected_digest: str
+    snapshot: dict
+    warnings: list[str]
+
+
+class BackupJobOperationResponse(BaseModel):
+    action: Literal["create", "update", "delete"]
+    job_id: str
+    request_id: UUID
+    change_id: UUID
+    status: str
+    provider_task: ProviderTaskResponse | None = None
+    message: str
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -866,6 +1009,55 @@ class GuestAgentInfoResponse(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════
 # UPLOAD
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+class StorageReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["delete", "upload"]
+    volume: str = Field(default="", max_length=512)
+    filename: str = Field(default="", max_length=255)
+    content: Literal["iso", "vztmpl"] = "iso"
+    size: int = Field(default=0, strict=True, ge=0, le=4 * 1024**3)
+
+    @model_validator(mode="after")
+    def action_fields(self) -> StorageReviewRequest:
+        if self.action == "delete":
+            if not self.volume or self.filename or self.size or self.content != "iso":
+                raise ValueError("Deletion requires only the volume identifier")
+        elif self.volume or not self.filename or not self.size:
+            raise ValueError("Upload requires filename, content and nonzero size")
+        return self
+
+
+class StorageOperationRequest(StorageReviewRequest):
+    request_id: UUID
+    expected_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    force: StrictBool = False
+    confirmed: StrictBool = False
+
+
+class StorageReviewSnapshot(BaseModel):
+    endpoint_node: str
+    node: str
+    storage: str
+    action: Literal["delete", "upload"]
+    volume: str
+    size: int
+    content: str
+    storage_type: str
+    storage_digest: str
+    volume_digest: str
+    references_digest: str
+    owner: int | None = None
+
+
+class StorageOperationReview(BaseModel):
+    expected_digest: str
+    snapshot: StorageReviewSnapshot
+
+
+class StorageOperationResponse(ClusterOperationResponse):
+    checksum: str | None = None
 
 
 class UploadResponse(BaseModel):
@@ -911,15 +1103,76 @@ class NodeCertificate(BaseModel):
     pem: str | None = None
 
 
-class UploadCertificateRequest(BaseModel):
-    certificates: str
-    key: str
-    force: bool = False
-    restart: bool = False
-    # replacing the node TLS cert can lock the operator out of
-    # pveproxy. Require an explicit acknowledgement on the direct route (parity
-    # with the destructive-op confirm class).
-    confirmed: bool = False
+class CertificateReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["upload", "delete", "renew"]
+    certificates: str = Field(default="", max_length=65536)
+    key: SecretStr = Field(default=SecretStr(""), max_length=32768)
+    overwrite: StrictBool = False
+    restart: StrictBool = False
+    acme_force: StrictBool = False
+
+    @model_validator(mode="after")
+    def action_options(self) -> CertificateReviewRequest:
+        if self.action == "upload":
+            if not self.certificates or not self.key.get_secret_value() or self.acme_force:
+                raise ValueError("Upload requires a certificate and key, without ACME options")
+        elif self.certificates or self.key.get_secret_value() or self.overwrite:
+            raise ValueError("Certificate and key are only accepted for upload")
+        if self.action != "renew" and self.acme_force:
+            raise ValueError("ACME force is only accepted for renewal")
+        if self.action == "renew" and self.restart:
+            raise ValueError("Renewal always reloads the proxy; restart is not an option")
+        return self
+
+
+class CertificateOperationRequest(CertificateReviewRequest):
+    request_id: UUID
+    expected_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    force: StrictBool = False
+    confirmed: StrictBool = False
+
+
+class UploadCertificateRequest(CertificateOperationRequest):
+    action: Literal["upload"] = "upload"
+
+
+class CertificateInfoSummary(BaseModel):
+    fingerprint: str
+    subject: str
+    issuer: str
+    notbefore: int
+    notafter: int
+    san: list[str]
+
+
+class CertificateCandidateSummary(CertificateInfoSummary):
+    chain_length: int
+    chain_fingerprints: list[str]
+
+
+class CertificateReviewSnapshot(BaseModel):
+    node: str
+    action: Literal["upload", "delete", "renew"]
+    inventory: dict[str, CertificateInfoSummary]
+    candidate: CertificateCandidateSummary | None
+    overwrite: bool
+    restart: bool
+    acme_force: bool
+    acme_configuration: dict[str, str]
+    expected_domains: list[str]
+    endpoint_node: str
+    endpoint_fingerprint: str | None
+
+
+class CertificateReviewResponse(BaseModel):
+    expected_digest: str
+    snapshot: CertificateReviewSnapshot
+
+
+class CertificateOperationResponse(ClusterOperationResponse):
+    pass
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1063,27 +1316,6 @@ class SdnController(BaseModel):
     pending: dict | None = None
 
 
-class CreateSdnZoneRequest(BaseModel):
-    zone: str = Field(..., pattern=r"^[a-zA-Z0-9_-]+$", max_length=64)
-    type: str = Field(
-        ..., pattern=r"^[a-z]+$", max_length=32
-    )  # e.g., "simple", "vlan", "qinq", "vxlan", "evpn"
-    nodes: str | None = None
-    bridge: str | None = None
-    mtu: int | None = None
-    dns: str | None = None
-    dnszone: str | None = None
-    tag: int | None = None
-
-
-class CreateSdnVnetRequest(BaseModel):
-    vnet: str = Field(..., pattern=r"^[a-zA-Z0-9_-]+$", max_length=64)
-    zone: str = Field(..., pattern=r"^[a-zA-Z0-9_-]+$", max_length=64)
-    alias: str | None = None
-    tag: int | None = None
-    vlanaware: bool = False
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 # GUEST AGENT (EXEC / FILE)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1180,7 +1412,14 @@ class BackupAgeReport(BaseModel):
     node: str
     last_backup_time: datetime | None = None
     age_hours: float | None = None
-    is_stale: bool = False  # True if age > threshold
+    is_stale: bool | None = None  # Unknown when incomplete reads cannot establish age.
+    status: Literal["current", "stale", "missing", "unknown"] = "unknown"
+
+
+class BackupReadFailure(BaseModel):
+    node: str
+    storage: str | None = None
+    reason: str
 
 
 class BackupAgeResponse(BaseModel):
@@ -1190,6 +1429,11 @@ class BackupAgeResponse(BaseModel):
     stale: int
     never_backed_up: int
     vms: list[BackupAgeReport]
+    fresh: int = 0
+    unknown: int = 0
+    complete: bool = True
+    observed_at: datetime | None = None
+    read_failures: list[BackupReadFailure] = Field(default_factory=list)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1237,6 +1481,18 @@ class HysteresisEvaluateResponse(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════
 # PBS / BACKUP RESTORE
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+class BackupRestoreIntentPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    node: str = Field(min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$")
+    vm_type: Literal["qemu", "lxc"]
+    archive: str = Field(min_length=1, max_length=512)
+    vmid: int = Field(ge=100, le=999999999)
+    storage: str | None = Field(None, min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$")
+    start: StrictBool = False
+    unique: StrictBool = True
 
 
 class RestoreBackupRequest(BaseModel):

@@ -1,0 +1,59 @@
+Discovery device inventory authority
+===================================
+
+A discovered MAC address is an identifier, not permission to reassign a device
+from another tenant. Both the preload lookup and the unique-insert conflict
+lookup restrict devices to active sites in the captured organization. The
+MAC-less lookup also requires an authorized site. Discovery within one tenant
+retains the existing controller-reassignment behavior.
+
+A controller must have an active, undeleted site and organization before adapter
+access. After adapter I/O, discovery rechecks the controller and current tenant
+sites. It holds shared PostgreSQL locks on the controller, site and organization
+authority rows through the Device inventory commit. Invalid, foreign, missing,
+deleted or inactive resolved target sites are refused before inventory changes.
+A concurrent insert collision with no tenant-scoped winner aborts and rolls back
+the inventory transaction, returning discovery_device_scope_conflict without
+loading or modifying the other tenant's device. The existing controller status
+and history are not overwritten by this safe refusal.
+
+Aggregate discovery now reports success:false when any selected controller
+returns failure or raises an exception. controllers_failed includes exceptions;
+processed/successful/failed counts remain accountable. A no-controller run is
+still an explicit successful no-work outcome. Partial work by successful
+controllers is retained; this is not an all-controller transaction.
+
+Compatibility and limits
+------------------------
+
+The global live-MAC unique index remains unchanged. Identical nonempty MACs
+cannot yet be represented independently across tenants; discovery safely refuses
+the conflict. Supporting that requires separate schema and ownership migration
+work. Unscoped/orphan inventory does not gain a tenant through MAC matching.
+Explicit invalid UUID site mappings retain the existing resolver's fallback to
+the controller default; the resolved target is always checked for authority.
+
+These locks protect the Device inventory transaction, not the preceding adapter
+operation or later deep-sync/ZTP work after commit. The initial per-controller
+request does not receive the original caller's complete grant snapshot. Changes
+between job selection and entering the per-controller routine require separate
+execution-authorization work. A later deep-sync failure still has its existing
+reporting behavior. Device/controller events are still published by their
+existing transport; they are not a transactional outbox, and a late rollback can
+leave a prior event without committed inventory. Global discovery lock ownership,
+raw controller error persistence and internal Celery diagnostics remain separate
+work. Old workers retain the original behavior: update workers consistently.
+
+Shared authority locks can briefly delay site/controller/organization edits;
+they are acquired after adapter I/O, not across the external discovery request.
+This does not establish a multihost availability or hardware-write guarantee.
+
+Verification
+------------
+
+Real PostgreSQL regressions cover preloaded foreign MACs, a foreign insert
+committed after the preload SELECT, invalid site mappings, authority changes
+during adapter I/O, and independent updates blocked by transaction locks.
+Legitimate same-tenant discovery/controller reassignment remains covered.
+Separate-process probes exercise actual committed database effects while adapter,
+deep-sync, ZTP and event edges are synthetic. They do not contact hardware.

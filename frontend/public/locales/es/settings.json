@@ -84,7 +84,8 @@
         "notifications": "Notificaciones",
         "modules": "Módulos",
         "system": "Información del sistema",
-        "about": "Acerca de"
+        "about": "Acerca de",
+        "access": "Acceso de solo lectura / escritura"
       }
     },
     "timezones": {
@@ -230,7 +231,34 @@
       },
       "modules": {
         "title": "Gestión de módulos",
-        "description": "Habilita, deshabilita y configura los módulos de FreeSDN. Los módulos agregan nuevas funciones como cámaras, VoIP, gestión de firewall y más."
+        "description": "Habilita, deshabilita y configura los módulos de FreeSDN. Los módulos agregan nuevas funciones como cámaras, VoIP, gestión de firewall y más.",
+        "enablementBoundary": "La selección de módulos controla la navegación y los eventos del ciclo de vida. No bloquea el acceso a la API ni cancela todos los trabajos en segundo plano. Para ello, utiliza permisos, concesiones de acceso a sitios y controles explícitos del programador."
+      },
+      "access": {
+        "title": "Acceso de solo lectura / escritura",
+        "description": "Controla si FreeSDN puede escribir en tus dispositivos. El modo de solo lectura permite supervisar y rechaza las escrituras en dispositivos en toda la plataforma."
+      }
+    },
+    "access": {
+      "title": "Acceso de solo lectura / escritura",
+      "description": "Controla si FreeSDN puede escribir en tus dispositivos. El modo de solo lectura permite supervisar y rechaza las escrituras en dispositivos en toda la plataforma.",
+      "row": {
+        "labelReadOnly": "Modo de solo lectura (solo supervisión)",
+        "labelWrite": "Modo de lectura y escritura (administración)",
+        "descReadOnly": "Las escrituras en dispositivos están deshabilitadas. Desactiva este modo para administrar y configurar dispositivos.",
+        "descWrite": "Las escrituras en dispositivos están habilitadas. Activa este modo para limitar la plataforma a la supervisión.",
+        "toggleAria": "Activar o desactivar el modo de solo lectura"
+      },
+      "status": {
+        "readOnly": "El modo de solo lectura está ACTIVADO. FreeSDN no escribirá en ningún dispositivo.",
+        "write": "El acceso de escritura está ACTIVADO. FreeSDN puede aplicar cambios a los dispositivos administrados."
+      },
+      "toast": {
+        "readOnlyTitle": "Modo de solo lectura activado",
+        "readOnlyDesc": "Las escrituras en dispositivos están deshabilitadas en toda la plataforma.",
+        "writeTitle": "Acceso de escritura activado",
+        "writeDesc": "Ahora se pueden administrar y configurar los dispositivos.",
+        "errorTitle": "No se pudo actualizar el modo"
       }
     }
   },
@@ -925,7 +953,18 @@
       "savedOk": "Guardado.",
       "checkTitle": "Guardado, con algo que revisar",
       "secretConfigured": "Configurado. Escribe para reemplazarlo.",
-      "secretEmpty": "Sin configurar"
+      "secretEmpty": "Sin configurar",
+      "secretChoiceConfigured": "Configurado. Selecciona una opción para sustituirlo.",
+      "emptyChoice": "Cadena vacía",
+      "retainedChoice": "{{value}} (valor guardado)",
+      "retainedChoiceHint": "Este valor guardado no está entre las opciones actuales. Selecciona una opción para cambiarlo.",
+      "typedChoice": "{{value}} ({{type}})",
+      "choiceType": {
+        "string": "texto",
+        "number": "número",
+        "boolean": "booleano",
+        "null": "nulo"
+      }
     }
   },
   "SSOSettingsPage": {

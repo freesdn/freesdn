@@ -710,6 +710,10 @@ def _service_for_feature(feature: str, session: AsyncSession) -> GatewayServiceB
         return GatewayHotspotService(session)
     if feature.startswith("routing."):
         return GatewayRoutingService(session)
+    if feature.startswith("switch.port."):
+        from app.services.adapter_omada_switch_ports import GatewaySwitchPortsService
+
+        return GatewaySwitchPortsService(session)
     if feature.startswith("switch."):
         return GatewaySwitchAdvancedService(session)
     if feature.startswith(("system.", "monitoring.")) or feature in (
@@ -1245,6 +1249,10 @@ async def apply_change(
     # feature prefix so non-VPN changes apply correctly.
     svc = _service_for_feature(change.feature, session)
     applier = svc.build_applier(change)
+    if change.feature == "proxmox.backup.restore":
+        from app.services.hypervisor_operations import HypervisorOperationService
+
+        applier = HypervisorOperationService(session, user).guard_applier(change, applier)
     applied = await staging.apply_change(
         change_id,
         force=body.force,

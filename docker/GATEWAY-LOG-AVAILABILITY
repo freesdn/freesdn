@@ -1,0 +1,28 @@
+GATEWAY LOG AVAILABILITY
+========================
+
+The generic gateway detail Logs tab reads the system and firewall REST endpoints.
+It does not consume the separate live SSE endpoint and makes no continuous-delivery
+or instant client-side revocation guarantee.
+
+Only a successful response with the selected gateway ID, matching vendor and a
+bounded array of at most the requested200 row objects can represent an empty log
+read. Displayed timestamp/process/message aliases accept text, finite numbers or
+absent values. Nested values and malformed arrays are unavailable, never rendered
+as React objects or treated as empty success. The OPNsense __timestamp__ alias is
+used consistently for both display and sorting. Log strings remain escaped text.
+
+The selected table is hidden while fetching, after a failed read and when its
+cached response does not match the gateway/vendor. A generic unavailable message
+does not reflect vendor diagnostics. Retry reads only the selected log endpoint.
+React Query keys remain scoped to the gateway and log kind; late responses from a
+previous gateway must not populate the current table. Previously displayed data
+cannot be recalled. This change does not implement durable log storage, new log
+vendor mappings, background streaming or real-device authentication acceptance.
+
+The correction is checked on the actual gateway page with synthetic API responses,
+and independently in Chromium using the actual Axios client over loopback HTTP.
+This is browser/query/response-contract coverage, not production hardware evidence.
+The English, Spanish and Chinese availability strings and earlier missing health,
+certificate-warning, backup-comparison and OpenVPN-profile translations retain the
+existing full namespace/key/interpolation verification gate.

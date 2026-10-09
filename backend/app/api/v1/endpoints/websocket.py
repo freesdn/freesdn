@@ -471,6 +471,22 @@ class ConnectionManager:
         if info.organization_id != str(event.organization_id):
             return False
 
+        # A personal notification remains private even when its recipient and
+        # another subscriber both have unrestricted access to this organization.
+        # Site grants, administrator roles and wildcard subscriptions cannot
+        # substitute for being the addressed user. Reject conflicting envelopes.
+        if event_type.startswith("notification."):
+            payload = event.payload if isinstance(event.payload, dict) else {}
+            target_user = payload.get("user_id")
+            if target_user is None or str(target_user) != info.user_id:
+                return False
+            if "notification" in payload:
+                notification = payload["notification"]
+                if not isinstance(notification, dict) or str(notification.get("user_id")) != str(
+                    target_user
+                ):
+                    return False
+
         # SECURITY: server-enforced per-user site scope. A
         # site-limited user (>=1 UserSiteAccess grant; never super/org admin)
         # may only receive events for sites they're granted — independent of

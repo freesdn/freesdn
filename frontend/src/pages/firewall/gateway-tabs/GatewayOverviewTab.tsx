@@ -5,7 +5,7 @@
  * WAN gateway health, and a raw live-status fallback panel.
  *
  * Extracted from GatewayDetailPage as part of the monolith breakup. Pure
- * presentation · receives all data via props with no callbacks.
+ * presentation · receives live read state and retry callbacks via props.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useTranslation } from 'react-i18next';
@@ -14,12 +14,19 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatsGrid, type StatItem } from '@/components/ui/stats-grid';
 import type { GatewayConnection } from '@/lib/api';
+import { GatewayLiveReadNotice } from './GatewayLiveReadNotice';
 
 export interface GatewayOverviewTabProps {
   gw: GatewayConnection;
   vendorLabel: string;
   deviceSummary: Record<string, any>;
   firmware: Record<string, any>;
+  firmwareLoading?: boolean;
+  firmwareError?: boolean;
+  onRetryFirmware?: () => void;
+  healthLoading?: boolean;
+  healthError?: boolean;
+  onRetryHealth?: () => void;
   gwHealth: any[];
   liveStatus: any;
 }
@@ -29,10 +36,26 @@ export function GatewayOverviewTab({
   vendorLabel,
   deviceSummary,
   firmware,
+  firmwareLoading = false, firmwareError = false, onRetryFirmware,
+  healthLoading = false, healthError = false, onRetryHealth,
   gwHealth,
   liveStatus,
 }: GatewayOverviewTabProps) {
   const { t } = useTranslation('firewall');
+  const unknown = t('GatewayOverviewTab.common.unknown');
+  const availability = [firmware.update_available, firmware.needs_update, firmware.upgrade_available];
+  const update = availability.some(value => value === true) ? true : availability.some(value => value === false) ? false : null;
+  const firmwareRows = firmwareLoading || firmwareError ? [] : [
+    [t('GatewayOverviewTab.firmware.firmware'), firmware.current_version || firmware.product_version || firmware.version || unknown],
+    [t('GatewayOverviewTab.firmware.latestVersion'), firmware.latest_version || firmware.new_version || unknown],
+    [t('GatewayOverviewTab.firmware.updateAvailable'), update === null ? unknown : update ? t('GatewayOverviewTab.firmware.updateYes', { version: firmware.latest_version || firmware.new_version || '?' }) : t('GatewayOverviewTab.common.no')],
+  ];
+  const healthState = (status: string) => {
+    const known = ['online', 'offline', 'none', 'pending', 'loss', 'delay'];
+    return t(`GatewayOverviewTab.wanHealth.states.${known.includes(status) ? status : 'unknown'}`);
+  };
+  const sample = (value: unknown, unit: string) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? `${value.toFixed(1)}${unit}` : unknown;
+
 
   // Build the device summary stat items dynamically · only include cards
   // for fields that the gateway actually reports.
@@ -64,10 +87,11 @@ export function GatewayOverviewTab({
       variant: disk > 90 ? 'destructive' : 'primary',
     });
   }
-  if (deviceSummary.uptime_text || deviceSummary.uptime) {
+  const uptime = deviceSummary.uptime_text || deviceSummary.uptime;
+  if (uptime != null && uptime !== '') {
     summaryStats.push({
       title: t('GatewayOverviewTab.stats.uptime'),
-      value: deviceSummary.uptime_text || deviceSummary.uptime,
+      value: uptime,
       icon: Clock,
       variant: 'primary',
     });
@@ -87,24 +111,29 @@ export function GatewayOverviewTab({
       icon: Globe,
       variant: 'primary',
       description: t('GatewayOverviewTab.stats.wanIpDescription', {
-        latency: deviceSummary.wan_delay_ms || '-',
-        loss: deviceSummary.wan_loss_pct || '0',
+        latency: typeof deviceSummary.wan_delay_ms === 'number' && Number.isFinite(deviceSummary.wan_delay_ms) && deviceSummary.wan_delay_ms >= 0
+          ? t('GatewayOverviewTab.stats.latencyValue', { value: deviceSummary.wan_delay_ms })
+          : t('GatewayOverviewTab.common.unknown'),
+        loss: typeof deviceSummary.wan_loss_pct === 'number' && Number.isFinite(deviceSummary.wan_loss_pct) && deviceSummary.wan_loss_pct >= 0 && deviceSummary.wan_loss_pct <= 100
+          ? t('GatewayOverviewTab.stats.lossValue', { value: deviceSummary.wan_loss_pct })
+          : t('GatewayOverviewTab.common.unknown'),
       }),
     });
   }
-  if (deviceSummary.services_running != null || deviceSummary.services_stopped != null) {
+  const knownCount = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  if (knownCount(deviceSummary.services_running) && knownCount(deviceSummary.services_stopped)) {
     summaryStats.push({
       title: t('GatewayOverviewTab.stats.services'),
-      value: t('GatewayOverviewTab.stats.servicesRunning', { count: deviceSummary.services_running || 0 }),
+      value: t('GatewayOverviewTab.stats.servicesRunning', { count: deviceSummary.services_running }),
       icon: Activity,
       variant: 'primary',
-      description: t('GatewayOverviewTab.stats.servicesStopped', { count: deviceSummary.services_stopped || 0 }),
+      description: t('GatewayOverviewTab.stats.servicesStopped', { count: deviceSummary.services_stopped }),
     });
   }
-  if (deviceSummary.vpn_tunnels_up != null || deviceSummary.vpn_tunnels_total != null) {
+  if (knownCount(deviceSummary.vpn_tunnels_up) && knownCount(deviceSummary.vpn_tunnels_total) && deviceSummary.vpn_tunnels_up <= deviceSummary.vpn_tunnels_total) {
     summaryStats.push({
       title: t('GatewayOverviewTab.stats.vpnTunnels'),
-      value: `${deviceSummary.vpn_tunnels_up || 0} / ${deviceSummary.vpn_tunnels_total || 0}`,
+      value: `${deviceSummary.vpn_tunnels_up} / ${deviceSummary.vpn_tunnels_total}`,
       icon: Lock,
       variant: 'primary',
     });
@@ -131,7 +160,7 @@ export function GatewayOverviewTab({
                 [t('GatewayOverviewTab.gatewayInfo.host'), `${gw.host}:${gw.port}`],
                 [t('GatewayOverviewTab.gatewayInfo.sslVerify'), gw.verify_ssl ? t('GatewayOverviewTab.common.yes') : t('GatewayOverviewTab.common.no')],
                 [t('GatewayOverviewTab.gatewayInfo.hostname'), gw.detected_hostname || '-'],
-                [t('GatewayOverviewTab.gatewayInfo.version'), gw.detected_version || '-'],
+                [t('GatewayOverviewTab.gatewayInfo.version'), firmwareLoading || firmwareError ? unknown : firmware.current_version || firmware.product_version || firmware.version || unknown],
                 [t('GatewayOverviewTab.gatewayInfo.model'), gw.detected_model || '-'],
                 [t('GatewayOverviewTab.gatewayInfo.credentials'), gw.has_credentials ? t('GatewayOverviewTab.gatewayInfo.configured') : t('GatewayOverviewTab.gatewayInfo.missing')],
                 [t('GatewayOverviewTab.gatewayInfo.created'), new Date(gw.created_at).toLocaleString()],
@@ -151,12 +180,11 @@ export function GatewayOverviewTab({
           <CardHeader className="pb-4">
             <CardTitle>{t('GatewayOverviewTab.firmware.title')}</CardTitle>
           </CardHeader>
+          {(firmwareLoading || firmwareError) && <GatewayLiveReadNotice loading={firmwareLoading} onRetry={onRetryFirmware} />}
           <CardContent>
             <dl className="space-y-3 text-sm">
               {[
-                [t('GatewayOverviewTab.firmware.firmware'), firmware.current_version || gw.detected_version || deviceSummary.version || '-'],
-                [t('GatewayOverviewTab.firmware.latestVersion'), firmware.latest_version || firmware.current_version || '-'],
-                [t('GatewayOverviewTab.firmware.updateAvailable'), (firmware.update_available || firmware.needs_update || firmware.upgrade_available) ? t('GatewayOverviewTab.firmware.updateYes', { version: firmware.latest_version || firmware.new_version || '?' }) : t('GatewayOverviewTab.common.no')],
+                ...firmwareRows,
                 [t('GatewayOverviewTab.firmware.autoSync'), gw.sync_enabled ? t('GatewayOverviewTab.common.enabled') : t('GatewayOverviewTab.common.disabled')],
                 [t('GatewayOverviewTab.firmware.interval'), `${gw.sync_interval_seconds}s`],
                 [t('GatewayOverviewTab.firmware.syncStatus'), gw.sync_status],
@@ -185,38 +213,39 @@ export function GatewayOverviewTab({
       </div>
 
       {/* WAN Gateway Health */}
-      {gwHealth.length > 0 && (
+      {
         <Card className="border-border/50">
           <CardHeader className="pb-4">
             <CardTitle>{t('GatewayOverviewTab.wanHealth.title')}</CardTitle>
           </CardHeader>
-          <CardContent>
+          {healthLoading || healthError ? <GatewayLiveReadNotice loading={healthLoading} onRetry={onRetryHealth} /> : <CardContent>
+            {gwHealth.length === 0 && <p className="text-sm text-muted-foreground">{t('GatewayOverviewTab.wanHealth.empty')}</p>}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {gwHealth.map((g: any, i: number) => {
-                const isOnline = g.status === 'online' || g.status === 'none' || g.status_text === 'Online';
+                const variant = g.status === 'online' ? 'default' : g.status === 'offline' ? 'destructive' : g.status === 'loss' || g.status === 'delay' ? 'warning' : 'muted';
                 return (
                   <div key={i} className="p-3 rounded-lg border space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-sm">{g.name || g.interface || t('GatewayOverviewTab.wanHealth.gatewayFallback', { index: i + 1 })}</span>
-                      <Badge variant={isOnline ? 'default' : 'destructive'}>
-                        {g.status_text || g.status || t('GatewayOverviewTab.wanHealth.unknown')}
+                      <Badge variant={variant}>
+                        {healthState(g.status)}
                       </Badge>
                     </div>
                     {g.address && <p className="text-xs text-muted-foreground">{t('GatewayOverviewTab.wanHealth.ip')} <span className="font-mono">{g.address}</span></p>}
                     {g.monitor_ip && <p className="text-xs text-muted-foreground">{t('GatewayOverviewTab.wanHealth.monitor')} <span className="font-mono">{g.monitor_ip}</span></p>}
                     <div className="flex gap-3 text-xs">
-                      {typeof g.delay_ms === 'number' && g.delay_ms > 0 && <span className="text-muted-foreground">{t('GatewayOverviewTab.wanHealth.latency')} <span className="font-mono">{g.delay_ms.toFixed(1)} ms</span></span>}
-                      {typeof g.loss_pct === 'number' && g.loss_pct > 0 && <span className="text-muted-foreground">{t('GatewayOverviewTab.wanHealth.loss')} <span className="font-mono">{g.loss_pct.toFixed(1)}%</span></span>}
-                      {typeof g.stddev_ms === 'number' && g.stddev_ms > 0 && <span className="text-muted-foreground">{t('GatewayOverviewTab.wanHealth.jitter')} <span className="font-mono">{g.stddev_ms.toFixed(1)} ms</span></span>}
+                      <span className="text-muted-foreground">{t('GatewayOverviewTab.wanHealth.latency')} <span className="font-mono">{sample(g.delay_ms, ' ms')}</span></span>
+                      <span className="text-muted-foreground">{t('GatewayOverviewTab.wanHealth.loss')} <span className="font-mono">{sample(g.loss_pct, '%')}</span></span>
+                      <span className="text-muted-foreground">{t('GatewayOverviewTab.wanHealth.jitter')} <span className="font-mono">{sample(g.stddev_ms, ' ms')}</span></span>
                     </div>
                     {g.default_gateway && <Badge variant="outline" className="text-xs mt-1">{t('GatewayOverviewTab.wanHealth.default')}</Badge>}
                   </div>
                 );
               })}
             </div>
-          </CardContent>
+          </CardContent>}
         </Card>
-      )}
+      }
 
       {/* Raw status (fallback) */}
       {liveStatus && (

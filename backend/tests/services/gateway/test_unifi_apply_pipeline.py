@@ -33,25 +33,14 @@ from app.services.adapter_staging import AdapterStagingService
 
 
 def _make_session(change: AdapterPendingChange):
-    """A mocked AsyncSession whose every ``execute`` resolves to ``change``.
+    """Return distinct claim/controller/audit results with SQLAlchemy shapes."""
+    from unittest.mock import MagicMock
 
-    The SELECT-FOR-UPDATE claim and the Omada controller-type lookup both call
-    ``.scalar_one_or_none()``; returning the change for both is harmless — the
-    Omada pre-flight is keyed on controller_type, which is not 'omada' here, so
-    it no-ops, exactly like the FreePBX pipeline test.
-    """
-    from unittest.mock import AsyncMock, MagicMock
+    from tests.services.gateway._audit_session import make_audit_session
 
-    s = AsyncMock()
-    s.commit = AsyncMock()
-    s.refresh = AsyncMock()
-    s.execute = AsyncMock(
-        return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=change)
-        )
-    )
-    s.get = AsyncMock(return_value=None)
-    return s
+    session = make_audit_session("unifi")
+    session.execute.return_value = MagicMock(scalar_one_or_none=MagicMock(return_value=change))
+    return session
 
 
 def _forget_change() -> AdapterPendingChange:

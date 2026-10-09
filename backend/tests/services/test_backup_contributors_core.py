@@ -99,7 +99,7 @@ class TestProtocolCompliance:
     def test_core_contributor_declarative_attrs(self) -> None:
         c = CoreBackupContributor()
         assert c.contributor_id == "core"
-        assert c.schema_version == "1.0.0"
+        assert c.schema_version == "2.0.0"
         # No depends_on — core is the bottom of the dependency graph.
         assert c.depends_on == ()
         # Included by default in every new backup.
@@ -210,7 +210,7 @@ class TestCollect:
         payload = await contributor.collect(session, org_id, options={})
 
         assert isinstance(payload, ContributorPayload)
-        assert payload.schema_version == "1.0.0"
+        assert payload.schema_version == "2.0.0"
         assert payload.counts == {
             "sites": 3,
             "controllers": 1,
@@ -416,7 +416,8 @@ class TestRestore:
         assert result.contributor_id == "core"
         assert result.status == "error"
         assert len(result.errors) == 1
-        assert "FK constraint violated" in result.errors[0]
+        assert "RuntimeError" in result.errors[0]
+        assert "FK constraint violated" not in result.errors[0]
         # No partial counts — the underlying call never returned.
         assert result.created == {}
         assert result.updated == {}

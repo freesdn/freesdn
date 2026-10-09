@@ -1,0 +1,26 @@
+HLS quality selection and encoding cost
+=======================================
+
+Only source quality copies the original video stream. Low, medium and high
+encode H.264 output and apply the existing configured quality/rate settings,
+regardless of whether the input is H.264 or HEVC. Low targets 640x360 and
+500 kbit/s maximum video rate; medium targets 1280x720 and 1500 kbit/s; high
+retains the input resolution with a 3000 kbit/s maximum video rate. These are
+encoder settings, not guaranteed total network bandwidth (audio, muxing and
+transport add overhead). Source preserves video codec and resolution and
+requires a client that supports that codec. Audio handling is unchanged.
+
+Previously all H.264 inputs were copied, even when low/medium/high was requested.
+Correctly applying these presets costs CPU. Multi-camera low-quality views now
+perform the requested encoding; size installations for simultaneous transcodes.
+This correction does not add hardware acceleration, admission limits, per-viewer
+leases or an aggregate CPU/memory quota. Those remain separate release work.
+
+The native regression fixture generates owned H.264 and HEVC clips, replaces
+only RTSP input with those files, and renders live/recorded playlists with the
+actual service and encoder arguments. Decoded frame dimensions verify low and
+medium resizing. Separately rendered source-mode segment bytes establish that
+high also encodes while source retains its video packets. The fixture limits
+threads and checks child/task cleanup. A local tool pass does not qualify the
+shipped image: packaged FFmpeg checks must run without skips. This is not a
+camera, RTSP-network, production-concurrency or hardware-decoder acceptance test.

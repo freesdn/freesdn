@@ -8,7 +8,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # The same flattened source can be qualified in the private upstream repo
+    # without replacing its development trunk or publishing release artifacts.
+    branches: [main, 'codex/release-qualification/**', 'qualification/**']
+  workflow_dispatch:
   pull_request:
     branches: [main]
   # Weekly run so a newly-disclosed CVE in a pinned dependency or base image is
@@ -20,8 +23,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Each frozen qualification SHA keeps its own run and evidence.
+  group: ci-${{ github.ref }}-${{ startsWith(github.ref, 'refs/heads/qualification/') && github.sha || 'latest' }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/heads/qualification/') }}
 
 jobs:
   # ==========================================================================
@@ -46,7 +50,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       valkey:
-        image: valkey/valkey:8.1.9-trixie
+        image: valkey/valkey:9.1.2-alpine
         ports:
           - 6379:6379
         options: >-
@@ -75,7 +79,7 @@ jobs:
           python-version: '3.14'
 
       - name: Install Poetry
-        run: pipx install poetry==2.4.1
+        run: pipx install poetry==2.5.1
 
       - name: Install dependencies
         working-directory: backend
@@ -83,7 +87,11 @@ jobs:
 
       - name: Ruff lint
         working-directory: backend
-        run: poetry run ruff check app
+        run: poetry run ruff check app tests
+
+      - name: Typing debt gate (no new diagnostics)
+        working-directory: backend
+        run: poetry run python scripts/check_typing_baseline.py
 
       - name: Ruff format check
         working-directory: backend
@@ -100,9 +108,36 @@ jobs:
         working-directory: backend
         run: poetry run python scripts/migrate.py
 
+      - name: Real database and API integration tests
+        working-directory: backend
+        env:
+          CI_REUSE_SERVICES: '1'
+        # CHR requires a separately provisioned RouterOS appliance; its
+        # qualification remains explicit rather than an implicit Docker skip.
+        run: poetry run pytest tests_integration/ --ignore=tests_integration/test_mikrotik_chr.py --tb=short -q
+
       - name: Run tests
         working-directory: backend
-        run: poetry run pytest tests/ --tb=short -q
+        env:
+          FREESDN_TEST_DIAGNOSTIC_DIR: ${{ runner.temp }}/backend-test-evidence
+        run: poetry run pytest -p tests.qualification_observer tests/ --tb=short -q --junitxml="${RUNNER_TEMP}/backend-test-evidence/junit.xml"
+
+      - name: Retain backend test results and timing evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: backend-test-evidence
+          path: ${{ runner.temp }}/backend-test-evidence/
+          if-no-files-found: warn
+
+      - name: Offline queue and report recovery safety guards
+        working-directory: backend
+        run: poetry run pytest ../scripts/tests/test_queue_inventory.py ../scripts/tests/test_queue_backup_recovery.py ../scripts/tests/test_report_recovery.py ../scripts/tests/test_auth_recovery.py ../scripts/tests/test_install_config.py ../scripts/tests/test_install_acceptance.py ../scripts/tests/test_runtime_marker_parity.py ../scripts/tests/test_event_retention.py ../scripts/tests/test_postgres_pressure.py --tb=short -q
+
+      - name: Offline database qualification evidence and interruption guards
+        working-directory: backend
+        timeout-minutes: 5
+        run: poetry run pytest ../scripts/tests/database_runtime --tb=short -q
 
   # ==========================================================================
   # Frontend - eslint, type-check, unit tests, production build
@@ -110,6 +145,10 @@ jobs:
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
+    env:
+      # Match the production builder; the full TypeScript graph exceeds V8's
+      # default 2 GiB heap before type diagnostics can complete.
+      NODE_OPTIONS: --max-old-space-size=4096
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -117,20 +156,34 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
-          # Node 26 to match the runtime the shipped image is built on
-          # (frontend/Dockerfile: FROM node:26.7.0-trixie-slim). CI ran on 24
-          # for months while the image ran 26, and the suite genuinely did not
-          # survive 26: Node 26 ships its own experimental localStorage global
-          # that is undefined without --localstorage-file, which shadowed
-          # happy-dom's for bare references and broke every zustand persist()
-          # store (66 tests, 9 files). Fixed in src/test-utils/setup.ts.
-          node-version: '26'
+          # Pin the same patched Node 24 LTS as the release Docker builder.
+          # Review a new major only after it enters LTS and passes qualification.
+          node-version: '24.21.0'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        run: |
+          npm install --global npm@12.2.0
+          npm ci
+
+      # The generated API types drift silently: nothing in the frontend code
+      # fails when openapi.d.ts stops matching the backend's response models.
+      # This is the half of that drift that needs no running backend -- it
+      # compares the committed types against the committed schema. It had no
+      # caller at all: the schema was untracked, so the check could not run
+      # anywhere clean, and no job invoked it. The separate api-contract job is
+      # a DIFFERENT check (frontend call paths resolve to real backend routes)
+      # and does not cover this.
+      #
+      # This step runs in the PUBLIC repo too: the curated .github overlay in
+      # release.py copies this very file. It therefore requires
+      # frontend/openapi.json to be in the flatten. Re-excluding that file
+      # breaks the public build on the first push, not here.
+      - name: API types are in step with the committed schema
+        working-directory: frontend
+        run: npm run gen:api-check
 
       # build-info.ts is generated (gitignored); standalone eslint/tsc run
       # before any vite invocation, so generate it first or imports of
@@ -138,6 +191,9 @@ jobs:
       - name: Generate build-info
         working-directory: frontend
         run: node scripts/gen-build-info.mjs
+
+      - name: Development dependency-volume safety
+        run: python3 -m unittest discover -s scripts/tests -p test_frontend_dev_entrypoint.py
 
       - name: ESLint (src)
         working-directory: frontend
@@ -151,9 +207,13 @@ jobs:
         working-directory: frontend
         run: npm run test:run
 
-      - name: Build
+      - name: Verify translations
         working-directory: frontend
-        run: npm run build
+        run: npm run i18n:verify
+
+      - name: Strict build
+        working-directory: frontend
+        run: npm run build:strict
 
   # ==========================================================================
   # API contract (GATING) - the frontend must not call a route the backend does
@@ -185,7 +245,7 @@ jobs:
           python-version: '3.14'
 
       - name: Install Poetry
-        run: pipx install poetry==2.4.1
+        run: pipx install poetry==2.5.1
 
       # Import-only: the check mounts the app and reads its route table. It
       # never opens a socket, so no Postgres/Valkey service is needed here.
@@ -215,7 +275,7 @@ jobs:
           python-version: '3.14'
 
       - name: Install Poetry
-        run: pipx install poetry==2.4.1
+        run: pipx install poetry==2.5.1
 
       - name: pip-audit (Python dependencies)
         working-directory: backend
@@ -236,14 +296,9 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
-          # Node 26 to match the runtime the shipped image is built on
-          # (frontend/Dockerfile: FROM node:26.7.0-trixie-slim). CI ran on 24
-          # for months while the image ran 26, and the suite genuinely did not
-          # survive 26: Node 26 ships its own experimental localStorage global
-          # that is undefined without --localstorage-file, which shadowed
-          # happy-dom's for bare references and broke every zustand persist()
-          # store (66 tests, 9 files). Fixed in src/test-utils/setup.ts.
-          node-version: '26'
+          # Pin the same patched Node 24 LTS as the release Docker builder.
+          # Review a new major only after it enters LTS and passes qualification.
+          node-version: '24.21.0'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -253,6 +308,7 @@ jobs:
         # gated are cleared via package.json "overrides" (e.g. js-yaml >=4.2.0);
         # add/bump an override (and document why) to clear a new finding.
         run: |
+          npm install --global npm@12.2.0
           npm ci
           npm audit --audit-level=high
 
@@ -270,6 +326,7 @@ jobs:
       - name: Trivy secret scan (gating)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.74.0
           scan-type: 'fs'
           scan-ref: '.'
           scanners: 'secret'
@@ -292,6 +349,7 @@ jobs:
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.74.0
           scan-type: 'fs'
           scan-ref: '.'
           severity: 'CRITICAL,HIGH'
@@ -300,64 +358,437 @@ jobs:
   # ==========================================================================
   # Pinned base/runtime image CVE scan (ADVISORY, FIXABLE-ONLY) - catches a CVE
   # disclosed in a pinned third-party image where a fixed image already exists
-  # (the class that left a base-image CVE sitting in a pin). ignore-unfixed keeps
-  # every hit ACTIONABLE = "a newer image clears this; bump the pin". Skipped on
-  # PRs (base images don't change per-PR); runs on push-to-main + the weekly cron.
-  # KEEP THIS MATRIX IN SYNC with docker-compose*.yml + */Dockerfile pins.
+  # (the class that left a base-image CVE sitting in a pin).
+  # Build and scan the HA load balancer on PRs and releases. Stock nginx tags
+  # can lag distribution patches, so scan the wrapper we actually ship.
   # ==========================================================================
   image-cve-scan:
     name: Image CVE Scan
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
-    continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        # Only images we run UNMODIFIED (stock from Docker Hub) belong here. A
-        # finding is then actionable: the tag genuinely ships unpatched and we
-        # run it that way. Today that is nginx alone (the HA reverse proxy).
-        image:
-          - nginx:1.31.4-alpine
-        # NOT SCANNED, because we do not run the raw base -- we run a BUILT image
-        # that apt-get/apk upgrades the OS layer at build time, so the shipped
-        # image carries current patches regardless of base-tag rebuild lag.
-        # Scanning the raw tag would measure something we do not ship and would
-        # sit permanently red on unfixable upstream lag (the caddy history this
-        # list used to carry):
-        #   python:3.14.7-slim-trixie   -> backend/Dockerfile, apt-get upgrade (all stages)
-        #   debian:trixie-slim          -> frontend/Dockerfile production, apt-get upgrade
-        #   node:26.7.0-trixie-slim     -> frontend build stage only; not shipped as a runtime
-        #   caddy:2.11.4-alpine         -> frontend/Dockerfile, apk upgrade --no-cache (:135)
-        #   postgres:18.6-trixie        -> docker/Dockerfile.postgres (+ Dockerfile.logdb), apt-get upgrade
-        #   valkey/valkey:8.1.9-trixie  -> docker/Dockerfile.valkey, apt-get upgrade
-        # Verified 2026-08-24: the stock postgres/valkey tags each carried 36
-        # fixable HIGH OS CVEs; the built wrappers scan clean (0). These
-        # apt-get/apk upgrade lines are load-bearing -- if one is removed the
-        # shipped image regresses and this job will NOT catch it. The proper
-        # safety net is to scan the BUILT images in a build-images job (not yet
-        # wired); until then the app-dependency surface is covered by the
-        # gating Dependency Audit job (pip-audit + npm audit).
-
+    # Scan what we ship, including the OS security upgrades in our wrapper.
     steps:
       # Required for .trivyignore to be readable. Without a checkout this job
       # has no working tree, so every documented suppression in that file was
       # silently doing nothing here (it only ever applied to the fs scans).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - name: Trivy image scan (${{ matrix.image }})
+      - name: Reserve disk for the complete native image build
+        run: |
+          # These jobs use Docker/Python, never the preinstalled Android SDK.
+          # Only GitHub's disposable runner is eligible; no VM data is touched.
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          df -h
+          sudo rm -rf -- /usr/local/lib/android
+          df -h
+
+      - name: Build patched HA load balancer
+        run: docker build --pull --no-cache -f docker/Dockerfile.ha-lb -t freesdn-ha-lb:ci docker
+
+      - name: Exercise HTTP, WebSockets and upstream loss
+        run: python3 scripts/check_ha_lb.py --image freesdn-ha-lb:ci
+
+      - name: Trivy image scan (built HA load balancer)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.74.0
           scan-type: 'image'
-          image-ref: ${{ matrix.image }}
+          image-ref: 'freesdn-ha-lb:ci'
           severity: 'CRITICAL,HIGH'
-          ignore-unfixed: true
-          # OS packages only. These are third-party BASE images, and their
-          # language/binary layers are upstream's own tooling, not FreeSDN's
-          # supply chain: gosu in the postgres image, the caddy binary itself,
-          # and the npm bundled inside the node image. None of it is fixable by
-          # a pin we control, and all of it was permanently red, which is how a
-          # scan stops being read. FreeSDN's actual dependency tree is covered
-          # by the Dependency Audit job (pip-audit + npm audit), which gates.
-          vuln-type: 'os'
-          trivyignores: '.trivyignore'
+          ignore-unfixed: false
           exit-code: '1'
+      - name: Build the shipped TimescaleDB image
+        run: docker build -f docker/Dockerfile.logdb -t freesdn-logdb:dr-check docker
+      - name: Build the shipped PostgreSQL and backup client image
+        run: docker build --pull -f docker/Dockerfile.postgres -t freesdn-postgres:dr-check docker
+      - name: Build the isolated legacy migration fixture (never publish)
+        run: docker build --pull -f docker/qualification/Dockerfile.legacy-logdb -t freesdn-logdb:legacy-fixture docker
+      - name: Pull the published source database image used by the upgrade rehearsal
+        run: docker pull postgres:18.6-trixie
+
+      - name: Qualify offline logical database migration and refusal cases
+        timeout-minutes: 20
+        run: >-
+          python3 scripts/check_database_runtime.py
+          --source-postgres postgres:18.6-trixie
+          --source-logdb freesdn-logdb:legacy-fixture
+          --target-postgres freesdn-postgres:dr-check
+          --target-logdb freesdn-logdb:dr-check
+          --report database-runtime.json
+      - name: Qualify the shipped PostgreSQL standby scripts and named volumes
+        timeout-minutes: 10
+        run: >-
+          python3 scripts/check_database_ha.py
+          --image freesdn-postgres:dr-check --report database-ha.json
+      # The entrypoint decides whether an operator's EXISTING volume is adopted,
+      # started or refused, and nothing exercised it against a real cluster:
+      # scripts/tests/database_runtime/ covers the checker tooling against a
+      # synthetic engine client. 26.09.0 -> 26.10.0 is an image-only upgrade
+      # precisely because adoption works, so a regression here would break
+      # every upgrade in the field while every other gate stayed green.
+      #
+      # OLD_IMAGE is the base the published image is built FROM, which yields
+      # the same unmarked PG18 glibc cluster; the release rehearsal runs the
+      # same script against the real published artifact.
+      - name: Qualify in-place database runtime adoption and its refusals
+        timeout-minutes: 15
+        env:
+          OLD_IMAGE: postgres:18.6-trixie
+          NEW_IMAGE: freesdn-postgres:dr-check
+        run: |
+          docker pull postgres:17-trixie
+          bash scripts/tests/test_database_runtime_upgrade.sh
+      - name: Build production backend for concurrent startup qualification
+        # A cold hosted build compiles FFmpeg and both VPN clients. The previous
+        # 30-minute limit interrupted a healthy compiler after disk was fixed.
+        timeout-minutes: 60
+        run: |
+          # Earlier database builds have finished. Keep their named images and
+          # volumes; only unreferenced builder cache is no longer needed here.
+          docker builder prune --all --force
+          docker build --pull --target production -t freesdn-backend:startup-check backend
+      - name: Qualify concurrent primary and Timescale startup migrations
+        timeout-minutes: 10
+        run: >-
+          python3 scripts/check_startup_migrations.py
+          --backend freesdn-backend:startup-check
+          --postgres freesdn-postgres:dr-check
+          --logdb freesdn-logdb:dr-check
+          --report database-startup.json
+      - name: Build shipped Valkey for stop and recreation qualification
+        run: docker build --pull -f docker/Dockerfile.valkey -t freesdn-valkey:ha-check docker
+      - name: Qualify Valkey elections, application recovery, recreation and quorum loss
+        timeout-minutes: 10
+        run: >-
+          python3 scripts/check_valkey_ha.py
+          --valkey freesdn-valkey:ha-check
+          --backend freesdn-backend:startup-check
+          --report valkey-ha.json
+      - name: Qualify Valkey memory pressure, persistence and queue recovery
+        timeout-minutes: 10
+        run: >-
+          python3 scripts/check_valkey_memory.py
+          --valkey freesdn-valkey:ha-check
+          --backend freesdn-backend:startup-check
+          --report valkey-memory.json
+      - name: Qualify read-only offline legacy queue inventory
+        timeout-minutes: 15
+        run: >-
+          python3 scripts/check_queue_inventory.py
+          --backend-image freesdn-backend:startup-check
+          --valkey-image freesdn-valkey:ha-check
+          --work-dir "${{ runner.temp }}/queue-inventory-private"
+      # Only the sanitized receipt is public; private fixtures include credentials.
+      - name: Preserve sanitized queue inventory qualification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: queue-inventory-qualification
+          path: ${{ runner.temp }}/queue-inventory-private/report.json
+      - name: Qualify saved RDB and multipart AOF recovery
+        timeout-minutes: 15
+        run: >-
+          python3 scripts/check_queue_backup_recovery.py
+          --backend-image freesdn-backend:startup-check
+          --valkey-image freesdn-valkey:ha-check
+          --work-dir "${{ runner.temp }}/queue-backup-private"
+      # Never upload backups, credentials, envelope manifests or private logs.
+      - name: Preserve sanitized queue backup recovery evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: queue-backup-recovery-qualification
+          path: ${{ runner.temp }}/queue-backup-private/report.json
+      - name: Qualify report outbox restore and duplicate-delivery protection
+        timeout-minutes: 10
+        run: >-
+          python3 scripts/check_report_recovery.py
+          --backend freesdn-backend:startup-check
+          --postgres freesdn-postgres:dr-check
+          --valkey freesdn-valkey:ha-check
+          --work-dir "${{ runner.temp }}/report-recovery-private"
+      # Never publish synthetic credentials, raw logs, certificates or snapshots.
+      - name: Preserve sanitized report recovery evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: report-recovery-qualification
+          path: ${{ runner.temp }}/report-recovery-private/report.json
+      - name: Build Caddy application for installation acceptance
+        timeout-minutes: 30
+        run: docker build --pull --target caddy -t freesdn-edge:install-check frontend
+      - name: Qualify bounded PostgreSQL storage-full and restart recovery
+        timeout-minutes: 5
+        run: >-
+          python3 scripts/check_postgres_pressure.py
+          --postgres freesdn-postgres:dr-check
+          --work-dir "${{ runner.temp }}/postgres-pressure-private"
+      - name: Preserve sanitized PostgreSQL pressure evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: postgres-pressure-qualification
+          path: ${{ runner.temp }}/postgres-pressure-private/report.json
+      - name: Qualify Lite HTTPS, report pressure, load and encrypted recovery
+        timeout-minutes: 20
+        run: >-
+          python3 scripts/check_install_acceptance.py
+          --source "${{ github.workspace }}/"
+          --backend freesdn-backend:startup-check
+          --postgres freesdn-postgres:dr-check
+          --logdb freesdn-logdb:dr-check
+          --valkey freesdn-valkey:ha-check
+          --edge freesdn-edge:install-check
+          --work-dir "${{ runner.temp }}/install-acceptance-private"
+          --soak-seconds 60 --report-disk-pressure
+      - name: Preserve sanitized installation acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: install-acceptance-qualification
+          path: ${{ runner.temp }}/install-acceptance-private/report.json
+      - name: Qualify bounded event retention on real TimescaleDB
+        timeout-minutes: 10
+        run: >-
+          python3 scripts/check_event_retention.py
+          --backend freesdn-backend:startup-check
+          --logdb freesdn-logdb:dr-check
+          --work-dir "${{ runner.temp }}/event-retention-private"
+      - name: Preserve sanitized event retention evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: event-retention-qualification
+          path: ${{ runner.temp }}/event-retention-private/report.json
+      - name: Preserve Valkey memory qualification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: valkey-memory-qualification
+          path: valkey-memory.*
+      - name: Preserve Valkey fault qualification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: valkey-ha-qualification
+          path: valkey-ha.*
+      - name: Preserve database qualification reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: database-runtime-qualification
+          path: database-*.json
+      - name: Verify encrypted restore and negative cases
+        timeout-minutes: 10
+        env:
+          LOGDB_IMAGE: freesdn-logdb:dr-check
+          POSTGRES_IMAGE: freesdn-postgres:dr-check
+        run: bash scripts/restore_drill.sh
+
+  # Gate the complete application images on PRs as well as releases. The source
+  # dependency audit cannot see OS packages, VPN binaries or pip's vendored code.
+  application-image-security:
+    name: Application image security (${{ matrix.component }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: backend
+            context: backend
+            dockerfile: backend/Dockerfile
+            target: production
+          - component: frontend
+            context: frontend
+            dockerfile: frontend/Dockerfile
+            target: caddy
+          - component: nginx
+            context: frontend
+            dockerfile: frontend/Dockerfile
+            target: production
+          - component: tailscale-access
+            context: backend
+            dockerfile: backend/Dockerfile
+            target: tailscale-access
+          - component: backup-metrics
+            context: docker
+            dockerfile: docker/Dockerfile.backup-metrics
+          - component: postgres
+            context: docker
+            dockerfile: docker/Dockerfile.postgres
+          - component: valkey
+            context: docker
+            dockerfile: docker/Dockerfile.valkey
+          - component: logdb
+            context: docker
+            dockerfile: docker/Dockerfile.logdb
+          - component: ha-lb
+            context: docker
+            dockerfile: docker/Dockerfile.ha-lb
+          - component: go2rtc
+            context: docker
+            dockerfile: docker/Dockerfile.go2rtc
+          - component: pgbouncer
+            context: docker
+            dockerfile: docker/Dockerfile.pgbouncer
+          - component: rclone
+            context: docker
+            dockerfile: docker/Dockerfile.rclone
+          - component: prometheus
+            context: docker
+            dockerfile: docker/Dockerfile.prometheus
+          - component: redis-exporter
+            context: docker
+            dockerfile: docker/Dockerfile.redis-exporter
+          - component: postgres-exporter
+            context: docker
+            dockerfile: docker/Dockerfile.postgres-exporter
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Reserve disk for the complete native image build
+        if: matrix.component == 'backend' || matrix.component == 'go2rtc'
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          df -h
+          sudo rm -rf -- /usr/local/lib/android
+          df -h
+      - name: Validate backup alert behavior
+        if: matrix.component == 'backup-metrics'
+        run: |
+          docker run --rm --network none \
+            -v "$PWD/observability/prometheus:/rules:ro" -w /rules \
+            --entrypoint /bin/promtool prom/prometheus:v3.14.0 check rules alerts.yml
+          docker run --rm --network none \
+            -v "$PWD/observability/prometheus:/rules:ro" -w /rules \
+            --entrypoint /bin/promtool prom/prometheus:v3.14.0 test rules backup-rules.test.yml audit-rules.test.yml
+      - name: Build production image without stale layers
+        if: ${{ !matrix.image }}
+        env:
+          BUILD_CONTEXT: ${{ matrix.context }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+          BUILD_TARGET: ${{ matrix.target }}
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          target_args=()
+          if [[ -n "$BUILD_TARGET" ]]; then
+            target_args=(--target "$BUILD_TARGET")
+          fi
+          docker build --pull --no-cache "${target_args[@]}" -f "$DOCKERFILE" \
+            -t "freesdn-${COMPONENT}:security" "$BUILD_CONTEXT"
+      - name: Pull the shipped optional-service image
+        if: ${{ matrix.image }}
+        env:
+          UPSTREAM_IMAGE: ${{ matrix.image }}
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          docker pull "$UPSTREAM_IMAGE"
+          docker tag "$UPSTREAM_IMAGE" "freesdn-${COMPONENT}:security"
+      - name: Scan complete production image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        env:
+          # Full inventory. Existing unrelated suppressions must not hide these findings.
+          TRIVY_IGNOREFILE: /dev/null
+          TRIVY_IGNORE_UNFIXED: 'false'
+        with:
+          version: v0.74.0
+          scan-type: image
+          image-ref: freesdn-${{ matrix.component }}:security
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: '1'
+          format: json
+          output: image-findings.json
+          timeout: 15m
+      - name: Verify and scan the source-built FFmpeg component
+        if: matrix.component == 'backend' || matrix.component == 'go2rtc'
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          set -euo pipefail
+          scan_tools="${RUNNER_TEMP}/freesdn-native-scanner"
+          mkdir -p "$scan_tools"
+          archive="$scan_tools/grype.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --max-time 180 \
+            https://github.com/anchore/grype/releases/download/v0.119.0/grype_0.119.0_linux_amd64.tar.gz \
+            --output "$archive"
+          printf '%s  %s\n' '3fa2dc4b924621ab65404cf08d0b8438d896d80ab949c9d5a4ca283c36004c9b' "$archive" | sha256sum -c -
+          tar --no-same-owner -xzf "$archive" -C "$scan_tools" grype
+          export PATH="$scan_tools:$PATH"
+          # Retain the final image; release only this ephemeral runner's unused
+          # builder cache before acquiring the native vulnerability database.
+          df -h
+          docker system df
+          docker builder prune --all --force
+          df -h
+          # Database diagnostics remain separate from the bounded scan. Both
+          # the known-vulnerable control and candidate payload still must pass.
+          export GRYPE_DB_CACHE_DIR="$scan_tools/db"
+          grype db update 2>&1 | tee "$scan_tools/database-update.log"
+          grype db status -o json
+          image_id=$(docker image inspect --format '{{.Id}}' "freesdn-${COMPONENT}:security")
+          python3 scripts/check_native_media_security.py \
+            --image "$image_id" --work-dir "${RUNNER_TEMP}/native-media"
+      - name: Preserve image inventory and findings even on failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-findings-${{ matrix.component }}
+          path: |
+            image-findings.json
+            ${{ runner.temp }}/native-media/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  go-source-security:
+    name: Reachable Go vulnerabilities (${{ matrix.component }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: netbird
+            context: backend
+            target: netbird-builder
+            packages: github.com/netbirdio/netbird/client
+          - component: tailscale
+            context: backend
+            target: tailscale-builder
+            packages: tailscale.com/cmd/tailscale tailscale.com/cmd/tailscaled tailscale.com/cmd/containerboot
+          - component: caddy
+            context: frontend
+            target: caddy-builder
+            packages: .
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Build the shipped Go source and compatibility tests
+        env:
+          BUILD_CONTEXT: ${{ matrix.context }}
+          BUILD_TARGET: ${{ matrix.target }}
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          docker build --pull --no-cache --target "$BUILD_TARGET" \
+            -t "freesdn-go-${COMPONENT}:security" "$BUILD_CONTEXT"
+      - name: Fail on reachable advisories regardless of severity
+        env:
+          COMPONENT: ${{ matrix.component }}
+          AUDIT_PACKAGES: ${{ matrix.packages }}
+        run: |
+          mkdir -p go-source-findings
+          docker run --rm -v "$PWD/go-source-findings:/reports" \
+            -e AUDIT_PACKAGES --entrypoint sh "freesdn-go-${COMPONENT}:security" -ec '
+              GOBIN=/tmp go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+              # This list comes only from the literal workflow matrix.
+              set -- $AUDIT_PACKAGES
+              # JSON output alone exits zero even when vulnerabilities are found.
+              /tmp/govulncheck -show verbose "$@" > /reports/findings.txt
+            '
+      - name: Preserve source findings even when the gate fails
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: go-source-findings-${{ matrix.component }}
+          path: go-source-findings/findings.txt
+          if-no-files-found: warn
+          retention-days: 30

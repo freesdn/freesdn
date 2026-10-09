@@ -1,0 +1,36 @@
+Gateway connection-test construction failures
+============================================
+
+Connection-test adapter construction now belongs to the same fixed error
+boundary as test execution. A constructor rejection produces a failed test
+result with a safe message and measured latency instead of an unhandled HTTP
+error. Recognized authentication, connectivity and timeout categories retain
+the existing guidance. Other exceptions use the existing generic message.
+Raw exception text and tracebacks are not emitted by this service boundary.
+
+This includes saved HTTP selections that contradict required certificate
+verification. The actual MikroTik and pfSense constructors still reject that
+policy before opening an HTTP client. Direct adapter construction continues
+to raise its original exception. The service does not silently change protocol,
+disable verification or rewrite saved settings to make a test pass.
+
+Only a successfully acquired adapter is disconnected. Caller cancellation
+continues to propagate; cleanup of an acquired adapter is unchanged. Resources
+allocated internally by a constructor that then raises remain that constructor's
+responsibility because no adapter object was returned to this service.
+
+Qualification covers saved and unsaved HTTP routes backed by PostgreSQL, with
+synthetic authenticated identities and constructor error injections across four
+vendors. Actual encrypted saved rows and real MikroTik/pfSense constructors
+reproduce the HTTP 500 before the fix and the controlled failure afterward,
+while creating no transport client. Real HTTP/TLS peers additionally protect
+the saved-protocol behavior as regression controls. These transport fixtures
+deliberately disable certificate verification; they do not prove certificate
+trust or hardware compatibility. Existing direct-adapter policy refusal tests
+remain intact; service refusal assertions now verify the controlled contract.
+
+Saved-test resource authority and stale-result persistence are covered by
+GATEWAY-TEST-AUTHORITY. Current caller/session/grant revalidation, arbitrary
+provider metadata and other operation logs remain separate. No schema, dependency
+or hardware changes are made. See GATEWAY-SAVED-TEST-POLICY and
+GATEWAY-TEST-DIAGNOSTICS for the related boundaries.

@@ -1,0 +1,43 @@
+OpenWrt configuration export control (2026-09-25)
+===============================================
+
+The dedicated OpenWrt gateway page now offers Download Config to a signed-in
+super administrator with controller:write. The existing authorization store
+recognizes its explicit superuser flag when checking that permission. Other
+roles, absent users and super administrators without that permission do not see
+the action. These are presentation checks: the configuration-download API remains
+the authority for role, permission, tenant/site scope and sensitive-data access.
+
+The action uses the existing configuration-download hook and validation helper.
+Opening the page does not fetch the archive. While a request is pending the
+button is disabled; duplicate activation is refused. Navigation or unmounting
+cancels delivery, and a late result cannot download the old gateway's archive.
+Provider diagnostics do not appear in failure messages. Successful responses
+preserve the original binary bytes and use the existing fixed filename. The
+archive is not stored in query or mutation caches by this action.
+
+This adds no backup storage, retention, history entry or restore operation. A
+configuration export may contain credentials and other secrets. Protect the
+downloaded file as sensitive administrator data. Browser download history and
+the user's local filesystem are outside the application's retention controls.
+The existing Sync control and other vendors' page branches are unchanged.
+
+Fifteen focused component cases reproduce nine missing-action failures on the
+old page and retain six access/existing-behavior controls. They use the actual
+OpenWrt page and tab, with synthetic identity, API and browser-file facilities.
+The initial full test run passed but TypeScript rejected three test-query options;
+that failure was retained and the test-only correction was checked again.
+
+Separate Chromium checks exercise this actual OpenWrt render branch through
+Axios and a real loopback HTTP server: byte-exact downloads, current/legacy
+scope metadata, refusal/error cases, duplicate suppression, navigation/unmount
+and role visibility. Those responses and identities are synthetic. They do not
+qualify login, API authorization, vendor transport, hardware or archive restore.
+Full suite and browser counts are recorded in source-bound qualification receipts.
+
+Backend source is unchanged from the separately qualified CGI transport work.
+See OPENWRT-CONFIG-TRANSPORT for package/ACL requirements, size/deadline limits,
+gzip-validation scope and remaining physical-device acceptance work. Its browser
+checks originally exercised the generic gateway page; this work closes the
+dedicated OpenWrt page's missing control. Production release qualification still
+requires the complete shipping, security and operational acceptance gates.

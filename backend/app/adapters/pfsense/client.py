@@ -22,6 +22,7 @@ from app.adapters.exceptions import (
     AdapterConnectionError,
     AdapterError,
     AdapterTimeoutError,
+    CapabilityNotSupportedError,
 )
 from app.adapters.http_utils import CircuitBreaker
 from app.adapters.validation import validate_id
@@ -171,6 +172,8 @@ class PfSenseClient:
         self.port = port
         self.api_key = api_key
         self.api_secret = api_secret
+        if verify_ssl and not use_ssl:
+            raise ValueError("Certificate verification requires HTTPS")
         self.use_ssl = use_ssl
         self.verify_ssl = verify_ssl
         self.timeout = timeout
@@ -812,11 +815,12 @@ class PfSenseClient:
         return await self.post("/diagnostics/halt", force=force)
 
     async def create_backup(self) -> Any:
-        # Re-raise so the staging applier sees the failure and marks
-        # the change ``failed``. Previously swallowing returned ``{}``
-        # and the change record showed ``success`` even when the
-        # backup never landed.
-        return await self.get("/diagnostics/config_history/backup")
+        """No supported saved-backup creation endpoint is implemented."""
+        raise CapabilityNotSupportedError(
+            "pfSense backup creation is not supported by this adapter; no backup was created",
+            adapter_id="pfsense",
+            capability="create_backup",
+        )
 
     async def get_firmware_info(self) -> Any:
         try:

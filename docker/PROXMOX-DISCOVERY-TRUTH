@@ -1,0 +1,9 @@
+Proxmox node discovery failure semantics
+
+The adapter now raises a fixed AdapterConnectionError for an API failure instead of returning an empty inventory. Invalid inventory envelopes, non-object records, missing or blank/non-string node identities, and duplicate identities also fail. Provider diagnostic bodies are not included in the raised message or the discovery error log. An actual empty node list remains a valid successful read, and optional node fields retain their existing defaults.
+
+The existing discovery worker therefore records failure under its current controller/site/organization transaction guards and does not invoke later deep sync. Hypervisor nodes remain outside generic network device inventory. No node operation or hardware write is introduced.
+
+Qualification includes36 new adapter/database tests (27 original regressions and9 controls),800 related PostgreSQL-backed tests and24 before/after local PostgreSQL/TLS-HTTP cases using the actual client, adapter and discovery worker. Appliance responses, event publication and deep-sync delivery are synthetic. Shipping container qualification and the full backend suite remain mandatory publication gates.
+
+This change does not validate all optional provider fields, repair other adapter methods that may suppress errors, fence all later background actions, or establish live hardware acceptance. Valid empty results reflect the authenticated account's visible inventory and are not a promise of complete cluster-wide permissions.

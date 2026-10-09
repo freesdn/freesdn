@@ -21,7 +21,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictBool, field_validator
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -349,7 +349,7 @@ class PortUpdateIn(BaseModel):
 
 
 class BulkPortUpdateIn(BaseModel):
-    port_ids: list[str]
+    port_ids: list[str] = Field(min_length=1, max_length=500)
     updates: PortUpdateIn
 
 
@@ -360,6 +360,12 @@ class ApplyProfileIn(BaseModel):
 
 class ToggleIn(BaseModel):
     enabled: bool
+
+
+class PortToggleIn(ToggleIn):
+    """Explicit apply intent for the synchronous, staged port-state API."""
+
+    force: StrictBool = False
 
 
 # =====================================================================
@@ -522,7 +528,7 @@ def _decrypt_if_needed(value: str | None) -> str:
     try:
         return decrypt_credential(value)
     except ValueError:
-        return value
+        raise ValueError("Stored controller credential could not be decrypted") from None
 
 
 async def _get_adapter_for_device(device: Device) -> Any:
@@ -1432,6 +1438,14 @@ async def bulk_update_ports(
     """Bulk-update multiple ports on a switch."""
     # Verify switch belongs to user's org + per-user site grant.
     await _get_switch(session, switch_id, _org_id(_user), _user)
+    # This endpoint supports inventory labels only. Hardware changes must use
+    # the controller-backed port operation; never acknowledge a DB-only write.
+    hardware_fields = data.updates.model_fields_set - {"name"}
+    if hardware_fields:
+        raise HTTPException(
+            422,
+            detail="Bulk port updates support name only; use controller-backed port operations",
+        )
     result = await session.execute(
         select(DevicePort).where(
             DevicePort.device_id == switch_id,
@@ -1445,10 +1459,6 @@ async def bulk_update_ports(
     for port in ports:
         if data.updates.name is not None:
             port.name = data.updates.name
-        if data.updates.enabled is not None:
-            port.is_enabled = data.updates.enabled
-        if data.updates.poe_config is not None:
-            port.is_poe_enabled = data.updates.poe_config.enabled
 
     await session.commit()
     return [_port_to_out(p) for p in ports]
@@ -1457,48 +1467,55 @@ async def bulk_update_ports(
 # ---------- Port Actions ----------
 
 
+async def _apply_port_state(
+    switch_id: str,
+    port_index: int,
+    data: PortToggleIn,
+    session: AsyncSession,
+    user: Any,
+    kind: Literal["enabled", "poe"],
+) -> AdapterActionResponse:
+    from app.services.adapter_omada_switch_ports import GatewaySwitchPortsService
+
+    device = await _get_switch(session, switch_id, _org_id(user), user)
+    svc = GatewaySwitchPortsService(session)
+    if svc.staging.is_read_only():
+        raise HTTPException(403, detail="ADAPTER_READ_ONLY is enabled; port changes are blocked")
+    if data.force is not True:
+        raise HTTPException(403, detail="force=true is required to apply a port state change")
+    change = await svc.stage_state(device, port_index, data.enabled, kind, _org_id(user), user.id)
+    try:
+        applied = await svc.staging.apply_change(
+            change.id,
+            force=data.force,
+            actor_id=user.id,
+            applier=svc.build_applier(change),
+        )
+    except HTTPException as exc:
+        if exc.status_code == 502:
+            raise HTTPException(502, detail=f"{exc.detail} (staged change {change.id})") from exc
+        raise
+    label = "Port" if kind == "enabled" else "PoE"
+    return AdapterActionResponse(
+        success=True,
+        message=f"{label} {port_index} {'enabled' if data.enabled else 'disabled'} (readback verified)",
+        data={**(applied.applied_response or {}), "change_id": str(applied.id)},
+    )
+
+
 @router.post(
     "/{switch_id}/ports/{port_index}/toggle",
     response_model=AdapterActionResponse,
 )
 async def toggle_port(
     switch_id: str,
-    port_index: int,
-    data: ToggleIn,
+    port_index: int = Path(..., ge=0, le=127),
+    data: PortToggleIn = ...,
     session: AsyncSession = Depends(get_session),
     _user: Any = Depends(require_permissions("network:write")),
 ) -> AdapterActionResponse:
-    """Enable/disable a port."""
-    device = await _get_switch(session, switch_id, _org_id(_user), _user)
-    adapter = await _get_adapter_for_device(device)
-    try:
-        async with adapter:
-            toggle_result = await adapter.set_port_enabled(
-                device.mac_address, port_index, data.enabled
-            )
-    except Exception as e:
-        logger.error("Controller communication error: %s", e, exc_info=True)
-        raise HTTPException(502, detail="Controller error")
-    raise_for_adapter_result(toggle_result)  # CONV2-001
-
-    # Update DB
-    port_result = await session.execute(
-        select(DevicePort).where(
-            DevicePort.device_id == switch_id,
-            DevicePort.port_number == port_index,
-        )
-    )
-    port = port_result.scalar_one_or_none()
-    if port:
-        port.is_enabled = data.enabled
-        port.status = PortStatus.UP if data.enabled else PortStatus.DISABLED
-        await session.commit()
-
-    return AdapterActionResponse(
-        success=True,
-        message=f"Port {port_index} {'enabled' if data.enabled else 'disabled'}",
-        data={"enabled": data.enabled, "port_index": port_index},
-    )
+    """Stage and apply an explicit port-state request; succeed only after readback."""
+    return await _apply_port_state(switch_id, port_index, data, session, _user, "enabled")
 
 
 @router.post(
@@ -1507,38 +1524,13 @@ async def toggle_port(
 )
 async def toggle_port_poe(
     switch_id: str,
-    port_index: int,
-    data: ToggleIn,
+    port_index: int = Path(..., ge=0, le=127),
+    data: PortToggleIn = ...,
     session: AsyncSession = Depends(get_session),
     _user: Any = Depends(require_permissions("network:write")),
 ) -> AdapterActionResponse:
-    """Enable/disable PoE on a port."""
-    device = await _get_switch(session, switch_id, _org_id(_user), _user)
-    adapter = await _get_adapter_for_device(device)
-    try:
-        async with adapter:
-            poe_result = await adapter.set_port_poe(device.mac_address, port_index, data.enabled)
-    except Exception as e:
-        logger.error("Controller communication error: %s", e, exc_info=True)
-        raise HTTPException(502, detail="Controller error")
-    raise_for_adapter_result(poe_result)  # CONV2-001
-
-    port_result = await session.execute(
-        select(DevicePort).where(
-            DevicePort.device_id == switch_id,
-            DevicePort.port_number == port_index,
-        )
-    )
-    port = port_result.scalar_one_or_none()
-    if port:
-        port.is_poe_enabled = data.enabled
-        await session.commit()
-
-    return AdapterActionResponse(
-        success=True,
-        message=f"PoE {'enabled' if data.enabled else 'disabled'} on port {port_index}",
-        data={"enabled": data.enabled, "port_index": port_index},
-    )
+    """Stage and apply an explicit PoE-state request; succeed only after readback."""
+    return await _apply_port_state(switch_id, port_index, data, session, _user, "poe")
 
 
 @router.post(

@@ -12,15 +12,17 @@ summary data.  Optionally renders to PDF/CSV.
 import csv
 import logging
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
-from app.core.site_access import site_ids_for_request
+from app.core.dependencies import CurrentUser
+from app.core.site_access import current_user_var, site_ids_for_request
 from app.models.sla import (
     SLABreach,
     SLAPolicy,
@@ -28,6 +30,20 @@ from app.models.sla import (
     SLAReport,
     SLAReportSchedule,
     SLASnapshot,
+)
+from app.services.sla import SLAMonitoringService
+from app.services.sla_calendar import ReportCalendar, ScheduleTimingError
+from app.services.sla_report_delivery import (
+    ReportDeliveryError,
+    authorize_delivery_epoch,
+    capture_delivery_approval,
+    enqueue_notices,
+)
+from app.services.sla_report_pdf import write_sla_pdf
+from app.services.sla_schedule_authorization import (
+    ScheduleAuthorizationError,
+    authorize_schedule,
+    capture_schedule_approval,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,11 +54,8 @@ REPORTS_BASE_DIR = os.environ.get("SLA_REPORTS_DIR", "/data/sla_reports")
 class SLAReportRenderError(RuntimeError):
     """The report data was computed but could not be written to disk.
 
-    Raised instead of swallowing the storage error. A swallowed render failure
-    leaves ``SLAReport.file_path`` NULL, and the download endpoint treats a NULL
-    file_path as "no file was requested" and returns the raw ``report_data``
-    JSON with a 200 — so a caller that asked for CSV silently receives JSON and
-    nothing anywhere says the render failed. See ``generate_report`` step 6.
+    Raised instead of publishing a report record whose file is missing or
+    incomplete. See ``generate_report`` step 6.
     """
 
 
@@ -106,7 +119,7 @@ class SLAReportGenerator:
         policy_q = select(SLAPolicy).where(
             SLAPolicy.organization_id == org_id,
         )
-        if policy_ids:
+        if policy_ids is not None:
             policy_q = policy_q.where(SLAPolicy.id.in_(policy_ids))
 
         # Per-user site grant: a site-limited caller may only report on policies
@@ -114,15 +127,9 @@ class SLAReportGenerator:
         # this, passing a sibling-site ``policy_ids`` would exfiltrate that
         # site's compliance + breach history. ``site_ids_for_request()`` reads
         # the request contextvar (no-op for unrestricted / scheduled runs).
-        _granted = site_ids_for_request()
-        if _granted is not None:
-            _ids = list(_granted)
-            policy_q = policy_q.where(
-                or_(
-                    SLAPolicy.scope != SLAPolicyScope.SITE.value,
-                    SLAPolicy.scope_id.in_(_ids) if _ids else SLAPolicy.scope_id.in_([]),
-                )
-            )
+        predicate = SLAMonitoringService._policy_grant_predicate()
+        if predicate is not None:
+            policy_q = policy_q.where(predicate)
 
         policies = list((await self.db.execute(policy_q)).scalars().all())
 
@@ -140,59 +147,40 @@ class SLAReportGenerator:
                 for p in policies
             ]
 
-        resolved_policy_ids = [p.id for p in policies]
+        # Use the exact resolved policy query even when it selects nothing.
+        # An explicit unmatched filter must never widen into all org policies.
+        policy_subquery = policy_q.with_only_columns(SLAPolicy.id)
 
-        # 2. Breaches in period
-        breach_q = select(SLABreach).where(
-            SLABreach.organization_id == org_id,
-            SLABreach.started_at >= period_start,
-            SLABreach.started_at <= period_end,
-        )
-        if resolved_policy_ids:
-            breach_q = breach_q.where(SLABreach.policy_id.in_(resolved_policy_ids))
-        elif _granted is not None:
-            # a site-limited caller whose accessible
-            # policy set is EMPTY (no policies on granted sites, or an explicit
-            # sibling-site ``policy_ids`` that the grant filter dropped) must NOT
-            # fall through to an org-wide breach read. Constrain to the accessible
-            # policy subquery so the empty grant yields ZERO breaches, never all
-            # of the org's. Mirrors the snapshot constraint below.
-            _ids = list(_granted)
-            accessible_policy_subq = select(SLAPolicy.id).where(
-                SLAPolicy.organization_id == org_id,
-                or_(
-                    SLAPolicy.scope != SLAPolicyScope.SITE.value,
-                    SLAPolicy.scope_id.in_(_ids) if _ids else SLAPolicy.scope_id.in_([]),
-                ),
+        # Breaches overlap the half-open reporting interval. An outage that
+        # started earlier but continued into this period still belongs here.
+        # Aggregate in PostgreSQL. Loading every breach also loads its notes and
+        # context JSON into the API/worker just to count two small categories.
+        # Historical reporting must not make application memory grow with all
+        # matching incident payloads. Keep the same tenant, grant and interval
+        # predicates on the grouped query.
+        breach_q = (
+            select(SLABreach.severity, SLABreach.status, func.count().label("breach_count"))
+            .where(
+                SLABreach.organization_id == org_id,
+                SLABreach.policy_id.in_(policy_subquery),
+                SLABreach.started_at < period_end,
+                or_(SLABreach.resolved_at.is_(None), SLABreach.resolved_at > period_start),
             )
-            breach_q = breach_q.where(SLABreach.policy_id.in_(accessible_policy_subq))
-
-        breaches = list((await self.db.execute(breach_q)).scalars().all())
-
+            .group_by(SLABreach.severity, SLABreach.status)
+        )
+        breach_counts = (await self.db.execute(breach_q)).all()
         breach_summary: dict[str, Any] = {
-            "total": len(breaches),
+            "total": 0,
             "by_severity": {},
             "by_status": {},
         }
-        for b in breaches:
+        for b in breach_counts:
+            breach_summary["total"] += b.breach_count
             breach_summary["by_severity"][b.severity] = (
-                breach_summary["by_severity"].get(b.severity, 0) + 1
+                breach_summary["by_severity"].get(b.severity, 0) + b.breach_count
             )
-            breach_summary["by_status"][b.status] = breach_summary["by_status"].get(b.status, 0) + 1
-
-        # 3. Compliance snapshots — scoped to org-owned policies
-        org_policy_subq = select(SLAPolicy.id).where(SLAPolicy.organization_id == org_id)
-        if resolved_policy_ids:
-            org_policy_subq = org_policy_subq.where(SLAPolicy.id.in_(resolved_policy_ids))
-        elif _granted is not None:
-            # Site-limited caller with no explicit policy filter and no accessible
-            # policies must not fall through to an org-wide snapshot aggregate.
-            _ids = list(_granted)
-            org_policy_subq = org_policy_subq.where(
-                or_(
-                    SLAPolicy.scope != SLAPolicyScope.SITE.value,
-                    SLAPolicy.scope_id.in_(_ids) if _ids else SLAPolicy.scope_id.in_([]),
-                )
+            breach_summary["by_status"][b.status] = (
+                breach_summary["by_status"].get(b.status, 0) + b.breach_count
             )
 
         snapshot_q = select(
@@ -202,27 +190,33 @@ class SLAReportGenerator:
             func.count().label("snapshot_count"),
         ).where(
             SLASnapshot.recorded_at >= period_start,
-            SLASnapshot.recorded_at <= period_end,
-            SLASnapshot.policy_id.in_(org_policy_subq),
+            SLASnapshot.recorded_at < period_end,
+            SLASnapshot.policy_id.in_(policy_subquery),
         )
 
         snap_row = (await self.db.execute(snapshot_q)).one()
 
         compliance_summary = {
             "avg_compliance_percent": (
-                round(snap_row.avg_compliance, 2) if snap_row.avg_compliance else None
+                round(snap_row.avg_compliance, 2) if snap_row.avg_compliance is not None else None
             ),
             "min_compliance_percent": (
-                round(snap_row.min_compliance, 2) if snap_row.min_compliance else None
+                round(snap_row.min_compliance, 2) if snap_row.min_compliance is not None else None
             ),
             "max_compliance_percent": (
-                round(snap_row.max_compliance, 2) if snap_row.max_compliance else None
+                round(snap_row.max_compliance, 2) if snap_row.max_compliance is not None else None
             ),
             "snapshot_count": snap_row.snapshot_count or 0,
         }
 
         # 4. Build report data
         report_data = {
+            # A stored aggregate cannot be narrowed later. Capture its original
+            # site scope so readers with reduced grants cannot retrieve it.
+            "access_scope": {
+                "version": 1,
+                "site_ids": await self._report_site_scope(policies),
+            },
             "period_start": period_start.isoformat(),
             "period_end": period_end.isoformat(),
             "policies": policy_summary,
@@ -251,7 +245,7 @@ class SLAReportGenerator:
             generated_at=datetime.now(UTC),
         )
 
-        # 6. Render to file (CSV or text-based report) BEFORE the row is added.
+        # 6. Render to file (CSV or PDF) BEFORE the row is added.
         #
         # This used to be `db.add()` + `flush()` and then a render wrapped in
         # `except Exception: logger.exception(...)`. Any storage failure at the
@@ -268,8 +262,13 @@ class SLAReportGenerator:
         # neither caller can publish a phantom report, and the error reaches the
         # operator instead of the log.
         await self._render_to_file(report, report_data)
-        self.db.add(report)
-        await self.db.flush()
+        try:
+            self.db.add(report)
+            await self.db.flush()
+        except Exception:
+            if report.file_path:
+                Path(report.file_path).unlink(missing_ok=True)
+            raise
 
         logger.info(
             "Generated SLA report '%s' (%s) for org %s — %d policies, %d breaches",
@@ -277,7 +276,7 @@ class SLAReportGenerator:
             report_format,
             org_id,
             len(policies),
-            len(breaches),
+            breach_summary["total"],
         )
         return report
 
@@ -286,7 +285,7 @@ class SLAReportGenerator:
     # ──────────────────────────────────────────────────────────────────────
 
     async def _render_to_file(self, report: SLAReport, report_data: dict[str, Any]) -> None:
-        """Render report data to a file (CSV or text-based PDF alternative).
+        """Render report data to a real CSV or PDF file.
 
         Raises ``SLAReportRenderError`` on any storage failure. The bare OSError
         the standard library raises here says only "[Errno 30] Read-only file
@@ -296,22 +295,23 @@ class SLAReportGenerator:
         base = Path(REPORTS_BASE_DIR)
         org_dir = base / str(report.organization_id)
         filename = f"sla_report_{report.id}"
-        filepath = org_dir / (f"{filename}.csv" if report.format == "csv" else f"{filename}.txt")
+        if report.format not in {"csv", "pdf"}:
+            raise SLAReportRenderError(f"Unsupported SLA report format: {report.format}")
+        filepath = org_dir / f"{filename}.{report.format}"
 
         try:
             base.mkdir(parents=True, exist_ok=True)
             org_dir.mkdir(parents=True, exist_ok=True)
 
             if report.format == "csv":
-                self._write_csv(filepath, report_data)
+                await run_in_threadpool(self._write_csv, filepath, report_data)
             else:
-                # Text-based report (PDF placeholder — can be upgraded to
-                # weasyprint or similar later without changing the public API)
-                self._write_text_report(filepath, report_data)
+                await run_in_threadpool(write_sla_pdf, filepath, report_data, report.title)
 
+            file_size = filepath.stat().st_size
             report.file_path = str(filepath)
-            report.file_size = filepath.stat().st_size
-        except OSError as exc:
+            report.file_size = file_size
+        except Exception as exc:
             # A write that died part-way (ENOSPC is the common one) leaves a
             # truncated file under an id no row will ever reference, on a disk
             # that is by definition already short. Best-effort sweep; never let
@@ -327,7 +327,7 @@ class SLAReportGenerator:
 
     def _write_csv(self, filepath: Path, data: dict[str, Any]) -> None:
         """Write SLA report data as CSV."""
-        with open(filepath, "w", newline="") as f:
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             # Header
             writer.writerow(
@@ -383,66 +383,6 @@ class SLAReportGenerator:
             for status, count in breaches.get("by_status", {}).items():
                 writer.writerow([status, count])
 
-    def _write_text_report(self, filepath: Path, data: dict[str, Any]) -> None:
-        """Write SLA report as formatted text (portable, no dependencies)."""
-        lines: list[str] = []
-        lines.append("=" * 60)
-        lines.append("SLA COMPLIANCE REPORT")
-        lines.append("=" * 60)
-        lines.append(f"Period: {data['period_start']} to {data['period_end']}")
-        lines.append("")
-
-        # Compliance summary
-        compliance = data.get("compliance", {})
-        lines.append("-" * 40)
-        lines.append("COMPLIANCE SUMMARY")
-        lines.append("-" * 40)
-        lines.append(f"  Average: {compliance.get('avg_compliance_percent', 'N/A')}%")
-        lines.append(f"  Minimum: {compliance.get('min_compliance_percent', 'N/A')}%")
-        lines.append(f"  Maximum: {compliance.get('max_compliance_percent', 'N/A')}%")
-        lines.append(f"  Snapshots: {compliance.get('snapshot_count', 0)}")
-        lines.append("")
-
-        # Policies
-        policies = data.get("policies", [])
-        if policies:
-            lines.append("-" * 40)
-            lines.append("SLA POLICIES")
-            lines.append("-" * 40)
-            for p in policies:
-                lines.append(f"  {p.get('name', 'Unknown')}")
-                lines.append(f"    Status: {p.get('status', 'N/A')}")
-                lines.append(f"    Scope: {p.get('scope', 'N/A')}")
-                lines.append(f"    Compliance: {p.get('current_compliance_percent', 'N/A')}%")
-                lines.append("")
-
-        # Breaches
-        breaches = data.get("breaches", {})
-        lines.append("-" * 40)
-        lines.append("BREACH SUMMARY")
-        lines.append("-" * 40)
-        lines.append(f"  Total: {breaches.get('total', 0)}")
-
-        by_sev = breaches.get("by_severity", {})
-        if by_sev:
-            lines.append("  By Severity:")
-            for sev, count in by_sev.items():
-                lines.append(f"    {sev}: {count}")
-
-        by_status = breaches.get("by_status", {})
-        if by_status:
-            lines.append("  By Status:")
-            for st, count in by_status.items():
-                lines.append(f"    {st}: {count}")
-
-        lines.append("")
-        lines.append("=" * 60)
-        lines.append("Generated by FreeSDN SLA Reporting Engine")
-        lines.append("=" * 60)
-
-        with open(filepath, "w") as f:
-            f.write("\n".join(lines))
-
     # ──────────────────────────────────────────────────────────────────────
     # Report Listing
     # ──────────────────────────────────────────────────────────────────────
@@ -456,6 +396,14 @@ class SLAReportGenerator:
     ) -> tuple[list[SLAReport], int]:
         """List generated reports for the organisation."""
         base = select(SLAReport).where(SLAReport.organization_id == org_id)
+        granted = site_ids_for_request()
+        if granted is not None:
+            scope = SLAReport.report_data["access_scope"]
+            base = base.where(
+                scope.contains({"version": 1}),
+                func.jsonb_typeof(scope["site_ids"]) == "array",
+                scope["site_ids"].contained_by([str(site_id) for site_id in granted]),
+            )
         total = (
             await self.db.execute(select(func.count()).select_from(base.subquery()))
         ).scalar() or 0
@@ -466,7 +414,19 @@ class SLAReportGenerator:
 
     async def get_report(self, report_id: UUID) -> SLAReport | None:
         result = await self.db.execute(select(SLAReport).where(SLAReport.id == report_id))
-        return result.scalar_one_or_none()
+        report = result.scalar_one_or_none()
+        granted = site_ids_for_request()
+        if report is not None and granted is not None:
+            scope = report.report_data.get("access_scope", {})
+            if not isinstance(scope, dict) or scope.get("version") != 1:
+                return None  # Legacy aggregates have no trustworthy scope; regenerate.
+            site_ids = scope.get("site_ids")
+            if not isinstance(site_ids, list) or any(
+                not isinstance(site_id, str) or site_id not in {str(s) for s in granted}
+                for site_id in site_ids
+            ):
+                return None
+        return report
 
     # ──────────────────────────────────────────────────────────────────────
     # Schedule Management
@@ -482,6 +442,13 @@ class SLAReportGenerator:
         base = select(SLAReportSchedule).where(
             SLAReportSchedule.organization_id == org_id,
         )
+        accessible = await self._accessible_schedule_policy_ids(org_id)
+        if accessible is not None:
+            base = base.where(
+                func.jsonb_typeof(SLAReportSchedule.sla_policy_ids) == "array",
+                SLAReportSchedule.sla_policy_ids != [],
+                SLAReportSchedule.sla_policy_ids.contained_by(accessible),
+            )
         total = (
             await self.db.execute(select(func.count()).select_from(base.subquery()))
         ).scalar() or 0
@@ -496,6 +463,15 @@ class SLAReportGenerator:
         filters = [SLAReportSchedule.id == schedule_id]
         if org_id is not None:
             filters.append(SLAReportSchedule.organization_id == org_id)
+        accessible = await self._accessible_schedule_policy_ids(org_id)
+        if accessible is not None:
+            filters.extend(
+                [
+                    func.jsonb_typeof(SLAReportSchedule.sla_policy_ids) == "array",
+                    SLAReportSchedule.sla_policy_ids != [],
+                    SLAReportSchedule.sla_policy_ids.contained_by(accessible),
+                ]
+            )
         result = await self.db.execute(select(SLAReportSchedule).where(*filters))
         return result.scalar_one_or_none()
 
@@ -505,6 +481,7 @@ class SLAReportGenerator:
         data: dict[str, Any],
         *,
         created_by: UUID | None = None,
+        current_user: CurrentUser | None = None,
     ) -> SLAReportSchedule:
         schedule = SLAReportSchedule(
             organization_id=org_id,
@@ -512,8 +489,12 @@ class SLAReportGenerator:
             frequency=data.get("frequency", "monthly"),
             day_of_week=data.get("day_of_week"),
             day_of_month=data.get("day_of_month"),
+            timezone=data.get("timezone", "UTC"),
+            time_of_day=data.get("time_of_day", "09:00"),
             recipients=data.get("recipients", []),
-            sla_policy_ids=data.get("sla_policy_ids", []),
+            delivery_enabled=data.get("delivery_enabled", False),
+            delivery_provider_id=data.get("delivery_provider_id"),
+            sla_policy_ids=[str(pid) for pid in data.get("sla_policy_ids", [])],
             enabled=data.get("enabled", True),
             next_run_at=data.get("next_run_at"),
         )
@@ -528,7 +509,13 @@ class SLAReportGenerator:
             schedule.next_run_at = self._compute_next_run(schedule, datetime.now(UTC))
         if created_by and hasattr(schedule, "created_by"):
             schedule.created_by = created_by
+        if current_user is not None:
+            schedule.execution_scope = await capture_schedule_approval(
+                self.db, current_user, org_id, schedule.sla_policy_ids
+            )
         self.db.add(schedule)
+        await self.db.flush()
+        await capture_delivery_approval(self.db, schedule)
         await self.db.flush()
         return schedule
 
@@ -537,6 +524,8 @@ class SLAReportGenerator:
         schedule_id: UUID,
         data: dict[str, Any],
         org_id: UUID | None = None,
+        *,
+        current_user: CurrentUser | None = None,
     ) -> SLAReportSchedule | None:
         schedule = await self.get_schedule(schedule_id, org_id=org_id)
         if not schedule:
@@ -547,23 +536,43 @@ class SLAReportGenerator:
             "frequency",
             "day_of_week",
             "day_of_month",
+            "timezone",
+            "time_of_day",
             "recipients",
+            "delivery_enabled",
+            "delivery_provider_id",
             "sla_policy_ids",
             "enabled",
             "next_run_at",
         }
-        retimed = any(k in {"frequency", "day_of_week", "day_of_month"} for k in data)
+        retimed = any(
+            k in {"frequency", "day_of_week", "day_of_month", "timezone", "time_of_day"}
+            for k in data
+        )
         for key, value in data.items():
             if key in allowed_fields:
+                if key == "sla_policy_ids":
+                    value = [str(pid) for pid in value]
                 setattr(schedule, key, value)
 
         # Changing the cadence has to move the next fire time, or the edit is
         # cosmetic. Also recompute when a schedule is re-enabled or has never
         # had one -- the second case heals rows created before schedules got a
         # first fire time at all.
-        if schedule.next_run_at is None or retimed or data.get("enabled") is True:
+        if data.get("next_run_at") is None and (
+            schedule.next_run_at is None or retimed or data.get("enabled") is True
+        ):
             schedule.next_run_at = self._compute_next_run(schedule, datetime.now(UTC))
 
+        if current_user is not None:
+            schedule.execution_scope = await capture_schedule_approval(
+                self.db, current_user, schedule.organization_id, schedule.sla_policy_ids
+            )
+            schedule.execution_error = None
+            schedule.updated_by = current_user.id
+        if schedule.delivery_enabled and current_user is None:
+            raise ReportDeliveryError("delivery_approval_required")
+        await capture_delivery_approval(self.db, schedule)
         await self.db.flush()
         return schedule
 
@@ -590,60 +599,69 @@ class SLAReportGenerator:
         """
         now = datetime.now(UTC)
 
-        q = select(SLAReportSchedule).where(
-            SLAReportSchedule.enabled.is_(True),
-            SLAReportSchedule.next_run_at.isnot(None),
-            SLAReportSchedule.next_run_at <= now,
+        q = (
+            select(SLAReportSchedule)
+            .where(
+                SLAReportSchedule.enabled.is_(True),
+                SLAReportSchedule.next_run_at.isnot(None),
+                SLAReportSchedule.next_run_at <= now,
+            )
+            .order_by(SLAReportSchedule.next_run_at, SLAReportSchedule.id)
+            .limit(100)
+            .with_for_update(skip_locked=True)
         )
         due_schedules = list((await self.db.execute(q)).scalars().all())
-
         reports: list[SLAReport] = []
 
         for schedule in due_schedules:
+            schedule_id = schedule.id
+            token = current_user_var.set(None)
             try:
-                # Determine period based on frequency
-                if schedule.frequency == "weekly":
-                    period_start = now - timedelta(weeks=1)
-                elif schedule.frequency == "quarterly":
-                    period_start = now - timedelta(days=90)
-                else:  # monthly (default)
-                    period_start = now - timedelta(days=30)
-
-                # Convert stored policy IDs (strings in JSONB) to UUIDs
-                policy_ids = None
-                if schedule.sla_policy_ids:
-                    from uuid import UUID as _UUID
-
-                    try:
-                        policy_ids = [_UUID(str(pid)) for pid in schedule.sla_policy_ids]
-                    except (ValueError, TypeError):
-                        policy_ids = None
-
-                report = await self.generate_report(
-                    org_id=schedule.organization_id,
-                    period_start=period_start,
-                    period_end=now,
-                    policy_ids=policy_ids,
-                    title=f"{schedule.name} — {now.strftime('%Y-%m-%d')}",
-                )
+                # Roll back this schedule's DB error before continuing. Row locks
+                # remain held until the caller commits report + next-run together.
+                async with self.db.begin_nested():
+                    authorize_delivery_epoch(schedule)
+                    actor = await authorize_schedule(self.db, schedule)
+                    current_user_var.set(actor)
+                    calendar = ReportCalendar.from_schedule(schedule)
+                    period_start, period_end = calendar.report_period(now)
+                    next_run = calendar.next_run(now)
+                    policy_ids = (
+                        [UUID(str(pid)) for pid in schedule.sla_policy_ids]
+                        if schedule.sla_policy_ids
+                        else None
+                    )
+                    report = await self.generate_report(
+                        org_id=schedule.organization_id,
+                        period_start=period_start,
+                        period_end=period_end,
+                        policy_ids=policy_ids,
+                        title=f"{schedule.name[:242]} — {now.strftime('%Y-%m-%d')}",
+                        generated_by=actor.id,
+                    )
+                    await enqueue_notices(self.db, schedule, report)
+                    schedule.last_generated_at = now
+                    schedule.next_run_at = next_run
+                    schedule.execution_error = None
                 reports.append(report)
-
-                # Update schedule timestamps
-                schedule.last_generated_at = now
-                schedule.next_run_at = self._compute_next_run(schedule, now)
+            except (ScheduleAuthorizationError, ScheduleTimingError, ReportDeliveryError) as exc:
+                # A disabled account or lost scope is not a transient render
+                # error. Pause until an authorized operator reviews and enables.
+                await self.db.refresh(schedule)
+                schedule.enabled = False
+                schedule.execution_error = str(exc)
+                await self.db.flush()
+                logger.warning("SLA schedule %s paused: %s", schedule_id, exc)
             except Exception:
-                # Safe to continue: ``generate_report`` renders BEFORE it adds
-                # the row, so a failed schedule has queued nothing for the
-                # caller's commit. ``next_run_at`` is deliberately left where it
-                # was, so the schedule stays due and retries once the operator
-                # fixes the sink, rather than skipping a period in silence.
-                logger.exception("Failed to generate scheduled report %s", schedule.id)
-                continue
+                await self.db.refresh(schedule)
+                schedule.execution_error = "generation_failed"
+                await self.db.flush()
+                logger.exception("Failed to generate scheduled report %s", schedule_id)
+            finally:
+                current_user_var.reset(token)
 
         if reports:
-            await self.db.flush()
             logger.info("Generated %d scheduled SLA reports", len(reports))
-
         return reports
 
     @staticmethod
@@ -651,10 +669,38 @@ class SLAReportGenerator:
         schedule: SLAReportSchedule,
         from_dt: datetime,
     ) -> datetime:
-        """Compute the next run timestamp based on frequency."""
-        if schedule.frequency == "weekly":
-            return from_dt + timedelta(weeks=1)
-        elif schedule.frequency == "quarterly":
-            return from_dt + timedelta(days=90)
-        else:  # monthly
-            return from_dt + timedelta(days=30)
+        """Compute the next occurrence in the configured local calendar."""
+        return ReportCalendar.from_schedule(schedule).next_run(from_dt)
+
+    async def _report_site_scope(self, policies: list[SLAPolicy]) -> list[str]:
+        """Capture owning sites now; later resource moves must not widen access."""
+        from app.models.enterprise import DeviceGroup
+        from app.modules.cameras.models import NVR, Camera
+
+        sites = {str(p.scope_id) for p in policies if p.scope == SLAPolicyScope.SITE.value}
+        supported = {"organization", "ssid", "site", "device_group", "camera", "nvr"}
+        if any(p.scope not in supported for p in policies):
+            sites.add("unresolved")  # Multi-site or unknown scope: admin-only archive.
+        models: list[tuple[str, type[DeviceGroup] | type[Camera] | type[NVR]]] = [
+            ("device_group", DeviceGroup),
+            ("camera", Camera),
+            ("nvr", NVR),
+        ]
+        for scope, model in models:
+            ids = {p.scope_id for p in policies if p.scope == scope}
+            if not ids:
+                continue
+            rows = (
+                await self.db.execute(select(model.id, model.site_id).where(model.id.in_(ids)))
+            ).all()
+            sites.update(str(row.site_id) for row in rows)
+            if len(rows) != len(ids):
+                sites.add("unresolved")
+        return sorted(sites)
+
+    async def _accessible_schedule_policy_ids(self, org_id: UUID | None) -> list[str] | None:
+        predicate = SLAMonitoringService._policy_grant_predicate()
+        if predicate is None:
+            return None
+        query = select(SLAPolicy.id).where(SLAPolicy.organization_id == org_id, predicate)
+        return [str(policy_id) for policy_id in (await self.db.execute(query)).scalars().all()]

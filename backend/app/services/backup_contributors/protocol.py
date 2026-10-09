@@ -155,10 +155,11 @@ class BackupContributor(Protocol):
           The ContributorPayload to embed in the archive.
 
         Raises:
-          Any exception → the Backup service catches it, marks this
-          contributor's section as failed in the manifest, and continues
-          with other contributors (per-module independence — same
-          contract as restore).
+          A full secret-bearing vault refuses collection if any contributor
+          fails, before storing an archive. Configuration snapshots can retain
+          other sections, with the omission recorded on the backup row. Omitted
+          sections are absent from their manifest; they are not successful
+          captures. Collection and restore have separate failure contracts.
         """
         ...
 

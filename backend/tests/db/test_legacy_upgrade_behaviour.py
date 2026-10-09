@@ -437,7 +437,10 @@ def test_duplicates_do_not_abort_the_upgrade(
     engine, _output = duplicate_review_upgrade
     with engine.connect() as conn:
         version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar()
-    assert version == "011_plugin_review_user_uq"
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    assert version == ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
 
 
 def test_duplicates_are_never_deleted(duplicate_review_upgrade: tuple[Engine, str]) -> None:

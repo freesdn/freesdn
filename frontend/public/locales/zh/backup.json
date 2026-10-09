@@ -216,7 +216,12 @@
       "confirmTypePrefix": "输入",
       "confirmTypeOr": "或",
       "confirmTypeSuffix": "以确认",
-      "confirmPlaceholder": "输入以确认破坏性还原"
+      "confirmPlaceholder": "输入以确认破坏性还原",
+      "sealedManifest": "需要输入备份口令才能预览此完整备份。",
+      "integrityVerified": "已为本次预览验证备份文件的完整性。",
+      "integrityRecorded": "已记录备份文件的标识；本次预览尚未检查文件。",
+      "integrityUnknown": "未记录备份文件的标识；完整性尚未验证。",
+      "integrityInvalid": "记录的备份文件标识无效。请在还原前检查或替换此备份。"
     },
     "dryRun": {
       "header": "模拟预览 · 尚未应用任何内容",
@@ -414,10 +419,38 @@
         "title": "导入完成",
         "message": "配置已成功导入"
       },
-      "importConfigFailed": "导入配置失败"
+      "importConfigFailed": "导入配置失败",
+      "dryRunFailed": {
+        "title": "模拟运行发现错误",
+        "message": "预览发现错误，未应用任何配置。请在还原前查看报告。"
+      },
+      "restorePartialFailure": {
+        "title": "还原已结束，但存在错误",
+        "message": "一个或多个部分失败。其他部分可能已应用。请在重试前查看报告。"
+      },
+      "restoreComplete": {
+        "title": "还原已完成",
+        "message": "关闭此结果前，请查看下方已应用和已跳过的部分。"
+      },
+      "restoreUnconfirmed": {
+        "title": "还原结果尚未确认",
+        "message": "服务器未返回已完成的恢复报告。请在重试前检查还原任务。"
+      }
+    },
+    "restoreResult": {
+      "header": "还原结果 · 请查看已应用和失败的部分"
+    },
+    "permissions": {
+      "archiveAuthorityRequired": "配置备份文件需要组织管理员权限；完整备份需要超级管理员权限。",
+      "fullVaultAuthorityRequired": "只有超级管理员才能创建或下载完整备份。"
     }
   },
   "StorageLocationsPage": {
+    "transport": {
+      "reviewRequired": "需要安全检查：请先更新此目标，再运行备份。之前成功的连接测试不代表符合新策略。",
+      "ftp": "已禁用明文 FTP。FTPS 的控制连接和数据连接均须使用 TLS，并使用与配置主机名匹配的可信证书。如有需要，请将私有 CA 安装到工作进程的信任存储中；不能关闭证书验证。",
+      "sftp": "SFTP 在身份验证前需要服务器主机密钥的 SHA256 指纹。请从可信管理员或控制台获取指纹，不要信任未经验证的首次连接。"
+    },
     "header": {
       "title": "存储位置",
       "subtitle": "配置备份的存储位置 · 本地磁盘、云或远程服务器。",
@@ -535,5 +568,26 @@
         "message": "连接测试失败。"
       }
     }
+  },
+  "vaultConfirmation": {
+    "title": "确认导出保管库",
+    "description": "此存档包含机密。请为本次操作确认当前账户。关闭窗口无法撤销已发送的请求。",
+    "legacyWarning": "此存档没有已记录的原始身份信息。检查当前字节无法证明其历史真实性。请仅使用来源可信的存档。",
+    "legacyAck": "我了解旧版存档的此项限制。",
+    "unconfirmed": "确认已结束，或操作结果尚未确认。开始另一项操作前请检查备份目录。响应失败不代表备份操作已回滚。",
+    "password": "当前账户密码",
+    "openIdentity": "通过身份提供商确认",
+    "callbackMissing": "管理员必须先配置保管库 OIDC 回调地址，此账户才能导出机密。",
+    "mfa": "身份验证器代码或尚未使用的恢复代码",
+    "close": "关闭",
+    "continue": "查询确认要求",
+    "create": "确认并创建保管库",
+    "download": "确认并下载保管库",
+    "alreadyOpen": "请先关闭当前的保管库确认窗口。",
+    "cannotStart": "无法开始保管库确认。请检查当前账户和存档完整性，并关闭之前的确认窗口。",
+    "encryptionRequired": "保管库必须加密。",
+    "individual": "请逐个下载保管库存档。每个存档均需单独确认账户。",
+    "downloadDispatched": "保管库下载已开始",
+    "verifySaved": "请检查已保存的文件。浏览器发起下载请求不代表文件已保存。"
   }
 }

@@ -1,0 +1,69 @@
+# Bounded Lite load, report storage failure and recovery
+
+Run this only on a Linux Docker qualification host with enough unused RAM and
+disk. It creates new private Compose projects, volumes and an internal network;
+it publishes no ports, configures no hardware, sends no external mail and never
+mounts an existing deployment volume. Use a reviewed public source export and
+locally built candidate image IDs. Do not point the work directory at a live
+installation. The driver refuses existing work directories and does not pull.
+
+Extend the command in `docker/INSTALL-ACCEPTANCE` with:
+
+    --report-disk-pressure --soak-seconds 1800
+
+The supported soak range is 60..1800 seconds; 0 disables load. CI uses 60 seconds
+as a regression gate. A 30-minute local rehearsal is not a multi-day soak or an
+enterprise capacity guarantee. An incomplete or failing run is not acceptance.
+
+## What it measures
+
+- Actual Caddy HTTPS, verified private CA, authenticated Secure cookies and CSRF.
+  Normal API rate limits remain enabled.
+- Four paced read clients (dashboard, sites, report catalogue and readiness),
+  each up to one request per 1.5 seconds. Aggregate read latency and errors are
+  reported. This is an explicit offered workload, not maximum sustainable RPS.
+- Alternating PDF/CSV generation every ten seconds against eight paused synthetic
+  policies, 20,000 incidents (with JSON/text) and 80,000 compliance samples. Each
+  report must include the expected counts and return a valid downloadable file.
+- 250 synthetic Timescale event rows inserted directly every five seconds.
+  This exercises concurrent database writes, NOT adapter/collector ingestion
+  throughput. The exact row count must survive encrypted recovery.
+- One harmless token-cleanup task on each of the five worker queues every ten
+  seconds. Completion latency is measured; fixture task results are forgotten.
+- API cgroup memory samples (including the in-container load generator), final
+  container OOM/restart state, generated archive hashes, recreation and encrypted
+  backup/restore. The load generator consumes part of the API memory budget.
+
+## Deliberate storage failure
+
+The driver temporarily directs only the fixture API report writer to a separate
+16 MiB tmpfs, owned by the non-root application user. The probe independently
+verifies the mount type and size before filling it to real ENOSPC. It must not
+fill the VM root disk, PostgreSQL volume, persistent report archive or any
+customer filesystem. Existing report files remain on their original volume.
+
+Both PDF and CSV requests must fail, with no extra catalogue row or partial
+render. Database readiness must continue to pass. Once the filler is removed,
+both formats must generate and download again. Only the two newly generated
+temporary report records are removed before that temporary filesystem goes
+away. The driver restores the ordinary report path, recreates the API and
+verifies that the original persistent archives still match their hashes.
+
+## Evidence and limits
+
+Only `report.json` is intended for sharing. The private work directory also
+contains generated credentials, bearer tokens, encryption test keys, database
+dumps and raw logs. Never upload the whole directory. Retain failed receipts;
+do not erase a failure by rerunning in the same work directory.
+
+The original Lite acceptance continues after load: recreate application
+containers, check every report hash, fence writers, encrypt both database
+backups, retain application volumes, stop the source, restore to fresh volumes
+and rotate the authentication signing key while preserving vault keys. All
+generated report bytes and the event count are checked again on the target.
+
+These fixtures do not establish a fleet size, production RTO/RPO, a safe
+customer queue replay policy, multi-host failover, real SMTP delivery, a
+production database-full recovery procedure or a report-history deletion
+policy. Report and delivery history remain retained; choose and test an explicit
+customer retention policy before offering an operational storage guarantee.

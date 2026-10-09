@@ -18,10 +18,18 @@ from app.services.device_control import (
 
 
 @pytest.fixture
-def mock_db():
-    """Create a mock async DB session."""
+def organization_id():
+    """Use a concrete tenant identity rather than a mock-derived string."""
+    return uuid.uuid4()
+
+
+@pytest.fixture
+def mock_db(organization_id):
+    """Async execute returns the synchronous SQLAlchemy result interface."""
+    result = MagicMock(spec=["scalar_one_or_none"])
+    result.scalar_one_or_none.return_value = organization_id
     db = AsyncMock()
-    db.execute = AsyncMock()
+    db.execute = AsyncMock(return_value=result)
     return db
 
 
@@ -42,6 +50,7 @@ def sample_device():
     device.external_id = "AA:BB:CC:DD:EE:FF"
     device.device_type = "switch"
     device.controller_id = uuid.uuid4()
+    device.site_id = uuid.uuid4()
     device.name = "core-switch-01"
     device.ip_address = "10.0.0.10"
     device.vendor = "tp-link"
@@ -54,6 +63,17 @@ def _make_adapter() -> MagicMock:
     adapter.__aenter__ = AsyncMock(return_value=adapter)
     adapter.__aexit__ = AsyncMock(return_value=None)
     return adapter
+
+
+def _assert_completed_event(service, device, organization_id, action):
+    service.event_bus.publish.assert_awaited_once()
+    event = service.event_bus.publish.await_args.args[0]
+    assert event.organization_id == str(organization_id)
+    assert event.payload["site_id"] == str(device.site_id)
+    assert event.payload["device_id"] == str(device.id)
+    assert event.event_type == "device.action_completed"
+    assert event.payload["action"] == action.value
+    assert event.payload["success"] is True
 
 
 class TestDeviceControlService:
@@ -94,7 +114,7 @@ class TestDeviceControlService:
         assert adapter.has_capability.call_args.kwargs["device_type"] == "access_point"
 
     @pytest.mark.asyncio
-    async def test_execute_action_dispatches_client_unblock(self, service, sample_device):
+    async def test_execute_action_dispatches_client_unblock(self, service, sample_device, organization_id):
         """CLIENT_UNBLOCK action should dispatch to adapter.unblock_client."""
         adapter = _make_adapter()
         adapter.unblock_client = AsyncMock(
@@ -113,9 +133,10 @@ class TestDeviceControlService:
 
         assert response.success is True
         adapter.unblock_client.assert_awaited_once_with("11:22:33:44:55:66")
+        _assert_completed_event(service, sample_device, organization_id, ActionType.CLIENT_UNBLOCK)
 
     @pytest.mark.asyncio
-    async def test_execute_action_poe_cycle_passes_duration(self, service, sample_device):
+    async def test_execute_action_poe_cycle_passes_duration(self, service, sample_device, organization_id):
         """POE_CYCLE action should pass duration to adapter.cycle_poe_port."""
         adapter = _make_adapter()
         adapter.cycle_poe_port = AsyncMock(
@@ -134,9 +155,10 @@ class TestDeviceControlService:
 
         assert response.success is True
         adapter.cycle_poe_port.assert_awaited_once_with(sample_device.external_id, 4, 9)
+        _assert_completed_event(service, sample_device, organization_id, ActionType.POE_CYCLE)
 
     @pytest.mark.asyncio
-    async def test_execute_action_port_configure_dispatch(self, service, sample_device):
+    async def test_execute_action_port_configure_dispatch(self, service, sample_device, organization_id):
         """PORT_CONFIGURE should use adapter.configure_switch_port when available."""
         adapter = _make_adapter()
         adapter.configure_switch_port = AsyncMock(
@@ -159,9 +181,10 @@ class TestDeviceControlService:
             7,
             {"native_vlan": 120},
         )
+        _assert_completed_event(service, sample_device, organization_id, ActionType.PORT_CONFIGURE)
 
     @pytest.mark.asyncio
-    async def test_execute_action_firmware_check_returns_data(self, service, sample_device):
+    async def test_execute_action_firmware_check_returns_data(self, service, sample_device, organization_id):
         """FIRMWARE_CHECK should wrap adapter.get_firmware_info into response data."""
         adapter = _make_adapter()
         adapter.get_firmware_info = AsyncMock(
@@ -181,3 +204,39 @@ class TestDeviceControlService:
         assert response.success is True
         assert response.data == {"current": "1.2.3", "available": "1.2.4"}
         adapter.get_firmware_info.assert_awaited_once_with(sample_device.external_id)
+        _assert_completed_event(service, sample_device, organization_id, ActionType.FIRMWARE_CHECK)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lookup", ["no-site", "missing-site", "query-failure"])
+async def test_completed_device_event_does_not_invent_a_tenant_on_lookup_failure(
+    service, sample_device, mock_db, lookup,
+):
+    adapter = _make_adapter()
+    adapter.unblock_client = AsyncMock(return_value=AdapterResult.ok(message="Client unblocked"))
+    service.get_device = AsyncMock(return_value=sample_device)
+    service.get_adapter_for_device = AsyncMock(return_value=adapter)
+    service.check_capability = MagicMock(return_value=True)
+    if lookup == "no-site":
+        sample_device.site_id = None
+    elif lookup == "missing-site":
+        mock_db.execute.return_value.scalar_one_or_none.return_value = None
+    else:
+        mock_db.execute.side_effect = RuntimeError("Owned synthetic site lookup failure")
+    response = await service.execute_action(ActionRequest(
+        device_id=sample_device.id,
+        action_type=ActionType.CLIENT_UNBLOCK,
+        parameters={"client_mac": "11:22:33:44:55:66"},
+    ))
+    assert response.success is True
+    adapter.unblock_client.assert_awaited_once_with("11:22:33:44:55:66")
+    service.event_bus.publish.assert_awaited_once()
+    event = service.event_bus.publish.await_args.args[0]
+    assert event.organization_id is None
+    assert event.payload["device_id"] == str(sample_device.id)
+    assert event.payload["site_id"] == (str(sample_device.site_id) if sample_device.site_id else None)
+    assert event.event_type == "device.action_completed"
+    if lookup == "no-site":
+        mock_db.execute.assert_not_awaited()
+    else:
+        mock_db.execute.assert_awaited_once()

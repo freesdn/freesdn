@@ -1,0 +1,26 @@
+CAMERA HLS SESSION LIFECYCLE
+===========================
+
+The API process that starts an HLS session owns its FFmpeg child and private
+output files. That process checks for stale sessions every 15 seconds. A session
+with no heartbeat, playlist fetch or valid segment fetch for more than 30 seconds
+is eligible for cleanup, even if its viewer count is still positive. Browser
+crashes and lost network connections cannot reliably send a final viewer-stop
+request. A positive viewer count is therefore not evidence of current activity.
+
+Normal heartbeat and media polling keep the session alive. Explicitly stopping
+the final viewer releases it immediately. The six-hour maximum session age is
+still enforced independently of recent activity. The idle check is periodic,
+so cleanup is not promised at exactly the 30-second boundary.
+
+Known boundary: HLS session metadata is currently local to one API process.
+A different API worker cannot look up, heartbeat or stop that session even when
+it shares the output directory. This is a reproduced limitation, not a qualified
+multi-worker playback implementation. It is separate from go2rtc playback paths.
+Do not treat successful page rendering, an existing playlist file, or tests of
+one worker as acceptance of HLS playback across workers or hosts. Cross-worker
+ownership/routing and owner-loss recovery remain release qualification work.
+
+The idle cleanup correction does not resolve that ownership limitation. Nor does
+it make a one-worker deployment a qualified availability workaround: worker
+recycling has a separately observed request delay and terminates owned streams.

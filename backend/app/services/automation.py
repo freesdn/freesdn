@@ -19,6 +19,8 @@ import contextlib
 import hashlib
 import logging
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -340,6 +342,8 @@ class ActionResult:
     execution_time_ms: float = 0
     output: dict[str, Any] | None = None
     error: str | None = None
+    # Authority refusals stop the entire chain even when an action permits errors.
+    stop_chain: bool = False
 
 
 # =============================================================================
@@ -414,7 +418,7 @@ class RuleExecution:
 # both insert, exceeding max_triggers_per_hour.
 #
 # Args: KEYS[1]=sorted-set key, ARGV[1]=window_start_ts, ARGV[2]=now_ts,
-#       ARGV[3]=max_count, ARGV[4]=expire_seconds
+#       ARGV[3]=max_count, ARGV[4]=expire_seconds, ARGV[5]=unique attempt member
 # Returns: 1 if the call is allowed (entry added), 0 if throttled.
 _THROTTLE_LUA_SCRIPT = """
 local key = KEYS[1]
@@ -426,7 +430,7 @@ local expire_secs = tonumber(ARGV[4])
 redis.call('ZREMRANGEBYSCORE', key, '-inf', window_start)
 local count = redis.call('ZCARD', key)
 if count < max_count then
-    redis.call('ZADD', key, now_ts, tostring(now_ts))
+    redis.call('ZADD', key, now_ts, ARGV[5])
     redis.call('EXPIRE', key, expire_secs)
     return 1
 end
@@ -493,6 +497,9 @@ class AutomationEngine:
         self._event_subscriptions: dict[str, list[UUID]] = {}
         # rule_id -> name, for event rules that named no pattern
         self._unsubscribed_rules: dict[UUID, str] = {}
+        # Latest coordination refusal on this worker. This is not an execution
+        # record or durable fleet-wide history, and contains no event payload.
+        self._coordination_blocks: dict[UUID, dict[str, str]] = {}
         self._lock = asyncio.Lock()  # protects _rules, _action_handlers, _event_subscriptions
         self._running = False
         self._subscription_id: str | None = None  # event bus subscription handle
@@ -517,6 +524,28 @@ class AutomationEngine:
         cannot tell either from the rule list.
         """
         return dict(self._unsubscribed_rules)
+
+    def coordination_blocks(self, organization_id: UUID | None) -> list[dict[str, str]]:
+        """Return only this organization's active rules refused on this worker."""
+        if organization_id is None:
+            return []
+        return [
+            {"rule_id": str(rule_id), **details}
+            for rule_id, details in self._coordination_blocks.items()
+            if (rule := self._rules.get(rule_id)) is not None
+            and rule.organization_id == organization_id
+            and rule.status == RuleStatus.ACTIVE
+        ]
+
+    def _coordination_refused(self, rule: AutomationRule, reason: str) -> None:
+        previous = self._coordination_blocks.get(rule.id)
+        if previous is None or previous["reason"] != reason:
+            self._coordination_blocks[rule.id] = {
+                "reason": reason,
+                "since": datetime.now(UTC).isoformat(),
+            }
+            # Do not copy client exception strings, URLs or event data into logs.
+            logger.warning("Automation rule %s refused: %s", rule.id, reason)
 
     def _register_builtin_handlers(self) -> None:
         """Register built-in action handlers for notifications and alerts."""
@@ -650,30 +679,46 @@ class AutomationEngine:
             org_id = context.get("organization_id")
             alert_id = params.get("alert_id")
             if not alert_id:
-                return {"resolved": False, "error": "No alert_id provided"}
+                return {"success": False, "resolved": False, "error": "No alert_id provided"}
             if not org_id:
-                return {"resolved": False, "error": "no organization context"}
+                return {"success": False, "resolved": False, "error": "no organization context"}
             aid = UUID(alert_id) if isinstance(alert_id, str) else alert_id
             async with async_session_factory() as db:
                 alert = await db.get(Alert, aid)
                 if alert is None or str(alert.organization_id) != str(org_id):
-                    return {"resolved": False, "error": "alert not found in this organization"}
+                    return {
+                        "success": False,
+                        "resolved": False,
+                        "error": "alert not found in this organization",
+                    }
                 svc = AlertRuleService(db)
                 result = await svc.resolve_alert(
                     aid,
-                    user_id=UUID("00000000-0000-0000-0000-000000000000"),  # system
+                    # Automated resolution has no interactive user. The nullable
+                    # FK records this honestly; an invented UUID violates it.
+                    user_id=None,
                     note="Auto-resolved by automation engine",
                 )
+                if result is None:
+                    return {
+                        "success": False,
+                        "resolved": False,
+                        "error": "alert already resolved or unavailable",
+                    }
                 await db.commit()
-                return {"resolved": result is not None}
+                return {"success": True, "resolved": True}
 
-        async def _resolve_camera_for_action(db: Any, params: dict[str, Any]) -> Any:
-            """Shared: load + org-scope the camera named in action params.
+        async def _resolve_camera_for_action(
+            db: Any, params: dict[str, Any], permission: str, access: str
+        ) -> Any:
+            """Authorize the current rule author before opening a camera adapter.
 
             SECURITY: organization_id comes from __context__ (the rule's owning
             org), NEVER from params — same rule as alert.create. A rule can only
             act on cameras in its own org, even if params forge a camera_id.
             """
+            from app.core.dependencies import CurrentUser, _get_user_by_id, _load_user_permissions
+            from app.modules.cameras.api import _enforce_camera_access
             from app.modules.cameras.models import Camera
 
             context = params.get("__context__", {})
@@ -683,19 +728,55 @@ class AutomationEngine:
                 return None, "camera_id required in action params"
             if not org_id:
                 return None, "no organization context"
-            cam = await db.get(
-                Camera, UUID(camera_id_str) if isinstance(camera_id_str, str) else camera_id_str
-            )
-            if cam is None or str(cam.organization_id) != str(org_id) or cam.deleted_at is not None:
-                return None, "camera not found in this organization"
-            return cam, None
+            actor_id = context.get("actor_id")
+            if not actor_id:
+                return None, "camera action requires a current rule author"
+            try:
+                # Resolve in this action's fresh session, including site grants.
+                # Never accept identity or authorization supplied in action params.
+                author = await _get_user_by_id(db, str(UUID(str(actor_id))))
+                if (
+                    author is None
+                    or not author.is_active
+                    or author.deleted_at is not None
+                    or str(author.organization_id) != str(org_id)
+                ):
+                    return None, "camera action requires an active author in this organization"
+                grants = author.site_access or []
+                principal = CurrentUser(
+                    author,
+                    await _load_user_permissions(author),
+                    accessible_site_ids={grant.site_id for grant in grants},
+                    site_access_levels={grant.site_id: grant.access_level for grant in grants},
+                )
+                if not principal.has_permission(permission):
+                    return None, "rule author no longer holds the required camera permission"
+                cam = await db.get(
+                    Camera, UUID(camera_id_str) if isinstance(camera_id_str, str) else camera_id_str
+                )
+                if (
+                    cam is None
+                    or str(cam.organization_id) != str(org_id)
+                    or cam.deleted_at is not None
+                ):
+                    return None, "camera not found in this organization"
+                if not principal.has_site_permission(permission, cam.site_id):
+                    return None, "rule author lacks the required permission at this camera site"
+                # Reuse the same site and per-camera/group grants as interactive
+                # camera access. Lookup errors must not widen authority.
+                await _enforce_camera_access(db, principal, cam.id, access)
+                return cam, None
+            except Exception:
+                # DB/client errors can contain connection details. Refuse before
+                # adapter creation without copying them into execution history.
+                return None, "camera authorization denied or unavailable"
 
         async def _handle_camera_ptz(params: dict[str, Any]) -> dict[str, Any]:
             from app.db import async_session_factory
             from app.modules.cameras.api import _API_WRITE_FORCE, _get_adapter_for_camera
 
             async with async_session_factory() as db:
-                cam, err = await _resolve_camera_for_action(db, params)
+                cam, err = await _resolve_camera_for_action(db, params, "cameras.ptz", "ptz")
                 if err:
                     return {"success": False, "error": err}
                 adapter, channel = await _get_adapter_for_camera(cam, db)
@@ -728,7 +809,7 @@ class AutomationEngine:
             from app.modules.cameras.api import _get_adapter_for_camera
 
             async with async_session_factory() as db:
-                cam, err = await _resolve_camera_for_action(db, params)
+                cam, err = await _resolve_camera_for_action(db, params, "cameras.view", "live")
                 if err:
                     return {"success": False, "error": err}
                 adapter, channel = await _get_adapter_for_camera(cam, db)
@@ -745,7 +826,9 @@ class AutomationEngine:
             from app.modules.cameras.api import _API_WRITE_FORCE, _get_adapter_for_camera
 
             async with async_session_factory() as db:
-                cam, err = await _resolve_camera_for_action(db, params)
+                cam, err = await _resolve_camera_for_action(
+                    db, params, "cameras.manage", "configure"
+                )
                 if err:
                     return {"success": False, "error": err}
                 adapter, channel = await _get_adapter_for_camera(cam, db)
@@ -768,7 +851,9 @@ class AutomationEngine:
             from app.modules.cameras.api import _API_WRITE_FORCE, _get_adapter_for_camera
 
             async with async_session_factory() as db:
-                cam, err = await _resolve_camera_for_action(db, params)
+                cam, err = await _resolve_camera_for_action(
+                    db, params, "cameras.manage", "configure"
+                )
                 if err:
                     return {"success": False, "error": err}
                 adapter, _channel = await _get_adapter_for_camera(cam, db)
@@ -904,9 +989,22 @@ class AutomationEngine:
     # Rule Management
     # =========================================================================
 
+    def _remove_rule_subscriptions(self, rule_id: UUID) -> None:
+        """Remove every old index entry while the caller holds ``_lock``."""
+        for pattern, rule_ids in list(self._event_subscriptions.items()):
+            remaining = [rid for rid in rule_ids if rid != rule_id]
+            if remaining:
+                self._event_subscriptions[pattern] = remaining
+            else:
+                del self._event_subscriptions[pattern]
+        self._unsubscribed_rules.pop(rule_id, None)
+
     async def register_rule(self, rule: AutomationRule) -> None:
         """Register an automation rule."""
         async with self._lock:
+            # Reads hydrate existing rules too. Replacement must not accumulate
+            # duplicate entries or leave the previous event pattern active.
+            self._remove_rule_subscriptions(rule.id)
             self._rules[rule.id] = rule
 
             # Subscribe to events if event-triggered
@@ -951,14 +1049,10 @@ class AutomationEngine:
                 return False
 
             rule = self._rules.pop(rule_id)
-
-            # Remove event subscriptions
-            for _pattern, rule_ids in self._event_subscriptions.items():
-                if rule_id in rule_ids:
-                    rule_ids.remove(rule_id)
-            # ...and the not-firing list, or a deleted rule keeps being reported
-            # as broken for the life of the process.
-            self._unsubscribed_rules.pop(rule_id, None)
+            # Remove all occurrences, including duplicates retained by an older
+            # worker, so recreating the rule cannot revive an obsolete pattern.
+            self._remove_rule_subscriptions(rule_id)
+            self._coordination_blocks.pop(rule_id, None)
 
         logger.info("Unregistered automation rule: %s", rule.name)
         return True
@@ -990,6 +1084,8 @@ class AutomationEngine:
 
             self._rules[rule_id].status = status
             self._rules[rule_id].updated_at = datetime.now(UTC)
+            if status != RuleStatus.ACTIVE:
+                self._coordination_blocks.pop(rule_id, None)
         return True
 
     # =========================================================================
@@ -1029,6 +1125,10 @@ class AutomationEngine:
         """
         return set(self._action_handlers)
 
+    async def _authorize_action(self) -> bool:
+        """Standalone evaluators have no persistent definition to revalidate."""
+        return True
+
     async def _execute_action(
         self,
         action: Action,
@@ -1051,6 +1151,16 @@ class AutomationEngine:
             if action.delay_seconds > 0:
                 delay = min(action.delay_seconds, _MAX_ACTION_DELAY)
                 await asyncio.sleep(delay)
+
+            # Revalidate AFTER delay: revocation during a wait must prevent effects.
+            if not await self._authorize_action():
+                return ActionResult(
+                    success=False,
+                    action_type=action.action_type,
+                    execution_time_ms=(datetime.now(UTC) - start_time).total_seconds() * 1000,
+                    error="Automation definition changed or unavailable; action refused",
+                    stop_chain=True,
+                )
 
             # Merge context into params
             params = {**action.params, "__context__": context}
@@ -1119,8 +1229,9 @@ class AutomationEngine:
         Args:
             event_type: Event type string
             event_data: Event payload
-            event_id: Unique event ID used for idempotency (prevents double-execution
-                      across multiple workers if the same event is delivered twice)
+            event_id: Shared event ID for duplicate suppression while the Redis
+                      claim remains present (300 seconds). This is not durable
+                      exactly-once delivery or recovery after Redis state loss.
 
         Returns:
             List of rule executions
@@ -1128,7 +1239,7 @@ class AutomationEngine:
         executions = []
 
         # Find matching rules
-        matching_rules = self._find_matching_rules(event_type)
+        matching_rules = await self._event_rules(event_type, event_org_id)
 
         # SECURITY (cross-tenant isolation): a rule fires ONLY on events from its
         # OWN organization. Events carry organization_id on the Event object; a
@@ -1146,27 +1257,27 @@ class AutomationEngine:
             if rule.status != RuleStatus.ACTIVE:
                 continue
 
-            # Idempotency: use Redis SET NX for at-most-once execution per
-            # (rule, event) pair across all workers (300s TTL covers any
-            # reasonable processing window). NOTE: best-effort, not a hard
-            # guarantee — if Redis is unreachable we PROCEED (fail-open, see the
-            # except below) rather than silently drop the automation. For a
-            # security/network platform, an occasional duplicate notify/webhook
-            # during a Redis outage is safer than silently not firing a rule;
-            # device writes are separately de-duplicated by the staging
-            # pipeline's atomic claim, so a double-apply cannot occur there.
+            # Only a positively acknowledged shared claim authorizes an event
+            # action. A timeout can follow a successful write: never delete the
+            # uncertain claim or fall back to a worker-local decision. Native
+            # camera actions are not all protected by the Fabric staging gate.
             if event_id:
                 try:
                     r = self._get_redis()
                     idempotency_key = f"automation:exec:{rule.id}:{event_id}"
                     acquired = await r.set(idempotency_key, "1", nx=True, ex=300)
-                    if not acquired:
+                    if acquired is False or acquired is None:
+                        self._coordination_blocks.pop(rule.id, None)
                         logger.debug(
                             f"Idempotency skip: rule={rule.id} already processing event={event_id}"
                         )
                         continue
-                except Exception as e:
-                    logger.warning("Idempotency check failed (proceeding): %s", e)
+                    if acquired is not True:
+                        self._coordination_refused(rule, "invalid event claim response")
+                        continue
+                except Exception:
+                    self._coordination_refused(rule, "event claim unavailable or uncertain")
+                    continue
 
             # Check throttling (Redis-backed, survives restarts)
             if not await self._check_throttle(rule):
@@ -1187,6 +1298,12 @@ class AutomationEngine:
             rule.trigger_count += 1
 
         return executions
+
+    async def _event_rules(
+        self, event_type: str, organization_id: str | None
+    ) -> list[AutomationRule]:
+        """Standalone evaluator selection; production overrides with committed reads."""
+        return self._find_matching_rules(event_type)
 
     def _find_matching_rules(self, event_type: str) -> list[AutomationRule]:
         """Find rules that match an event type."""
@@ -1225,7 +1342,9 @@ class AutomationEngine:
         own in-memory last_triggered; a restart reset the timer, allowing
         immediate re-execution. Now a Redis key with TTL = cooldown_seconds
         acts as the distributed lock.  Rate limiting also uses Redis.
-        Falls back to in-memory on Redis error (fail open).
+        Unavailable or uncertain coordination refuses execution. A reserved
+        claim/cooldown is not undone after a later failure; there is no automatic
+        replay or exactly-once guarantee across state loss, eviction or restore.
         """
         now = datetime.now(UTC)
 
@@ -1237,15 +1356,15 @@ class AutomationEngine:
                 cooldown_key = f"automation:cooldown:{rule.id}"
                 # Returns True if key was set (not in cooldown), False if already exists
                 can_run = await r.set(cooldown_key, "1", nx=True, ex=rule.cooldown_seconds)
-                if not can_run:
+                if can_run is False or can_run is None:
+                    self._coordination_blocks.pop(rule.id, None)
                     return False
-            except Exception as e:
-                logger.warning("Redis cooldown check failed (falling back to in-memory): %s", e)
-                # Fallback: use in-memory last_triggered if Redis is unavailable
-                if rule.last_triggered:
-                    cooldown_until = rule.last_triggered + timedelta(seconds=rule.cooldown_seconds)
-                    if now < cooldown_until:
-                        return False
+                if can_run is not True:
+                    self._coordination_refused(rule, "invalid cooldown response")
+                    return False
+            except Exception:
+                self._coordination_refused(rule, "cooldown unavailable or uncertain")
+                return False
 
         # A-2: Atomic sliding-window rate limit via Lua script.
         # The Lua script atomically removes stale entries, checks the count,
@@ -1265,11 +1384,16 @@ class AutomationEngine:
                 now_ts,  # ARGV[2]
                 rule.max_triggers_per_hour,  # ARGV[3]
                 3700,  # ARGV[4] — expire after 1h + buffer
+                uuid4().hex,  # ARGV[5] — same-timestamp attempts must remain distinct
             )
-            return bool(result)
-        except Exception as e:
-            logger.warning("Redis throttle check failed (allowing execution): %s", e)
-            return True  # Fail open — prefer false-positive executions over silent drops
+            if type(result) is not int or result not in (0, 1):
+                self._coordination_refused(rule, "invalid rate limit response")
+                return False
+            self._coordination_blocks.pop(rule.id, None)
+            return result == 1
+        except Exception:
+            self._coordination_refused(rule, "rate limit unavailable or uncertain")
+            return False
 
     async def _execute_rule(
         self,
@@ -1302,7 +1426,7 @@ class AutomationEngine:
 
             if not result.success:
                 overall_success = False
-                if not action.continue_on_error:
+                if result.stop_chain or not action.continue_on_error:
                     error_message = f"Action {action.action_type} failed: {result.error}"
                     break
 
@@ -1377,8 +1501,9 @@ class AutomationEngine:
                     )
                 )
                 await _session.commit()
-        except Exception as _persist_err:
-            logger.error(f"Failed to persist execution record for rule {rule.id}: {_persist_err}")
+        except Exception:
+            # DB driver errors can embed SQL parameters, including action payloads.
+            logger.error("Failed to persist automation execution for rule %s", rule.id)
 
         return execution
 
@@ -1390,10 +1515,12 @@ class AutomationEngine:
         self,
         rule_id: UUID,
         data: dict[str, Any] | None = None,
+        *,
+        organization_id: UUID | None = None,
     ) -> RuleExecution | None:
-        """Manually trigger a rule."""
+        """Manually trigger a rule in a standalone evaluator."""
         rule = self._rules.get(rule_id)
-        if not rule:
+        if not rule or (organization_id is not None and rule.organization_id != organization_id):
             return None
 
         return await self._execute_rule(rule, data or {})
@@ -1521,7 +1648,7 @@ class AutomationService:
         from sqlalchemy.ext.asyncio import AsyncSession
 
         self.db: AsyncSession = db
-        self.engine = engine or AutomationEngine()
+        self.engine = engine or _PersistentAutomationEngine()
 
     @staticmethod
     def _rule_from_record(rec: Any) -> AutomationRule:
@@ -1674,63 +1801,78 @@ class AutomationService:
         organization_id: UUID | None = None,
         **updates: Any,
     ) -> AutomationRule | None:
-        """Update a rule. organization_id must match rule owner (A-4: IDOR fix)."""
+        """Validate an isolated replacement before changing persistent/live state.
+
+        The database lookup remains organization-scoped. A lookup/validation/
+        flush failure cannot mutate the currently cached action chain. The caller
+        still owns commit; cross-worker invalidation and post-flush rollback are
+        separate lifecycle concerns.
+        """
+        from copy import deepcopy
+        from dataclasses import fields
+        from types import SimpleNamespace
+
         from sqlalchemy import select
 
         from app.models.automation import AutomationRuleRecord
 
-        # DB-fallback lookup: rules are not always in the per-process engine cache
-        # (after restart, or under multiple workers each has its own cache). get_rule
-        # loads from DB and warms the engine so the subsequent mutation works.
-        rule = await self.get_rule(rule_id)
-        if not rule:
-            return None
-
-        # A-4: verify the rule belongs to the caller's org before mutating
-        # (get_rule does not filter by org, so the org check is enforced here)
-        if organization_id is not None and rule.organization_id != organization_id:
-            return None  # silently 404 — do not expose existence to wrong org
-
-        for key, value in updates.items():
-            if hasattr(rule, key):
-                setattr(rule, key, value)
-
-        rule.updated_at = datetime.now(UTC)
-
-        # Persist to database (scoped by org for defence-in-depth)
         result = await self.db.execute(
             select(AutomationRuleRecord).where(
                 AutomationRuleRecord.id == rule_id,
                 *(
                     [AutomationRuleRecord.organization_id == organization_id]
-                    if organization_id
+                    if organization_id is not None
                     else []
                 ),
             )
         )
         record = result.scalar_one_or_none()
-        if record:
-            for key, value in updates.items():
-                if hasattr(record, key):
-                    if key == "conditions" and isinstance(value, ConditionGroup):
-                        record.conditions = value.to_dict()
-                    elif (
-                        key == "actions"
-                        and isinstance(value, list)
-                        and value
-                        and isinstance(value[0], Action)
-                    ):
-                        record.actions = [a.to_dict() for a in value]
-                    elif key == "trigger_type" and isinstance(value, TriggerType):
-                        record.trigger_type = value.value
-                    elif key == "status" and isinstance(value, RuleStatus):
-                        record.status = value.value
-                    else:
-                        setattr(record, key, value)
-            record.updated_at = datetime.now(UTC)
-            await self.db.flush()
+        if record is None:
+            return None
+        # Keep defense in depth when a caller supplies a custom session adapter.
+        if organization_id is not None and record.organization_id != organization_id:
+            return None
 
-        return rule
+        writable = {
+            "name",
+            "description",
+            "trigger_type",
+            "trigger_config",
+            "conditions",
+            "actions",
+            "status",
+            "priority",
+            "cooldown_seconds",
+            "max_triggers_per_hour",
+        }
+        if updates.keys() - writable:
+            raise ValueError("Unsupported automation rule update field")
+        normalized = deepcopy(updates)
+        for key, value in normalized.items():
+            if key == "conditions" and isinstance(value, ConditionGroup):
+                normalized[key] = value.to_dict()
+            elif key == "actions" and isinstance(value, list):
+                normalized[key] = [a.to_dict() if isinstance(a, Action) else a for a in value]
+            elif (
+                key == "trigger_type"
+                and isinstance(value, TriggerType)
+                or key == "status"
+                and isinstance(value, RuleStatus)
+            ):
+                normalized[key] = value.value
+        updated_at = datetime.now(UTC)
+        snapshot = {
+            item.name: deepcopy(getattr(record, item.name)) for item in fields(AutomationRule)
+        }
+        snapshot.update(normalized, updated_at=updated_at)
+        replacement = self._rule_from_record(SimpleNamespace(**snapshot))
+
+        for key, value in normalized.items():
+            setattr(record, key, value)
+        record.updated_at = updated_at
+        await self.db.flush()
+        await self.engine.register_rule(replacement)
+        return replacement
 
     async def delete_rule(self, rule_id: UUID, organization_id: UUID | None = None) -> bool:
         """Delete a rule. organization_id must match rule owner (A-5: IDOR fix)."""
@@ -1816,19 +1958,161 @@ class AutomationService:
         data: dict[str, Any] | None = None,
         organization_id: UUID | None = None,
     ) -> RuleExecution | None:
-        """Manually trigger a rule. A-7: verify org ownership before triggering."""
-        # DB-fallback lookup so "Run Now" works for rules not in this worker's cache
-        # (after restart / under multiple workers). get_rule warms the engine, so the
-        # subsequent engine.trigger_rule cache lookup succeeds.
-        rule = await self.get_rule(rule_id)
-        if not rule:
+        """Resolve current request scope, then revalidate committed execution state."""
+        from sqlalchemy import select
+
+        from app.models.automation import AutomationRuleRecord
+
+        statement = select(AutomationRuleRecord).where(AutomationRuleRecord.id == rule_id)
+        if organization_id is not None:
+            statement = statement.where(AutomationRuleRecord.organization_id == organization_id)
+        record = (await self.db.execute(statement)).scalar_one_or_none()
+        if record is None:
             return None
-        # A-7: an admin from another org must not be able to trigger foreign rules
-        # (get_rule does not filter by org, so the org check is enforced here)
-        if organization_id is not None and rule.organization_id != organization_id:
-            return None
-        return await self.engine.trigger_rule(rule_id, data)
+        # Keep explicit standalone engines useful without treating their cache as
+        # an ownership check. Production engines independently read committed data.
+        await self.engine.register_rule(deepcopy(self._rule_from_record(record)))
+        return await self.engine.trigger_rule(rule_id, data, organization_id=organization_id)
 
 
-# Global engine instance
-automation_engine = AutomationEngine()
+class _PersistentAutomationEngine(AutomationEngine):
+    """Production selection reads committed definitions, never cached authority.
+
+    The base engine remains a standalone evaluator. Both production construction
+    sites use this implementation; database failure never selects cached rules.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._execution_authority: ContextVar[AutomationRule | None] = ContextVar(
+            "automation_execution_authority", default=None
+        )
+
+    @staticmethod
+    def _definition(rule: AutomationRule) -> dict[str, Any]:
+        return {**rule.to_dict(), "created_by": str(rule.created_by) if rule.created_by else None}
+
+    async def _execute_rule(
+        self, rule: AutomationRule, trigger_data: dict[str, Any]
+    ) -> RuleExecution:
+        # ContextVars isolate concurrent and nested chains. Copying also prevents
+        # a request's cache edits from mutating this execution's authority.
+        token = self._execution_authority.set(deepcopy(rule))
+        try:
+            return await super()._execute_rule(rule, trigger_data)
+        finally:
+            self._execution_authority.reset(token)
+
+    async def _authorize_action(self) -> bool:
+        selected = self._execution_authority.get()
+        if selected is None:
+            return False
+        current = await self._persisted_rules(
+            organization_id=selected.organization_id, rule_id=selected.id
+        )
+        return len(current) == 1 and self._definition(current[0]) == self._definition(selected)
+
+    async def _persisted_rules(
+        self,
+        *,
+        organization_id: UUID | str | None,
+        rule_id: UUID | None = None,
+        event_only: bool = False,
+    ) -> list[AutomationRule]:
+        from sqlalchemy import select
+
+        from app.db.session import AsyncSessionLocal
+        from app.models.automation import AutomationRuleRecord
+        from app.models.core import Organization
+
+        if organization_id is None and rule_id is None:
+            return []
+        if organization_id is not None:
+            try:
+                organization_id = UUID(str(organization_id))
+            except (TypeError, ValueError):
+                return []
+        statement = (
+            select(AutomationRuleRecord)
+            .join(Organization, Organization.id == AutomationRuleRecord.organization_id)
+            .where(Organization.is_active.is_(True), Organization.deleted_at.is_(None))
+        )
+        if organization_id is not None:
+            statement = statement.where(AutomationRuleRecord.organization_id == organization_id)
+        if rule_id is not None:
+            statement = statement.where(AutomationRuleRecord.id == rule_id)
+        if event_only:
+            statement = statement.where(
+                AutomationRuleRecord.status == RuleStatus.ACTIVE.value,
+                AutomationRuleRecord.trigger_type == TriggerType.EVENT.value,
+            )
+        try:
+            async with AsyncSessionLocal() as db:
+                records = (await db.execute(statement)).scalars().all()
+                snapshots = []
+                for record in records:
+                    try:
+                        if (
+                            not isinstance(record.trigger_config, dict)
+                            or not isinstance(record.actions, list)
+                            or (
+                                record.conditions is not None
+                                and not isinstance(record.conditions, dict)
+                            )
+                        ):
+                            raise ValueError("Invalid definition shape")
+                        rule = AutomationService._rule_from_record(record)
+                        if (
+                            type(rule.priority) is not int
+                            or type(rule.cooldown_seconds) is not int
+                            or rule.cooldown_seconds < 0
+                            or type(rule.max_triggers_per_hour) is not int
+                            or rule.max_triggers_per_hour < 1
+                            or any(
+                                not isinstance(action.params, dict)
+                                or type(action.delay_seconds) is not int
+                                or action.delay_seconds < 0
+                                or type(action.continue_on_error) is not bool
+                                for action in rule.actions
+                            )
+                        ):
+                            raise ValueError("Invalid definition fields")
+                        snapshots.append(deepcopy(rule))
+                    except (AttributeError, KeyError, RecursionError, TypeError, ValueError):
+                        logger.warning("Ignored an invalid persisted automation definition")
+        except Exception:
+            logger.warning("Committed automation definitions unavailable; execution refused")
+            return []
+        return sorted(snapshots, key=lambda rule: (-rule.priority, str(rule.id)))
+
+    async def _event_rules(
+        self, event_type: str, organization_id: str | None
+    ) -> list[AutomationRule]:
+        rules = await self._persisted_rules(organization_id=organization_id, event_only=True)
+        matching = []
+        for rule in rules:
+            pattern = str(rule.trigger_config.get("event_pattern") or "").strip()
+            if pattern and self._matches_pattern(event_type, pattern):
+                # Diagnostics may remember a copy, but edits to that copy must
+                # never change an execution's isolated committed snapshot.
+                await self.register_rule(deepcopy(rule))
+                matching.append(rule)
+        return matching
+
+    async def trigger_rule(
+        self,
+        rule_id: UUID,
+        data: dict[str, Any] | None = None,
+        *,
+        organization_id: UUID | None = None,
+    ) -> RuleExecution | None:
+        rules = await self._persisted_rules(organization_id=organization_id, rule_id=rule_id)
+        if len(rules) != 1:
+            return None
+        # Explicit manual execution retains the existing disabled/paused-rule
+        # behavior. Event selection requires ACTIVE; neither path trusts cache.
+        return await self._execute_rule(rules[0], data or {})
+
+
+# Production event-bus and API engine: persistence is mandatory here.
+automation_engine = _PersistentAutomationEngine()

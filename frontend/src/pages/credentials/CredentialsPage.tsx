@@ -325,7 +325,7 @@ export default function CredentialsPage() {
     },
     onSuccess: (data) => {
       if (data.success) {
-        toast({ title: t('CredentialsPage.notifications.testSuccess.title'), description: t('CredentialsPage.notifications.testSuccess.message') });
+        toast({ title: t('CredentialsPage.notifications.testSuccess.title'), description: data.message || t('CredentialsPage.notifications.testSuccess.message') });
       } else {
         // Backend returns the diagnostic under `message` (CredentialTestResponse).
         toast({ title: t('CredentialsPage.notifications.testFailed.title'), description: data.message || t('CredentialsPage.notifications.testFailed.message'), variant: 'destructive' });

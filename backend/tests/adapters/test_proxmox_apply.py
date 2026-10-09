@@ -24,6 +24,7 @@ Adapter is mocked at the service-layer boundary
 (``_get_controller`` + ``_get_proxmox_adapter``) so no live Proxmox
 is contacted.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -71,14 +72,28 @@ def _make_vm_service() -> tuple[GatewayProxmoxVmService, MagicMock]:
     svc = GatewayProxmoxVmService(MagicMock())
     mock_adapter = MagicMock()
     for name in (
-        "create_vm", "update_vm_config", "delete_vm", "clone_vm",
-        "convert_to_template", "start_vm", "stop_vm", "shutdown_vm",
-        "reboot_vm", "suspend_vm", "resume_vm", "migrate_vm",
-        "remote_migrate_vm", "resize_vm_disk", "update_guest_cloudinit",
-        "regenerate_cloudinit", "agent_exec", "agent_file_write",
+        "create_vm",
+        "update_vm_config",
+        "delete_vm",
+        "clone_vm",
+        "convert_to_template",
+        "start_vm",
+        "stop_vm",
+        "shutdown_vm",
+        "reboot_vm",
+        "suspend_vm",
+        "resume_vm",
+        "migrate_vm",
+        "remote_migrate_vm",
+        "resize_vm_disk",
+        "update_guest_cloudinit",
+        "regenerate_cloudinit",
+        "agent_exec",
+        "agent_file_write",
     ):
         setattr(
-            mock_adapter, name,
+            mock_adapter,
+            name,
             AsyncMock(return_value=AdapterResult.ok(data={"upid": "TASK"})),
         )
     mock_adapter.disconnect = AsyncMock(return_value=None)
@@ -99,7 +114,8 @@ def _make_snapshot_service() -> tuple[GatewayProxmoxSnapshotService, MagicMock]:
     mock_adapter = MagicMock()
     for name in ("create_snapshot", "delete_snapshot", "rollback_snapshot"):
         setattr(
-            mock_adapter, name,
+            mock_adapter,
+            name,
             AsyncMock(return_value=AdapterResult.ok(data={"upid": "TASK"})),
         )
     mock_adapter.disconnect = AsyncMock(return_value=None)
@@ -119,11 +135,16 @@ def _make_backup_service() -> tuple[GatewayProxmoxBackupService, MagicMock]:
     svc = GatewayProxmoxBackupService(MagicMock())
     mock_adapter = MagicMock()
     for name in (
-        "create_backup_job", "update_backup_job", "delete_backup_job",
-        "run_backup", "restore_backup", "prune_backups",
+        "create_backup_job",
+        "update_backup_job",
+        "delete_backup_job",
+        "run_backup",
+        "restore_backup",
+        "prune_backups",
     ):
         setattr(
-            mock_adapter, name,
+            mock_adapter,
+            name,
             AsyncMock(return_value=AdapterResult.ok(data={"upid": "TASK"})),
         )
     mock_adapter.disconnect = AsyncMock(return_value=None)
@@ -178,7 +199,9 @@ class TestApplyTableCompleteness:
         ],
     )
     def test_snapshot_apply_table_has_pair(
-        self, feature: str, op: str,
+        self,
+        feature: str,
+        op: str,
     ) -> None:
         assert (feature, op) in SNAPSHOT_APPLY
 
@@ -194,7 +217,9 @@ class TestApplyTableCompleteness:
         ],
     )
     def test_backup_apply_table_has_pair(
-        self, feature: str, op: str,
+        self,
+        feature: str,
+        op: str,
     ) -> None:
         assert (feature, op) in BACKUP_APPLY
 
@@ -203,23 +228,18 @@ class TestApplyTableCompleteness:
 
 
 class TestVmDispatch:
-    @pytest.mark.asyncio
-    async def test_destroy_dispatches_with_force(self) -> None:
+    async def test_legacy_destroy_cannot_bypass_review(self) -> None:
         svc, adapter = _make_vm_service()
         change = _make_change(
-            "proxmox.vm.destroy", "delete",
+            "proxmox.vm.destroy",
+            "delete",
             target_id="100",
-            # destroy is CATASTROPHIC → the pre-flight gate requires confirmed=true.
             payload={"node": "pve", "vm_type": "qemu", "confirmed": True},
         )
-        applier = svc.build_applier(change)
-        await applier(change)
-        adapter.delete_vm.assert_awaited_once()
-        # destroy takes (node, vmid, vm_type, force=True)
-        args = adapter.delete_vm.await_args.args
-        kwargs = adapter.delete_vm.await_args.kwargs
-        assert args == ("pve", 100, "qemu")
-        assert kwargs.get("force") is True
+        with pytest.raises(HTTPException) as exc:
+            await svc.build_applier(change)(change)
+        assert exc.value.status_code == 400
+        adapter.delete_vm.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_destroy_without_confirmation_is_blocked(self) -> None:
@@ -227,9 +247,16 @@ class TestVmDispatch:
         # refused (409) BEFORE the adapter is ever called.
         svc, adapter = _make_vm_service()
         change = _make_change(
-            "proxmox.vm.destroy", "delete",
+            "proxmox.vm.destroy",
+            "delete",
             target_id="100",
-            payload={"node": "pve", "vm_type": "qemu"},  # no confirmed
+            payload={
+                "deletion_version": 1,
+                "node": "pve",
+                "vmid": 100,
+                "vm_type": "qemu",
+                "expected_digest": "a" * 40,
+            },  # no confirmed
         )
         applier = svc.build_applier(change)
         with pytest.raises(HTTPException) as exc:
@@ -241,7 +268,8 @@ class TestVmDispatch:
     async def test_start_dispatches(self) -> None:
         svc, adapter = _make_vm_service()
         change = _make_change(
-            "proxmox.vm.start", "create",
+            "proxmox.vm.start",
+            "create",
             target_id="100",
             payload={"node": "pve"},
         )
@@ -253,7 +281,8 @@ class TestVmDispatch:
     async def test_missing_node_raises_400(self) -> None:
         svc, _ = _make_vm_service()
         change = _make_change(
-            "proxmox.vm.destroy", "delete",
+            "proxmox.vm.destroy",
+            "delete",
             target_id="100",
             payload={},  # no "node"
         )
@@ -266,7 +295,8 @@ class TestVmDispatch:
     async def test_unknown_feature_raises_400(self) -> None:
         svc, _ = _make_vm_service()
         change = _make_change(
-            "proxmox.vm.not_real", "create",
+            "proxmox.vm.not_real",
+            "create",
             target_id="100",
             payload={"node": "pve"},
         )
@@ -286,29 +316,37 @@ class TestGuestFilePathValidation:
     defense in depth against an admin overwriting /etc/sudoers via
     the staging pipeline."""
 
-    @pytest.mark.parametrize("good_path", [
-        "/home/user/config.json",
-        "/var/www/app/settings.ini",
-        "/opt/myapp/run.sh",
-        "/tmp/scratch",
-    ])
+    @pytest.mark.parametrize(
+        "good_path",
+        [
+            "/home/user/config.json",
+            "/var/www/app/settings.ini",
+            "/opt/myapp/run.sh",
+            "/tmp/scratch",
+        ],
+    )
     def test_allows_typical_application_paths(self, good_path: str) -> None:
         # Should NOT raise.
         _validate_guest_file_path(good_path)
 
-    @pytest.mark.parametrize("bad_path,expect_in_detail", [
-        ("/etc/shadow", "/etc/shadow"),
-        ("/etc/sudoers", "/etc/sudoers"),
-        ("/etc/sudoers.d/00-evil", "/etc/sudoers"),
-        ("/root/.ssh/authorized_keys", "/root/.ssh/"),
-        ("/etc/ssh/sshd_config", "/etc/ssh/"),
-        ("/proc/self/mem", "/proc/"),
-        ("/sys/class/net", "/sys/"),
-        ("/dev/sda", "/dev/"),
-        ("/boot/initrd", "/boot/"),
-    ])
+    @pytest.mark.parametrize(
+        "bad_path,expect_in_detail",
+        [
+            ("/etc/shadow", "/etc/shadow"),
+            ("/etc/sudoers", "/etc/sudoers"),
+            ("/etc/sudoers.d/00-evil", "/etc/sudoers"),
+            ("/root/.ssh/authorized_keys", "/root/.ssh/"),
+            ("/etc/ssh/sshd_config", "/etc/ssh/"),
+            ("/proc/self/mem", "/proc/"),
+            ("/sys/class/net", "/sys/"),
+            ("/dev/sda", "/dev/"),
+            ("/boot/initrd", "/boot/"),
+        ],
+    )
     def test_denylist_rejected(
-        self, bad_path: str, expect_in_detail: str,
+        self,
+        bad_path: str,
+        expect_in_detail: str,
     ) -> None:
         with pytest.raises(HTTPException) as exc:
             _validate_guest_file_path(bad_path)
@@ -351,7 +389,8 @@ class TestGuestFilePathValidation:
         """
         svc, adapter = _make_vm_service()
         change = _make_change(
-            "proxmox.vm.guest_agent_file_write", "create",
+            "proxmox.vm.guest_agent_file_write",
+            "create",
             target_id="100",
             payload={
                 "node": "pve",
@@ -379,7 +418,8 @@ class TestSnapshotDispatch:
         # Snapshot service: vmid lives in payload (not target_id);
         # target_id holds the snapname on delete/rollback.
         change = _make_change(
-            "proxmox.snapshot.create", "create",
+            "proxmox.snapshot.create",
+            "create",
             payload={
                 "node": "pve",
                 "vmid": 100,
@@ -397,7 +437,8 @@ class TestSnapshotDispatch:
         svc, adapter = _make_snapshot_service()
         # rollback is CATASTROPHIC → pre-flight gate requires confirmed=true.
         change = _make_change(
-            "proxmox.snapshot.rollback", "create",
+            "proxmox.snapshot.rollback",
+            "create",
             target_id="preupgrade",
             payload={
                 "node": "pve",
@@ -416,7 +457,8 @@ class TestSnapshotDispatch:
         # refused (409) before the adapter is touched unless confirmed=true.
         svc, adapter = _make_snapshot_service()
         change = _make_change(
-            "proxmox.snapshot.rollback", "create",
+            "proxmox.snapshot.rollback",
+            "create",
             target_id="preupgrade",
             payload={"node": "pve", "vmid": 100, "vm_type": "qemu"},  # no confirmed
         )
@@ -431,7 +473,8 @@ class TestSnapshotDispatch:
         # delete is IRREVERSIBLE (removes the only restore path) → the
         # pre-flight gate now requires confirmed=true before dispatch.
         change = _make_change(
-            "proxmox.snapshot.delete", "delete",
+            "proxmox.snapshot.delete",
+            "delete",
             target_id="old",
             payload={
                 "node": "pve",
@@ -453,7 +496,8 @@ class TestBackupDispatch:
     async def test_run_backup_dispatches(self) -> None:
         svc, adapter = _make_backup_service()
         change = _make_change(
-            "proxmox.backup.run", "create",
+            "proxmox.backup.run",
+            "create",
             payload={
                 "node": "pve",
                 "vmid": 100,  # single int per the dispatch signature
@@ -469,7 +513,8 @@ class TestBackupDispatch:
     async def test_restore_dispatches(self) -> None:
         svc, adapter = _make_backup_service()
         change = _make_change(
-            "proxmox.backup.restore", "create",
+            "proxmox.backup.restore",
+            "create",
             payload={
                 "node": "pve",
                 "vmid": 100,
@@ -487,7 +532,8 @@ class TestBackupDispatch:
     async def test_prune_dispatches(self) -> None:
         svc, adapter = _make_backup_service()
         change = _make_change(
-            "proxmox.backup.prune", "create",
+            "proxmox.backup.prune",
+            "create",
             payload={
                 "node": "pve",
                 "storage": "local",

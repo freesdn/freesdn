@@ -10,6 +10,7 @@ import asyncio
 import ipaddress
 import logging
 import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -307,22 +308,22 @@ def _engine_conn(**kw):
 
 
 class TestNegotiatorClusterGuards:
-    """Cluster-wide at-most-once + cooldown via Redis, with single-instance fallback."""
+    """Shared event/cooldown claims refuse when coordination is unavailable."""
 
-    async def test_claim_event_fail_open_without_redis(self) -> None:
+    async def test_claim_event_refuses_without_redis(self) -> None:
         from app.core.fabric.negotiator import Negotiator
 
         n = Negotiator()
-        n._redis = None  # probed, unavailable
+        n._get_redis = AsyncMock(return_value=None)
         ev = type("E", (), {"id": "e1"})()
-        assert await n._claim_event(_engine_conn(), ev) is True
+        assert await n._claim_event(_engine_conn(), ev) is False
 
-    async def test_claim_event_without_event_id_proceeds(self) -> None:
+    async def test_claim_event_without_event_id_refuses(self) -> None:
         from app.core.fabric.negotiator import Negotiator
 
         n = Negotiator()
         n._redis = None
-        assert await n._claim_event(_engine_conn(), type("E", (), {})()) is True
+        assert await n._claim_event(_engine_conn(), type("E", (), {})()) is False
 
     async def test_claim_event_dedupes_across_workers(self) -> None:
         from app.core.fabric.negotiator import Negotiator
@@ -343,22 +344,26 @@ class TestNegotiatorClusterGuards:
         assert await n._claim_event(conn, ev) is True  # first worker claims
         assert await n._claim_event(conn, ev) is False  # second worker, same event → skip
 
-    async def test_cooldown_inprocess_fallback(self) -> None:
+    async def test_cooldown_refuses_without_shared_coordination(self) -> None:
         from app.core.fabric.negotiator import Negotiator
 
         n = Negotiator()
-        n._redis = None
+        n._get_redis = AsyncMock(return_value=None)
         conn = _engine_conn(cooldown_seconds=60)
-        assert await n._cooldown_ok(conn) is True  # first fire opens the window
-        assert await n._cooldown_ok(conn) is False  # still cooling down
+        assert await n._cooldown_ok(conn) is False
+        assert await n._cooldown_ok(conn) is False
 
-    def test_remove_connection_prunes_last_fire(self) -> None:
-        from app.core.fabric.negotiator import Negotiator
+    async def test_remove_connection_does_not_release_shared_claims(self) -> None:
+        from tests.core.fabric_fakes import coordinated_negotiator
 
-        n = Negotiator()
-        n._last_fire["c1"] = 1.0
-        n.remove_connection("c1")
-        assert "c1" not in n._last_fire
+        n = coordinated_negotiator()
+        conn = _engine_conn()
+        n.add_connection(conn)
+        event = type("E", (), {"id": "owned-event"})()
+        assert await n._claim_event(conn, event)
+        n.remove_connection(conn.id)
+        assert n.list_connections() == []
+        assert not await n._claim_event(conn, event)
 
     async def test_detached_dispatch_runs_handle_event_off_the_bus_budget(
         self, chain_pool, monkeypatch

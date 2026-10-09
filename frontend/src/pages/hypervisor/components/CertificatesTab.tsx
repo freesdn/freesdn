@@ -6,7 +6,7 @@
  */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,20 +15,15 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/empty-state';
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { DestructiveConfirmDialog } from '@/components/ui/destructive-confirm-dialog';
-import { Shield, Upload, RefreshCw } from 'lucide-react';
+import { Shield, Upload, RefreshCw, Trash2 } from 'lucide-react';
 import { hypervisorApi } from '@/lib/api';
-import { useToast } from '@/hooks/use-toast';
+import { CertificateOperationDialog } from './dialogs/CertificateOperationDialog';
 import type { HypervisorNode } from '@/lib/api';
 
 interface CertificatesTabProps {
   controllerId: string;
   nodes: HypervisorNode[];
+  onTracked: () => void;
 }
 
 interface CertInfo {
@@ -46,13 +41,13 @@ interface CertInfo {
 function formatCertDate(val: string | number | undefined): string {
   if (!val) return '--';
   const d = typeof val === 'number' ? new Date(val * 1000) : new Date(val);
-  return d.toLocaleDateString();
+  return Number.isFinite(d.getTime()) ? d.toLocaleDateString() : '--';
 }
 
 function daysUntilExpiry(val: string | number | undefined): number | null {
   if (!val) return null;
   const d = typeof val === 'number' ? new Date(val * 1000) : new Date(val);
-  return Math.floor((d.getTime() - Date.now()) / 86400000);
+  return Number.isFinite(d.getTime()) ? Math.floor((d.getTime() - Date.now()) / 86400000) : null;
 }
 
 function expiryBadge(val: string | number | undefined, t: (key: string, options?: Record<string, unknown>) => string) {
@@ -63,17 +58,9 @@ function expiryBadge(val: string | number | undefined, t: (key: string, options?
   return <Badge variant="secondary">{t('CertificatesTab.status.daysLeft', { days })}</Badge>;
 }
 
-export function CertificatesTab({ controllerId, nodes }: CertificatesTabProps) {
+export function CertificatesTab({ controllerId, nodes, onTracked }: CertificatesTabProps) {
   const { t } = useTranslation('hypervisor');
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [uploadDialog, setUploadDialog] = useState<string | null>(null);
-  // Typed-confirm target for ACME renew (replaces native confirm()).
-  const [renewTarget, setRenewTarget] = useState<string | null>(null);
-  const [certPem, setCertPem] = useState('');
-  const [keyPem, setKeyPem] = useState('');
-  const [force, setForce] = useState(false);
-  const [restart, setRestart] = useState(true);
+  const [intent, setIntent] = useState<{ node: string; action: 'upload' | 'delete' | 'renew' } | null>(null);
 
   // Fetch certs for all nodes
   const nodeQueryResults = useQueries({
@@ -95,37 +82,6 @@ export function CertificatesTab({ controllerId, nodes }: CertificatesTabProps) {
       allCerts.push({ ...cert, _node: nodes[i].node });
     }
   }
-
-  const renewMutation = useMutation({
-    mutationFn: (node: string) => hypervisorApi.renewAcmeCertificate(controllerId, node),
-    onSuccess: (_data, node) => {
-      toast({ title: t('CertificatesTab.toast.renewStarted.title'), description: t('CertificatesTab.toast.renewStarted.description', { node }) });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'certificates', controllerId, node] });
-    },
-    onError: () => {
-      toast({ title: t('CertificatesTab.toast.renewFailed.title'), description: t('CertificatesTab.toast.renewFailed.description'), variant: 'destructive' });
-    },
-  });
-
-  const uploadMutation = useMutation({
-    mutationFn: (node: string) =>
-      hypervisorApi.uploadCustomCertificate(controllerId, node, {
-        certificates: certPem,
-        key: keyPem,
-        force,
-        restart,
-      }),
-    onSuccess: (_data, node) => {
-      toast({ title: t('CertificatesTab.toast.uploadSuccess.title'), description: t('CertificatesTab.toast.uploadSuccess.description', { node }) });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'certificates', controllerId, node] });
-      setUploadDialog(null);
-      setCertPem('');
-      setKeyPem('');
-    },
-    onError: () => {
-      toast({ title: t('CertificatesTab.toast.uploadFailed.title'), description: t('CertificatesTab.toast.uploadFailed.description'), variant: 'destructive' });
-    },
-  });
 
   if (isLoading) {
     return (
@@ -182,19 +138,18 @@ export function CertificatesTab({ controllerId, nodes }: CertificatesTabProps) {
                     <TableCell>{expiryBadge(c.notafter, t)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
+                        {c.filename === 'pveproxy-ssl.pem' && <><Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setRenewTarget(c._node)}
-                          disabled={renewMutation.isPending}
+                          onClick={() => setIntent({ node: c._node, action: 'renew' })}
                         >
                           <RefreshCw className="h-3 w-3 mr-1" />
                           {t('CertificatesTab.actions.renew')}
-                        </Button>
+                        </Button><Button variant="ghost" size="sm" onClick={() => setIntent({ node: c._node, action: 'delete' })}><Trash2 className="h-3 w-3 mr-1" />{t('CertificateOperationDialog.remove')}</Button></>}
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setUploadDialog(c._node)}
+                          onClick={() => setIntent({ node: c._node, action: 'upload' })}
                         >
                           <Upload className="h-3 w-3 mr-1" />
                           {t('CertificatesTab.actions.upload')}
@@ -210,77 +165,7 @@ export function CertificatesTab({ controllerId, nodes }: CertificatesTabProps) {
         </CardContent>
       </Card>
 
-      {/* Upload Custom Certificate Dialog */}
-      <Dialog open={!!uploadDialog} onOpenChange={(open) => {
-        setUploadDialog(open ? uploadDialog : null);
-        if (!open) {
-          setCertPem('');
-          setKeyPem('');
-        }
-      }}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{t('CertificatesTab.dialog.title')}</DialogTitle>
-            <DialogDescription>{t('CertificatesTab.dialog.description', { node: uploadDialog })}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="cert-pem">{t('CertificatesTab.dialog.certLabel')}</Label>
-              <textarea
-                id="cert-pem"
-                className="mt-1 w-full rounded-md border bg-transparent px-3 py-2 text-sm font-mono min-h-[100px]"
-                value={certPem}
-                onChange={(e) => setCertPem(e.target.value)}
-                placeholder="-----BEGIN CERTIFICATE-----"
-              />
-            </div>
-            <div>
-              <Label htmlFor="key-pem">{t('CertificatesTab.dialog.keyLabel')}</Label>
-              <textarea
-                id="key-pem"
-                className="mt-1 w-full rounded-md border bg-transparent px-3 py-2 text-sm font-mono min-h-[100px]"
-                value={keyPem}
-                onChange={(e) => setKeyPem(e.target.value)}
-                placeholder="-----BEGIN PRIVATE KEY-----"
-              />
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Checkbox id="cert-force" checked={force} onCheckedChange={(v) => setForce(!!v)} />
-                <Label htmlFor="cert-force" className="text-sm">{t('CertificatesTab.dialog.forceOverwrite')}</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox id="cert-restart" checked={restart} onCheckedChange={(v) => setRestart(!!v)} />
-                <Label htmlFor="cert-restart" className="text-sm">{t('CertificatesTab.dialog.restartServices')}</Label>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setUploadDialog(null)}>{t('CertificatesTab.actions.cancel')}</Button>
-            <Button
-              disabled={!certPem || !keyPem || uploadMutation.isPending}
-              onClick={() => { if (uploadDialog) uploadMutation.mutate(uploadDialog); }}
-            >
-              {t('CertificatesTab.actions.uploadCertificate')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Typed-confirm dialog for ACME renew (replaces native confirm()) */}
-      <DestructiveConfirmDialog
-        open={renewTarget !== null}
-        onOpenChange={(o) => { if (!o) setRenewTarget(null); }}
-        title={t('CertificatesTab.actions.renew')}
-        description={t('CertificatesTab.confirm.renew', { node: renewTarget ?? '' })}
-        confirmationText={renewTarget ?? ''}
-        confirmLabel={t('CertificatesTab.actions.renew')}
-        isPending={renewMutation.isPending}
-        onConfirm={() => {
-          if (renewTarget) renewMutation.mutate(renewTarget);
-          setRenewTarget(null);
-        }}
-      />
+      {intent && <CertificateOperationDialog controllerId={controllerId} node={intent.node} action={intent.action} onClose={() => setIntent(null)} onTracked={onTracked} />}
     </div>
   );
 }

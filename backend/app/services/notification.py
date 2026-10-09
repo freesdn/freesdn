@@ -23,6 +23,7 @@ import hmac
 import json
 import logging
 import re
+import ssl
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -39,6 +40,18 @@ from uuid import UUID, uuid4
 _EMAIL_HEADER_INJECTION_PATTERN = re.compile(r"[\r\n\x00]")
 
 
+class _NotificationInputError(ValueError):
+    """An input refusal with a fixed diagnostic, never the supplied value."""
+
+    def __init__(self, reason: str):
+        messages = {
+            "type": "Invalid email header value: expected a string",
+            "injection": "Email header value contains newline or NUL byte (header injection attempt)",
+            "address": "Invalid email address",
+        }
+        super().__init__(messages.get(reason, "Invalid notification input (config error)"))
+
+
 def _sanitize_header_value(value: str, max_length: int = 998) -> str:
     """Sanitize a value for use in an email header.
 
@@ -47,11 +60,9 @@ def _sanitize_header_value(value: str, max_length: int = 998) -> str:
     RFC 5322 line length limit).
     """
     if not isinstance(value, str):
-        raise ValueError(f"Email header value must be a string, got {type(value).__name__}")
+        raise _NotificationInputError("type")
     if _EMAIL_HEADER_INJECTION_PATTERN.search(value):
-        raise ValueError(
-            "Email header value contains newline or NUL byte (header injection attempt)"
-        )
+        raise _NotificationInputError("injection")
     return value[:max_length]
 
 
@@ -69,18 +80,18 @@ def _validate_email_address(address: str) -> str:
 
     _name, addr = parseaddr(sanitized)
     if not addr or "@" not in addr:
-        raise ValueError(f"Invalid email address: {address!r}")
+        raise _NotificationInputError("address")
     # Re-check the parsed components for injection, just in case parseaddr
     # ever returns unsanitized content.
     if _EMAIL_HEADER_INJECTION_PATTERN.search(addr):
-        raise ValueError("Email address contains newline or NUL byte (header injection attempt)")
+        raise _NotificationInputError("injection")
     return addr
 
 
 import jinja2
 from jinja2 import BaseLoader, select_autoescape
 from jinja2.sandbox import SandboxedEnvironment
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select, text
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -241,6 +252,9 @@ class DeliveryResult:
     # exist and ``_track_delivery`` raised AttributeError on every send,
     # silently breaking delivery tracking.
     provider: str | None = None
+    # Identity of this attempt's tracking row, assigned only after its flush.
+    # This is not proof of transaction commit or final recipient delivery.
+    delivery_id: str | None = None
 
 
 @dataclass
@@ -412,6 +426,75 @@ _SMTP_TIMEOUT_SECONDS = 10
 _SMTP_TOTAL_TIMEOUT_SECONDS = 30
 
 
+def _safe_provider_http_error(status_code: int) -> str:
+    """Keep the protocol status without copying URLs or vendor response bodies."""
+    if type(status_code) is not int or not 100 <= status_code <= 599:
+        return "Notification provider returned an invalid HTTP status"
+    message = f"Notification provider returned HTTP {status_code}"
+    if status_code == 429:
+        return message + " (rate limit)"
+    if status_code == 401:
+        return message + " (unauthorized)"
+    if status_code == 403:
+        return message + " (forbidden)"
+    if status_code == 404:
+        return message + " (not found)"
+    if 400 <= status_code < 500:
+        return message + " (bad request)"
+    return message
+
+
+def _safe_provider_error(error: Exception) -> str:
+    """Map known failure types to fixed diagnostics, without exception text.
+
+    Transport exceptions and server replies can contain credentials, message
+    content or private endpoint addresses. Only local validation messages and
+    bounded numeric protocol codes may cross this diagnostic boundary.
+    """
+    import smtplib
+
+    import httpx
+
+    if type(error) is _NotificationInputError:
+        return str(error)
+    if isinstance(error, httpx.HTTPStatusError):
+        return _safe_provider_http_error(error.response.status_code)
+    if isinstance(error, smtplib.SMTPResponseException):
+        code = error.smtp_code
+        if type(code) is int and 400 <= code <= 599:
+            kind = "temporary" if code < 500 else "permanent"
+            return f"SMTP {kind} failure (code {code})"
+        return "SMTP request failed"
+    if isinstance(error, smtplib.SMTPRecipientsRefused):
+        replies = error.recipients
+        codes = (
+            [
+                reply[0]
+                for reply in replies.values()
+                if isinstance(reply, (tuple, list))
+                and len(reply) == 2
+                and type(reply[0]) is int
+                and 400 <= reply[0] <= 599
+            ]
+            if isinstance(replies, dict)
+            else []
+        )
+        if codes and len(codes) == len(replies) and all(code >= 500 for code in codes):
+            return "SMTP permanent failure (recipients refused)"
+        return "SMTP temporary failure (recipients unavailable)"
+    if isinstance(error, ssl.SSLCertVerificationError):
+        return "Notification TLS certificate verification failed (config error)"
+    if isinstance(error, json.JSONDecodeError):
+        return "Notification provider returned invalid JSON"
+    if isinstance(error, ValueError):
+        return "Notification configuration error (config error)"
+    if isinstance(error, (TimeoutError, httpx.TimeoutException)):
+        return "Notification provider timed out"
+    if isinstance(error, (OSError, httpx.RequestError)):
+        return "Notification provider unreachable"
+    return "Notification provider request failed"
+
+
 class SMTPProvider(NotificationProvider):
     """SMTP email provider."""
 
@@ -485,7 +568,7 @@ class SMTPProvider(NotificationProvider):
             def _deliver() -> None:
                 with smtplib.SMTP(self.host, self.port, timeout=_SMTP_TIMEOUT_SECONDS) as server:
                     if self.use_tls:
-                        server.starttls()
+                        server.starttls(context=ssl.create_default_context())
                     if self.username and self.password:
                         server.login(self.username, self.password)
                     server.send_message(
@@ -509,12 +592,12 @@ class SMTPProvider(NotificationProvider):
                 provider=self.provider_type,
             )
         except Exception as e:
-            logger.error("SMTP delivery failed: %s", e)
+            logger.error("SMTP delivery failed: %s", _safe_provider_error(e))
             return DeliveryResult(
                 success=False,
                 channel=self.channel,
                 status=DeliveryStatus.FAILED,
-                error=str(e),
+                error=_safe_provider_error(e),
                 provider=self.provider_type,
             )
 
@@ -526,7 +609,7 @@ class SMTPProvider(NotificationProvider):
             def _probe() -> None:
                 with smtplib.SMTP(self.host, self.port, timeout=_SMTP_TIMEOUT_SECONDS) as server:
                     if self.use_tls:
-                        server.starttls()
+                        server.starttls(context=ssl.create_default_context())
                     if self.username and self.password:
                         server.login(self.username, self.password)
 
@@ -534,7 +617,7 @@ class SMTPProvider(NotificationProvider):
             await asyncio.wait_for(asyncio.to_thread(_probe), timeout=_SMTP_TOTAL_TIMEOUT_SECONDS)
             return True, "SMTP connection successful"
         except Exception as e:
-            return False, f"SMTP error: {e}"
+            return False, f"SMTP error: {_safe_provider_error(e)}"
 
 
 class GmailOAuthProvider(NotificationProvider):
@@ -697,12 +780,12 @@ class GmailOAuthProvider(NotificationProvider):
                 provider=self.provider_type,
             )
         except Exception as e:
-            logger.error("Gmail API delivery failed for %s: %s", self.from_email, type(e).__name__)
+            logger.error("Gmail API delivery failed: %s", _safe_provider_error(e))
             return DeliveryResult(
                 success=False,
                 channel=self.channel,
                 status=DeliveryStatus.FAILED,
-                error=str(e),
+                error=_safe_provider_error(e),
                 provider=self.provider_type,
             )
 
@@ -725,7 +808,7 @@ class GmailOAuthProvider(NotificationProvider):
             email = profile.get("emailAddress", "unknown")
             return True, f"Gmail OAuth2 verified — authenticated as {email}"
         except Exception as e:
-            return False, f"Gmail OAuth2 error: {type(e).__name__}: {e}"
+            return False, f"Gmail OAuth2 error: {_safe_provider_error(e)}"
 
 
 class SlackProvider(NotificationProvider):
@@ -789,22 +872,22 @@ class SlackProvider(NotificationProvider):
                 message_id=str(uuid4()),
                 provider=self.provider_type,
             )
-        except ValueError as e:
-            logger.warning("Slack webhook URL blocked (SSRF): %s", e)
+        except ValueError:
+            logger.warning("Slack webhook URL blocked (SSRF)")
             return DeliveryResult(
                 success=False,
                 channel=self.channel,
                 status=DeliveryStatus.FAILED,
-                error=f"Webhook URL blocked (SSRF): {e}",
+                error="Webhook URL blocked (SSRF)",
                 provider=self.provider_type,
             )
         except Exception as e:
-            logger.error("Slack delivery failed: %s", e)
+            logger.error("Slack delivery failed: %s", _safe_provider_error(e))
             return DeliveryResult(
                 success=False,
                 channel=self.channel,
                 status=DeliveryStatus.FAILED,
-                error=str(e),
+                error=_safe_provider_error(e),
                 provider=self.provider_type,
             )
 
@@ -820,11 +903,11 @@ class SlackProvider(NotificationProvider):
             )
             if response.status_code == 200:
                 return True, "Slack webhook verified"
-            return False, f"Slack returned: {response.text}"
-        except ValueError as e:
-            return False, f"Slack webhook URL blocked (SSRF): {e}"
+            return False, f"Slack did not accept verification (HTTP {response.status_code})"
+        except ValueError:
+            return False, "Slack webhook URL blocked (SSRF)"
         except Exception as e:
-            return False, f"Slack error: {e}"
+            return False, f"Slack error: {_safe_provider_error(e)}"
 
 
 class WebhookProvider(NotificationProvider):
@@ -892,22 +975,22 @@ class WebhookProvider(NotificationProvider):
                 provider_response={"status_code": response.status_code},
                 provider=self.provider_type,
             )
-        except ValueError as e:
-            logger.warning("Webhook URL blocked (SSRF): %s", e)
+        except ValueError:
+            logger.warning("Webhook URL blocked (SSRF)")
             return DeliveryResult(
                 success=False,
                 channel=self.channel,
                 status=DeliveryStatus.FAILED,
-                error=f"Webhook URL blocked (SSRF): {e}",
+                error="Webhook URL blocked (SSRF)",
                 provider=self.provider_type,
             )
         except Exception as e:
-            logger.error("Webhook delivery failed: %s", e)
+            logger.error("Webhook delivery failed: %s", _safe_provider_error(e))
             return DeliveryResult(
                 success=False,
                 channel=self.channel,
                 status=DeliveryStatus.FAILED,
-                error=str(e),
+                error=_safe_provider_error(e),
                 provider=self.provider_type,
             )
 
@@ -931,10 +1014,10 @@ class WebhookProvider(NotificationProvider):
         try:
             # DNS-rebinding-safe request
             response = await safe_http_request("OPTIONS", self.url, timeout=15.0)
-        except ValueError as e:
-            return False, f"Webhook URL blocked (SSRF): {e}"
+        except ValueError:
+            return False, "Webhook URL blocked (SSRF)"
         except Exception as e:
-            return False, f"Webhook error: {e}"
+            return False, f"Webhook error: {_safe_provider_error(e)}"
 
         code = response.status_code
         if code < 400 or code in (405, 501):
@@ -1015,22 +1098,22 @@ class _PushProvider(NotificationProvider):
                 provider_response={"status_code": response.status_code},
                 provider=self.provider_type,
             )
-        except ValueError as e:
-            logger.warning("%s URL blocked (SSRF): %s", self.provider_type, e)
+        except ValueError:
+            logger.warning("%s URL blocked (SSRF)", self.provider_type)
             return DeliveryResult(
                 success=False,
                 channel=self.channel,
                 status=DeliveryStatus.FAILED,
-                error=f"URL blocked (SSRF): {e}",
+                error="URL blocked (SSRF)",
                 provider=self.provider_type,
             )
         except Exception as e:
-            logger.error("%s delivery failed: %s", self.provider_type, e)
+            logger.error("%s delivery failed: %s", self.provider_type, _safe_provider_error(e))
             return DeliveryResult(
                 success=False,
                 channel=self.channel,
                 status=DeliveryStatus.FAILED,
-                error=str(e),
+                error=_safe_provider_error(e),
                 provider=self.provider_type,
             )
 
@@ -1221,22 +1304,22 @@ class TeamsProvider(NotificationProvider):
                 message_id=str(uuid4()),
                 provider=self.provider_type,
             )
-        except ValueError as e:
-            logger.warning("Teams webhook URL blocked (SSRF): %s", e)
+        except ValueError:
+            logger.warning("Teams webhook URL blocked (SSRF)")
             return DeliveryResult(
                 success=False,
                 channel=self.channel,
                 status=DeliveryStatus.FAILED,
-                error=f"Webhook URL blocked (SSRF): {e}",
+                error="Webhook URL blocked (SSRF)",
                 provider=self.provider_type,
             )
         except Exception as e:
-            logger.error("Teams delivery failed: %s", e)
+            logger.error("Teams delivery failed: %s", _safe_provider_error(e))
             return DeliveryResult(
                 success=False,
                 channel=self.channel,
                 status=DeliveryStatus.FAILED,
-                error=str(e),
+                error=_safe_provider_error(e),
                 provider=self.provider_type,
             )
 
@@ -1257,10 +1340,10 @@ class TeamsProvider(NotificationProvider):
             if response.status_code in (200, 202):
                 return True, "Teams webhook verified"
             return False, f"Teams returned HTTP {response.status_code}"
-        except ValueError as e:
-            return False, f"Teams webhook URL blocked (SSRF): {e}"
+        except ValueError:
+            return False, "Teams webhook URL blocked (SSRF)"
         except Exception as e:
-            return False, f"Teams error: {e}"
+            return False, f"Teams error: {_safe_provider_error(e)}"
 
 
 # =============================================================================
@@ -1353,7 +1436,9 @@ class _HTTPEmailProvider(NotificationProvider):
         try:
             request_kwargs = self._body(recipient, payload)
         except ValueError as e:
-            return self._failure(f"{self.provider_type} rejected the message: {e}")
+            return self._failure(
+                f"{self.provider_type} rejected the message: {_safe_provider_error(e)}"
+            )
 
         try:
             response = await safe_http_request(
@@ -1363,19 +1448,16 @@ class _HTTPEmailProvider(NotificationProvider):
                 timeout=30.0,
                 **request_kwargs,
             )
-        except ValueError as e:
-            return self._failure(f"{self.provider_type} endpoint blocked (SSRF): {e}")
+        except ValueError:
+            return self._failure(f"{self.provider_type} endpoint blocked (SSRF)")
         except Exception as e:
-            logger.error("%s delivery failed: %s", self.provider_type, e)
-            return self._failure(str(e))
+            logger.error("%s delivery failed: %s", self.provider_type, _safe_provider_error(e))
+            return self._failure(_safe_provider_error(e))
 
         if response.status_code not in self.accepted_statuses:
-            # A 4xx here is a real refusal -- unverified sender, bad key, over
-            # quota -- and the operator needs the vendor's own words for it.
-            return self._failure(
-                f"{self.provider_type} returned HTTP {response.status_code}: "
-                f"{self._response_text(response)[:500]}"
-            )
+            # Keep the refusal code and retry class. Vendor reply bodies can
+            # reflect credentials or message content and are not diagnostics.
+            return self._failure(_safe_provider_http_error(response.status_code))
 
         return DeliveryResult(
             success=True,
@@ -1385,13 +1467,6 @@ class _HTTPEmailProvider(NotificationProvider):
             provider_response={"status_code": response.status_code},
             provider=self.provider_type,
         )
-
-    @staticmethod
-    def _response_text(response: Any) -> str:
-        try:
-            return response.text or ""
-        except Exception:
-            return ""
 
     def _message_id(self, response: Any) -> str:
         """The vendor's own id when it gives one, so a bounce can be traced."""
@@ -1431,10 +1506,10 @@ class _HTTPEmailProvider(NotificationProvider):
         method, url, kwargs = probe
         try:
             response = await safe_http_request(method, url, timeout=15.0, **kwargs)
-        except ValueError as e:
-            return False, f"Endpoint blocked (SSRF): {e}"
+        except ValueError:
+            return False, "Endpoint blocked (SSRF)"
         except Exception as e:
-            return False, f"{self.provider_type} error: {e}"
+            return False, f"{self.provider_type} error: {_safe_provider_error(e)}"
         if response.status_code in (200, 201, 202, 204):
             return True, f"{self.provider_type} credentials verified"
         if response.status_code in (401, 403):
@@ -1806,21 +1881,20 @@ class AmazonSESProvider(_HTTPEmailProvider):
         try:
             kwargs = self._body(recipient, payload)
         except ValueError as e:
-            return self._failure(f"{self.provider_type} rejected the message: {e}")
+            return self._failure(
+                f"{self.provider_type} rejected the message: {_safe_provider_error(e)}"
+            )
 
         try:
             response = await safe_http_request("POST", self._endpoint(), timeout=30.0, **kwargs)
-        except ValueError as e:
-            return self._failure(f"{self.provider_type} endpoint blocked (SSRF): {e}")
+        except ValueError:
+            return self._failure(f"{self.provider_type} endpoint blocked (SSRF)")
         except Exception as e:
-            logger.error("%s delivery failed: %s", self.provider_type, e)
-            return self._failure(str(e))
+            logger.error("%s delivery failed: %s", self.provider_type, _safe_provider_error(e))
+            return self._failure(_safe_provider_error(e))
 
         if response.status_code not in self.accepted_statuses:
-            return self._failure(
-                f"{self.provider_type} returned HTTP {response.status_code}: "
-                f"{self._response_text(response)[:500]}"
-            )
+            return self._failure(_safe_provider_http_error(response.status_code))
         return DeliveryResult(
             success=True,
             channel=self.channel,
@@ -1906,20 +1980,14 @@ class TwilioSMSProvider(NotificationProvider):
                 },
                 timeout=30.0,
             )
-        except ValueError as e:
-            return self._failure(f"{self.provider_type} endpoint blocked (SSRF): {e}")
+        except ValueError:
+            return self._failure(f"{self.provider_type} endpoint blocked (SSRF)")
         except Exception as e:
-            logger.error("%s delivery failed: %s", self.provider_type, e)
-            return self._failure(str(e))
+            logger.error("%s delivery failed: %s", self.provider_type, _safe_provider_error(e))
+            return self._failure(_safe_provider_error(e))
 
         if response.status_code not in (200, 201):
-            try:
-                detail = response.text or ""
-            except Exception:
-                detail = ""
-            return self._failure(
-                f"{self.provider_type} returned HTTP {response.status_code}: {detail[:500]}"
-            )
+            return self._failure(_safe_provider_http_error(response.status_code))
 
         message_id = str(uuid4())
         try:
@@ -1948,10 +2016,10 @@ class TwilioSMSProvider(NotificationProvider):
                 headers=self._headers(),
                 timeout=15.0,
             )
-        except ValueError as e:
-            return False, f"Endpoint blocked (SSRF): {e}"
+        except ValueError:
+            return False, "Endpoint blocked (SSRF)"
         except Exception as e:
-            return False, f"{self.provider_type} error: {e}"
+            return False, f"{self.provider_type} error: {_safe_provider_error(e)}"
         if response.status_code == 200:
             return True, "Twilio credentials verified"
         if response.status_code in (401, 403):
@@ -2281,33 +2349,40 @@ class NotificationService:
         organization_id: UUID | None = None,
         commit: bool = True,
     ) -> dict[str, Any]:
+        """Persist a bell row and its pending event in the same transaction.
+
+        Standalone callers may keep commit=True. Shared dispatch uses False:
+        only the business transaction's owner commits or rolls back its work.
+        A beat worker publishes committed events; this method never publishes.
         """
-        Create an in-app notification.
+        from app.models.core import Organization, User
+        from app.models.notification_outbox import InAppNotificationEvent
 
-        These are stored in the database and retrieved by the frontend.
-
-        NOTE: ``commit`` defaults to ``True``. Previously this method only
-        called ``db.flush()`` and never committed — when invoked from an
-        event-bus handler running on its own short-lived session, the
-        session would close without committing and the INSERT was rolled
-        back. Callers participating in a larger transaction can pass
-        ``commit=False`` to defer the commit to the outer caller.
-        """
-        notification = {
-            "id": str(uuid4()),
-            "user_id": str(user_id),
-            "title": title,
-            "body": body,
-            "category": category.value,
-            "severity": severity.value,
-            "action_url": action_url,
-            "data": data or {},
-            "read": False,
-            "created_at": datetime.now(UTC).isoformat(),
-        }
-
-        # Persist to database
+        statement = (
+            select(User.id, User.organization_id)
+            .outerjoin(Organization, Organization.id == User.organization_id)
+            .where(
+                User.id == user_id,
+                User.is_active.is_(True),
+                User.deleted_at.is_(None),
+                (User.organization_id.is_(None))
+                | (Organization.is_active.is_(True) & Organization.deleted_at.is_(None)),
+            )
+        )
+        if organization_id is not None:
+            statement = statement.where(User.organization_id == organization_id)
+        try:
+            recipient = (await self.db.execute(statement)).one_or_none()
+        except Exception:
+            raise NotificationError("In-app notification recipient unavailable") from None
+        if recipient is None:
+            raise NotificationError("In-app notification recipient unavailable")
+        # A platform-originated personal notification still belongs to the
+        # target user's current organization, never to a global broadcast.
+        organization_id = recipient[1]
+        created_at = datetime.now(UTC)
         record = InAppNotification(
+            id=uuid4(),
             user_id=user_id,
             organization_id=organization_id,
             title=title,
@@ -2316,58 +2391,37 @@ class NotificationService:
             severity=severity.value,
             action_url=action_url,
             data=data or {},
+            created_at=created_at,
         )
         try:
             self.db.add(record)
             await self.db.flush()
-            notification["id"] = str(record.id)
+            self.db.add(
+                InAppNotificationEvent(
+                    notification_id=record.id, user_id=user_id, organization_id=organization_id
+                )
+            )
+            await self.db.flush()
             if commit:
                 await self.db.commit()
-        except Exception as exc:
-            logger.error("Failed to persist in-app notification: %s", exc)
+        except Exception:
+            logger.error("Failed to persist in-app notification and pending event")
             if commit:
                 with __import__("contextlib").suppress(Exception):
                     await self.db.rollback()
-
-        # Publish via event bus for real-time delivery.
-        # NOTE: EventBus.publish() takes a single Event dataclass — the
-        # previous call passed a string + dict (kwargs of an older API)
-        # which raised TypeError. The error was swallowed by the caller's
-        # blanket ``except Exception`` so real-time WebSocket delivery of
-        # notifications was silently broken.
-        from app.core.events import (
-            Event,
-            EventCategory,
-            EventPriority,
-            get_event_bus,
-        )
-
-        try:
-            severity_priority = (
-                EventPriority.CRITICAL
-                if severity == NotificationSeverity.CRITICAL
-                else EventPriority.HIGH
-                if severity == NotificationSeverity.ERROR
-                else EventPriority.NORMAL
-            )
-            bus = get_event_bus()
-            await bus.publish(
-                Event(
-                    event_type="notification.created",
-                    category=EventCategory.USER,
-                    priority=severity_priority,
-                    payload={
-                        "notification": notification,
-                        "user_id": str(user_id),
-                    },
-                    organization_id=str(organization_id) if organization_id else None,
-                )
-            )
-        except Exception as exc:
-            logger.warning("Failed to publish notification event: %s", exc)
-
-        logger.info("In-app notification created for user %s", user_id)
-        return notification
+            raise NotificationError("In-app notification persistence failed") from None
+        return {
+            "id": str(record.id),
+            "user_id": str(user_id),
+            "title": title,
+            "body": body,
+            "category": category.value,
+            "severity": severity.value,
+            "action_url": action_url,
+            "data": data or {},
+            "read": False,
+            "created_at": created_at.isoformat(),
+        }
 
     async def get_in_app_notifications(
         self,
@@ -2719,11 +2773,15 @@ class NotificationService:
             provider=result.provider,
             message_id=result.message_id,
         )
+        # Providers cannot supply a tracking-row identity. Clear any stale
+        # identity and never let a failed flush borrow another attempt's row.
+        result.delivery_id = None
         try:
             self.db.add(record)
             await self.db.flush()
-        except Exception as exc:
-            logger.error("Failed to track notification delivery: %s", exc)
+            result.delivery_id = str(record.id)
+        except Exception:
+            logger.error("Failed to track notification delivery")
 
         logger.debug(
             f"Notification delivery: channel={channel}, "
@@ -3252,25 +3310,53 @@ class NotificationService:
         }
     )
 
+    async def _serialize_provider_writes(self, organization_id: UUID | None) -> None:
+        """Serialize provider management until the caller commits or rolls back.
+
+        Lock a stable ownership scope even when no default row exists. Platform
+        providers have their own NULL-owner scope; administrative all-tenant
+        lookup does not make a tenant provider a platform-owned provider.
+        """
+        scope = str(organization_id) if organization_id is not None else "platform"
+        digest = hashlib.sha256(
+            ("freesdn:notification-provider-management:" + scope).encode()
+        ).digest()
+        key = int.from_bytes(digest[:8], "big", signed=True)
+        await self.db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": key})
+
+    async def _get_provider_for_write(
+        self, provider_id: UUID, organization_id: UUID | None
+    ) -> NotificationProviderRecord | None:
+        record = await self.get_provider(provider_id, organization_id=organization_id)
+        if record is None:
+            return None
+        owner = record.organization_id
+        await self._serialize_provider_writes(owner)
+        # A waiter must use current configuration and cannot resurrect a row
+        # deleted or moved by an earlier writer. Keep administrative lookup
+        # semantics separate from this exact ownership recheck.
+        result = await self.db.execute(
+            select(NotificationProviderRecord)
+            .where(
+                NotificationProviderRecord.id == provider_id,
+                NotificationProviderRecord.organization_id == owner,
+            )
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
     async def _demote_other_defaults(
         self,
         channel: str,
         organization_id: UUID | None,
         keep_id: UUID | None = None,
     ) -> None:
-        """Unset ``is_default`` on every other provider in the same channel.
-
-        Without this two concurrent "Set as default" calls (or two
-        ``create_provider(is_default=True)`` in quick succession) both
-        succeed and ``load_providers_from_db`` then non-deterministically
-        picks one — the others are silently shadowed.
-        """
+        """Demote only the exact owner/channel while its transaction lock is held."""
         clauses = [
             NotificationProviderRecord.channel == channel,
+            NotificationProviderRecord.organization_id == organization_id,
             NotificationProviderRecord.is_default.is_(True),
         ]
-        if organization_id is not None:
-            clauses.append(NotificationProviderRecord.organization_id == organization_id)
         if keep_id is not None:
             clauses.append(NotificationProviderRecord.id != keep_id)
         await self.db.execute(
@@ -3299,6 +3385,7 @@ class NotificationService:
             )
         # Resolve channel from provider_type
         channel = self._channel_for_provider_type(provider_type)
+        await self._serialize_provider_writes(organization_id)
         if is_default:
             await self._demote_other_defaults(channel, organization_id)
         # NOTE: Encrypt sensitive keys (SMTP password, webhook URL,
@@ -3329,7 +3416,7 @@ class NotificationService:
         **kwargs: Any,
     ) -> NotificationProviderRecord | None:
         """Partial update of a provider record (org-scoped, whitelisted fields only)."""
-        record = await self.get_provider(provider_id, organization_id=organization_id)
+        record = await self._get_provider_for_write(provider_id, organization_id)
         if not record:
             return None
         for key, value in kwargs.items():
@@ -3357,11 +3444,13 @@ class NotificationService:
                     k: v for k, v in value.items() if not self._is_masked_echo(k, v, existing_plain)
                 }
                 merged = {**existing_plain, **clean}
+                if merged != existing_plain:
+                    record.is_verified = False
                 value = self._encrypt_sensitive_config(merged)
             if key == "is_default" and value is True:
                 await self._demote_other_defaults(
                     record.channel,
-                    organization_id,
+                    record.organization_id,
                     keep_id=record.id,
                 )
             setattr(record, key, value)
@@ -3376,7 +3465,7 @@ class NotificationService:
         organization_id: UUID | None = None,
     ) -> bool:
         """Delete a provider record (org-scoped). Returns True if deleted."""
-        record = await self.get_provider(provider_id, organization_id=organization_id)
+        record = await self._get_provider_for_write(provider_id, organization_id)
         if not record:
             return False
         await self.db.delete(record)
@@ -3399,6 +3488,48 @@ class NotificationService:
         msg = re.sub(r"https?://\S+", "<redacted-url>", msg)
         return msg[:1024]
 
+    @staticmethod
+    def _provider_probe_snapshot(record: NotificationProviderRecord) -> dict[str, Any]:
+        """Bind a result to the owner and configuration used before network I/O."""
+        snapshot = {
+            name: getattr(record, name)
+            for name in (
+                "id",
+                "organization_id",
+                "provider_type",
+                "channel",
+                "is_enabled",
+                "updated_at",
+            )
+        }
+        # Keep an independent JSON value even if the ORM instance is refreshed.
+        snapshot["config"] = json.loads(json.dumps(record.config))
+        return snapshot
+
+    async def _record_provider_probe(
+        self, snapshot: dict[str, Any], values: dict[str, Any]
+    ) -> bool:
+        """Write metadata only if the tested configuration is still current.
+
+        External I/O has already finished. The brief owner lock coordinates
+        management writers, and the conditional UPDATE also rechecks its exact
+        binding atomically instead of flushing the stale ORM instance by ID.
+        """
+        await self._serialize_provider_writes(snapshot["organization_id"])
+        result = await self.db.execute(
+            sa_update(NotificationProviderRecord)
+            .where(
+                *(
+                    getattr(NotificationProviderRecord, name) == value
+                    for name, value in snapshot.items()
+                )
+            )
+            .values(**values)
+            .returning(NotificationProviderRecord.id)
+            .execution_options(synchronize_session=False)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def verify_stored_provider(
         self,
         provider_id: UUID,
@@ -3408,14 +3539,21 @@ class NotificationService:
         record = await self.get_provider(provider_id, organization_id=organization_id)
         if not record:
             return False, "Provider not found"
+        snapshot = self._provider_probe_snapshot(record)
         runtime = self._build_runtime_provider(record)
         if not runtime:
             return False, f"Unsupported provider type: {record.provider_type}"
         ok, msg = await runtime.verify()
-        record.is_verified = ok
-        record.last_verified_at = datetime.now(UTC)
-        record.last_error = None if ok else self._sanitize_last_error(msg)
-        await self.db.flush()
+        applied = await self._record_provider_probe(
+            snapshot,
+            {
+                "is_verified": ok,
+                "last_verified_at": datetime.now(UTC),
+                "last_error": None if ok else self._sanitize_last_error(msg),
+            },
+        )
+        if not applied:
+            return False, "Provider changed during verification; verify again"
         return ok, msg
 
     async def test_stored_provider(
@@ -3433,6 +3571,7 @@ class NotificationService:
                 status=DeliveryStatus.FAILED,
                 error="Provider not found",
             )
+        snapshot = self._provider_probe_snapshot(record)
         runtime = self._build_runtime_provider(record)
         if not runtime:
             return DeliveryResult(
@@ -3447,15 +3586,15 @@ class NotificationService:
             body_html="<p>This is a <strong>test notification</strong> from FreeSDN.</p><p>If you received this, the provider is configured correctly.</p>",
         )
         result = await runtime.send(recipient, payload)
-        # Update last_error on the record (URL-redacted + length-capped
-        # to avoid leaking webhook secrets from httpx error messages).
-        if not result.success:
-            record.last_error = self._sanitize_last_error(result.error)
-        else:
-            record.last_error = None
-            record.is_verified = True
-            record.last_verified_at = datetime.now(UTC)
-        await self.db.flush()
+        # Preserve the actual send outcome even if the provider changed while
+        # the transport was running. A completed send cannot be recalled, but
+        # it must not certify or overwrite diagnostics for a new configuration.
+        values: dict[str, Any] = {
+            "last_error": None if result.success else self._sanitize_last_error(result.error)
+        }
+        if result.success:
+            values.update(is_verified=True, last_verified_at=datetime.now(UTC))
+        await self._record_provider_probe(snapshot, values)
         return result
 
     # ---- In-memory provider registry (legacy) -----------------------------
@@ -3520,7 +3659,9 @@ class NotificationService:
         provider.rate_limit_per_hour = record.rate_limit_per_hour
         provider.rate_limit_per_day = record.rate_limit_per_day
 
-    async def _rate_limit_exceeded(self, provider: NotificationProvider) -> str | None:
+    async def _rate_limit_exceeded(
+        self, provider: NotificationProvider, *, fail_closed: bool = False
+    ) -> str | None:
         """Name the window a send would breach, or None to proceed.
 
         ``rate_limit_per_hour`` / ``rate_limit_per_day`` were collected by the
@@ -3563,7 +3704,7 @@ class NotificationService:
                     return f"{name}ly rate limit reached ({limit}/{name})"
         except Exception:
             logger.debug("Notification rate-limit check unavailable", exc_info=True)
-            return None
+            return "rate_limit_unavailable" if fail_closed else None
         return None
 
     def _build_runtime_provider(
@@ -3623,24 +3764,39 @@ class NotificationService:
         return inst
 
     async def load_providers_from_db(self, organization_id: UUID | None = None) -> None:
+        """Replace delivery providers from one exact organization scope.
+
+        None means platform-owned providers, unlike the administrative
+        list_providers(None) operation which intentionally lists every tenant.
+        A failed reload must not leave the previous scope authorized to send.
         """
-        Load all enabled providers from the database and register them
-        into the in-memory _providers dict so that send() can use them.
-        """
-        records = await self.list_providers(
-            organization_id=organization_id,
-            enabled_only=True,
+        self._providers = {}
+        statement = (
+            select(NotificationProviderRecord)
+            .where(
+                NotificationProviderRecord.organization_id == organization_id,
+                NotificationProviderRecord.is_enabled.is_(True),
+            )
+            .order_by(
+                NotificationProviderRecord.is_default.desc(),
+                NotificationProviderRecord.created_at.desc(),
+                NotificationProviderRecord.id,
+            )
         )
+        records = (await self.db.execute(statement)).scalars().all()
+        selected: dict[NotificationChannel, NotificationProvider] = {}
         for rec in records:
+            try:
+                channel = NotificationChannel(rec.channel)
+            except ValueError:
+                logger.warning("Unknown notification channel in stored provider")
+                continue
+            if channel in selected:
+                continue
             runtime = self._build_runtime_provider(rec)
             if runtime:
-                try:
-                    channel = NotificationChannel(rec.channel)
-                    # Prefer the default provider when multiple exist
-                    if rec.is_default or channel not in self._providers:
-                        self._providers[channel] = runtime
-                except ValueError:
-                    logger.warning("Unknown channel '%s' for provider %s", rec.channel, rec.id)
+                selected[channel] = runtime
+        self._providers = selected
 
     @staticmethod
     def _is_masked_echo(key: str, value: Any, existing_plain: dict[str, Any]) -> bool:

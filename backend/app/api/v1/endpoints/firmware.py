@@ -255,7 +255,15 @@ async def cache_firmware(
     fw = await svc.get_firmware(session, firmware_id)
     if not fw or fw.organization_id != organization_id:
         raise HTTPException(status_code=404, detail="Firmware not found")
-    fw = await svc.cache_firmware(session, firmware_id)
+    try:
+        fw = await svc.cache_firmware(session, firmware_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (TimeoutError, OSError) as exc:
+        raise HTTPException(status_code=502, detail="Firmware download failed") from exc
+    except Exception as exc:
+        logger.warning("Firmware cache failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="Firmware download failed") from exc
     await session.commit()
     return {"status": "cached", "firmware_id": str(firmware_id)}
 
@@ -426,6 +434,18 @@ async def check_compatibility(
 # =========================================================================
 
 
+def _validate_job_access(user: Any, job: Any) -> None:
+    """An omitted site never means omitted ownership or unrestricted targets."""
+    if not job or job.organization_id != _org_id(user):
+        raise HTTPException(status_code=404, detail="Job not found")
+    grants = site_ids_for_request(user)
+    if grants is not None:
+        targets = job.target_site_ids
+        if not targets or not set(targets).issubset({str(site) for site in grants}):
+            raise HTTPException(status_code=404, detail="Job not found")
+    _validate_site_grant(user, job.site_id, detail="Job not found")
+
+
 @router.get("/jobs", response_model=UpgradeJobListResponse)
 async def list_jobs(
     status: str | None = None,
@@ -458,23 +478,9 @@ async def get_job(
 ) -> dict[str, Any]:
     from app.services.firmware import PersistentFirmwareService as svc
 
-    organization_id = _org_id(user)
-    org_sites = (
-        (
-            await session.execute(
-                select(Site.id).where(
-                    Site.organization_id == organization_id, Site.deleted_at.is_(None)
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
     job = await svc.get_job(session, job_id)
-    if not job or job.site_id not in org_sites:
-        raise HTTPException(status_code=404, detail="Job not found")
-    # site-grant boundary on reading a job by id.
-    _validate_site_grant(user, job.site_id, detail="Job not found")
+    _validate_job_access(user, job)
+
     return job
 
 
@@ -521,6 +527,8 @@ async def create_job(
             Device.id.in_(device_ids),
             Device.site_id.in_(org_sites),
         )
+        if site_id:
+            dev_q = dev_q.where(Device.site_id == site_id)
         grant_sites = site_ids_for_request(user)
         if grant_sites is not None:
             dev_q = dev_q.where(Device.site_id.in_(list(grant_sites)))
@@ -536,17 +544,10 @@ async def create_job(
         if not fw or fw.organization_id != organization_id:
             raise HTTPException(status_code=404, detail="Firmware not found")
 
+    payload["organization_id"] = organization_id
     job = await svc.create_job(session, payload, user_id=user.id)
+    await svc.run_upgrade_job(session, job.id)
     await session.commit()
-
-    # Dispatch Celery task if not scheduled for later
-    if not data.scheduled_at:
-        try:
-            from app.tasks.firmware import run_firmware_upgrade
-
-            run_firmware_upgrade.delay(str(job.id))
-        except Exception as e:
-            logger.warning("Could not dispatch firmware upgrade task: %s", e)
 
     return job
 
@@ -560,29 +561,14 @@ async def cancel_job(
     require_admin(user)
     from app.services.firmware import PersistentFirmwareService as svc
 
-    organization_id = _org_id(user)
-    org_sites = (
-        (
-            await session.execute(
-                select(Site.id).where(
-                    Site.organization_id == organization_id, Site.deleted_at.is_(None)
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
     existing = await svc.get_job(session, job_id)
-    if not existing or existing.site_id not in org_sites:
-        raise HTTPException(status_code=404, detail="Job not found")
-    # site-grant boundary on cancelling a job.
-    _validate_site_grant(user, existing.site_id, detail="Job not found")
+    _validate_job_access(user, existing)
 
     job = await svc.cancel_job(session, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     await session.commit()
-    return {"status": "cancelled", "job_id": str(job_id)}
+    return {"status": job.status, "job_id": str(job_id)}
 
 
 @router.post("/jobs/{job_id}/retry", response_model=UpgradeJobResponse)
@@ -595,36 +581,14 @@ async def retry_job(
     require_admin(user)
     from app.services.firmware import PersistentFirmwareService as svc
 
-    organization_id = _org_id(user)
-    org_sites = (
-        (
-            await session.execute(
-                select(Site.id).where(
-                    Site.organization_id == organization_id, Site.deleted_at.is_(None)
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
     existing = await svc.get_job(session, job_id)
-    if not existing or existing.site_id not in org_sites:
-        raise HTTPException(status_code=404, detail="Job not found")
-    # site-grant boundary on retrying a job.
-    _validate_site_grant(user, existing.site_id, detail="Job not found")
+    _validate_job_access(user, existing)
 
     new_job = await svc.retry_job(session, job_id, failed_only=failed_only)
     if not new_job:
         raise HTTPException(status_code=404, detail="Job not found")
+    await svc.run_upgrade_job(session, new_job.id)
     await session.commit()
-
-    # Dispatch the retry job
-    try:
-        from app.tasks.firmware import run_firmware_upgrade
-
-        run_firmware_upgrade.delay(str(new_job.id))
-    except Exception as e:
-        logger.warning("Could not dispatch firmware retry task: %s", e)
 
     return new_job
 

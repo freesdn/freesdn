@@ -1,0 +1,39 @@
+Unsupported gateway backup operations
+====================================
+
+OPNsense's reviewed core BackupController (26.7.4) provides inventory, download,
+delete and revert operations. It does not provide the backup/backup action
+previously used by FreeSDN to create a history entry. The adapter now returns
+NOT_SUPPORTED without dispatching that operation; the direct client raises
+CapabilityNotSupportedError, including when force=True was supplied. A forced
+write cannot make an unsupported API exist. The standard gateway write mapper
+returns HTTP 501 with a fixed explanation after normal access checks and
+adapter connection succeed. No saved backup is claimed.
+
+The OpenWrt adapter cannot enumerate device backup history. It now returns
+NOT_SUPPORTED instead of manufacturing an empty successful list. The existing
+inventory service maps that result to HTTP 501. In contrast, a successfully
+retrieved empty OPNsense inventory remains a valid empty list.
+
+Protected configuration exports remain separate and unchanged. OpenWrt's
+create_backup adapter method remains the archive-export implementation used by
+download_config; it does not establish managed storage, retention or restore
+durability. Unifying that legacy method with the generic on-device creation UI
+is still a separate capability-contract issue. The current UI may display a
+creation action that receives an unsupported response; no per-operation UI
+capability model is claimed by this backend correction.
+
+Existing authentication, organization/site visibility, deletion checks and
+write permissions are preserved. An unsupported operation does not bypass
+those checks or turn an unauthorized request into an informative capability
+response. The regression fixtures use actual adapters and PostgreSQL while
+explicitly replacing authentication and device transport. They are not real
+hardware backup or restore qualification.
+
+Managed encrypted artifact storage, retention, restore validation and measured
+recovery objectives remain outstanding. See also GATEWAY-BACKUP-TRIGGER,
+GATEWAY-BACKUP-INVENTORY, GATEWAY-BACKUP-INVENTORY-UI and
+OPNSENSE-BACKUP-MUTATIONS for the distinct backup boundaries.
+
+Upstream reference:
+https://github.com/opnsense/core/blob/26.7.4/src/opnsense/mvc/app/controllers/OPNsense/Core/Api/BackupController.php

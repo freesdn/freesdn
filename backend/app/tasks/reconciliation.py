@@ -166,12 +166,13 @@ def reconcile_all_devices(self: Any) -> dict[str, Any]:
     """Celery task: fan-out reconciliation to all managed devices."""
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    if not acquire_solo_lock("reconcile_all_devices", ttl_seconds=120):
+    lock_token = acquire_solo_lock("reconcile_all_devices", ttl_seconds=120)
+    if not lock_token:
         return {"skipped": True, "reason": "already_running"}
     try:
         return asyncio.run(_reconcile_all_devices())
     finally:
-        release_solo_lock("reconcile_all_devices")
+        release_solo_lock("reconcile_all_devices", lock_token)
 
 
 # ==========================================================================
@@ -199,24 +200,29 @@ async def _recompute_device_health(device_id: str) -> dict[str, Any]:
         try:
             health_svc = HealthService(session)
 
+            # Only observed status/configuration contributes. Firmware currency
+            # and error rates have no collector here and must not be fabricated.
             scores = {
-                "reachability_score": HealthService.score_reachability(device.status == "online"),
-                "drift_score": HealthService.score_drift(dc.has_drift if dc else False),
-                # Latency, utilization, firmware, error_rate can be sourced
-                # from metrics collection tasks — use defaults for now
-                "latency_score": None,
-                "utilization_score": None,
-                "firmware_score": HealthService.score_firmware(True),
-                "error_score": 100,
+                "reachability_score": (
+                    HealthService.score_reachability(device.status == "online")
+                    if device.status in {"online", "offline"}
+                    else None
+                ),
+                "drift_score": (
+                    HealthService.score_drift(dc.has_drift)
+                    if dc is not None and dc.running_synced_at is not None
+                    else None
+                ),
             }
-
-            health = await health_svc.compute_device_health(device, **scores)
+            health = await health_svc.compute_device_health(
+                device, **scores, replace_components=True
+            )
             await session.commit()
 
             return {
                 "success": True,
                 "device_id": str(device.id),
-                "health_score": health.health_score,
+                "health_score": health.measured_score,
                 "health_status": health.health_status,
             }
 
@@ -273,12 +279,13 @@ def recompute_all_health(self: Any) -> dict[str, Any]:
     """Celery task: fan-out health recomputation to all managed devices."""
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    if not acquire_solo_lock("recompute_all_health", ttl_seconds=120):
+    lock_token = acquire_solo_lock("recompute_all_health", ttl_seconds=120)
+    if not lock_token:
         return {"skipped": True, "reason": "already_running"}
     try:
         return asyncio.run(_recompute_all_health())
     finally:
-        release_solo_lock("recompute_all_health")
+        release_solo_lock("recompute_all_health", lock_token)
 
 
 # ==========================================================================
@@ -296,7 +303,7 @@ async def _snapshot_daily_health() -> dict[str, Any]:
             select(
                 DeviceHealth.organization_id,
                 DeviceHealth.site_id,
-                func.avg(DeviceHealth.health_score).label("avg_score"),
+                func.avg(DeviceHealth.measured_score).label("avg_score"),
                 func.count(DeviceHealth.device_id).label("device_count"),
                 func.count()
                 .filter(DeviceHealth.health_status == HealthStatus.HEALTHY)
@@ -363,9 +370,10 @@ def snapshot_daily_health(self: Any) -> dict[str, Any]:
     """Celery task: nightly health snapshot aggregation."""
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    if not acquire_solo_lock("snapshot_daily_health", ttl_seconds=300):
+    lock_token = acquire_solo_lock("snapshot_daily_health", ttl_seconds=300)
+    if not lock_token:
         return {"skipped": True, "reason": "already_running"}
     try:
         return asyncio.run(_snapshot_daily_health())
     finally:
-        release_solo_lock("snapshot_daily_health")
+        release_solo_lock("snapshot_daily_health", lock_token)

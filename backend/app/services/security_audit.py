@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 
 from app.core.security_utils import escape_like
 
@@ -127,11 +127,11 @@ class PersistentSecurityAuditService:
             previous_state=previous_state,
             new_state=new_state,
             tags=tags or [],
-            metadata=metadata or {},
+            extra_metadata=metadata or {},
         )
-        session.add(record)
-        await session.flush()
-        return record
+        from app.services.audit import AuditService
+
+        return await AuditService(session).persist_record(record)
 
     @staticmethod
     async def query_audit_logs(
@@ -597,7 +597,7 @@ class PersistentSecurityAuditService:
 
         by_action: dict[str, int] = dict(
             (
-                await session.execute(  # type: ignore[arg-type]
+                await session.execute(
                     select(AuditLogRecord.action, func.count(AuditLogRecord.id))
                     .where(and_(*conditions))
                     .group_by(AuditLogRecord.action)
@@ -607,7 +607,7 @@ class PersistentSecurityAuditService:
 
         by_resource: dict[str, int] = dict(
             (
-                await session.execute(  # type: ignore[arg-type]
+                await session.execute(
                     select(AuditLogRecord.resource_type, func.count(AuditLogRecord.id))
                     .where(and_(*conditions))
                     .group_by(AuditLogRecord.resource_type)
@@ -615,9 +615,9 @@ class PersistentSecurityAuditService:
             ).all()
         )
 
-        by_actor: dict[str, int] = dict(
+        by_actor: dict[str | None, int] = dict(
             (
-                await session.execute(  # type: ignore[arg-type]
+                await session.execute(
                     select(AuditLogRecord.actor_name, func.count(AuditLogRecord.id))
                     .where(and_(*conditions))
                     .group_by(AuditLogRecord.actor_name)
@@ -627,7 +627,7 @@ class PersistentSecurityAuditService:
 
         by_status: dict[str, int] = dict(
             (
-                await session.execute(  # type: ignore[arg-type]
+                await session.execute(
                     select(AuditLogRecord.status, func.count(AuditLogRecord.id))
                     .where(and_(*conditions))
                     .group_by(AuditLogRecord.status)
@@ -1693,51 +1693,29 @@ class PersistentSecurityAuditService:
     async def cleanup_old_entries(
         session: AsyncSession,
         retention_days: int = 90,
+        *,
+        cutoff: datetime | None = None,
     ) -> dict[str, int]:
-        """Delete entries older than retention period."""
-        from app.models.security_audit import (
-            AuditLogRecord,
-            FailedLoginRecord,
-            SecurityAnomalyRecord,
-            SecurityEventRecord,
-        )
+        """Delete one bounded batch per table; caller owns commit/rollback."""
+        from app.services.audit_chain import prune_prefix
+        from app.services.audit_retention import delete_security_batch
 
-        cutoff = datetime.now(UTC) - timedelta(days=retention_days)
-
-        audit_deleted = (
-            await session.execute(delete(AuditLogRecord).where(AuditLogRecord.timestamp < cutoff))
-        ).rowcount  # type: ignore[attr-defined]
-
-        events_deleted = (
-            await session.execute(
-                delete(SecurityEventRecord).where(SecurityEventRecord.timestamp < cutoff)
-            )
-        ).rowcount  # type: ignore[attr-defined]
-
-        logins_deleted = (
-            await session.execute(
-                delete(FailedLoginRecord).where(FailedLoginRecord.timestamp < cutoff)
-            )
-        ).rowcount  # type: ignore[attr-defined]
-
-        anomalies_deleted = (
-            await session.execute(
-                delete(SecurityAnomalyRecord).where(
-                    SecurityAnomalyRecord.detected_at < cutoff,
-                    SecurityAnomalyRecord.resolved == True,  # noqa: E712
-                )
-            )
-        ).rowcount  # type: ignore[attr-defined]
-
+        if cutoff is None:
+            cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+        # All domain-row work precedes the audit chain lock. A later batch must
+        # start a new caller transaction, not reacquire domain rows under it.
+        events_deleted = await delete_security_batch(session, "security_events", cutoff)
+        logins_deleted = await delete_security_batch(session, "failed_logins", cutoff)
+        anomalies_deleted = await delete_security_batch(session, "anomalies", cutoff)
         await session.flush()
-
+        audit_deleted = await prune_prefix(session, cutoff)
         totals = {
             "audit_logs": audit_deleted,
             "security_events": events_deleted,
             "failed_logins": logins_deleted,
             "anomalies": anomalies_deleted,
         }
-        logger.info("Security audit cleanup: %s", totals)
+        logger.info("Security audit cleanup batch: %s", totals)
         return totals
 
     # =========================================================================

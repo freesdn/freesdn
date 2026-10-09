@@ -1,0 +1,27 @@
+HLS native diagnostics and producer lifetime
+===========================================
+
+FFmpeg stderr is continuously drained through a pipe. At most the first 64 KiB
+is retained in the existing private 0600 per-session diagnostic file. Remaining
+bytes are discarded without copying native text to application logs. A write
+failure disables further retention but continues draining, so diagnostic disk
+failure does not make the child block on a full pipe. The owned capture task
+closes the file at EOF/cancellation and is awaited during session cleanup.
+The prefix limit deliberately does not retain later messages or rotate logs.
+
+A running producer can still be shared for an identical request. A dead live
+producer or failed recorded producer is removed and replaced on the next start.
+A successfully exited recorded producer can be reused only while its playlist
+and at least one correctly named media segment remain. This avoids restarting
+valid completed recordings while refusing dead sessions with no retained media.
+This file-presence check does not inspect every media byte or guarantee decoding.
+
+Stop retains terminate/kill deadlines, awaits the diagnostic task and removes
+private session files. Worker-crash child binding remains the separate Linux
+launcher introduced earlier; it does not itself remove crash-left files.
+
+Tests exercise actual local children, bounded output, diagnostic-write failure,
+stop/reap and completed-versus-failed reuse. Packaged qualification uses local
+synthetic FFmpeg inputs; these checks do not claim vendor RTSP acceptance.
+Multiworker/multihost session coordination, individual viewer leases, aggregate
+session/resource quotas and abandoned directory cleanup remain separate work.

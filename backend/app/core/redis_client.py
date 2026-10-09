@@ -24,6 +24,9 @@ from typing import Any
 
 import redis as _sync_redis
 import redis.asyncio as _async_redis
+from redis.asyncio.retry import Retry as AsyncRetry
+from redis.backoff import NoBackoff
+from redis.retry import Retry
 
 from app.core.config import settings
 
@@ -52,9 +55,14 @@ def _direct_url(db: int) -> str:
     return f"redis://{auth}{settings.REDIS_HOST}:{settings.REDIS_PORT}/{db}"
 
 
-def _sentinel_kwargs() -> dict[str, Any]:
-    # Sentinels themselves require AUTH in our deployment (auth-pass).
-    return {"password": settings.REDIS_PASSWORD} if settings.REDIS_PASSWORD else {}
+def _sentinel_kwargs(*, asynchronous: bool = False) -> dict[str, Any]:
+    # Bound each discovery attempt separately from blocking pub/sub reads.
+    return {
+        "password": settings.REDIS_PASSWORD or None,
+        "retry": (AsyncRetry if asynchronous else Retry)(NoBackoff(), 0),
+        "socket_timeout": _SENTINEL_QUERY_TIMEOUT,
+        "socket_connect_timeout": _SENTINEL_QUERY_TIMEOUT,
+    }
 
 
 # Default command timeout on the MASTER connection. Critical for failover: a
@@ -64,7 +72,7 @@ def _sentinel_kwargs() -> dict[str, Any]:
 # Sentinel for the new master on the next call.
 # EXCEPTION: pub/sub listeners pass socket_timeout=None, because socket_timeout
 # would interrupt the long-lived blocking listen() read.
-_SENTINEL_QUERY_TIMEOUT = 5  # connecting to / querying the sentinels themselves
+_SENTINEL_QUERY_TIMEOUT = 1  # connecting to / querying the sentinels themselves
 
 
 def get_async_redis(
@@ -73,9 +81,15 @@ def get_async_redis(
     """Return an async Redis/Valkey client (Sentinel-aware when HA is configured)."""
     addrs = sentinel_addrs()
     if addrs:
+        kwargs.setdefault("socket_connect_timeout", 5)
+        # Retrying an ambiguously acknowledged INCR/LPUSH may duplicate work.
+        # Let the caller handle the failed operation; the next connection asks
+        # Sentinel for the current master. Never turn a 5s timeout into a long
+        # exponential-backoff stall during failover.
+        kwargs.setdefault("retry", AsyncRetry(NoBackoff(), 0))
         sentinel = _async_redis.sentinel.Sentinel(
             addrs,
-            sentinel_kwargs=_sentinel_kwargs(),
+            sentinel_kwargs=_sentinel_kwargs(asynchronous=True),
             password=settings.REDIS_PASSWORD or None,
             socket_timeout=_SENTINEL_QUERY_TIMEOUT,
         )
@@ -98,6 +112,12 @@ def get_sync_redis(
     """Return a sync Redis/Valkey client (Sentinel-aware when HA is configured)."""
     addrs = sentinel_addrs()
     if addrs:
+        kwargs.setdefault("socket_connect_timeout", 5)
+        # Retrying an ambiguously acknowledged INCR/LPUSH may duplicate work.
+        # Let the caller handle the failed operation; the next connection asks
+        # Sentinel for the current master. Never turn a 5s timeout into a long
+        # exponential-backoff stall during failover.
+        kwargs.setdefault("retry", Retry(NoBackoff(), 0))
         sentinel = _sync_redis.sentinel.Sentinel(
             addrs,
             sentinel_kwargs=_sentinel_kwargs(),

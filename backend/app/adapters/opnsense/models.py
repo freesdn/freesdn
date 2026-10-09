@@ -180,8 +180,8 @@ class NormalizedFirmwareInfo(BaseModel):
 
     current_version: str = ""
     latest_version: str | None = None
-    needs_update: bool = False
-    update_available: bool = False
+    needs_update: bool | None = None
+    update_available: bool | None = None
     product_name: str = ""
     product_id: str = ""
     product_target: str = ""
@@ -462,9 +462,9 @@ class NormalizedGateway(BaseModel):
     address: str = ""
     status: GatewayStatus = GatewayStatus.UNKNOWN
     status_text: str = ""
-    loss_pct: float = 0.0
-    delay_ms: float = 0.0
-    stddev_ms: float = 0.0
+    loss_pct: float | None = None
+    delay_ms: float | None = None
+    stddev_ms: float | None = None
     interface: str = ""
     monitor_ip: str = ""
     default_gateway: bool = False
@@ -873,6 +873,7 @@ class NormalizedDeviceSummary(BaseModel):
     interface_count: int = 0
     interfaces_up: int = 0
     interfaces_down: int = 0
+    interfaces_unknown: int = 0
     wan_status: GatewayStatus = GatewayStatus.UNKNOWN
     wan_ip: str = ""
     wan_gateway: str = ""

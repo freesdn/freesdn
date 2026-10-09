@@ -1,0 +1,42 @@
+Tenant-visible task failure diagnostics
+======================================
+
+FreeSDN task progress keeps its task ID, organization owner, status, timestamps,
+progress counts and retry counts. Failed tasks use the stable error code
+task_failed and the message "Task failed". Retrying tasks use task_retry and
+a retry-count message. Neither record contains the original exception message
+or a diagnostic result payload. Revoked records also drop previous diagnostic
+errors/results and use "Task was revoked".
+
+The progress store applies this boundary before persistence and when reading
+legacy failure/retry/revoked records. Reading does not silently rewrite or delete
+older records. Existing records remain in protected Redis until their normal
+expiry or an explicitly managed retention operation. Every serving API process
+must be updated; old API processes can still expose old diagnostic fields.
+
+Task result queries use the scoped progress store only. They do not fetch the
+raw Celery result backend for a task lacking a scoped completed record. That
+backend has no trusted organization owner. Missing/unowned tasks and tasks from
+another organization keep the existing generic 404 response. No permission is
+granted based on possessing a task ID.
+
+The FreeSDN failure/retry hooks and custom task_failure log signal do not render
+the exception. Operators retain the task ID for correlation. This change does
+not invent a detailed error description from an unknown third-party exception,
+and exception objects with an unsafe __str__ cannot break these hooks.
+
+Scope limits
+------------
+
+Celery's own result serialization, exception traceback and built-in worker log
+remain separate sensitive infrastructure surfaces. The real broker/worker
+qualification explicitly demonstrates that those surfaces still contain the
+synthetic diagnostic while the corrected tenant progress/API boundary does not.
+Protect broker/result storage and logs with appropriate access and retention;
+this correction is not a universal secret-removal or log-sanitization guarantee.
+
+Successful task result payloads, explicitly supplied running-task progress
+messages, Celery SUCCESS versus domain success, submission recovery, duplicate
+execution and post-check authorization races retain their existing contracts.
+Task producers must supply appropriate public success/progress fields. Changing
+those contracts and sanitizing infrastructure logs require separate work.

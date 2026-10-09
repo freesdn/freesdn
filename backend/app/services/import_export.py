@@ -31,13 +31,14 @@ if TYPE_CHECKING:
 
     from app.models.import_export import ExportJob, ImportJob
 
+from app.core.private_files import read_private, write_private
+from app.core.security_utils import MAX_CONFIG_IMPORT_BYTES
 from app.models.devices import normalize_device_type
 
 logger = logging.getLogger(__name__)
 
 # Directory for temporary import/export files
 DATA_DIR = Path("/tmp/freesdn_data")
-DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # Maximum rows exported per entity type to prevent OOM on large databases
@@ -153,7 +154,7 @@ class DataImportExportService:
             filename = f"export_{job.id}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
             ext = "yaml" if job.export_format == "yaml" else "json"
             filepath = DATA_DIR / f"{filename}.{ext}"
-            filepath.write_bytes(content_bytes)
+            write_private(filepath, content_bytes)
 
             job.file_path = str(filepath)
             job.file_size_bytes = len(content_bytes)
@@ -512,7 +513,10 @@ class DataImportExportService:
         if not filepath.exists():
             return {"valid": False, "errors": ["File not found"]}
 
-        content = filepath.read_text(encoding="utf-8")
+        try:
+            content = read_private(filepath, MAX_CONFIG_IMPORT_BYTES).decode("utf-8")
+        except (OSError, UnicodeError):
+            return {"valid": False, "errors": ["Import file is unavailable, unsafe or too large"]}
 
         try:
             if source_format in ("freesdn", "generic_json"):
@@ -722,7 +726,7 @@ class DataImportExportService:
             return {"error": job.error_message}
 
         # Parse file
-        content = Path(job.file_path).read_text(encoding="utf-8")
+        content = read_private(Path(job.file_path), MAX_CONFIG_IMPORT_BYTES).decode("utf-8")
         if job.source_format in ("freesdn", "generic_json"):
             data = json.loads(content)
         elif job.source_format == "generic_csv":

@@ -1,0 +1,48 @@
+packages:
+  - "mantine-ui"
+  - "module/*"
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+minimumReleaseAgeExclude:
+  - '@mantine/code-highlight@9.5.0'
+  - '@mantine/core@9.5.0'
+  - '@mantine/dates@9.5.0'
+  - '@mantine/hooks@9.5.0'
+  - '@mantine/notifications@9.5.0'
+  - '@mantine/store@9.5.0'
+
+# FreeSDN release security overrides. Keep API-compatible supported lines;
+# exact resolution and integrity hashes are committed in pnpm-lock.yaml.
+overrides:
+  'form-data@>=4 <5': 4.0.6
+  'brace-expansion@>=1 <2': 1.1.21
+  'brace-expansion@>=2 <3': 2.1.7
+  'brace-expansion@>=3 <6': 5.0.12
+  'js-yaml@>=3 <4': 3.15.2
+  'js-yaml@>=4 <5': 4.3.2
+  'react-router-dom@>=7 <8': 7.18.4
+  'react-router@>=7 <8': 7.18.4
+  'nanoid@<4': 3.3.19
+  'postcss-selector-parser@>=7 <8': 7.1.6
+  'browserslist@>=4 <5': 4.29.0
+  'sanitize-html@>=2 <3': 2.17.7
+  'vitest@>=3 <4': 4.1.11
+  '@vitest/mocker@>=3 <4': 4.1.11
+  'baseline-browser-mapping@>=2 <3': 2.11.25
+  'source-map-js@>=1 <2': 1.2.2
+  # Jest 30 types remove the expect 29 -> micromatch -> braces build dependency.
+  # Upstream's full UI/module tests and the production bundle remain qualified.
+  '@types/jest@>=29 <30': 30.0.0
+  'moment@>=2 <3': 2.31.0
+  # Two CRITICAL Handlebars advisories, GHSA-8r5x-fm3f-whwj and
+  # GHSA-p8wg-vrv2-v86f: JavaScript injection via AST type confusion in
+  # compile (a bypass of CVE-2026-3393) and via an own-property check
+  # bypass. Vulnerable >=4.0.0 <=4.7.9, patched in 4.7.10.
+  #
+  # This blocked the image build outright, and that is the gate working:
+  # Prometheus compiles its web UI into the Go binary, so Trivy scans the
+  # finished image at 0 HIGH/CRITICAL either way. Without the pnpm audit
+  # step in the ui stage, two critical injection flaws would have shipped
+  # inside an image with a clean report.
+  'handlebars@>=4 <5': 4.7.10

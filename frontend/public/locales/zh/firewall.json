@@ -108,7 +108,8 @@
       "verifySsl": "验证 SSL 证书",
       "syncConfiguration": "同步配置",
       "enableAutoSync": "启用自动同步",
-      "syncInterval": "同步间隔（秒）"
+      "syncInterval": "同步间隔（秒）",
+      "insecureTlsWarning": "证书验证已禁用。系统不会验证网关身份，凭据可能遭到窃取。建议使用受信任的证书，或将设备的 CA 安装到后端信任库中。"
     },
     "vendorFilter": {
       "all": "所有厂商"
@@ -525,7 +526,7 @@
       "certificates": "证书",
       "certificateAuthorities": "证书颁发机构",
       "revocationLists": "吊销列表",
-      "empty": "信任存储中未找到证书或 CA。",
+      "empty": "未返回证书、CA 或已配置的吊销列表。",
       "columns": {
         "name": "名称",
         "dn": "DN",
@@ -533,7 +534,9 @@
         "inUse": "使用中",
         "ca": "CA",
         "type": "类型"
-      }
+      },
+      "unavailable": "信任库清单不可用，无法确认数量。",
+      "retry": "重试信任库检查"
     },
     "acme": {
       "title": "ACME / Let's Encrypt",
@@ -544,16 +547,20 @@
       "actions": "操作",
       "certificatesHeading": "ACME 证书",
       "accountsHeading": "ACME 账户",
-      "empty": "未找到 ACME 配置。安装 os-acme-client 以管理 Let's Encrypt 证书。",
+      "empty": "未返回 ACME 证书、账户、验证或操作。",
       "columns": {
         "name": "名称",
         "domains": "域名",
         "account": "账户",
         "lastUpdate": "上次更新",
-        "status": "状态",
+        "status": "配置",
         "email": "电子邮件",
         "ca": "CA"
-      }
+      },
+      "unavailable": "ACME 清单不可用。请检查插件支持和网关访问权限。",
+      "retry": "重试 ACME 检查",
+      "enabled": "配置中已启用",
+      "disabled": "配置中已禁用"
     },
     "syslog": {
       "title": "Syslog 目标",
@@ -589,7 +596,12 @@
         "status": "状态",
         "daysRemaining": "剩余天数",
         "expires": "到期"
-      }
+      },
+      "unavailable": "证书状态不可用，无法判断其健康状况。",
+      "retry": "重新检查证书",
+      "unknown": "到期时间未知",
+      "unknownExpiry": "无法读取部分证书的到期时间，请在网关上核实。",
+      "empty": "未返回任何证书。"
     }
   },
   "GatewayServicesTab": {
@@ -1071,7 +1083,9 @@
       "uptime": "运行时间",
       "version": "版本",
       "wanIp": "WAN IP",
-      "wanIpDescription": "延迟: {{latency}}ms, 丢包: {{loss}}%",
+      "wanIpDescription": "延迟：{{latency}}，丢包：{{loss}}",
+      "latencyValue": "{{value}} 毫秒",
+      "lossValue": "{{value}}%",
       "services": "服务",
       "servicesRunning": "{{count}} 个运行中",
       "servicesStopped": "{{count}} 个已停止",
@@ -1116,13 +1130,24 @@
       "latency": "延迟:",
       "loss": "丢包:",
       "jitter": "抖动:",
-      "default": "默认"
+      "default": "默认",
+      "empty": "未报告 WAN 网关",
+      "states": {
+        "online": "在线",
+        "offline": "离线",
+        "none": "未监控",
+        "pending": "等待中",
+        "loss": "丢包",
+        "delay": "高延迟",
+        "unknown": "未知"
+      }
     },
     "liveStatus": {
       "title": "实时系统状态",
       "description": "来自网关的实时数据"
     },
     "common": {
+      "unknown": "未知",
       "yes": "是",
       "no": "否",
       "enabled": "已启用",
@@ -1138,18 +1163,25 @@
     "actions": {
       "revert": "还原",
       "createBackup": "创建备份",
-      "cancel": "取消"
+      "cancel": "取消",
+      "deleteBackup": "删除备份 {{filename}}"
     },
     "backups": {
+      "creationUnsupported": "此适配器不支持创建已保存的备份。可用历史记录和配置导出是独立的操作。",
       "title": "配置备份",
-      "description": "网关配置快照"
+      "description": "网关配置快照",
+      "loading": "正在加载备份历史…",
+      "unavailable": "备份历史不可用。无法确定是否存在已保存的备份。",
+      "retry": "重试备份历史"
     },
     "diff": {
       "title": "配置差异",
       "description": "比较运行中的配置与最近一次备份",
       "generating": "正在生成差异…",
       "changesDetected": "检测到更改",
-      "noChanges": "无更改"
+      "noChanges": "无更改",
+      "unavailable": "无法进行比较。必须成功获取两份配置文件，才能判断是否存在更改。",
+      "retry": "重试比较"
     },
     "revertDialog": {
       "title": "还原配置？",
@@ -1985,10 +2017,13 @@
       "activeDecisions": "活动决策",
       "columns": {
         "ipRange": "IP/范围",
-        "reason": "原因",
+        "reason": "来源 / 范围",
         "action": "动作",
-        "expires": "过期时间"
-      }
+        "expires": "持续时间",
+        "source": "来源"
+      },
+      "alertWindow": "显示 {{total}} 条警报中的 {{shown}} 条。仅获取前 50 条记录。",
+      "decisionWindow": "显示 {{total}} 条决策中的 {{shown}} 条。仅获取前 50 条记录。"
     },
     "dialogs": {
       "clearAlerts": {
@@ -2060,7 +2095,8 @@
       "service": "服务",
       "graphiteServer": "Graphite 服务器",
       "influxUrl": "InfluxDB URL",
-      "influxDatabase": "InfluxDB 数据库"
+      "influxDatabase": "InfluxDB 数据库",
+      "influxV2Url": "InfluxDB v2 地址"
     },
     "netflow": {
       "title": "NetFlow / sFlow",
@@ -2287,7 +2323,10 @@
       "system": "系统"
     },
     "searchFirewall": "搜索防火墙日志...",
-    "searchSystem": "搜索系统日志..."
+    "searchSystem": "搜索系统日志...",
+    "loading": "正在加载当前日志…",
+    "unavailable": "日志不可用。尚未确认已成功读取空日志。",
+    "retry": "重试日志"
   },
   "OpenWrtTab": {
     "common": {
@@ -3681,22 +3720,34 @@
     "title": "RADIUS 用户",
     "siteLabel": "站点：",
     "description": "暂存内置 RADIUS 用户的创建/删除（WPA-Enterprise 与端口认证）。更改通过待应用更改抽屉生效。",
-    "form": { "create": "暂存新的 RADIUS 用户" },
+    "form": {
+      "create": "暂存新的 RADIUS 用户"
+    },
     "fields": {
       "name": "用户名",
       "namePlaceholder": "例如 alice",
       "password": "密码",
       "passwordPlaceholder": "RADIUS 密钥"
     },
-    "actions": { "stageCreate": "暂存创建", "cancel": "取消", "stage": "暂存" },
+    "actions": {
+      "stageCreate": "暂存创建",
+      "cancel": "取消",
+      "stage": "暂存"
+    },
     "loadError": "无法加载 RADIUS 用户：",
     "unknownError": "未知错误",
     "loading": "正在加载 RADIUS 用户…",
     "empty": "此控制器上没有 RADIUS 用户。使用上方表单暂存一个。",
     "toast": {
-      "created": { "title": "已暂存 RADIUS 用户创建" },
-      "deleted": { "title": "已暂存 RADIUS 用户删除" },
-      "stageFailed": { "title": "暂存更改失败" }
+      "created": {
+        "title": "已暂存 RADIUS 用户创建"
+      },
+      "deleted": {
+        "title": "已暂存 RADIUS 用户删除"
+      },
+      "stageFailed": {
+        "title": "暂存更改失败"
+      }
     },
     "dialog": {
       "createTitle": "暂存 RADIUS 用户？",
@@ -3710,8 +3761,14 @@
     "title": "热点",
     "siteLabel": "站点：",
     "description": "暂存访客凭证与门户操作员。更改通过待应用更改抽屉生效。",
-    "kinds": { "voucher": "凭证", "operator": "操作员" },
-    "form": { "createVoucher": "生成访客凭证", "createOperator": "暂存门户操作员" },
+    "kinds": {
+      "voucher": "凭证",
+      "operator": "操作员"
+    },
+    "form": {
+      "createVoucher": "生成访客凭证",
+      "createOperator": "暂存门户操作员"
+    },
     "fields": {
       "kind": "资源",
       "count": "数量",
@@ -3733,9 +3790,15 @@
     "loading": "正在加载…",
     "empty": "暂无内容。使用上方表单暂存一个创建。",
     "toast": {
-      "created": { "title": "已暂存热点创建" },
-      "deleted": { "title": "已暂存热点删除" },
-      "stageFailed": { "title": "暂存更改失败" }
+      "created": {
+        "title": "已暂存热点创建"
+      },
+      "deleted": {
+        "title": "已暂存热点删除"
+      },
+      "stageFailed": {
+        "title": "暂存更改失败"
+      }
     },
     "dialog": {
       "createTitle": "暂存热点创建？",
@@ -3783,5 +3846,13 @@
     "actions": {
       "syncNow": "立即同步"
     }
+  },
+  "GatewayLiveRead": {
+    "loading": "正在加载网关状态...",
+    "unavailable": "网关状态不可用。请重试读取，或检查设备连接及支持情况。",
+    "retry": "重试",
+    "running": "运行中",
+    "stopped": "已停止",
+    "summary": "设备实时摘要"
   }
 }

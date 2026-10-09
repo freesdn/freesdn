@@ -1,0 +1,48 @@
+PUBLIC CANDIDATE SUPPORT BOUNDARY
+===============================
+
+FreeSDN remains Community / Early Access. This source and its local qualification
+artifacts are not an enterprise-stable release or a published-image acceptance.
+
+Platform: the appliance candidate is qualified only for Linux amd64. ARM64 builds
+and ARM64 installation are unsupported by this evidence. Do not publish an ARM64
+stable manifest until the runtime, database, media/VPN binaries, restore and
+installation gates pass on that architecture. Agent desktop/platform releases
+have their own independent qualification and signing requirements.
+
+Deployment: Lite/Pro/Max presets and single-host HA have bounded automated fixture
+evidence. The HA Compose overlay offers process/service failover on one host; it
+does not provide host-loss protection. Asynchronous replication and every-second
+AOF can lose acknowledged writes. No zero-RPO, partition fencing or production
+capacity/retention guarantee is made. Sizing figures are planning starting points.
+
+Operations: Proxmox SDN apply remains blocked. Read/stage visibility is not proof
+that every write family is supported. Scheduled SLA reports generate PDF/CSV
+archives subject to access checks. Opt-in SMTP notices use durable records,
+current recipient/actor authorization and bounded safe retries. Existing schedules
+remain opted out; uncertain sends are never automatically repeated. Attachments,
+external recipients and inbox-delivery confirmation are unsupported. Read
+SLA-REPORT-DELIVERY; real-relay/restore/capacity acceptance remains separate.
+
+Existing sites: preserve old images, database/queue volumes and Sentinel state.
+Read postgres/UPGRADING, redis/HA-UPGRADING, redis/QUEUE-INVENTORY and
+redis/QUEUE-BACKUP-RECOVERY. A passing synthetic restore does not select your
+authoritative primary, establish completeness of your backup, reconcile hardware
+effects or authorize replay. Coordinated customer migration remains an acceptance
+gate. Post-snapshot JWT recovery requires separate signing-key review while vault
+keys remain unchanged; see the authentication recovery instructions.
+
+Hardware: prior real Omada, Hikvision, UniFi, TrueNAS and Proxmox use is acknowledged.
+Qualify the actual released image digests against each supported firmware/API
+version and workflow before making a new-candidate production support claim.
+Public VPN NAT/relay/routing/ACL/reconnect acceptance remains separate.
+
+Security: no third-party audit or compliance certification is claimed. Runtime
+scans are dated evidence for exact images, not a perpetual absence of vulnerabilities.
+The optional UDP collector belongs on a restricted management network with source
+firewalling; an IP allowlist is not cryptographic sender authentication. Never
+expose its telemetry ports directly to the Internet.
+
+Distribution: a stable release must bind the reviewed source to hosted CI, version,
+image digests, SBOMs, signatures/attestations and a clean installation from the
+actual published artifacts. Local passing tests do not satisfy publication gates.

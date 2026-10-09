@@ -1,0 +1,61 @@
+FreeSDN event automation coordination
+===================================
+
+Event-triggered actions require successful shared coordination. A failed,
+unavailable, malformed or uncertain Redis/Valkey response never permits a local
+fallback. This covers the event claim, configured cooldown and hourly rate limit.
+Only the actual Redis SET acknowledgement (True) grants a claim/cooldown; only
+integer 1 from the atomic rate-limit script grants an execution. Integer 0 is a
+normal rate-limit refusal. Distinct attempts with identical timestamps occupy
+distinct rate-limit entries.
+
+This boundary matters for camera actions as well as notifications. Native camera
+handlers do not all use the Fabric staged-write path. An uncertain event must
+not be allowed merely because another action family has its own write gate.
+
+Operator observations
+---------------------
+
+GET /api/v1/automation/summary includes coordination_blocked_this_worker for the
+caller's organization. Each entry contains a rule ID, a fixed reason and the
+first observation time for that reason. It contains no event payload or client
+connection details. These refusals do not increment trigger_count or fabricate a
+successful execution. A subsequent definite coordination decision clears the
+observation; pausing or removing the rule on that worker also clears it.
+
+This is process-local diagnostic state, not durable audit history or a complete
+fleet view. A request routed to a different worker can return different entries;
+an empty list does not prove every worker or rule is healthy. The web rule cards
+do not yet display these diagnostics. Review the API and application warnings.
+
+Recovery boundaries
+-------------------
+
+A timeout may arrive after the shared store has accepted the claim. The engine
+does not delete that claim or a reserved cooldown after a later failure. An event
+may therefore be missed. There is no automatic replay or catch-up after outage.
+Reconcile effects before any deliberate manual retry, especially camera actions
+and external notifications. Manual Run Now retains its existing explicit path;
+these new coordination checks govern event-driven execution.
+
+The event claim lasts 300 seconds. A shared event ID suppresses duplicates only
+while its claim remains present. Expiry, eviction, store loss, restoring an old
+snapshot, clock skew and an action lasting beyond its claim are not exactly-once
+guarantees. Callers omitting event_id receive rate/cooldown checks without an
+event-identity claim. External effects still require idempotency and coordinated
+restore/fencing. This change does not qualify hardware operations, repair stale
+rule caches across workers or implement a durable event inbox/outbox.
+
+Local rule subscription replacement
+-----------------------------------
+Re-registering the same rule ID replaces its event-pattern entries under the
+engine lock. Previous patterns and duplicates are removed, including all legacy
+duplicates on deletion. Fixing an empty pattern clears its local diagnostic, and
+changing an event rule to a manual trigger removes its event subscription. Rule
+edits refresh this local index after the database flush succeeds.
+
+This does not synchronize the other workers' rule caches or make their mutation
+transactional with a later database commit/rollback. An operator disable/edit
+must not be described as a proven fleet-wide execution fence on the strength of
+this local fix. That behavior needs its own persisted-state/fencing design and
+multi-process qualification.

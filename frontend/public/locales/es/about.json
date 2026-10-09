@@ -7,7 +7,8 @@
       "version": "Versión",
       "license": "Licencia",
       "documentation": "Documentación",
-      "sourceCode": "Código fuente"
+      "sourceCode": "Código fuente",
+      "versionUnknown": "Desconocida"
     },
     "trademarks": {
       "title": "Marcas comerciales y reconocimientos",

@@ -92,7 +92,10 @@
       "downloadMbps": "Descarga (Mbps)",
       "uploadMbps": "Subida (Mbps)",
       "noData": "No hay datos de tráfico disponibles",
-      "last24h": "Últimas 24 h"
+      "last24h": "Últimas 24 h",
+      "downloadMiB": "Descarga (MiB)",
+      "uploadMiB": "Subida (MiB)",
+      "counterSnapshot": "Contadores acumulados actuales; los reinicios varían"
     },
     "networkHealth": {
       "notAvailable": "N/D",

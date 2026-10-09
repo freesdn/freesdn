@@ -1,0 +1,64 @@
+# Authenticated appliance TLS
+
+New controller records and connection probes verify certificates by default.
+The TrueNAS and hypervisor onboarding dialogs also start with verification on.
+Existing records are not silently rewritten: review any `verify_ssl=false`
+controllers before upgrading and deploy their trusted certificate chain.
+
+TrueNAS REST and WebSocket clients and UniFi Protect default to verified TLS.
+TrueNAS uses HTTPS even on nonstandard ports; legacy port 80 maps to 443, just
+as its WebSocket and transfer channels do. A WebSocket certificate failure is
+terminal, not a reason to try REST. Authenticated HTTP redirects are refused.
+TrueNAS downloads accept only an appliance-relative `/_download/` URL, never
+a response-selected host or HTTP URL carrying the API key.
+
+## Private appliance certificates
+
+Use certificates whose subject alternative names match the configured host.
+For a private CA, provide a PEM CA certificate bundle (no private keys), set
+`FREESDN_DEVICE_CA_BUNDLE=/run/freesdn-device-ca/ca.pem`, and bind-mount that file
+read-only into every backend service that connects to the appliance. This adds
+trust to the system store; an unreadable or invalid configured bundle fails
+closed. Recreate affected services to apply changed environment or mounts.
+
+Example Compose override for the API; repeat the volume on `worker`, optional
+`worker-io`, and `api-2` when those services perform these operations. Include
+any other service that actually connects to the appliance in your deployment.
+
+```yaml
+services:
+  api:
+    volumes:
+      - type: bind
+        source: ./secrets/device-ca.pem
+        target: /run/freesdn-device-ca/ca.pem
+        read_only: true
+        bind:
+          create_host_path: false
+```
+
+The base Compose environment forwards `FREESDN_DEVICE_CA_BUNDLE` to backend
+services. The certificate file must be readable by the non-root application
+user. This setting currently applies to TrueNAS REST/WebSocket/transfers and
+UniFi Protect; it is not a claim that every other integration uses this policy.
+These HTTP clients ignore ambient proxy environment variables. TrueNAS REST
+retains the configured overlay-aware client factory; live VPN acceptance is
+still required for every advertised transport/topology.
+
+## Existing insecure configurations
+
+TrueNAS's explicit `verify_ssl=false` option remains for reviewed legacy
+installations and emits a warning. Encryption without peer verification does
+not authenticate the device and should not be the production default. Enabling
+verification may expose a missing CA, wrong hostname or expired certificate;
+correct those conditions rather than enabling an automatic insecure retry.
+The camera service's UniFi Protect path always verifies TLS and uses the CA
+bundle above; it no longer silently opts out. Other camera transports retain
+their separate protocol/security limitations and still need review.
+
+The loopback tests in `tests/adapters/test_appliance_tls.py` cover trusted,
+unknown-CA, expired and wrong-host certificates; credentials do not reach a
+rejected peer. Redirect refusal and transfer-channel trust are also exercised.
+These are transport tests with synthetic credentials, not new vendor-hardware
+qualification. Certificate and endpoint changes need a staged acceptance run
+against the actual supported appliances before production rollout.

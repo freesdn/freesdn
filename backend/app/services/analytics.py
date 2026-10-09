@@ -935,7 +935,7 @@ class PersistentAnalyticsService:
         labels = labels or {}
         now = timestamp or datetime.now(UTC)
         labels_str = ",".join(f"{k}={v}" for k, v in sorted(labels.items()))
-        labels_hash = hashlib.md5(labels_str.encode()).hexdigest()[:16]
+        labels_hash = hashlib.md5(labels_str.encode(), usedforsecurity=False).hexdigest()[:16]
 
         point = MetricDataPoint(
             time=now,
@@ -964,7 +964,7 @@ class PersistentAnalyticsService:
         for p in points:
             labels = p.get("labels") or {}
             labels_str = ",".join(f"{k}={v}" for k, v in sorted(labels.items()))
-            labels_hash = hashlib.md5(labels_str.encode()).hexdigest()[:16]
+            labels_hash = hashlib.md5(labels_str.encode(), usedforsecurity=False).hexdigest()[:16]
             objs.append(
                 MetricDataPoint(
                     time=p.get("timestamp") or datetime.now(UTC),
@@ -1048,12 +1048,18 @@ class PersistentAnalyticsService:
             # rather than reading org-wide time-series across sibling sites.
             # Bound the IN list and parameterise each id (no SQL injection).
             site_id_in = filters.get("site_id_in")
-            if site_id_in:
+            if site_id_in is not None:
                 ids = [str(s) for s in site_id_in][:500]
-                placeholders = ", ".join(f":site_in_{i}" for i in range(len(ids)))
-                extra_where += f" AND site_id IN ({placeholders})"
-                for i, sid in enumerate(ids):
-                    params[f"site_in_{i}"] = sid
+                if ids:
+                    placeholders = ", ".join(f":site_in_{i}" for i in range(len(ids)))
+                    extra_where += f" AND site_id IN ({placeholders})"
+                    for i, sid in enumerate(ids):
+                        params[f"site_in_{i}"] = sid
+                else:
+                    # An explicit empty access ceiling grants no sites. It must
+                    # remain narrower than an absent (unrestricted) filter,
+                    # including when the caller also pins a site or device.
+                    extra_where += " AND 1 = 0"
             if "device_id" in filters:
                 extra_where += " AND device_id = :device_id"
                 params["device_id"] = filters["device_id"]

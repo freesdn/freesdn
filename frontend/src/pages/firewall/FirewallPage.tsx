@@ -17,7 +17,7 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -286,6 +286,22 @@ interface AddGatewayDialogProps {
   sites: Site[];
 }
 
+const INITIAL_GATEWAY_FORM = {
+  name: '',
+  vendor: '' as '' | 'opnsense' | 'pfsense' | 'mikrotik' | 'openwrt',
+  host: '',
+  port: '443',
+  verify_ssl: true,
+  api_key: '',
+  api_secret: '',
+  username: '',
+  password: '',
+  description: '',
+  sync_enabled: true,
+  sync_interval_seconds: '300',
+  site_id: '',
+};
+
 function AddGatewayDialog({
   open,
   onOpenChange,
@@ -297,45 +313,48 @@ function AddGatewayDialog({
   sites,
 }: AddGatewayDialogProps) {
   const { t } = useTranslation('firewall');
-  const initialForm = {
-    name: '',
-    vendor: '' as '' | 'opnsense' | 'pfsense' | 'mikrotik' | 'openwrt',
-    host: '',
-    port: '443',
-    verify_ssl: false,
-    api_key: '',
-    api_secret: '',
-    username: '',
-    password: '',
-    description: '',
-    sync_enabled: true,
-    sync_interval_seconds: '300',
-    site_id: '',
-  };
 
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState(INITIAL_GATEWAY_FORM);
   const [showSecret, setShowSecret] = useState(false);
+  const [hasCurrentTest, setHasCurrentTest] = useState(false);
+
+  // A successful create closes the dialog from its parent, without onOpenChange.
+  useEffect(() => {
+    if (!open) {
+      setForm(INITIAL_GATEWAY_FORM);
+      setShowSecret(false);
+      setHasCurrentTest(false);
+    }
+  }, [open]);
 
   // Clear form + credentials when dialog closes
   const handleDialogOpenChange = (v: boolean) => {
     onOpenChange(v);
-    if (!v) { setForm(initialForm); setShowSecret(false); }
+    if (!v) { setForm(INITIAL_GATEWAY_FORM); setShowSecret(false); }
   };
 
-  const updateField = (field: string, value: string | boolean) =>
+  const updateField = (field: string, value: string | boolean) => {
+    setHasCurrentTest(false);
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
 
-  const handleTest = () => {
-    onTestConnection({
-      vendor: form.vendor as 'opnsense' | 'pfsense' | 'mikrotik' | 'openwrt',
-      host: form.host,
-      port: parseInt(form.port, 10) || 443,
-      verify_ssl: form.verify_ssl,
-      api_key: form.api_key || undefined,
-      api_secret: form.api_secret || undefined,
-      username: form.username || undefined,
-      password: form.password || undefined,
-    });
+  const handleTest = async () => {
+    setHasCurrentTest(true);
+    try {
+      await onTestConnection({
+        vendor: form.vendor as 'opnsense' | 'pfsense' | 'mikrotik' | 'openwrt',
+        host: form.host,
+        port: parseInt(form.port, 10) || 443,
+        verify_ssl: form.verify_ssl,
+        api_key: form.api_key || undefined,
+        api_secret: form.api_secret || undefined,
+        username: form.username || undefined,
+        password: form.password || undefined,
+      });
+    } catch {
+      // The parent mutation reports the request error through its visible toast.
+      setHasCurrentTest(false);
+    }
   };
 
   const handleSubmit = () => {
@@ -446,6 +465,28 @@ function AddGatewayDialog({
             </div>
           </div>
 
+          {/* Certificate verification is strict unless the operator opts out. */}
+          <div className="grid gap-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="gw_ssl"
+                checked={form.verify_ssl}
+                onChange={(e) => updateField('verify_ssl', e.target.checked)}
+                aria-describedby={!form.verify_ssl ? 'gw_tls_warning' : undefined}
+                className="h-4 w-4 rounded border-input"
+              />
+              <Label htmlFor="gw_ssl">{t('FirewallPage.fields.verifySsl')}</Label>
+            </div>
+            {!form.verify_ssl && (
+              <p id="gw_tls_warning" role="alert" className="text-sm text-amber-700 dark:text-amber-400">
+                {t('FirewallPage.fields.insecureTlsWarning', {
+                  defaultValue: 'Certificate verification is disabled. The gateway identity will not be checked, exposing credentials to interception. Prefer a trusted certificate or install the device CA in the backend trust store.',
+                })}
+              </p>
+            )}
+          </div>
+
           {/* Credentials · OPNsense / pfSense (API Key) */}
           {!usesBasicAuth && form.vendor && (
             <>
@@ -541,7 +582,7 @@ function AddGatewayDialog({
           )}
 
           {/* Test connection result */}
-          {testResult && (
+          {hasCurrentTest && !isTesting && testResult && (
             <Card className={cn(testResult.success ? 'border-emerald-500/50' : 'border-red-500/50')}>
               <CardContent noOffset className="py-3">
                 <div className="flex items-center gap-2">

@@ -1,0 +1,34 @@
+Device selection in site backups
+================================
+
+A site selection and an explicit device list now both constrain the core device
+query. The exported device set is their intersection within the requested
+organization. Previously a nonempty device list replaced the site filter, so a
+backup labeled for one site could contain device records from another site in
+the same organization. A mixed list now includes only devices at the selected
+site; an entirely out-of-site list produces an empty core device set.
+
+Existing behavior is preserved for organization-wide selection, site-only
+selection, duplicate IDs, foreign/missing/deleted devices and include_devices=false.
+An empty list retains its existing meaning of no explicit device restriction;
+this change does not redefine it to mean export no devices. No schema changes,
+new privileges or dependency changes are needed.
+
+The backup create route requires an unscoped organization administrator. This
+qualification demonstrates a selection/contents defect, not cross-organization
+access through that route. Missing, foreign and deleted site identifiers are
+also checked directly at the collector boundary; the HTTP route has separate
+site validation. Those direct cases are not an HTTP authorization claim.
+
+Tests use actual PostgreSQL rows and the core backup contributor, with ordinary
+snapshot and vault options. Separate application processes also create encrypted
+local files, verify their checksum, decrypt/decompress them and inspect the device
+records and manifest counts. Requested site metadata must match the archive's
+selected devices. No synthetic successful result stands in for archive readback.
+
+This correction is limited to core device selection. It does not qualify all
+contributors' site scopes, credential dependency closure, device/controller/site
+lifecycle consistency, concurrent authority changes, historical archives, full
+fresh-install recovery, remote storage durability, vendor restoration or RTO/RPO.
+Other sections of a site backup still require their own scope contract review.
+Shipping/runtime evidence is separately gated and recorded.

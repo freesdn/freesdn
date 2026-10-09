@@ -52,7 +52,7 @@ const defaultValues: TrueNASFormValues = {
   site_id: '',
   host: '',
   port: 443,
-  verify_ssl: false,
+  verify_ssl: true,
   sync_enabled: true,
   sync_interval_seconds: 300,
   username: 'truenas_admin',

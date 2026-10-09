@@ -1,0 +1,41 @@
+# Gateway certificate inventory and expiry reads
+
+Certificate expiry is a read-only inventory check, not certificate issuance,
+renewal, revocation checking or TLS-chain validation. It requires firewall.view
+and preserves the existing organization, active-parent and site-access checks.
+No certificate or gateway configuration is changed by these routes.
+
+GET /firewall/gateways/{id}/certificates/certs returns a confirmed inventory.
+GET /firewall/gateways/{id}/certificates/expiry classifies that inventory using
+an expiry threshold of 1 through 365 days (the dashboard requests 30).
+
+Unsupported adapter operations return 501. Failed connections, failed reads,
+malformed envelopes and incomplete inventories return a generic 502. Neither
+condition means there are zero certificates or that certificates are healthy.
+Raw device errors, private keys and certificate payloads are not returned by the
+OPNsense inventory adapter; retry diagnostics retain only the exception type.
+
+The OPNsense implementation calls the Trust cert/search endpoint with all rows
+requested. It validates the row list, unique record identities, current page,
+returned count and total count before normalizing public metadata. Firmware
+with a different or incomplete response fails visibly; compatibility must be
+verified against each supported firmware in the operator's environment.
+
+Expiry classification supports ISO timestamps, legacy UTC timestamps and
+OPNsense Unix seconds, including numeric strings and zero. Missing, malformed,
+non-finite or out-of-range dates are unknown, not valid. The response includes
+unknown and unknown_count, and needs_attention is true for unknown, expired or
+soon-expiring certificates. Every returned certificate is counted exactly once.
+
+The dashboard verifies the gateway identity, threshold, row shapes and counts.
+It hides cached status during refresh and after errors, offers an explicit retry,
+and distinguishes an empty inventory from a healthy nonempty inventory. Unknown
+expiry rows never show a fabricated date. English, Spanish and Chinese include
+the unavailable, empty and unknown states.
+
+The automated checks use real PostgreSQL, ASGI, the actual OPNsense client/parser,
+and a real Chromium page with synthetic device responses. These do not prove
+live firmware compatibility, certificate deployment, unattended renewal, trust
+chain health, continuous freshness, HA or enterprise acceptance. The separate
+trust overview, CA/CRL and ACME summaries have distinct contracts and acceptance
+limits described in TRUST-ACME-INVENTORY-READS; an expiry pass does not qualify them.

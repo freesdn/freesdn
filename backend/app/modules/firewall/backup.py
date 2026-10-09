@@ -263,18 +263,20 @@ class FirewallBackupContributor:
             ]
 
         # --- Gateway connections (org-scoped via org_id; creds stripped) ---
-        gw_rows = (
-            (
-                await session.execute(
-                    select(GatewayConnection).where(
-                        GatewayConnection.org_id == organization_id,
-                        GatewayConnection.deleted_at.is_(None),
-                    )
-                )
-            )
-            .scalars()
-            .all()
+        gw_q = select(GatewayConnection).where(
+            GatewayConnection.org_id == organization_id,
+            GatewayConnection.deleted_at.is_(None),
         )
+        if site_filter:
+            # A site archive excludes organization-wide and sibling gateways.
+            # Validate the site's tenant/lifecycle here as scheduled jobs and
+            # direct service callers do not pass through HTTP admission.
+            gw_q = gw_q.join(Site, GatewayConnection.site_id == Site.id).where(
+                GatewayConnection.site_id == site_filter,
+                Site.organization_id == organization_id,
+                Site.deleted_at.is_(None),
+            )
+        gw_rows = (await session.execute(gw_q)).scalars().all()
         gw_data = [
             {
                 "id": str(g.id),
@@ -315,7 +317,7 @@ class FirewallBackupContributor:
             metadata={
                 "captured_at": time.time(),
                 "source": "firewall_contributor.collect",
-                "secrets_excluded": True,
+                "secrets_excluded": not include_secrets,
             },
         )
 

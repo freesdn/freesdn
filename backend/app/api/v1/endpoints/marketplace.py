@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Awaitable, Callable
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -26,6 +27,8 @@ from app.core.security_utils import escape_like
 from app.db import get_session
 from app.models.marketplace import MarketplacePlugin, MarketplacePluginVersion, PluginReview
 from app.models.plugins import InstalledPlugin
+from app.plugins.mutation_authority import capture_plugin_mutation_authority
+from app.services import marketplace_catalog as catalog_policy
 from app.services.audit import AuditAction, AuditService, ResourceType
 
 logger = logging.getLogger(__name__)
@@ -57,6 +60,52 @@ MARKETPLACE_ALLOW_UNSIGNED = os.getenv("MARKETPLACE_ALLOW_UNSIGNED", "").strip()
     "yes",
 )
 
+# Independent restore floor. Invalid values fail closed when sync/install is used.
+MARKETPLACE_MIN_SERIAL = os.getenv("MARKETPLACE_MIN_SERIAL", "0").strip()
+
+
+def _catalog_identity() -> str:
+    return catalog_policy.publisher_identity(
+        MARKETPLACE_REGISTRY_URL, MARKETPLACE_PUBLISHER_PUBLIC_KEY
+    )
+
+
+async def _require_current_catalog(session: AsyncSession, plugin: MarketplacePlugin) -> None:
+    if not MARKETPLACE_PUBLISHER_PUBLIC_KEY and not MARKETPLACE_ALLOW_UNSIGNED:
+        raise HTTPException(
+            403, "Pin a marketplace publisher key before installing catalog plugins."
+        )
+    await catalog_policy.require_installable(
+        session, plugin, _catalog_identity(), catalog_policy.minimum_serial(MARKETPLACE_MIN_SERIAL)
+    )
+
+
+def _marketplace_mutation_check(
+    check_account: Callable[[], Awaitable[None]],
+    session: AsyncSession,
+    plugin: MarketplacePlugin,
+) -> Callable[[], Awaitable[None]]:
+    # Copy the accepted offer before any archive download or lifecycle wait.
+    # The account callback was already captured before catalog resolution.
+    offer = catalog_policy.CatalogOffer.from_plugin(plugin)
+
+    async def check() -> None:
+        if not MARKETPLACE_PUBLISHER_PUBLIC_KEY and not MARKETPLACE_ALLOW_UNSIGNED:
+            raise HTTPException(403, "Marketplace publisher authorization changed.")
+        floor = catalog_policy.minimum_serial(MARKETPLACE_MIN_SERIAL)
+        envelope = await catalog_policy.require_current_offer(
+            session,
+            offer,
+            _catalog_identity(),
+            floor,
+        )
+        await check_account()
+        # Account revalidation can await SQL/Redis. Recheck catalog time after it.
+        envelope.require_current(catalog_policy.minimum_serial(MARKETPLACE_MIN_SERIAL))
+
+    return check
+
+
 # NOTE: registry sync ingests third-party JSON that ends up populating
 # install pages and (via /install) executes code with full backend privileges.
 # Hardening:
@@ -69,6 +118,8 @@ MARKETPLACE_ALLOW_UNSIGNED = os.getenv("MARKETPLACE_ALLOW_UNSIGNED", "").strip()
 #   - Ed25519 detached signature over the canonicalised catalog verified
 #     with a pinned publisher key (_verify_catalog_signature) before any DB write,
 #     so a compromised/MITM'd registry cannot drive plugin URL/checksum → install.
+#   - Signed freshness and a transaction-locked serial floor prevent replay;
+#     installation requires current snapshot provenance and rechecks after download.
 MAX_REGISTRY_CATALOG_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
@@ -159,6 +210,7 @@ _CATALOG_ALLOWED_FIELDS: frozenset[str] = frozenset(
         "latest_version",
         "author",
         "author_name",
+        "author_url",
         "homepage_url",
         "download_url",
         "checksum_sha256",
@@ -388,6 +440,7 @@ async def _resolve_published(session: AsyncSession, slug: str) -> MarketplacePlu
     )
     plugin = result.scalar_one_or_none()
     if plugin:
+        await _require_current_catalog(session, plugin)
         return plugin
 
     withdrawn_row = await session.execute(
@@ -449,18 +502,26 @@ async def install_from_marketplace(
     if not is_unscoped_superuser(current_user):  # scope-aware
         raise HTTPException(status_code=403, detail="Requires super admin role")
 
+    check_account = capture_plugin_mutation_authority(request, current_user, session)
     plugin = await _resolve_published(session, slug)
+    check_authority = _marketplace_mutation_check(check_account, session, plugin)
 
     from app.plugins.loader import PluginLoadError, plugin_loader
 
     try:
         raw = await _download_and_verify(plugin)
+        # Downloads can outlast catalog validity. Refuse before changing files
+        # or stopping a running plugin when authorization has expired.
+        await _require_current_catalog(session, plugin)
 
         record = await plugin_loader.install_plugin(
             source=raw,
             db=session,
             installed_by_id=current_user.id,
+            before_mutation=check_authority,
             source_url=f"marketplace:{slug}",
+            expected_plugin_id=plugin.plugin_id,
+            expected_version=plugin.latest_version,
         )
 
         # START it. Installing wrote the files and the database row and stopped
@@ -559,7 +620,9 @@ async def upgrade_from_marketplace(
     if not is_unscoped_superuser(current_user):
         raise HTTPException(status_code=403, detail="Requires super admin role")
 
+    check_account = capture_plugin_mutation_authority(request, current_user, session)
     plugin = await _resolve_published(session, slug)
+    check_authority = _marketplace_mutation_check(check_account, session, plugin)
 
     from app.plugins.loader import PluginLoadError, _version_tuple, plugin_loader
 
@@ -599,16 +662,20 @@ async def upgrade_from_marketplace(
 
     try:
         raw = await _download_and_verify(plugin)
+        # Downloads can outlast catalog validity. Refuse before changing files
+        # or stopping a running plugin when authorization has expired.
+        await _require_current_catalog(session, plugin)
 
-        # Stop first. upgrade_plugin replaces the files underneath a running
-        # plugin, and its per-organisation runtimes hold connections, event
-        # subscriptions and scheduler claims that belong to the old code.
-        await plugin_loader.stop_plugin_everywhere(plugin.plugin_id, session)
+        # The loader validates before stopping active runtimes and serializes
+        # shutdown with file replacement. A rejected archive must not leave a
+        # working plugin stopped merely because this endpoint was called.
         record = await plugin_loader.upgrade_plugin(
             plugin_id=plugin.plugin_id,
             source=raw,
             db=session,
             installed_by_id=current_user.id,
+            expected_version=target,
+            before_mutation=check_authority,
         )
         from app.api.v1.endpoints.plugins import _start_plugin_everywhere
 
@@ -884,6 +951,7 @@ def _sanitize_catalog_entry(entry: dict[str, Any]) -> dict[str, Any]:
 
 @router.post("/sync", status_code=status.HTTP_200_OK)
 async def sync_marketplace(
+    request: Request,
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, Any]:
@@ -894,6 +962,7 @@ async def sync_marketplace(
     if not is_unscoped_superuser(current_user):  # scope-aware
         raise HTTPException(status_code=403, detail="Requires super_admin role")
 
+    check_account = capture_plugin_mutation_authority(request, current_user, session)
     synced = 0
 
     # FETCH and VERIFY are separated deliberately, because they need opposite
@@ -933,130 +1002,106 @@ async def sync_marketplace(
                 status_code=503, detail="Remote registry unavailable and no seed file found"
             ) from exc
 
+    # A fetch or offline fallback cannot retain a revoked initiating credential.
+    # Keep this refusal outside the fetch exception handler.
+    await check_account()
+
+    if not isinstance(catalog, dict):
+        raise HTTPException(400, "Marketplace catalog must be an object.")
     if not used_seed:
         # authenticate the REMOTE catalog (pinned-key Ed25519 signature)
         # before any ingest. Raises 403 on unsigned/invalid per the configured
         # posture, and that refusal must never degrade to the seed.
         _verify_catalog_signature(catalog or {})
 
-    skipped_entries: list[dict[str, str]] = []
-    seen_ids: set[str] = set()
-    for entry in catalog.get("plugins", []):
-        if not isinstance(entry, dict) or "plugin_id" not in entry:
-            continue
-        # NOTE: strip server-controlled and trust-decision fields
-        # BEFORE any setattr / **kwargs construction. ``is_verified``,
-        # ``is_featured``, ``status``, ``download_count``, ``id``, timestamps
-        # are NOT controllable from the registry feed — this is the single
-        # most consequential supply-chain hijack vector in the file.
-        sanitized = _sanitize_catalog_entry(entry)
-        if "plugin_id" not in sanitized:
-            continue
-
-        # Isolate each entry in a SAVEPOINT so one bad catalog row (e.g. a
-        # slug-uniqueness collision, which is NOT pre-checked) does not abort
-        # the entire batch. The loser/invalid row is rolled back and reported
-        # instead of failing the whole sync.
-        try:
-            async with session.begin_nested():
-                existing = await session.execute(
-                    select(MarketplacePlugin).where(
-                        MarketplacePlugin.plugin_id == sanitized["plugin_id"]
+    floor = catalog_policy.minimum_serial(MARKETPLACE_MIN_SERIAL)
+    envelope = None if used_seed else catalog_policy.validate_envelope(catalog, floor)
+    entries = catalog_policy.validate_entries(catalog.get("plugins"))
+    identity = _catalog_identity()
+    withdrawn: list[str] = []
+    seed_ignored = False
+    try:
+        state = await catalog_policy.lock_catalog(session)
+        await check_account()
+        if used_seed and state.serial:
+            # An unreachable registry is never authority to replace a previously
+            # accepted snapshot. Keep the catalog and its expiry exactly as-is.
+            seed_ignored = True
+        else:
+            if envelope is not None:
+                catalog_policy.accept_envelope(state, envelope, identity, floor)
+            seen_ids: set[str] = set()
+            for entry in entries:
+                sanitized = _sanitize_catalog_entry(entry)
+                row = (
+                    await session.execute(
+                        select(MarketplacePlugin).where(
+                            MarketplacePlugin.plugin_id == sanitized["plugin_id"]
+                        )
                     )
-                )
-                row = existing.scalar_one_or_none()
-                if row:
-                    for k, v in sanitized.items():
-                        if hasattr(row, k):
-                            setattr(row, k, v)
-                    # A plugin the registry had withdrawn and has now listed
-                    # again is published again. ``status`` is deliberately
-                    # stripped by _sanitize_catalog_entry (the feed must never
-                    # set its own trust fields), so nothing above restores it
-                    # and a re-listed plugin would otherwise stay invisible for
-                    # ever with no way back short of editing the database.
+                ).scalar_one_or_none()
+                if used_seed and row is not None:
+                    # Even before the first verified sync, legacy withdrawals
+                    # and operator decisions survive an offline seed fallback.
+                    continue
+                if row is None:
+                    row = MarketplacePlugin(**sanitized)
+                    session.add(row)
+                else:
+                    for key, value in sanitized.items():
+                        setattr(row, key, value)
                     if row.status == "withdrawn":
                         row.status = "published"
-                else:
-                    row = MarketplacePlugin(
-                        **{k: v for k, v in sanitized.items() if hasattr(MarketplacePlugin, k)},
+                if envelope is not None:
+                    row.catalog_identity = identity
+                    row.catalog_serial = envelope.serial
+                seen_ids.add(sanitized["plugin_id"])
+                synced += 1
+            await session.flush()
+            if not used_seed:
+                # Empty signed snapshots are authoritative withdrawals too.
+                stale = await session.execute(
+                    select(MarketplacePlugin).where(
+                        MarketplacePlugin.status == "published",
+                        MarketplacePlugin.plugin_id.notin_(seen_ids),
                     )
-                    session.add(row)
-                await session.flush()
-        except IntegrityError:
-            # Name the conflict. A bare count told an operator that something
-            # was dropped and nothing about what or why, and the usual cause is
-            # a slug already held by a DIFFERENT plugin_id -- which makes the
-            # skip PERMANENT, not transient. That is worth surfacing: sync will
-            # report the same entry every run and the plugin will never appear.
-            pid = str(sanitized.get("plugin_id", "?"))
-            slug = sanitized.get("slug")
-            reason = "integrity error"
-            if slug:
-                holder = await session.execute(
-                    select(MarketplacePlugin.plugin_id).where(MarketplacePlugin.slug == slug)
                 )
-                other = holder.scalar_one_or_none()
-                if other and other != sanitized.get("plugin_id"):
-                    reason = f"slug {slug!r} is already held by {other!r}"
-            skipped_entries.append({"plugin_id": pid, "reason": reason})
-            logger.warning("Skipping marketplace catalog entry %r: %s", pid, reason)
-            continue
-        seen_ids.add(str(sanitized["plugin_id"]))
-        synced += 1
-
-    # DE-LIST what the registry no longer carries.
-    #
-    # The loop above only ever upserts, so a plugin that the registry DROPS --
-    # retired, renamed, or pulled because it turned out to be harmful -- stayed
-    # listed and installable for ever on every deployment that had synced it
-    # once. Withdrawal was the only lever the project had over a bad plugin and
-    # it did nothing for the people who already had the catalogue.
-    #
-    # De-list, do NOT delete: reviews, download counts and history are worth
-    # keeping, "withdrawn" is a state an operator may need to see, and a hard
-    # delete would take the row out from under anyone mid-page.
-    #
-    # And do NOT touch an installed copy. Uninstalling somebody's running
-    # integration because an upstream index changed would be a remote actor
-    # stopping production work; the registry decides what is on offer, the
-    # operator decides what runs. Withdrawal makes it un-installable and
-    # un-browsable, and leaves what is already there alone.
-    #
-    # Only ever from the REMOTE, signature-verified catalogue. The bundled seed
-    # is a fallback for an unreachable registry, not an authority on what has
-    # been withdrawn -- reconciling against it would let one failed fetch
-    # de-list every plugin of a private registry that was merely unreachable.
-    withdrawn: list[str] = []
-    if not used_seed and seen_ids:
-        stale = await session.execute(
-            select(MarketplacePlugin).where(
-                MarketplacePlugin.status == "published",
-                MarketplacePlugin.plugin_id.notin_(seen_ids),
-            )
-        )
-        for row in stale.scalars().all():
-            row.status = "withdrawn"
-            withdrawn.append(row.plugin_id)
-            logger.info(
-                "Marketplace plugin %r is no longer in the registry catalog; withdrawing it "
-                "from the marketplace. Installed copies are left running.",
-                row.plugin_id,
-            )
-
-    await session.commit()
-    skipped = len(skipped_entries)
-    message = f"Synced {synced} plugins from registry ({skipped} skipped)"
-    if skipped_entries:
-        detail = "; ".join(f"{e['plugin_id']}: {e['reason']}" for e in skipped_entries)
-        message = f"{message}. Skipped: {detail}"
+                for row in stale.scalars().all():
+                    row.status = "withdrawn"
+                    withdrawn.append(row.plugin_id)
+        # Flush every pending catalog-row write before the final authority read:
+        # row-lock waits must not move the commit beyond credential validation.
+        await session.flush()
+        await check_account()
+        if envelope is not None:
+            envelope.require_current(floor)
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            409,
+            "Catalog conflicts with existing plugin identifiers or slugs; no snapshot was accepted.",
+        ) from exc
+    except Exception:
+        await session.rollback()
+        raise
+    message = (
+        "Registry unavailable; retained the accepted catalog without changes."
+        if seed_ignored
+        else f"Synced {synced} plugins from registry (0 skipped)"
+    )
+    if used_seed and not seed_ignored:
+        message += ". Offline seed is browse-only until a current signed catalog is accepted."
     if withdrawn:
-        message = f"{message}. Withdrawn (no longer in the registry): {', '.join(withdrawn)}"
+        message += f". Withdrawn (no longer in the registry): {', '.join(withdrawn)}"
     return {
         "synced": synced,
-        "skipped": skipped,
-        "skipped_entries": skipped_entries,
+        "skipped": 0,
+        "skipped_entries": [],
         "withdrawn": withdrawn,
         "used_seed": used_seed,
+        "seed_ignored": seed_ignored,
+        "catalog_serial": state.serial if state.serial else None,
+        "catalog_expires_at": state.expires_at.isoformat() if state.expires_at else None,
         "message": message,
     }

@@ -335,8 +335,8 @@ export const gatewayApi = {
     api.get(`/firewall/gateways/${enc(id)}/plugins`),
 
   // Config download + Backup delete
-  downloadConfig: (id: string) =>
-    api.get(`/firewall/gateways/${enc(id)}/config/download`),
+  downloadConfig: (id: string, signal?: AbortSignal) =>
+    api.get<unknown>(`/firewall/gateways/${enc(id)}/config/download`, { signal }),
 
   deleteBackup: (id: string, filename: string) =>
     api.delete<GatewayWriteResponse>(`/firewall/gateways/${enc(id)}/backups/${enc(filename)}`),

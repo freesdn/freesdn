@@ -181,10 +181,10 @@ export const switchesApi = {
 
   // Port Actions
   togglePort: (switchId: string, portIndex: number, enabled: boolean) =>
-    api.post(`/switches/${switchId}/ports/${portIndex}/toggle`, { enabled }),
+    api.post(`/switches/${switchId}/ports/${portIndex}/toggle`, { enabled, force: true }),
 
   togglePoe: (switchId: string, portIndex: number, enabled: boolean) =>
-    api.post(`/switches/${switchId}/ports/${portIndex}/poe`, { enabled }),
+    api.post(`/switches/${switchId}/ports/${portIndex}/poe`, { enabled, force: true }),
 
   cyclePoe: (switchId: string, portIndex: number) =>
     api.post(`/switches/${switchId}/ports/${portIndex}/poe/cycle`),

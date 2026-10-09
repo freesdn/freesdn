@@ -1,0 +1,44 @@
+User accounts and UUID identity in backup collection/restore
+============================================================
+
+A site-specific backup includes only active users in the requested organization
+with an explicit grant to that active site. Unrestricted organization accounts
+and users assigned only to other sites are excluded. An organization-wide
+backup remains the way to carry all organization accounts. include_users=false
+still excludes both users and their access grants.
+
+Previously a site backup included every organization user but only grants for
+the selected site. The real PostgreSQL probe demonstrates that restoring one
+unrelated restricted user could recreate it with zero grants. CurrentUser treats
+zero grants as unrestricted site access, so this was a privilege expansion.
+The corrected collection reconciles the actual exported user/grant sets after
+both reads: no selected user without a matching grant and no new grant without
+its selected user is emitted. Tests inject grant/lifecycle changes between SQL
+reads; they are not a cross-process concurrency or caller-revocation test.
+
+For users belonging to multiple sites, a site snapshot intentionally carries
+only the selected site's grants. It is a partial snapshot, not a full account
+recovery artifact. Whole-organization lifecycle inconsistencies and previously
+created archives are unchanged; this fix does not retroactively certify them.
+
+The core restore now converts JSON UUID strings to Python UUID objects for
+mapped UUID columns before lookup/insertion/update. Bulk INSERT RETURNING uses
+typed identities to correlate records; relying on PostgreSQL's implicit string
+conversion caused actual bulk restoration to fail. Invalid UUID values are
+counted as skipped without poisoning the transaction. JSON fields containing
+UUID-shaped text remain JSON strings. Existing tenant, grant-target, secret-field
+and overwrite rules are preserved. No database schema or dependency change is
+required. Module-specific restore helpers are outside this change.
+
+Qualification covers actual PostgreSQL user collection and core user/grant
+restoration, read-cap preservation, typed bulk site/credential/automation
+inserts, malformed identifiers, and encrypted local archive write/readback.
+The independent probe characterizes the original bulk failure and successful
+single-user privilege expansion, then checks the repaired behavior. It does
+not exercise HTTP authentication, first-install recovery, every contributor,
+device configuration restore, remote storage durability or customer RTO/RPO.
+Core credential scope and other contributor scope still need separate review.
+
+SQLAlchemy references:
+https://docs.sqlalchemy.org/en/20/core/type_basics.html#sqlalchemy.types.Uuid
+https://docs.sqlalchemy.org/en/20/core/connections.html#engine-insertmanyvalues

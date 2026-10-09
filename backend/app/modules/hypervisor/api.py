@@ -17,7 +17,18 @@ import re
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Path,
+    Query,
+    UploadFile,
+    status,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,40 +43,45 @@ from app.modules.hypervisor.schemas import (
     AgentFileReadRequest,
     AgentFileWriteRequest,
     BackupAgeResponse,
-    BackupJobCreateRequest,
+    BackupJobOperationRequest,
+    BackupJobOperationResponse,
     BackupJobResponse,
-    BackupJobUpdateRequest,
+    BackupJobReviewRequest,
+    BackupJobReviewResponse,
     BackupRunRequest,
     BulkActionRequest,
     BulkActionResult,
     BulkMigrateRequest,
     CephDetailResponse,
     CephStatusResponse,
+    CertificateOperationRequest,
+    CertificateOperationResponse,
+    CertificateReviewRequest,
+    CertificateReviewResponse,
     CloneRequest,
     CloudInitConfig,
-    ClusterFirewallOptions,
+    ClusterOperationRequest,
+    ClusterOperationResponse,
+    ClusterOperationReview,
     ClusterResourceItem,
     ClusterStatusResponse,
     ConsoleProxyResponse,
     CreateContainerRequest,
-    CreateGuestFirewallRuleRequest,
-    CreateSdnVnetRequest,
-    CreateSdnZoneRequest,
     CreateVMRequest,
     CreateVMResponse,
+    DeleteVMRequest,
     DiskInfoResponse,
-    FirewallRuleCreateRequest,
     FirewallRuleResponse,
     FleetDashboardResponse,
     FleetTaskStatistics,
     GuestAgentInfoResponse,
     GuestAgentNetworkInterface,
-    GuestFirewallOptions,
     HAGroupCreateRequest,
     HAGroupResponse,
     HAResourceCreateRequest,
     HAResourceResponse,
     HypervisorDashboardResponse,
+    HypervisorIntentRequest,
     HysteresisEvaluateRequest,
     HysteresisEvaluateResponse,
     MigrateRequest,
@@ -85,18 +101,34 @@ from app.modules.hypervisor.schemas import (
     SnapshotCreateRequest,
     SnapshotResponse,
     StorageContentItem,
+    StorageOperationRequest,
+    StorageOperationResponse,
+    StorageOperationReview,
     StorageResponse,
+    StorageReviewRequest,
     SyslogEntry,
     TaskDetailResponse,
     TaskLogEntry,
     TaskResponse,
+    TaskStopRequest,
+    TaskStopResponse,
+    TaskStopReviewResponse,
+    TaskStopTarget,
+    TemplateConversionRequest,
     UpdateConfigRequest,
     UploadCertificateRequest,
-    UploadResponse,
     VMActionRequest,
+    VMActionResponse,
     VMResponse,
 )
+from app.modules.hypervisor.sdn_schemas import (
+    SdnAttachmentInspection,
+    SdnDependencyInspection,
+    SdnDryRunObservation,
+    SdnInspection,
+)
 from app.modules.hypervisor.service import HypervisorService, evaluate_with_hysteresis
+from app.services.hypervisor_sdn import HypervisorSdnService
 
 logger = logging.getLogger(__name__)
 
@@ -463,7 +495,9 @@ async def get_vm_config(
 
 @router.post(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/action",
-    summary="Perform a VM/container power action",
+    summary="Submit a durably tracked VM/container power action",
+    response_model=VMActionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def vm_action(
     controller_id: UUID,
@@ -477,7 +511,16 @@ async def vm_action(
     ctrl = await _get_controller(controller_id, session, current_user)
     try:
         svc = HypervisorService(session)
-        return await svc.vm_action(ctrl, node, vmid, body.action, vm_type)
+        return await svc.vm_action(
+            ctrl,
+            node,
+            vmid,
+            body.action,
+            vm_type,
+            current_user=current_user,
+            request_id=body.request_id,
+            force=body.force,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ConnectionError as e:
@@ -522,6 +565,8 @@ async def get_snapshots(
 
 @router.post(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/snapshots",
+    response_model=VMActionResponse,
+    status_code=202,
     summary="Create a snapshot",
 )
 async def create_snapshot(
@@ -537,7 +582,16 @@ async def create_snapshot(
     try:
         svc = HypervisorService(session)
         return await svc.create_snapshot(
-            ctrl, node, vmid, body.snapname, body.description, vm_type, body.vmstate
+            ctrl,
+            node,
+            vmid,
+            body.snapname,
+            body.description,
+            vm_type,
+            body.vmstate,
+            current_user=current_user,
+            request_id=body.request_id,
+            force=body.force,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -552,10 +606,13 @@ async def create_snapshot(
 
 @router.post(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/snapshots/{snapname}/rollback",
+    response_model=VMActionResponse,
+    status_code=202,
     summary="Rollback to a snapshot",
 )
 async def rollback_snapshot(
     controller_id: UUID,
+    body: HypervisorIntentRequest,
     node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
     vm_type: Literal["qemu", "lxc"] = Path(...),
     vmid: int = Path(..., ge=100, le=999999999),
@@ -572,7 +629,17 @@ async def rollback_snapshot(
     ctrl = await _get_controller(controller_id, session, current_user)
     try:
         svc = HypervisorService(session)
-        return await svc.rollback_snapshot(ctrl, node, vmid, snapname, vm_type, confirmed=confirmed)
+        return await svc.rollback_snapshot(
+            ctrl,
+            node,
+            vmid,
+            snapname,
+            vm_type,
+            confirmed=confirmed,
+            current_user=current_user,
+            request_id=body.request_id,
+            force=body.force,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ConnectionError as e:
@@ -586,6 +653,8 @@ async def rollback_snapshot(
 
 @router.delete(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/snapshots/{snapname}",
+    response_model=VMActionResponse,
+    status_code=202,
     summary="Delete a snapshot",
 )
 async def delete_snapshot(
@@ -594,13 +663,26 @@ async def delete_snapshot(
     vm_type: Literal["qemu", "lxc"] = Path(...),
     vmid: int = Path(..., ge=100, le=999999999),
     snapname: str = Path(..., min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9_-]+$"),
+    request_id: UUID = Query(..., description="Stable intent ID; reuse on retries"),
+    force: bool = Query(False),
+    confirmed: bool = Query(False, description="Required: permanently removes the snapshot"),
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
     ctrl = await _get_controller(controller_id, session, current_user)
     try:
         svc = HypervisorService(session)
-        return await svc.delete_snapshot(ctrl, node, vmid, snapname, vm_type)
+        return await svc.delete_snapshot(
+            ctrl,
+            node,
+            vmid,
+            snapname,
+            vm_type,
+            confirmed=confirmed,
+            current_user=current_user,
+            request_id=request_id,
+            force=force,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ConnectionError as e:
@@ -817,6 +899,8 @@ async def get_backup_jobs(
 
 @router.post(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/backup",
+    response_model=VMActionResponse,
+    status_code=202,
     summary="Run a manual backup",
 )
 async def run_backup(
@@ -831,7 +915,18 @@ async def run_backup(
     ctrl = await _get_controller(controller_id, session, current_user)
     try:
         svc = HypervisorService(session)
-        return await svc.run_backup(ctrl, node, vmid, body.storage, body.mode, body.compress)
+        return await svc.run_backup(
+            ctrl,
+            node,
+            vmid,
+            body.storage,
+            body.mode,
+            body.compress,
+            vm_type=vm_type,
+            current_user=current_user,
+            request_id=body.request_id,
+            force=body.force,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ConnectionError as e:
@@ -850,6 +945,8 @@ async def run_backup(
 
 @router.post(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/clone",
+    response_model=VMActionResponse,
+    status_code=202,
     summary="Clone a VM or container",
 )
 async def clone_vm(
@@ -875,6 +972,9 @@ async def clone_vm(
             full=body.full,
             storage=body.storage,
             description=body.description,
+            current_user=current_user,
+            request_id=body.request_id,
+            force=body.force,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -889,6 +989,8 @@ async def clone_vm(
 
 @router.post(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/migrate",
+    response_model=VMActionResponse,
+    status_code=202,
     summary="Migrate a VM or container to another node",
 )
 async def migrate_vm(
@@ -903,7 +1005,18 @@ async def migrate_vm(
     ctrl = await _get_controller(controller_id, session, current_user)
     try:
         svc = HypervisorService(session)
-        return await svc.migrate_vm(ctrl, node, vmid, body.target, vm_type, body.online)
+        return await svc.migrate_vm(
+            ctrl,
+            node,
+            vmid,
+            body.target,
+            vm_type,
+            body.online,
+            restart=body.restart,
+            current_user=current_user,
+            request_id=body.request_id,
+            force=body.force,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ConnectionError as e:
@@ -917,7 +1030,9 @@ async def migrate_vm(
 
 @router.put(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/resize",
-    summary="Resize a VM/CT disk",
+    summary="Submit a reviewed disk resize",
+    response_model=VMActionResponse,
+    status_code=202,
 )
 async def resize_disk(
     controller_id: UUID,
@@ -931,7 +1046,7 @@ async def resize_disk(
     ctrl = await _get_controller(controller_id, session, current_user)
     try:
         svc = HypervisorService(session)
-        return await svc.resize_disk(ctrl, node, vmid, body.disk, body.size, vm_type)
+        return await svc.resize_disk(ctrl, node, vmid, body, vm_type, current_user=current_user)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ConnectionError as e:
@@ -945,7 +1060,9 @@ async def resize_disk(
 
 @router.put(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/config",
-    summary="Update VM/CT configuration",
+    summary="Submit a reviewed VM/CT configuration change",
+    response_model=VMActionResponse,
+    status_code=202,
 )
 async def update_config(
     controller_id: UUID,
@@ -958,11 +1075,8 @@ async def update_config(
 ):
     ctrl = await _get_controller(controller_id, session, current_user)
     try:
-        config = {k: v for k, v in body.model_dump().items() if v is not None}
-        if not config:
-            raise HTTPException(status_code=400, detail="No config fields provided")
         svc = HypervisorService(session)
-        return await svc.update_config(ctrl, node, vmid, config, vm_type)
+        return await svc.update_config(ctrl, node, vmid, body, vm_type, current_user=current_user)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ConnectionError as e:
@@ -976,10 +1090,13 @@ async def update_config(
 
 @router.post(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/template",
-    summary="Convert VM/CT to template",
+    summary="Submit a confirmed template conversion",
+    response_model=VMActionResponse,
+    status_code=202,
 )
 async def convert_to_template(
     controller_id: UUID,
+    body: TemplateConversionRequest,
     node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
     vm_type: Literal["qemu", "lxc"] = Path(...),
     vmid: int = Path(..., ge=100, le=999999999),
@@ -989,7 +1106,9 @@ async def convert_to_template(
     ctrl = await _get_controller(controller_id, session, current_user)
     try:
         svc = HypervisorService(session)
-        return await svc.convert_to_template(ctrl, node, vmid, vm_type)
+        return await svc.convert_to_template(
+            ctrl, node, vmid, body, vm_type, current_user=current_user
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ConnectionError as e:
@@ -1094,30 +1213,52 @@ async def get_task_log(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.delete(
-    "/controllers/{controller_id}/nodes/{node}/tasks/{upid}",
-    summary="Stop a running task",
+def _task_stop_target(
+    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9-]+$"),
+    upid: str = Path(..., min_length=10, max_length=512),
+) -> TaskStopTarget:
+    try:
+        return TaskStopTarget(node=node, upid=upid)
+    except ValueError:
+        raise HTTPException(422, detail="Invalid task identity or node mismatch") from None
+
+
+@router.post(
+    "/controllers/{controller_id}/nodes/{node}/tasks/{upid}/stop-review",
+    response_model=TaskStopReviewResponse,
+    summary="Review termination of an exact running task",
 )
-async def stop_task(
+async def review_task_stop(
     controller_id: UUID,
-    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    upid: str = Path(..., min_length=10, pattern=r"^UPID:[^/]+$"),
+    target: TaskStopTarget = Depends(_task_stop_target),
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.stop_task(ctrl, node, upid)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_task_control import HypervisorTaskControlService
+
+    return await HypervisorTaskControlService(session, current_user).review(
+        controller_id, target.node, target.upid
+    )
+
+
+@router.delete(
+    "/controllers/{controller_id}/nodes/{node}/tasks/{upid}",
+    response_model=TaskStopResponse,
+    status_code=202,
+    summary="Submit a reviewed, tracked task-stop request",
+)
+async def stop_task(
+    controller_id: UUID,
+    body: TaskStopRequest,
+    target: TaskStopTarget = Depends(_task_stop_target),
+    session: AsyncSession = Depends(get_db),
+    current_user=Depends(require_min_role("site_admin")),
+):
+    from app.services.hypervisor_task_control import HypervisorTaskControlService
+
+    return await HypervisorTaskControlService(session, current_user).submit(
+        controller_id, target.node, target.upid, body
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1172,74 +1313,6 @@ async def get_node_firewall_rules(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post(
-    "/controllers/{controller_id}/nodes/{node}/firewall/rules",
-    summary="Create a node firewall rule",
-)
-async def create_node_firewall_rule(
-    controller_id: UUID,
-    body: FirewallRuleCreateRequest,
-    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    session: AsyncSession = Depends(get_db),
-    current_user=Depends(require_min_role("site_admin")),
-):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.create_firewall_rule(
-            ctrl,
-            node=node,
-            action=body.action,
-            rule_type=body.type,
-            enable=body.enable,
-            source=body.source,
-            dest=body.dest,
-            sport=body.sport,
-            dport=body.dport,
-            proto=body.proto,
-            macro=body.macro,
-            comment=body.comment,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.delete(
-    "/controllers/{controller_id}/nodes/{node}/firewall/rules/{pos}",
-    summary="Delete a node firewall rule",
-)
-async def delete_node_firewall_rule(
-    controller_id: UUID,
-    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    pos: int = Path(..., ge=0),
-    session: AsyncSession = Depends(get_db),
-    # P0: was only get_current_user — any authenticated user could
-    # delete cluster firewall rules. Aligned with every other DELETE
-    # in this router (site_admin minimum).
-    current_user=Depends(require_min_role("site_admin")),
-):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.delete_firewall_rule(ctrl, pos, node=node)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 # NODE EXTRAS
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1247,64 +1320,42 @@ async def delete_node_firewall_rule(
 
 @router.post(
     "/controllers/{controller_id}/nodes/{node}/shutdown",
+    response_model=ClusterOperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Shutdown a node",
 )
 async def shutdown_node(
     controller_id: UUID,
-    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    confirmed: bool = Query(
-        False,
-        description="Must be true to shut the node down (catastrophic — takes the "
-        "whole node offline with no auto-recovery). The UI's type-to-confirm dialog "
-        "sets this; without it the API returns 409.",
-    ),
+    body: ClusterOperationRequest,
+    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9.-]+$"),
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.shutdown_node(ctrl, node, confirmed=confirmed)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_cluster_operations import HypervisorClusterOperationService
+
+    return await HypervisorClusterOperationService(session, current_user).submit(
+        controller_id, "node.shutdown", node, body
+    )
 
 
 @router.post(
     "/controllers/{controller_id}/nodes/{node}/reboot",
+    response_model=ClusterOperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Reboot a node",
 )
 async def reboot_node(
     controller_id: UUID,
-    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    confirmed: bool = Query(
-        False,
-        description="Must be true to reboot the node (catastrophic — takes the "
-        "whole node and its guests offline). The UI's type-to-confirm dialog sets "
-        "this; without it the API returns 409.",
-    ),
+    body: ClusterOperationRequest,
+    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9.-]+$"),
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.reboot_node(ctrl, node, confirmed=confirmed)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_cluster_operations import HypervisorClusterOperationService
+
+    return await HypervisorClusterOperationService(session, current_user).submit(
+        controller_id, "node.reboot", node, body
+    )
 
 
 @router.get(
@@ -1381,32 +1432,48 @@ async def get_node_syslog(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.delete(
-    "/controllers/{controller_id}/nodes/{node}/storage/{storage}/content/{volume:path}",
-    summary="Delete a storage volume",
+@router.post(
+    "/controllers/{controller_id}/nodes/{node}/storage/{storage}/review",
+    response_model=StorageOperationReview,
+    summary="Review a storage artifact upload or deletion",
 )
-async def delete_storage_volume(
+async def review_storage_operation(
     controller_id: UUID,
-    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    storage: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    volume: str = Path(..., min_length=1),
+    node: str,
+    storage: str,
+    body: StorageReviewRequest,
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    _validate_path_param(volume, _RE_VOLID, "volume")
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.delete_storage_volume(ctrl, node, storage, volume)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_storage_operations import HypervisorStorageOperationService
+
+    return await HypervisorStorageOperationService(session, current_user).review(
+        controller_id, node, storage, body
+    )
+
+
+@router.delete(
+    "/controllers/{controller_id}/nodes/{node}/storage/{storage}/content/{volume:path}",
+    response_model=StorageOperationResponse,
+    status_code=202,
+    summary="Submit a reviewed storage artifact deletion",
+)
+async def delete_storage_volume(
+    controller_id: UUID,
+    body: StorageOperationRequest,
+    node: str,
+    storage: str,
+    volume: str,
+    session: AsyncSession = Depends(get_db),
+    current_user=Depends(require_min_role("site_admin")),
+):
+    from app.services.hypervisor_storage_operations import HypervisorStorageOperationService
+
+    if body.action != "delete" or body.volume != volume:
+        raise HTTPException(400, detail="Storage action or volume differs from endpoint")
+    return await HypervisorStorageOperationService(session, current_user).submit(
+        controller_id, node, storage, body
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1555,6 +1622,7 @@ async def get_next_vmid(
 @router.post(
     "/controllers/{controller_id}/vms",
     response_model=CreateVMResponse,
+    status_code=202,
     summary="Create a new QEMU virtual machine",
 )
 async def create_vm(
@@ -1563,47 +1631,17 @@ async def create_vm(
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.create_vm(
-            ctrl,
-            vmid=body.vmid,
-            name=body.name,
-            node=body.node,
-            cores=body.cores,
-            sockets=body.sockets,
-            memory=body.memory,
-            balloon=body.balloon,
-            ostype=body.ostype,
-            storage=body.storage,
-            disk_size=body.disk_size,
-            iso=body.iso,
-            net_bridge=body.net_bridge,
-            net_model=body.net_model,
-            cpu_type=body.cpu_type,
-            bios=body.bios,
-            machine=body.machine,
-            start=body.start_after_create,
-            pool=body.pool,
-            description=body.description,
-            onboot=body.onboot,
-            tags=body.tags,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_operations import HypervisorOperationService
+
+    return await HypervisorOperationService(session, current_user).create(
+        controller_id, "qemu", body
+    )
 
 
 @router.post(
     "/controllers/{controller_id}/containers",
     response_model=CreateVMResponse,
+    status_code=202,
     summary="Create a new LXC container",
 )
 async def create_container(
@@ -1612,42 +1650,11 @@ async def create_container(
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.create_container(
-            ctrl,
-            vmid=body.vmid,
-            hostname=body.hostname,
-            node=body.node,
-            ostemplate=body.ostemplate,
-            cores=body.cores,
-            memory=body.memory,
-            swap=body.swap,
-            storage=body.storage,
-            rootfs_size=body.rootfs_size,
-            net_bridge=body.net_bridge,
-            net_ip=body.net_ip,
-            password=body.password,
-            ssh_public_keys=body.ssh_public_keys,
-            start=body.start_after_create,
-            pool=body.pool,
-            description=body.description,
-            unprivileged=body.unprivileged,
-            onboot=body.onboot,
-            tags=body.tags,
-            nameserver=body.nameserver,
-            searchdomain=body.searchdomain,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_operations import HypervisorOperationService
+
+    return await HypervisorOperationService(session, current_user).create(
+        controller_id, "lxc", body
+    )
 
 
 # ORDER MATTERS: this literal route MUST stay above the
@@ -1661,34 +1668,22 @@ async def create_container(
 # routes rather than only literal ones.
 @router.delete(
     "/controllers/{controller_id}/nodes/{node}/certificates/custom",
-    response_model=None,
-    summary="Delete custom TLS certificate",
+    response_model=CertificateOperationResponse,
+    status_code=202,
+    summary="Submit reviewed certificate delete",
 )
 async def delete_custom_certificate(
     controller_id: UUID,
+    body: CertificateOperationRequest,
     node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    restart: bool = Query(False),
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        result = await svc.delete_custom_certificate(ctrl, node, restart)
-        if not result.success:
-            raise HTTPException(
-                status_code=400, detail=result.error or "Failed to delete certificate"
-            )
-        return result.data
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_certificates import HypervisorCertificateService
+
+    return await HypervisorCertificateService(session, current_user).submit(
+        controller_id, node, "delete", body
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1698,34 +1693,24 @@ async def delete_custom_certificate(
 
 @router.delete(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}",
-    summary="Delete a VM or container",
+    response_model=VMActionResponse,
+    status_code=202,
+    summary="Submit a reviewed VM/container deletion",
 )
 async def delete_vm(
     controller_id: UUID,
+    body: DeleteVMRequest,
     node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
     vm_type: Literal["qemu", "lxc"] = Path(...),
     vmid: int = Path(..., ge=100, le=999999999),
-    confirmed: bool = Query(
-        False,
-        description="Must be true to destroy the guest (irreversible). The UI's "
-        "type-to-confirm dialog sets this; without it the API returns 409.",
-    ),
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.delete_vm(ctrl, node, vmid, vm_type, confirmed=confirmed)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_operations import HypervisorOperationService
+
+    return await HypervisorOperationService(session, current_user).delete(
+        controller_id, node, vmid, vm_type, body
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1735,6 +1720,8 @@ async def delete_vm(
 
 @router.post(
     "/controllers/{controller_id}/ha/resources",
+    response_model=ClusterOperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Add a VM/CT to HA management",
 )
 async def create_ha_resource(
@@ -1743,56 +1730,37 @@ async def create_ha_resource(
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.create_ha_resource(
-            ctrl,
-            body.sid,
-            group=body.group,
-            max_relocate=body.max_relocate,
-            max_restart=body.max_restart,
-            state=body.state,
-            comment=body.comment,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_cluster_operations import HypervisorClusterOperationService
+
+    return await HypervisorClusterOperationService(session, current_user).submit(
+        controller_id, "ha.resource.create", body.sid, body
+    )
 
 
 @router.delete(
     "/controllers/{controller_id}/ha/resources/{sid}",
+    response_model=ClusterOperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Remove a VM/CT from HA management",
 )
 async def delete_ha_resource(
     controller_id: UUID,
-    sid: str = Path(..., min_length=3, max_length=20, pattern=r"^(vm|ct):\d+$"),
+    body: ClusterOperationRequest,
+    sid: str = Path(..., pattern=r"^(vm|ct):[1-9][0-9]{2,8}$"),
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.delete_ha_resource(ctrl, sid)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_cluster_operations import HypervisorClusterOperationService
+
+    return await HypervisorClusterOperationService(session, current_user).submit(
+        controller_id, "ha.resource.delete", sid, body
+    )
 
 
 @router.post(
     "/controllers/{controller_id}/ha/groups",
+    response_model=ClusterOperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Create an HA group",
 )
 async def create_ha_group(
@@ -1801,51 +1769,31 @@ async def create_ha_group(
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.create_ha_group(
-            ctrl,
-            body.group,
-            body.nodes,
-            nofailback=body.nofailback,
-            restricted=body.restricted,
-            comment=body.comment,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_cluster_operations import HypervisorClusterOperationService
+
+    return await HypervisorClusterOperationService(session, current_user).submit(
+        controller_id, "ha.group.create", body.group, body
+    )
 
 
 @router.delete(
     "/controllers/{controller_id}/ha/groups/{group}",
+    response_model=ClusterOperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Delete an HA group",
 )
 async def delete_ha_group(
     controller_id: UUID,
+    body: ClusterOperationRequest,
     group: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9_-]+$"),
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.delete_ha_group(ctrl, group)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_cluster_operations import HypervisorClusterOperationService
+
+    return await HypervisorClusterOperationService(session, current_user).submit(
+        controller_id, "ha.group.delete", group, body
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1874,7 +1822,14 @@ async def bulk_action(
     try:
         svc = HypervisorService(session)
         targets = [t.model_dump() for t in body.targets]
-        results = await svc.bulk_action(ctrl, targets, body.action, confirmed=confirmed)
+        results = await svc.bulk_action(
+            ctrl,
+            targets,
+            body.action,
+            confirmed=confirmed,
+            current_user=current_user,
+            force=body.force,
+        )
         return [BulkActionResult(**r) for r in results]
     except ConnectionError as e:
         raise HTTPException(status_code=502, detail=str(e))
@@ -1900,7 +1855,15 @@ async def bulk_migrate(
     try:
         svc = HypervisorService(session)
         targets = [t.model_dump() for t in body.targets]
-        results = await svc.bulk_migrate(ctrl, targets, body.target_node, body.online)
+        results = await svc.bulk_migrate(
+            ctrl,
+            targets,
+            body.target_node,
+            body.online,
+            restart=body.restart,
+            current_user=current_user,
+            force=body.force,
+        )
         return [BulkActionResult(**r) for r in results]
     except ConnectionError as e:
         raise HTTPException(status_code=502, detail=str(e))
@@ -1970,98 +1933,78 @@ async def get_guest_agent_info(
 
 
 @router.post(
-    "/controllers/{controller_id}/backup/jobs",
-    summary="Create a scheduled backup job",
+    "/controllers/{controller_id}/backup/jobs/review",
+    response_model=BackupJobReviewResponse,
+    summary="Review a backup schedule change without modifying the provider",
 )
-async def create_backup_job(
+async def review_backup_job(
     controller_id: UUID,
-    body: BackupJobCreateRequest,
+    body: BackupJobReviewRequest,
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        kwargs = {k: v for k, v in body.model_dump().items() if v is not None}
-        result = await svc.create_backup_job(ctrl, **kwargs)
-        if not result.success:
-            raise HTTPException(
-                status_code=400, detail=result.error or "Failed to create backup job"
-            )
-        return {"status": "ok", "data": result.data}
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_backup_jobs import HypervisorBackupJobService
+
+    return await HypervisorBackupJobService(session, current_user).review(controller_id, body)
+
+
+@router.post(
+    "/controllers/{controller_id}/backup/jobs",
+    response_model=BackupJobOperationResponse,
+    status_code=202,
+    summary="Create a reviewed backup schedule",
+)
+async def create_backup_job(
+    controller_id: UUID,
+    body: BackupJobOperationRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user=Depends(require_min_role("site_admin")),
+):
+    from app.services.hypervisor_backup_jobs import HypervisorBackupJobService
+
+    if body.action != "create":
+        raise HTTPException(400, detail="Action must match the create endpoint")
+    return await HypervisorBackupJobService(session, current_user).submit(controller_id, body)
 
 
 @router.put(
     "/controllers/{controller_id}/backup/jobs/{job_id}",
-    summary="Update a backup job",
+    response_model=BackupJobOperationResponse,
+    status_code=202,
+    summary="Update a reviewed backup schedule",
 )
 async def update_backup_job(
     controller_id: UUID,
-    body: BackupJobUpdateRequest,
-    job_id: str = Path(..., min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_:-]+$"),
+    body: BackupJobOperationRequest,
+    job_id: str = Path(..., min_length=1, max_length=50, pattern=r"^[A-Za-z0-9][A-Za-z0-9_:-]*$"),
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        kwargs = {k: v for k, v in body.model_dump().items() if v is not None}
-        if not kwargs:
-            raise HTTPException(status_code=400, detail="No fields to update")
-        result = await svc.update_backup_job(ctrl, job_id, **kwargs)
-        if not result.success:
-            raise HTTPException(
-                status_code=400, detail=result.error or "Failed to update backup job"
-            )
-        return {"status": "ok"}
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_backup_jobs import HypervisorBackupJobService
+
+    if body.action != "update" or body.job_id != job_id:
+        raise HTTPException(400, detail="Action and job ID must match the update endpoint")
+    return await HypervisorBackupJobService(session, current_user).submit(controller_id, body)
 
 
 @router.delete(
     "/controllers/{controller_id}/backup/jobs/{job_id}",
-    summary="Delete a backup job",
+    response_model=BackupJobOperationResponse,
+    status_code=202,
+    summary="Delete a reviewed schedule without deleting archives",
 )
 async def delete_backup_job(
     controller_id: UUID,
-    job_id: str = Path(..., min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_:-]+$"),
+    body: BackupJobOperationRequest,
+    job_id: str = Path(..., min_length=1, max_length=50, pattern=r"^[A-Za-z0-9][A-Za-z0-9_:-]*$"),
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        result = await svc.delete_backup_job(ctrl, job_id)
-        if not result.success:
-            raise HTTPException(
-                status_code=400, detail=result.error or "Failed to delete backup job"
-            )
-        return {"status": "ok"}
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_backup_jobs import HypervisorBackupJobService
+
+    if body.action != "delete" or body.job_id != job_id:
+        raise HTTPException(400, detail="Action and job ID must match the delete endpoint")
+    return await HypervisorBackupJobService(session, current_user).submit(controller_id, body)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2103,65 +2046,41 @@ async def get_container_rrd(
 
 @router.post(
     "/controllers/{controller_id}/nodes/{node}/storage/{storage}/upload",
-    response_model=UploadResponse,
-    summary="Upload a file (ISO/template) to storage",
+    response_model=StorageOperationResponse,
+    status_code=202,
+    summary="Submit a reviewed ISO or template upload",
 )
 async def upload_to_storage(
     controller_id: UUID,
+    node: str,
+    storage: str,
     file: UploadFile = File(...),
-    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    storage: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
+    request_id: UUID = Form(...),
+    expected_digest: str = Form(..., pattern=r"^[a-f0-9]{64}$"),
+    content: str = Form(..., pattern=r"^(iso|vztmpl)$"),
+    size: int = Form(..., gt=0, le=4 * 1024**3),
+    force: bool = Form(False),
+    confirmed: bool = Form(False),
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    temp_path: str | None = None
-    try:
-        import os
-        import tempfile
+    from app.services.hypervisor_storage_operations import HypervisorStorageOperationService
 
-        MAX_UPLOAD_SIZE = 4 * 1024 * 1024 * 1024  # 4GB
-        total_size = 0
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            temp_path = tmp.name
-            while True:
-                chunk = await file.read(1024 * 1024)  # 1MB chunks
-                if not chunk:
-                    break
-                total_size += len(chunk)
-                if total_size > MAX_UPLOAD_SIZE:
-                    raise HTTPException(status_code=413, detail="File too large (max 4GB)")
-                tmp.write(chunk)
-        filename = file.filename or "upload"
-        content_type = file.content_type or "application/octet-stream"
-        svc = HypervisorService(session)
-        result = await svc.upload_to_storage(ctrl, node, storage, filename, content_type, temp_path)
-        if isinstance(result, dict) and not result.get("success", True):
-            raise HTTPException(status_code=400, detail=result.get("error", "Upload failed"))
-        upid = None
-        if isinstance(result, dict):
-            upid = str(result.get("data")) if result.get("data") else None
-        return UploadResponse(
-            filename=filename,
-            size=total_size,
-            content_type=content_type,
-            upid=upid,
-        )
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-    finally:
-        if temp_path:
-            try:
-                os.unlink(temp_path)
-            except OSError:
-                logger.warning("Failed to remove temp upload file: %s", temp_path)
+    if not file.filename or len(file.filename) > 255:
+        raise HTTPException(400, detail="A filename of 1 to 255 characters is required")
+    body = StorageOperationRequest(
+        action="upload",
+        filename=file.filename,
+        content="iso" if content == "iso" else "vztmpl",
+        size=size,
+        request_id=request_id,
+        expected_digest=expected_digest,
+        force=force,
+        confirmed=confirmed,
+    )
+    return await HypervisorStorageOperationService(session, current_user).submit(
+        controller_id, node, storage, body, file
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2338,41 +2257,49 @@ async def get_node_certificates(
 
 
 @router.post(
-    "/controllers/{controller_id}/nodes/{node}/certificates/acme/renew",
-    response_model=None,
-    summary="Renew ACME certificate on a node",
+    "/controllers/{controller_id}/nodes/{node}/certificates/review",
+    response_model=CertificateReviewResponse,
+    summary="Read and review certificate impact without writing to Proxmox",
 )
-async def renew_node_acme_certificate(
+async def review_node_certificate(
     controller_id: UUID,
+    body: CertificateReviewRequest,
     node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    force: bool = Query(False),
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        result = await svc.renew_node_acme_certificate(ctrl, node, force)
-        if not result.success:
-            raise HTTPException(
-                status_code=400, detail=result.error or "Failed to renew ACME certificate"
-            )
-        return result.data
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_certificates import HypervisorCertificateService
+
+    return await HypervisorCertificateService(session, current_user).review(
+        controller_id, node, body
+    )
+
+
+@router.post(
+    "/controllers/{controller_id}/nodes/{node}/certificates/acme/renew",
+    response_model=CertificateOperationResponse,
+    status_code=202,
+    summary="Submit reviewed certificate renew",
+)
+async def renew_node_acme_certificate(
+    controller_id: UUID,
+    body: CertificateOperationRequest,
+    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
+    session: AsyncSession = Depends(get_db),
+    current_user=Depends(require_min_role("site_admin")),
+):
+    from app.services.hypervisor_certificates import HypervisorCertificateService
+
+    return await HypervisorCertificateService(session, current_user).submit(
+        controller_id, node, "renew", body
+    )
 
 
 @router.post(
     "/controllers/{controller_id}/nodes/{node}/certificates/custom",
-    response_model=None,
-    summary="Upload a custom TLS certificate",
+    response_model=CertificateOperationResponse,
+    status_code=202,
+    summary="Submit reviewed certificate upload",
 )
 async def upload_custom_certificate(
     controller_id: UUID,
@@ -2381,43 +2308,11 @@ async def upload_custom_certificate(
     session: AsyncSession = Depends(get_db),
     current_user=Depends(require_min_role("site_admin")),
 ):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    # replacing the node TLS cert can lock the operator out of
-    # pveproxy if the cert/key is bad. Require an explicit confirmed=true (parity
-    # with the destructive-op confirm class and the staged-apply catastrophic
-    # gate added in adapter_proxmox_preflight).
-    if not body.confirmed:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Uploading a custom TLS certificate can lock pveproxy out if the "
-                "cert/key is invalid; resubmit with confirmed=true to proceed."
-            ),
-        )
-    try:
-        svc = HypervisorService(session)
-        result = await svc.upload_custom_certificate(
-            ctrl,
-            node,
-            certificates=body.certificates,
-            key=body.key,
-            force=body.force,
-            restart=body.restart,
-        )
-        if not result.success:
-            raise HTTPException(
-                status_code=400, detail=result.error or "Failed to upload certificate"
-            )
-        return result.data
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    from app.services.hypervisor_certificates import HypervisorCertificateService
+
+    return await HypervisorCertificateService(session, current_user).submit(
+        controller_id, node, "upload", body
+    )
 
 
 @router.get(
@@ -2548,6 +2443,45 @@ async def remote_migrate_container(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+@router.get("/controllers/{controller_id}/sdn/attachments", response_model=SdnAttachmentInspection)
+async def inspect_sdn_attachments(
+    controller_id: UUID,
+    current_user=Depends(require_permissions("hypervisor:read")),
+    session: AsyncSession = Depends(get_db),
+):
+    return await HypervisorSdnService(session, current_user).attachments(controller_id)
+
+
+@router.get("/controllers/{controller_id}/sdn/dependencies", response_model=SdnDependencyInspection)
+async def inspect_sdn_dependencies(
+    controller_id: UUID,
+    current_user=Depends(require_permissions("hypervisor:read")),
+    session: AsyncSession = Depends(get_db),
+):
+    return await HypervisorSdnService(session, current_user).dependencies(controller_id)
+
+
+@router.get("/controllers/{controller_id}/sdn/inspection", response_model=SdnInspection)
+async def inspect_sdn(
+    controller_id: UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user=Depends(require_permissions("hypervisor:read")),
+):
+    return await HypervisorSdnService(session, current_user).inspect(controller_id)
+
+
+@router.get(
+    "/controllers/{controller_id}/sdn/nodes/{node}/dry-run", response_model=SdnDryRunObservation
+)
+async def inspect_sdn_dry_run(
+    controller_id: UUID,
+    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[A-Za-z0-9][A-Za-z0-9.-]*$"),
+    session: AsyncSession = Depends(get_db),
+    current_user=Depends(require_permissions("hypervisor:read")),
+):
+    return await HypervisorSdnService(session, current_user).dry_run(controller_id, node)
+
+
 @router.get(
     "/controllers/{controller_id}/sdn/zones",
     response_model=None,
@@ -2626,172 +2560,6 @@ async def get_sdn_controllers(
         # (BGP MD5 / TCP-AO neighbor auth secret). Redact before returning to a
         # hypervisor:read (viewer) caller — parity with get_node_certificates (:2284).
         return redact_secrets(result.data) if isinstance(result.data, (dict, list)) else result.data
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.post(
-    "/controllers/{controller_id}/sdn/zones",
-    response_model=None,
-    summary="Create an SDN zone",
-)
-async def create_sdn_zone(
-    controller_id: UUID,
-    body: CreateSdnZoneRequest,
-    session: AsyncSession = Depends(get_db),
-    current_user=Depends(require_min_role("site_admin")),
-):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        kwargs = {
-            k: v for k, v in body.model_dump(exclude={"zone", "type"}).items() if v is not None
-        }
-        result = await svc.create_sdn_zone(ctrl, body.zone, body.type, **kwargs)
-        if not result.success:
-            raise HTTPException(status_code=400, detail=result.error or "Failed to create SDN zone")
-        return result.data or {"status": "ok"}
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.post(
-    "/controllers/{controller_id}/sdn/vnets",
-    response_model=None,
-    summary="Create an SDN vnet",
-)
-async def create_sdn_vnet(
-    controller_id: UUID,
-    body: CreateSdnVnetRequest,
-    session: AsyncSession = Depends(get_db),
-    current_user=Depends(require_min_role("site_admin")),
-):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        kwargs = {
-            k: v for k, v in body.model_dump(exclude={"vnet", "zone"}).items() if v is not None
-        }
-        result = await svc.create_sdn_vnet(ctrl, body.vnet, body.zone, **kwargs)
-        if not result.success:
-            raise HTTPException(status_code=400, detail=result.error or "Failed to create SDN vnet")
-        return result.data or {"status": "ok"}
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.delete(
-    "/controllers/{controller_id}/sdn/zones/{zone}",
-    response_model=None,
-    summary="Delete an SDN zone",
-)
-async def delete_sdn_zone(
-    controller_id: UUID,
-    zone: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    session: AsyncSession = Depends(get_db),
-    current_user=Depends(require_min_role("site_admin")),
-):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        # SAFETY: check if any vnets depend on this zone before deleting
-        vnets_result = await svc.get_sdn_vnets(ctrl)
-        if vnets_result.success and isinstance(vnets_result.data, list):
-            dependent_vnets = [
-                v.get("vnet", v.get("name", "?"))
-                for v in vnets_result.data
-                if v.get("zone") == zone
-            ]
-            if dependent_vnets:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Cannot delete zone '{zone}': {len(dependent_vnets)} vnet(s) "
-                    f"depend on it ({', '.join(dependent_vnets[:5])}). Delete those first.",
-                )
-        result = await svc.delete_sdn_zone(ctrl, zone)
-        if not result.success:
-            raise HTTPException(status_code=400, detail=result.error or "Failed to delete SDN zone")
-        return {"status": "ok"}
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.delete(
-    "/controllers/{controller_id}/sdn/vnets/{vnet}",
-    response_model=None,
-    summary="Delete an SDN vnet",
-)
-async def delete_sdn_vnet(
-    controller_id: UUID,
-    vnet: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    session: AsyncSession = Depends(get_db),
-    current_user=Depends(require_min_role("site_admin")),
-):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        result = await svc.delete_sdn_vnet(ctrl, vnet)
-        if not result.success:
-            raise HTTPException(status_code=400, detail=result.error or "Failed to delete SDN vnet")
-        return {"status": "ok"}
-    except HTTPException:
-        raise
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except AdapterError:
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.post(
-    "/controllers/{controller_id}/sdn/apply",
-    response_model=None,
-    summary="Apply pending SDN configuration",
-)
-async def apply_sdn(
-    controller_id: UUID,
-    session: AsyncSession = Depends(get_db),
-    current_user=Depends(require_min_role("site_admin")),
-):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        result = await svc.apply_sdn(ctrl)
-        if not result.success:
-            raise HTTPException(
-                status_code=400, detail=result.error or "Failed to apply SDN config"
-            )
-        return {"status": "ok"}
     except HTTPException:
         raise
     except ConnectionError as e:
@@ -3229,63 +2997,6 @@ async def get_guest_firewall_rules(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post(
-    "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/firewall/rules",
-    summary="Create a guest firewall rule on a VM/CT",
-)
-async def create_guest_firewall_rule(
-    controller_id: UUID,
-    body: CreateGuestFirewallRuleRequest,
-    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    vm_type: str = Path(..., pattern=r"^(qemu|lxc)$"),
-    vmid: int = Path(..., ge=100, le=999999999),
-    session: AsyncSession = Depends(get_db),
-    current_user=Depends(require_min_role("site_admin")),
-):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        rule = {k: v for k, v in body.model_dump().items() if v is not None}
-        return await svc.create_guest_firewall_rule(ctrl, node, vm_type, vmid, rule)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.delete(
-    "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/firewall/rules/{pos}",
-    summary="Delete a guest firewall rule on a VM/CT",
-)
-async def delete_guest_firewall_rule(
-    controller_id: UUID,
-    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    vm_type: str = Path(..., pattern=r"^(qemu|lxc)$"),
-    vmid: int = Path(..., ge=100, le=999999999),
-    pos: int = Path(..., ge=0),
-    session: AsyncSession = Depends(get_db),
-    current_user=Depends(require_min_role("site_admin")),
-):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        svc = HypervisorService(session)
-        return await svc.delete_guest_firewall_rule(ctrl, node, vm_type, vmid, pos)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
 @router.get(
     "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/firewall/options",
     response_model=None,
@@ -3312,37 +3023,6 @@ async def get_guest_firewall_options(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.put(
-    "/controllers/{controller_id}/nodes/{node}/{vm_type}/{vmid}/firewall/options",
-    summary="Update guest firewall options for a VM/CT",
-)
-async def update_guest_firewall_options(
-    controller_id: UUID,
-    body: GuestFirewallOptions,
-    node: str = Path(..., min_length=1, max_length=63, pattern=r"^[a-zA-Z0-9._-]+$"),
-    vm_type: str = Path(..., pattern=r"^(qemu|lxc)$"),
-    vmid: int = Path(..., ge=100, le=999999999),
-    session: AsyncSession = Depends(get_db),
-    current_user=Depends(require_min_role("site_admin")),
-):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        options = {k: v for k, v in body.model_dump().items() if v is not None}
-        if not options:
-            raise HTTPException(status_code=400, detail="No options provided")
-        svc = HypervisorService(session)
-        return await svc.update_guest_firewall_options(ctrl, node, vm_type, vmid, options)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
 @router.get(
     "/controllers/{controller_id}/cluster/firewall/options",
     response_model=None,
@@ -3357,34 +3037,6 @@ async def get_cluster_fw_options(
     try:
         svc = HypervisorService(session)
         return await svc.get_cluster_firewall_options(ctrl)
-    except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except (AdapterError, HTTPException):
-        raise  # app-level handlers map these (read-only->403, conn->502); HTTPExceptions pass through
-    except Exception as e:
-        logger.error("Hypervisor API error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.put(
-    "/controllers/{controller_id}/cluster/firewall/options",
-    summary="Update cluster firewall options",
-)
-async def update_cluster_fw_options(
-    controller_id: UUID,
-    body: ClusterFirewallOptions,
-    session: AsyncSession = Depends(get_db),
-    current_user=Depends(require_min_role("site_admin")),
-):
-    ctrl = await _get_controller(controller_id, session, current_user)
-    try:
-        options = {k: v for k, v in body.model_dump().items() if v is not None}
-        if not options:
-            raise HTTPException(status_code=400, detail="No options provided")
-        svc = HypervisorService(session)
-        return await svc.update_cluster_firewall_options(ctrl, options)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except ConnectionError as e:
         raise HTTPException(status_code=502, detail=str(e))
     except (AdapterError, HTTPException):
@@ -3790,3 +3442,28 @@ async def evaluate_hysteresis(
     except Exception as e:
         logger.error("Hysteresis evaluation error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to evaluate hysteresis")
+
+
+@router.get(
+    "/controllers/{controller_id}/cluster-operations/review",
+    response_model=ClusterOperationReview,
+    summary="Review cluster impact before node power or HA configuration changes",
+)
+async def review_cluster_operation(
+    controller_id: UUID,
+    action: str = Query(..., max_length=32),
+    target: str = Query(..., max_length=63),
+    group: str = Query("", max_length=63),
+    session: AsyncSession = Depends(get_db),
+    current_user=Depends(require_min_role("site_admin")),
+):
+    from app.services.hypervisor_cluster_operations import HypervisorClusterOperationService
+
+    return await HypervisorClusterOperationService(session, current_user).review(
+        controller_id, action, target, group
+    )
+
+
+from app.modules.hypervisor.firewall_api import router as firewall_router
+
+router.include_router(firewall_router)

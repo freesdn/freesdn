@@ -87,6 +87,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { firmwareDeviceOutcome } from './jobStatus';
 import { firmwareApi, FirmwareSummary, type FirmwareSchedule } from '@/lib/api';
 import { useSiteStore } from '@/stores/siteStore';
 import { BatchProgressDialog, BatchDeviceStatus } from '@/components/ui/batch-progress-dialog';
@@ -522,10 +523,10 @@ export default function FirmwarePage() {
       return;
     }
 
-    // Initialize batch progress with running status directly
+    // Submission and queue acceptance are pending, not execution.
     const batchItems: BatchDeviceStatus[] = selectedDevices.map(id => {
       const dev = (deviceStatus || []).find(d => d.device_id === id);
-      return { id, name: dev?.device_name || id, status: 'running' as const };
+      return { id, name: dev?.device_name || id, status: 'pending' as const };
     });
     setBatchDevices(batchItems);
     setUpgradeDialogOpen(false);
@@ -542,15 +543,9 @@ export default function FirmwarePage() {
       });
       // If job was created successfully, mark based on response
       const jobData = (result?.data as unknown) as Record<string, unknown> | undefined;
-      const deviceResults = jobData?.devices;
-      if (Array.isArray(deviceResults)) {
-        setBatchDevices(prev => prev.map(d => {
-          const dr = (deviceResults as Array<Record<string, unknown>>).find((r) => r.device_id === d.id);
-          return dr ? { ...d, status: dr.status === 'failed' ? 'failed' as const : 'success' as const, message: String(dr.message || '') } : { ...d, status: 'success' as const };
-        }));
-      } else {
-        setBatchDevices(prev => prev.map(d => ({ ...d, status: 'success' as const, message: t('FirmwarePage.batch.jobCreated') })));
-      }
+      setBatchDevices(prev => prev.map(device => ({
+        ...device, ...firmwareDeviceOutcome(jobData, device.id),
+      })));
       queryClient.invalidateQueries({ queryKey: ['firmware'] });
     } catch (error) {
       setBatchDevices(prev => prev.map(d => ({ ...d, status: 'failed' as const, message: t('FirmwarePage.batch.failedToStart') })));
@@ -569,6 +564,9 @@ export default function FirmwarePage() {
 
   return (
     <div className="space-y-6">
+        <div role="status" className="rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm">
+          {t('FirmwarePage.catalogExecutionUnavailable')}
+        </div>
         {/* Header */}
         <PageHeader
           title={t('FirmwarePage.header.title')}
@@ -1332,7 +1330,7 @@ export default function FirmwarePage() {
         {/* Schedules Tab */}
         <TabsContent value="schedules" className="space-y-4">
           <div className="flex justify-end">
-            <Button onClick={() => { setEditingScheduleId(null); setScheduleDialogOpen(true); }}>
+            <Button disabled onClick={() => { setEditingScheduleId(null); setScheduleDialogOpen(true); }}>
               <Plus className="mr-2 h-4 w-4" />
               {t('FirmwarePage.schedules.create')}
             </Button>
@@ -1364,7 +1362,7 @@ export default function FirmwarePage() {
                     <div className="flex items-center gap-3">
                       <Switch
                         checked={schedule.is_enabled}
-                        disabled={toggleScheduleMut.isPending}
+                        disabled={toggleScheduleMut.isPending || !schedule.is_enabled}
                         onCheckedChange={() => toggleScheduleMut.mutate(schedule.id)}
                       />
                       <div>
@@ -1383,7 +1381,7 @@ export default function FirmwarePage() {
                           <Edit className="mr-2 h-4 w-4" />
                           {t('FirmwarePage.actions.edit')}
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => runScheduleNowMut.mutate(schedule.id)}>
+                        <DropdownMenuItem disabled onClick={() => runScheduleNowMut.mutate(schedule.id)}>
                           <Play className="mr-2 h-4 w-4" />
                           {t('FirmwarePage.actions.runNow')}
                         </DropdownMenuItem>
@@ -1497,6 +1495,7 @@ export default function FirmwarePage() {
                   </p>
                 </div>
                 <Switch
+                  disabled
                   checked={upgradeForm.backup_before}
                   onCheckedChange={(checked) => setUpgradeForm({ ...upgradeForm, backup_before: checked })}
                 />
@@ -1509,6 +1508,7 @@ export default function FirmwarePage() {
                   </p>
                 </div>
                 <Switch
+                  disabled
                   checked={upgradeForm.rollback_on_failure}
                   onCheckedChange={(checked) => setUpgradeForm({ ...upgradeForm, rollback_on_failure: checked })}
                 />
@@ -1520,7 +1520,7 @@ export default function FirmwarePage() {
             <Button variant="outline" onClick={() => setUpgradeDialogOpen(false)}>
               {t('FirmwarePage.actions.cancel')}
             </Button>
-            <Button onClick={handleStartUpgrade}>
+            <Button disabled onClick={handleStartUpgrade}>
               {upgradeForm.scheduled_at ? t('FirmwarePage.upgradeDialog.scheduleUpgrade') : t('FirmwarePage.upgradeDialog.startUpgrade')}
             </Button>
           </DialogFooter>
@@ -1764,7 +1764,7 @@ export default function FirmwarePage() {
             </Button>
             <Button
               onClick={handleSubmitSchedule}
-              disabled={createScheduleMut.isPending || updateScheduleMut.isPending}
+              disabled={!editingScheduleId || createScheduleMut.isPending || updateScheduleMut.isPending}
             >
               {(createScheduleMut.isPending || updateScheduleMut.isPending) && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -866,6 +866,9 @@ function SettingsContent({ tab }: { tab: string }) {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            <p role="note" className="mb-4 text-sm text-muted-foreground">
+              {t('SettingsPage.content.modules.enablementBoundary')}
+            </p>
             <ModulesSettingsTab />
           </CardContent>
         </Card>
@@ -984,9 +987,9 @@ export function SettingsPage() {
         </aside>
 
         {/* ---- Content area ---- */}
-        <main className="flex-1 min-w-0">
+        <section aria-label={t('SettingsPage.nav.categories.system')} className="flex-1 min-w-0">
           <SettingsContent tab={currentTab} />
-        </main>
+        </section>
       </div>
     </div>
   );

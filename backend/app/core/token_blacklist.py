@@ -1,111 +1,123 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2024-2026 FreeSDN
-"""
-FreeSDN - Token Blacklist (Redis-backed)
-=============================================
+"""Durable JWT revocations and atomic refresh consumption in PostgreSQL.
 
-Provides JWT revocation via Redis SET with automatic TTL expiry.
-Tokens are blacklisted by their JTI (JWT ID) claim.
+Valkey's shared TTL cache can evict keys or lose replicated writes. It cannot
+be the authority for token revocation or single-use security decisions.
 """
 
+from __future__ import annotations
+
+import hashlib
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-import redis.asyncio as aioredis
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert
 
-from app.core.redis_client import get_async_redis
+from app.core.token_authority_lock import lock_token_authority
+from app.db.session import security_session_factory
+from app.models.core import TokenRevocation
 
 logger = logging.getLogger(__name__)
 
-_BLACKLIST_PREFIX = "token:blacklist:"
-_redis_client: aioredis.Redis | None = None
+
+class TokenRevocationUnavailable(RuntimeError):
+    """Revocation was not acknowledged; callers must not report success."""
 
 
-async def _get_redis() -> aioredis.Redis:
-    """Get or create a reusable Redis client instance."""
-    global _redis_client
-    if _redis_client is None:
-        _redis_client = get_async_redis(decode_responses=True)
-    return _redis_client
+def _identity(jti: str) -> str:
+    if not isinstance(jti, str) or not jti or len(jti) > 1024:
+        raise ValueError("Invalid token identifier")
+    return hashlib.sha256(jti.encode()).hexdigest()
+
+
+def _expiry(exp: int | datetime) -> datetime:
+    if isinstance(exp, datetime):
+        if exp.tzinfo is None:
+            raise ValueError("Token expiry must have a timezone")
+        return exp.astimezone(UTC)
+    return datetime.fromtimestamp(exp, UTC)
 
 
 async def blacklist_token(jti: str, exp: int | datetime) -> None:
-    """
-    Add a token JTI to the blacklist.
-
-    The key automatically expires once the token's own ``exp`` passes,
-    so blacklist entries never accumulate beyond the token lifetime.
-
-    Args:
-        jti: The JWT ID claim value.
-        exp: Token expiration – either a Unix timestamp (int) or a datetime.
-    """
-    if isinstance(exp, datetime):
-        ttl = int((exp - datetime.now(UTC)).total_seconds())
-    else:
-        ttl = int(exp - datetime.now(UTC).timestamp())
-
-    if ttl <= 0:
-        return  # token already expired, nothing to blacklist
-
+    """Commit revocation before success; storage failure is terminal."""
     try:
-        client = await _get_redis()
-        await client.setex(f"{_BLACKLIST_PREFIX}{jti}", ttl, "1")
-    except Exception:
-        logger.exception("Failed to blacklist token %s", jti)
+        identity, expiry = _identity(jti), _expiry(exp)
+        if expiry <= datetime.now(UTC):
+            return
+        statement = insert(TokenRevocation).values(jti_hash=identity, expires_at=expiry)
+        statement = statement.on_conflict_do_update(
+            index_elements=[TokenRevocation.jti_hash],
+            set_={
+                "expires_at": func.greatest(
+                    TokenRevocation.expires_at, statement.excluded.expires_at
+                )
+            },
+        )
+        async with security_session_factory() as session, session.begin():
+            await lock_token_authority(session, jti)
+            await session.execute(statement)
+    except Exception as exc:
+        logger.exception("Durable token revocation failed")
+        raise TokenRevocationUnavailable("Token revocation storage unavailable") from exc
 
 
 async def claim_token_jti(jti: str, exp: int | datetime) -> bool:
-    """Atomically blacklist a JTI, returning True only if THIS call performed
-       the write.
+    """One committed insert wins; failures and expired claims are refused.
 
-       Implemented with Redis ``SET key 1 NX EX ttl``: exactly one of N concurrent
-       callers presenting the same jti wins the claim (returns True); the others
-       see the key already set and return False. Used by refresh-token rotation
-    to collapse a concurrent same-token refresh to a single
-       winner — without it, two requests could both pass the (non-atomic)
-       blacklist check, both mint a fresh token pair, and orphan one per-device
-       session row (defeating targeted session revocation for that pair).
-
-       Fails OPEN (returns True) when Redis is unavailable, mirroring
-       ``blacklist_token``'s best-effort behavior so a Redis outage doesn't block
-       all refreshes. Note that ``is_token_blacklisted`` fails CLOSED, so during a
-       full outage the refresh is already rejected upstream before reaching here.
+    A lost response after commit requires login, not reuse of the old token.
     """
-    if isinstance(exp, datetime):
-        ttl = int((exp - datetime.now(UTC)).total_seconds())
-    else:
-        ttl = int(exp - datetime.now(UTC).timestamp())
-
-    if ttl <= 0:
-        return True  # token already expired; nothing to claim
-
     try:
-        client = await _get_redis()
-        was_set = await client.set(f"{_BLACKLIST_PREFIX}{jti}", "1", nx=True, ex=ttl)
-        return bool(was_set)
+        identity, expiry = _identity(jti), _expiry(exp)
+        if expiry <= datetime.now(UTC):
+            return False
+        statement = (
+            insert(TokenRevocation)
+            .values(jti_hash=identity, expires_at=expiry)
+            .on_conflict_do_nothing(index_elements=[TokenRevocation.jti_hash])
+            .returning(TokenRevocation.jti_hash)
+        )
+        async with security_session_factory() as session, session.begin():
+            await lock_token_authority(session, jti)
+            won = (await session.execute(statement)).scalar_one_or_none() is not None
+        # The INSERT or commit may have waited beyond the earlier expiry check.
+        # Keep the committed tombstone even when this request is now too late.
+        return won and expiry > datetime.now(UTC)
     except Exception:
-        logger.exception("Failed to claim token jti %s (failing open)", jti)
-        return True  # fail-open: don't break refresh on Redis outage
+        logger.exception("Durable token claim failed; refusing token reuse")
+        return False
 
 
 async def is_token_blacklisted(jti: str) -> bool:
-    """
-    Check whether a JTI has been revoked.
-
-    Returns ``True`` if blacklisted **or if Redis is unreachable**
-    (fail-closed).  This means a brief Redis outage will temporarily
-    reject all JWTs rather than silently accepting revoked tokens –
-    the safer default for a security-critical check.
-    """
+    """Database absence is authoritative; storage/validation errors deny."""
     try:
-        client = await _get_redis()
-        result = await client.exists(f"{_BLACKLIST_PREFIX}{jti}")
-        return bool(result)
+        identity = _identity(jti)
+        async with security_session_factory() as session:
+            return (
+                await session.execute(
+                    select(TokenRevocation.jti_hash).where(TokenRevocation.jti_hash == identity)
+                )
+            ).scalar_one_or_none() is not None
     except Exception:
-        logger.exception(
-            "Redis blacklist lookup failed for %s — failing CLOSED "
-            "(treating token as revoked for safety)",
-            jti,
+        logger.exception("Durable token lookup failed; treating token as revoked")
+        return True
+
+
+async def prune_expired_revocations() -> int:
+    """Bound each maintenance batch; retain a day beyond expiry for clock skew."""
+    cutoff = datetime.now(UTC) - timedelta(days=1)
+    async with security_session_factory() as session, session.begin():
+        expired = (
+            select(TokenRevocation.jti_hash)
+            .where(TokenRevocation.expires_at < cutoff)
+            .order_by(TokenRevocation.expires_at)
+            .limit(1000)
+            .with_for_update(skip_locked=True)
         )
-        return True  # SECURITY: fail-closed — reject token when Redis is down
+        removed = await session.execute(
+            delete(TokenRevocation)
+            .where(TokenRevocation.jti_hash.in_(expired))
+            .returning(TokenRevocation.jti_hash)
+        )
+        return len(removed.scalars().all())

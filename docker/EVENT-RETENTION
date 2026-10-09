@@ -1,0 +1,68 @@
+# Event-history retention and bounded cleanup
+
+The existing `app.tasks.maintenance.cleanup_old_events` task retains 90 days by
+default. Its daily 03:00 UTC beat schedule is unchanged. The LogDB migration also
+installs a separate 180-day Timescale chunk retention policy and compression
+after 14 days. These are separate mechanisms: 180 days is not a promise that the
+manual row cleanup keeps that much history. This change does not shorten either
+existing policy or add deletion of report-delivery history.
+
+Each cleanup transaction selects at most 1,000 expired rows, using the complete
+(id, timestamp) primary key, an explicitly materialized batch and SKIP LOCKED.
+Each transaction commits independently. A sweep stops after 100 batches or a
+200-second work budget; individual statements have a 10-second timeout and lock
+waits a one-second timeout. Database errors propagate as task failures. Celery's
+existing retry policy may start another bounded sweep; earlier commits survive.
+The work budget is checked between batches, not a strict whole-process deadline.
+
+The returned result includes `deleted`, `batches`, `remaining_expired` and
+`complete`. `success=true, complete=false` means the sweep ran successfully but
+expired data still exists, including rows skipped because another transaction
+locked them. The worker logs a warning for that result. It never performs an
+unbounded final delete to force completeness, and it does not count the whole
+backlog before starting. Completion is a point-in-time observation, not a
+guarantee against later inserts with older timestamps.
+
+Invalid days (including zero, negative values, booleans and non-integers) are
+refused before opening a database session. Valid values are 1..36500 days.
+
+## Operations and capacity
+
+Review incomplete results and warnings, active locks, database disk space,
+autovacuum and Timescale job failures. A row cap does not bound all physical I/O:
+compressed chunks can require decompression, and deleted rows do not immediately
+return disk space to the OS. The default daily row-sweep cap is 100,000 rows; do
+not assume it can keep up with a larger steady expiration rate. Timescale chunk
+retention remains independent. A growing backlog needs measured sizing and an
+operator-reviewed schedule/capacity policy, not an unbounded DELETE or a full
+disk on the production host. Never run VACUUM FULL or drop chunks as an automatic
+reaction to an incomplete sweep.
+
+## Reproducible acceptance
+
+From a reviewed public source tree on a Linux Docker host with the candidate
+production backend and LogDB images already present:
+
+```sh
+python3 scripts/check_event_retention.py \
+  --backend <candidate-backend-image-or-id> \
+  --logdb <candidate-logdb-image-or-id> \
+  --work-dir /private/new-retention-fixture
+```
+
+The tool resolves local image IDs without pulling and creates an internal
+network, a fresh tmpfs database and restricted application container. It exposes
+no host ports, accepts no existing volumes/database URLs and does not contact
+hardware. It runs the shipped LogDB migration, then checks an empty table,
+the old oversized-delete negative control (rolled back), exact cutoff/composite
+identity, concurrent sweepers, locked rows, compressed chunks, the default
+100-batch cap and real mid-run SQL failure/recovery. Only `report.json` is designed
+to share. The work directory contains generated credentials and raw failure
+logs: keep it private. Cleanup verifies resource ownership labels before removal.
+
+This is synthetic retention acceptance, not a production-sized disk-pressure or
+sustained soak qualification. It does not cover report archives/delivery history,
+all other telemetry tables, customer backup migration or multi-host availability.
+
+PostgreSQL's DELETE documentation describes bounded deletion through a selected
+batch: https://www.postgresql.org/docs/18/sql-delete.html

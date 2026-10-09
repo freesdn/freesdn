@@ -30,151 +30,31 @@ RUNS. An upstream index change must never stop production work.
 from __future__ import annotations
 
 import inspect
+from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
+from sqlalchemy import select
+
+from app.api.v1.endpoints import marketplace as mp
+from app.models.marketplace import MarketplacePlugin
+from tests.services.test_marketplace_replay_regression import (
+    _catalog_setup,
+    _sync_with_catalog_actor,
+)
 
 
-class _Row:
-    """Stands in for a MarketplacePlugin row."""
-
-    def __init__(self, plugin_id: str, status: str = "published"):
-        self.plugin_id = plugin_id
-        self.slug = plugin_id
-        self.status = status
-        self.name = plugin_id
-        self.version = "1.0.0"
+@pytest.fixture
+def catalogs(monkeypatch):
+    return _catalog_setup(monkeypatch)
 
 
-class _FakeSession:
-    """Enough SQLAlchemy to run the real sync loop against an in-memory table."""
-
-    def __init__(self, rows: list[_Row]):
-        self.rows = rows
-        self.added: list[object] = []
-        self.deleted: list[object] = []
-
-    async def execute(self, stmt, *a, **k):
-        sql = str(stmt).upper()
-        # An expanding ``notin_`` binds the whole collection under ONE key, so
-        # a scalars-only sweep of .params sees an empty set and every row looks
-        # stale. Flatten sequences too.
-        values: list[str] = []
-        for v in stmt.compile().params.values():
-            if isinstance(v, str):
-                values.append(v)
-            elif isinstance(v, (list, tuple, set)):
-                values.extend(x for x in v if isinstance(x, str))
-        if "NOT IN" in sql:  # the de-list sweep
-            seen = {v for v in values if v != "published"}
-            matched = [r for r in self.rows if r.status == "published" and r.plugin_id not in seen]
-        else:  # the per-entry upsert lookup
-            matched = [r for r in self.rows if r.plugin_id in values]
-
-        class _Result:
-            def scalar_one_or_none(self_inner):
-                return matched[0] if matched else None
-
-            def scalars(self_inner):
-                class _S:
-                    def all(self_s):
-                        return matched
-
-                return _S()
-
-        return _Result()
-
-    def add(self, obj):
-        self.added.append(obj)
-
-    def delete(self, obj):
-        self.deleted.append(obj)
-
-    async def commit(self):
-        pass
-
-    async def flush(self):
-        pass
-
-    async def rollback(self):
-        pass
-
-    def begin_nested(self):
-        class _Savepoint:
-            async def __aenter__(self_inner):
-                return self_inner
-
-            async def __aexit__(self_inner, *exc):
-                return False
-
-        return _Savepoint()
-
-
-class _User:
-    id = None
-    organization_id = None
-    role = "super_admin"
-    is_superuser = True
-
-    def has_permission(self, _p):
-        return True
-
-
-def _catalog(*plugin_ids: str) -> dict:
-    return {
-        "plugins": [
-            {
-                "plugin_id": p,
-                "slug": p,
-                "name": p,
-                "latest_version": "1.0.0",
-                "download_url": "https://registry.freesdn.org/plugins/" + p + "-1.0.0.zip",
-                "checksum_sha256": "0" * 64,
-            }
-            for p in plugin_ids
-        ],
-        "signature": "unused-the-verifier-is-stubbed",
-    }
-
-
-async def _sync(monkeypatch, catalog: dict, rows: list[_Row], *, remote: bool = True):
-    from fastapi import HTTPException
-
-    from app.api.v1.endpoints import marketplace as mp
-
-    if remote:
-
-        async def _ok(_url):
-            return catalog
-
-        monkeypatch.setattr(mp, "_fetch_registry_catalog", _ok)
-    else:
-
-        async def _dead(_url):
-            raise HTTPException(status_code=400, detail="SSRF blocked: Cannot resolve hostname")
-
-        monkeypatch.setattr(mp, "_fetch_registry_catalog", _dead)
-
-    monkeypatch.setattr(mp, "_verify_catalog_signature", lambda _c: None)
-    monkeypatch.setattr(mp, "is_unscoped_superuser", lambda _u: True)
-
-    session = _FakeSession(rows)
-    out = await mp.sync_marketplace(current_user=_User(), session=session)
-    return out, session
-
-
-# ── the fix ─────────────────────────────────────────────────────
-
-
-async def test_a_plugin_the_registry_dropped_is_withdrawn(monkeypatch):
-    """
-    The bug, driven directly: a row present locally and absent from the fetched
-    catalogue used to survive untouched and stay installable for ever.
-    """
-    rows = [_Row("netbox-sync"), _Row("notify-hub"), _Row("ai-ops-tools")]
-
-    out, _ = await _sync(monkeypatch, _catalog("netbox-sync"), rows)
-
+async def test_a_plugin_the_registry_dropped_is_withdrawn(db_session, catalogs):
+    make, sync = catalogs
+    await sync(db_session, make(1, ("netbox-sync", "notify-hub", "ai-ops-tools")))
+    out = await sync(db_session, make(2, ("netbox-sync",)))
     assert sorted(out["withdrawn"]) == ["ai-ops-tools", "notify-hub"]
+    rows = (await db_session.execute(select(MarketplacePlugin))).scalars().all()
     assert {r.plugin_id: r.status for r in rows} == {
         "netbox-sync": "published",
         "notify-hub": "withdrawn",
@@ -182,75 +62,62 @@ async def test_a_plugin_the_registry_dropped_is_withdrawn(monkeypatch):
     }
 
 
-async def test_the_operator_is_told_which_ones(monkeypatch):
-    """A silent de-list is indistinguishable from a sync that lost entries."""
-    rows = [_Row("netbox-sync"), _Row("notify-hub")]
-
-    out, _ = await _sync(monkeypatch, _catalog("netbox-sync"), rows)
-
-    assert "notify-hub" in out["message"]
-    assert "withdraw" in out["message"].lower()
+async def test_the_operator_is_told_which_ones(db_session, catalogs):
+    make, sync = catalogs
+    await sync(db_session, make(1, ("netbox-sync", "notify-hub")))
+    out = await sync(db_session, make(2, ("netbox-sync",)))
+    assert "notify-hub" in out["message"] and "withdraw" in out["message"].lower()
 
 
-async def test_a_withdrawn_row_is_not_deleted(monkeypatch):
-    """
-    De-list, do not delete. Reviews, download counts and history are worth
-    keeping, and a hard delete would take the row out from under anyone who
-    happened to be reading its page.
-    """
-    rows = [_Row("notify-hub")]
-
-    _, session = await _sync(monkeypatch, _catalog("netbox-sync"), rows)
-
-    assert session.deleted == [], "a withdrawn plugin was deleted rather than de-listed"
-    assert rows[0].plugin_id == "notify-hub", "the row is gone"
-
-
-async def test_a_relisted_plugin_comes_back(monkeypatch):
-    """
-    ``status`` is deliberately stripped from every catalogue entry, so nothing
-    in the upsert restores it. Without an explicit re-publish a plugin that the
-    registry listed again would stay invisible for ever, with no way back short
-    of editing the database.
-    """
-    rows = [_Row("netbox-sync", status="withdrawn")]
-
-    out, _ = await _sync(monkeypatch, _catalog("netbox-sync"), rows)
-
-    assert rows[0].status == "published", "a re-listed plugin stayed withdrawn"
-    assert out["withdrawn"] == []
+async def test_a_withdrawn_row_is_not_deleted(db_session, catalogs):
+    make, sync = catalogs
+    await sync(db_session, make(1, ("notify-hub",)))
+    before = (await db_session.execute(select(MarketplacePlugin))).scalar_one()
+    before.rating_count = 5
+    row_id = before.id
+    await db_session.commit()
+    await sync(db_session, make(2, ("netbox-sync",)))
+    row = (
+        await db_session.execute(select(MarketplacePlugin).where(MarketplacePlugin.id == row_id))
+    ).scalar_one()
+    assert row.plugin_id == "notify-hub" and row.rating_count == 5 and row.status == "withdrawn"
+    with pytest.raises(HTTPException) as error:
+        await mp._resolve_published(db_session, "notify-hub")
+    assert error.value.status_code == 410
 
 
-# ── what it must NOT do ─────────────────────────────────────────
+async def test_a_relisted_plugin_comes_back_with_newer_signed_catalog(db_session, catalogs):
+    make, sync = catalogs
+    await sync(db_session, make(1, ("netbox-sync",)))
+    await sync(db_session, make(2, ()))
+    out = await sync(db_session, make(3, ("netbox-sync",)))
+    row = await mp._resolve_published(db_session, "netbox-sync")
+    assert row.status == "published" and row.catalog_serial == 3 and out["withdrawn"] == []
 
 
-async def test_the_seed_fallback_never_withdraws_anything(monkeypatch):
-    """
-    The bundled seed is a fallback for an unreachable registry, not an authority
-    on what has been withdrawn. Reconciling against it would let a single failed
-    fetch de-list every plugin of a private registry that was merely down.
-    """
-    rows = [_Row("some-private-plugin"), _Row("another-one")]
-
-    out, _ = await _sync(monkeypatch, {}, rows, remote=False)
-
-    assert out["used_seed"] is True, "this test is not exercising the seed path"
-    assert out["withdrawn"] == [], "an unreachable registry de-listed a private catalogue"
-    assert all(r.status == "published" for r in rows)
+async def test_the_seed_fallback_never_withdraws_anything(db_session, catalogs, monkeypatch):
+    make, sync = catalogs
+    await sync(db_session, make(1, ("some-private-plugin", "another-one")))
+    monkeypatch.setattr(mp, "_fetch_registry_catalog", AsyncMock(side_effect=OSError("offline")))
+    out = await _sync_with_catalog_actor(db_session)
+    assert out["used_seed"] and out["seed_ignored"] and out["withdrawn"] == []
+    assert all(
+        r.status == "published"
+        for r in (await db_session.execute(select(MarketplacePlugin))).scalars()
+    )
 
 
-async def test_an_empty_catalogue_does_not_empty_the_marketplace(monkeypatch):
-    """
-    A registry serving a valid but empty catalogue -- a build accident, a bad
-    deploy -- must not withdraw everything. Nothing seen means nothing to
-    reconcile against, not "everything is gone".
-    """
-    rows = [_Row("netbox-sync"), _Row("hello-world")]
-
-    out, _ = await _sync(monkeypatch, {"plugins": []}, rows)
-
-    assert out["withdrawn"] == []
-    assert all(r.status == "published" for r in rows)
+async def test_an_empty_signed_catalogue_withdraws_offers(db_session, catalogs):
+    # A signed empty snapshot is the publisher's only way to withdraw everything.
+    # Invalid, unsigned and incomplete snapshots are rejected before mutations.
+    make, sync = catalogs
+    await sync(db_session, make(1, ("netbox-sync", "hello-world")))
+    out = await sync(db_session, make(2, ()))
+    assert set(out["withdrawn"]) == {"netbox-sync", "hello-world"}
+    assert all(
+        r.status == "withdrawn"
+        for r in (await db_session.execute(select(MarketplacePlugin))).scalars()
+    )
 
 
 def test_sync_never_touches_an_installed_plugin():

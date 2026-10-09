@@ -1,0 +1,41 @@
+Gateway configuration file downloads
+====================================
+
+The gateway System Download Config action now saves the content returned by
+the configuration API. It no longer interprets that response as a device-write
+result. Text is saved as XML, preserving its UTF-8 bytes and BOM; an explicitly
+base64-encoded OpenWRT archive is decoded and saved as tar.gz. Gateway response
+identity, recognized format, nonempty content, canonical base64 and a 16 MiB
+original-content bound are checked before a browser object URL is created.
+The filename contains only a fixed prefix, the validated gateway UUID and the
+recognized extension. Adapter-supplied filenames and vendor strings are not
+used in the filename. Temporary anchors and object URLs are released.
+
+The backup table exposes one Export configuration action, including when its
+history is empty. The old icon on every history row was misleading: every row
+called the same generic endpoint without passing the selected backup identity.
+Those icons are removed. Export does not claim to download a historical row.
+OPNsense still supplies its latest device backup; see OPNSENSE-CONFIG-DOWNLOAD.
+
+Only one export request is active per gateway page. Both buttons are disabled
+while it is pending; repeated callbacks are also guarded. Changing gateway or
+unmounting aborts the request and ignores late completion. Responses are not
+placed in React Query or mutation caches. UI errors are fixed descriptions,
+without backend diagnostic text. A successful browser initiation says Download
+started and warns that the file may contain credentials. It does not promise
+that the user completed an operating-system Save dialog or stored it securely.
+New messages use explicit English fallbacks pending additional translations.
+
+This change does not create a durable backup service, historical content API,
+retention policy, restoration proof, or caller/resource authority checks after
+device I/O. Archive representation is not proof of tar integrity or restore
+compatibility. The separate legacy backup trigger still needs durable capture.
+
+Qualification includes 13 actual-page checks with nine reproduced old failures
+and four controls, 32 document/URL checks, and two missing-ID lifecycle checks.
+All 842 frontend tests, lint and strict production build pass. Nine actual
+Chromium cases exercise the real page and Axios over loopback HTTP, compare
+downloaded bytes, and check failed/stale/duplicate requests. API responses and
+identity are synthetic; no device authentication or hardware backup restoration
+is claimed. The first nullable cleanup build failure and malformed fixture
+pending-changes response are retained with their corrections.

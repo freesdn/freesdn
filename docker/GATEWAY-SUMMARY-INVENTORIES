@@ -1,0 +1,68 @@
+Gateway summary and complete inventory reads
+===========================================
+
+This correction covers the OPNsense device-summary aggregate, HAProxy read
+inventories, VPN status and the dedicated IPsec SAD/SPD read. It introduces no
+device write or restore operation. Other vendors keep their existing contracts,
+including the separate OpenWrt device-summary envelope.
+
+Observed summary values
+-----------------------
+The summary reads diagnostics/system/system_information and system_time,
+core/firmware/status, interfaces/overview/export, routes/gateway/status and
+routing/settings/search_gateway. The firmware version comes from the nested
+product record. Notification metadata from core/system/status is not system
+identity or uptime.
+
+Interface counts include unknown states separately from up and down. An
+unassigned interface can have an empty configured identifier; duplicate nonempty
+identifiers are inconsistent. Unknown interface states are not assumed down.
+
+The primary WAN is the explicitly active, enabled IPv4 default gateway, or the
+IPv6 default when no IPv4 default exists. No configured default or multiple
+active defaults leaves selection unknown; the first returned row is not a
+substitute. The firewall WAN address comes from that gateway's interface, while
+the upstream router address is reported separately. Required inventory
+inconsistency makes the summary unavailable.
+
+Unmonitored gateway state is not an observed online state. Missing latency and
+packet-loss samples remain absent, while a measured zero is retained. The UI
+labels absent samples Unknown, without adding numeric units. It shows combined
+service/VPN counters only when both values are known. This summary does not
+collect CPU, storage, service inventory, tunnel health, IDS alerts or rule
+counts and does not manufacture defaults for them.
+
+Firmware update state is known only when the vendor reports an update/upgrade,
+or reports no update with check metadata. An unchecked or failed check remains
+unknown. These values reflect the vendor's response, not an independently
+verified firmware freshness or vulnerability assessment.
+
+Complete inventories and safe failures
+-------------------------------------
+HAProxy searches request all rows. The five inventories require consistent
+pagination metadata, complete rows and unique nonempty identities. Selected
+public fields have explicit string/boolean types. An unavailable or partial
+component does not become a successful empty HAProxy overview.
+
+WireGuard peer/server and OpenVPN instance inventories must be complete. Their
+existing envelopes are retained, including nested settings. VPN secret values
+are redacted at the adapter boundary and again where applicable at the API/UI.
+IPsec reads use ipsec/sad/search and ipsec/spd/search. Provider errors and
+malformed required payloads yield generic unavailable responses. Cancellation
+propagates. Read requests and these regression fixtures do not modify gateways.
+
+Acceptance limits
+-----------------
+Upstream contracts are pinned in the adjacent JSON fixture and local audit
+receipts. Synthetic HTTP transport, isolated PostgreSQL/ASGI checks, page tests
+and Chromium exercise the implementation, not a physical device or normal
+production authentication. Inventories exceeding a vendor's returned page are
+refused rather than silently described as complete; firmware-specific scale
+limits and large deployed configurations still need acceptance.
+
+The separate firmware-information, system-information and gateway-health
+adapter methods are not certified by this summary correction and remain audit
+work. These read results do not qualify gateway writes, backups, retention,
+restore, high availability, production RTO/RPO or an enterprise SLA. Follow the
+candidate support boundary and test the exact release images against the
+intended device models, firmware versions and operations before deployment.

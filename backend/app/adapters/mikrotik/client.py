@@ -156,8 +156,10 @@ class MikroTikClient:
         self.port = port
         self.username = username
         self.password = password
-        # Auto-derive SSL from port when not explicitly set
-        self.use_ssl = use_ssl if use_ssl is not None else (port in (443, 8729))
+        # Verification always requires TLS, including on custom ports.
+        if verify_ssl and use_ssl is False:
+            raise ValueError("Certificate verification requires HTTPS")
+        self.use_ssl = use_ssl if use_ssl is not None else (verify_ssl or port in (443, 8729))
         self.verify_ssl = verify_ssl
         self.timeout = timeout
         protocol = "https" if self.use_ssl else "http"

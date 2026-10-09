@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Float,
@@ -424,7 +425,7 @@ class AgentRelease(Base, UUIDMixin):
     )
     download_url: Mapped[str] = mapped_column(String(500), nullable=False)
     checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    file_size: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    file_size: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     release_notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
     min_backend_version: Mapped[str] = mapped_column(String(50), default="", nullable=False)
     is_latest: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

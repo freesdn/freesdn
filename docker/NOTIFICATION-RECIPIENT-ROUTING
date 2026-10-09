@@ -1,0 +1,31 @@
+Personal notification WebSocket routing
+=======================================
+
+Events named notification.* require an explicit payload.user_id matching the
+connected user, in addition to the existing organization, subscription and site
+filters. An unrestricted organization administrator or a wildcard subscriber
+is not automatically the recipient of another user's personal notification.
+If a nested notification is present, its user_id must agree with the envelope;
+malformed or conflicting nested objects are refused.
+
+The addressed user's multiple connections remain supported. Organization-wide
+notifications must create an individual notification for each intended user.
+Other events are unchanged: a user_id identifying the actor of a device update
+must not silently convert that update into a personal notification.
+
+All API processes that serve the event WebSocket must run this correction.
+Mixed old/new API processes can still disclose personal notifications through
+an old process. This filter is independent of Redis/Valkey fanout and applies
+when the actual event router sends each frame.
+
+Qualification includes regressions against the previous source, related event
+and notification tests, and actual Redis/Valkey-to-WebSocket transport through
+two independent receiver processes. The transport fixture uses synthetic
+already-authenticated connection state; it does not prove login, token
+revalidation, production tenant data, browser rendering or hardware behavior.
+Those are separate acceptance gates.
+
+Limits: notification transaction ownership, durable event/retry publication,
+crash recovery, stale connection authorization between revalidations and
+exactly-once delivery are not solved by this recipient filter. No database
+migration or notification-outbox implementation is part of this change.

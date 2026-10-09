@@ -13,9 +13,10 @@ Celery tasks for system maintenance:
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import ColumnElement, delete, func, select, text
+from sqlalchemy.engine import CursorResult
 
 from app.core.celery_app import celery_app
 from app.core.config import settings
@@ -37,67 +38,34 @@ def _get_logdb() -> Any:
     return _logdb_factory
 
 
+@celery_app.task(bind=True, base=FreeSDNTask, soft_time_limit=30, time_limit=45)  # type: ignore[untyped-decorator]
+def cleanup_token_revocations(self: Any) -> dict[str, Any]:
+    """Prune a bounded batch of tokens expired for more than a day."""
+    from app.core.token_blacklist import prune_expired_revocations
+
+    return {"success": True, "deleted": asyncio.run(prune_expired_revocations())}
+
+
 @celery_app.task(bind=True, base=FreeSDNTask, soft_time_limit=300, time_limit=360)  # type: ignore[untyped-decorator]
 def cleanup_old_events(self: Any, days: int = 90) -> dict[str, Any]:
+    """Prune expired event history in bounded, independently committed batches.
+
+    Keeps the existing 90-day default. A remaining backlog or locked rows are
+    reported explicitly; the task never claims that a partial sweep is complete.
     """
-    Clean up old events from the database.
+    from app.services.event_retention import prune_event_history, retention_cutoff
 
-    By default, keeps events for 90 days (TimescaleDB retention policy).
-    This task does manual cleanup for any orphaned data.
-
-    Args:
-        days: Number of days to retain events
-    """
-
-    async def _run() -> dict[str, Any]:
-        from app.models.events import EventRecord
-
-        cutoff = datetime.now(UTC) - timedelta(days=days)
-
-        async with _get_logdb()() as session:
-            # Count events to delete
-            count_result = await session.execute(
-                select(func.count(EventRecord.id)).where(EventRecord.timestamp < cutoff)
-            )
-            count = count_result.scalar() or 0
-
-            if count == 0:
-                return {
-                    "success": True,
-                    "message": f"No events older than {days} days",
-                    "deleted": 0,
-                }
-
-            self.update_progress(0, 1, f"Deleting {count} old events...")
-
-            # Delete old events in batches
-            deleted = 0
-            max_iterations = 100
-
-            while max_iterations > 0:
-                max_iterations -= 1
-                result = await session.execute(
-                    delete(EventRecord)
-                    .where(EventRecord.timestamp < cutoff)
-                    .execution_options(synchronize_session=False)
-                )
-
-                batch_deleted = result.rowcount
-                if batch_deleted == 0:
-                    break
-
-                deleted += batch_deleted
-                await session.commit()
-
-                self.update_progress(deleted, count, f"Deleted {deleted}/{count} old events")
-
-            return {
-                "success": True,
-                "deleted": deleted,
-                "cutoff_date": cutoff.isoformat(),
-            }
-
-    return asyncio.run(_run())
+    # Reject invalid values before opening a LogDB connection/factory.
+    retention_cutoff(days)
+    result = asyncio.run(prune_event_history(_get_logdb(), days))
+    if result["remaining_expired"]:
+        logger.warning(
+            "Event retention sweep incomplete: deleted=%s batches=%s; "
+            "expired rows remain (budget or concurrent locks)",
+            result["deleted"],
+            result["batches"],
+        )
+    return result
 
 
 @celery_app.task(bind=True, base=FreeSDNTask, soft_time_limit=60, time_limit=120)  # type: ignore[untyped-decorator]
@@ -148,7 +116,7 @@ def reap_stuck_omada_pending_changes(self: Any, max_age_minutes: int = 5) -> dic
             )
             result = await session.execute(stmt)
             await session.commit()
-            return int(result.rowcount or 0)
+            return int(cast(CursorResult[Any], result).rowcount or 0)
 
     reaped = asyncio.run(_run())
     if reaped:
@@ -260,20 +228,28 @@ def cleanup_orphan_sessions(self: Any, hours: int = 24) -> dict[str, Any]:
         )
 
         async with AsyncSessionLocal() as session:
+            # A callback holds SSO state while waiting for an account; logout
+            # holds that account while revoking UserSession rows. Do not join
+            # that cycle by waiting on session rows already owned by either.
+            # Locked expired rows remain eligible for a later scheduled sweep.
+            user_ids = (
+                select(UserSession.id)
+                .where(_reapable_user_sessions(now, idle_cutoff, token_dead_cutoff))
+                .with_for_update(skip_locked=True)
+            )
             user_result = await session.execute(
-                delete(UserSession).where(
-                    _reapable_user_sessions(now, idle_cutoff, token_dead_cutoff)
-                )
+                delete(UserSession).where(UserSession.id.in_(user_ids))
             )
             # SSO sessions are short-lived (10-min TTL) and single-use; expired or
             # completed rows — each holding the full IdP-response claims JSONB —
             # must be reaped or they accumulate forever. There was no SSOSession
             # reaper before, only this UserSession one.
-            sso_result = await session.execute(
-                delete(SSOSession).where(
-                    (SSOSession.expires_at < now) | (SSOSession.completed_at.isnot(None))
-                )
+            sso_ids = (
+                select(SSOSession.id)
+                .where((SSOSession.expires_at < now) | (SSOSession.completed_at.isnot(None)))
+                .with_for_update(skip_locked=True)
             )
+            sso_result = await session.execute(delete(SSOSession).where(SSOSession.id.in_(sso_ids)))
 
             await session.commit()
 
@@ -458,8 +434,8 @@ def prune_collector_logs(self: Any) -> dict[str, Any]:
                     ),
                     {"org": org_id, "days": flow_days},
                 )
-                logs_deleted = int(logs_res.rowcount or 0)
-                flows_deleted = int(flows_res.rowcount or 0)
+                logs_deleted = int(cast(CursorResult[Any], logs_res).rowcount or 0)
+                flows_deleted = int(cast(CursorResult[Any], flows_res).rowcount or 0)
                 results["orgs"][str(org_id)] = {
                     "logs_deleted": logs_deleted,
                     "flows_deleted": flows_deleted,
@@ -486,8 +462,10 @@ def prune_collector_logs(self: Any) -> dict[str, Any]:
                     "AND bucket_time < NOW() - INTERVAL '7 days'"
                 )
             )
-            results["orphan_logs_deleted"] = int(orphan_logs.rowcount or 0)
-            results["orphan_flows_deleted"] = int(orphan_flows.rowcount or 0)
+            results["orphan_logs_deleted"] = int(cast(CursorResult[Any], orphan_logs).rowcount or 0)
+            results["orphan_flows_deleted"] = int(
+                cast(CursorResult[Any], orphan_flows).rowcount or 0
+            )
             results["logs_deleted"] += results["orphan_logs_deleted"]
             results["flows_deleted"] += results["orphan_flows_deleted"]
 

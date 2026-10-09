@@ -7,6 +7,7 @@ FreeSDN - Credentials Endpoints
 CRUD + test for stored credentials.
 """
 
+import hashlib
 import logging
 from datetime import UTC, datetime
 from typing import Annotated, Any
@@ -102,24 +103,62 @@ async def _verify_site_in_org(
         raise HTTPException(status_code=404, detail="Site not found")
     # Enforce the per-user site grant on the referenced site.
     assert_can_access_site(current_user, site_id, detail="Site not found")
+    # Visibility alone does not authorize a write under a read-only site grant.
+    if not current_user.has_site_permission("settings:write", site_id):
+        raise HTTPException(status_code=403, detail="Write permission required for this site")
+
+
+async def _serialize_credential_writes(session: AsyncSession, organization_id: UUID) -> None:
+    """Serialize management-API credential writes through commit or rollback.
+
+    Empty default groups have no row to lock. A namespaced PostgreSQL
+    transaction advisory lock also covers two simultaneous inserts. Locks are
+    scoped to the owning organization, so unrelated organizations can proceed.
+    This does not enforce uniqueness for raw SQL or independently run restores.
+    """
+    digest = hashlib.sha256(f"freesdn:credential-management:{organization_id}".encode()).digest()
+    key = int.from_bytes(digest[:8], byteorder="big", signed=True)
+    await session.execute(select(func.pg_advisory_xact_lock(key)))
+
+
+async def _reload_credential_for_write(session: AsyncSession, credential: Credential) -> Credential:
+    """Reload the binding after serialization; a preceding writer may move it."""
+    owner = credential.organization_id
+    credential_id = credential.id
+    await _serialize_credential_writes(session, owner)
+    result = await session.execute(
+        select(Credential)
+        .where(
+            Credential.id == credential_id,
+            Credential.organization_id == owner,
+            Credential.deleted_at.is_(None),
+        )
+        .execution_options(populate_existing=True)
+    )
+    current: Credential | None = result.scalar_one_or_none()
+    if current is None:
+        raise HTTPException(status_code=404, detail="Credential not found")
+    return current
 
 
 async def _demote_other_defaults(
     session: AsyncSession,
     *,
     organization_id: UUID,
+    site_id: UUID | None,
     scope: Any,
     vendor: str | None,
     keep_id: UUID | None = None,
 ) -> None:
-    """Unset ``is_default`` on siblings in the same (org, scope, vendor).
+    """Demote live defaults only in the exact (org, site, scope, vendor) group.
 
-    Without this two credentials could both be ``is_default=True`` in
-    the same scope and downstream lookups (``.where(is_default=True)
-    .limit(1)``) would return nondeterministic results.
+    A NULL site denotes the org-level group, not all sites. This operation
+    requires its management-API caller to hold the organization transaction
+    lock. It does not repair duplicates outside the promoted group.
     """
     clauses = [
         Credential.organization_id == organization_id,
+        Credential.site_id == site_id if site_id is not None else Credential.site_id.is_(None),
         Credential.scope == scope,
         Credential.is_default.is_(True),
         Credential.deleted_at.is_(None),
@@ -195,7 +234,7 @@ async def list_credentials(
             .where(Device.credential_id.in_(cred_ids), Device.deleted_at.is_(None))
             .group_by(Device.credential_id)
         )
-        device_counts = {row[0]: row[1] for row in counts_result.all()}
+        device_counts = {row[0]: row[1] for row in counts_result.all() if row[0] is not None}
 
     responses = []
     for cred in credentials:
@@ -213,16 +252,21 @@ async def create_credential(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
     """Create a new credential."""
-    await _verify_site_in_org(session, data.site_id, current_user.organization_id, current_user)
+    organization_id = current_user.organization_id
+    if organization_id is None:
+        raise HTTPException(status_code=403, detail="Organization context required")
+    await _serialize_credential_writes(session, organization_id)
+    await _verify_site_in_org(session, data.site_id, organization_id, current_user)
     if data.is_default:
         await _demote_other_defaults(
             session,
-            organization_id=current_user.organization_id,
+            organization_id=organization_id,
+            site_id=data.site_id,
             scope=data.scope,
             vendor=data.vendor,
         )
     credential = Credential(
-        organization_id=current_user.organization_id,
+        organization_id=organization_id,
         name=data.name,
         description=data.description,
         credential_type=data.credential_type,
@@ -301,17 +345,29 @@ async def update_credential(
     # Per-user site grant: a site-limited operator cannot modify a
     # credential bound to a sibling site (gate the EXISTING binding).
     assert_can_access_site(current_user, credential.site_id, detail="Credential not found")
+    # Visibility alone does not authorize a write under a read-only site grant.
+    if credential.site_id is not None and not current_user.has_site_permission(
+        "settings:write", credential.site_id
+    ):
+        raise HTTPException(status_code=403, detail="Write permission required for this site")
+
+    credential = await _reload_credential_for_write(session, credential)
+    assert_can_access_site(current_user, credential.site_id, detail="Credential not found")
+    if credential.site_id is not None and not current_user.has_site_permission(
+        "settings:write", credential.site_id
+    ):
+        raise HTTPException(status_code=403, detail="Write permission required for this site")
 
     update_data = data.model_dump(exclude_unset=True)
 
-    # Validate ``site_id`` belongs to caller's org AND that the caller
+    # Validate ``site_id`` belongs to the credential's org AND that the caller
     # holds a grant for it (same gate as create) BEFORE any field
     # assignment — prevents re-homing a credential into a sibling site.
     if "site_id" in update_data and update_data["site_id"] is not None:
         await _verify_site_in_org(
             session,
             update_data["site_id"],
-            current_user.organization_id,
+            credential.organization_id,
             current_user,
         )
 
@@ -321,14 +377,20 @@ async def update_credential(
             value = update_data.pop(input_field)
             update_data[model_field] = encrypt_credential(value) if value else None
 
-    # If this PUT promotes the row to default, demote any siblings
-    # in the same (org, scope, vendor) first. Scope/vendor on the
-    # current row may have been changed in the same PUT so use the
-    # incoming values when present.
-    if update_data.get("is_default") is True:
+    # A default moved to another group must replace that group's default even
+    # when the caller omits is_default. Metadata-only edits do not repair or
+    # demote other rows; explicit false leaves destination defaults untouched.
+    group_changed = any(
+        field in update_data and update_data[field] != getattr(credential, field)
+        for field in ("site_id", "scope", "vendor")
+    )
+    if update_data.get("is_default", credential.is_default) is True and (
+        update_data.get("is_default") is True or group_changed
+    ):
         await _demote_other_defaults(
             session,
-            organization_id=current_user.organization_id,
+            organization_id=credential.organization_id,
+            site_id=update_data.get("site_id", credential.site_id),
             scope=update_data.get("scope", credential.scope),
             vendor=update_data.get("vendor", credential.vendor),
             keep_id=credential.id,
@@ -371,6 +433,18 @@ async def delete_credential(
     # Per-user site grant: a site-limited operator cannot delete a
     # credential bound to a sibling site.
     assert_can_access_site(current_user, credential.site_id, detail="Credential not found")
+    # Visibility alone does not authorize a write under a read-only site grant.
+    if credential.site_id is not None and not current_user.has_site_permission(
+        "settings:write", credential.site_id
+    ):
+        raise HTTPException(status_code=403, detail="Write permission required for this site")
+
+    credential = await _reload_credential_for_write(session, credential)
+    assert_can_access_site(current_user, credential.site_id, detail="Credential not found")
+    if credential.site_id is not None and not current_user.has_site_permission(
+        "settings:write", credential.site_id
+    ):
+        raise HTTPException(status_code=403, detail="Write permission required for this site")
 
     credential.deleted_at = datetime.now(UTC)
     await session.commit()
@@ -385,7 +459,7 @@ async def test_credential(
     current_user: Annotated[CurrentUser, Depends(require_permissions("settings:write"))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
-    """Test a credential against a target device."""
+    """Check HTTP connectivity without claiming credential authentication."""
     query = select(Credential).where(
         Credential.id == credential_id,
         Credential.deleted_at.is_(None),
@@ -402,6 +476,11 @@ async def test_credential(
     # thereby exercise the decrypted secret of) a credential bound to a
     # sibling site.
     assert_can_access_site(current_user, credential.site_id, detail="Credential not found")
+    # Visibility alone does not authorize a write under a read-only site grant.
+    if credential.site_id is not None and not current_user.has_site_permission(
+        "settings:write", credential.site_id
+    ):
+        raise HTTPException(status_code=403, detail="Write permission required for this site")
 
     # /L1 (residual hardening): testing a stored credential sends its
     # plaintext to the target, so make every test DETECTABLE — log actor +
@@ -413,11 +492,32 @@ async def test_credential(
         data.target_ip,
     )
 
+    import asyncio
+    import ipaddress
+
     import httpx
 
     from app.core.security_utils import resolve_and_pin_host, validate_target_host
 
     target_ip = data.target_ip
+    if target_ip.startswith("[") and target_ip.endswith("]"):
+        try:
+            target_ip = str(ipaddress.IPv6Address(target_ip[1:-1]))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid target: bracketed targets must be IPv6 literals.",
+            ) from None
+    try:
+        target_address = ipaddress.ip_address(target_ip)
+    except ValueError:
+        pass  # Hostnames retain their original identity for Host/SNI below.
+    else:
+        if isinstance(target_address, ipaddress.IPv6Address):
+            target_address = target_address.ipv4_mapped or target_address
+        # Apply every existing target check to the canonical address, including
+        # the embedded IPv4 of mapped literals; never bypass metadata checks.
+        target_ip = str(target_address)
     port = data.port or 443
 
     # SECURITY: Validate target IP to prevent SSRF against loopback/metadata.
@@ -474,31 +574,67 @@ async def test_credential(
     if data.allow_plaintext_http:
         schemes.append("http")
 
+    # One elapsed transport budget covers HTTPS and any explicitly enabled
+    # plaintext fallback. Per-read timeouts alone allow a peer to drip data
+    # indefinitely. DNS validation and database commits are separate work.
+    deadline = asyncio.get_running_loop().time() + 10
     last_err_kind: str | None = None
     for scheme in schemes:
         verify_ssl = data.verify_ssl if scheme == "https" else True
         try:
-            # Build URL from the pinned IP literal so httpx connects to a fixed
-            # address — no second DNS lookup, no rebind window.
-            url = f"{scheme}://{pinned_host}:{port}/"
-            async with httpx.AsyncClient(verify=verify_ssl, timeout=10) as client:
-                resp = await client.get(
-                    url,
-                    auth=(username, password) if username else None,
-                    follow_redirects=False,
-                )
-            if resp.status_code < 500:
-                credential.last_test_result = "success"
-                await session.commit()
-                return CredentialTestResponse(
-                    success=True,
-                    message=f"Connected successfully via {scheme.upper()} (HTTP {resp.status_code})",
-                    device_info={
-                        "status_code": resp.status_code,
-                        "scheme": scheme,
-                        "verify_ssl": data.verify_ssl if scheme == "https" else None,
-                    },
-                )
+            async with asyncio.timeout_at(deadline):
+                # Build URL from the pinned IP literal so httpx connects to a
+                # fixed address without a second, rebindable DNS lookup.
+                url_host = f"[{pinned_host}]" if ":" in pinned_host else pinned_host
+                url = f"{scheme}://{url_host}:{port}/"
+                request_options: dict[str, Any] = {}
+                if target_ip != pinned_host:
+                    # The socket remains pinned to the validated IP. Retain the
+                    # requested hostname for virtual-host routing and certificate
+                    # identity, including SNI when verification is opted out.
+                    original_url = httpx.URL(scheme=scheme, host=target_ip, port=port)
+                    request_options["headers"] = {"Host": original_url.netloc.decode("ascii")}
+                    if scheme == "https":
+                        request_options["extensions"] = {"sni_hostname": original_url.host}
+                # Retain CA configuration while excluding ambient proxies.
+                verify_context = httpx.create_ssl_context(verify=verify_ssl, trust_env=True)
+                async with httpx.AsyncClient(
+                    verify=verify_context, timeout=10, trust_env=False
+                ) as client:
+                    async with client.stream(
+                        "GET",
+                        url,
+                        auth=(username, password) if username else None,
+                        follow_redirects=False,
+                        **request_options,
+                    ) as response:
+                        # This check needs only the status. Never download or
+                        # decompress an arbitrary device response body.
+                        status_code = response.status_code
+            # A generic HTTP endpoint can answer without authenticating the
+            # supplied credential. Only report an HTTP connectivity outcome.
+            # Receiving an error or redirect is final: do not retry plaintext
+            # after a completed HTTPS response, even when fallback is enabled.
+            reachable = 200 <= status_code < 300
+            credential.last_test_result = "reachable" if reachable else "failed"
+            await session.commit()
+            return CredentialTestResponse(
+                success=reachable,
+                message=(
+                    f"HTTP connectivity check returned HTTP {status_code} "
+                    f"via {scheme.upper()}; authentication was not verified."
+                ),
+                device_info={
+                    "status_code": status_code,
+                    "scheme": scheme,
+                    "verify_ssl": data.verify_ssl if scheme == "https" else None,
+                    "check_kind": "http_connectivity",
+                    "authentication_verified": False,
+                },
+            )
+        except TimeoutError:
+            last_err_kind = "deadline"
+            break
         except (httpx.ConnectError, httpx.ReadTimeout):
             last_err_kind = "connect"
             continue
@@ -515,6 +651,10 @@ async def test_credential(
     return CredentialTestResponse(
         success=False,
         message=(
-            "Test failed (no response from target)" if last_err_kind == "connect" else "Test failed"
+            "Test failed (transport time budget exceeded)"
+            if last_err_kind == "deadline"
+            else "Test failed (no response from target)"
+            if last_err_kind == "connect"
+            else "Test failed"
         ),
     )

@@ -1,0 +1,59 @@
+OPNsense backup deletion and reversion protocol
+===============================================
+
+OPNsense core BackupController.deleteBackupAction($backup) and
+revertBackupAction($backup) take the backup filename in the action URL path.
+FreeSDN now sends POST /api/core/backup/deleteBackup/<filename> or
+POST /api/core/backup/revertBackup/<filename>, with a valid empty JSON object.
+The previous requests supplied the filename only in a JSON body.
+
+The client and adapter share a filename check: one ASCII alphanumeric/dot/
+underscore/hyphen segment, 1–128 characters, no double dot and not a single
+dot. The 128-character bound matches the existing OPNsense API path guard.
+Invalid names are rejected before transport. Longer vendor filenames may be
+listed by the separate metadata API but are not actionable through this
+bounded path contract.
+
+Only the exact deleted or reverted status confirms the corresponding action.
+not_found becomes a controlled not-found failure. Failed, missing, malformed,
+opposite-action or otherwise unexpected outcomes cannot become success.
+Successful data contains only the confirmed status and requested filename.
+Transport/protocol failures return a fixed message that the operation could
+not be confirmed; these adapter handlers do not log response bodies or raw
+exception tracebacks. A timeout does not establish that the device did nothing.
+
+Existing safety policy remains in force
+---------------------------------------
+The adapter still passes its existing direct_write_force flag, default false.
+The client retains the original platform read-only gate, POST classification,
+path guard and single-attempt write policy. This change does not enable writes
+in a monitor-only deployment or automatically retry uncertain operations.
+Cancellation propagates; it cannot undo a request already received by a device.
+API permission, site, tenant and deleted-resource checks are unchanged.
+
+Evidence and limits
+-------------------
+Regression checks use the actual client/adapter with controlled HTTPX transport
+and actual PostgreSQL/API routes with synthetic identity. Independent checks
+use incoming TCP HTTP plus a separate real TLS peer, synthetic Basic
+Authentication, a fixture trust root and a controlled request deadline. The
+peer checks method, filename path and JSON body, tests failures and cancellation,
+and records actual request counts. The original cached-settings fixture error
+is retained; the fixture now sets the loaded deployment default explicitly.
+The real read-only gate and refusal controls remain exercised.
+
+These results establish the tested protocol and error semantics, not actual
+appliance restoration or reload behavior. No customer device is written by
+the qualification fixtures. After a real revert, application/reload/reboot
+requirements, connectivity recovery and functional validation remain a
+separate controlled-hardware acceptance step. Current caller authorization
+after I/O and server-side artifact identity locking are not introduced here.
+
+Backup creation is unchanged and still needs review: the referenced upstream
+controller has no matching backupAction for the currently configured create
+endpoint. FreeSDN-managed artifact storage, retention, restore and measured
+RPO/RTO remain separate incomplete capabilities. This correction does not
+establish enterprise release readiness.
+
+Pinned protocol reference:
+https://github.com/opnsense/core/blob/26.7.4/src/opnsense/mvc/app/controllers/OPNsense/Core/Api/BackupController.php

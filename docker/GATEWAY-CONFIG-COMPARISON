@@ -1,0 +1,35 @@
+Gateway configuration comparison availability
+=============================================
+
+The legacy comparison endpoint now requires both a successful current-content
+result and a successful history result containing nonempty baseline text.
+Failed or malformed sources return fixed HTTP 502 errors; explicitly unsupported
+sources return 501; an absent backup or absent backup contents returns 409.
+These outcomes never contain has_changes:false or an empty success diff.
+Complete comparisons include comparison_available:true and retain their existing
+unified diff, size and summary fields. Device diagnostic text is not included in
+the new comparison errors. Both child and parent cancellation propagate, even
+when the sibling retrieval also fails. Existing admission and adapter cleanup
+remain in place; broader adapter logging is not changed by this boundary.
+
+The backup UI requires a complete comparison response, consistent boolean and
+diff-line fields, and positive document sizes before displaying a result.
+Missing/malformed data or a failed request shows comparison unavailable; a
+refresh hides the old result while pending. A failed refresh does not display
+stale success. Retry is explicit and performs no backup or device write.
+
+This establishes availability truth, not a new backup engine. Normalized vendor
+backup metadata does not itself supply a baseline. In particular, the current
+OPNsense export is its latest device backup, not a separate running-state proof;
+see OPNSENSE-CONFIG-DOWNLOAD. A provider needs real, correctly identified content
+for both sides before this endpoint can establish a meaningful comparison.
+This change does not implement durable configuration capture, historical-content
+retrieval, backup-trigger persistence, restoration or vendor-wide live drift.
+It does not add caller or resource reauthorization after device I/O, bound all
+possible diff costs, or sanitize arbitrary adapter logs.
+
+Qualification covers actual encrypted PostgreSQL rows, HTTP routes and service
+outcomes with synthetic authenticated identities and adapter responses. The UI
+tests mount the real component. Hardware, vendor transport, backup storage and
+restore behavior are not proven by these fixtures. No schema or dependency
+changes occur.

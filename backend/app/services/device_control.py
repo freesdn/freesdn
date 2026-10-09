@@ -23,6 +23,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters import exceptions as adapter_errors
 from app.adapters.base import AdapterResult, BaseAdapter
 from app.adapters.capabilities import Capability
 from app.adapters.exceptions import (
@@ -33,6 +34,74 @@ from app.core.events import device_event, get_event_bus
 from app.models import Controller, Device
 
 logger = logging.getLogger(__name__)
+
+
+# Adapter diagnostics can include controller credentials or upstream response
+# bodies. Only these fixed identifiers/messages cross the service boundary;
+# arbitrary result text and exception representations must not reach HTTP,
+# events, or logs. Keep the existing identifiers used by the HTTP status mapper.
+_PUBLIC_ACTION_ERRORS = {
+    "AdapterConnectionError": "Unable to communicate with the device controller",
+    "AdapterAuthenticationError": "Device controller authentication failed",
+    "AdapterTimeoutError": "Device action timed out; check device state before retrying",
+    "AdapterRateLimitError": "Device controller rate limit reached",
+    "AdapterReadOnlyError": "Device actions are disabled by the read-only policy",
+    "READ_ONLY": "Device actions are disabled by the read-only policy",
+    "read_only": "Device actions are disabled by the read-only policy",
+    "AdapterConfirmationRequiredError": "This device action requires confirmation",
+    "confirmation_required": "This device action requires confirmation",
+    "CapabilityNotSupportedError": "The device does not support this action",
+    "capability_not_supported": "The device does not support this action",
+    "DeviceNotFoundError": "Device not found",
+    "device_not_found": "Device not found",
+    "AdapterNotFoundError": "No compatible device adapter found",
+    "no_adapter": "No compatible device adapter found",
+    "DeviceOfflineError": "The device is offline",
+    "ConfigurationError": "Device action configuration is invalid",
+    "AdapterOutcomeUnknownError": (
+        "Device action outcome is unknown; check device state before retrying"
+    ),
+    "adapter_error": "Device action failed; check device state before retrying",
+    "action_failed": "Device action failed; check device state before retrying",
+}
+
+
+def _public_action_error(value: object, fallback: str = "adapter_error") -> tuple[str, str]:
+    """Return only an allowlisted identifier and its server-owned message."""
+    code = value if isinstance(value, str) and value in _PUBLIC_ACTION_ERRORS else fallback
+    return code, _PUBLIC_ACTION_ERRORS[code]
+
+
+_RESULT_POLICY_ERRORS = {
+    "READ_ONLY": "AdapterReadOnlyError",
+    "CONFIRMATION_REQUIRED": "AdapterConfirmationRequiredError",
+    "CONFIRM": "AdapterConfirmationRequiredError",
+    "NOT_SUPPORTED": "CapabilityNotSupportedError",
+    "NOT_IMPLEMENTED": "CapabilityNotSupportedError",
+    "INVALID_CONFIG": "ConfigurationError",
+    "SERVICE_NOT_ALLOWED": "CapabilityNotSupportedError",
+}
+
+
+def _public_exception_code(exc: AdapterError) -> str:
+    """Recognize trusted base types, including vendor-specific subclasses."""
+    for error_type in (
+        adapter_errors.AdapterOutcomeUnknownError,
+        adapter_errors.AdapterReadOnlyError,
+        adapter_errors.AdapterConfirmationRequiredError,
+        adapter_errors.CapabilityNotSupportedError,
+        adapter_errors.DeviceNotFoundError,
+        adapter_errors.AdapterNotFoundError,
+        adapter_errors.AdapterConnectionError,
+        adapter_errors.AdapterAuthenticationError,
+        adapter_errors.AdapterTimeoutError,
+        adapter_errors.AdapterRateLimitError,
+        adapter_errors.DeviceOfflineError,
+        adapter_errors.ConfigurationError,
+    ):
+        if isinstance(exc, error_type):
+            return error_type.__name__
+    return "adapter_error"
 
 
 # =============================================================================
@@ -224,8 +293,14 @@ class DeviceControlService:
                     password=controller.password or "",
                     **kwargs,
                 )
-            except Exception as e:
-                logger.error("Failed to create adapter %s: %s", adapter_id, e)
+            except Exception:
+                logger.error(
+                    "Device adapter initialization failed",
+                    extra={
+                        "device_id": str(device.id),
+                        "error_code": "adapter_initialization_failed",
+                    },
+                )
                 return None
 
         # Standalone device - try to find adapter by vendor
@@ -239,8 +314,14 @@ class DeviceControlService:
                     username=getattr(device, "username", "") or "",
                     password=getattr(device, "password", "") or "",
                 )
-            except Exception as e:
-                logger.error("Failed to create adapter for standalone device: %s", e)
+            except Exception:
+                logger.error(
+                    "Standalone device adapter initialization failed",
+                    extra={
+                        "device_id": str(device.id),
+                        "error_code": "adapter_initialization_failed",
+                    },
+                )
 
         return None
 
@@ -300,47 +381,121 @@ class DeviceControlService:
                 response.complete()
                 return response
 
-            # Execute action
-            async with adapter:
-                result = await self._execute_action_with_adapter(adapter, device, request)
+            await self._run_action_session(adapter, device, request, response)
 
-            response.success = result.success
-            response.message = (
-                result.message
-                or ("Success" if result.success else result.error)
-                or ("Success" if result.success else "Failed")
-            )
-            response.data = result.data or {}
-            response.error = result.error
-
-            # Publish event
+            # A notification failure must not rewrite an already obtained device
+            # outcome or cause the device command to be issued again.
             from app.core.events import org_id_for_site
 
-            org_id = await org_id_for_site(self.db, device.site_id)
-            await self.event_bus.publish(
-                device_event(
-                    "action_completed" if response.success else "action_failed",
-                    device_id=str(device.id),
-                    site_id=str(device.site_id) if device.site_id else None,
-                    organization_id=org_id,
-                    device_name=device.name,
-                    action=request.action_type.value,
-                    success=response.success,
-                    message=response.message,
+            try:
+                org_id = await org_id_for_site(self.db, device.site_id)
+                await self.event_bus.publish(
+                    device_event(
+                        "action_completed" if response.success else "action_failed",
+                        device_id=str(device.id),
+                        site_id=str(device.site_id) if device.site_id else None,
+                        organization_id=org_id,
+                        device_name=device.name,
+                        action=request.action_type.value,
+                        success=response.success,
+                        message=response.message,
+                    )
                 )
-            )
+            except Exception:
+                logger.error(
+                    "Device action notification failed; device outcome retained",
+                    extra={
+                        "device_id": str(request.device_id),
+                        "action": request.action_type.value,
+                    },
+                )
 
         except AdapterError as e:
-            logger.error("Adapter error for action %s: %s", request.action_type, e)
-            response.message = str(e)
-            response.error = e.__class__.__name__
-        except Exception as e:
-            logger.exception("Action failed: %s on %s", request.action_type, request.device_id)
-            response.message = f"Action failed: {str(e)}"
-            response.error = str(e)
+            response.error, response.message = _public_action_error(_public_exception_code(e))
+            logger.error(
+                "Device adapter action failed",
+                extra={"device_id": str(request.device_id), "error_code": response.error},
+            )
+        except Exception:
+            response.error, response.message = _public_action_error("action_failed")
+            logger.error(
+                "Device action failed",
+                extra={"device_id": str(request.device_id), "error_code": response.error},
+            )
 
         response.complete()
         return response
+
+    async def _run_action_session(
+        self,
+        adapter: BaseAdapter,
+        device: Device,
+        request: ActionRequest,
+        response: ActionResponse,
+    ) -> None:
+        """Retain a validated acknowledgement before cleanup; never replay a command.
+
+        Cancellation must escape even when an adapter suppresses it or raises
+        another exception during exit. Failed entry needs explicit cleanup
+        because Python does not call __aexit__ when __aenter__ raises.
+        """
+        entered = False
+        recorded = False
+        interrupted: BaseException | None = None
+        try:
+            async with adapter:
+                entered = True
+                try:
+                    result = await self._execute_action_with_adapter(adapter, device, request)
+                    if not isinstance(result, AdapterResult) or type(result.success) is not bool:
+                        response.error, response.message = _public_action_error(
+                            "AdapterOutcomeUnknownError"
+                        )
+                    elif result.success:
+                        response.success = True
+                        response.message = "Device action accepted"
+                        response.data = result.data or {}
+                        response.error = None
+                    else:
+                        code = (
+                            _RESULT_POLICY_ERRORS.get(result.error_code)
+                            if isinstance(result.error_code, str)
+                            else None
+                        )
+                        response.error, response.message = _public_action_error(
+                            code or result.error, fallback="AdapterOutcomeUnknownError"
+                        )
+                        # Failed payloads are diagnostics, not successful action data.
+                        response.data = {}
+                    recorded = True
+                except BaseException as exc:
+                    interrupted = exc
+                    raise
+        except BaseException as exc:
+            if interrupted is None:
+                if not recorded or not isinstance(exc, Exception):
+                    interrupted = exc
+            elif isinstance(interrupted, Exception) and not isinstance(exc, Exception):
+                interrupted = exc
+            logger.warning(
+                "Device adapter session did not complete normally",
+                extra={"device_id": str(request.device_id)},
+            )
+        finally:
+            if not entered:
+                try:
+                    await adapter.disconnect()
+                except BaseException as exc:
+                    if interrupted is None or (
+                        isinstance(interrupted, Exception) and not isinstance(exc, Exception)
+                    ):
+                        interrupted = exc
+                    logger.warning(
+                        "Device adapter cleanup failed",
+                        extra={"device_id": str(request.device_id)},
+                    )
+        if interrupted is not None:
+            raise interrupted
 
     async def _execute_action_with_adapter(
         self,
@@ -377,86 +532,124 @@ class DeviceControlService:
                 from app.services.adapter_preflight_common import affirmative
 
                 if not affirmative(params.get("confirm")):
-                    return AdapterResult(success=False, error="Factory reset requires confirmation")
+                    return AdapterResult(
+                        success=False,
+                        error="Factory reset requires confirmation",
+                        error_code="CONFIRMATION_REQUIRED",
+                    )
                 return await adapter.factory_reset(device_id)
 
             # PoE actions
             case ActionType.POE_ENABLE:
                 port = params.get("port")
                 if port is None:
-                    return AdapterResult(success=False, error="Port required")
+                    return AdapterResult(
+                        success=False, error="Port required", error_code="INVALID_CONFIG"
+                    )
                 return await adapter.set_port_poe(device_id, port, True)
             case ActionType.POE_DISABLE:
                 port = params.get("port")
                 if port is None:
-                    return AdapterResult(success=False, error="Port required")
+                    return AdapterResult(
+                        success=False, error="Port required", error_code="INVALID_CONFIG"
+                    )
                 return await adapter.set_port_poe(device_id, port, False)
             case ActionType.POE_CYCLE:
                 port = params.get("port")
                 duration = params.get("duration", 5)
                 if port is None:
-                    return AdapterResult(success=False, error="Port required")
+                    return AdapterResult(
+                        success=False, error="Port required", error_code="INVALID_CONFIG"
+                    )
                 return await adapter.cycle_poe_port(device_id, port, duration)
 
             # Port actions
             case ActionType.PORT_ENABLE:
                 port = params.get("port")
                 if port is None:
-                    return AdapterResult(success=False, error="Port required")
+                    return AdapterResult(
+                        success=False, error="Port required", error_code="INVALID_CONFIG"
+                    )
                 return await adapter.set_port_enabled(device_id, port, True)
             case ActionType.PORT_DISABLE:
                 port = params.get("port")
                 if port is None:
-                    return AdapterResult(success=False, error="Port required")
+                    return AdapterResult(
+                        success=False, error="Port required", error_code="INVALID_CONFIG"
+                    )
                 return await adapter.set_port_enabled(device_id, port, False)
             case ActionType.PORT_CONFIGURE:
                 port = params.get("port")
                 config = params.get("config")
                 if port is None:
-                    return AdapterResult(success=False, error="Port required")
+                    return AdapterResult(
+                        success=False, error="Port required", error_code="INVALID_CONFIG"
+                    )
                 if not isinstance(config, dict):
-                    return AdapterResult(success=False, error="Port config required")
+                    return AdapterResult(
+                        success=False, error="Port config required", error_code="INVALID_CONFIG"
+                    )
                 configure_port = getattr(adapter, "configure_switch_port", None)
                 if callable(configure_port):
                     return await configure_port(device_id, port, config)
-                return AdapterResult(success=False, error="Port configuration not supported")
+                return AdapterResult(
+                    success=False,
+                    error="Port configuration not supported",
+                    error_code="NOT_SUPPORTED",
+                )
 
             # WiFi actions
             case ActionType.SSID_ENABLE:
                 ssid_id = params.get("ssid_id")
                 if not ssid_id:
-                    return AdapterResult(success=False, error="SSID ID required")
+                    return AdapterResult(
+                        success=False, error="SSID ID required", error_code="INVALID_CONFIG"
+                    )
                 return await adapter.toggle_ssid(ssid_id, True)
             case ActionType.SSID_DISABLE:
                 ssid_id = params.get("ssid_id")
                 if not ssid_id:
-                    return AdapterResult(success=False, error="SSID ID required")
+                    return AdapterResult(
+                        success=False, error="SSID ID required", error_code="INVALID_CONFIG"
+                    )
                 return await adapter.toggle_ssid(ssid_id, False)
             case ActionType.SSID_UPDATE:
                 ssid_id = params.get("ssid_id")
                 if not ssid_id:
-                    return AdapterResult(success=False, error="SSID ID required")
+                    return AdapterResult(
+                        success=False, error="SSID ID required", error_code="INVALID_CONFIG"
+                    )
                 config = params.get("config")
                 if not isinstance(config, dict):
-                    return AdapterResult(success=False, error="SSID config required")
+                    return AdapterResult(
+                        success=False, error="SSID config required", error_code="INVALID_CONFIG"
+                    )
                 update_ssid = getattr(adapter, "update_ssid", None)
                 if callable(update_ssid):
                     return await update_ssid(ssid_id, config)
-                return AdapterResult(success=False, error="SSID update not supported")
+                return AdapterResult(
+                    success=False, error="SSID update not supported", error_code="NOT_SUPPORTED"
+                )
             case ActionType.CLIENT_DISCONNECT:
                 client_mac = params.get("client_mac")
                 if not client_mac:
-                    return AdapterResult(success=False, error="Client MAC required")
+                    return AdapterResult(
+                        success=False, error="Client MAC required", error_code="INVALID_CONFIG"
+                    )
                 return await adapter.kick_client(client_mac)
             case ActionType.CLIENT_BLOCK:
                 client_mac = params.get("client_mac")
                 if not client_mac:
-                    return AdapterResult(success=False, error="Client MAC required")
+                    return AdapterResult(
+                        success=False, error="Client MAC required", error_code="INVALID_CONFIG"
+                    )
                 return await adapter.block_client(client_mac)
             case ActionType.CLIENT_UNBLOCK:
                 client_mac = params.get("client_mac")
                 if not client_mac:
-                    return AdapterResult(success=False, error="Client MAC required")
+                    return AdapterResult(
+                        success=False, error="Client MAC required", error_code="INVALID_CONFIG"
+                    )
                 return await adapter.unblock_client(client_mac)
 
             # Camera actions
@@ -474,27 +667,43 @@ class DeviceControlService:
                 get_firmware_info = getattr(adapter, "get_firmware_info", None)
                 if callable(get_firmware_info):
                     return AdapterResult.ok(await get_firmware_info(device_id))
-                return AdapterResult(success=False, error="Firmware check not supported")
+                return AdapterResult(
+                    success=False, error="Firmware check not supported", error_code="NOT_SUPPORTED"
+                )
             case ActionType.FIRMWARE_UPGRADE:
                 upgrade_firmware = getattr(adapter, "upgrade_firmware", None)
                 if callable(upgrade_firmware):
                     return await upgrade_firmware(device_id)
-                return AdapterResult(success=False, error="Firmware upgrade not supported")
+                return AdapterResult(
+                    success=False,
+                    error="Firmware upgrade not supported",
+                    error_code="NOT_SUPPORTED",
+                )
 
             # Configuration actions
             case ActionType.CONFIG_BACKUP:
                 backup_config = getattr(adapter, "backup_config", None)
                 if callable(backup_config):
                     return await backup_config(device_id)
-                return AdapterResult(success=False, error="Configuration backup not supported")
+                return AdapterResult(
+                    success=False,
+                    error="Configuration backup not supported",
+                    error_code="NOT_SUPPORTED",
+                )
             case ActionType.CONFIG_RESTORE:
                 backup_id = params.get("backup_id")
                 if not backup_id:
-                    return AdapterResult(success=False, error="Backup ID required")
+                    return AdapterResult(
+                        success=False, error="Backup ID required", error_code="INVALID_CONFIG"
+                    )
                 restore_config = getattr(adapter, "restore_config", None)
                 if callable(restore_config):
                     return await restore_config(device_id, backup_id)
-                return AdapterResult(success=False, error="Configuration restore not supported")
+                return AdapterResult(
+                    success=False,
+                    error="Configuration restore not supported",
+                    error_code="NOT_SUPPORTED",
+                )
 
             case _:
                 return AdapterResult(success=False, error=f"Unknown action type: {action_type}")

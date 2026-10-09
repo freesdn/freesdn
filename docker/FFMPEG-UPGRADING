@@ -1,0 +1,39 @@
+Stable FFmpeg media runtime
+===========================
+
+Backend development/production and optional go2rtc use a verified FFmpeg 9.0.2
+source build against stable Alpine 3.24 libraries. The release tarball is pinned
+by SHA-256 and checked using its detached upstream signature and the pinned
+public verification key. Compiler tools and development headers stay in the
+builder. Runtime dependencies are generated from ELF sonames and installed from
+the signed stable repositories. No Alpine edge repository or opaque third-party
+runtime executable is used. Distribution FFmpeg packages must not coexist.
+
+The exact upstream source tarball, signature, public verification key, musl V4L2
+patch, build recipe, dependency versions and runtime hashes accompany the image
+under /usr/share/freesdn-sources/ffmpeg. License texts are under
+/usr/share/licenses/ffmpeg. GPL/version3 and x264/x265 are enabled. This is an
+inspectable source bundle for this media build, not a declaration that every
+transitive dependency has undergone an independent license/security audit.
+
+Compatibility review is required before upgrading operator-defined exec sources.
+Compared with Alpine FFmpeg 8.1.2, the selected 9.0.2 build no longer lists the
+legacy v308/v408/v410 encoder names or sonic/v308/v408/v410 decoder names; those
+implementations are absent from upstream 9.0.2's codec registry. Do not assume
+custom commands using these names will continue to work. All previously listed
+filters, protocols and hardware-acceleration methods remain available in the
+inspected amd64 build; that is capability enumeration, not physical GPU testing.
+H.264/HEVC quality presets, source copy and mono 8 kHz AAC have synthetic native
+encode/decode coverage. Hardware, RTSP-network and accelerator-driver acceptance
+remain separate. Preserve the previously qualified image digests for rollback.
+
+The candidate support boundary remains Linux amd64. An arm64 recipe branch is
+not arm64 release acceptance. No stable multi-architecture manifest is authorized
+by an amd64 test pass. Every produced image needs fresh SBOM/vulnerability scans,
+media/runtime tests, immutable digest binding and release provenance. Upstream
+compiler warnings are retained; successful compilation is not a security audit.
+
+The two ffmpeg-build recipe directories are intentionally byte-identical because
+backend and optional services use separate Docker build contexts. Change both
+copies together, verify the new upstream signature/hash, inspect capability
+changes, rebuild every consumer and qualify their actual published artifacts.

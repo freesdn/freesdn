@@ -35,6 +35,7 @@ from app.plugins.capabilities import (
     known_codes,
 )
 from app.plugins.loader import PluginLoadError, plugin_loader
+from app.plugins.mutation_authority import capture_plugin_mutation_authority
 from app.plugins.public_auth import (
     PLUGIN_PUBLIC_NONCE_HEADER,
     PLUGIN_PUBLIC_ORG_HEADER,
@@ -216,6 +217,8 @@ class PluginScheduleInfo(BaseModel):
     #: are higher; ``last_run`` is shared through Redis and is not affected.
     runs_this_worker: int = 0
     failures_this_worker: int = 0
+    #: A local refusal to attempt work, not an executed run or global status.
+    blocked_this_worker: dict[str, Any] | None = None
 
 
 class PluginScheduleUpdate(BaseModel):
@@ -737,6 +740,7 @@ async def install_plugin(
 ) -> InstalledPlugin:
     """Install a plugin from a ZIP file upload."""
     _require_plugin_platform_admin(current_user)
+    check_authority = capture_plugin_mutation_authority(request, current_user, session)
     if not file:
         raise HTTPException(status_code=400, detail="No file provided")
     try:
@@ -744,6 +748,7 @@ async def install_plugin(
             source=file,
             db=session,
             installed_by_id=current_user.id,
+            before_mutation=check_authority,
         )
         await _start_plugin_everywhere(record.plugin_id, session, request.app)
         await _audit_plugin_install(session, current_user, record, source="upload")
@@ -770,6 +775,7 @@ async def install_plugin_from_url(
 ) -> InstalledPlugin:
     """Install a plugin by downloading from a URL."""
     _require_plugin_platform_admin(current_user)
+    check_authority = capture_plugin_mutation_authority(request, current_user, session)
     try:
         if not settings.PLUGIN_ENABLE_DIRECT_URL_INSTALLS:
             raise HTTPException(
@@ -806,6 +812,7 @@ async def install_plugin_from_url(
             source=raw,
             db=session,
             installed_by_id=current_user.id,
+            before_mutation=check_authority,
             source_url=body.url,
         )
         await _start_plugin_everywhere(record.plugin_id, session, request.app)
@@ -824,6 +831,7 @@ async def install_plugin_from_url(
 @router.delete("/{plugin_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def uninstall_plugin(
     plugin_id: str,
+    request: Request,
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
     purge_settings: Annotated[
@@ -851,6 +859,7 @@ async def uninstall_plugin(
     are done with wants the credential gone.
     """
     _require_plugin_platform_admin(current_user)
+    check_authority = capture_plugin_mutation_authority(request, current_user, session)
     # Capture plugin details BEFORE uninstall (the loader may delete the row).
     pre_result = await session.execute(
         select(InstalledPlugin).where(InstalledPlugin.plugin_id == plugin_id)
@@ -859,7 +868,7 @@ async def uninstall_plugin(
     pre_name = pre_plugin.name if pre_plugin else None
     pre_version = pre_plugin.version if pre_plugin else None
     try:
-        await plugin_loader.uninstall_plugin(plugin_id, session)
+        await plugin_loader.uninstall_plugin(plugin_id, session, before_mutation=check_authority)
     except PluginLoadError as exc:
         logger.error("Plugin uninstall failed for %s: %s", plugin_id, exc, exc_info=True)
         raise HTTPException(status_code=404, detail="Plugin not found")
@@ -901,6 +910,7 @@ async def enable_plugin(
     """Enable a disabled plugin."""
     if not _is_global_scope(current_user):
         _require_org_admin(current_user)
+    check_authority = capture_plugin_mutation_authority(request, current_user, session)
     result = await session.execute(
         select(InstalledPlugin).where(InstalledPlugin.plugin_id == plugin_id)
     )
@@ -932,6 +942,7 @@ async def enable_plugin(
     # because the stop_* methods take no lock.
     start_scope: tuple[str, Any] | None = None
     async with plugin_loader.lifecycle_lock(plugin_id):
+        await check_authority()
         if _is_global_scope(current_user):
             plugin.is_active = True
             plugin.status = "installed"
@@ -991,12 +1002,14 @@ async def enable_plugin(
 @router.post("/{plugin_id}/disable", response_model=PluginSummary)
 async def disable_plugin(
     plugin_id: str,
+    request: Request,
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> PluginSummary:
     """Disable a plugin without removing it."""
     if not _is_global_scope(current_user):
         _require_org_admin(current_user)
+    check_authority = capture_plugin_mutation_authority(request, current_user, session)
     result = await session.execute(
         select(InstalledPlugin).where(InstalledPlugin.plugin_id == plugin_id)
     )
@@ -1005,6 +1018,7 @@ async def disable_plugin(
         raise HTTPException(status_code=404, detail="Plugin not found")
     # NOTE: serialise disable via per-plugin lifecycle lock.
     async with plugin_loader.lifecycle_lock(plugin_id):
+        await check_authority()
         if _is_global_scope(current_user):
             plugin.is_active = False
             plugin.status = "disabled"
@@ -1059,6 +1073,7 @@ async def upgrade_plugin(
 ) -> InstalledPlugin:
     """Upgrade an installed plugin by uploading a new ZIP."""
     _require_plugin_platform_admin(current_user)
+    check_authority = capture_plugin_mutation_authority(request, current_user, session)
     if not file:
         raise HTTPException(status_code=400, detail="No file provided")
     # Capture pre-upgrade version for audit trail
@@ -1068,12 +1083,14 @@ async def upgrade_plugin(
     pre_plugin = pre_result.scalar_one_or_none()
     pre_version = pre_plugin.version if pre_plugin else None
     try:
-        await plugin_loader.stop_plugin_everywhere(plugin_id, session)
+        # The loader validates the archive before stopping active runtimes,
+        # then holds its lifecycle lock across shutdown and file replacement.
         record = await plugin_loader.upgrade_plugin(
             plugin_id=plugin_id,
             source=file,
             db=session,
             installed_by_id=current_user.id,
+            before_mutation=check_authority,
         )
         await _start_plugin_everywhere(plugin_id, session, request.app, replace_routes=True)
         # audit lifecycle operation
@@ -1210,11 +1227,13 @@ async def _secret_setting_keys(session: AsyncSession, plugin_id: str) -> set[str
 async def update_plugin_settings(
     plugin_id: str,
     body: PluginSettingsUpdate,
+    request: Request,
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict:
     """Update org-scoped settings for a plugin."""
     _require_org_admin(current_user)
+    check_authority = capture_plugin_mutation_authority(request, current_user, session)
     await _verify_plugin_installed(session, plugin_id)
     if not current_user.organization_id:
         raise HTTPException(status_code=400, detail="Organization required")
@@ -1308,6 +1327,29 @@ async def update_plugin_settings(
         )
         await session.execute(stmt)
 
+        if key in secret_keys and value == "":
+            # An explicit blank clears both storage forms. Otherwise the SDK
+            # falls back to the old encrypted value after the plaintext clears.
+            # Match replacement's plaintext-then-ciphertext lock order and keep
+            # both changes in the transaction checked below before committing.
+            await session.execute(
+                delete(PluginSetting).where(
+                    PluginSetting.plugin_id == plugin_id,
+                    PluginSetting.organization_id == current_user.organization_id,
+                    PluginSetting.key == f"{key}:encrypted",
+                )
+            )
+
+    # An upsert can wait for another settings writer. Recheck the initiating
+    # account, tenant and credential after every pending write has returned, so
+    # revoked callers cannot commit either a setting or its encrypted twin.
+    # Re-running API-key authentication here would commit last_used and these
+    # writes; use the non-committing scalar authority check instead.
+    try:
+        await check_authority()
+    except BaseException:
+        await session.rollback()
+        raise
     await session.commit()
 
     # Ask the plugin whether what was just saved actually works. Advisory: the
@@ -1440,6 +1482,7 @@ async def _schedule_infos(
                 last_run=await plugin_scheduler.last_run(plugin_id, organization_id, sched.name),
                 runs_this_worker=int(stat.get("runs", 0)),
                 failures_this_worker=int(stat.get("failures", 0)),
+                blocked_this_worker=stat.get("blocked"),
             )
         )
     return infos

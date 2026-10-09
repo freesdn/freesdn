@@ -1,0 +1,26 @@
+Camera media child ownership on Linux
+=====================================
+
+HLS FFmpeg and both FFprobe discovery paths launch through a small stdlib-only
+helper. It registers Linux PR_SET_PDEATHSIG with SIGKILL, checks that the original
+parent is still present, and replaces itself with the verified media executable.
+An API worker crash therefore terminates its directly owned media child. Normal
+request cancellation and probe timeouts continue to kill and reap the child.
+HLS stop also waits after escalating from terminate to kill before removing files.
+
+The helper opens the selected executable and executes the same inode. It refuses
+nonregular, set-ID and file-capability executables, and fails closed if capability
+metadata cannot be checked. No shell or subprocess preexec callback is involved.
+Only fixed launch-refusal text is written; command arguments are never included.
+The helper file runs directly so it does not initialize application settings.
+
+This is Linux-specific. The kernel binding follows the creating parent thread,
+not all possible descendants; later credential changes can clear that binding.
+The shipped media binaries must remain ordinary unprivileged executables. Tests
+use actual isolated local child processes; packaged qualification additionally
+uses synthetic local media and the shipped FFmpeg/FFprobe, not vendor cameras.
+
+This component does not share HLS session metadata between API workers, route
+media across containers or hosts, add per-viewer leases, remove files left after
+an ungraceful worker exit, bound the FFmpeg diagnostic file, or solve recorded
+session-key and cache invalidation. These remain separate release work.

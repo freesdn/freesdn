@@ -30,11 +30,15 @@ from __future__ import annotations
 
 import uuid
 from types import SimpleNamespace
-from typing import Any
+
+from sqlalchemy import delete, select
 
 from app.core.dependencies import CurrentUser
+from app.core.security import get_password_hash
 from app.models import UserSiteAccess
+from app.models.core import Organization, Site, User
 from app.services.backup import BackupService
+from app.services.backup_contributors import CoreBackupContributor
 
 ORG = uuid.uuid4()
 OTHER_ORG = uuid.uuid4()
@@ -47,146 +51,114 @@ TECHNICIAN = uuid.uuid4()
 # ── collect ──────────────────────────────────────────────────────
 
 
-class _Result:
-    def __init__(self, rows: list) -> None:
-        self._rows = rows
-
-    def scalars(self):
-        return self
-
-    def all(self):
-        return self._rows
-
-    def first(self):
-        return self._rows[0] if self._rows else None
-
-
-class _CollectSession:
-    """Answers only the user_site_access query; every other table is empty."""
-
-    def __init__(self, grants: list) -> None:
-        self.grants = grants
-
-    async def execute(self, query):
-        return _Result(self.grants if "core.user_site_access" in str(query) else [])
+async def _seed_owned_scope(session):
+    """Real disposable rows; collection and recovery share the actual schema."""
+    session.add_all([
+        Organization(id=ORG, name="Owned grants", slug=uuid.uuid4().hex),
+        Organization(id=OTHER_ORG, name="Owned foreign grants", slug=uuid.uuid4().hex),
+    ])
+    await session.flush()
+    session.add_all([
+        Site(id=GRANTED_SITE, organization_id=ORG, name="Granted site", slug=uuid.uuid4().hex),
+        Site(id=OTHER_SITE, organization_id=ORG, name="Other site", slug=uuid.uuid4().hex),
+        Site(id=FOREIGN_SITE, organization_id=OTHER_ORG, name="Foreign site", slug=uuid.uuid4().hex),
+        User(id=TECHNICIAN, organization_id=ORG, username="owned-tech-" + uuid.uuid4().hex,
+             email=uuid.uuid4().hex + "@example.com", role="site_admin", is_active=True,
+             hashed_password=get_password_hash("Owned grant account password")),
+    ])
+    await session.flush()
 
 
-def _grant(access_level: str | None = "read") -> Any:
-    return SimpleNamespace(
-        id=uuid.uuid4(),
-        user_id=TECHNICIAN,
-        site_id=GRANTED_SITE,
-        access_level=access_level,
+async def _collect(session, *, include_users: bool = True, include_secrets: bool = False) -> dict:
+    await _seed_owned_scope(session)
+    session.add(UserSiteAccess(user_id=TECHNICIAN, site_id=GRANTED_SITE, access_level="read"))
+    await session.flush()
+    payload = await CoreBackupContributor().collect(
+        session, ORG, {"include_users": include_users, "include_secrets": include_secrets,
+                       "include_devices": False, "include_automation": False},
     )
+    return payload.data
 
 
-async def _collect(*, include_users: bool = True, include_secrets: bool = False) -> dict:
-    svc = BackupService.__new__(BackupService)
-    svc.db = _CollectSession([_grant()])
-    svc.org_id = ORG
-    payload = await BackupService.collect_backup_data(
-        svc,
-        organization_id=ORG,
-        include_users=include_users,
-        include_secrets=include_secrets,
-    )
-    return payload.get("data", payload)
-
-
-async def test_a_vault_carries_the_site_grants() -> None:
+async def test_a_vault_carries_the_site_grants(db_session) -> None:
     """The section did not exist at all; this is the whole omission in one assert.
 
     Mutation caught: deleting the ``data["user_site_access"] = [...]`` block in
     collect_backup_data (the pre-fix state).
     """
-    data = await _collect(include_secrets=True)
+    data = await _collect(db_session, include_secrets=True)
     assert "user_site_access" in data, "a .fsdnvault still omits the per-user site grants"
     assert len(data["user_site_access"]) == 1
 
 
-async def test_the_access_level_cap_travels_with_the_grant() -> None:
+async def test_the_access_level_cap_travels_with_the_grant(db_session) -> None:
     """A grant restored without its access_level is a read-only technician
     restored with write authority over the site they were pinned to.
 
     Mutation caught: dropping ``access_level`` from the collected dict.
     """
-    rec = (await _collect())["user_site_access"][0]
+    rec = (await _collect(db_session))["user_site_access"][0]
     assert rec["access_level"] == "read"
     assert rec["user_id"] == str(TECHNICIAN)
     assert rec["site_id"] == str(GRANTED_SITE)
 
 
-async def test_grants_are_omitted_when_users_are() -> None:
+async def test_grants_are_omitted_when_users_are(db_session) -> None:
     """A backup taken with users excluded must not carry grants either -- they
     reference user rows that are not in the archive.
 
     Mutation caught: collecting grants outside the ``if include_users:`` block.
     """
-    data = await _collect(include_users=False)
+    data = await _collect(db_session, include_users=False)
     assert "user_site_access" not in data
 
 
 # ── restore ──────────────────────────────────────────────────────
 
 
-class _RestoreSession:
-    """Minimal AsyncSession stand-in for ``_restore_data``.
+async def _restore(payload: dict, session, monkeypatch, *, restore_users: bool = True):
+    from datetime import UTC, datetime
 
-    ``execute`` answers the two id-set queries ``_restorable_ids`` issues and
-    the duplicate lookup on the grant's unique key. ``add`` records what the
-    restore would insert.
-    """
-
-    def __init__(self, *, live_site_ids: list = (), live_user_ids: list = ()) -> None:
-        self.added: list[Any] = []
-        self._live_site_ids = list(live_site_ids)
-        self._live_user_ids = list(live_user_ids)
-
-    async def get(self, model_cls, pk):
-        return None
-
-    async def execute(self, query):
-        text = str(query)
-        if "core.user_site_access" in text:
-            return _Result([])  # no colliding grant on this instance
-        if "FROM core.sites" in text:
-            return _Result(self._live_site_ids)
-        if "FROM core.users" in text:
-            return _Result(self._live_user_ids)
-        return _Result([])
-
-    def add(self, obj) -> None:
-        self.added.append(obj)
-
-    async def flush(self) -> None:
-        return None
-
-
-async def _restore(payload: dict, *, restore_users: bool = True) -> _RestoreSession:
-    session = _RestoreSession(
-        live_site_ids=[GRANTED_SITE, OTHER_SITE],
-        live_user_ids=[TECHNICIAN],
+    import app.services.backup_contributors as contributors
+    from app.services.backup_contributors import (
+        BackupArchive,
+        BackupContributorRegistry,
+        BackupManifest,
+        ContributorEntry,
     )
-    svc = BackupService.__new__(BackupService)
-    svc.db = session
-    svc.org_id = ORG
-    await BackupService._restore_data(
-        svc,
-        payload,
-        dry_run=False,
-        overwrite_existing=True,
-        restore_devices=False,
-        restore_users=restore_users,
-        include_secrets=True,
+    from app.services.backup_contributors.account_security import collect_snapshot
+
+    registry = BackupContributorRegistry()
+    registry.register(CoreBackupContributor())
+    monkeypatch.setattr(contributors, "get_registry", lambda: registry)
+    await _seed_owned_scope(session)
+    data = await collect_snapshot(session, ORG)
+    data["user_site_access"] = payload["user_site_access"]
+    if restore_users:
+        # The subject is genuinely absent at the destination. Existing account
+        # authority-conflict refusal is covered separately, not bypassed here.
+        await session.execute(delete(User).where(User.id == TECHNICIAN))
+        await session.flush()
+    archive = BackupArchive(
+        manifest=BackupManifest(backup_id=str(uuid.uuid4()), created_at=datetime.now(UTC),
+                                organization_id=str(ORG), contributors=[
+                                    ContributorEntry(id="core", schema_version="2.0.0", counts={}),
+                                ]), contributors={"core": data},
     )
-    return session
+    report = await BackupService(session)._dispatch_restore_via_contributors(
+        archive, organization_id=ORG, dry_run=False,
+        restore_options={"overwrite_existing": True, "restore_devices": False,
+                         "restore_users": restore_users, "include_secrets": True},
+    )
+    added = list((await session.scalars(select(UserSiteAccess).where(UserSiteAccess.user_id == TECHNICIAN))).all())
+    return SimpleNamespace(added=added, report=report)
 
 
 def _payload(grants: list[dict]) -> dict:
     return {"sites": [], "controllers": [], "users": [], "user_site_access": grants}
 
 
-async def test_restore_reinstates_the_site_limit_it_used_to_flatten() -> None:
+async def test_restore_reinstates_the_site_limit_it_used_to_flatten(db_session, monkeypatch) -> None:
     """The finding end to end: restore the archived grant, rebuild the principal
     from what the restore actually produced, and confirm the technician is
     caged again.
@@ -209,8 +181,9 @@ async def test_restore_reinstates_the_site_limit_it_used_to_flatten() -> None:
                     "access_level": "read",
                 }
             ]
-        )
+        ), db_session, monkeypatch,
     )
+    assert session.report["summary"]["contributors_failed"] == 0
 
     grants = [o for o in session.added if isinstance(o, UserSiteAccess)]
     assert grants, "the restore created no UserSiteAccess row"
@@ -255,7 +228,7 @@ async def test_zero_grants_is_fail_open_which_is_why_the_omission_escalated() ->
     assert principal.can_access_site(OTHER_SITE) is True
 
 
-async def test_grants_are_not_restored_when_users_are_not() -> None:
+async def test_grants_are_not_restored_when_users_are_not(db_session, monkeypatch) -> None:
     """A config-snapshot restore leaves users alone (restore_users defaults
     False), so it must leave their grants alone too -- otherwise it would apply
     one instance's access model to another instance's accounts.
@@ -273,13 +246,14 @@ async def test_grants_are_not_restored_when_users_are_not() -> None:
                     "access_level": "read",
                 }
             ]
-        ),
+        ), db_session, monkeypatch,
         restore_users=False,
     )
+    assert session.report["summary"]["contributors_failed"] == 0
     assert [o for o in session.added if isinstance(o, UserSiteAccess)] == []
 
 
-async def test_a_grant_aimed_at_a_foreign_site_is_refused() -> None:
+async def test_a_grant_aimed_at_a_foreign_site_is_refused(db_session, monkeypatch) -> None:
     """user_site_access has no organization_id column, so the generic H4
     cross-org reject is blind to it: a grant naming another org's site would
     both escape tenant scope and blow up the flush on the FK, taking the whole
@@ -297,8 +271,11 @@ async def test_a_grant_aimed_at_a_foreign_site_is_refused() -> None:
                     "access_level": "admin",
                 }
             ]
-        )
+        ), db_session, monkeypatch,
     )
+    assert session.report["summary"]["contributors_failed"] == 1
+    assert session.report["summary"]["total_errors"] > 0
+    assert await db_session.scalar(select(User.id).where(User.id == TECHNICIAN)) is None
     assert [o for o in session.added if isinstance(o, UserSiteAccess)] == []
 
 

@@ -1,0 +1,25 @@
+FreeSDN FFmpeg stable source build
+
+FFmpeg 9.0.2 is obtained from https://ffmpeg.org/releases/ and checked with the
+upstream release signature and pinned SHA-256. Public verification fingerprint:
+FCF986EA15E6E293A5644F10B4322F04D67658D8.
+
+Codec and device choices follow Alpine aports 3.24-stable community/ffmpeg
+8.1.2-r0, inspected September 24, 2026. The musl V4L2 ioctl compatibility patch
+is retained from that package (author q66, original commit
+6408745f54ada32bad44227e6b4173e46641afaa). FFmpeg 9 uses build-time glslang for
+SPIR-V instead of the removed libshaderc configure option. The Chromium-specific
+libavformat extension is omitted: these images use the FFmpeg command-line tools,
+not Chromium linked to libavformat. VAAPI, QSV on amd64, and Vulkan are compiled;
+that does not establish accelerator-driver or physical-device acceptance.
+
+The build enables GPL and version3 options, including x264/x265. FFmpeg license
+texts accompany the runtime. The exact upstream source archive, patch, recipe,
+source lock, signature and public verification key are included under
+/usr/share/freesdn-sources/ffmpeg. Build package versions and runtime binary
+hashes are recorded there as well. Dependencies remain signed stable-Alpine
+packages and require their own updates and license compliance. This source
+bundle does not assert a complete legal review of every image dependency.
+
+No Alpine edge repository, downloaded opaque runtime binary, setuid capability,
+or private publisher signing key is required by this recipe.

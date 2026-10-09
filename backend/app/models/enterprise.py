@@ -26,12 +26,15 @@ from sqlalchemy import (
     Index,
     Integer,
     SmallInteger,
+    SQLColumnExpression,
     String,
     Text,
     UniqueConstraint,
+    case,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import AuditMixin, Base, SoftDeleteMixin, UUIDMixin
@@ -677,9 +680,45 @@ class DeviceHealth(Base):
 
     # ── Utility ──
 
+    @hybrid_property
+    def measured_score(self) -> int | None:
+        """Unknown rows have no measurement, including legacy numeric defaults.
+
+        Keep the existing non-null database column compatible with upgrades;
+        API responses and aggregates must use this nullable projection.
+        """
+        if self.health_status not in (
+            HealthStatus.HEALTHY,
+            HealthStatus.WARNING,
+            HealthStatus.DEGRADED,
+            HealthStatus.CRITICAL,
+        ):
+            return None
+        return self.health_score
+
+    @measured_score.inplace.expression
+    @classmethod
+    def _measured_score_expression(cls) -> SQLColumnExpression[int | None]:
+        return case(
+            (
+                cls.health_status.in_(
+                    [
+                        HealthStatus.HEALTHY,
+                        HealthStatus.WARNING,
+                        HealthStatus.DEGRADED,
+                        HealthStatus.CRITICAL,
+                    ]
+                ),
+                cls.health_score,
+            ),
+            else_=None,
+        )
+
     @staticmethod
-    def compute_status(score: int) -> HealthStatus:
-        """Derive HealthStatus tier from numeric score."""
+    def compute_status(score: int | float | None) -> HealthStatus:
+        """Derive HealthStatus tier without treating missing data as a score."""
+        if score is None:
+            return HealthStatus.UNKNOWN
         if score >= 90:
             return HealthStatus.HEALTHY
         if score >= 70:

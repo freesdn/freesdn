@@ -426,52 +426,12 @@ class GatewayProxmoxClusterService(GatewayServiceBase):
         """
 
         async def _apply(c: Any) -> Any:
-            adapter: ProxmoxAdapter | None = None
-            try:
-                ctrl = await self._get_controller(c.controller_id, c.organization_id)
-                adapter = await self._build_adapter(ctrl)
-                payload = c.payload or {}
-                target_id = c.target_id
+            if c.feature == "proxmox.cluster.firewall_options":
+                raise HTTPException(400, detail="Use a reviewed firewall operation")
+            if c.feature == "proxmox.cluster.task_stop":
+                from app.services.hypervisor_task_control import apply_task_stop
 
-                method_name = _APPLY.get((c.feature, c.operation))
-                if method_name is None:
-                    raise HTTPException(
-                        400,
-                        detail=(f"no applier for feature={c.feature!r} operation={c.operation!r}"),
-                    )
-                method = getattr(adapter, method_name, None)
-                if method is None:
-                    raise HTTPException(
-                        501,
-                        detail=(
-                            f"Proxmox adapter has no method {method_name!r}; missing implementation"
-                        ),
-                    )
-
-                if c.feature == "proxmox.cluster.task_stop":
-                    # target_id = upid; payload should carry node so we know
-                    # which node owns the task. Validate both.
-                    if not target_id:
-                        raise HTTPException(400, detail="task_stop requires target_id (upid)")
-                    node = payload.get("node")
-                    if not isinstance(node, str) or not node:
-                        raise HTTPException(400, detail="task_stop payload must include node")
-                    node = validate_id(node, label="node")
-                    # Real Proxmox UPIDs contain ``@`` (user@realm) and
-                    # are ~85 chars — the generic ``validate_id`` regex
-                    # refuses them. Use the dedicated UPID validator.
-                    # Without this, every real
-                    # ``task_stop`` apply would 400 before reaching the
-                    # adapter — silent feature-broken-in-production.
-                    upid = validate_upid(target_id, label="upid")
-                    return await method(node=node, upid=upid, force=True)
-                if c.feature == "proxmox.cluster.firewall_options":
-                    # No target_id — the cluster firewall options object is
-                    # a singleton. Payload is the options dict.
-                    return await method(payload, force=True)
-                raise HTTPException(400, detail=f"unhandled feature={c.feature!r}")
-            finally:
-                if adapter is not None:
-                    await adapter.disconnect()
+                return await apply_task_stop(self, c)
+            raise HTTPException(400, detail="Unsupported cluster operation")
 
         return _apply

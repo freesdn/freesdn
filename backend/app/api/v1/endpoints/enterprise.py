@@ -1619,7 +1619,8 @@ async def get_site_health(
     result = await db.execute(
         select(
             func.count(DeviceHealth.device_id).label("device_count"),
-            func.avg(DeviceHealth.health_score).label("avg_score"),
+            func.avg(DeviceHealth.measured_score).label("avg_score"),
+            func.count(DeviceHealth.measured_score).label("measured_count"),
             func.count()
             .filter(DeviceHealth.health_status == HealthStatus.HEALTHY)
             .label("healthy"),
@@ -1632,17 +1633,18 @@ async def get_site_health(
             func.count()
             .filter(DeviceHealth.health_status == HealthStatus.CRITICAL)
             .label("critical"),
-        ).where(DeviceHealth.site_id == site_id)
+        ).where(DeviceHealth.site_id == site_id, DeviceHealth.organization_id == org_id)
     )
     row = result.one()
 
-    avg_score = float(row.avg_score or 100)
+    avg_score = float(row.avg_score) if row.avg_score is not None else None
     return SiteHealthSummary(
         site_id=site_id,
         site_name=site.name,
         device_count=row.device_count,
-        avg_health_score=round(avg_score, 1),
-        health_status=DeviceHealth.compute_status(round(avg_score)).value,
+        measured_device_count=row.measured_count,
+        avg_health_score=round(avg_score, 1) if avg_score is not None else None,
+        health_status=DeviceHealth.compute_status(avg_score).value,
         healthy=row.healthy,
         warning=row.warning,
         degraded=row.degraded,
@@ -1687,7 +1689,8 @@ async def get_org_health(
             DeviceHealth.site_id,
             Site.name.label("site_name"),
             func.count(DeviceHealth.device_id).label("device_count"),
-            func.avg(DeviceHealth.health_score).label("avg_score"),
+            func.avg(DeviceHealth.measured_score).label("avg_score"),
+            func.count(DeviceHealth.measured_score).label("measured_count"),
             func.avg(DeviceHealth.reachability_score).label("avg_reachability"),
             func.count()
             .filter(DeviceHealth.health_status == HealthStatus.HEALTHY)
@@ -1713,27 +1716,30 @@ async def get_org_health(
 
     site_summaries: list[SiteHealthSummary] = []
     total_devices = 0
+    total_measured = 0
     total_score_sum = 0.0
 
     for row in rows:
-        avg = float(row.avg_score or 100)
-        uptime = round(float(row.avg_reachability), 1) if row.avg_reachability is not None else None
+        avg = float(row.avg_score) if row.avg_score is not None else None
         site_summaries.append(
             SiteHealthSummary(
                 site_id=row.site_id,
                 site_name=row.site_name or "Unassigned",
                 device_count=row.device_count,
-                avg_health_score=round(avg, 1),
-                health_status=DeviceHealth.compute_status(round(avg)).value,
+                measured_device_count=row.measured_count,
+                avg_health_score=round(avg, 1) if avg is not None else None,
+                health_status=DeviceHealth.compute_status(avg).value,
                 healthy=row.healthy,
                 warning=row.warning,
                 degraded=row.degraded,
                 critical=row.critical,
-                uptime_percent=uptime,
+                uptime_percent=None,  # Reachability score is not measured availability over time.
             )
         )
         total_devices += row.device_count
-        total_score_sum += avg * row.device_count
+        total_measured += row.measured_count
+        if avg is not None:
+            total_score_sum += avg * row.measured_count
 
     # Count sites
     site_count_q = select(func.count(Site.id)).where(
@@ -1745,14 +1751,15 @@ async def get_org_health(
         site_count_q = site_count_q.where(Site.id == site_id)
     total_sites = (await db.execute(site_count_q)).scalar() or 0
 
-    org_avg = total_score_sum / total_devices if total_devices > 0 else 100.0
+    org_avg = total_score_sum / total_measured if total_measured > 0 else None
 
     return OrgHealthSummary(
         organization_id=org_id,
         site_count=total_sites,
         device_count=total_devices,
-        avg_health_score=round(org_avg, 1),
-        health_status=DeviceHealth.compute_status(round(org_avg)).value,
+        measured_device_count=total_measured,
+        avg_health_score=round(org_avg, 1) if org_avg is not None else None,
+        health_status=DeviceHealth.compute_status(org_avg).value,
         sites=site_summaries,
     )
 
@@ -1811,7 +1818,7 @@ async def list_device_health(
     # those buttons actually do something instead of silently falling
     # through to ``health_score``.
     sort_column_map = {
-        "health_score": DeviceHealth.health_score,
+        "health_score": DeviceHealth.measured_score,
         "device_name": Device.name,
         "updated_at": DeviceHealth.updated_at,
         "reachability_score": DeviceHealth.reachability_score,
@@ -1821,8 +1828,12 @@ async def list_device_health(
         "utilization_score": DeviceHealth.utilization_score,
         "firmware_score": DeviceHealth.firmware_score,
     }
-    sort_col = sort_column_map.get(sort_by, DeviceHealth.health_score)
-    base = base.order_by(sort_col.desc()) if sort_dir == "desc" else base.order_by(sort_col.asc())
+    sort_col = sort_column_map.get(sort_by, DeviceHealth.measured_score)
+    base = (
+        base.order_by(sort_col.desc().nulls_last())
+        if sort_dir == "desc"
+        else base.order_by(sort_col.asc().nulls_last())
+    )
 
     base = base.offset(offset).limit(limit)
     result = await db.execute(base)
@@ -1886,7 +1897,11 @@ async def get_top_issues(
         assert_can_access_site(user, site_id, detail="Site not found")
         q = q.where(DeviceHealth.site_id == site_id)
 
-    q = q.order_by(DeviceHealth.health_score.asc()).limit(limit)
+    q = (
+        q.where(DeviceHealth.measured_score.is_not(None))
+        .order_by(DeviceHealth.measured_score.asc())
+        .limit(limit)
+    )
     result = await db.execute(q)
     rows = result.all()
 
@@ -1904,11 +1919,11 @@ async def get_top_issues(
     for row in rows:
         dh = row[0]
         # Find the worst (lowest) component score
-        worst_name = "unknown"
-        worst_score = 100
+        worst_name: str | None = None
+        worst_score: int | None = None
         for name, attr in component_names:
             val = getattr(dh, attr, None)
-            if val is not None and val < worst_score:
+            if val is not None and (worst_score is None or val < worst_score):
                 worst_score = val
                 worst_name = name
 
@@ -2096,7 +2111,8 @@ async def get_module_health(
         select(
             Device.device_type,
             func.count(DeviceHealth.device_id).label("device_count"),
-            func.avg(DeviceHealth.health_score).label("avg_score"),
+            func.avg(DeviceHealth.measured_score).label("avg_score"),
+            func.count(DeviceHealth.measured_score).label("measured_count"),
             func.sum(case((DeviceHealth.health_status == HealthStatus.HEALTHY, 1), else_=0)).label(
                 "healthy"
             ),
@@ -2134,6 +2150,7 @@ async def get_module_health(
         module_data[module_name] = {
             "device_count": 0,
             "score_sum": 0.0,
+            "measured_count": 0,
             "healthy": 0,
             "warning": 0,
             "degraded": 0,
@@ -2146,7 +2163,9 @@ async def get_module_health(
             continue
         md = module_data[mod_name]
         md["device_count"] += row.device_count or 0
-        md["score_sum"] += float(row.avg_score or 0) * (row.device_count or 0)
+        md["measured_count"] += row.measured_count
+        if row.avg_score is not None:
+            md["score_sum"] += float(row.avg_score) * row.measured_count
         md["healthy"] += row.healthy or 0
         md["warning"] += row.warning or 0
         md["degraded"] += row.degraded or 0
@@ -2154,12 +2173,13 @@ async def get_module_health(
 
     summaries: list[ModuleHealthSummary] = []
     for module_name, md in module_data.items():
-        avg = md["score_sum"] / md["device_count"] if md["device_count"] > 0 else 0
+        avg = md["score_sum"] / md["measured_count"] if md["measured_count"] > 0 else None
         summaries.append(
             ModuleHealthSummary(
                 module=module_name,
                 device_count=md["device_count"],
-                avg_health_score=round(avg, 1),
+                measured_device_count=md["measured_count"],
+                avg_health_score=round(avg, 1) if avg is not None else None,
                 healthy=md["healthy"],
                 warning=md["warning"],
                 degraded=md["degraded"],
@@ -2755,7 +2775,7 @@ async def get_wan_health(
             Device.device_type,
             Site.name.label("site_name"),
             Device.ip_address,
-            DeviceHealth.health_score,
+            DeviceHealth.measured_score.label("health_score"),
             DeviceHealth.latency_score,
             DeviceHealth.reachability_score,
             DeviceHealth.utilization_score,
@@ -2768,7 +2788,7 @@ async def get_wan_health(
             tenant_filter(DeviceHealth, user),
             Device.device_type.in_(wan_types),
         )
-        .order_by(DeviceHealth.health_score.asc())
+        .order_by(DeviceHealth.measured_score.asc().nulls_last())
     )
 
     if site_id is not None:
@@ -2815,7 +2835,8 @@ async def get_site_ranking(
             DeviceHealth.site_id,
             Site.name.label("site_name"),
             func.count(DeviceHealth.device_id).label("device_count"),
-            func.avg(DeviceHealth.health_score).label("avg_score"),
+            func.avg(DeviceHealth.measured_score).label("avg_score"),
+            func.count(DeviceHealth.measured_score).label("measured_count"),
             func.avg(DeviceHealth.reachability_score).label("avg_reachability"),
         )
         .outerjoin(Site, DeviceHealth.site_id == Site.id)
@@ -2841,6 +2862,13 @@ async def get_site_ranking(
             ).where(
                 HealthDailySnapshot.organization_id == org_id,
                 HealthDailySnapshot.snapshot_date == yesterday,
+                (
+                    HealthDailySnapshot.healthy_count
+                    + HealthDailySnapshot.warning_count
+                    + HealthDailySnapshot.degraded_count
+                    + HealthDailySnapshot.critical_count
+                )
+                > 0,
             )
         )
         yesterday_map = {
@@ -2854,12 +2882,12 @@ async def get_site_ranking(
 
     rankings: list[SiteRanking] = []
     for row in current_rows:
-        avg = round(float(row.avg_score or 100), 1)
-        uptime = round(float(row.avg_reachability), 1) if row.avg_reachability is not None else None
+        avg = round(float(row.avg_score), 1) if row.avg_score is not None else None
 
         yesterday_avg = yesterday_map.get(row.site_id)
-        trend: Literal["up", "down", "stable"] = "stable"
-        if yesterday_avg is not None:
+        trend: Literal["up", "down", "stable", "unknown"] = "unknown"
+        delta: float | None = None
+        if yesterday_avg is not None and avg is not None:
             delta = round(avg - yesterday_avg, 1)
             if delta > 2:
                 trend = "up"
@@ -2867,8 +2895,6 @@ async def get_site_ranking(
                 trend = "down"
             else:
                 trend = "stable"
-        else:
-            delta = 0.0
 
         rankings.append(
             SiteRanking(
@@ -2876,12 +2902,13 @@ async def get_site_ranking(
                 site_name=row.site_name or "Unassigned",
                 avg_health_score=avg,
                 device_count=row.device_count,
-                uptime_percent=uptime,
+                measured_device_count=row.measured_count,
+                uptime_percent=None,  # Reachability score is not measured availability over time.
                 trend=trend,
                 trend_delta=delta,
             )
         )
 
     # Sort by avg_health_score ASC (worst first)
-    rankings.sort(key=lambda r: r.avg_health_score)
+    rankings.sort(key=lambda r: (r.avg_health_score is None, r.avg_health_score or 0))
     return rankings

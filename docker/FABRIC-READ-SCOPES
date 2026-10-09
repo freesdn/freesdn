@@ -1,0 +1,24 @@
+Fabric read scope and result contracts
+======================================
+
+Network client reads and statistics always intersect organization membership
+with both optional filters: a single requested site and a set of granted sites.
+Neither filter replaces tenant authorization; an explicitly empty set yields no
+clients. Deleted sites remain excluded through the shared organization predicate.
+The Fabric network handler supplies its accessible_site_ids to that service.
+
+The Fabric firewall-alert handler supplies the same invocation scope to
+FirewallService's existing organization/site device filter. It unpacks the
+service's (rows, total) return value and serializes the actual alert rows,
+including signature_name. Its output count is the number of returned rows, not
+the total across all pages. An empty page has count zero and an empty alerts list.
+
+Fabric storage health filters controllers by organization, nondeleted site and
+any explicit invocation site scope before a storage provider is contacted.
+An inaccessible explicit controller returns no appliance rows. Provider behavior
+and vendor health interpretation are unchanged.
+
+These handlers return fixed database read failures without raw exception details.
+They preserve the existing None/unrestricted scope convention and do not change
+hybrid author grant policy. Author verification, generic permission ceilings,
+other module read paths and device write qualification remain separate controls.

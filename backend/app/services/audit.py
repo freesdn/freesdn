@@ -26,13 +26,13 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, desc, func, or_, select, text
-from sqlalchemy import delete as sa_delete
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import true as sa_true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security_utils import escape_like
-from app.models.security_audit import AuditLogRecord, SecurityEventRecord
+from app.models.security_audit import AUDIT_APPEND_SEQUENCE, AuditLogRecord, SecurityEventRecord
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +123,11 @@ def _canonical_row_json(record: "AuditLogRecord") -> bytes:
         "tags": record.tags,
         "extra_metadata": record.extra_metadata,
     }
+    # Preserve the exact format-1 signed body for historical NULL-position rows.
+    # Format 2 binds append order without rewriting the occurrence timestamp.
+    if record.append_sequence is not None:
+        payload["chain_format"] = 2
+        payload["append_sequence"] = record.append_sequence
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
 
 
@@ -265,6 +270,20 @@ def _safe_event_type(raw: str) -> SecurityEventType:
         return SecurityEventType.SUSPICIOUS_ACTIVITY
 
 
+def _read_audit_identifier(value: str | None) -> UUID | str | None:
+    """Keep UUID reader compatibility without rejecting external identifiers.
+
+    The stored columns and legacy writer permit arbitrary strings. Reading
+    them must not rewrite their persisted values, including an empty string.
+    """
+    if value is None:
+        return None
+    try:
+        return UUID(value)
+    except ValueError:
+        return value
+
+
 # =============================================================================
 # Data Classes
 # =============================================================================
@@ -278,9 +297,9 @@ class AuditEntry:
     timestamp: datetime
     action: str
     resource_type: str
-    resource_id: UUID | None
+    resource_id: UUID | str | None
     resource_name: str | None
-    actor_id: UUID | None
+    actor_id: UUID | str | None
     actor_type: str
     actor_name: str | None
     actor_email: str | None
@@ -481,7 +500,7 @@ class AuditService:
 
         return entry
 
-    def _sanitize_entry(self, entry: AuditEntry) -> None:
+    def _sanitize_entry(self, entry: AuditEntry | AuditLogRecord) -> None:
         """Remove sensitive data from audit entry.
 
         NOTE: the previous implementation only recursed into nested
@@ -593,98 +612,90 @@ class AuditService:
             extra_metadata=entry.extra_metadata,
         )
 
-        # SECURITY / ROBUSTNESS: wrap the audit write in a
-        # SAVEPOINT (``begin_nested``) so a failure here — schema drift,
-        # constraint violation, transient DB hiccup — rolls back ONLY
-        # the audit row, not the caller's pending mutations. Without this,
-        # a failed ``flush()`` leaves the session in PendingRollbackError
-        # state and the outer commit on ``get_session`` cleanup will fail,
-        # effectively undoing a user action that already returned 200.
-        #
-        # NOTE: inside the savepoint, lock the most-recent
-        # existing audit row FOR UPDATE so concurrent inserts cannot both
-        # compute the same ``prev_hash`` and end up branching the chain.
-        # Postgres's row-level lock is held until the savepoint commits.
-        # If we cannot acquire the lock or there is no prior row, we
-        # treat this as a genesis row (``prev_hash=None``).
         try:
+            await self.persist_record(record)
+        except Exception:
+            # The shared path already reports the loss. This API remains best
+            # effort because the caller may already have applied a device action.
+            # Other writers use the strict API and retain their original errors.
+            return
+
+    async def persist_record(self, record: AuditLogRecord) -> AuditLogRecord:
+        """Sanitize and sign a new row without committing the caller transaction.
+
+        This strict persistence API raises on failure. The main log API keeps
+        its historical best-effort contract by catching that exception; setup
+        does the same explicitly. It must never re-sign existing history.
+
+        PostgreSQL-normalized defaults, timestamps and floating-point duration
+        are applied before signing so the durable row has the same canonical
+        body. An occurrence time is normalized to UTC, never moved forward.
+        """
+        try:
+            if not sa_inspect(record).transient:
+                raise ValueError("Audit persistence accepts only new transient rows")
+            if record.row_hmac is not None or record.prev_hash is not None:
+                raise ValueError("Audit persistence does not import existing signatures")
+            if record.append_sequence is not None:
+                raise ValueError("Audit persistence assigns its own append sequence")
+            if record.id is None:
+                record.id = uuid4()
+            if record.timestamp is None:
+                record.timestamp = datetime.now(UTC)
+            if record.timestamp.tzinfo is None or record.timestamp.utcoffset() is None:
+                raise ValueError("Audit occurrence timestamp must include a timezone")
+            record.timestamp = record.timestamp.astimezone(UTC)
+            if record.response_time_ms is not None:
+                record.response_time_ms = float(record.response_time_ms)
+            if record.actor_type is None:
+                record.actor_type = "user"
+            if record.status is None:
+                record.status = "success"
+            if record.tags is None:
+                record.tags = []
+            self._sanitize_entry(record)
+
+            # begin_nested first flushes the caller's pending ORM state. The
+            # shared chain lock and INSERT remain inside the actual savepoint;
+            # its failure must not poison an otherwise usable outer transaction.
             async with self.db.begin_nested():
-                # Lock the latest audit row to serialise chain extension.
-                # ``with_for_update(skip_locked=False)`` blocks until the
-                # conflicting writer commits / rolls back. The select is
-                # ordered by ``timestamp DESC, id DESC`` so we deterministically
-                # pick the same prev row across replicas.
-                # SECURITY (chain genesis race): ``with_for_update()`` on a
-                # ``LIMIT 1`` tail read locks NOTHING when the table (or the
-                # filtered window) is empty, so two concurrent genesis writers
-                # would both observe prev_hash=NULL and branch the chain. Take
-                # a transaction-level advisory lock FIRST to serialise the
-                # whole read-tail/insert critical section even when no prior
-                # row exists. Best-effort: suppressed on non-PostgreSQL
-                # backends (e.g. SQLite tests), which are single-threaded and
-                # therefore cannot branch anyway.
-                import contextlib
+                await self.db.execute(
+                    text("SELECT pg_advisory_xact_lock(:k)"),
+                    {"k": _AUDIT_CHAIN_LOCK_KEY},
+                )
+                from app.services import audit_chain
 
-                from sqlalchemy.exc import OperationalError, ProgrammingError
-
-                with contextlib.suppress(Exception):
-                    await self.db.execute(
-                        text("SELECT pg_advisory_xact_lock(:k)"),
-                        {"k": _AUDIT_CHAIN_LOCK_KEY},
-                    )
-
-                prev_hmac: str | None = None
-                try:
-                    latest_result = await self.db.execute(
-                        select(AuditLogRecord.row_hmac)
-                        .order_by(
-                            desc(AuditLogRecord.timestamp),
-                            desc(AuditLogRecord.id),
-                        )
-                        .limit(1)
-                        .with_for_update()
-                    )
-                    prev_hmac = latest_result.scalar_one_or_none()
-                except (OperationalError, ProgrammingError):
-                    # Column may not exist yet (migration not run) — fall
-                    # back to an unchained row and continue. The validator
-                    # treats NULL prev_hash/row_hmac as "pre-chain".
-                    prev_hmac = None
-
-                record.prev_hash = prev_hmac
-                try:
-                    record.row_hmac = _compute_row_hmac(prev_hmac, record)
-                except Exception:
-                    # If HMAC computation blows up for any reason, do not
-                    # block the audit write — record it unchained and log.
-                    logger.exception("audit chain HMAC computation failed")
-                    record.row_hmac = None
-
+                revision, state = await audit_chain.load_locked_state(self.db)
+                await audit_chain.check_locked_tail(self.db, state)
+                tail = state["tail"]
+                record.prev_hash = tail["hash"] if tail is not None else None
+                record.append_sequence = await self.db.scalar(AUDIT_APPEND_SEQUENCE.next_value())
+                if record.append_sequence <= (tail["sequence"] or 0 if tail else 0):
+                    raise ValueError("Audit append sequence does not advance retained state")
+                record.row_hmac = _compute_row_hmac(record.prev_hash, record)
                 self.db.add(record)
-                # flush is implicit on savepoint commit but we force it
-                # here so any IntegrityError is raised inside the nested
-                # transaction and caught below.
                 await self.db.flush()
+                state["tail"] = audit_chain.position(record)
+                state["live_rows"] += 1
+                await audit_chain.store_locked_state(self.db, revision, state)
+            return record
         except Exception:
             logger.exception(
                 "CRITICAL: audit log write failed — audit trail incomplete "
                 "(action=%s resource_type=%s actor_id=%s)",
-                entry.action,
-                entry.resource_type,
-                entry.actor_id,
+                record.action,
+                record.resource_type,
+                record.actor_id,
             )
             try:
                 from app.core.metrics import audit_write_failures_total
 
                 audit_write_failures_total.labels(
-                    resource_type=str(entry.resource_type),
+                    resource_type=str(record.resource_type),
                 ).inc()
             except Exception:  # pragma: no cover - metrics optional
                 pass
-            # Do NOT re-raise: the action has already happened; the failure
-            # must be visible to ops but must not break the user request.
-            # The savepoint has already rolled back so the outer
-            # transaction remains viable for its final commit.
+            raise
 
     async def _flush_buffer(self) -> None:
         """No-op: audit entries are persisted immediately in ``_store_entry``.
@@ -863,9 +874,9 @@ class AuditService:
                 timestamp=r.timestamp,
                 action=r.action,
                 resource_type=r.resource_type,
-                resource_id=UUID(r.resource_id) if r.resource_id else None,
+                resource_id=_read_audit_identifier(r.resource_id),
                 resource_name=r.resource_name,
-                actor_id=UUID(r.actor_id) if r.actor_id else None,
+                actor_id=_read_audit_identifier(r.actor_id),
                 actor_type=r.actor_type,
                 actor_name=r.actor_name,
                 actor_email=r.actor_email,
@@ -1204,134 +1215,111 @@ class AuditService:
         end_id: UUID | None = None,
         limit: int = 10000,
     ) -> dict[str, Any]:
-        """Walk the audit hash chain and verify each row's HMAC.
+        """Verify a bounded retained window and local state in one DB snapshot.
 
-        Rows are visited in (timestamp, id) ascending order — same order
-        used when extending the chain in :meth:`_store_entry`. The walker
-        recomputes ``HMAC(prev_hash || canonical_json)`` for each row and
-        compares against the stored ``row_hmac``.
+        The local seal authenticates the tail, counts and intentional retention
+        boundary. It cannot establish whole-database rollback resistance or an
+        external immutable destination. Old unsigned history remains disclosed.
+        Explicit bounds or truncation never qualify the complete retained chain.
+        """
+        from app.services import audit_chain
 
-        Rows written before the chain was introduced (``row_hmac IS NULL``)
-        are tolerated and reported as ``unchained`` but do not break the
-        verdict for chained rows.
+        await self._flush_buffer()
+        await self.db.flush()
+        size = max(1, min(limit, 100000))
+        checked = unchained = legacy = 0
+        boundary_verified = False
+        more = False
+        next_id = None
+        state = None
 
-        Returns::
-
-            {
-                "valid": bool,                # True iff no broken links
-                "checked": int,               # rows examined
-                "unchained": int,             # rows with NULL row_hmac
-                "broken_at": str | None,      # first row id that failed
-                "broken_reason": str | None,  # human-readable cause
+        def report(
+            valid: bool,
+            row: AuditLogRecord | None = None,
+            reason: str | None = None,
+        ) -> dict[str, Any]:
+            complete = valid and not more and start_id is None and end_id is None
+            return {
+                "valid": valid,
+                "checked": checked,
+                "unchained": unchained,
+                "broken_at": str(row.id) if row is not None else None,
+                "broken_reason": reason,
+                "legacy_rows": legacy,
+                "boundary_verified": valid and boundary_verified,
+                "complete": complete,
+                # Kept as an explicit false compatibility field. Authentication
+                # of all historical events is broader than a local retained seal.
+                "history_authenticated": False,
+                "retained_history_authenticated": bool(
+                    complete
+                    and boundary_verified
+                    and state is not None
+                    and unchained == 0
+                    and state["unsigned_history_rows"] == 0
+                ),
+                "state_authenticated": state is not None,
+                "unsigned_history_rows": state["unsigned_history_rows"] if state else None,
+                "retention_applied": state is not None and state["boundary"] is not None,
+                "external_immutability_proven": False,
+                "next_start_id": str(next_id) if valid and next_id is not None else None,
             }
 
-        ``limit`` caps the walk so a malicious or huge table can't lock
-        up the admin endpoint. Callers can paginate by passing
-        ``start_id``.
-        """
-        await self._flush_buffer()
-
-        conditions = []
-        if start_id is not None:
-            # Resolve the row to its timestamp so we filter by a
-            # totally-ordered key (timestamp + id) rather than a UUID.
-            start_row = await self.db.execute(
-                select(AuditLogRecord.timestamp, AuditLogRecord.id).where(
-                    AuditLogRecord.id == start_id
-                )
-            )
-            start_pair = start_row.first()
-            if start_pair is not None:
-                conditions.append(AuditLogRecord.timestamp >= start_pair[0])
-        if end_id is not None:
-            end_row = await self.db.execute(
-                select(AuditLogRecord.timestamp, AuditLogRecord.id).where(
-                    AuditLogRecord.id == end_id
-                )
-            )
-            end_pair = end_row.first()
-            if end_pair is not None:
-                conditions.append(AuditLogRecord.timestamp <= end_pair[0])
-
-        where_clause = and_(*conditions) if conditions else sa_true()
-
-        result = await self.db.execute(
-            select(AuditLogRecord)
-            .where(where_clause)
-            .order_by(AuditLogRecord.timestamp.asc(), AuditLogRecord.id.asc())
-            .limit(max(1, min(limit, 100000)))
-        )
-        rows = result.scalars().all()
-
-        checked = 0
-        unchained = 0
-        # We can't easily fetch the row immediately preceding the window,
-        # so we accept the first row's prev_hash as-is (we only verify the
-        # row body links to the stored hash from that point forward).
-        last_seen_hmac: str | None = None
-        # SECURITY (NULL-row tamper): legitimately-NULL ``row_hmac`` rows only
-        # exist at the START of the table — rows written BEFORE the chain
-        # migration ran. Once the chain has begun (we have seen at least one
-        # chained row), every subsequent row is written with a populated
-        # ``row_hmac``; a NULL after that point is not a benign pre-chain row
-        # but a surgical tamper (an attacker NULLing a row to hide an edit /
-        # break a link). Treat it as a chain break rather than resetting the
-        # prev-link check.
+        try:
+            meta, rows = await audit_chain.snapshot(self.db, start_id, end_id, size)
+            state = audit_chain.verified_snapshot_state(meta)
+        except audit_chain.AuditSnapshotRowError as exc:
+            return report(False, exc.row, str(exc))
+        except ValueError as exc:
+            return report(False, reason=str(exc))
+        if not meta["start_exists"]:
+            return report(False, reason="start_id does not exist")
+        if not meta["end_exists"]:
+            return report(False, reason="end_id does not exist")
+        if not meta["bounds_ordered"]:
+            return report(False, reason="start_id follows end_id")
+        more = len(rows) > size
+        if more:
+            next_id = rows[size].id
+            rows = rows[:size]
+        predecessor = audit_chain.from_json(meta["previous"])
+        last_seen_hmac = None
         seen_chained = False
+        boundary_verified = state is not None
+        if predecessor is not None:
+            try:
+                audit_chain.verify_body(predecessor)
+            except ValueError:
+                return report(False, predecessor, "Predecessor row body modified")
+            last_seen_hmac = predecessor.row_hmac
+            seen_chained = last_seen_hmac is not None
+            boundary_verified = boundary_verified and seen_chained
+        elif state is not None and state["boundary"] is not None:
+            last_seen_hmac = state["boundary"]["hash"]
+            seen_chained = last_seen_hmac is not None
+            boundary_verified = seen_chained
+        # With no predecessor/boundary, the first signed record must link to
+        # genesis. A migrated unknown prefix may still be read, but not certified.
         for row in rows:
             checked += 1
+            legacy += int(row.append_sequence is None)
             if row.row_hmac is None:
-                if seen_chained:
-                    # NULL row_hmac after the chain has begun => tampering.
-                    return {
-                        "valid": False,
-                        "checked": checked,
-                        "unchained": unchained,
-                        "broken_at": str(row.id),
-                        "broken_reason": (
-                            "row_hmac is NULL on a post-genesis row "
-                            "(chain link removed — possible tampering)"
-                        ),
-                    }
-                # Pre-chain row (before the chain existed) — note and continue.
+                if seen_chained or row.append_sequence is not None:
+                    return report(False, row, "row_hmac is NULL on a signed-chain row")
                 unchained += 1
-                last_seen_hmac = None
+                boundary_verified = False
                 continue
+            if row.prev_hash != last_seen_hmac:
+                return report(False, row, "prev_hash mismatch in append order")
+            try:
+                audit_chain.verify_body(row)
+            except ValueError:
+                return report(
+                    False, row, "row_hmac mismatch (row body or append position modified)"
+                )
             seen_chained = True
-
-            # If we already saw a chained row, the next row's prev_hash
-            # MUST equal it. (We allow the very first chained row in the
-            # window to have any prev_hash since it may legitimately point
-            # to a row outside the queried range.)
-            if last_seen_hmac is not None and row.prev_hash != last_seen_hmac:
-                return {
-                    "valid": False,
-                    "checked": checked,
-                    "unchained": unchained,
-                    "broken_at": str(row.id),
-                    "broken_reason": (
-                        f"prev_hash mismatch: expected {last_seen_hmac!r} got {row.prev_hash!r}"
-                    ),
-                }
-
-            expected = _compute_row_hmac(row.prev_hash, row)
-            if not hmac.compare_digest(expected, row.row_hmac):
-                return {
-                    "valid": False,
-                    "checked": checked,
-                    "unchained": unchained,
-                    "broken_at": str(row.id),
-                    "broken_reason": "row_hmac mismatch (row body modified)",
-                }
             last_seen_hmac = row.row_hmac
-
-        return {
-            "valid": True,
-            "checked": checked,
-            "unchained": unchained,
-            "broken_at": None,
-            "broken_reason": None,
-        }
+        return report(True)
 
     # =========================================================================
     # Data Retention
@@ -1354,17 +1342,17 @@ class AuditService:
 
         cutoff = datetime.now(UTC) - timedelta(days=retention_days)
 
-        # Delete old audit logs
-        result = await self.db.execute(
-            sa_delete(AuditLogRecord).where(AuditLogRecord.timestamp < cutoff)
-        )
-        audit_deleted = result.rowcount or 0  # type: ignore[attr-defined]
+        # Bounded append-prefix retention preserves a verifiable boundary.
+        # Backdated interior rows wait until all earlier appends are eligible.
+        from app.services.audit_chain import prune_prefix
+        from app.services.audit_retention import delete_security_batch
 
-        # Delete old security events
-        sec_result = await self.db.execute(
-            sa_delete(SecurityEventRecord).where(SecurityEventRecord.timestamp < cutoff)
-        )
-        sec_deleted = sec_result.rowcount or 0  # type: ignore[attr-defined]
+        # Ordinary rows are bounded too; caller still owns the transaction.
+        sec_deleted = await delete_security_batch(self.db, "security_events", cutoff)
+
+        # Match domain writers: finish ordinary security-row mutations before
+        # acquiring the shared audit-chain lock. Caller still owns the transaction.
+        audit_deleted = await prune_prefix(self.db, cutoff)
 
         total_deleted = audit_deleted + sec_deleted
         logger.info(
@@ -1409,7 +1397,7 @@ class AuditService:
                 ],
             )
             writer.writeheader()
-            # INJ-04: neutralize CSV/spreadsheet formula injection — actor_name,
+            # INJ-04: neutralize CSV/spreadsheet formula injection — actor_name/id,
             # action, resource_type/id, ip_address can carry attacker-influenced
             # text that Excel/Sheets would execute (=cmd|/=HYPERLINK DDE/exfil).
             from app.core.security_utils import csv_safe
@@ -1421,9 +1409,11 @@ class AuditService:
                         "action": csv_safe(entry.action),
                         "resource_type": csv_safe(entry.resource_type),
                         "resource_id": csv_safe(
-                            str(entry.resource_id) if entry.resource_id else ""
+                            str(entry.resource_id) if entry.resource_id is not None else ""
                         ),
-                        "actor_id": str(entry.actor_id) if entry.actor_id else "",
+                        "actor_id": csv_safe(
+                            str(entry.actor_id) if entry.actor_id is not None else ""
+                        ),
                         "actor_name": csv_safe(entry.actor_name or ""),
                         "status": csv_safe(entry.status),
                         "ip_address": csv_safe(entry.ip_address or ""),
@@ -1439,9 +1429,11 @@ class AuditService:
                     "timestamp": entry.timestamp.isoformat(),
                     "action": entry.action,
                     "resource_type": entry.resource_type,
-                    "resource_id": str(entry.resource_id) if entry.resource_id else None,
+                    "resource_id": str(entry.resource_id)
+                    if entry.resource_id is not None
+                    else None,
                     "resource_name": entry.resource_name,
-                    "actor_id": str(entry.actor_id) if entry.actor_id else None,
+                    "actor_id": str(entry.actor_id) if entry.actor_id is not None else None,
                     "actor_name": entry.actor_name,
                     "status": entry.status,
                     "changes": entry.changes,

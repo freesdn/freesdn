@@ -397,7 +397,8 @@
       "healthy": "健康",
       "warning": "警告",
       "degraded": "降级",
-      "critical": "严重"
+      "critical": "严重",
+      "unknown": "未知"
     },
     "errorLoading": "无法加载设备健康数据。",
     "empty": "没有设备符合当前筛选条件。",
@@ -575,7 +576,8 @@
         "degraded": "50-69 · 降级",
         "critical": "0-49 · 严重"
       }
-    }
+    },
+    "measurementCoverage": "{{measured}} / {{total}} 条健康记录具有测量数据"
   },
   "IncidentsPage": {
     "header": {

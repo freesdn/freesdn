@@ -12,7 +12,17 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,6 +54,9 @@ class MarketplacePlugin(Base, UUIDMixin, AuditMixin):
     icon_url: Mapped[str | None] = mapped_column(String(512))
     banner_url: Mapped[str | None] = mapped_column(String(512))
     screenshots: Mapped[list[str]] = mapped_column(JSONB, default=list)
+
+    catalog_identity: Mapped[str | None] = mapped_column(String(64))
+    catalog_serial: Mapped[int | None] = mapped_column(BigInteger)
 
     download_url: Mapped[str] = mapped_column(String(512))
     checksum_sha256: Mapped[str] = mapped_column(String(64))
@@ -102,3 +115,21 @@ class PluginReview(Base, UUIDMixin, AuditMixin):
 
     def __repr__(self) -> str:
         return f"<PluginReview {self.marketplace_plugin_id} by {self.user_id}>"
+
+
+class MarketplaceCatalogState(Base):
+    """Global snapshot authorization; retained across process and worker restarts."""
+
+    __tablename__ = "marketplace_catalog_state"
+    __table_args__ = (
+        CheckConstraint("scope = 'global'", name="singleton"),
+        CheckConstraint("serial >= 0", name="serial"),
+        {"schema": "core"},
+    )
+
+    scope: Mapped[str] = mapped_column(String(16), primary_key=True)
+    identity: Mapped[str] = mapped_column(String(64))
+    serial: Mapped[int] = mapped_column(BigInteger)
+    payload_sha256: Mapped[str] = mapped_column(String(64))
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

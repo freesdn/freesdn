@@ -1,0 +1,37 @@
+Device batch command outcomes
+=============================
+
+Batch reboot and firmware requests dispatch each unique device ID at most once
+within that request. Organization, site permission, role/API-key ceilings and
+confirmation checks retain their existing behavior. An inaccessible device or
+one without a usable controller session is not attempted.
+
+Every eligible device receives one result, even when controller cleanup fails.
+The existing device_id/success/message keys remain, with success always boolean.
+The added outcome distinguishes accepted, rejected, unknown and not_attempted.
+Accepted requires an AdapterResult with success exactly True: it means the
+adapter acknowledged the command, not that hardware execution was verified.
+Rejected requires a recognized policy/capability refusal. Malformed responses,
+unclassified failures and exceptions after invocation are unknown; check device
+state before retrying. Arbitrary provider messages and exception text are not
+returned or included in this handler's warnings.
+
+Cleanup errors cannot turn an accepted result into a second failure result or
+cause an automatic retry. A fixed warning accompanies retained outcomes. Failed
+context entry attempts disconnect. Cancellation propagates even if context exit
+raises another error or suppresses it; interrupted batches do not report normal
+completion. There is no automatic command replay.
+
+Qualification includes actual PostgreSQL rows, HTTP-ASGI routes and separate
+processes exercising TCP loopback HTTP. Cancellation is tested by direct handler
+invocation, explicitly not as client-disconnect behavior. Authenticated principals
+and controller adapters are synthetic; no vendor hardware is changed. Checks
+cover duplicate IDs, mixed access, missing controllers, success/refusal, malformed
+results, sensitive diagnostics, setup/entry/exit failures and cancellation.
+
+This is request-local duplicate prevention, not cross-request idempotency or
+exactly-once hardware execution. It does not verify hardware completion, actual
+login, concurrent authority revocation, controller ownership/lifecycle consistency,
+or third-party adapter logs. No frontend batch caller was identified; the endpoint
+behavior is qualified independently. Full shipping/runtime checks are separately
+gated and recorded; these checks alone do not establish enterprise readiness.

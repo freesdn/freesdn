@@ -41,3 +41,8 @@ scrape_configs:
   - job_name: logdb
     static_configs:
       - targets: ["logdb-exporter:9187"]
+
+  # Dedicated status-only exporter; no backup files or credentials over HTTP.
+  - job_name: freesdn-backups
+    static_configs:
+      - targets: ["backup-metrics:9788"]

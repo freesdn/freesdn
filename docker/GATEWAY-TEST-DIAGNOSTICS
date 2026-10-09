@@ -1,0 +1,29 @@
+Gateway connection-test diagnostic boundary
+===========================================
+
+Saved and unsaved gateway tests return fixed result messages instead of
+arbitrary AdapterResult.message values. Successful checks report connection
+success. Recognized AUTH_FAILED, CONN_FAILED and TIMEOUT codes produce fixed,
+actionable guidance; unknown or malformed codes produce a generic failure.
+Raised adapter exceptions retain the existing fixed exception categories.
+
+The service's exception log records a fixed warning with the vendor, without
+raw exception text or traceback. Other adapter and infrastructure logs are
+not changed by this boundary. The existing service behavior already excluded
+AdapterResult.error; error-only results remain explicit compatibility controls.
+
+The qualification uses actual HTTP routes, service, encrypted credentials and
+PostgreSQL. Authenticated state and adapter results are synthetic. Saved tests
+retain destination and trust policy, update online/detected metadata as before,
+and disconnect their owned adapter. The exact service logger is observed by a
+temporary test handler. Before/after real TLS keepalive and cancellation checks
+are additional transport regression controls, not diagnostic-privacy proofs.
+
+Device hostname, model, version and other legitimate metadata remain provider
+data; this is not a universal secret scrubber. Arbitrary provider metadata, other
+operation logs and current caller/session/grant revalidation require separate
+review. Saved-test resource scope and stale results are covered by
+GATEWAY-TEST-AUTHORITY. Constructor exceptions are covered by
+GATEWAY-CONSTRUCTION-FAILURES; saved-settings propagation is covered by
+GATEWAY-SAVED-TEST-POLICY.
+No database history rewrite, hardware write, schema or dependency change occurs.

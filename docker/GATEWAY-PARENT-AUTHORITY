@@ -1,0 +1,35 @@
+Gateway reads require current active parent authority
+====================================================
+
+Gateway row lookup, list rows/counts and summary/vendor totals use the same
+current database predicates: the gateway belongs to the requested organization
+and is not deleted; its organization is active and not deleted; and any assigned
+site belongs to that organization and is active and not deleted. Existing site
+restrictions are included in the SQL predicate, before a cached response or
+adapter is used. The selected gateway is refreshed from the database so an ORM
+identity-map copy cannot supply an obsolete site or connection value.
+
+An inaccessible individual gateway returns the existing opaque HTTP 404. Lists
+and summary totals omit inaccessible gateways. Unassigned gateways remain
+available to callers with organization-wide access. Existing role checks and
+FreeSDN's hybrid site-grant policy are unchanged: a non-admin user with zero
+explicit grants is still organization-wide within their role; one or more
+grants restrict that user to those sites. This change must not be described as
+introducing a deny-all meaning for zero grants or closing caller-grant revocation.
+
+The correction also applies to existing live/sync/write paths that resolve their
+initial gateway through _get_gw. It does not independently recheck caller roles,
+sessions, API keys or site-grant records. It adds no lock across device I/O and
+cannot prevent a parent from changing after admission, recall credentials already
+sent, invalidate all distributed caches or undo a device operation. Saved
+connection-test post-I/O guards retain their separate documented behavior.
+Creation and reassignment target validation and background code that bypasses
+this service require separate review. No backup storage/restore is added.
+
+Qualification uses real PostgreSQL and HTTP routes with synthetic caller identity
+and vendor replies. Eight read surfaces cover deleted/inactive organizations,
+deleted/inactive/foreign sites, assigned and unassigned gateway controls, empty
+explicit-grant compatibility, and stale ORM site-assignment cache reads. Separate
+TCP checks commit parent mutations through an independent database session and
+use fresh request sessions. They are not real hardware, TLS, login or live
+caller-revocation acceptance. Full shipping results are recorded separately.

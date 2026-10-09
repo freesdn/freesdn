@@ -9,7 +9,6 @@ REST API endpoints for camera management and streaming.
 
 import asyncio
 import contextlib
-import json
 import logging
 import time
 from datetime import UTC, datetime, timedelta
@@ -2617,26 +2616,25 @@ async def _enforce_camera_access(
     """
     from app.modules.cameras.models import Camera as _Camera
 
-    org_id = getattr(current_user, "organization_id", None)
-    if org_id is None:
-        # No org context → nothing to scope against; the module permission
-        # gate already ran, so allow (matches prior behaviour).
-        return
-
-    # Resolve camera site_id and assert site-grant BEFORE any role logic so
-    # that a site-limited user cannot reach sibling-site cameras via the
-    # role-fallback grant path.
-    cam_site_row = await session.execute(
-        select(_Camera.site_id).where(
+    org_id = org_scope_or_platform(current_user)
+    # A nullable site is not proof that a camera exists. Resolve identity and
+    # site together so deleted/missing/foreign cameras cannot use role fallback.
+    camera_result = await session.execute(
+        select(_Camera.id, _Camera.site_id).where(
             _Camera.id == camera_id,
-            _Camera.organization_id == org_id,
             _Camera.deleted_at.is_(None),
+            *([_Camera.organization_id == org_id] if org_id is not None else []),
         )
     )
-    cam_site_id = cam_site_row.scalar_one_or_none()
-    # cam_site_id may be None (no site assigned) — assert_can_access_site
-    # treats None as "org-level resource" and is a no-op.
+    camera_row = camera_result.one_or_none()
+    if camera_row is None:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    _, cam_site_id = camera_row
     assert_can_access_site(current_user, cam_site_id, detail="Camera not found")
+    if org_id is None:
+        # Preserve the explicitly privileged platform scope only after the
+        # resource existence and site checks; module permissions still apply.
+        return
 
     from app.modules.cameras.service import CameraAccessService
 
@@ -6378,6 +6376,16 @@ async def check_user_camera_access(
 hls_router = APIRouter(prefix="/streams/hls", tags=["HLS Streaming"])
 
 
+async def _shared_hls_request(operation: str, **params: Any) -> Any:
+    """Use the shared owner, with fixed errors safe for the HTTP boundary."""
+    from app.modules.cameras.coordinator import HLSCoordinatorError, request
+
+    try:
+        return await request(operation, **params)
+    except HLSCoordinatorError:
+        raise HTTPException(status_code=503, detail="HLS service temporarily unavailable") from None
+
+
 @router.post("/{camera_id}/stream/hls/start", response_model=HLSSessionStartResponse)
 async def start_hls_stream(
     camera_id: UUID,
@@ -6394,10 +6402,6 @@ async def start_hls_stream(
         )
     except CameraNotFoundError:
         raise HTTPException(status_code=404, detail="Camera not found")
-
-    from app.modules.cameras.service import HLSStreamService
-
-    hls_service = HLSStreamService()
 
     # Build an AUTHENTICATED RTSP URL. The stored rtsp_main_stream carries the
     # correct NVR host + channel but NO credentials, so feeding it straight to
@@ -6418,7 +6422,8 @@ async def start_hls_stream(
         )
     rtsp_url = base
 
-    result = await hls_service.start_session(
+    result = await _shared_hls_request(
+        "start",
         camera_id=camera_id,
         quality=body.quality,
         rtsp_url=rtsp_url,
@@ -6436,15 +6441,11 @@ async def start_hls_stream(
     )
 
 
-# Per-camera cache of the recorded stream's PROBE (codec + dimensions +
-# decodability), keyed by camera_id with a TTL. These are stable properties of
-# the camera/NVR's recording config, so we probe once and reuse — avoiding the
-# ~1s ffprobe on every play while letting playback ADAPT to whatever codec each
-# stream actually carries (H.264 / H.265 / etc., mixed across channels, NVRs and
-# vendors) instead of assuming one. A "playable=False" verdict (no decodable
-# video / 0×0 — the device emits no parameter sets) drives an honest fast-fail.
-_RECORDED_PROBE_CACHE: dict[UUID, tuple[dict[str, Any] | None, float]] = {}
+# Cache only an exact source and playback window, within a bounded local map.
+# A definitive failure for one recording must not block an unrelated window.
+_RECORDED_PROBE_CACHE: dict[str, tuple[dict[str, Any], float]] = {}
 _RECORDED_PROBE_TTL = 1800.0  # seconds
+_RECORDED_PROBE_MAX_ENTRIES = 256
 
 
 def _normalize_codec(raw: str | None) -> str | None:
@@ -6466,47 +6467,12 @@ async def _probe_recorded_stream(rtsp_url: str) -> dict[str, Any] | None:
     caller should NOT cache and should let the normal path proceed.
     ``playable`` is False when there's no decodable video (no stream, or 0×0).
     """
-    args = [
-        "ffprobe",
-        "-v",
-        "quiet",
-        "-print_format",
-        "json",
-        "-show_streams",
-        "-rtsp_transport",
-        "tcp",
-        "-probesize",
-        "2000000",
-        "-analyzeduration",
-        "3000000",
-        rtsp_url,
-    ]
-    proc = await asyncio.create_subprocess_exec(
-        *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
-    )
-    try:
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-    except TimeoutError:
-        with contextlib.suppress(ProcessLookupError):
-            proc.kill()
-        with contextlib.suppress(Exception):
-            await proc.communicate()
-        return None
-    try:
-        streams = json.loads(out or b"{}").get("streams", [])
-        video = next((s for s in streams if s.get("codec_type") == "video"), None)
-        if video is None:
-            return {"playable": False, "codec": None, "width": 0, "height": 0}
-        width = int(video.get("width") or 0)
-        height = int(video.get("height") or 0)
-        return {
-            "playable": bool(width and height),
-            "codec": _normalize_codec(video.get("codec_name")),
-            "width": width,
-            "height": height,
-        }
-    except Exception:  # pragma: no cover - defensive
-        return None
+    from app.modules.cameras.service import TranscodeService
+
+    result = await TranscodeService().probe_recorded_stream(rtsp_url)
+    if result is not None:
+        result["codec"] = _normalize_codec(result["codec"])
+    return result
 
 
 @router.post("/{camera_id}/playback/hls/start", response_model=HLSSessionStartResponse)
@@ -6538,7 +6504,7 @@ async def start_playback_hls_stream(
     host, port, username, password = await _resolve_credentials(camera, session)
     vendor = (getattr(camera, "vendor", "") or "").lower() or "hikvision"
 
-    from app.modules.cameras.service import HLSStreamService, StreamService
+    from app.modules.cameras.service import StreamService, camera_media_identity
 
     adapter = StreamService._create_camera_adapter(
         host=host, port=port, username=username, password=password, vendor=vendor
@@ -6556,26 +6522,35 @@ async def start_playback_hls_stream(
             start_time=body.start_time.isoformat(),
             duration_s=body.duration_s,
         )
-    except Exception as exc:
-        logger.warning("Playback HLS URL build failed for camera %s: %s", camera_id, exc)
+    except Exception:
+        logger.warning("Playback HLS URL build failed for camera %s", camera_id)
         raise HTTPException(status_code=502, detail="Failed to open recorded stream")
     finally:
         with contextlib.suppress(Exception):
             await adapter.disconnect()
 
-    # Probe the recorded stream (cached per-camera) to (a) fail fast + honestly when
-    # it isn't decodable — instead of spawning an ffmpeg that produces nothing and
-    # leaving the player to spin 30s then silently fall back — and (b) AUTO-DETECT
-    # the codec so playback adapts per stream (copy H.264, transcode HEVC) rather
-    # than assuming one codec across all cameras/NVRs/vendors.
-    cached = _RECORDED_PROBE_CACHE.get(camera_id)
+    # Source credentials/configuration and the exact requested window participate
+    # in the opaque identity. Inconclusive discovery never becomes a cached verdict.
+    playback_key = f"rec:{body.start_time.isoformat()}:{body.duration_s}"
+    probe_key = camera_media_identity(
+        camera_id, org_scope_or_platform(current_user), rtsp_url, playback_key
+    )
+    now = time.monotonic()
+    for key, (_, stored_at) in list(_RECORDED_PROBE_CACHE.items()):
+        if now - stored_at >= _RECORDED_PROBE_TTL:
+            _RECORDED_PROBE_CACHE.pop(key, None)
+    cached = _RECORDED_PROBE_CACHE.get(probe_key)
     probe: dict[str, Any] | None
-    if cached is not None and (time.monotonic() - cached[1]) < _RECORDED_PROBE_TTL:
+    if cached is not None:
         probe = cached[0]
     else:
         probe = await _probe_recorded_stream(rtsp_url)
-        if probe is not None:  # only cache definitive probes
-            _RECORDED_PROBE_CACHE[camera_id] = (probe, time.monotonic())
+        if probe is not None:
+            # Evict oldest inserted results; this cache never grows with every
+            # seek window over the process lifetime. No awaits inside mutation.
+            while len(_RECORDED_PROBE_CACHE) >= _RECORDED_PROBE_MAX_ENTRIES:
+                _RECORDED_PROBE_CACHE.pop(next(iter(_RECORDED_PROBE_CACHE)))
+            _RECORDED_PROBE_CACHE[probe_key] = (probe, time.monotonic())
     if probe is not None and probe.get("playable") is False:
         raise HTTPException(
             status_code=422,
@@ -6591,15 +6566,14 @@ async def start_playback_hls_stream(
     # for browser compatibility.
     detected_codec = (probe or {}).get("codec") or "h265"
 
-    hls_service = HLSStreamService()
-    start_key = body.start_time.strftime("%Y%m%dT%H%M%S")
-    result = await hls_service.start_session(
+    result = await _shared_hls_request(
+        "start",
         camera_id=camera_id,
         quality=body.quality,
         rtsp_url=rtsp_url,
         source_codec=detected_codec,
         organization_id=org_scope_or_platform(current_user),
-        session_key=f"{camera_id}:{body.quality}:rec:{start_key}",
+        session_key=playback_key,
         is_recorded=True,
     )
     if "error" in result:
@@ -6614,22 +6588,38 @@ async def start_playback_hls_stream(
     )
 
 
+async def _authorized_hls_session(
+    session: AsyncSession, current_user: CurrentUser, session_id: str
+) -> dict[str, Any]:
+    """Resolve complete metadata and current camera authority before activity."""
+    organization_id = org_scope_or_platform(current_user)
+    info = await _shared_hls_request("info", session_id=session_id)
+    if (
+        not isinstance(info, dict)
+        or "organization_id" not in info
+        or str(info["organization_id"]) != str(organization_id)
+        or not isinstance(info.get("is_recorded"), bool)
+    ):
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        camera_id = UUID(str(info.get("camera_id")))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="Session not found") from None
+    await _enforce_camera_access(
+        session, current_user, camera_id, "playback" if info["is_recorded"] else "live"
+    )
+    return info
+
+
 @hls_router.post("/{session_id}/heartbeat", response_model=HLSHeartbeatResponse)
 async def hls_heartbeat(
     session_id: Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")],
     current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.view"))],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
     """Keep HLS session alive. Call every 15s."""
-    from app.modules.cameras.service import HLSStreamService
-
-    hls_service = HLSStreamService()
-    info = hls_service._sessions.get(session_id)
-    if not info:
-        raise HTTPException(status_code=404, detail="Session not found")
-    # Verify org ownership before heartbeating
-    if str(info.get("organization_id", "")) != str(current_user.organization_id):
-        raise HTTPException(status_code=404, detail="Session not found")
-    alive = await hls_service.heartbeat(session_id)
+    info = await _authorized_hls_session(session, current_user, session_id)
+    alive = await _shared_hls_request("heartbeat", session_id=session_id)
     if not alive:
         raise HTTPException(status_code=404, detail="Session not found")
     return HLSHeartbeatResponse(alive=True, viewers=info.get("viewers", 1))
@@ -6642,24 +6632,8 @@ async def get_hls_playlist(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
     """Serve HLS playlist (.m3u8)."""
-    from app.modules.cameras.service import HLSStreamService
-
-    hls_service = HLSStreamService()
-    # Verify org ownership
-    info = hls_service._sessions.get(session_id, {})
-    if str(info.get("organization_id", "")) != str(current_user.organization_id):
-        raise HTTPException(status_code=404, detail="Playlist not found")
-    # Re-evaluate the per-camera grant on every playlist fetch so a revoked grant
-    # stops serving an already-started session within one fetch interval.
-    cam_id = info.get("camera_id")
-    if cam_id:
-        await _enforce_camera_access(
-            session,
-            current_user,
-            UUID(cam_id) if isinstance(cam_id, str) else cam_id,
-            "playback" if info.get("is_recorded") else "live",
-        )
-    path = hls_service.get_playlist_path(session_id)
+    await _authorized_hls_session(session, current_user, session_id)
+    path = await _shared_hls_request("playlist", session_id=session_id)
     if not path:
         # get_playlist_path already returns None unless the .m3u8 exists on disk;
         # ffmpeg may not have written the first segment yet, or the session ended.
@@ -6672,7 +6646,7 @@ async def get_hls_playlist(
     return FileResponse(
         path,
         media_type="application/vnd.apple.mpegurl",
-        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        headers={"Cache-Control": "private, no-cache, no-store, must-revalidate"},
     )
 
 
@@ -6688,22 +6662,8 @@ async def get_hls_segment(
 
     if not _re.fullmatch(r"\d{5}\.ts", segment):
         raise HTTPException(status_code=400, detail="Invalid segment name")
-    from app.modules.cameras.service import HLSStreamService
-
-    hls_service = HLSStreamService()
-    # Verify org ownership
-    info = hls_service._sessions.get(session_id, {})
-    if str(info.get("organization_id", "")) != str(current_user.organization_id):
-        raise HTTPException(status_code=404, detail="Segment not found")
-    cam_id = info.get("camera_id")
-    if cam_id:
-        await _enforce_camera_access(
-            session,
-            current_user,
-            UUID(cam_id) if isinstance(cam_id, str) else cam_id,
-            "playback" if info.get("is_recorded") else "live",
-        )
-    path = hls_service.get_segment_path(session_id, segment)
+    await _authorized_hls_session(session, current_user, session_id)
+    path = await _shared_hls_request("segment", session_id=session_id, segment=segment)
     if not path:
         raise HTTPException(status_code=404, detail="Segment not found")
     from fastapi.responses import FileResponse
@@ -6711,7 +6671,7 @@ async def get_hls_segment(
     return FileResponse(
         path,
         media_type="video/mp2t",
-        headers={"Cache-Control": "max-age=3600"},
+        headers={"Cache-Control": "private, no-store"},
     )
 
 
@@ -6719,16 +6679,11 @@ async def get_hls_segment(
 async def stop_hls_stream(
     session_id: Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")],
     current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.view"))],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
     """Stop an HLS streaming session."""
-    from app.modules.cameras.service import HLSStreamService
-
-    hls_service = HLSStreamService()
-    # Verify org ownership
-    info = hls_service._sessions.get(session_id, {})
-    if str(info.get("organization_id", "")) != str(current_user.organization_id):
-        raise HTTPException(status_code=404, detail="Session not found")
-    await hls_service.stop_session(session_id)
+    await _authorized_hls_session(session, current_user, session_id)
+    await _shared_hls_request("stop", session_id=session_id)
     return {"status": "stopped"}
 
 

@@ -16,16 +16,30 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.engine import URL, make_url
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+# Private/public suites and pytest workers may share one PostgreSQL server. Never
+# let one process recreate or drop another process's migration fixture database.
+_SCRATCH_RUN_ID = uuid4().hex[:12]
+
+
+def _scratch_name(name: str) -> str:
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", name):
+        raise ValueError("scratch database names must be lowercase SQL identifiers")
+    digest = hashlib.sha256(name.encode()).hexdigest()[:8]
+    return f"{name[:40]}_{digest}_{_SCRATCH_RUN_ID}"
+
 
 # The revision the frozen baseline dump is stamped at: the last one that predates the
 # four un-migrated model commits of 2026-06-21/22.
@@ -145,7 +159,8 @@ def maintenance_engine() -> Iterator[sa.Engine]:
 
 
 def make_scratch_database(engine: sa.Engine, name: str) -> URL:
-    """(Re)create an empty database called ``name`` and return its async URL."""
+    """Recreate this process's database for logical ``name`` and return its URL."""
+    name = _scratch_name(name)
     with engine.connect() as conn:
         conn.execute(sa.text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
         conn.execute(sa.text(f'CREATE DATABASE "{name}"'))
@@ -153,6 +168,7 @@ def make_scratch_database(engine: sa.Engine, name: str) -> URL:
 
 
 def drop_scratch_database(engine: sa.Engine, name: str) -> None:
+    name = _scratch_name(name)
     with engine.connect() as conn:
         conn.execute(sa.text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
 
@@ -166,6 +182,10 @@ def run_alembic(
     which cannot run inside the event loop pytest-asyncio has open.
     """
     env = dict(os.environ)
+    # Pytest may encode a binary parameter's full value in this diagnostic label.
+    # Keep the parent test identity intact; a migration child is not a pytest case
+    # and must not inherit an environment entry beyond the OS exec limit.
+    env.pop("PYTEST_CURRENT_TEST", None)
     env["DATABASE_URL"] = url.render_as_string(hide_password=False)
     env["PYTHONPATH"] = os.pathsep.join(
         [str(BACKEND_ROOT), *([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])]

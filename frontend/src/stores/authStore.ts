@@ -6,7 +6,7 @@ import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { api, getCookie, getApiErrorMessage } from '../lib/api';
 import type { AxiosError } from 'axios';
-import { demoUser } from '@/demo/fixtures';
+import { demoUser } from '@/demo/identity';
 import { isDemoMode } from '@/demo/mode';
 
 /**

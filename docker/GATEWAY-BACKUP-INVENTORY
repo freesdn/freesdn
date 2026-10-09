@@ -1,0 +1,40 @@
+Gateway backup inventory contract and limitations
+================================================
+
+The OPNsense core backup inventory uses GET /api/core/backup/backups/this.
+The host selector is intentionally fixed to this firewall; remote OPNcentral
+providers are not queried. Its items contain id, time_iso, filesize and
+description. FreeSDN normalizes these into filename, timestamp, size_bytes and
+description, preserving list order and zero-byte sizes. A successful empty
+items list remains a confirmed empty inventory.
+
+The previous client omitted the required host selector and the adapter looked
+for a backups field rather than items, so valid history could be lost. The
+gateway service also turned adapter failures into HTTP 200 empty inventories.
+
+The service now returns a fixed HTTP 502 on failure or malformed metadata and
+HTTP 501 on an explicitly unsupported operation. Admission denials remain
+unchanged. Metadata must be a list of distinct safe filenames and correctly
+typed fields. Extra provider fields, including configuration bodies, are not
+returned. Provider exception text is not included in inventory diagnostics;
+shared gateway adapter cleanup also avoids logging raw exception text.
+
+Reference, retrieved 2026-09-25:
+https://github.com/opnsense/core/blob/26.7.4/src/opnsense/mvc/app/controllers/OPNsense/Core/Api/BackupController.php
+https://docs.opnsense.org/development/api/core/core.html
+
+Qualification includes PostgreSQL-backed HTTP admission/response tests and a
+separate real HTTPX/TLS probe against an owned synthetic OPNsense-shaped server.
+The service probe explicitly doubles vendor I/O; the TLS probe uses the actual
+OPNsense client and adapter, overriding only its fixture destination and trust.
+Neither is a real-appliance compatibility, backup creation, restore, or data
+durability test. This does not expand the vendor hardware support matrix.
+
+Remaining work includes per-table unavailable/stale states and size_bytes
+display in the frontend, validating vendor create/delete/revert contracts, and
+FreeSDN-managed off-device artifact retention and recovery. An inventory entry
+alone proves neither its contents nor restorability. The current frontend's
+existing query error banner can surface these HTTP failures; it is unchanged.
+The OpenWRT adapter's existing static empty history response is also unchanged;
+it is not evidence that a real appliance has no backup files. Explicitly marking
+that unsupported history capability remains a separate correction.

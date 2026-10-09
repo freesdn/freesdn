@@ -17,7 +17,8 @@
       "totalVMs": "Total de VM",
       "backedUpOk": "Con copia (OK)",
       "stale": "Obsoletas",
-      "neverBackedUp": "Sin copia nunca"
+      "neverBackedUp": "Sin copia nunca",
+      "unknown": "Desconocido"
     },
     "table": {
       "vmid": "VMID",
@@ -30,7 +31,8 @@
     "status": {
       "ok": "OK",
       "stale": "Obsoleta",
-      "never": "Nunca"
+      "never": "Nunca",
+      "unknown": "Desconocido"
     },
     "empty": {
       "noVMs": "No se encontraron VM en el informe de antigüedad de copias.",
@@ -39,7 +41,8 @@
     "errors": {
       "loadBanner": "No se pudo cargar el informe de antigüedad de copias. Los datos siguientes pueden estar obsoletos o vacíos.",
       "loadReport": "No se pudo cargar el informe de antigüedad de copias",
-      "selectNodeStorage": "Selecciona un nodo y almacenamiento"
+      "selectNodeStorage": "Selecciona un nodo y almacenamiento",
+      "incomplete": "No se pudo leer parte del almacenamiento de copias de seguridad. No se puede confirmar si faltan copias o si están desactualizadas hasta que todo el almacenamiento sea accesible. Las copias recientes observadas siguen siendo visibles."
     },
     "actions": {
       "retry": "Reintentar",
@@ -390,14 +393,15 @@
       "delete": "¿Eliminar {{count}} VM/CT? Esta acción no se puede deshacer. Asegúrate de que todos estén detenidos."
     },
     "toast": {
-      "actionCompleteTitle": "Acción masiva completada",
-      "actionCompleteDescription": "{{succeeded}} con éxito, {{failed}} con error",
+      "actionCompleteTitle": "Solicitudes procesadas",
+      "actionCompleteDescription": "{{succeeded}} confirmadas, {{failed}} requieren revisión. Consulte Cambios pendientes para ver los resultados de las operaciones.",
       "actionFailedTitle": "Error en la acción masiva",
       "migrationStarted": "Migración iniciada para {{count}} VM"
     },
     "results": {
       "title": "Resultados de la operación masiva",
-      "close": "Cerrar"
+      "close": "Cerrar",
+      "tracked": "Registrada en Cambios pendientes"
     },
     "migrate": {
       "title": "Migración masiva de {{count}} VM/CT",
@@ -406,7 +410,7 @@
       "targetNodeLabel": "Nodo de destino",
       "targetNodePlaceholder": "Selecciona el nodo de destino",
       "targetNodeRequired": "Selecciona un nodo de destino",
-      "onlineLabel": "Migración en línea (en vivo)"
+      "onlineLabel": "Migración en vivo (solo máquinas QEMU)"
     }
   },
   "EditConfigDialog": {
@@ -1056,7 +1060,8 @@
       "quorate": "Con quórum",
       "noQuorum": "Sin quórum",
       "active": "Activo",
-      "inactive": "Inactivo"
+      "inactive": "Inactivo",
+      "unknown": "Desconocido"
     },
     "taskStatus": {
       "completed": "Completadas",
@@ -1352,7 +1357,18 @@
       "restoreStaged": {
         "title": "Restauración preparada",
         "description": "Revísela y aplíquela desde Cambios pendientes. Una restauración sobrescribe el invitado de destino."
-      }
+      },
+      "actionNeedsReview": "La acción requiere revisión",
+      "powerTracked": "La operación {{id}} está guardada. Comprueba su finalización en Cambios pendientes.",
+      "powerResponseLost": "Comprueba Cambios pendientes antes de enviar otra solicitud de energía. La solicitud anterior puede haber llegado a Proxmox.",
+      "operationAccepted": "Solicitud aceptada",
+      "operationTracked": "La operación {{id}} se sigue en Cambios pendientes. La aceptación no confirma su finalización.",
+      "operationResponseLost": "El resultado requiere revisión. Revise Cambios pendientes antes de iniciar otra operación. Reenviar este diálogo sin cambios reutiliza el mismo identificador de solicitud.",
+      "recoveryResponseLost": "El resultado requiere revisión. Revise Cambios pendientes antes de iniciar otra operación de recuperación. Un nuevo identificador de solicitud puede enviar otra operación.",
+      "guestChangeVerified": "Estado del huésped verificado",
+      "pendingRestart": "Configuración guardada; aún se requiere reiniciar",
+      "reviewUnavailable": "Se requieren una configuración y un tamaño de disco verificados. Cierre y vuelva a abrir para recargar.",
+      "intentChanged": "Esta solicitud ya se ha enviado. Revise su resultado antes de modificarla."
     },
     "snapshotDialog": {
       "title": "Crear instantánea",
@@ -1390,14 +1406,17 @@
       "targetNode": "Nodo de destino",
       "selectTargetNode": "Seleccionar nodo de destino",
       "onlineMigration": "Migración en línea (en vivo)",
-      "migrating": "Migrando..."
+      "migrating": "Migrando...",
+      "restartMigration": "Permitir apagar y reiniciar contenedores",
+      "restartWarning": "La migración de contenedores no es en vivo. Active la migración con reinicio para permitir interrupciones en contenedores en ejecución; de lo contrario, solo se pueden migrar contenedores detenidos."
     },
     "resizeDialog": {
       "title": "Redimensionar disco · VM {{vmid}}",
       "description": "Ampliar el tamaño del disco en {{node}}",
       "sizeHint": "Use +10G para añadir 10GB, o 50G para un tamaño absoluto",
       "resizing": "Redimensionando...",
-      "resize": "Redimensionar"
+      "resize": "Redimensionar",
+      "reviewedSize": "Tamaño de disco revisado: {{size}} GiB. El sistema de archivos del huésped puede requerir una ampliación aparte."
     },
     "backupDialog": {
       "title": "Copia de seguridad de VM {{vmid}}",
@@ -1476,5 +1495,348 @@
       "startAfterRestore": "Iniciar tras la restauración",
       "uniqueMac": "Direcciones MAC únicas"
     }
+  },
+  "DeleteGuestDialog": {
+    "title": "Revisar eliminación de invitados",
+    "warning": "Elimine permanentemente estos invitados y sus discos propios. No se puede deshacer. Deténgalos primero; se respetan la protección y los bloqueos del proveedor.",
+    "limit": "Proxmox no puede comparar atómicamente la configuración revisada al eliminar. Evite cambios simultáneos fuera de FreeSDN. No se purgan tareas de copia ni discos sin referencia.",
+    "loading": "Leyendo las configuraciones para esta revisión…",
+    "reviewFailed": "Revisión no disponible, invitado protegido o bloqueado, o controlador cambiado. Cierre y revise de nuevo.",
+    "readOnly": "Las escrituras están deshabilitadas en modo de solo lectura.",
+    "accepted": "Solicitudes registradas. Consulte Cambios pendientes para comprobar la finalización; aceptado no significa eliminado.",
+    "notAccepted": "Solicitud no aceptada",
+    "type": "Escriba DELETE para confirmar estos destinos revisados",
+    "submit": "Enviar eliminación"
+  },
+  "CreateGuestDialog": {
+    "title": "Revisar creación del huésped",
+    "warning": "Elija un VMID explícito. Un ID sugerido no está reservado; un conflicto de asignación detiene esta solicitud.",
+    "vmid": "VMID",
+    "suggest": "Sugerir ID disponible",
+    "review": "Revisar creación",
+    "submit": "Enviar creación",
+    "frozen": "Esta revisión está fijada. Si se pierde la respuesta, reenvíe la misma intención; revise Cambios pendientes antes de abrir una nueva solicitud.",
+    "receipt": "Recibo de creación registrado. La aceptación no significa que el huésped o sus aplicaciones estén listos. Siga la operación en Cambios pendientes.",
+    "invalid": "Introduzca un VMID, nodo, nombre, tamaño de disco y plantilla (para contenedores) válidos.",
+    "suggestFailed": "No se pudo sugerir un ID. Introduzca y revise un ID explícito.",
+    "changed": "El controlador cambió. Cierre y revise en el controlador deseado.",
+    "password": "Contraseña raíz del contenedor (opcional)",
+    "passwordHint": "La contraseña se cifra en el registro de la operación y nunca aparece en el recibo."
+  },
+  "ClusterOperationDialog": {
+    "title": "Revisar operación del clúster",
+    "review": "Revisar impacto",
+    "warning": "Apagar o reiniciar un nodo puede interrumpir todos sus huéspedes y el acceso al clúster. Los cambios de HA pueden iniciar, detener o mover cargas. Verifique mantenimiento, copias y acceso de recuperación.",
+    "limits": "Esta revisión no demuestra el cuórum restante, la disponibilidad del almacenamiento, la seguridad del aislamiento ni la visibilidad completa bajo todas las ACL. Los cambios externos pueden coincidir con la comprobación final.",
+    "manual": "La energía del nodo no tiene ID de tarea del proveedor. El resultado sigue siendo desconocido hasta verificar el host por una vía independiente y resolver el recibo en Cambios pendientes.",
+    "ha": "La lectura de HA verifica solo la configuración, no la salud ni la conmutación. Los grupos requieren la API heredada. Eliminar un recurso nunca purga las reglas de HA.",
+    "failed": "No se pudo revisar el impacto. No se envió ningún comando. Cierre este diálogo y revise de nuevo.",
+    "loading": "Leyendo el impacto del clúster…",
+    "confirm": "Escriba el destino exacto para confirmar: {{target}}",
+    "submit": "Enviar operación revisada",
+    "changed": "Cambió el controlador o la acción. Cierre y revise de nuevo.",
+    "receipt": "Solicitud registrada. Aceptación no significa finalización; revise el recibo en Cambios pendientes.",
+    "guests": "Huéspedes visibles (todo el clúster)",
+    "nodes": "Miembros del clúster",
+    "resources": "Configuración de HA",
+    "options": "Parámetros de operación fijados",
+    "quorum": "Cuórum actual",
+    "retry": "La respuesta se perdió o fue rechazada. Revise Cambios pendientes. Reintentar aquí reutiliza el mismo ID y los parámetros revisados."
+  },
+  "CertificateOperationDialog": {
+    "title": "Revisar operación de certificado",
+    "warning": "Cambiar TLS puede interrumpir el acceso de gestión. Mantenga acceso independiente a la consola y una copia segura del certificado y la clave de recuperación.",
+    "limits": "Se comprueban la clave, la cadena proporcionada y la validez. No se verifica la confianza del navegador, los nombres de host, la revocación ni todos los nodos. No hay reversión automática ni reducción de la verificación TLS.",
+    "acmeWarning": "La renovación ACME recarga el proxy y puede revocar el certificado anterior. Aquí no se modifican las credenciales de la cuenta ni del complemento DNS.",
+    "restartWarning": "Reiniciar el proxy puede interrumpir la API y las consolas. Sin reinicio, los cambios guardados pueden permanecer inactivos.",
+    "acmeForce": "Renovar antes del período normal de vencimiento",
+    "review": "Validar y revisar",
+    "reviewFailed": "La revisión falló. No se envió ninguna escritura. Reintente o cierre y corrija el certificado, la clave o las opciones.",
+    "endpoint": "Nodo del punto de conexión configurado",
+    "options": "Sobrescribir: {{overwrite}} · Reiniciar: {{restart}} · Renovación anticipada: {{acmeForce}}",
+    "candidate": "Certificado candidato validado",
+    "current": "Huellas de los certificados actuales",
+    "domains": "Dominios ACME revisados",
+    "confirm": "Escriba el nodo exacto para confirmar: {{node}}",
+    "changed": "El destino cambió. Cierre y vuelva a revisar.",
+    "retry": "No se recibió la respuesta. Revise primero Cambios pendientes. Reintentar conserva el identificador y la intención; no inicie otra operación a ciegas.",
+    "receipt": "Solicitud registrada. La aceptación no demuestra la activación. Siga la operación en Cambios pendientes y verifique independientemente los resultados inciertos.",
+    "submit": "Enviar cambio de certificado revisado",
+    "remove": "Eliminar certificado personalizado"
+  },
+  "StorageOperationDialog": {
+    "upload": "Revisar carga al almacenamiento",
+    "delete": "Revisar eliminación del volumen",
+    "warning": "La eliminación es irreversible. Las cargas requieren un nombre nuevo. Registrar una solicitud no demuestra su finalización.",
+    "limits": "Los discos de máquinas virtuales quedan excluidos. Las referencias ISO se comprueban con las credenciales del controlador; los cambios externos y las excepciones de permisos pueden invalidar la revisión. La finalización requiere una tarea coincidente y una lectura del almacenamiento, no un borrado seguro ni un hash independiente de los bytes guardados.",
+    "filePolicy": "Máximo 4 GiB. Use un nombre ASCII: .iso, .tar.gz, .tar.xz o .tar.zst. Sin rutas, espacios ni puntos consecutivos.",
+    "review": "Revisar estado del almacenamiento",
+    "reviewFailed": "Revisión no disponible o insegura. Compruebe el estado, los permisos y las referencias antes de reintentar.",
+    "confirm": "Escriba el ID completo del volumen: {{volume}}",
+    "changed": "El destino ha cambiado. Cierre este diálogo y revise de nuevo.",
+    "failed": "No se recibió un comprobante verificado. Consulte los cambios pendientes antes de iniciar otra solicitud. Reintentar aquí conserva el ID y el archivo.",
+    "cancel": "Cancelar",
+    "submit": "Enviar operación revisada"
+  },
+  "ReviewedBackupJob": {
+    "create": "Crear programación de copias revisada",
+    "update": "Actualizar programación de copias revisada",
+    "delete": "Eliminar programación de copias revisada",
+    "warning": "Guardar una programación no demuestra que se haya ejecutado una copia ni que se pueda restaurar. Eliminarla no elimina archivos ni detiene una ejecución en curso.",
+    "limits": "Seleccione de 1 a 64 ID de invitados explícitos en un nodo. Use HH:MM o días de la semana seguidos de HH:MM, según la hora local del nodo. Las tareas nuevas conservan todas las copias; supervise la capacidad. Se conservan la retención y las notificaciones existentes. Detener o suspender puede interrumpir los invitados. Una tarea habilitada puede ejecutarse antes de completar la verificación.",
+    "node": "Nodo",
+    "storage": "Almacenamiento de copias",
+    "schedule": "Programación",
+    "vmid": "ID de invitados (separados por comas, sin espacios)",
+    "snapshot": "Configuración, retención y selección de invitados revisadas",
+    "confirm": "Escriba el ID exacto de la tarea: {{id}}",
+    "error": "No se pudo verificar la revisión o la solicitud. Consulte Cambios pendientes antes de reintentar o iniciar otra solicitud. Las opciones nativas avanzadas pueden requerir gestión nativa.",
+    "review": "Revisar programación de copias",
+    "submit": "Enviar programación revisada",
+    "inherited": "Heredado",
+    "nativeSelection": "Selección nativa"
+  },
+  "TaskStop": {
+    "title": "Revisar la detención de la tarea",
+    "warning": "Detener un proceso no deshace sus cambios. Las copias de seguridad, migraciones y otras operaciones pueden quedar incompletas. Una confirmación de recepción no demuestra que la tarea se haya detenido.",
+    "requirements": "Requiere los permisos Sys.Audit y Sys.Modify del nodo. Inspeccione la operación original y sus efectos antes de recuperarla.",
+    "reviewed": "Tarea en ejecución {{type}} en {{node}} revisada.",
+    "confirm": "Escriba el nombre del nodo para confirmar: {{node}}",
+    "review": "Revisar tarea en ejecución",
+    "submit": "Enviar solicitud de detención con seguimiento",
+    "error": "La revisión o el envío no está disponible. Inspeccione los cambios pendientes antes de reintentar. El reintento reutiliza el mismo ID de solicitud.",
+    "logUnavailable": "El registro de la tarea no está disponible. Esto no significa que esté vacío."
+  },
+  "FirewallOps": {
+    "title": "Revisar operación de cortafuegos",
+    "warning": "Los cambios pueden desconectar la administración y las cargas. Guardar la configuración no demuestra el filtrado efectivo ni la conectividad; no hay reversión automática.",
+    "before": "Configuración actual",
+    "desired": "Configuración esperada",
+    "confirm": "Escriba el destino para confirmar: {{target}}",
+    "recovery": "He verificado el acceso independiente a consola o recuperación fuera de banda.",
+    "error": "No se pudo verificar la revisión o solicitud. Revise Cambios pendientes antes de reintentar; no repita una escritura incierta con otra solicitud.",
+    "review": "Revisar cambio de cortafuegos",
+    "submit": "Enviar solicitud de cortafuegos registrada",
+    "scope": "Ámbito del cortafuegos",
+    "cluster": "Clúster",
+    "refresh": "Actualizar reglas",
+    "pending": "Cambios pendientes",
+    "enable": "Revisar activación",
+    "disable": "Revisar desactivación",
+    "add": "Revisar nueva regla",
+    "delete": "Revisar eliminación",
+    "loading": "Cargando reglas…",
+    "actions": "Acciones",
+    "fields": {
+      "source": "Origen",
+      "dest": "Destino",
+      "dport": "Puerto de destino",
+      "proto": "Protocolo",
+      "comment": "Comentario"
+    },
+    "toggle": "Revisar activación/desactivación",
+    "first": "Revisar mover al inicio"
+  },
+  "SdnInspection": {
+    "title": "Inspección de configuración SDN",
+    "refresh": "Actualizar observaciones",
+    "writeBoundary": "Los cambios y la aplicación de SDN no están disponibles en FreeSDN hasta validar el flujo revisado de bloqueo nativo.",
+    "visibility": "Son observaciones filtradas por permisos, no una instantánea atómica ni completa. La configuración en ejecución no demuestra la recarga de nodos ni la conectividad.",
+    "recovery": "Use la administración nativa de Proxmox para los cambios, con acceso de recuperación independiente. No aplique cambios a la red de administración basándose solo en esta inspección.",
+    "pending": {
+      "changes_detected": "Cambios visibles detectados",
+      "no_visible_changes": "Sin cambios en la configuración visible",
+      "unknown": "Estado pendiente desconocido"
+    },
+    "observed": "Observado: {{time}}",
+    "refreshing": "Leyendo el estado actual…",
+    "permissions": "Consulta de permisos: {{status}} · SDN.Audit: {{audit}} · SDN.Allocate: {{allocate}}. Los permisos en /sdn no demuestran visibilidad de todos los objetos secundarios.",
+    "unknown": "desconocido",
+    "unobserved": "Sin inspeccionar: {{resources}}. El impacto en invitados e interfaces y las capacidades de bloqueo siguen sin verificar.",
+    "resources": {
+      "zones": "Zonas",
+      "vnets": "VNets",
+      "controllers": "Controladores SDN"
+    },
+    "views": {
+      "configured": "Configurada (deseada)",
+      "running": "En ejecución (confirmada)",
+      "pending": "Cambios pendientes nativos"
+    },
+    "status": {
+      "available": "Lectura disponible",
+      "denied": "Permiso denegado",
+      "unsupported_or_missing": "No compatible o ausente",
+      "unavailable": "No disponible",
+      "invalid": "Respuesta del proveedor no válida"
+    },
+    "failed": "Falló la observación SDN. Los datos anteriores no deben considerarse actuales.",
+    "empty": "No hay objetos visibles. Los permisos pueden ocultar otros objetos.",
+    "omitted": "Campos ocultos o no compatibles: {{count}}",
+    "dryRun": "Resumen de simulación por nodo",
+    "diffBoundary": "Vista de solo lectura de los cambios generados de interfaces y FRR. El contenido se oculta porque puede contener credenciales. No verifica la conectividad ni autoriza la aplicación.",
+    "node": "Nombre exacto del nodo Proxmox",
+    "preview": "Leer simulación",
+    "interfaces": "Interfaces",
+    "frr": "Enrutamiento FRR",
+    "changed": "Diferencia detectada",
+    "unchanged": "Sin diferencias detectadas",
+    "lines": "{{added}} líneas añadidas, {{removed}} líneas eliminadas"
+  },
+  "SdnDependencies": {
+    "title": "Cobertura de dependencias SDN",
+    "boundary": "Observaciones de solo lectura filtradas por permisos. No constituyen un grafo de dependencias completo ni una aprobación para aplicar cambios de red. La inspección usa como máximo tres lecturas simultáneas y un presupuesto de 20 segundos. Se omiten secretos y campos de políticas no admitidos.",
+    "inspect": "Inspeccionar dependencias",
+    "refresh": "Actualizar observaciones de dependencias",
+    "reads": "{{used}} de {{limit}} lecturas de colecciones iniciadas (sin contar reintentos de transporte)",
+    "parents": "Se seleccionaron {{selected}} VNets visibles (límite {{limit}}); se omitieron {{omitted}} VNets visibles adicionales por el límite. También pueden existir VNets ocultas o no disponibles.",
+    "limited": "Se alcanzó el límite de respuesta. Algunas colecciones no se observaron y no deben considerarse vacías.",
+    "unobserved": "Sin verificar: {{resources}}.",
+    "resource": "Familia de dependencias",
+    "view": "Vista de configuración",
+    "noCollection": "No se observó ninguna colección para esta selección. Esto no demuestra que no existan objetos.",
+    "parent": "VNet: {{name}}",
+    "notObserved": "No observado",
+    "identitiesOnly": "Solo identidades del catálogo. Las reglas anidadas no forman parte de este catálogo; seleccione la familia de entradas de políticas correspondiente para su observación independiente.",
+    "displayLimit": "Se muestran las primeras {{limit}} de {{total}} entradas devueltas.",
+    "references": "Referencias de objetos visibles",
+    "referenceBoundary": "No visible puede significar ausente, oculto por permisos o cambiado entre lecturas. Un destino visible no demuestra que la configuración sea válida. Las referencias en ejecución a IPAM/DNS usan su catálogo de configuración actual. Los campos pendientes no se resuelven en un grafo de dependencias.",
+    "noReferences": "No se observaron referencias compatibles para esta selección; pueden quedar dependencias sin observar.",
+    "resources": {
+      "zones": "Zonas",
+      "vnets": "VNets",
+      "controllers": "Controladores SDN",
+      "subnets": "Subredes por VNet",
+      "ipams": "Proveedores IPAM",
+      "dns": "Proveedores DNS",
+      "fabrics": "Tejidos de red",
+      "fabric-nodes": "Nodos de tejidos de red",
+      "prefix-lists": "Catálogo de listas de prefijos",
+      "route-maps": "Catálogo de mapas de rutas",
+      "prefix-list-entries": "Reglas de listas de prefijos",
+      "route-map-entries": "Entradas de mapas de rutas"
+    },
+    "reasons": {
+      "view_not_exposed": "Esta colección nativa no expone esta vista de configuración.",
+      "inspection_deadline": "Se alcanzó el plazo de inspección antes de completar esta lectura.",
+      "response_limit": "Esta colección superó el presupuesto agregado de respuesta.",
+      "parent_inventory_unavailable": "Al menos una vista del inventario de VNets no estaba disponible; la enumeración de subredes está incompleta."
+    },
+    "referenceStatus": {
+      "visible": "Destino visible en esta observación",
+      "not_visible": "Destino no visible; existencia sin verificar",
+      "target_unavailable": "Colección de destino no disponible"
+    },
+    "unobservedNames": {
+      "guest_nic_references": "referencias de interfaces de invitados",
+      "host_network_interfaces": "interfaces de red del host",
+      "route_map_entries": "entradas de mapas de rutas",
+      "prefix_list_entries": "entradas de listas de prefijos",
+      "fabric_interface_and_peer_details": "detalles de interfaces y pares de tejidos de red",
+      "provider_version_and_plugin_support": "compatibilidad de versión y complementos del proveedor",
+      "withheld_or_unobserved_policy_fields": "campos de políticas omitidos o no observados",
+      "policy_evaluation_and_enforcement": "evaluación y aplicación real de políticas",
+      "fabric_runtime_and_withheld_fields": "estado de ejecución del fabric y campos de configuración omitidos"
+    },
+    "unobservedFallback": "Otras dependencias siguen sin verificar; no hay detalles de cobertura disponibles.",
+    "policyBoundary": "Solo configuración de políticas analizada; no se verifican la evaluación de FRR ni la aplicación real. Las filas nativas pendientes pueden incluir identidades en su sección de cambios; se conservan los marcadores de eliminación. Se omiten campos desconocidos y texto de pares no admitido. Las lecturas de catálogos y entradas pueden tener distintos filtros de permisos nativos. Los cambios pendientes no se combinan en una política ejecutable.",
+    "nestedDisplayLimit": "{{field}}: se muestran los primeros {{limit}} de {{total}} elementos recibidos.",
+    "fabricBoundary": "Solo configuración de fabrics. Las claves de nodo incluyen el fabric y el nodo; un nodo puede pertenecer a varios fabrics. Las coincidencias de interfaces y pares se limitan a la misma vista de configuración observada y al mismo fabric. No demuestran la existencia de interfaces del host, sesiones activas, un intercambio de claves WireGuard, la validez del enrutamiento ni la conectividad. Se omiten claves, endpoints, direcciones y campos no admitidos; los cambios pendientes no se resuelven en un grafo.",
+    "unsupportedFabricProtocol": "Este lector no admite el protocolo de este fabric. Se muestran las identidades; se omiten los detalles específicos del protocolo."
+  },
+  "SdnAttachments": {
+    "title": "Observaciones de NIC de invitados e interfaces de hosts",
+    "boundary": "Observaciones parciales de solo lectura. La coincidencia de nombres no verifica la conectividad ni establece un grafo de impacto completo. La aplicación de SDN sigue bloqueada.",
+    "inspect": "Inspeccionar conexiones de invitados y hosts",
+    "refresh": "Actualizar observaciones de conexiones",
+    "guest_inventory": "Inventario de invitados visibles",
+    "node_inventory": "Inventario de nodos visibles",
+    "selection": "Seleccionadas {{selected}} de {{total}} entradas visibles (límite {{limit}}); {{omitted}} omitidas por el límite de selección.",
+    "coverage": "No se han verificado invitados y nodos ocultos o no seleccionados, instantáneas, dispositivos passthrough, diferencias pendientes del host, rutas de gestión, políticas SDN anidadas, versiones del proveedor ni conectividad real.",
+    "vnets": "VNets · {{view}}",
+    "visibleVnets": "Identidades de VNet visibles: {{count}}",
+    "guestBoundary": "La configuración actual no es una prueba de la red activa del invitado. La vista combinada incluye cambios y eliminaciones pendientes. Las dos vistas se leen por separado y pueden coincidir con migraciones o cambios nativos.",
+    "guest": "Invitado seleccionado",
+    "view": "Vista de configuración del invitado",
+    "views": {
+      "current": "Configuración actual",
+      "pending_merged": "Configuración con cambios pendientes"
+    },
+    "noGuest": "No se seleccionaron observaciones de invitados",
+    "noNics": "No hay entradas NIC visibles en esta vista de configuración. Esto no descarta dispositivos passthrough ni dependencias ocultas.",
+    "noBridge": "Sin puente explícito",
+    "tag": "Etiqueta VLAN: {{tag}}",
+    "trunks": "Troncales VLAN: {{trunks}}",
+    "link_down": "Enlace desactivado en configuración: {{value}}",
+    "firewall": "Indicador de firewall configurado: {{value}}",
+    "yes": "Sí",
+    "no": "No",
+    "targets": {
+      "configured_vnet": "Nombre de VNet configurada",
+      "running_vnet": "Nombre de VNet en ejecución",
+      "host_interface": "Nombre de interfaz en el nodo del invitado"
+    },
+    "match": {
+      "visible": "Nombre visible; conectividad no verificada",
+      "not_visible": "Nombre no visible; puede estar ausente, oculto o haber cambiado",
+      "target_unavailable": "Observación del destino no disponible",
+      "not_observed": "Destino no observado o no seleccionado",
+      "no_bridge": "Sin referencia explícita a un puente"
+    },
+    "omittedOptions": "Otras opciones NIC omitidas: {{count}}",
+    "hostBoundary": "Los informes del host combinan configuración e indicadores de ejecución y pueden incluir ajustes pendientes. Las interfaces activas o existentes no prueban la accesibilidad. No se inspeccionan las diferencias pendientes ni los metadatos del resultado.",
+    "node": "Host seleccionado",
+    "noHost": "No se seleccionaron observaciones de hosts",
+    "active": "Indicador nativo de actividad: {{value}}",
+    "exists": "Indicador nativo de existencia: {{value}}",
+    "noMembers": "Sin miembros explícitos"
+  },
+  "DashboardObservation": {
+    "freshness": {
+      "current": "Recopilación reciente",
+      "stale": "La observación está desactualizada",
+      "unavailable": "Se desconoce la antigüedad de la observación"
+    },
+    "coverage": {
+      "complete_visible": "Observaciones visibles completas",
+      "partial": "Observaciones parciales",
+      "unavailable": "No hay observaciones utilizables"
+    },
+    "collected": "Inicio de recopilación: {{time}} · antigüedad: {{age}} segundos",
+    "visibleScope": "Los recuentos incluyen solo recursos visibles para la credencial del controlador. La hora de recopilación no establece la antigüedad de las muestras nativas; no es una instantánea atómica.",
+    "storageScope": "La capacidad de disco describe los sistemas de archivos de los nodos, no la capacidad de los almacenes ni la ubicación segura de cargas.",
+    "registrationScope": "Los totales corresponden a controladores registrados. No se deduplican clústeres físicos; varios registros pueden contar la misma infraestructura más de una vez. La cobertura de nodos excluye controladores fallidos cuyo número de nodos se desconoce.",
+    "metrics": {
+      "cpu": "Uso de CPU",
+      "memory": "Uso de memoria",
+      "node_filesystem": "Uso del sistema de archivos del nodo"
+    },
+    "metricStatus": {
+      "available": "Observado",
+      "partial": "Observado parcialmente",
+      "unavailable": "No disponible"
+    },
+    "contributors": "Contribuyeron {{observed}} de {{expected}} nodos conocidos",
+    "reasons": {
+      "missing_statistics": "Faltan estadísticas",
+      "invalid_statistics": "Estadísticas no válidas",
+      "node_not_online": "Nodo no observado en línea",
+      "inventory_mismatch": "Difieren las vistas de miembros y recursos"
+    },
+    "incompleteMetric": "Métrica completa no disponible",
+    "refreshRequired": "Los valores actuales se ocultan hasta disponer de una observación reciente y válida.",
+    "readSucceeded": "Lectura correcta",
+    "readFailed": "Lectura fallida",
+    "controllerCoverage": "{{observed}} de {{total}} controladores observados; {{failed}} fallidos",
+    "separateTasks": "Los recuentos de tareas tienen un ciclo de recopilación independiente y no quedan validados por la observación del panel anterior.",
+    "loading": "Esperando una observación del panel",
+    "exitKiosk": "Salir del modo quiosco",
+    "nodeStatus": {
+      "online": "En línea",
+      "offline": "Sin conexión",
+      "unknown": "Desconocido"
+    },
+    "haServices": "Servicios HA visibles",
+    "haBoundary": "Las entradas visibles no establecen el estado de HA ni la preparación para conmutación por error."
   }
 }

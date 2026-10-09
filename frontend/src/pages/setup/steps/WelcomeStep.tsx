@@ -3,10 +3,11 @@
 /**
  * FreeSDN - Setup Wizard: Welcome Step
  */
-import { useState, useEffect, version as reactVersion } from 'react';
+import { useState, useEffect, useRef, version as reactVersion } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { setupApi, type WelcomeResponse, type SystemRequirement } from '@/lib/setup-api';
+import { getApiErrorMessage } from '@/lib/api';
 import { useSetupStore } from '@/stores/setupStore';
 import { FRONTEND_VERSIONS } from '@/lib/build-info';
 import { Button } from '@/components/ui/button';
@@ -46,21 +47,37 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [restorePass, setRestorePass] = useState('');
   const [restoring, setRestoring] = useState(false);
+  const restoreInFlight = useRef(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
   const handleRestore = async () => {
-    if (!restoreFile || restorePass.length < 12) return;
+    if (restoreInFlight.current || !restoreFile || restorePass.length < 12) return;
+    restoreInFlight.current = true;
     setRestoring(true);
     setRestoreError(null);
     try {
-      await setupApi.restoreFromVault(restoreFile, restorePass);
-      // The restored super_admin completes setup — go log in with the OLD credentials.
+      const response = await setupApi.restoreFromVault(restoreFile, restorePass);
+      const report = response?.result;
+      const core = Array.isArray(report?.contributors)
+        ? report.contributors.find((entry) => entry.contributor_id === 'core')
+        : undefined;
+      // A fulfilled request alone does not establish successful recovery.
+      if (
+        response?.success !== true ||
+        typeof response.organization_id !== 'string' || !response.organization_id.trim() ||
+        report?.summary?.contributors_failed !== 0 || report.summary.total_errors !== 0 ||
+        core?.status !== 'ok' || !Array.isArray(core.errors) || core.errors.length > 0
+      ) {
+        setRestoreError(t('WelcomeStep.restore.unconfirmed'));
+        return;
+      }
+      // The backend has committed a complete recovery with an active administrator.
       navigate('/login');
-    } catch (err: any) {
-      setRestoreError(
-        err?.response?.data?.detail || t('WelcomeStep.restore.failed'),
-      );
+    } catch (err: unknown) {
+      setRestoreError(getApiErrorMessage(err, t('WelcomeStep.restore.failed')));
     } finally {
+      setRestorePass('');
+      restoreInFlight.current = false;
       setRestoring(false);
     }
   };
@@ -278,6 +295,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
           <button
             type="button"
             onClick={() => setRestoreOpen((o) => !o)}
+            disabled={restoring}
             className="flex items-center gap-2 text-sm font-medium w-full text-left"
           >
             <Upload className="h-4 w-4 text-muted-foreground" />
@@ -298,6 +316,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
               <Label htmlFor="restore-file">{t('WelcomeStep.restore.fileLabel')}</Label>
               <Input
                 id="restore-file"
+                disabled={restoring}
                 type="file"
                 accept=".fsdnvault"
                 onChange={(e) => setRestoreFile(e.target.files?.[0] ?? null)}
@@ -307,6 +326,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
               <Label htmlFor="restore-pass">{t('WelcomeStep.restore.passLabel')}</Label>
               <Input
                 id="restore-pass"
+                disabled={restoring}
                 type="password"
                 autoComplete="off"
                 value={restorePass}
@@ -315,7 +335,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
               />
             </div>
             {restoreError && (
-              <div className="text-sm text-destructive flex items-start gap-2">
+              <div role="alert" className="text-sm text-destructive flex items-start gap-2">
                 <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                 <span>{restoreError}</span>
               </div>
@@ -342,7 +362,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
         <div className="flex justify-end">
           <Button
             onClick={onNext}
-            disabled={!data.can_proceed}
+            disabled={!data.can_proceed || restoring}
             size="lg"
           >
             {t('WelcomeStep.actions.continue')}

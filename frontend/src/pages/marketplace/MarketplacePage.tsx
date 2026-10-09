@@ -24,7 +24,7 @@ import {
   ArrowUpCircle,
 } from 'lucide-react';
 
-import { api } from '@/lib/api';
+import { api, getApiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { PageHeader } from '@/components/layout';
 import { Button } from '@/components/ui/button';
@@ -385,7 +385,7 @@ export default function MarketplacePage() {
   };
 
   const syncMutation = useMutation({
-    mutationFn: () => api.post('/marketplace/plugins/sync'),
+    mutationFn: () => api.post<{ message: string }>('/marketplace/plugins/sync'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['marketplace-plugins'] }),
   });
 
@@ -466,10 +466,16 @@ export default function MarketplacePage() {
         </Alert>
       )}
 
+      {syncMutation.isSuccess && (
+        <Alert>
+          <AlertDescription>{syncMutation.data.data.message}</AlertDescription>
+        </Alert>
+      )}
+
       {syncMutation.isError && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>            {(syncMutation.error as any)?.response?.data?.detail || t('MarketplacePage.errors.loadFailed')}
+          <AlertDescription>            {getApiErrorMessage(syncMutation.error, t('MarketplacePage.errors.loadFailed'))}
           </AlertDescription>
         </Alert>
       )}
@@ -486,9 +492,7 @@ export default function MarketplacePage() {
       {(installMutation.isError || upgradeMutation.isError) && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>            {(installMutation.error as any)?.response?.data?.detail ||
-              (upgradeMutation.error as any)?.response?.data?.detail ||
-              t('MarketplacePage.errors.installFailed')}
+          <AlertDescription>            {getApiErrorMessage(upgradeMutation.isError ? upgradeMutation.error : installMutation.error, t('MarketplacePage.errors.installFailed'))}
           </AlertDescription>
         </Alert>
       )}

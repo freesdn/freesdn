@@ -418,3 +418,19 @@ frontend/vite.config.js
 frontend/vite.config.d.ts
 frontend/tailwind.config.js
 
+
+# Recovered companion projects: source is tracked; generated output stays local.
+!website/src/lib/
+!website/src/lib/**
+website/dist/
+website/.astro/
+website/.wrangler/
+website-docs/dist/
+website-docs/.astro/
+website-docs/.wrangler/
+agent/dist/
+integrations/n8n-nodes-freesdn/dist/
+
+# Wrangler local cache (account id, project list) written by `wrangler pages deploy`.
+/.wrangler/
+demo/.wrangler/

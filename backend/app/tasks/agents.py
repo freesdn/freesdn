@@ -114,6 +114,7 @@ def cleanup_stale_agents(
                             agent.last_heartbeat.isoformat(),
                             int(age),
                             agent.notification_channels,
+                            now.isoformat(),
                         ]
                     )
 
@@ -140,7 +141,7 @@ def cleanup_stale_agents(
                     # the next beat run will not re-select it; the alert for
                     # this transition is lost, exactly as it was when an inline
                     # dispatch raised.
-                    logger.exception("Failed to enqueue offline alert for agent %s", args[0])
+                    logger.warning("Failed to enqueue offline alert for agent %s", args[0])
 
             if count_offline > 0:
                 logger.warning(
@@ -519,8 +520,9 @@ def notify_offline_agent(
     last_heartbeat_iso: str,
     stale_seconds: int,
     channels: dict[str, Any],
+    disconnected_at_iso: str | None = None,
 ) -> dict[str, Any]:
-    """Dispatch an agent-offline alert as a separate task.
+    """Dispatch only a still-current, tenant-scoped offline transition.
 
     cleanup_stale_agents previously did all
     dispatches inline, holding the periodic-task slot for as long as
@@ -530,42 +532,130 @@ def notify_offline_agent(
     """
     from uuid import UUID
 
+    from sqlalchemy import or_
     from sqlalchemy import update as _update
 
     from app.models.agents import RemoteAgent
+    from app.models.core import Organization, Site
+    from app.services.notification import DeliveryStatus
     from app.services.notification_helpers import dispatch_notifications
 
     async def _run() -> dict[str, Any]:
-        title = f"[FreeSDN] Agent OFFLINE: {agent_name}"
-        body = "\n".join(
-            [
-                f"Agent: {agent_name}",
-                f"Agent ID: {agent_id}",
-                f"Site: {site_id}",
-                f"Last heartbeat: {last_heartbeat_iso}",
-                f"Stale for: {stale_seconds} seconds",
-            ]
+        try:
+            identity = UUID(agent_id)
+            expected_site = UUID(site_id)
+            heartbeat = datetime.fromisoformat(last_heartbeat_iso)
+            disconnected = datetime.fromisoformat(disconnected_at_iso or "")
+            if heartbeat.utcoffset() is None or disconnected.utcoffset() is None:
+                raise ValueError("Timezone is required")
+        except (TypeError, ValueError, AttributeError):
+            return {"success": False, "error": "invalid_offline_transition"}
+
+        # The queue snapshot selects a transition, never its authority or content.
+        # Legacy queued tasks without an exact disconnect epoch fail closed.
+        transition = (
+            RemoteAgent.id == identity,
+            RemoteAgent.site_id == expected_site,
+            RemoteAgent.status == "offline",
+            RemoteAgent.is_enabled.is_(True),
+            RemoteAgent.deleted_at.is_(None),
+            RemoteAgent.last_heartbeat == heartbeat,
+            RemoteAgent.disconnected_at == disconnected,
+            RemoteAgent.offline_notified_at.is_(None),
         )
-        async with AsyncSessionLocal() as session:
-            try:
-                await dispatch_notifications(
+        active_site = (
+            Site.id == expected_site,
+            Site.is_active.is_(True),
+            Site.deleted_at.is_(None),
+            Organization.id == Site.organization_id,
+            Organization.is_active.is_(True),
+            Organization.deleted_at.is_(None),
+        )
+        try:
+            async with AsyncSessionLocal() as session:
+                row = (
+                    await session.execute(
+                        select(RemoteAgent, Site.organization_id)
+                        .join(Site, Site.id == RemoteAgent.site_id)
+                        .join(Organization, Organization.id == Site.organization_id)
+                        .where(
+                            *transition,
+                            *active_site,
+                            or_(
+                                RemoteAgent.organization_id.is_(None),
+                                RemoteAgent.organization_id == Site.organization_id,
+                            ),
+                        )
+                    )
+                ).one_or_none()
+                if row is None:
+                    return {"success": False, "error": "offline_transition_unavailable"}
+                agent, organization_id = row
+                current_channels = agent.notification_channels
+                if not current_channels:
+                    return {"success": False, "error": "offline_channels_disabled"}
+
+                # Do not use stale or edited channel targets, names or ages from
+                # the task payload. The current site determines tenant scope.
+                age = max(0, int((datetime.now(UTC) - heartbeat).total_seconds()))
+                title = f"[FreeSDN] Agent OFFLINE: {agent.name}"
+                body = "\n".join(
+                    [
+                        f"Agent: {agent.name}",
+                        f"Agent ID: {identity}",
+                        f"Site: {expected_site}",
+                        f"Last heartbeat: {heartbeat.isoformat()}",
+                        f"Stale for: {age} seconds",
+                    ]
+                )
+                outcomes = await dispatch_notifications(
                     session,
-                    channels_config=channels,
+                    channels_config=current_channels,
                     title=title,
                     body=body,
+                    organization_id=organization_id,
                 )
-            except Exception:
-                logger.exception("Offline alert dispatch failed for %s", agent_id)
-                return {"success": False}
+                completed = {DeliveryStatus.SENT, DeliveryStatus.DELIVERED}
+                accepted = completed | {DeliveryStatus.SKIPPED}
+                delivered = sum(item.success and item.status in completed for item in outcomes)
+                all_accepted = bool(outcomes) and all(
+                    item.success and item.status in accepted for item in outcomes
+                )
+                if not all_accepted or not delivered:
+                    # Preserve tracking rows, but a failure, pending result,
+                    # empty batch or all-skipped batch is not a delivered alert.
+                    await session.commit()
+                    return {"success": False, "error": "offline_notification_not_delivered"}
 
-            # Mark notified so the periodic detector skips this agent
-            # until reconnect (which clears the flag in the WS handler).
-            await session.execute(
-                _update(RemoteAgent)
-                .where(RemoteAgent.id == UUID(agent_id))
-                .values(offline_notified_at=datetime.now(UTC))
-            )
-            await session.commit()
-        return {"success": True}
+                # A reconnect, new offline transition, policy edit, deletion or
+                # tenant move during delivery must not mark the new state sent.
+                valid_site = (
+                    select(Site.id)
+                    .join(Organization, Organization.id == Site.organization_id)
+                    .where(*active_site, Site.organization_id == organization_id)
+                )
+                changed = await session.execute(
+                    _update(RemoteAgent)
+                    .where(
+                        *transition,
+                        RemoteAgent.site_id.in_(valid_site),
+                        or_(
+                            RemoteAgent.organization_id.is_(None),
+                            RemoteAgent.organization_id == organization_id,
+                        ),
+                        RemoteAgent.notification_channels == current_channels,
+                    )
+                    .values(offline_notified_at=datetime.now(UTC))
+                    .execution_options(synchronize_session=False)
+                )
+                await session.commit()
+                if changed.rowcount != 1:
+                    return {"success": False, "error": "offline_transition_changed"}
+                return {"success": True, "delivered": delivered}
+        except Exception:
+            # Database/provider failures can include credentials or payloads.
+            # Uncertain external effects are not reported as committed success.
+            logger.warning("Agent offline notification state unavailable")
+            return {"success": False, "error": "offline_notification_unavailable"}
 
     return asyncio.run(_run())

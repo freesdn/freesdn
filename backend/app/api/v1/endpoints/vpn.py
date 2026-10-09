@@ -159,6 +159,7 @@ class _OpenVPNImportRequest(BaseModel):
 
     site_id: UUID
     config_content: str = Field(..., min_length=1, max_length=102400)
+    config_id: UUID | None = None
     # No `description`: SiteVPNConfiguration has no column for one, so the
     # value was collected, passed down and dropped on every import.
 
@@ -1689,6 +1690,7 @@ async def import_openvpn_config(
             site_id=payload.site_id,
             org_id=_org_id(current_user),
             config_content=payload.config_content,
+            config_id=payload.config_id,
         )
         return {
             "success": True,
@@ -2446,10 +2448,13 @@ async def create_site_vpn_config(
     site = await _verify_site_org(session, site_id, current_user)
     from app.models.vpn import SiteVPNConfiguration
 
+    values = data.model_dump()
+    if values.get("openvpn_config_content"):
+        values["openvpn_config_content"] = encrypt_credential(values["openvpn_config_content"])
     config = SiteVPNConfiguration(
         site_id=site_id,
         organization_id=site.organization_id,
-        **data.model_dump(),
+        **values,
     )
     session.add(config)
 

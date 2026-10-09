@@ -56,7 +56,7 @@ The tail: controls that were offered, accepted, and connected to nothing.
 from __future__ import annotations
 
 import inspect
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -103,17 +103,17 @@ def test_the_due_query_still_skips_null() -> None:
 
 
 @pytest.mark.parametrize(
-    ("frequency", "min_days"),
-    [("weekly", 6), ("monthly", 29), ("quarterly", 89)],
+    ("frequency", "expected"),
+    [("weekly", (2026, 8, 24)), ("monthly", (2026, 9, 1)), ("quarterly", (2026, 10, 1))],
 )
-def test_the_next_run_is_in_the_future_for_each_cadence(frequency: str, min_days: int) -> None:
+def test_the_next_run_is_in_the_future_for_each_cadence(frequency, expected) -> None:
     from app.services.sla_reports import SLAReportGenerator
 
     now = datetime(2026, 8, 20, 12, 0, tzinfo=UTC)
     schedule = SimpleNamespace(frequency=frequency)
     nxt = SLAReportGenerator._compute_next_run(schedule, now)
+    assert nxt == datetime(*expected, 9, 0, tzinfo=UTC)
     assert nxt > now
-    assert nxt - now >= timedelta(days=min_days)
 
 
 def test_a_periodic_task_now_calls_the_generator() -> None:

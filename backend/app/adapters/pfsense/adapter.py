@@ -663,17 +663,11 @@ class PfSenseAdapter(BaseAdapter):
     # ═══════════════════════════════════════════════════════════════════════
 
     async def create_backup(self, **kwargs: Any) -> AdapterResult:
-        try:
-            result = await self._api.create_backup()
-            # pfSense ``config_history/backup`` returns the running
-            # config which embeds hashed admin passwords, OpenVPN keys,
-            # IPsec PSKs, WireGuard private keys, and SNMP communities.
-            # Strip every sensitive-looking key before the payload
-            # leaves the adapter — the operator can still see structure
-            # and counts; the secrets are masked as ``***``.
-            return AdapterResult.ok(data=redact_secrets(result), message="Backup created")
-        except Exception as exc:
-            return AdapterResult.fail(str(exc))
+        """Do not treat arbitrary configuration payloads as saved backups."""
+        return AdapterResult.fail(
+            "pfSense backup creation is not supported by this adapter; no backup was created",
+            error_code="NOT_SUPPORTED",
+        )
 
     # ═══════════════════════════════════════════════════════════════════════
     # Firmware

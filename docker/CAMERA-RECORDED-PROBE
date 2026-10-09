@@ -1,0 +1,24 @@
+Recorded playback probe lifecycle
+=================================
+
+Recorded playback and codec discovery now share the bounded FFprobe runner in
+TranscodeService. Recorded discovery retains its TCP transport, 2,000,000-byte
+probe-size setting, 3,000,000-microsecond analysis setting and 10-second timeout.
+Stdout is limited to 1 MiB; stderr is discarded. Cancellation, timeout and output
+refusal kill and reap the owned child before returning or propagating cancellation.
+
+The recorded result keeps its existing meaning:
+- None: discovery was inconclusive; do not cache a definitive playback verdict.
+- playable=False: a successful, valid probe contains no video or zero dimensions.
+- playable=True: valid video metadata with positive dimensions.
+
+A nonzero probe exit, malformed metadata, invalid dimensions or oversized output
+cannot become a definitive cached result. H.264/HEVC normalization remains the
+same, including HEVC -> h265. Missing probe binaries are inconclusive here.
+
+Tests use real harmless child processes. Separate packaged-binary qualification
+uses local synthetic H.264/HEVC files, not RTSP or vendor hardware. This change
+does not validate every camera/NVR codec or claim production device acceptance.
+
+Recorded-probe cache invalidation, HLS session-key scope/window completeness,
+FFmpeg worker ownership and per-viewer leases remain separate lifecycle work.

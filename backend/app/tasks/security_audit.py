@@ -173,32 +173,74 @@ def expire_ip_blocks(self) -> dict[str, Any]:
 # =============================================================================
 
 
+class AuditCleanupTask(FreeSDNTask):
+    """A completed batch may still leave actionable retention work."""
+
+    abstract = True
+
+    def _success_message(self, retval: Any) -> str:
+        progress = retval.get("retention") if isinstance(retval, dict) else None
+        if not isinstance(progress, dict):
+            return "Cleanup batch finished; retention status unavailable"
+        if progress.get("blocked_prefix") is True:
+            return "Cleanup batch committed; audit retention blocked. Review the retained prefix."
+        if progress.get("more_available") is True:
+            return "Cleanup batch committed; retention work remaining for the next scheduled batch"
+        if progress.get("complete") is True:
+            return "Cleanup batch committed; no eligible retention work remained at the check"
+        return "Cleanup batch finished; retention status unavailable"
+
+
 @celery_app.task(
     bind=True,
-    base=FreeSDNTask,
+    base=AuditCleanupTask,
     name="security.cleanup_audit_data",
     soft_time_limit=120,
     time_limit=180,
 )
 def cleanup_audit_data(self) -> dict[str, Any]:
-    """
-    Purge old audit and security data per retention policy.
-    Runs daily.
+    """Commit one bounded batch; report remaining work for the next Beat tick.
+
+    A successful batch is not necessarily completed retention. Repeated worker
+    deliveries operate on committed database state, with no chained broker
+    message required for continuation. A commit transport error can be uncertain;
+    do not infer that an exception proves nothing committed.
     """
 
     async def _run() -> dict[str, Any]:
+        from sqlalchemy import text
+
+        from app.core.metrics import audit_retention_batches_total
+        from app.services.audit_retention import retention_progress
         from app.services.security_audit import PersistentSecurityAuditService as svc
 
         async with AsyncSessionLocal() as session:
             try:
-                totals = await svc.cleanup_old_entries(session, retention_days=90)
-                await session.commit()
-                logger.info("Audit cleanup completed: %s", totals)
-                return totals
-            except Exception as e:
+                async with asyncio.timeout(90):
+                    await session.execute(text("SET LOCAL lock_timeout = '5s'"))
+                    await session.execute(text("SET LOCAL statement_timeout = '10s'"))
+                    cutoff = datetime.now(UTC) - timedelta(days=90)
+                    totals = await svc.cleanup_old_entries(session, cutoff=cutoff)
+                    progress = await retention_progress(session, cutoff)
+                    await session.commit()
+            except Exception as exc:
                 await session.rollback()
-                logger.error("Audit cleanup error: %s", e)
-                return {"error": str(e)}
+                audit_retention_batches_total.labels(outcome="failed").inc()
+                logger.error("Audit cleanup batch failed (%s)", type(exc).__name__)
+                raise RuntimeError(
+                    "Audit cleanup did not complete; inspect the last committed batch"
+                ) from None
+            outcome = (
+                "blocked"
+                if progress["blocked_prefix"]
+                else "incomplete"
+                if progress["more_available"]
+                else "complete"
+            )
+            audit_retention_batches_total.labels(outcome=outcome).inc()
+            log = logger.info if progress["complete"] else logger.warning
+            log("Audit cleanup batch %s: deleted=%s retention=%s", outcome, totals, progress)
+            return {**totals, "retention": progress}
 
     return asyncio.run(_run())
 

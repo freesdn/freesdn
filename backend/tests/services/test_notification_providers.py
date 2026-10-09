@@ -372,7 +372,11 @@ async def test_a_vendor_rejection_is_a_failure_not_a_success(captured, kind: str
     assert result.success is False
     assert result.status == DeliveryStatus.FAILED
     assert "422" in (result.error or "")
-    assert "Sender identity not verified" in (result.error or "")
+    # Provider replies can contain credentials or recipient/message details.
+    assert "Sender identity not verified" not in (result.error or "")
+    from app.tasks.notification_retry import is_transient_error
+
+    assert not is_transient_error(result.error)
 
 
 @pytest.mark.parametrize(

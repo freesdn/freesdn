@@ -1,0 +1,34 @@
+Fabric shared coordination and outage behavior
+==============================================
+
+Automatic Fabric Connections require a stable event ID and an affirmative
+Redis/Valkey SET NX response before a chain can run. A configured cooldown also
+requires an affirmative shared claim. The coordinator refuses missing identities,
+unavailable clients, lookup errors, timeouts and malformed replies. It does not
+replace shared claims with worker-local memory during an outage.
+
+Client construction failures are retried on a later event. Commands have bounded
+connect/read timeouts and do not automatically retry uncertain writes. A failed
+or lost reply does not release a claim: the server may have already committed it.
+A healthy duplicate/cooldown denial remains a normal skip. Refusal warnings do not
+include raw connection exceptions or event payloads.
+
+Compatibility and limits
+------------------------
+
+Existing key names are retained, including the connection/event claim's 300-second
+TTL and the configured cooldown TTL. Coordinating through the same healthy store
+suppresses duplicate attempts within that lifetime. All event workers must be
+upgraded before relying on the outage behavior; an older worker can still fail
+open. No persistent exactly-once, automatic retry/delivery, partition fencing,
+rollback of an external effect, or guarantee across lost broker state is added.
+
+Operator-initiated run_once remains an explicit test path. It does not claim a
+bus event, and still applies the normal author, permission, scope and staging
+checks. The runtime's cached Connection freshness and best-effort audit recording
+remain separate concerns.
+
+On a coordination outage, inspect the fixed Fabric refusal warnings and broker
+health. Restore the configured shared store and verify a new safe event before
+re-enabling operational assumptions. Missed events are not replayed automatically;
+review any uncertain external effect before requesting a manual retry.

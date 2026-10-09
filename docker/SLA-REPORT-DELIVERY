@@ -1,0 +1,163 @@
+SCHEDULED SLA REPORT EMAIL NOTICES
+================================
+
+Scope
+-----
+Scheduled reports generate PDF archives. On-demand generation supports PDF/CSV.
+Email sends a generic report-ready notice with an authenticated link to /sla/reports.
+No attachments, report contents, resource names, credentials or public download
+tokens are sent. SMTP and Gmail SMTP are supported; API-based mail providers,
+arbitrary external recipients, bounce processing and inbox-delivery confirmation
+are outside this implementation. The Reports tab currently uses English labels.
+
+Upgrade and opt-in
+-----------------
+Back up the database and report volume using the coordinated deployment procedure.
+Migration 017 adds a durable outbox and leaves delivery_enabled=false on existing
+schedules. Existing recipient metadata does not authorize any email. Migration
+017 resets SMTP provider verification because older STARTTLS verification did
+not explicitly validate server certificates. Existing alert sending remains
+independent of the report delivery opt-in.
+
+Migration 018 adds a per-notice deployment identifier (delivery_epoch). Existing
+notices remain unapproved with a NULL identifier; it is never backfilled from
+configuration. Existing version-1 schedule approvals need review and reapproval.
+Old unclaimed notices become unknown, not retried, even if attempts is zero.
+
+1. Configure FRONTEND_URL as the public HTTPS origin, without credentials, path,
+   query or fragment. API and worker services must receive the same value.
+   Set SLA_REPORT_DELIVERY_EPOCH to a newly generated UUID4, for example with
+   python -c "import uuid; print(uuid.uuid4())". Keep this value identical across
+   API, scheduler and every worker, stable across ordinary restarts. Empty disables
+   mail approval and quarantines active notices. An invalid value refuses startup.
+   It is a deployment identifier, not a secret or vault key. Manage it separately
+   from database/report snapshots, and rotate it before restoring workers.
+2. Use an enabled SMTP or Gmail SMTP provider belonging to the organization.
+   Require STARTTLS. Verify it again after upgrade. The OS trust store is used;
+   mount a managed CA bundle through SSL_CERT_FILE when a private CA is required.
+   Never disable verification to make a private certificate work.
+3. In SLA > Reports, review the schedule's calendar and explicit policies.
+   Site-limited operators must select policy IDs. Scheduling runs hourly at :07;
+   the stored local calendar time is not a minute-level delivery guarantee.
+4. Opt into notices and select the verified provider. Recipients must be active
+   FreeSDN users in the same organization with config:read and report access.
+   Save and reapprove. Only future scheduled reports enqueue notices.
+5. Run Celery beat and a worker consuming the metrics queue. Delivery polling
+   runs every minute, at most eight notices per invocation. Pending work survives
+   lost broker ticks in PostgreSQL and is picked up by a later polling pass.
+
+Authority and cancellation
+--------------------------
+Approvals pin the actor's permissions/site ceiling, recipient identities and
+addresses/site ceilings, provider configuration digest, public origin and delivery epoch.
+Each attempt checks current actor and recipient authority, original report site
+scope, enabled schedule/provider, unchanged approval and readable archive file.
+Removing the last site grant cannot make unattended mail unrestricted.
+Provider changes, account/email/scope changes and schedule edits cancel affected
+pending notices. Edit/save to approve future reports; old notices are not redirected.
+Pausing is possible even when the provider configuration is broken.
+
+The claim is committed before network I/O. Changes after that claim may be too
+late to stop a send already in progress. Only pending/retry deliveries can be
+cancelled through the UI/API. Authentication and site checks still apply when
+the recipient follows the link. No claim of atomic revocation during SMTP I/O
+or exactly-once external delivery is made.
+
+States and recovery
+-------------------
+pending/retry: awaiting an attempt; UI shows the next attempt and can cancel it.
+sending: a durable claim exists; concurrent workers skip it.
+accepted: the SMTP server acknowledged DATA; this is not proof of inbox delivery.
+failed: definite permanent refusal, exhausted retries, expired notice or corrupt
+        configuration. Fix the cause and review the next scheduled report.
+cancelled: approval/identity/provider/report is no longer valid, or an operator
+           cancelled unclaimed work. No automatic resend follows reapproval.
+skipped: recipient email preferences or the reports category suppressed notice.
+unknown: acknowledgement was lost, the overall deadline expired, a sending
+         worker disappeared, or the notice belongs to an unapproved recovery epoch. NEVER automatically resend. Inspect SMTP relay logs
+         using Message-ID <sla-report-DELIVERY_UUID@freesdn.invalid> and ensure
+         the original worker has stopped before any external manual action.
+         No in-app resend or forced retry of unknown outcomes is provided.
+
+Only explicit transient refusals and pre-submission connection failures retry.
+There are at most five SMTP attempts, with 15/30/60/120 minute delays. Socket I/O
+has a 10-second timeout and the async send deadline is 35 seconds. An interrupted
+claim becomes unknown after ten minutes; a surviving SMTP thread may still finish
+after the async deadline. A failed DB commit after acceptance also leaves a claim
+that becomes unknown, not retryable. Paused/expired/corrupt notices do not block
+the rest of the outbox. Notices expire after seven days. Quiet hours defer them.
+Provider hourly/daily counters are shared with notifications; unlike urgent alert
+sending, report notices defer when rate-limit storage is unavailable.
+
+Operator APIs (organization and archive site permissions enforced)
+-----------------------------------------------------------------
+GET /api/v1/sla/reports/{report_id}/deliveries (requires config:write)
+POST /api/v1/sla/reports/{report_id}/deliveries/{delivery_id}/cancel
+POST /api/v1/sla/report-schedules; PUT /api/v1/sla/report-schedules/{id}
+  delivery_enabled: boolean (default false)
+  delivery_provider_id: organization SMTP provider UUID
+  recipients: approved organization user email addresses
+
+History, backup and rollback
+----------------------------
+Preserve the database, encrypted provider configuration and report volume together.
+The outbox stores recipient addresses (personal data), fixed error codes and
+attempt counts, never SMTP credentials or report bodies. Terminal delivery history
+has no automatic deletion policy in this version: size/retention review is required.
+Migration downgrade refuses to discard nonempty delivery history. Preserve and
+review that history rather than clearing it to make rollback pass.
+
+Coordinated report-mail recovery
+-------------------------------
+A restored database can contain pending/retry/sending states for mail already
+accepted after the backup. Even attempts=0 is not proof that no email was sent.
+The epoch is NOT automatic restore detection: restoring the old configuration
+with the old database can replay mail. SMTP Message-ID does not deduplicate it.
+
+1. Fence the original API, schedulers and workers, including their SMTP/network
+   egress. Preserve the source database, report volume, deployment configuration,
+   relay logs and all backups. A changed setting cannot fence an old running
+   process or stop an already-submitted message. Do not use a rolling restart.
+2. Restore into an isolated environment. Complete the broader database, JWT,
+   vault, queue/HA and source-election recovery checks before restarting general
+   workers. This report procedure does not authorize hardware-job replay.
+3. Generate a NEW UUID4 for SLA_REPORT_DELIVERY_EPOCH outside the restored backup.
+   Do not reuse the original value, generate a new value on every boot, copy it
+   from restored approvals or modify notice epochs in the database. Keep the
+   credential encryption SECRET_KEY and ENCRYPTION_SALT unchanged. JWT recovery
+   requires its separate signing-key cutover; this identifier does not replace it.
+4. Apply the current migrations with workers stopped. Recreate all API, beat and
+   worker processes with the same new epoch only when the coordinated recovery
+   is accepted. Mixed epoch values can quarantine each other's notices.
+5. Delivery polling quarantines old active notices as unknown with the fixed code
+   delivery_recovery_review_required, in batches of at most 100 per process_one
+   call, including future retries and unexpired sending claims. It preserves IDs,
+   recipient snapshots, attempts and all terminal history. No SMTP is attempted
+   for these rows. Pending current-epoch work can proceed alongside quarantine.
+   Due schedules with stale approvals pause before rendering a report.
+6. Review the original source and relay logs against each notice Message-ID.
+   Missing relay history is not proof of nondelivery. Unknown notices have no
+   automatic or UI resend action. Do not clear history to make a downgrade work.
+7. Once the restored authority/provider/archive state has been reviewed, edit and
+   save the intended schedules in SLA > Reports. Only newly generated reports can
+   create notices under the new approval. Reapproval cannot revive old notices.
+8. Keep the current recovery-aware image for this database. Migration 018 refuses
+   downgrade with nonempty outbox history. An older image can bypass the epoch
+   guard even without a database downgrade; pin approved images and prohibit that
+   rollback. Recovery after new writes needs reconciliation, not snapshot swapping.
+
+Local rehearsal (synthetic, no customer relay or hardware)
+--------------------------------------------------------
+python scripts/check_report_recovery.py --backend CANDIDATE_BACKEND_IMAGE \
+  --postgres RETAINED_POSTGRES_IMAGE --valkey RETAINED_VALKEY_IMAGE \
+  --work-dir /absolute/new/private/report-recovery
+
+The harness resolves exact image IDs, creates a private internal Docker network,
+uses real PostgreSQL dump/restore and a real loopback SMTP STARTTLS peer, and removes
+only its own containers/anonymous volumes/network. It reproduces duplicate delivery
+with an unchanged epoch, then checks rotated/empty epochs, reapproval and restart.
+The private directory contains synthetic credentials and snapshots: never publish
+it. Only report.json is intended as shareable evidence. No existing data is mounted.
+
+These tests do not qualify a customer's relay, DNS/SPF/DKIM/DMARC, deliverability,
+volume capacity, representative backup, source fencing or coordinated HA recovery.

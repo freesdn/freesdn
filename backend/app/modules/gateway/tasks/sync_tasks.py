@@ -115,7 +115,8 @@ def sync_all_gateways() -> dict[str, Any]:
     """
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    if not acquire_solo_lock("gateway.sync_all_gateways", ttl_seconds=600):
+    lock_token = acquire_solo_lock("gateway.sync_all_gateways", ttl_seconds=600)
+    if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:
         return asyncio.run(_sync_all_brain_gateways())
@@ -123,4 +124,4 @@ def sync_all_gateways() -> dict[str, Any]:
         logger.exception("sync_all_gateways failed")
         return {"success": False, "error": "see logs"}
     finally:
-        release_solo_lock("gateway.sync_all_gateways")
+        release_solo_lock("gateway.sync_all_gateways", lock_token)

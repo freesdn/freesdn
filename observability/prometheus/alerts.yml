@@ -197,21 +197,26 @@ groups:
     rules:
 
       - alert: FreeSDNAuditWriteFailing
-        expr: rate(freesdn_audit_write_failures_total[5m]) > 0
+        # A resource label is created on its first failure, so its first
+        # scrape can already be 1: rate()/increase() would miss that loss.
+        # A quiet counter does not mean the missing audit record was repaired.
+        # This remains process-lifetime telemetry, not a durable incident ledger.
+        expr: freesdn_audit_write_failures_total > 0
         for: 1m
         labels:
           severity: critical
           component: audit
           compliance: "true"
         annotations:
-          summary: "Audit log writes are failing"
+          summary: "Audit persistence failure observed"
           description: |
-            Audit log rows are failing to persist for resource_type=
-            {{ $labels.resource_type }}. Any non-zero rate here means
-            the audit trail is incomplete - this is a compliance and
-            forensics issue, not just a reliability one. Investigate
-            Postgres health and the savepoint isolation in
-            ``services/audit.py:_store_entry`` immediately.
+            One or more audit write attempts failed for resource_type=
+            {{ $labels.resource_type }} during this counter's lifetime.
+            A quiet counter does not prove the audit gap was repaired.
+            Preserve the affected logs and investigate database health;
+            do not replay a device command to recreate its audit entry.
+            Counter reset or disappearance is not recovery confirmation.
+            See observability/prometheus/audit-failures.md in the release sources.
 
       - alert: FreeSDNAuthLoginBruteForce
         expr: |
@@ -321,62 +326,92 @@ groups:
     interval: 60s
     rules:
 
-      # The pg-backup container emits a textfile metric
-      # ``freesdn_pg_backup_last_success_timestamp`` on
-      # every successful cycle (see docker-compose.yml; tier env files
-      # .env.lite / .env.pro / .env.max select the deployment profile,
-      # full reference at https://docs.freesdn.org/deploy/deployment-tiers/). If that
-      # timestamp falls more than 26 hours behind ``time()`` the backup
-      # loop has stalled - pg_dump permission change, disk full, schema
-      # lock, container restart loop. 26h covers the 24h cycle plus a
-      # generous margin so a normal mid-cycle scrape doesn't false-page.
-      - alert: FreeSDNBackupStale
-        expr: |
-          time() - freesdn_pg_backup_last_success_timestamp > 26 * 3600
-        for: 15m
-        labels:
-          severity: critical
-          component: backup
+      - alert: FreeSDNBackupMetricsUnavailable
+        expr: up{job="freesdn-backups"} == 0 or absent(up{job="freesdn-backups"})
+        for: 5m
+        labels: {severity: critical, component: backup}
         annotations:
-          summary: "pg_dump backup is stale on {{ $labels.instance }}"
-          description: |
-            The pg-backup container has not completed a successful dump
-            in the last 26 hours. Backups feed disaster recovery - once
-            this stretches past 48h the RPO commitment in the
-            disaster-recovery procedure (docs.freesdn.org) is broken.
-
-            Investigate:
-              1. ``docker compose --env-file .env.pro logs pg-backup | tail -200``
-              2. Check the ``pg_backups`` volume for free space (df).
-              3. Confirm pg_dump can still authenticate with the
-                 current ``POSTGRES_PASSWORD``.
-              4. If the container exited, ``docker compose up -d pg-backup``
-                 and watch the logs through a full cycle.
+          summary: "Backup metrics cannot be collected"
+          description: "Check the backup-metrics container and Prometheus scrape target. Missing observations do not establish backup health."
           runbook_url: "https://docs.freesdn.org/deploy/backups-and-restore/"
 
-      # The same emitter exposes ``freesdn_pg_backup_encryption_enabled``
-      # (0 = unencrypted, 1 = GPG-encrypted). A production deployment
-      # should never be 0 - encryption is the default but
-      # operator misconfiguration (missing recipient, unreadable key)
-      # falls back to unencrypted dumps. This alerts on that fallback.
-      - alert: FreeSDNBackupUnencrypted
-        expr: |
-          freesdn_pg_backup_encryption_enabled == 0
-        for: 30m
-        labels:
-          severity: warning
-          component: backup
+      - alert: FreeSDNBackupStateInvalid
+        expr: freesdn_pg_backup_status_valid == 0 or freesdn_pg_backup_config_valid == 0 or freesdn_pg_backup_pair_present == 0
+        for: 5m
+        labels: {severity: critical, component: backup}
         annotations:
-          summary: "pg_dump backups are running UNENCRYPTED on {{ $labels.instance }}"
-          description: |
-            The pg-backup container is writing plaintext gzipped dumps
-            (no GPG encryption). This may be intentional for dev, but
-            in production it means a host or volume compromise =
-            full data exfil including the ciphertext of every
-            encrypted column.
+          summary: "Backup status or completed database pair is missing or invalid"
+          description: "Check both database archives, the completion pointer, timing settings and pg-backup logs. This also fires before the first successful backup."
+          runbook_url: "https://docs.freesdn.org/deploy/backups-and-restore/"
 
-            To enable encryption set BACKUP_GPG_RECIPIENT and
-            BACKUP_GPG_PUBLIC_KEY_PATH in .env, drop the public key at
-            ./secrets/backup-public.asc, and restart the container.
-            See secrets/README.md.
+      - alert: FreeSDNBackupDisabled
+        expr: freesdn_pg_backup_enabled == 0 and freesdn_pg_backup_status_valid == 1
+        for: 5m
+        labels: {severity: critical, component: backup}
+        annotations:
+          summary: "Database backups are disabled"
+          description: "Without a working encryption recipient/key the service fails closed. Configure GPG; plaintext requires an explicit development-only opt-in."
+          runbook_url: "https://docs.freesdn.org/deploy/backups-and-restore/"
+
+      - alert: FreeSDNBackupFailed
+        expr: freesdn_pg_backup_last_attempt_failed == 1
+        for: 5m
+        labels: {severity: critical, component: backup}
+        annotations:
+          summary: "The latest database backup attempt failed"
+          description: "A previous success does not clear a newer failed attempt. Check pg-backup logs, database access, encryption and free space."
+          runbook_url: "https://docs.freesdn.org/deploy/backups-and-restore/"
+
+      - alert: FreeSDNBackupStale
+        expr: time() - freesdn_pg_backup_last_success_timestamp > freesdn_pg_backup_max_age_seconds
+        for: 15m
+        labels: {severity: critical, component: backup}
+        annotations:
+          summary: "The last completed database backup exceeds its configured age limit"
+          description: "The threshold uses BACKUP_INTERVAL_SECONDS plus BACKUP_FRESHNESS_GRACE_SECONDS. Check pg-backup logs and complete a restore drill separately."
+          runbook_url: "https://docs.freesdn.org/deploy/backups-and-restore/"
+
+      - alert: FreeSDNBackupUnencrypted
+        expr: freesdn_pg_backup_encryption_enabled == 0 and freesdn_pg_backup_enabled == 1
+        for: 30m
+        labels: {severity: warning, component: backup}
+        annotations:
+          summary: "Database backups are running without GPG encryption"
+          description: "Plaintext was explicitly enabled. Configure BACKUP_GPG_RECIPIENT and BACKUP_GPG_PUBLIC_KEY_PATH for production."
+          runbook_url: "https://docs.freesdn.org/deploy/backups-and-restore/"
+
+      - alert: FreeSDNOffsiteBackupUnavailable
+        expr: (freesdn_pg_backup_offsite_status_valid == 0 or freesdn_pg_backup_offsite_last_success_timestamp == 0) and freesdn_pg_backup_offsite_required == 1
+        for: 5m
+        labels: {severity: critical, component: backup}
+        annotations:
+          summary: "Required off-site backup has no valid completion evidence"
+          description: "Check the dr profile, rclone configuration and pg-backup-offsite logs. Enabling a service is not proof of remote completion."
+          runbook_url: "https://docs.freesdn.org/deploy/backups-and-restore/"
+
+      - alert: FreeSDNOffsiteBackupFailed
+        expr: freesdn_pg_backup_offsite_last_attempt_failed == 1 and freesdn_pg_backup_offsite_required == 1
+        for: 5m
+        labels: {severity: critical, component: backup}
+        annotations:
+          summary: "The latest off-site backup attempt failed verification"
+          description: "Both database files and their completion marker must pass verification. A previous successful copy is retained as history only."
+          runbook_url: "https://docs.freesdn.org/deploy/backups-and-restore/"
+
+      - alert: FreeSDNOffsiteBackupStale
+        expr: (time() - freesdn_pg_backup_offsite_source_timestamp > freesdn_pg_backup_offsite_max_age_seconds) and freesdn_pg_backup_offsite_required == 1
+        for: 15m
+        labels: {severity: critical, component: backup}
+        annotations:
+          summary: "The database pair verified off-site is too old"
+          description: "Age is measured from the source backup, not the most recent copy. Copying the same old pair repeatedly cannot reset this alert."
+          runbook_url: "https://docs.freesdn.org/deploy/backups-and-restore/"
+
+      - alert: FreeSDNOffsiteRetentionFailed
+        expr: freesdn_pg_backup_offsite_retention_failed == 1 and freesdn_pg_backup_offsite_required == 1
+        for: 15m
+        labels: {severity: warning, component: backup}
+        annotations:
+          summary: "Off-site backup retention failed"
+          description: "Copy verification succeeded but old-object deletion failed. Check quota, permissions and object-lock policy; do not weaken retention protection automatically."
           runbook_url: "https://docs.freesdn.org/deploy/backups-and-restore/"

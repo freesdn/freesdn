@@ -104,7 +104,7 @@ def validate_id(value: str, *, label: str = "id") -> str:
 # proxmox cluster service needs its own validator. Slashes / nulls /
 # spaces / ``..`` traversal still excluded. The Proxmox cluster
 # apply-path tests caught the gap.
-_PROXMOX_UPID_RE = re.compile(r"^[A-Za-z0-9_.\-:@]{1,128}$")
+_PROXMOX_UPID_RE = re.compile(r"[A-Za-z0-9_.!\-:@]{1,512}")
 
 
 def validate_upid(value: str | None, *, label: str = "upid") -> str:
@@ -114,7 +114,7 @@ def validate_upid(value: str | None, *, label: str = "upid") -> str:
     ~85 chars. Still rejects ``..`` traversal and the usual
     path-walk attempts.
     """
-    if not value or not _PROXMOX_UPID_RE.match(value):
+    if not value or not _PROXMOX_UPID_RE.fullmatch(value):
         raise HTTPException(400, detail=f"invalid {label} format")
     if ".." in value:
         raise HTTPException(400, detail=f"invalid {label} format")

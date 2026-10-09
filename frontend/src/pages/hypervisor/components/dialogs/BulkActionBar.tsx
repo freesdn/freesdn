@@ -8,7 +8,8 @@
  * (target node + online checkbox). The Results dialog is read-only and
  * stays as a plain Dialog.
  */
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { newHypervisorRequestId } from '@/lib/api/hypervisor';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
@@ -22,7 +23,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { FormDialog } from '@/components/ui/form-dialog';
-import { DestructiveConfirmDialog } from '@/components/ui/destructive-confirm-dialog';
+import { DeleteGuestDialog } from './DeleteGuestDialog';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -38,11 +39,11 @@ interface BulkActionBarProps {
   onClear: () => void;
 }
 
-const migrateSchema = z.object({
-  target_node: z.string().min(1, 'Select a target node'),
-  online: z.boolean(),
-});
-type MigrateFormValues = z.infer<typeof migrateSchema>;
+interface MigrateFormValues {
+  target_node: string;
+  online: boolean;
+  restart: boolean;
+}
 
 export function BulkActionBar({ controllerId, selectedTargets, nodes, onClear }: BulkActionBarProps) {
   const { t } = useTranslation('hypervisor');
@@ -53,15 +54,19 @@ export function BulkActionBar({ controllerId, selectedTargets, nodes, onClear }:
   const localizedMigrateSchema = z.object({
     target_node: z.string().min(1, t('BulkActionBar.migrate.targetNodeRequired')),
     online: z.boolean(),
+    restart: z.boolean(),
   });
 
   const [migrateOpen, setMigrateOpen] = useState(false);
+  // Keep IDs through response loss and manual resubmission of this dialog.
+  const migrationIds = useRef(new Map<string, string>());
   const [results, setResults] = useState<BulkActionResult[] | null>(null);
   // Bulk-delete is irreversible; gate behind the typed-confirm dialog
   // instead of native confirm().
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const actionMutation = useMutation({
+    retry: false, // Inspect durable receipts before submitting another intent.
     mutationFn: (action: string) =>
       hypervisorApi.bulkAction(controllerId, {
         targets: selectedTargets.map((t) => ({ node: t.node, vm_type: t.vm_type, vmid: t.vmid })),
@@ -86,19 +91,34 @@ export function BulkActionBar({ controllerId, selectedTargets, nodes, onClear }:
   });
 
   const migrateMutation = useMutation({
+    retry: false,
     mutationFn: (values: MigrateFormValues) =>
       hypervisorApi.bulkMigrate(controllerId, {
-        targets: selectedTargets.map((t) => ({ node: t.node, vm_type: t.vm_type, vmid: t.vmid })),
+        targets: selectedTargets.map((target) => {
+          const key = `${controllerId}:${target.vm_type}:${target.vmid}`;
+          const request_id = migrationIds.current.get(key) ?? newHypervisorRequestId();
+          migrationIds.current.set(key, request_id);
+          return { node: target.node, vm_type: target.vm_type, vmid: target.vmid, request_id };
+        }),
         target_node: values.target_node,
         online: values.online,
+        restart: values.restart,
       }),
     onSuccess: (resp) => {
       const data = resp.data || [];
       setResults(data);
       const succeeded = data.filter((r) => r.success).length;
-      toast({ title: t('BulkActionBar.toast.migrationStarted', { count: succeeded }) });
+      const failed = data.length - succeeded;
+      toast({
+        title: t('BulkActionBar.toast.actionCompleteTitle'),
+        description: t('BulkActionBar.toast.actionCompleteDescription', { succeeded, failed }),
+        variant: failed > 0 ? 'destructive' : undefined,
+      });
       setMigrateOpen(false);
       queryClient.invalidateQueries({ queryKey: ['hypervisor'] });
+    },
+    onError: () => {
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.operationResponseLost'), variant: 'destructive' });
     },
   });
 
@@ -140,7 +160,7 @@ export function BulkActionBar({ controllerId, selectedTargets, nodes, onClear }:
         }}>
           <RotateCcw className="h-3.5 w-3.5 mr-1 text-blue-500" /> {t('BulkActionBar.actions.reboot')}
         </Button>
-        <Button size="sm" variant="outline" disabled={isPending} onClick={() => setMigrateOpen(true)}>
+        <Button size="sm" variant="outline" disabled={isPending} onClick={() => { migrationIds.current.clear(); setMigrateOpen(true); }}>
           <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> {t('BulkActionBar.actions.migrate')}
         </Button>
         <Button
@@ -162,20 +182,11 @@ export function BulkActionBar({ controllerId, selectedTargets, nodes, onClear }:
         </Button>
       </div>
 
-      {/* Typed-confirm dialog for bulk delete (replaces native confirm()) */}
-      <DestructiveConfirmDialog
-        open={deleteConfirmOpen}
-        onOpenChange={setDeleteConfirmOpen}
-        title={t('BulkActionBar.actions.delete')}
-        description={t('BulkActionBar.confirm.delete', { count })}
-        confirmationText="DELETE"
-        confirmLabel={t('BulkActionBar.actions.delete')}
-        isPending={isPending}
-        onConfirm={() => {
-          actionMutation.mutate('delete');
-          setDeleteConfirmOpen(false);
-        }}
-      />
+      {deleteConfirmOpen && <DeleteGuestDialog
+        controllerId={controllerId}
+        targets={selectedTargets.map((target) => ({ node: target.node, vm_type: target.vm_type, vmid: target.vmid }))}
+        onClose={() => setDeleteConfirmOpen(false)}
+      />}
 
       {/* Results dialog */}
       <Dialog open={!!results} onOpenChange={(o) => { if (!o) { setResults(null); onClear(); } }}>
@@ -193,6 +204,7 @@ export function BulkActionBar({ controllerId, selectedTargets, nodes, onClear }:
                 )}
                 <span className="font-mono text-xs">{r.vmid}</span>
                 <span className="text-muted-foreground text-xs">{r.node}</span>
+                {r.change_id && <span className="text-xs text-muted-foreground" title={r.change_id}>{t('BulkActionBar.results.tracked')}</span>}
                 {r.error && <span className="text-xs text-destructive truncate">{r.error}</span>}
               </div>
             ))}
@@ -210,7 +222,7 @@ export function BulkActionBar({ controllerId, selectedTargets, nodes, onClear }:
         title={t('BulkActionBar.migrate.title', { count })}
         description={t('BulkActionBar.migrate.description')}
         schema={localizedMigrateSchema}
-        defaultValues={{ target_node: '', online: true }}
+        defaultValues={{ target_node: '', online: true, restart: false }}
         submitLabel={t('BulkActionBar.migrate.submit', { count })}
         contentClassName="sm:max-w-md"
         onSubmit={async (values) => {
@@ -254,6 +266,22 @@ export function BulkActionBar({ controllerId, selectedTargets, nodes, onClear }:
                 </FormItem>
               )}
             />
+            {selectedTargets.some((target) => target.vm_type === 'lxc') && <>
+              <FormField
+                control={form.control}
+                name="restart"
+                render={({ field }) => (
+                  <FormItem>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <FormControl><Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(!!v)} /></FormControl>
+                      <span className="text-sm">{t('HypervisorPage.migrateDialog.restartMigration')}</span>
+                    </label>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <p className="text-sm text-amber-600">{t('HypervisorPage.migrateDialog.restartWarning')}</p>
+            </>}
           </>
         )}
       </FormDialog>

@@ -1,0 +1,11 @@
+# FreeSDN security rebuild; upstream runtime contract is preserved.
+FROM golang:1.27.2-alpine3.24 AS builder
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local
+WORKDIR /build
+COPY postgres-exporter-build/go.mod postgres-exporter-build/go.sum ./
+RUN go mod download all && go mod verify
+RUN go build -mod=readonly -trimpath -ldflags="-s -w -X github.com/prometheus/common/version.Version=0.20.1-freesdn" -o /out/service github.com/prometheus-community/postgres_exporter/cmd/postgres_exporter
+
+FROM prometheuscommunity/postgres-exporter:v0.20.1
+COPY --from=builder /out/service /bin/postgres_exporter
+COPY postgres-exporter-build/LICENSE postgres-exporter-build/NOTICE /usr/share/licenses/postgres-exporter/

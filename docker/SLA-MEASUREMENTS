@@ -1,0 +1,63 @@
+FreeSDN SLA measurement boundaries
+=================================
+
+A displayed policy compliance percentage is the fraction of its configured,
+measured targets that pass at one evaluation. It is not time-based availability,
+an error budget, a service credit calculation or a contractual SLA certificate.
+
+Current observations
+--------------------
+* Site and organization scopes: composite device health score, including zero.
+  A composite health score is not measured uptime or client satisfaction.
+* Camera and NVR scopes: the fraction of collected camera-health snapshots that
+  report online within the configured window. This is sampled availability;
+  missing polls, coverage gaps and irregular sampling do not establish uptime.
+* Other scope/metric combinations without an implemented collector remain
+  unavailable. Selecting a threshold does not create its observation source.
+
+Missing data
+------------
+Every configured non-null target must have a finite observation for a numeric
+whole-policy percentage. Missing observations clear the current percentage to
+null (N/A in the UI). An incomplete evaluation does not write a numeric history
+snapshot, count a missing target as passing, or resolve that target's existing
+incident. Other measured targets can still create or resolve incidents.
+A policy with no targets is also unavailable. A measured zero is a valid value.
+The evaluation timestamp records an attempt; it is not proof of sensor freshness.
+
+Upgrade implications
+--------------------
+Earlier versions used composite health as site/organization uptime and treated
+unavailable targets as passing. Existing policies are preserved, but their next
+active evaluation can become N/A. Review each threshold with the operator and
+use health_score_min for composite health. New site policies do not silently
+include an uptime target. Old snapshots, reports and disabled-policy cached
+values are retained as historical records, not recomputed or certified.
+
+Incident lifecycle
+------------------
+Acknowledged incidents remain unresolved until a measured target recovers. They
+are updated without creating a replacement, and recovery closes every retained
+duplicate from earlier versions. Acknowledging an already resolved incident does
+not reopen it. Overlapping evaluators skip policies locked by the current pass;
+policies_evaluated reports the work that this pass actually performed.
+
+Consecutive confirmation
+------------------------
+The configured breach_after_consecutive counts repeated violations in complete
+policy evaluations. Pending violations affect the measured compliance percentage,
+but a new incident is raised only when its own metric reaches the configured count.
+Counters persist in snapshot metadata, capped at the configured count. Missing or
+partial evaluations, compliant observations, target/configuration changes and
+disabling/resuming a policy break the sequence. Legacy snapshots without counter
+metadata start a new sequence. Existing unresolved incidents continue to be tracked.
+These are evaluations, not proof of independent or fresh physical observations;
+manual evaluation also counts. No availability coverage guarantee is implied.
+
+Remaining qualification
+-----------------------
+Health-observation freshness, fleet coverage, full-window availability, pre-breach
+warning-threshold behavior and multi-host operational behavior
+need independent acceptance before contractual or enterprise SLA claims. A report
+can average only the complete snapshots that exist; it does not interpolate
+missing intervals or certify that every scheduled evaluation occurred.

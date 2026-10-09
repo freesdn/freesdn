@@ -1,0 +1,32 @@
+Firewall gateway onboarding certificate verification
+=====================================================
+
+The Add Gateway dialog selects certificate verification by default for new
+OPNsense, pfSense, MikroTik RouterOS and OpenWRT gateway connections. Both
+Test Connection and Add Gateway submit that explicit choice. Operators may
+uncheck verification for a device whose certificate they cannot yet validate;
+the dialog shows an accessible warning about identity verification and
+credential interception. Prefer a trusted certificate or an appropriately
+configured backend trust store over an ongoing opt-out.
+
+A failed connection test does not silently disable verification. Editing any
+form field invalidates the displayed test result. Closing the form, including
+successful creation through its parent, clears its credentials and restores
+the verified default. A test response arriving after the form was changed or
+closed is not shown as validation of the new form. Request rejection uses the
+existing error toast and does not become an unhandled promise in this dialog.
+
+The UI change does not rewrite existing gateway rows or edit behavior. New
+create/test API requests and ORM inserts now also default to verification;
+see GATEWAY-CERTIFICATE-DEFAULTS for scope and compatibility. Existing explicit
+saved choices remain intact; low-level adapter defaults are not globally changed.
+Certificate trust is
+not a replacement for operator authorization, secure routing or least-privilege
+device credentials. No successful UI test asserts vendor support across all
+firmware, real appliance acceptance or independent security certification.
+
+The regression suite drives the actual React page with API transport doubles:
+secure and opted-out requests for four vendors, successful-create reset, failed
+and rejected requests, changed policy/fields, late responses and cancellation.
+Native packaged frontend and real-backend browser qualification remain separate
+release gates. This change performs no hardware or customer gateway writes.

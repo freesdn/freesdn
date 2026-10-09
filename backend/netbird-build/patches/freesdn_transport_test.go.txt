@@ -1,0 +1,233 @@
+package relay
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/netip"
+	"strings"
+	"sync/atomic"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/netbirdio/netbird/client/internal/stdnet"
+	"github.com/netbirdio/netbird/client/net/hooks"
+	"github.com/pion/stun/v3"
+	"github.com/pion/turn/v4"
+)
+
+func localSTUN(t *testing.T, mode string) *stun.URI {
+	t.Helper()
+	conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	t.Cleanup(func() { conn.Close(); <-done })
+	go func() {
+		defer close(done)
+		buf := make([]byte, 2048)
+		for {
+			n, addr, err := conn.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			req := &stun.Message{Raw: append([]byte(nil), buf[:n]...)}
+			if req.Decode() != nil {
+				continue
+			}
+			if mode == "silent" {
+				continue
+			}
+			opts := []stun.Setter{req, stun.BindingSuccess}
+			if mode == "valid" {
+				udp := addr.(*net.UDPAddr)
+				opts = append(opts, &stun.XORMappedAddress{IP: udp.IP, Port: udp.Port})
+			}
+			msg, err := stun.Build(opts...)
+			if err != nil {
+				return
+			}
+			conn.WriteTo(msg.Raw, addr)
+		}
+	}()
+	uri, err := stun.ParseURI("stun:" + conn.LocalAddr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return uri
+}
+
+func TestFreeSDNSTUNProbe(t *testing.T) {
+	for _, mode := range []string{"valid", "missing-address", "silent"} {
+		t.Run(mode, func(t *testing.T) {
+			uri := localSTUN(t, mode)
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			defer cancel()
+			addr, err := NewStunTurnProbe(time.Second).probeSTUN(ctx, uri)
+			switch mode {
+			case "valid":
+				if err != nil || !strings.HasPrefix(addr, "127.0.0.1:") {
+					t.Fatalf("addr=%s error=%v", addr, err)
+				}
+			case "missing-address":
+				if err == nil || errors.Is(err, context.DeadlineExceeded) {
+					t.Fatalf("malformed response should fail immediately: %v", err)
+				}
+			case "silent":
+				if !errors.Is(err, context.DeadlineExceeded) {
+					t.Fatalf("wanted deadline, got %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestFreeSDNSTUNCancel(t *testing.T) {
+	uri := localSTUN(t, "valid")
+	for range 20 {
+		ctx, cancel := context.WithCancel(context.Background())
+		go cancel()
+		_, _ = NewStunTurnProbe(time.Second).probeSTUN(ctx, uri)
+	}
+}
+
+func TestFreeSDNTURNAllocation(t *testing.T) {
+	for _, network := range []string{"udp", "tcp"} {
+		t.Run(network, func(t *testing.T) {
+			generator := &turn.RelayAddressGeneratorStatic{RelayAddress: net.ParseIP("127.0.0.1"), Address: "127.0.0.1"}
+			cfg := turn.ServerConfig{Realm: "freesdn-test", AuthHandler: func(username, realm string, _ net.Addr) ([]byte, bool) {
+				if username != "test-user" || realm != "freesdn-test" {
+					return nil, false
+				}
+				return turn.GenerateAuthKey(username, realm, "test-only-password"), true
+			}}
+			var address string
+			if network == "udp" {
+				conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { conn.Close() })
+				address = conn.LocalAddr().String()
+				cfg.PacketConnConfigs = []turn.PacketConnConfig{{PacketConn: conn, RelayAddressGenerator: generator}}
+			} else {
+				listener, err := net.Listen("tcp4", "127.0.0.1:0")
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { listener.Close() })
+				address = listener.Addr().String()
+				cfg.ListenerConfigs = []turn.ListenerConfig{{Listener: listener, RelayAddressGenerator: generator}}
+			}
+			server, err := turn.NewServer(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { server.Close() })
+			uri, err := stun.ParseURI(fmt.Sprintf("turn:%s?transport=%s", address, network))
+			if err != nil {
+				t.Fatal(err)
+			}
+			uri.Username = "test-user"
+			uri.Password = "test-only-password"
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			addr, err := NewStunTurnProbe(time.Second).probeTURN(ctx, uri)
+			if err != nil || !strings.HasPrefix(addr, "127.0.0.1:") {
+				t.Fatalf("allocation addr=%s error=%v", addr, err)
+			}
+			uri.Password = "incorrect-test-password"
+			_, err = NewStunTurnProbe(time.Second).probeTURN(ctx, uri)
+			if err == nil {
+				t.Fatal("invalid TURN credential accepted")
+			}
+		})
+	}
+}
+
+type fixtureDiscovery struct{}
+
+func (fixtureDiscovery) IFaces() (string, error) {
+	return "allowed0 77 1450 true true false false true | 192.0.2.1/24\nblocked0 78 1400 true true false false true | 198.51.100.1/24", nil
+}
+func TestFreeSDNProbeInterfaces(t *testing.T) {
+	custom, err := stdnet.NewNetWithDiscover(context.Background(), fixtureDiscovery{}, []string{"blocked0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bridge := &probeNet{custom}
+	ifaces, err := bridge.Interfaces()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ifaces) != 1 || ifaces[0].Name != "allowed0" || ifaces[0].MTU != 1450 {
+		t.Fatalf("lost filtered interfaces: %v", ifaces)
+	}
+	for _, byName := range []bool{true, false} {
+		var name string
+		if byName {
+			iface, err := bridge.InterfaceByName("allowed0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			a, err := iface.Addrs()
+			if err != nil {
+				t.Fatal(err)
+			}
+			name = a[0].String()
+		} else {
+			iface, err := bridge.InterfaceByIndex(77)
+			if err != nil {
+				t.Fatal(err)
+			}
+			a, err := iface.Addrs()
+			if err != nil {
+				t.Fatal(err)
+			}
+			name = a[0].String()
+		}
+		if name != "192.0.2.1/24" {
+			t.Fatalf("lost cached address: %s", name)
+		}
+	}
+	if _, err := bridge.InterfaceByName("blocked0"); err == nil {
+		t.Fatal("blocked interface became visible")
+	}
+}
+
+func TestFreeSDNProbeRoutingHooks(t *testing.T) {
+	t.Setenv("NB_USE_LEGACY_ROUTING", "true")
+	t.Setenv("NB_SKIP_SOCKET_MARK", "true")
+	var writes, closes, controls atomic.Int32
+	hooks.AddWriteHook(func(_ hooks.ConnectionID, _ netip.Prefix) error { writes.Add(1); return nil })
+	t.Cleanup(hooks.RemoveWriteHooks)
+	hooks.AddCloseHook(func(_ hooks.ConnectionID) error { closes.Add(1); return nil })
+	t.Cleanup(hooks.RemoveCloseHooks)
+	custom, err := stdnet.NewNet(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bridge := &probeNet{custom}
+	receiver, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer receiver.Close()
+	listener := bridge.CreateListenConfig(&net.ListenConfig{Control: func(_, _ string, _ syscall.RawConn) error { controls.Add(1); return nil }})
+	conn, err := listener.ListenPacket(context.Background(), "udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = conn.WriteTo([]byte("probe"), receiver.LocalAddr()); err != nil {
+		t.Fatal(err)
+	}
+	if err = conn.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if writes.Load() == 0 || closes.Load() == 0 || controls.Load() != 1 {
+		t.Fatalf("lost hooks: write=%d close=%d control=%d", writes.Load(), closes.Load(), controls.Load())
+	}
+}

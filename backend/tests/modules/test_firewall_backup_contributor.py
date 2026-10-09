@@ -12,6 +12,7 @@ serialized), and restore tenant/FK guards via the shared
 from __future__ import annotations
 
 from collections import deque
+from contextlib import nullcontext
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
@@ -37,9 +38,15 @@ class FakeAsyncSession:
         self._store = store or {}
         self.added: list[Any] = []
         self.flush_count = 0
+        self.is_active = True
+
+    def begin_nested(self):
+        # Shape-only unit double: transaction/refresh behavior is qualified by
+        # the real PostgreSQL contributor cases, never by this context manager.
+        return nullcontext()
 
     async def execute(self, _q): return _Result(self._q.popleft() if self._q else [])
-    async def get(self, model_cls, pk): return self._store.get((model_cls.__name__, str(pk)))
+    async def get(self, model_cls, pk, *, populate_existing=False, with_for_update=None): return self._store.get((model_cls.__name__, str(pk)))
     def add(self, obj): self.added.append(obj)
     async def flush(self): self.flush_count += 1
 

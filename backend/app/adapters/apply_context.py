@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import contextlib
 import contextvars
+from collections.abc import Iterator
 
 _apply_window: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "adapter_apply_window", default=False
@@ -30,7 +31,7 @@ def in_apply_window() -> bool:
 
 
 @contextlib.contextmanager
-def apply_window():
+def apply_window() -> Iterator[None]:
     """Mark the current task as inside an approved staged apply.
 
     Synchronous context manager: it only sets/resets a contextvar, so it wraps an

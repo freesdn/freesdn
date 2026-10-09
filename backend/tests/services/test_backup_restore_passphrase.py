@@ -82,6 +82,8 @@ class _Backup:
     encryption_key_id = None
     created_at = datetime.now(UTC)
     name = "nightly vault"
+    # Persisted pre-identity Backup rows have this required JSONB field.
+    metadata_json: dict[str, Any] = {}
 
 
 class _Session:

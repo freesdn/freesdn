@@ -1617,7 +1617,13 @@ async def _create_audit_logs(
             response_code=200 if status == "success" else random.choice([400, 401, 403, 500]),
             response_time_ms=round(random.uniform(8, 480), 1),
         )
-        db.add(log)
+        # Generated examples must remain explicitly distinguishable from real
+        # operations, including after export. These fields are signed as data.
+        log.tags = ["sample_data"]
+        log.extra_metadata = {"synthetic": True, "origin": "setup_sample_data"}
+        from app.services.audit import AuditService
+
+        await AuditService(db).persist_record(log)
         logs.append(log)
     await db.flush()
     return logs

@@ -31,13 +31,12 @@ Supported features::
                                                 payload = {node, action})
     proxmox.node.apt_refresh          create  (payload = {node})
     proxmox.node.certificate_upload   create  — HIGH-RISK
-                                                (payload = {node,
-                                                            certificates,
-                                                            key,
-                                                            overwrite?,
-                                                            restart?})
-    proxmox.node.certificate_delete   delete  (target_id = node)
-    proxmox.node.acme_renew           create  (target_id = node)
+    proxmox.node.certificate_delete   delete
+    proxmox.node.acme_renew           create
+
+Certificate operations require the reviewed versioned plan produced by
+HypervisorCertificateService. Private keys are encrypted and bound to the
+operation ID; legacy raw certificates/key staging is refused before persistence.
 
 The applier passes ``force=True`` to the Proxmox adapter so the write
 actually reaches the cluster — every write outside the applier is
@@ -290,6 +289,14 @@ class GatewayProxmoxNodeService(GatewayServiceBase):
         """
 
         async def _apply(c: Any) -> Any:
+            from app.services.hypervisor_certificates import FEATURES, apply_certificate
+
+            if c.feature in FEATURES:
+                return await apply_certificate(self, c)
+            if c.feature in ("proxmox.node.reboot", "proxmox.node.shutdown"):
+                from app.services.hypervisor_cluster_operations import apply_cluster_operation
+
+                return await apply_cluster_operation(self, c)
             adapter: ProxmoxAdapter | None = None
             try:
                 adapter = await self._get_proxmox_adapter(c.controller_id, c.organization_id)
@@ -310,18 +317,6 @@ class GatewayProxmoxNodeService(GatewayServiceBase):
                             f"Proxmox adapter has no method {method_name!r}; missing implementation"
                         ),
                     )
-
-                # ── Power: reboot / shutdown ──────────────────────────
-                if c.feature in ("proxmox.node.reboot", "proxmox.node.shutdown"):
-                    node = validate_id(target_id, label="node")
-                    # Pre-flight: rebooting/shutting a node interrupts EVERY
-                    # running guest on it — CATASTROPHIC, blocked unless the
-                    # staged payload carries confirmed=true; the read-only check
-                    # counts the affected guests.
-                    from app.services.adapter_proxmox_preflight import preflight_gate
-
-                    await preflight_gate(adapter, c.feature, c.operation, {**payload, "node": node})
-                    return await method(node, force=True)
 
                 # ── Service action ────────────────────────────────────
                 if c.feature == "proxmox.node.service_action":
@@ -378,43 +373,6 @@ class GatewayProxmoxNodeService(GatewayServiceBase):
                     node_raw = target_id or str(payload.get("node", ""))
                     node = validate_id(node_raw, label="node")
                     return await method(node, force=True)
-
-                # ── Certificate: upload (HIGH-RISK) ───────────────────
-                if c.feature == "proxmox.node.certificate_upload":
-                    # target_id = node; payload = {certificates, key,
-                    # overwrite?, restart?}.
-                    node = validate_id(target_id, label="node")
-                    certificates = str(payload.get("certificates", ""))
-                    key = str(payload.get("key", ""))
-                    if not (certificates and key):
-                        raise HTTPException(
-                            400,
-                            detail=(
-                                "proxmox.node.certificate_upload requires certificates and key"
-                            ),
-                        )
-                    overwrite = bool(payload.get("overwrite", False))
-                    restart = bool(payload.get("restart", False))
-                    return await method(
-                        node,
-                        certificates,
-                        key,
-                        overwrite=overwrite,
-                        restart=restart,
-                        force=True,
-                    )
-
-                # ── Certificate: delete ───────────────────────────────
-                if c.feature == "proxmox.node.certificate_delete":
-                    node = validate_id(target_id, label="node")
-                    restart = bool(payload.get("restart", False))
-                    return await method(node, restart=restart, force=True)
-
-                # ── ACME renewal ──────────────────────────────────────
-                if c.feature == "proxmox.node.acme_renew":
-                    node = validate_id(target_id, label="node")
-                    acme_force = bool(payload.get("acme_force", False))
-                    return await method(node, acme_force=acme_force, force=True)
 
                 raise HTTPException(400, detail=f"unhandled feature={c.feature!r}")
             finally:

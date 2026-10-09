@@ -33,6 +33,13 @@ def _require_http_url(v: str | None) -> str | None:
     return v
 
 
+def _require_boolean_mfa_trust(value: dict[str, Any]) -> dict[str, Any]:
+    """Keep explicit MFA trust aligned with portable security metadata."""
+    if "trust_idp_mfa" in value and type(value["trust_idp_mfa"]) is not bool:
+        raise ValueError("trust_idp_mfa must be a boolean")
+    return value
+
+
 # ---------------------------------------------------------------------------
 # Provider CRUD Schemas
 # ---------------------------------------------------------------------------
@@ -90,6 +97,11 @@ class SSOProviderBase(BaseModel):
     default_role: str = "viewer"
 
     extra_settings: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("extra_settings")
+    @classmethod
+    def _validate_extra_settings(cls, v: dict[str, Any]) -> dict[str, Any]:
+        return _require_boolean_mfa_trust(v)
 
     @field_validator("oidc_issuer", "oidc_discovery_url", "saml_sso_url", "saml_slo_url")
     @classmethod
@@ -153,6 +165,32 @@ class SSOProviderUpdate(BaseModel):
     default_role: str | None = None
 
     extra_settings: dict[str, Any] | None = None
+
+    @field_validator(
+        "name",
+        "status",
+        "display_order",
+        "ldap_use_tls",
+        "attribute_mapping",
+        "role_mapping",
+        "jit_provisioning",
+        "default_role",
+        "extra_settings",
+        mode="before",
+    )
+    @classmethod
+    def _require_present_value(cls, v: Any) -> Any:
+        # Omitted PATCH defaults are not validated. Explicit null must not
+        # reach a NOT NULL column or persist JSON null into required metadata.
+        # False, zero and empty objects remain valid supplied values.
+        if v is None:
+            raise ValueError("cannot be null; omit the field to leave it unchanged")
+        return v
+
+    @field_validator("extra_settings")
+    @classmethod
+    def _validate_extra_settings(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        return _require_boolean_mfa_trust(v) if v is not None else None
 
     @field_validator("oidc_issuer", "oidc_discovery_url", "saml_sso_url", "saml_slo_url")
     @classmethod

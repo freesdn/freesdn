@@ -15,11 +15,12 @@ import logging
 import re
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from typing import Any
 
 from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
@@ -250,6 +251,42 @@ def _constant_time_compare(a: str, b: str) -> bool:
 # ===========================================
 
 
+def apply_request_response_headers(request: Request, response: Response, request_id: str) -> None:
+    """Apply the existing correlation/security policy to ordinary and outer errors."""
+    response.headers["X-Request-ID"] = request_id
+
+    # ── Security Headers ──────────────────────────────────────────
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    # Content-Security-Policy — restrict resource loading.
+    # connect-src is 'self' ONLY: same-origin WebSocket (wss://same-host)
+    # is already covered by 'self', so we do not need the ws:/wss:
+    # wildcards. Removing them prevents data exfiltration to
+    # attacker-controlled WebSocket endpoints in the event of an XSS.
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+    # HSTS — when requests come over HTTPS (or via reverse proxy)
+    proto = request.headers.get("X-Forwarded-Proto", request.url.scheme)
+    if proto == "https":
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=63072000; includeSubDomains; preload"
+        )
+
+
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """
     Adds a unique request ID to each request for tracing.
@@ -286,40 +323,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         finally:
             request_id_var.reset(token)
 
-        response.headers["X-Request-ID"] = request_id
-
-        # ── Security Headers ──────────────────────────────────────────
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = (
-            "camera=(), microphone=(), geolocation=(), payment=()"
-        )
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        # Content-Security-Policy — restrict resource loading.
-        # connect-src is 'self' ONLY: same-origin WebSocket (wss://same-host)
-        # is already covered by 'self', so we do not need the ws:/wss:
-        # wildcards. Removing them prevents data exfiltration to
-        # attacker-controlled WebSocket endpoints in the event of an XSS.
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: blob:; "
-            "font-src 'self'; "
-            "connect-src 'self'; "
-            "frame-ancestors 'none'; "
-            "base-uri 'self'; "
-            "form-action 'self'"
-        )
-        # HSTS — when requests come over HTTPS (or via reverse proxy)
-        proto = request.headers.get("X-Forwarded-Proto", request.url.scheme)
-        if proto == "https":
-            response.headers["Strict-Transport-Security"] = (
-                "max-age=63072000; includeSubDomains; preload"
-            )
+        apply_request_response_headers(request, response, request_id)
 
         return response
 
@@ -413,10 +417,23 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         app: ASGIApp,
         requests_per_minute: int = 60,
         burst_limit: int = 10,
+        auth_path_prefix: str | None = None,
     ):
         super().__init__(app)
         self.requests_per_minute = requests_per_minute
         self.burst_limit = burst_limit
+        # Capture the actual application's auth namespace. Request headers and
+        # subsequent settings changes cannot redirect this fail-closed policy.
+        prefix = self._FAIL_CLOSED_PREFIX if auth_path_prefix is None else auth_path_prefix
+        if (
+            type(prefix) is not str
+            or not prefix.startswith("/")
+            or not prefix.endswith("/auth/")
+            or any(c in prefix for c in ("?", "#", "\\", "%"))
+            or any(ord(c) <= 32 or ord(c) == 127 for c in prefix)
+        ):
+            raise ValueError("Explicit canonical authentication path prefix required")
+        self.auth_path_prefix = prefix
         self._redis: Any = None
         self._redis_loop: Any = None
 
@@ -495,7 +512,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
             payload = jwt.decode(
                 token,
-                settings.SECRET_KEY,
+                settings.jwt_signing_key,
                 algorithms=[settings.ALGORITHM],
                 options={"require": ["exp", "iat", "sub"]},
                 audience="freesdn-api",
@@ -556,7 +573,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             # global per-IP burst limit AND the endpoint-level credential
             # stuffing guards. For every other route we still fail open
             # so a Redis blip doesn't take the whole site down.
-            if request.url.path.startswith(self._FAIL_CLOSED_PREFIX):
+            if request.url.path.startswith(self.auth_path_prefix):
                 logger.error(
                     "Rate limiter Redis unavailable on auth route %s; failing closed",
                     request.url.path,
@@ -598,12 +615,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 headers={"Retry-After": "60"},
             )
 
-        # Add rate limit headers
+        # Preserve the result of THIS admission for an owned outer timeout.
+        # Do not perform a second Redis check or consume another request slot.
+        rate_headers = {
+            "X-RateLimit-Limit": str(self.requests_per_minute),
+            "X-RateLimit-Remaining": str(max(0, self.requests_per_minute - minute_count - 1)),
+        }
+        request.scope["freesdn.rate_limit_headers"] = rate_headers
         response = await call_next(request)
-        response.headers["X-RateLimit-Limit"] = str(self.requests_per_minute)
-        response.headers["X-RateLimit-Remaining"] = str(
-            max(0, self.requests_per_minute - minute_count - 1)
-        )
+        response.headers.update(rate_headers)
         return response
 
 
@@ -868,6 +888,23 @@ def setup_exception_handlers(app: FastAPI) -> None:
 
     # ── Standard HTTP exceptions ──────────────────────────────────────
 
+    from app.core.token_blacklist import TokenRevocationUnavailable
+
+    @app.exception_handler(TokenRevocationUnavailable)
+    async def revocation_storage_handler(
+        request: Request, exc: TokenRevocationUnavailable
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "code": 503,
+                    "message": "Token revocation is temporarily unavailable; the operation was not confirmed",
+                    "request_id": getattr(request.state, "request_id", None),
+                }
+            },
+        )
+
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
         """Handle HTTP exceptions with consistent format."""
@@ -1039,6 +1076,28 @@ _LARGE_BODY_PATH_PREFIXES: tuple[str, ...] = (
 _LARGE_BODY_MAX_BYTES = 4 * 1024 * 1024 * 1024  # 4 GB
 
 
+# Only the operation's actual upload action receives this separate wire bound.
+# JSON commands/status and similarly named paths keep the control-plane ceiling.
+# The private parser still narrows it to the intent's declared payload size.
+_RELEASE_OPERATION_UPLOAD_PATH = re.compile(
+    r"/api/v1/agents/release-operations/"
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/upload/?\Z"
+)
+_RELEASE_OPERATION_UPLOAD_MAX_BYTES = 500 * 1024 * 1024 + 300 * 1024 + 65536
+
+
+class _RequestBodyTooLarge(Exception):
+    """An overflow is a failed receive, never a normal end of the request."""
+
+
+def _only_body_limit_errors(error: BaseException) -> bool:
+    if isinstance(error, _RequestBodyTooLarge):
+        return True
+    return isinstance(error, BaseExceptionGroup) and all(
+        _only_body_limit_errors(e) for e in error.exceptions
+    )
+
+
 class BodySizeLimitMiddleware(BaseHTTPMiddleware):
     """Reject requests whose body exceeds ``max_bytes``.
 
@@ -1070,7 +1129,9 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
         # Upload routes carry their own (larger, precise) limit; the global cap
         # is sized for JSON control-plane writes and would otherwise win.
         path = request.url.path
-        if path.startswith(_LARGE_BODY_PATH_PREFIXES):
+        if request.method == "POST" and _RELEASE_OPERATION_UPLOAD_PATH.fullmatch(path):
+            max_bytes = _RELEASE_OPERATION_UPLOAD_MAX_BYTES
+        elif path.startswith(_LARGE_BODY_PATH_PREFIXES):
             max_bytes = _LARGE_BODY_MAX_BYTES
         else:
             max_bytes = self.max_bytes
@@ -1090,9 +1151,9 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
 
         # 2. Streaming guard: wrap ``receive`` to count actual body bytes so a
         # chunked / Content-Length-less request can't slip past the cap. We
-        # flag the breach and let the downstream handler observe a truncated
-        # body (more_body=False) rather than feeding it unbounded data; the
-        # request is then rejected with 413 instead of being processed.
+        # fail the receive on breach: a synthetic normal EOF could let a
+        # handler parse a valid prefix and commit before its response becomes
+        # 413. Actual handlers must propagate failed reads or roll back them.
         #
         # The body is streamed lazily by whoever first consumes it downstream
         # (Starlette's BaseHTTPMiddleware reads it via this request's
@@ -1103,19 +1164,31 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
         state = {"total": 0, "exceeded": False}
 
         async def limited_receive() -> Any:
+            if state["exceeded"]:
+                raise _RequestBodyTooLarge("Request body limit exceeded")
             message = await original_receive()
             if message.get("type") == "http.request":
                 state["total"] += len(message.get("body", b"") or b"")
                 if state["total"] > max_bytes:
                     state["exceeded"] = True
-                    # Stop the stream so the handler doesn't keep receiving
-                    # attacker-controlled bytes; it sees an empty terminal chunk.
-                    return {"type": "http.request", "body": b"", "more_body": False}
+                    # Do not deliver the overflowing chunk, forge completion
+                    # or accept another receive after the failure.
+                    raise _RequestBodyTooLarge("Request body limit exceeded")
             return message
 
         request._receive = limited_receive  # type: ignore[attr-defined]
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception as error:
+            # AnyIO may wrap receive failures. Never suppress cancellation or
+            # an unrelated/mixed failure merely because overflow also occurred.
+            if not state["exceeded"] or not _only_body_limit_errors(error):
+                raise
+            return JSONResponse(
+                status_code=413,
+                content={"detail": (f"request body exceeds {max_bytes}-byte limit")},
+            )
         if state["exceeded"]:
             return JSONResponse(
                 status_code=413,
@@ -1162,9 +1235,8 @@ class TrailingSlashNormalizeMiddleware(BaseHTTPMiddleware):
     spelling before routing — both ``/sites`` and ``/sites/`` reach
     the same handler with no client-visible redirect.
 
-    Dynamic-segment routes (e.g. ``/sites/{id}``) are matched via the
-    compiled regex Starlette built for them; we cache those at startup
-    too.
+    This cache contains static paths only. Dynamic-segment routes keep their
+    registered spelling and remain the router's responsibility.
 
     The OpenAPI docs / static asset paths are passed through untouched.
     """
@@ -1178,6 +1250,32 @@ class TrailingSlashNormalizeMiddleware(BaseHTTPMiddleware):
         self._no_slash_paths: set[str] | None = None  # exact paths NOT ending in /
         self._built_epoch: int = -1  # epoch the caches above were built at
 
+    @staticmethod
+    def _static_route_paths(
+        routes: Sequence[Any], prefix: str = "", include_in_schema: bool = True
+    ) -> Iterator[str]:
+        """Read path metadata without constructing response models or schemas.
+
+        The pinned FastAPI version retains included routers and their prefix/
+        visibility context instead of flattening ``app.routes``. Traverse those
+        original definitions, preserving the same visibility boundary as the
+        previous OpenAPI inventory. Tests compare the complete application path
+        set with its schema and exercise nested prefixes and plugin invalidation.
+        """
+        for route in routes:
+            router = getattr(route, "original_router", None)
+            context = getattr(route, "include_context", None)
+            if router is not None and context is not None:
+                yield from TrailingSlashNormalizeMiddleware._static_route_paths(
+                    router.routes,
+                    prefix + context.prefix,
+                    include_in_schema and context.include_in_schema,
+                )
+            elif isinstance(route, APIRoute) and include_in_schema and route.include_in_schema:
+                path = prefix + route.path
+                if "{" not in path:
+                    yield path
+
     def _ensure_route_caches(self, scope_app: Any) -> None:
         if self._slash_paths is not None and self._built_epoch == _ROUTE_EPOCH:
             return
@@ -1185,23 +1283,14 @@ class TrailingSlashNormalizeMiddleware(BaseHTTPMiddleware):
         slash: set[str] = set()
         no_slash: set[str] = set()
         try:
-            # Build the static-path caches from the OpenAPI schema — fastapi's
-            # canonical, full-path route inventory. We can't walk ``app.routes``
-            # for this anymore: fastapi 0.137+ wraps each ``include_router`` in an
-            # opaque ``_IncludedRouter`` whose ``.routes`` is empty and ``.path``
-            # is None, so a tree-walk surfaces zero API paths (it would silently
-            # disable this trailing-slash normalizer for every API endpoint). The
-            # schema stays correct across versions. Only static (param-less) paths
-            # matter here — dynamic routes are matched by Starlette's regex anyway.
-            # Generated once per process, then cached on the instance.
+            # Generating the complete OpenAPI document here synchronously blocks
+            # the first request on every new worker, even a liveness check. Path
+            # normalization needs only route metadata, not Pydantic schemas.
             if self._built_epoch != -1:
-                # Rebuild: fastapi memoises the schema on app.openapi_schema, so
-                # without dropping it the "fresh" read returns the same paths we
-                # already have and the rebuild achieves nothing.
+                # Dynamic registration must still invalidate the documentation
+                # cache; the docs endpoint rebuilds it when explicitly requested.
                 scope_app.openapi_schema = None
-            for path in scope_app.openapi().get("paths", {}) or {}:
-                if not isinstance(path, str) or "{" in path:
-                    continue
+            for path in self._static_route_paths(scope_app.routes):
                 if path.endswith("/") and len(path) > 1:
                     slash.add(path)
                 else:
@@ -1250,7 +1339,12 @@ class TrailingSlashNormalizeMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def setup_middleware(app: FastAPI, enable_rate_limiting: bool = True) -> None:
+def setup_middleware(
+    app: FastAPI,
+    enable_rate_limiting: bool = True,
+    *,
+    auth_path_prefix: str | None = None,
+) -> None:
     """Add all middleware to the FastAPI app."""
 
     # Order matters - first added = outermost = runs first/last
@@ -1287,6 +1381,7 @@ def setup_middleware(app: FastAPI, enable_rate_limiting: bool = True) -> None:
             RateLimitMiddleware,
             requests_per_minute=settings.RATE_LIMIT_RPM,
             burst_limit=settings.RATE_LIMIT_BURST,
+            auth_path_prefix=auth_path_prefix,
         )
 
     # Setup exception handlers

@@ -15,6 +15,7 @@
 
 import { Fragment, useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import { backupGuestType, newHypervisorRequestId, reviewedDiskBytes, reviewedGuestDigest } from '@/lib/api/hypervisor';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -33,12 +34,10 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
-  MemoryStick,
   Network,
   ChevronDown,
   ChevronRight,
   ListTodo,
-  Shield,
   Copy,
   ArrowRightLeft,
   Expand,
@@ -52,12 +51,9 @@ import {
   Undo2,
   PowerOff,
   Plus,
-  Globe,
   Loader2,
-  AlertTriangle,
   Upload,
   Thermometer,
-  BarChart3,
   LayoutDashboard,
   Clock,
   Maximize2,
@@ -66,10 +62,9 @@ import {
 } from 'lucide-react';
 
 import { PendingChangesBadge } from '@/components/gateways/PendingChangesBadge';
+import { FirewallPanel } from './components/FirewallPanel';
 import { PendingChangesDrawer } from '@/components/gateways/PendingChangesDrawer';
 import { PageHeader, PageTabs } from '@/components/layout';
-import { StatsGrid } from '@/components/ui/stats-grid';
-import { StatusBadge } from '@/components/ui/status-indicator';
 import { MetricBar } from '@/components/ui/metric-bar';
 import { EmptyState, ErrorState } from '@/components/ui/empty-state';
 import { PageSkeleton } from '@/components/ui/page-skeleton';
@@ -102,6 +97,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { DestructiveConfirmDialog } from '@/components/ui/destructive-confirm-dialog';
+import { ClusterOperationDialog } from './components/dialogs/ClusterOperationDialog';
+import type { ClusterOperationSpec } from '@/lib/api/hypervisor';
+import { CreateGuestDialog } from './components/dialogs/CreateGuestDialog';
+import { DeleteGuestDialog } from './components/dialogs/DeleteGuestDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -114,6 +113,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useSiteStore } from '@/stores/siteStore';
+import { useUIStore } from '@/stores';
 import { controllersApi, hypervisorApi } from '@/lib/api';
 // Tab components are lazy-loaded so the 182KB Hypervisor monolith
 // doesn't pull all 14 tabs into the initial bundle. Each tab fetches
@@ -134,6 +134,7 @@ const MonitoringTab = lazy(() =>
   import('./components/MonitoringTab').then((m) => ({ default: m.MonitoringTab }))
 );
 import { KioskMode } from './components/KioskMode';
+import { DashboardTab, FleetTab } from './components/DashboardPanels';
 const BackupAgeTab = lazy(() =>
   import('./components/BackupAgeTab').then((m) => ({ default: m.BackupAgeTab }))
 );
@@ -168,7 +169,9 @@ import { GuestDetailDrawer } from './components/GuestDetailDrawer';
 import { StackedResourceBar } from './components/StackedResourceBar';
 import { EditConfigDialog } from './components/dialogs/EditConfigDialog';
 import { BulkActionBar } from './components/dialogs/BulkActionBar';
+import { TaskStopDialog } from './components/dialogs/TaskStopDialog';
 import { BackupJobDialog } from './components/dialogs/BackupJobDialog';
+import { StorageOperationDialog } from './components/dialogs/StorageOperationDialog';
 import { UploadDialog } from './components/dialogs/UploadDialog';
 import { AddHypervisorDialog } from './components/dialogs/AddHypervisorDialog';
 import { formatBytes, formatUptime, formatTimestamp } from './components/helpers';
@@ -182,213 +185,16 @@ import type {
   HypervisorStorage,
   HypervisorTask,
   HypervisorBackupJob,
-  HypervisorFirewallRule,
   HypervisorSnapshot,
   HypervisorHAResource,
   HypervisorHAGroup,
   HypervisorResourcePool,
   FleetDashboard,
-  FleetClusterSummary,
 } from '@/lib/api';
 
 // ============================================================================
 // EXTRACTED TAB COMPONENTS
 // ============================================================================
-
-interface FleetTabProps {
-  fleetLoading: boolean;
-  fleetError: boolean;
-  fleet: FleetDashboard | undefined;
-  refetchFleet: () => void;
-  taskStats?: { ok?: number; running?: number; warning?: number; error?: number };
-}
-
-const FleetTab = ({ fleetLoading, fleetError, fleet, refetchFleet, taskStats }: FleetTabProps) => {
-  const { t } = useTranslation('hypervisor');
-  if (fleetLoading) {
-    return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-24" />
-        ))}
-      </div>
-    );
-  }
-
-  if (fleetError || !fleet) {
-    return <ErrorState message={t('HypervisorPage.fleet.loadError')} onRetry={() => refetchFleet()} />;
-  }
-
-  if (fleet.total_clusters === 0) {
-    return <EmptyState icon={Globe} title={t('HypervisorPage.fleet.emptyTitle')} description={t('HypervisorPage.fleet.emptyDescription')} />;
-  }
-
-  const fleetStats = [
-    { title: t('HypervisorPage.stats.clusters'), value: `${fleet.online_clusters} / ${fleet.total_clusters}`, icon: Globe, variant: fleet.online_clusters === fleet.total_clusters ? 'success' as const : 'warning' as const },
-    { title: t('HypervisorPage.stats.nodes'), value: `${fleet.online_nodes} / ${fleet.total_nodes}`, icon: Server, variant: 'primary' as const },
-    { title: t('HypervisorPage.stats.vms'), value: `${fleet.running_vms} / ${fleet.total_vms}`, icon: Monitor, variant: 'info' as const },
-    { title: t('HypervisorPage.stats.containers'), value: `${fleet.running_containers} / ${fleet.total_containers}`, icon: Box, variant: 'info' as const },
-    { title: t('HypervisorPage.stats.cpu'), value: `${fleet.cpu_usage_percent}%`, icon: Cpu, variant: fleet.cpu_usage_percent > 80 ? 'destructive' as const : 'default' as const, description: t('HypervisorPage.stats.coresCount', { count: fleet.total_cpu_cores }) },
-    { title: t('HypervisorPage.stats.memory'), value: `${fleet.memory_usage_percent}%`, icon: MemoryStick, variant: fleet.memory_usage_percent > 80 ? 'warning' as const : 'default' as const, description: formatBytes(fleet.total_memory_bytes) },
-    { title: t('HypervisorPage.stats.storage'), value: `${fleet.storage_usage_percent}%`, icon: HardDrive, variant: fleet.storage_usage_percent > 85 ? 'destructive' as const : 'default' as const, description: formatBytes(fleet.total_storage_bytes) },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <StatsGrid stats={fleetStats} columns={4} />
-
-      {/* Task Statistics Card */}
-      {taskStats && (taskStats.ok || taskStats.running || taskStats.warning || taskStats.error) ? (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-muted-foreground" />
-              {t('HypervisorPage.fleet.taskStatistics')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div>
-                <p className="text-2xl font-bold text-success">{taskStats.ok || 0}</p>
-                <p className="text-xs text-muted-foreground">{t('HypervisorPage.taskStatus.completed')}</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-info">{taskStats.running || 0}</p>
-                <p className="text-xs text-muted-foreground">{t('HypervisorPage.taskStatus.running')}</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-warning">{taskStats.warning || 0}</p>
-                <p className="text-xs text-muted-foreground">{t('HypervisorPage.taskStatus.warning')}</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-destructive">{taskStats.error || 0}</p>
-                <p className="text-xs text-muted-foreground">{t('HypervisorPage.taskStatus.error')}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <div className="grid gap-4">
-        {fleet.clusters.map((cluster: FleetClusterSummary) => (
-          <Card key={cluster.controller_id}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {cluster.status === 'online' ? (
-                    <CheckCircle className="h-5 w-5 text-success" />
-                  ) : (
-                    <AlertTriangle className="h-5 w-5 text-destructive" />
-                  )}
-                  <div>
-                    <CardTitle className="text-base">{cluster.controller_name}</CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      {cluster.cluster_name || 'pve'} · {t('HypervisorPage.fleet.nodeCount', { count: cluster.total_nodes })}
-                      {cluster.quorate ? '' : t('HypervisorPage.fleet.noQuorumSuffix')}
-                    </p>
-                  </div>
-                </div>
-                <StatusBadge variant={cluster.status === 'online' ? 'online' : 'offline'} size="sm">
-                  {cluster.status}
-                </StatusBadge>
-              </div>
-            </CardHeader>
-            {cluster.status === 'online' ? (
-              <CardContent>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground">{t('HypervisorPage.stats.nodes')}</p>
-                    <p className="text-sm font-medium">{cluster.online_nodes}/{cluster.total_nodes}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">{t('HypervisorPage.fleet.vmsCts')}</p>
-                    <p className="text-sm font-medium">{cluster.running_vms}/{cluster.total_vms} VMs, {cluster.running_containers}/{cluster.total_containers} CTs</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">{t('HypervisorPage.stats.cpu')}</p>
-                    <div className="flex items-center gap-2">
-                      <Progress value={cluster.cpu_usage_percent} className="h-1.5 flex-1" />
-                      <span className="text-xs font-medium">{cluster.cpu_usage_percent}%</span>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">{t('HypervisorPage.stats.memory')}</p>
-                    <div className="flex items-center gap-2">
-                      <Progress value={cluster.memory_usage_percent} className="h-1.5 flex-1" />
-                      <span className="text-xs font-medium">{cluster.memory_usage_percent}%</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            ) : cluster.error ? (
-              <CardContent noOffset>
-                <p className="text-xs text-destructive">{cluster.error}</p>
-              </CardContent>
-            ) : null}
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-interface DashboardTabProps {
-  dashLoading: boolean;
-  dashError: boolean;
-  dash: HypervisorDashboard | undefined;
-  refetchDash: () => void;
-}
-
-const DashboardTab = ({ dashLoading, dashError, dash, refetchDash }: DashboardTabProps) => {
-  const { t } = useTranslation('hypervisor');
-  if (dashLoading) {
-    return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-24" />
-        ))}
-      </div>
-    );
-  }
-
-  if (dashError || !dash) {
-    return <ErrorState message={t('HypervisorPage.dashboard.loadError')} onRetry={() => refetchDash()} />;
-  }
-
-  const stats = [
-    { title: t('HypervisorPage.stats.nodes'), value: `${dash.online_nodes} / ${dash.total_nodes}`, icon: Server, variant: dash.online_nodes === dash.total_nodes ? 'success' as const : 'warning' as const },
-    { title: t('HypervisorPage.stats.vms'), value: `${dash.running_vms} / ${dash.total_vms}`, icon: Monitor, variant: 'primary' as const },
-    { title: t('HypervisorPage.stats.containers'), value: `${dash.running_containers} / ${dash.total_containers}`, icon: Box, variant: 'info' as const },
-    { title: t('HypervisorPage.stats.cpu'), value: `${dash.cpu_usage_percent}%`, icon: Cpu, variant: dash.cpu_usage_percent > 80 ? 'destructive' as const : 'default' as const, description: t('HypervisorPage.stats.coresCount', { count: dash.total_cpu_cores }) },
-    { title: t('HypervisorPage.stats.memory'), value: `${dash.memory_usage_percent}%`, icon: MemoryStick, variant: dash.memory_usage_percent > 80 ? 'warning' as const : 'default' as const, description: formatBytes(dash.total_memory_bytes) },
-    { title: t('HypervisorPage.stats.storage'), value: `${dash.storage_usage_percent}%`, icon: HardDrive, variant: dash.storage_usage_percent > 85 ? 'destructive' as const : 'default' as const, description: formatBytes(dash.total_storage_bytes) },
-    { title: t('HypervisorPage.stats.cluster'), value: dash.cluster_name || 'pve', icon: Network, variant: dash.quorate ? 'success' as const : 'destructive' as const, description: dash.quorate ? t('HypervisorPage.stats.quorate') : t('HypervisorPage.stats.noQuorum') },
-    { title: t('HypervisorPage.stats.ha'), value: dash.ha_active ? t('HypervisorPage.stats.active') : t('HypervisorPage.stats.inactive'), icon: Activity, variant: dash.ha_active ? 'success' as const : 'default' as const },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <StatsGrid stats={stats} columns={4} />
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { label: t('HypervisorPage.dashboard.cpuUsage'), value: dash.cpu_usage_percent },
-          { label: t('HypervisorPage.dashboard.memoryUsage'), value: dash.memory_usage_percent },
-          { label: t('HypervisorPage.dashboard.storageUsage'), value: dash.storage_usage_percent },
-        ].map((bar) => (
-          <Card key={bar.label}>
-            <CardContent noOffset>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">{bar.label}</span>
-                <span className="text-sm font-bold">{bar.value.toFixed(1)}%</span>
-              </div>
-              <MetricBar value={bar.value} variant="thick" hideValue />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-};
 
 interface NodesTabProps {
   nodesLoading: boolean;
@@ -416,16 +222,6 @@ interface NodesTabProps {
   nodeShutdownMutation: { mutate: (node: string) => void };
   /** All VMs + containers for stacked resource bars */
   allGuests: HypervisorVM[];
-  /** Page-wide destructive-confirm helper. Threaded from
-   *  HypervisorPage so node reboot/shutdown use the typed-confirm
-   *  dialog instead of bare ``window.confirm()``. */
-  requestConfirm: (args: {
-    title: string;
-    description: string;
-    confirmationText: string;
-    confirmLabel: string;
-    onConfirm: () => void;
-  }) => void;
 }
 
 const NodesTab = ({
@@ -434,7 +230,7 @@ const NodesTab = ({
   nodeServicesLoading, nodeServices, nodeDisksLoading, nodeDisks,
   nodeNetworkLoading, nodeNetworkIfaces, nodeVMsLoading, nodeCTsLoading, nodeVMs, nodeContainers,
   nodeSensorsLoading, nodeSensors,
-  nodeRebootMutation, nodeShutdownMutation, allGuests, requestConfirm,
+  nodeRebootMutation, nodeShutdownMutation, allGuests,
   controllerId,
 }: NodesTabProps) => {
   const { t } = useTranslation('hypervisor');
@@ -509,25 +305,13 @@ const NodesTab = ({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
-                        onClick={() => requestConfirm({
-                          title: t('HypervisorPage.nodes.rebootConfirm.title', { node: node.node }),
-                          description: t('HypervisorPage.nodes.rebootConfirm.description', { node: node.node }),
-                          confirmationText: node.node,
-                          confirmLabel: t('HypervisorPage.nodes.rebootConfirm.confirmLabel'),
-                          onConfirm: () => nodeRebootMutation.mutate(node.node),
-                        })}
+                        onClick={() => nodeRebootMutation.mutate(node.node)}
                         disabled={node.status !== 'online'}
                       >
                         <RotateCcw className="mr-2 h-3.5 w-3.5 text-info" /> {t('HypervisorPage.nodes.reboot')}
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => requestConfirm({
-                          title: t('HypervisorPage.nodes.shutdownConfirm.title', { node: node.node }),
-                          description: t('HypervisorPage.nodes.shutdownConfirm.description', { node: node.node }),
-                          confirmationText: node.node,
-                          confirmLabel: t('HypervisorPage.nodes.shutdownConfirm.confirmLabel'),
-                          onConfirm: () => nodeShutdownMutation.mutate(node.node),
-                        })}
+                        onClick={() => nodeShutdownMutation.mutate(node.node)}
                         disabled={node.status !== 'online'}
                         className="text-destructive"
                       >
@@ -1004,9 +788,6 @@ interface VMTableProps {
   onEditConfig: (vm: HypervisorVM) => void;
   onConsole: (vm: HypervisorVM) => void;
   onRowClick?: (vm: HypervisorVM) => void;
-  /** Page-wide destructive-confirm helper.
-   *  Replaces bare ``window.confirm()`` for shutdown / reboot /
-   *  suspend / force-stop. Threaded from HypervisorPage. */
   requestConfirm: (args: {
     title: string;
     description: string;
@@ -1024,12 +805,6 @@ const VMTable = ({
   onRowClick, requestConfirm,
 }: VMTableProps) => {
   const { t } = useTranslation('hypervisor');
-  // Row-scoped target for the typed-confirm delete dialog. A bare
-  // confirm() is bypassed by one click / accidental Enter; the
-  // dialog requires the operator to re-type
-  // the VM name before the destructive button enables.
-  const [deleteTarget, setDeleteTarget] = useState<typeof items[number] | null>(null);
-
   if (loading) return <Skeleton className="h-64" />;
   if (error) return <ErrorState message={t('HypervisorPage.vmTable.loadError', { label })} onRetry={refetch} />;
   if (items.length === 0) return <EmptyState icon={Monitor} title={t('HypervisorPage.vmTable.emptyTitle', { label })} />;
@@ -1217,7 +992,7 @@ const VMTable = ({
                   <DropdownMenuItem
                     className="text-destructive"
                     disabled={vm.status === 'running'}
-                    onClick={() => setDeleteTarget(vm)}
+                    onClick={() => onDeleteVM({ node: vm.node, vmType: vm.vm_type, vmid: vm.vmid })}
                   >
                     <Trash2 className="mr-2 h-3.5 w-3.5" /> {t('HypervisorPage.vmActions.delete')}
                   </DropdownMenuItem>
@@ -1228,33 +1003,12 @@ const VMTable = ({
         ))}
       </TableBody>
     </Table>
-    <DestructiveConfirmDialog
-      open={deleteTarget !== null}
-      onOpenChange={(o) => !o && setDeleteTarget(null)}
-      title={t('HypervisorPage.vmTable.deleteConfirm.title', { kind: deleteTarget?.vm_type === 'lxc' ? 'CT' : 'VM', vmid: deleteTarget?.vmid ?? '' })}
-      description={t('HypervisorPage.vmTable.deleteConfirm.description', {
-        kind: deleteTarget?.vm_type === 'lxc' ? t('HypervisorPage.common.containerLower') : 'VM',
-        vmid: deleteTarget?.vmid,
-        name: deleteTarget?.name,
-        node: deleteTarget?.node,
-      })}
-      confirmationText={deleteTarget?.name ?? ''}
-      confirmLabel={t('HypervisorPage.vmTable.deleteConfirm.confirmLabel', { kind: deleteTarget?.vm_type === 'lxc' ? 'CT' : 'VM' })}
-      onConfirm={() => {
-        if (!deleteTarget) return;
-        onDeleteVM({
-          node: deleteTarget.node,
-          vmType: deleteTarget.vm_type,
-          vmid: deleteTarget.vmid,
-        });
-        setDeleteTarget(null);
-      }}
-    />
     </div>
   );
 };
 
 interface StorageTabProps {
+  onTracked: () => void;
   nodes: HypervisorNode[];
   activeStorageNode: string;
   setStorageNode: (node: string) => void;
@@ -1279,9 +1033,11 @@ const buildContentTypes = (t: (key: string) => string) => [
 const StorageTab = ({
   nodes, activeStorageNode, setStorageNode,
   storageLoading, storageError, storagePools, refetchStorage, setUploadDialog,
-  controllerId, setRestoreDialog,
+  controllerId, setRestoreDialog, onTracked,
 }: StorageTabProps) => {
   const { t } = useTranslation('hypervisor');
+  const [deletion, setDeletion] = useState<{ node: string; storage: string; volume: string } | null>(null);
+  const readOnly = useUIStore((s) => s.readOnlyMode);
   const CONTENT_TYPES = useMemo(() => buildContentTypes(t), [t]);
   const [expandedStorage, setExpandedStorage] = useState<string | null>(null);
   const [contentFilter, setContentFilter] = useState('');
@@ -1305,6 +1061,8 @@ const StorageTab = ({
 
   return (
     <div className="space-y-4">
+      {deletion && <StorageOperationDialog controllerId={controllerId} node={deletion.node} storage={deletion.storage} volume={deletion.volume} action="delete" onClose={() => setDeletion(null)} onTracked={() => { setDeletion(null); onTracked(); }} />}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {nodes.length > 1 && (
@@ -1452,13 +1210,14 @@ const StorageTab = ({
                                         onClick={() => setRestoreDialog({
                                           archive: item.volid || item.name,
                                           node: activeStorageNode,
-                                          vmType: String(item.volid || '').includes('lxc') ? 'lxc' : 'qemu',
+                                          vmType: backupGuestType(String(item.volid || item.name || ''), item.format),
                                           storage: pool.storage,
                                         })}
                                       >
                                         <Undo2 className="h-3 w-3 mr-0.5" /> {t('HypervisorPage.storage.restore')}
                                       </Button>
                                     )}
+                                    {typeof item.volid === 'string' && /:(iso|vztmpl|backup)\//.test(item.volid) && <Button variant="destructive" size="sm" disabled={readOnly} onClick={() => setDeletion({ node: pool.node, storage: pool.storage, volume: item.volid })}>{t('StorageOperationDialog.delete')}</Button>}
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -1489,16 +1248,12 @@ interface TasksTabProps {
   refetchTasks: () => void;
   setTaskLogDialog: (value: { node: string; upid: string } | null) => void;
   onStopTask: (params: { node: string; upid: string }) => void;
-  requestConfirm: (args: {
-    title: string; description: string; confirmationText: string;
-    confirmLabel: string; onConfirm: () => void;
-  }) => void;
 }
 
 const TasksTab = ({
   nodes, activeTasksNode, setTasksNode,
   tasksLoading, tasksError, tasks, refetchTasks,
-  setTaskLogDialog, onStopTask, requestConfirm,
+  setTaskLogDialog, onStopTask,
 }: TasksTabProps) => {
   const { t } = useTranslation('hypervisor');
   return (
@@ -1574,13 +1329,7 @@ const TasksTab = ({
                         variant="ghost"
                         size="sm"
                         className="h-7 px-2 text-destructive"
-                        onClick={() => requestConfirm({
-                          title: t('HypervisorPage.tasks.stopConfirm.title'),
-                          description: t('HypervisorPage.tasks.stopConfirm.description', { type: task.type || t('HypervisorPage.tasks.taskWord'), upid: task.upid?.slice(0, 60) }),
-                          confirmationText: 'stop',
-                          confirmLabel: t('HypervisorPage.tasks.stopConfirm.confirmLabel'),
-                          onConfirm: () => onStopTask({ node: task.node, upid: task.upid }),
-                        })}
+                        onClick={() => onStopTask({ node: task.node, upid: task.upid })}
                       >
                         <StopCircle className="h-3.5 w-3.5" />
                       </Button>
@@ -1604,16 +1353,12 @@ interface BackupTabProps {
   refetchBackup: () => void;
   setEditBackupJob: (job: HypervisorBackupJob | null) => void;
   setBackupJobDialog: (open: boolean) => void;
-  deleteBackupJobMutation: { mutate: (jobId: string) => void; isPending: boolean };
-  requestConfirm: (args: {
-    title: string; description: string; confirmationText: string;
-    confirmLabel: string; onConfirm: () => void;
-  }) => void;
+  setDeleteBackupJob: (job: HypervisorBackupJob | null) => void;
 }
 
 const BackupTab = ({
   backupLoading, backupError, backupJobs, refetchBackup,
-  setEditBackupJob, setBackupJobDialog, deleteBackupJobMutation, requestConfirm,
+  setEditBackupJob, setBackupJobDialog, setDeleteBackupJob,
 }: BackupTabProps) => {
   const { t } = useTranslation('hypervisor');
   return (
@@ -1649,11 +1394,11 @@ const BackupTab = ({
                 <TableCell className="font-mono text-xs">{job.id}</TableCell>
                 <TableCell className="text-sm">{job.schedule}</TableCell>
                 <TableCell className="text-sm">{job.storage}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{job.vmid || t('HypervisorPage.common.all')}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{job.vmid || t('ReviewedBackupJob.nativeSelection')}</TableCell>
                 <TableCell>
-                  <Badge variant="outline" className="text-[10px]">{job.mode}</Badge>
+                  <Badge variant="outline" className="text-[10px]">{job.mode || t('ReviewedBackupJob.inherited')}</Badge>
                 </TableCell>
-                <TableCell className="text-xs">{job.compress}</TableCell>
+                <TableCell className="text-xs">{job.compress || t('ReviewedBackupJob.inherited')}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{job.node || t('HypervisorPage.common.all')}</TableCell>
                 <TableCell>
                   <Badge variant={job.enabled ? 'default' : 'secondary'}>
@@ -1672,145 +1417,11 @@ const BackupTab = ({
                     <Button
                       variant="ghost" size="sm" className="h-7 px-2 text-destructive"
                       title={t('HypervisorPage.actions.delete')}
-                      onClick={() => requestConfirm({
-                        title: t('HypervisorPage.backup.deleteConfirm.title'),
-                        description: t('HypervisorPage.backup.deleteConfirm.description', { id: job.id }),
-                        confirmationText: job.id,
-                        confirmLabel: t('HypervisorPage.backup.deleteConfirm.confirmLabel'),
-                        onConfirm: () => deleteBackupJobMutation.mutate(job.id),
-                      })}
+                      onClick={() => setDeleteBackupJob(job)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        </div>
-      )}
-    </div>
-  );
-};
-
-interface FirewallTabProps {
-  fwLoading: boolean;
-  fwError: boolean;
-  firewallRules: HypervisorFirewallRule[];
-  refetchFW: () => void;
-  nodes: HypervisorNode[];
-  setFwCreateDialog: (value: { node: string } | null) => void;
-  setFwAction: (value: string) => void;
-  setFwType: (value: string) => void;
-  setFwSource: (value: string) => void;
-  setFwDest: (value: string) => void;
-  setFwDport: (value: string) => void;
-  setFwProto: (value: string) => void;
-  setFwComment: (value: string) => void;
-  deleteFwRuleMutation: { mutate: (params: { node: string; pos: number }) => void; isPending: boolean };
-  requestConfirm: (args: {
-    title: string; description: string; confirmationText: string;
-    confirmLabel: string; onConfirm: () => void;
-  }) => void;
-}
-
-const FirewallTab = ({
-  fwLoading, fwError, firewallRules, refetchFW, nodes,
-  setFwCreateDialog, setFwAction, setFwType, setFwSource, setFwDest, setFwDport, setFwProto, setFwComment,
-  deleteFwRuleMutation, requestConfirm,
-}: FirewallTabProps) => {
-  const { t } = useTranslation('hypervisor');
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">{t('HypervisorPage.firewall.heading')}</h3>
-        {nodes.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setFwCreateDialog({ node: nodes[0].node });
-              setFwAction('ACCEPT');
-              setFwType('in');
-              setFwSource('');
-              setFwDest('');
-              setFwDport('');
-              setFwProto('tcp');
-              setFwComment('');
-            }}
-          >
-            <Shield className="h-3.5 w-3.5 mr-1" /> {t('HypervisorPage.firewall.addRule')}
-          </Button>
-        )}
-      </div>
-
-      {fwLoading ? <Skeleton className="h-64" /> :
-       fwError ? <ErrorState message={t('HypervisorPage.firewall.loadError')} onRetry={() => refetchFW()} /> :
-       firewallRules.length === 0 ? <EmptyState icon={Shield} title={t('HypervisorPage.firewall.emptyTitle')} description={t('HypervisorPage.firewall.emptyDescription')} /> : (
-        <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>#</TableHead>
-              <TableHead>{t('HypervisorPage.tableHeaders.type')}</TableHead>
-              <TableHead>{t('HypervisorPage.firewall.action')}</TableHead>
-              <TableHead>{t('HypervisorPage.firewall.protocol')}</TableHead>
-              <TableHead>{t('HypervisorPage.firewall.source')}</TableHead>
-              <TableHead>{t('HypervisorPage.firewall.dest')}</TableHead>
-              <TableHead>{t('HypervisorPage.firewall.dport')}</TableHead>
-              <TableHead>{t('HypervisorPage.backup.enabled')}</TableHead>
-              <TableHead>{t('HypervisorPage.firewall.comment')}</TableHead>
-              <TableHead className="w-[60px]" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {firewallRules.map((rule) => (
-              <TableRow key={rule.pos}>
-                <TableCell className="font-mono text-xs">{rule.pos}</TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="text-[10px]">{rule.type}</Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={rule.action === 'ACCEPT' ? 'default' : rule.action === 'DROP' ? 'destructive' : 'secondary'}
-                  >
-                    {rule.action}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-xs">{rule.proto || '-'}</TableCell>
-                <TableCell className="text-xs font-mono">{rule.source || '-'}</TableCell>
-                <TableCell className="text-xs font-mono">{rule.dest || '-'}</TableCell>
-                <TableCell className="text-xs font-mono">{rule.dport || '-'}</TableCell>
-                <TableCell>
-                  <Badge variant={rule.enable ? 'default' : 'secondary'} className="text-[10px]">
-                    {rule.enable ? t('HypervisorPage.common.yes') : t('HypervisorPage.common.no')}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                  {rule.comment || '-'}
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-destructive"
-                    disabled={deleteFwRuleMutation.isPending}
-                    onClick={() => {
-                      if (nodes.length === 0) return;
-                      const pos = rule.pos;
-                      const action = rule.action || t('HypervisorPage.firewall.ruleWord');
-                      requestConfirm({
-                        title: t('HypervisorPage.firewall.deleteConfirm.title', { pos }),
-                        description: t('HypervisorPage.firewall.deleteConfirm.description', { pos, action, type: rule.type || t('HypervisorPage.common.unknownLower') }),
-                        confirmationText: String(pos),
-                        confirmLabel: t('HypervisorPage.firewall.deleteConfirm.confirmLabel'),
-                        onConfirm: () => deleteFwRuleMutation.mutate({ node: nodes[0].node, pos }),
-                      });
-                    }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -1839,17 +1450,13 @@ interface HATabProps {
   setHaGrpRestricted: (value: boolean) => void;
   deleteHAResourceMutation: { mutate: (sid: string) => void; isPending: boolean };
   deleteHAGroupMutation: { mutate: (group: string) => void; isPending: boolean };
-  requestConfirm: (args: {
-    title: string; description: string; confirmationText: string;
-    confirmLabel: string; onConfirm: () => void;
-  }) => void;
 }
 
 const HATab = ({
   haResLoading, haResError, haResources, refetchHARes, haGroups,
   setHaResDialog, setHaResSid, setHaResGroup,
   setHaGrpDialog, setHaGrpName, setHaGrpNodes, setHaGrpComment, setHaGrpNofailback, setHaGrpRestricted,
-  deleteHAResourceMutation, deleteHAGroupMutation, requestConfirm,
+  deleteHAResourceMutation, deleteHAGroupMutation,
 }: HATabProps) => {
   const { t } = useTranslation('hypervisor');
   if (haResLoading) return <Skeleton className="h-64" />;
@@ -1900,13 +1507,7 @@ const HATab = ({
                       variant="ghost"
                       size="sm"
                       className="h-7 w-7 p-0 text-destructive"
-                      onClick={() => requestConfirm({
-                        title: t('HypervisorPage.ha.removeResourceConfirm.title'),
-                        description: t('HypervisorPage.ha.removeResourceConfirm.description', { sid: res.sid }),
-                        confirmationText: res.sid,
-                        confirmLabel: t('HypervisorPage.ha.removeResourceConfirm.confirmLabel'),
-                        onConfirm: () => deleteHAResourceMutation.mutate(res.sid),
-                      })}
+                      onClick={() => deleteHAResourceMutation.mutate(res.sid)}
                       disabled={deleteHAResourceMutation.isPending}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -1955,13 +1556,7 @@ const HATab = ({
                       variant="ghost"
                       size="sm"
                       className="h-7 w-7 p-0 text-destructive"
-                      onClick={() => requestConfirm({
-                        title: t('HypervisorPage.ha.deleteGroupConfirm.title', { group: grp.group }),
-                        description: t('HypervisorPage.ha.deleteGroupConfirm.description', { group: grp.group }),
-                        confirmationText: grp.group,
-                        confirmLabel: t('HypervisorPage.ha.deleteGroupConfirm.confirmLabel'),
-                        onConfirm: () => deleteHAGroupMutation.mutate(grp.group),
-                      })}
+                      onClick={() => deleteHAGroupMutation.mutate(grp.group)}
                       disabled={deleteHAGroupMutation.isPending}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -2182,18 +1777,6 @@ export function HypervisorPage() {
   });
   const backupJobs: HypervisorBackupJob[] = backupResp?.data || [];
 
-  // ── Firewall Rules (cluster-level) ────────────────────────────────────
-  const {
-    data: fwResp,
-    isLoading: fwLoading,
-    isError: fwError,
-    refetch: refetchFW,
-  } = useQuery({
-    queryKey: ['hypervisor', 'firewall', controllerId],
-    queryFn: () => hypervisorApi.getClusterFirewallRules(controllerId),
-    enabled: !!controllerId && activeTab === 'firewall',
-  });
-  const firewallRules: HypervisorFirewallRule[] = fwResp?.data || [];
 
   // ── HA Resources ──────────────────────────────────────────────────────
   const {
@@ -2245,98 +1828,11 @@ export function HypervisorPage() {
 
   // ── Create VM/CT dialog state ──────────────────────────────────────────
   const [createDialog, setCreateDialog] = useState<'vm' | 'ct' | null>(null);
-  const [createName, setCreateName] = useState('');
-  const [createNode, setCreateNode] = useState('');
-  const [createCores, setCreateCores] = useState(2);
-  const [createMemory, setCreateMemory] = useState(2048);
-  const [createDiskSize, setCreateDiskSize] = useState('32G');
-  const [createStorage, setCreateStorage] = useState('local-lvm');
-  const [createOsTemplate, setCreateOsTemplate] = useState('');
-  const [createIso, setCreateIso] = useState('');
-  const [createStartAfter, setCreateStartAfter] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ node: string; vmType: string; vmid: number } | null>(null);
 
-  const createVMMutation = useMutation({
-    mutationFn: () =>
-      hypervisorApi.createVM(controllerId, {
-        name: createName,
-        node: createNode || nodes[0]?.node || '',
-        cores: createCores,
-        memory: createMemory,
-        disk_size: createDiskSize,
-        storage: createStorage,
-        iso: createIso || undefined,
-        start_after_create: createStartAfter,
-      }),
-    onSuccess: (resp) => {
-      toast({ title: t('HypervisorPage.toast.vmCreationStarted'), description: `VMID: ${resp.data?.vmid}` });
-      setCreateDialog(null);
-      setCreateName('');
-      queryClient.invalidateQueries({ queryKey: ['hypervisor'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.vmCreationFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
-
-  const createCTMutation = useMutation({
-    mutationFn: () =>
-      hypervisorApi.createContainer(controllerId, {
-        hostname: createName,
-        node: createNode || nodes[0]?.node || '',
-        ostemplate: createOsTemplate,
-        cores: createCores,
-        memory: createMemory,
-        rootfs_size: createDiskSize.replace(/G$/i, ''),
-        storage: createStorage,
-        start_after_create: createStartAfter,
-      }),
-    onSuccess: (resp) => {
-      toast({ title: t('HypervisorPage.toast.containerCreationStarted'), description: `VMID: ${resp.data?.vmid}` });
-      setCreateDialog(null);
-      setCreateName('');
-      queryClient.invalidateQueries({ queryKey: ['hypervisor'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.containerCreationFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
-
-  // ── Delete VM/CT mutation ──────────────────────────────────────────────
-  const deleteVMMutation = useMutation({
-    mutationFn: (params: { node: string; vmType: string; vmid: number }) =>
-      hypervisorApi.deleteVM(controllerId, params.node, params.vmType, params.vmid),
-    onSuccess: (_d, p) => {
-      toast({ title: t('HypervisorPage.toast.deletionStarted'), description: `${p.vmType === 'lxc' ? 'CT' : 'VM'} ${p.vmid}` });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.deleteFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
-
-  // ── HA create/delete mutations ─────────────────────────────────────────
-  const createHAResourceMutation = useMutation({
-    mutationFn: (params: { sid: string; group?: string }) =>
-      hypervisorApi.createHAResource(controllerId, params),
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.haResourceCreated') });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'ha'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.haResourceCreationFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
-
-  const deleteHAResourceMutation = useMutation({
-    mutationFn: (sid: string) => hypervisorApi.deleteHAResource(controllerId, sid),
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.haResourceRemoved') });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'ha'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.haResourceRemoveFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
+  const [clusterOperation, setClusterOperation] = useState<ClusterOperationSpec | null>(null);
+  const deleteHAResourceMutation = { isPending: false, mutate: (sid: string) => setClusterOperation({ action: 'ha.resource.delete', target: sid }) };
+  const deleteHAGroupMutation = { isPending: false, mutate: (group: string) => setClusterOperation({ action: 'ha.group.delete', target: group }) };
 
   // ── HA group create/delete mutations ──────────────────────────────────
   const [haResDialog, setHaResDialog] = useState(false);
@@ -2350,170 +1846,162 @@ export function HypervisorPage() {
   const [haGrpRestricted, setHaGrpRestricted] = useState(false);
   const [haGrpComment, setHaGrpComment] = useState('');
 
-  const createHAGroupMutation = useMutation({
-    mutationFn: () =>
-      hypervisorApi.createHAGroup(controllerId, {
-        group: haGrpName,
-        nodes: haGrpNodes,
-        nofailback: haGrpNofailback,
-        restricted: haGrpRestricted,
-        comment: haGrpComment || undefined,
-      }),
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.haGroupCreated') });
-      setHaGrpDialog(false);
-      setHaGrpName('');
-      setHaGrpNodes('');
-      setHaGrpComment('');
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'ha'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.haGroupCreationFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
-
-  const deleteHAGroupMutation = useMutation({
-    mutationFn: (group: string) => hypervisorApi.deleteHAGroup(controllerId, group),
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.haGroupDeleted') });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'ha'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.haGroupDeleteFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
-
   // ── VM Action mutation ─────────────────────────────────────────────────
   const vmActionMutation = useMutation({
+    retry: false, // A new mutation call must not silently mint a second intent ID.
     mutationFn: (params: { node: string; vmType: string; vmid: number; action: string }) =>
       hypervisorApi.vmAction(controllerId, params.node, params.vmType, params.vmid, params.action),
-    onSuccess: (_data, params) => {
-      toast({ title: t('HypervisorPage.toast.actionSent', { action: params.action }), description: t('HypervisorPage.toast.vmOnNode', { vmid: params.vmid, node: params.node }) });
+    onSuccess: (response, params) => {
+      const accepted = response.data.status === 'applied';
+      toast({
+        title: accepted ? t('HypervisorPage.toast.actionSent', { action: params.action }) : t('HypervisorPage.toast.actionNeedsReview'),
+        description: t('HypervisorPage.toast.powerTracked', { id: response.data.change_id }),
+        variant: accepted ? undefined : 'destructive',
+      });
+      setPendingChangesOpen(true);
       queryClient.invalidateQueries({ queryKey: ['hypervisor'] });
     },
     onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.actionFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      setPendingChangesOpen(true);
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.powerResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
     },
   });
 
-  // ── Node power mutations ──────────────────────────────────────────────
-  const nodeShutdownMutation = useMutation({
-    mutationFn: (node: string) => hypervisorApi.shutdownNode(controllerId, node),
-    onSuccess: (_d, node) => {
-      toast({ title: t('HypervisorPage.toast.shutdownInitiated'), description: node });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'nodes'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.shutdownFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
-
-  const nodeRebootMutation = useMutation({
-    mutationFn: (node: string) => hypervisorApi.rebootNode(controllerId, node),
-    onSuccess: (_d, node) => {
-
-      toast({ title: t('HypervisorPage.toast.rebootInitiated'), description: node });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'nodes'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.rebootFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
+  const nodeShutdownMutation = { mutate: (node: string) => setClusterOperation({ action: 'node.shutdown', target: node }) };
+  const nodeRebootMutation = { mutate: (node: string) => setClusterOperation({ action: 'node.reboot', target: node }) };
 
   // ── Clone mutation ────────────────────────────────────────────────────
-  const [cloneDialog, setCloneDialog] = useState<{ node: string; vmType: string; vmid: number; name: string } | null>(null);
+  const [cloneDialog, setCloneDialog] = useState<{ node: string; vmType: string; vmid: number; name: string; requestId: string } | null>(null);
   const [cloneNewId, setCloneNewId] = useState('');
   const [cloneName, setCloneName] = useState('');
   const [cloneFull, setCloneFull] = useState(true);
 
   const cloneMutation = useMutation({
+    retry: false,
     mutationFn: () => {
       if (!cloneDialog) throw new Error('No VM');
       return hypervisorApi.cloneVM(controllerId, cloneDialog.node, cloneDialog.vmType, cloneDialog.vmid, {
+        request_id: cloneDialog.requestId,
         newid: parseInt(cloneNewId),
         name: cloneName || undefined,
         full: cloneFull,
       });
     },
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.cloneStarted') });
+    onSuccess: (response) => {
+      const accepted = response.data.status === 'applied';
+      toast({
+        title: t(accepted ? 'HypervisorPage.toast.operationAccepted' : 'HypervisorPage.toast.actionNeedsReview'),
+        description: t('HypervisorPage.toast.operationTracked', { id: response.data.change_id }),
+        variant: accepted ? undefined : 'destructive',
+      });
+      setPendingChangesOpen(true);
       setCloneDialog(null);
       queryClient.invalidateQueries({ queryKey: ['hypervisor'] });
     },
     onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.cloneFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      setPendingChangesOpen(true);
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.operationResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
     },
   });
 
   // ── Migrate mutation ──────────────────────────────────────────────────
-  const [migrateDialog, setMigrateDialog] = useState<{ node: string; vmType: string; vmid: number } | null>(null);
+  const [migrateDialog, setMigrateDialog] = useState<{ node: string; vmType: string; vmid: number; requestId: string } | null>(null);
   const [migrateTarget, setMigrateTarget] = useState('');
   const [migrateOnline, setMigrateOnline] = useState(true);
+  const [migrateRestart, setMigrateRestart] = useState(false);
 
   const migrateMutation = useMutation({
+    retry: false,
     mutationFn: () => {
       if (!migrateDialog) throw new Error('No VM');
       return hypervisorApi.migrateVM(controllerId, migrateDialog.node, migrateDialog.vmType, migrateDialog.vmid, {
         target: migrateTarget,
-        online: migrateOnline,
+        request_id: migrateDialog.requestId,
+        online: migrateDialog.vmType === 'qemu' && migrateOnline,
+        restart: migrateDialog.vmType === 'lxc' && migrateRestart,
       });
     },
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.migrationStarted') });
+    onSuccess: (response) => {
+      const accepted = response.data.status === 'applied';
+      toast({
+        title: t(accepted ? 'HypervisorPage.toast.operationAccepted' : 'HypervisorPage.toast.actionNeedsReview'),
+        description: t('HypervisorPage.toast.operationTracked', { id: response.data.change_id }),
+        variant: accepted ? undefined : 'destructive',
+      });
+      setPendingChangesOpen(true);
       setMigrateDialog(null);
       queryClient.invalidateQueries({ queryKey: ['hypervisor'] });
     },
     onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.migrationFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      setPendingChangesOpen(true);
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.operationResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
     },
   });
 
   // ── Resize mutation ───────────────────────────────────────────────────
-  const [resizeDialog, setResizeDialog] = useState<{ node: string; vmType: string; vmid: number } | null>(null);
+  const [resizeDialog, setResizeDialog] = useState<{ controllerId: string; node: string; vmType: string; vmid: number; requestId: string; config?: Record<string, unknown> } | null>(null);
   const [resizeDisk, setResizeDisk] = useState('scsi0');
   const [resizeAmount, setResizeAmount] = useState('+10G');
 
+  const resizeConfig = resizeDialog?.config ?? {};
+  const resizeDigest = reviewedGuestDigest(resizeConfig);
+  const resizeCurrentBytes = reviewedDiskBytes(resizeConfig, resizeDisk);
   const resizeMutation = useMutation({
+    retry: false,
     mutationFn: () => {
-      if (!resizeDialog) throw new Error('No VM');
+      if (!resizeDialog || resizeDialog.controllerId !== controllerId || !resizeDigest || !resizeCurrentBytes) throw new Error(t('HypervisorPage.toast.reviewUnavailable'));
       return hypervisorApi.resizeDisk(controllerId, resizeDialog.node, resizeDialog.vmType, resizeDialog.vmid, {
         disk: resizeDisk,
         size: resizeAmount,
+        request_id: resizeDialog.requestId,
+        expected_digest: resizeDigest,
+        current_size_bytes: resizeCurrentBytes,
       });
     },
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.diskResized') });
+    onSuccess: (response) => {
+      const verified = response.data.provider_task?.status === 'succeeded';
+      toast({ title: t(verified ? 'HypervisorPage.toast.guestChangeVerified' : response.data.status === 'applied' ? 'HypervisorPage.toast.operationAccepted' : 'HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.operationTracked', { id: response.data.change_id }) });
+      setPendingChangesOpen(true);
       setResizeDialog(null);
       queryClient.invalidateQueries({ queryKey: ['hypervisor', 'vms'] });
       queryClient.invalidateQueries({ queryKey: ['hypervisor', 'containers'] });
     },
     onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.resizeFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      setPendingChangesOpen(true);
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.operationResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
     },
   });
 
   // ── Snapshot dialog ────────────────────────────────────────────────────
-  const [snapDialog, setSnapDialog] = useState<{ open: boolean; node: string; vmType: string; vmid: number } | null>(null);
+  const [snapDialog, setSnapDialog] = useState<{ open: boolean; node: string; vmType: string; vmid: number; requestId: string } | null>(null);
   const [snapName, setSnapName] = useState('');
   const [snapDesc, setSnapDesc] = useState('');
 
   const createSnapshotMutation = useMutation({
+    retry: false,
     mutationFn: () => {
       if (!snapDialog) throw new Error('No VM selected');
       return hypervisorApi.createSnapshot(
         controllerId, snapDialog.node, snapDialog.vmType, snapDialog.vmid,
-        { snapname: snapName, description: snapDesc }
+        { snapname: snapName, description: snapDesc, request_id: snapDialog.requestId }
       );
     },
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.snapshotCreated') });
+    onSuccess: (response) => {
+      const accepted = response.data.status === 'applied';
+      toast({
+        title: t(accepted ? 'HypervisorPage.toast.operationAccepted' : 'HypervisorPage.toast.actionNeedsReview'),
+        description: t('HypervisorPage.toast.operationTracked', { id: response.data.change_id }),
+        variant: accepted ? undefined : 'destructive',
+      });
+      setPendingChangesOpen(true);
       setSnapDialog(null);
       setSnapName('');
       setSnapDesc('');
       queryClient.invalidateQueries({ queryKey: ['hypervisor', 'snapshots'] });
     },
     onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.snapshotFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      setPendingChangesOpen(true);
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
     },
   });
 
@@ -2529,66 +2017,49 @@ export function HypervisorPage() {
   const snapshots: HypervisorSnapshot[] = snapListResp?.data || [];
 
   const rollbackSnapshotMutation = useMutation({
-    mutationFn: (params: { node: string; vmType: string; vmid: number; snapname: string }) =>
-      hypervisorApi.rollbackSnapshot(controllerId, params.node, params.vmType, params.vmid, params.snapname),
-    onSuccess: (_d, p) => {
-      toast({ title: t('HypervisorPage.toast.rollbackStarted'), description: t('HypervisorPage.toast.snapshotLabel', { name: p.snapname }) });
+    retry: false,
+    mutationFn: (params: { node: string; vmType: string; vmid: number; snapname: string; requestId: string }) =>
+      hypervisorApi.rollbackSnapshot(controllerId, params.node, params.vmType, params.vmid, params.snapname, params.requestId),
+    onSuccess: (response) => {
+      const accepted = response.data.status === 'applied';
+      toast({
+        title: t(accepted ? 'HypervisorPage.toast.operationAccepted' : 'HypervisorPage.toast.actionNeedsReview'),
+        description: t('HypervisorPage.toast.operationTracked', { id: response.data.change_id }),
+        variant: accepted ? undefined : 'destructive',
+      });
+      setPendingChangesOpen(true);
       queryClient.invalidateQueries({ queryKey: ['hypervisor'] });
     },
     onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.rollbackFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      setPendingChangesOpen(true);
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
     },
   });
 
   const deleteSnapshotMutation = useMutation({
-    mutationFn: (params: { node: string; vmType: string; vmid: number; snapname: string }) =>
-      hypervisorApi.deleteSnapshot(controllerId, params.node, params.vmType, params.vmid, params.snapname),
-    onSuccess: (_d, p) => {
-      toast({ title: t('HypervisorPage.toast.snapshotDeleted'), description: p.snapname });
+    retry: false,
+    mutationFn: (params: { node: string; vmType: string; vmid: number; snapname: string; requestId: string }) =>
+      hypervisorApi.deleteSnapshot(controllerId, params.node, params.vmType, params.vmid, params.snapname, params.requestId),
+    onSuccess: (response) => {
+      const accepted = response.data.status === 'applied';
+      toast({
+        title: t(accepted ? 'HypervisorPage.toast.operationAccepted' : 'HypervisorPage.toast.actionNeedsReview'),
+        description: t('HypervisorPage.toast.operationTracked', { id: response.data.change_id }),
+        variant: accepted ? undefined : 'destructive',
+      });
+      setPendingChangesOpen(true);
       queryClient.invalidateQueries({ queryKey: ['hypervisor', 'snapshots'] });
     },
     onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.deleteFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
-
-  // ── Firewall rule create ──────────────────────────────────────────────
-  const [fwCreateDialog, setFwCreateDialog] = useState<{ node: string } | null>(null);
-  const [fwAction, setFwAction] = useState<string>('ACCEPT');
-  const [fwType, setFwType] = useState<string>('in');
-  const [fwSource, setFwSource] = useState('');
-  const [fwDest, setFwDest] = useState('');
-  const [fwDport, setFwDport] = useState('');
-  const [fwProto, setFwProto] = useState('tcp');
-  const [fwComment, setFwComment] = useState('');
-
-  const createFwRuleMutation = useMutation({
-    mutationFn: () => {
-      if (!fwCreateDialog) throw new Error('No node');
-      return hypervisorApi.createNodeFirewallRule(controllerId, fwCreateDialog.node, {
-        action: fwAction,
-        type: fwType,
-        source: fwSource || undefined,
-        dest: fwDest || undefined,
-        dport: fwDport || undefined,
-        proto: fwProto || undefined,
-        comment: fwComment || undefined,
-      });
-    },
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.firewallRuleCreated') });
-      setFwCreateDialog(null);
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'firewall'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.createFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      setPendingChangesOpen(true);
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
     },
   });
 
   // ── Task log dialog ───────────────────────────────────────────────────
   const [taskLogDialog, setTaskLogDialog] = useState<{ node: string; upid: string } | null>(null);
 
-  const { data: taskLogResp, isLoading: taskLogLoading } = useQuery({
+  const { data: taskLogResp, isLoading: taskLogLoading, isError: taskLogError } = useQuery({
     queryKey: ['hypervisor', 'tasklog', controllerId, taskLogDialog?.node, taskLogDialog?.upid],
     queryFn: () => hypervisorApi.getTaskLog(controllerId, taskLogDialog!.node, taskLogDialog!.upid, 0, 200),
     enabled: !!taskLogDialog,
@@ -2596,40 +2067,39 @@ export function HypervisorPage() {
   });
   const taskLogEntries = taskLogResp?.data || [];
 
-  const stopTaskMutation = useMutation({
-    mutationFn: (params: { node: string; upid: string }) =>
-      hypervisorApi.stopTask(controllerId, params.node, params.upid),
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.taskStopRequested') });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'tasks'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.stopFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
+  const [taskStopTarget, setTaskStopTarget] = useState<{ controllerId: string; node: string; upid: string } | null>(null);
 
   // ── Backup run mutation ───────────────────────────────────────────────
-  const [backupDialog, setBackupDialog] = useState<{ node: string; vmType: string; vmid: number } | null>(null);
+  const [backupDialog, setBackupDialog] = useState<{ node: string; vmType: string; vmid: number; requestId: string } | null>(null);
   const [backupStorage, setBackupStorage] = useState('local');
   const [backupMode, setBackupMode] = useState('snapshot');
   const [backupCompress, setBackupCompress] = useState('zstd');
 
   const runBackupMutation = useMutation({
+    retry: false,
     mutationFn: () => {
       if (!backupDialog) throw new Error('No VM');
       return hypervisorApi.runBackup(controllerId, backupDialog.node, backupDialog.vmType, backupDialog.vmid, {
+        request_id: backupDialog.requestId,
         storage: backupStorage,
         mode: backupMode,
         compress: backupCompress,
       });
     },
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.backupStarted') });
+    onSuccess: (response) => {
+      const accepted = response.data.status === 'applied';
+      toast({
+        title: t(accepted ? 'HypervisorPage.toast.operationAccepted' : 'HypervisorPage.toast.actionNeedsReview'),
+        description: t('HypervisorPage.toast.operationTracked', { id: response.data.change_id }),
+        variant: accepted ? undefined : 'destructive',
+      });
+      setPendingChangesOpen(true);
       setBackupDialog(null);
       queryClient.invalidateQueries({ queryKey: ['hypervisor', 'tasks'] });
     },
     onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.backupFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      setPendingChangesOpen(true);
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
     },
   });
 
@@ -2665,35 +2135,13 @@ export function HypervisorPage() {
   const [backupJobDialog, setBackupJobDialog] = useState(false);
   const [editBackupJob, setEditBackupJob] = useState<HypervisorBackupJob | null>(null);
 
-  const deleteBackupJobMutation = useMutation({
-    mutationFn: (jobId: string) => hypervisorApi.deleteBackupJob(controllerId, jobId),
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.backupJobDeleted') });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'backup'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.deleteFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
-
-  // ── Firewall delete mutation ─────────────────────────────────────────
-  const deleteFwRuleMutation = useMutation({
-    mutationFn: (params: { node: string; pos: number }) =>
-      hypervisorApi.deleteNodeFirewallRule(controllerId, params.node, params.pos),
-    onSuccess: () => {
-      toast({ title: t('HypervisorPage.toast.firewallRuleDeleted') });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'firewall'] });
-    },
-    onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.deleteFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
-    },
-  });
+  const [deleteBackupJob, setDeleteBackupJob] = useState<HypervisorBackupJob | null>(null);
 
   // ── Upload dialog state ──────────────────────────────────────────────
   const [uploadDialog, setUploadDialog] = useState<{ node: string; storage: string } | null>(null);
 
   // ── Restore from Backup dialog ──────────────────────────────────────
-  const [restoreDialog, setRestoreDialog] = useState<{ archive: string; node: string; vmType: string; storage: string } | null>(null);
+  const [restoreDialog, setRestoreDialog] = useState<{ archive: string; node: string; vmType: string; storage: string; requestId: string } | null>(null);
   const [restoreVmid, setRestoreVmid] = useState('');
   const [restoreTargetStorage, setRestoreTargetStorage] = useState('');
   const [restoreTargetNode, setRestoreTargetNode] = useState('');
@@ -2708,6 +2156,7 @@ export function HypervisorPage() {
   // from the Pending Changes drawer, which supplies the `confirmed: true`
   // second factor after an explicit acknowledgement.
   const restoreBackupMutation = useMutation({
+    retry: false,
     mutationFn: () => {
       if (!restoreDialog || !restoreVmid) throw new Error('Missing required fields');
       return hypervisorApi.stageBackupRestore(controllerId, {
@@ -2718,12 +2167,12 @@ export function HypervisorPage() {
         storage: restoreTargetStorage || undefined,
         start: restoreStartAfter,
         unique: restoreUniqueMac,
-      });
+      }, restoreDialog.requestId);
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       toast({
-        title: t('HypervisorPage.toast.restoreStaged.title'),
-        description: t('HypervisorPage.toast.restoreStaged.description'),
+        title: t(response.data.status === 'pending' ? 'HypervisorPage.toast.restoreStaged.title' : 'HypervisorPage.toast.actionNeedsReview'),
+        description: response.data.status === 'pending' ? t('HypervisorPage.toast.restoreStaged.description') : t('HypervisorPage.toast.operationTracked', { id: response.data.id }),
       });
       setRestoreDialog(null);
       setRestoreVmid('');
@@ -2731,7 +2180,8 @@ export function HypervisorPage() {
       queryClient.invalidateQueries({ queryKey: ['pending-changes'] });
     },
     onError: (err: any) => {
-      toast({ title: t('HypervisorPage.toast.restoreFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      setPendingChangesOpen(true);
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
     },
   });
 
@@ -2739,7 +2189,7 @@ export function HypervisorPage() {
   const [detailVM, setDetailVM] = useState<HypervisorVM | null>(null);
 
   // ── Fleet Task Statistics ───────────────────────────────────────────
-  const { data: taskStatsResp } = useQuery({
+  const { data: taskStatsResp, isError: taskStatsError } = useQuery({
     queryKey: ['hypervisor', 'task-stats', selectedSiteId],
     queryFn: () => hypervisorApi.getFleetTaskStatistics(selectedSiteId || undefined),
     enabled: proxmoxControllers.length > 0 && (activeTab === 'fleet' || activeTab === 'dashboard'),
@@ -2750,7 +2200,7 @@ export function HypervisorPage() {
   // Fleet tab read them from the top level, so every counter was undefined, the
   // card's render guard never passed, and the Task Statistics card simply never
   // appeared. Unwrap here so the tab keeps its flat shape.
-  const taskStats: any = taskStatsResp?.data?.aggregate || {};
+  const taskStats = taskStatsError ? undefined : taskStatsResp?.data?.aggregate;
 
   // ── Node detail state (must be before any early return · Rules of Hooks) ──
   const [expandedNode, setExpandedNode] = useState<string | null>(null);
@@ -2839,11 +2289,11 @@ export function HypervisorPage() {
   }, [vmActionMutation]);
 
   const handleDeleteVM = useCallback((params: { node: string; vmType: string; vmid: number }) => {
-    deleteVMMutation.mutate(params);
-  }, [deleteVMMutation]);
+    setDeleteTarget(params);
+  }, []);
 
   const handleSnapshot = useCallback((vm: HypervisorVM) => {
-    setSnapDialog({ open: true, node: vm.node, vmType: vm.vm_type, vmid: vm.vmid });
+    setSnapDialog({ open: true, node: vm.node, vmType: vm.vm_type, vmid: vm.vmid, requestId: newHypervisorRequestId() });
     setSnapName(`snap-${Date.now()}`);
     setSnapDesc('');
   }, []);
@@ -2853,26 +2303,35 @@ export function HypervisorPage() {
   }, []);
 
   const handleClone = useCallback((vm: HypervisorVM) => {
-    setCloneDialog({ node: vm.node, vmType: vm.vm_type, vmid: vm.vmid, name: vm.name });
+    setCloneDialog({ node: vm.node, vmType: vm.vm_type, vmid: vm.vmid, name: vm.name, requestId: newHypervisorRequestId() });
     setCloneNewId('');
     setCloneName(`${vm.name}-clone`);
     setCloneFull(true);
   }, []);
 
   const handleMigrate = useCallback((vm: HypervisorVM) => {
-    setMigrateDialog({ node: vm.node, vmType: vm.vm_type, vmid: vm.vmid });
+    setMigrateDialog({ node: vm.node, vmType: vm.vm_type, vmid: vm.vmid, requestId: newHypervisorRequestId() });
     setMigrateTarget('');
-    setMigrateOnline(vm.status === 'running');
+    setMigrateOnline(vm.vm_type === 'qemu' && vm.status === 'running');
+    setMigrateRestart(false);
   }, []);
 
-  const handleResize = useCallback((vm: HypervisorVM) => {
-    setResizeDialog({ node: vm.node, vmType: vm.vm_type, vmid: vm.vmid });
-    setResizeDisk('scsi0');
+  const handleResize = useCallback(async (vm: HypervisorVM) => {
+    const requestId = newHypervisorRequestId();
+    resizeMutation.reset();
+    setResizeDialog({ controllerId, node: vm.node, vmType: vm.vm_type, vmid: vm.vmid, requestId });
+    setResizeDisk(vm.vm_type === 'lxc' ? 'rootfs' : 'scsi0');
     setResizeAmount('+10G');
-  }, []);
+    try {
+      const response = await hypervisorApi.getVMConfig(controllerId, vm.node, vm.vm_type, vm.vmid);
+      setResizeDialog((current) => current?.requestId === requestId ? { ...current, config: response.data } : current);
+    } catch {
+      toast({ title: t('HypervisorPage.toast.reviewUnavailable'), variant: 'destructive' });
+    }
+  }, [controllerId, resizeMutation, t, toast]);
 
   const handleBackup = useCallback((vm: HypervisorVM) => {
-    setBackupDialog({ node: vm.node, vmType: vm.vm_type, vmid: vm.vmid });
+    setBackupDialog({ node: vm.node, vmType: vm.vm_type, vmid: vm.vmid, requestId: newHypervisorRequestId() });
     setBackupStorage('local');
     setBackupMode('snapshot');
     setBackupCompress('zstd');
@@ -2896,10 +2355,6 @@ export function HypervisorPage() {
       })
       .catch(() => toast({ title: t('HypervisorPage.toast.consoleFailed'), variant: 'destructive' }));
   }, [controllerId, proxmoxControllers, toast, t]);
-
-  const handleStopTask = useCallback((params: { node: string; upid: string }) => {
-    stopTaskMutation.mutate(params);
-  }, [stopTaskMutation]);
 
   // ── Skeleton on first load · never show a blank page ──────────────────
   if (controllersLoading && proxmoxControllers.length === 0) {
@@ -2951,7 +2406,6 @@ export function HypervisorPage() {
       {kioskMode && (
         <KioskMode
           controllerId={controllerId}
-          nodes={nodes}
           onExit={() => setKioskMode(false)}
         />
       )}
@@ -2980,10 +2434,10 @@ export function HypervisorPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => { setCreateDialog('vm'); setCreateNode(nodes[0]?.node || ''); }}>
+                  <DropdownMenuItem onClick={() => { setCreateDialog('vm'); }}>
                     <Monitor className="mr-2 h-3.5 w-3.5" /> {t('HypervisorPage.actions.newVm')}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => { setCreateDialog('ct'); setCreateNode(nodes[0]?.node || ''); }}>
+                  <DropdownMenuItem onClick={() => { setCreateDialog('ct'); }}>
                     <Box className="mr-2 h-3.5 w-3.5" /> {t('HypervisorPage.actions.newContainer')}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -3019,8 +2473,7 @@ export function HypervisorPage() {
                 refetchStorage();
                 refetchTasks();
                 refetchBackup();
-                refetchFW();
-              }}
+                  }}
             >
               <RefreshCw className="h-4 w-4 mr-1" />
               {t('HypervisorPage.actions.refresh')}
@@ -3073,7 +2526,7 @@ export function HypervisorPage() {
             {
               value: 'dashboard',
               label: t('HypervisorPage.tabs.dashboard'),
-              content: <DashboardTab dashLoading={dashLoading} dashError={dashError} dash={dash} refetchDash={refetchDash} />,
+              content: <DashboardTab controllerId={controllerId} dashLoading={dashLoading} dashError={dashError} dash={dash} refetchDash={refetchDash} />,
             },
             {
               value: 'nodes',
@@ -3092,7 +2545,6 @@ export function HypervisorPage() {
                   nodeRebootMutation={nodeRebootMutation} nodeShutdownMutation={nodeShutdownMutation}
                   allGuests={[...vms, ...containers]}
                   controllerId={controllerId}
-                  requestConfirm={requestConfirm}
                 />
               ),
             },
@@ -3163,7 +2615,8 @@ export function HypervisorPage() {
                   nodes={nodes} activeStorageNode={activeStorageNode} setStorageNode={setStorageNode}
                   storageLoading={storageLoading} storageError={storageError} storagePools={storagePools}
                   refetchStorage={refetchStorage} setUploadDialog={setUploadDialog}
-                  controllerId={controllerId} setRestoreDialog={setRestoreDialog}
+                  onTracked={() => setPendingChangesOpen(true)}
+                  controllerId={controllerId} setRestoreDialog={(value) => setRestoreDialog(value ? { ...value, requestId: newHypervisorRequestId() } : null)}
                 />
               ),
             },
@@ -3176,8 +2629,8 @@ export function HypervisorPage() {
                   nodes={nodes} activeTasksNode={activeTasksNode} setTasksNode={setTasksNode}
                   tasksLoading={tasksLoading} tasksError={tasksError} tasks={tasks}
                   refetchTasks={refetchTasks} setTaskLogDialog={setTaskLogDialog}
-                  onStopTask={handleStopTask}
-                  requestConfirm={requestConfirm}
+                  onStopTask={(target) => setTaskStopTarget({ controllerId, ...target })}
+
                 />
               ),
             },
@@ -3189,24 +2642,15 @@ export function HypervisorPage() {
                 <BackupTab
                   backupLoading={backupLoading} backupError={backupError} backupJobs={backupJobs}
                   refetchBackup={refetchBackup} setEditBackupJob={setEditBackupJob}
-                  setBackupJobDialog={setBackupJobDialog} deleteBackupJobMutation={deleteBackupJobMutation}
-                  requestConfirm={requestConfirm}
+                  setBackupJobDialog={setBackupJobDialog} setDeleteBackupJob={setDeleteBackupJob}
                 />
               ),
             },
             {
               value: 'firewall',
               label: t('HypervisorPage.tabs.firewall'),
-              count: firewallRules.length,
               content: (
-                <FirewallTab
-                  fwLoading={fwLoading} fwError={fwError} firewallRules={firewallRules} refetchFW={refetchFW}
-                  nodes={nodes} setFwCreateDialog={setFwCreateDialog}
-                  setFwAction={setFwAction} setFwType={setFwType} setFwSource={setFwSource}
-                  setFwDest={setFwDest} setFwDport={setFwDport} setFwProto={setFwProto} setFwComment={setFwComment}
-                  deleteFwRuleMutation={deleteFwRuleMutation}
-                  requestConfirm={requestConfirm}
-                />
+                <FirewallPanel controllerId={controllerId} nodes={nodes} />
               ),
             },
             {
@@ -3221,7 +2665,6 @@ export function HypervisorPage() {
                   setHaGrpDialog={setHaGrpDialog} setHaGrpName={setHaGrpName} setHaGrpNodes={setHaGrpNodes}
                   setHaGrpComment={setHaGrpComment} setHaGrpNofailback={setHaGrpNofailback} setHaGrpRestricted={setHaGrpRestricted}
                   deleteHAResourceMutation={deleteHAResourceMutation} deleteHAGroupMutation={deleteHAGroupMutation}
-                  requestConfirm={requestConfirm}
                 />
               ),
             },
@@ -3270,6 +2713,7 @@ export function HypervisorPage() {
                 <CertificatesTab
                   controllerId={controllerId}
                   nodes={nodes}
+                  onTracked={() => setPendingChangesOpen(true)}
                 />
               ) : null,
             },
@@ -3423,6 +2867,7 @@ export function HypervisorPage() {
                           onClick={() => {
                             if (!snapListDialog) return;
                             const sd = snapListDialog;
+                            const requestId = newHypervisorRequestId();
                             requestConfirm({
                               title: t('HypervisorPage.snapshotListDialog.rollbackConfirm.title', { name: snap.name }),
                               description: t('HypervisorPage.snapshotListDialog.rollbackConfirm.description', { kind: sd.vmType === 'lxc' ? 'CT' : 'VM', vmid: sd.vmid, node: sd.node, name: snap.name }),
@@ -3430,7 +2875,7 @@ export function HypervisorPage() {
                               confirmLabel: t('HypervisorPage.vmActions.rollback'),
                               onConfirm: () => rollbackSnapshotMutation.mutate({
                                 node: sd.node, vmType: sd.vmType,
-                                vmid: sd.vmid, snapname: snap.name,
+                                vmid: sd.vmid, snapname: snap.name, requestId,
                               }),
                             });
                           }}
@@ -3445,6 +2890,7 @@ export function HypervisorPage() {
                           onClick={() => {
                             if (!snapListDialog) return;
                             const sd = snapListDialog;
+                            const requestId = newHypervisorRequestId();
                             requestConfirm({
                               title: t('HypervisorPage.snapshotListDialog.deleteConfirm.title', { name: snap.name }),
                               description: t('HypervisorPage.snapshotListDialog.deleteConfirm.description', { name: snap.name, kind: sd.vmType === 'lxc' ? 'CT' : 'VM', vmid: sd.vmid, node: sd.node }),
@@ -3452,7 +2898,7 @@ export function HypervisorPage() {
                               confirmLabel: t('HypervisorPage.snapshotListDialog.deleteConfirm.confirmLabel'),
                               onConfirm: () => deleteSnapshotMutation.mutate({
                                 node: sd.node, vmType: sd.vmType,
-                                vmid: sd.vmid, snapname: snap.name,
+                                vmid: sd.vmid, snapname: snap.name, requestId,
                               }),
                             });
                           }}
@@ -3543,11 +2989,12 @@ export function HypervisorPage() {
             <div className="flex items-center gap-2">
               <Checkbox
                 id="migrate-online"
-                checked={migrateOnline}
-                onCheckedChange={(v) => setMigrateOnline(!!v)}
+                checked={migrateDialog?.vmType === 'lxc' ? migrateRestart : migrateOnline}
+                onCheckedChange={(v) => migrateDialog?.vmType === 'lxc' ? setMigrateRestart(!!v) : setMigrateOnline(!!v)}
               />
-              <Label htmlFor="migrate-online">{t('HypervisorPage.migrateDialog.onlineMigration')}</Label>
+              <Label htmlFor="migrate-online">{t(migrateDialog?.vmType === 'lxc' ? 'HypervisorPage.migrateDialog.restartMigration' : 'HypervisorPage.migrateDialog.onlineMigration')}</Label>
             </div>
+            {migrateDialog?.vmType === 'lxc' && <p className="text-sm text-amber-600">{t('HypervisorPage.migrateDialog.restartWarning')}</p>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setMigrateDialog(null)}>{t('HypervisorPage.actions.cancel')}</Button>
@@ -3562,7 +3009,7 @@ export function HypervisorPage() {
       </Dialog>
 
       {/* ── Resize dialog ────────────────────────────────────────────────── */}
-      <Dialog open={!!resizeDialog} onOpenChange={(open) => { if (!open) setResizeDialog(null); }}>
+      <Dialog open={!!resizeDialog && resizeDialog.controllerId === controllerId} onOpenChange={(open) => { if (!open) setResizeDialog(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t('HypervisorPage.resizeDialog.title', { vmid: resizeDialog?.vmid })}</DialogTitle>
@@ -3573,19 +3020,20 @@ export function HypervisorPage() {
           <div className="space-y-4">
             <div>
               <Label>{t('HypervisorPage.tableHeaders.disk')}</Label>
-              <Input value={resizeDisk} onChange={(e) => setResizeDisk(e.target.value)} placeholder="scsi0" />
+              <Input disabled={resizeMutation.isPending || resizeMutation.isError} value={resizeDisk} onChange={(e) => setResizeDisk(e.target.value)} placeholder="scsi0" />
             </div>
             <div>
               <Label>{t('HypervisorPage.tableHeaders.size')}</Label>
-              <Input value={resizeAmount} onChange={(e) => setResizeAmount(e.target.value)} placeholder="+10G" />
+              <Input disabled={resizeMutation.isPending || resizeMutation.isError} value={resizeAmount} onChange={(e) => setResizeAmount(e.target.value)} placeholder="+10G" />
               <p className="text-xs text-muted-foreground mt-1">{t('HypervisorPage.resizeDialog.sizeHint')}</p>
+              <p className="text-xs text-muted-foreground mt-1">{resizeDigest && resizeCurrentBytes ? t('HypervisorPage.resizeDialog.reviewedSize', { size: resizeCurrentBytes / (1024 ** 3) }) : t('HypervisorPage.toast.reviewUnavailable')}</p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setResizeDialog(null)}>{t('HypervisorPage.actions.cancel')}</Button>
             <Button
               onClick={() => resizeMutation.mutate()}
-              disabled={!resizeDisk || !resizeAmount || resizeMutation.isPending}
+              disabled={!resizeDisk || !resizeAmount || !resizeDigest || !resizeCurrentBytes || resizeMutation.isPending}
             >
               {resizeMutation.isPending ? t('HypervisorPage.resizeDialog.resizing') : t('HypervisorPage.resizeDialog.resize')}
             </Button>
@@ -3643,79 +3091,6 @@ export function HypervisorPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Firewall rule create dialog ──────────────────────────────────── */}
-      <Dialog open={!!fwCreateDialog} onOpenChange={(open) => { if (!open) setFwCreateDialog(null); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t('HypervisorPage.firewallDialog.title')}</DialogTitle>
-            <DialogDescription>
-              {t('HypervisorPage.firewallDialog.description', { node: fwCreateDialog?.node })}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('HypervisorPage.firewall.action')}</Label>
-                <Select value={fwAction} onValueChange={setFwAction}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ACCEPT">ACCEPT</SelectItem>
-                    <SelectItem value="DROP">DROP</SelectItem>
-                    <SelectItem value="REJECT">REJECT</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>{t('HypervisorPage.firewallDialog.direction')}</Label>
-                <Select value={fwType} onValueChange={setFwType}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="in">{t('HypervisorPage.firewallDialog.inbound')}</SelectItem>
-                    <SelectItem value="out">{t('HypervisorPage.firewallDialog.outbound')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <Label>{t('HypervisorPage.firewall.protocol')}</Label>
-              <Select value={fwProto} onValueChange={setFwProto}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tcp">TCP</SelectItem>
-                  <SelectItem value="udp">UDP</SelectItem>
-                  <SelectItem value="icmp">ICMP</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>{t('HypervisorPage.firewallDialog.sourceOptional')}</Label>
-              <Input value={fwSource} onChange={(e) => setFwSource(e.target.value)} placeholder="10.0.0.0/24" />
-            </div>
-            <div>
-              <Label>{t('HypervisorPage.firewallDialog.destOptional')}</Label>
-              <Input value={fwDest} onChange={(e) => setFwDest(e.target.value)} placeholder="192.168.1.0/24" />
-            </div>
-            <div>
-              <Label>{t('HypervisorPage.firewallDialog.dportOptional')}</Label>
-              <Input value={fwDport} onChange={(e) => setFwDport(e.target.value)} placeholder="80,443" />
-            </div>
-            <div>
-              <Label>{t('HypervisorPage.firewallDialog.commentOptional')}</Label>
-              <Input value={fwComment} onChange={(e) => setFwComment(e.target.value)} placeholder={t('HypervisorPage.firewallDialog.commentPlaceholder')} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFwCreateDialog(null)}>{t('HypervisorPage.actions.cancel')}</Button>
-            <Button
-              onClick={() => createFwRuleMutation.mutate()}
-              disabled={createFwRuleMutation.isPending}
-            >
-              {createFwRuleMutation.isPending ? t('HypervisorPage.actions.creating') : t('HypervisorPage.firewall.createRule')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* ── Task log dialog ──────────────────────────────────────────────── */}
       <Dialog open={!!taskLogDialog} onOpenChange={(open) => { if (!open) setTaskLogDialog(null); }}>
         <DialogContent className="sm:max-w-2xl max-h-[80vh]">
@@ -3726,7 +3101,7 @@ export function HypervisorPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="bg-muted rounded-md p-3 overflow-auto max-h-[50vh]">
-            {taskLogLoading ? <Skeleton className="h-32" /> :
+            {taskLogError ? <p role="alert" className="text-sm text-destructive">{t('TaskStop.logUnavailable')}</p> : taskLogLoading ? <Skeleton className="h-32" /> :
              taskLogEntries.length === 0 ? <p className="text-xs text-muted-foreground">{t('HypervisorPage.taskLogDialog.empty')}</p> : (
               <pre className="text-xs font-mono whitespace-pre-wrap">
                 {taskLogEntries.map((entry: any) => entry.t).join('\n')}
@@ -3739,161 +3114,12 @@ export function HypervisorPage() {
         </DialogContent>
       </Dialog>
 
+      {clusterOperation && <ClusterOperationDialog controllerId={controllerId} intent={clusterOperation}
+        onClose={() => setClusterOperation(null)} onTracked={() => setPendingChangesOpen(true)} />}
+
       {/* ── Create VM / Container dialog ────────────────────────────────── */}
-      <Dialog open={!!createDialog} onOpenChange={(open) => { if (!open) setCreateDialog(null); }}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {createDialog === 'vm' ? t('HypervisorPage.createDialog.titleVm') : t('HypervisorPage.createDialog.titleCt')}
-            </DialogTitle>
-            <DialogDescription>
-              {createDialog === 'vm'
-                ? t('HypervisorPage.createDialog.descriptionVm')
-                : t('HypervisorPage.createDialog.descriptionCt')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-            {/* Name */}
-            <div>
-              <Label>{createDialog === 'ct' ? t('HypervisorPage.createDialog.hostname') : t('HypervisorPage.tableHeaders.name')}</Label>
-              <Input
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
-                placeholder={createDialog === 'ct' ? 'my-container' : 'my-vm'}
-                maxLength={128}
-              />
-            </div>
-
-            {/* Target Node */}
-            <div>
-              <Label>{t('HypervisorPage.migrateDialog.targetNode')}</Label>
-              <Select value={createNode || nodes[0]?.node || ''} onValueChange={setCreateNode}>
-                <SelectTrigger><SelectValue placeholder={t('HypervisorPage.createDialog.selectNode')} /></SelectTrigger>
-                <SelectContent>
-                  {nodes.map((n) => (
-                    <SelectItem key={n.node} value={n.node}>
-                      {n.node} {n.status === 'online' ? '' : `(${n.status})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* OS Template (CT only) */}
-            {createDialog === 'ct' && (
-              <div>
-                <Label>{t('HypervisorPage.createDialog.osTemplate')}</Label>
-                <Input
-                  value={createOsTemplate}
-                  onChange={(e) => setCreateOsTemplate(e.target.value)}
-                  placeholder="local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {t('HypervisorPage.createDialog.osTemplateHint')}
-                </p>
-              </div>
-            )}
-
-            {/* ISO (VM only) */}
-            {createDialog === 'vm' && (
-              <div>
-                <Label>{t('HypervisorPage.createDialog.isoImage')}</Label>
-                <Input
-                  value={createIso}
-                  onChange={(e) => setCreateIso(e.target.value)}
-                  placeholder="local:iso/ubuntu-24.04-server.iso"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {t('HypervisorPage.createDialog.isoHint')}
-                </p>
-              </div>
-            )}
-
-            {/* CPU & Memory */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('HypervisorPage.createDialog.cpuCores')}</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={128}
-                  value={createCores}
-                  onChange={(e) => setCreateCores(parseInt(e.target.value) || 1)}
-                />
-              </div>
-              <div>
-                <Label>{t('HypervisorPage.createDialog.memoryMb')}</Label>
-                <Input
-                  type="number"
-                  min={128}
-                  step={256}
-                  value={createMemory}
-                  onChange={(e) => setCreateMemory(parseInt(e.target.value) || 512)}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {(createMemory / 1024).toFixed(1)} GB
-                </p>
-              </div>
-            </div>
-
-            {/* Disk & Storage */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{createDialog === 'ct' ? t('HypervisorPage.createDialog.rootDiskSize') : t('HypervisorPage.createDialog.diskSize')}</Label>
-                <Input
-                  value={createDiskSize}
-                  onChange={(e) => setCreateDiskSize(e.target.value)}
-                  placeholder={createDialog === 'ct' ? '8' : '32G'}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {createDialog === 'ct' ? t('HypervisorPage.createDialog.diskHintCt') : t('HypervisorPage.createDialog.diskHintVm')}
-                </p>
-              </div>
-              <div>
-                <Label>{t('HypervisorPage.tableHeaders.storage')}</Label>
-                <Input
-                  value={createStorage}
-                  onChange={(e) => setCreateStorage(e.target.value)}
-                  placeholder="local-lvm"
-                />
-              </div>
-            </div>
-
-            {/* Start after create */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <Checkbox
-                checked={createStartAfter}
-                onCheckedChange={(checked) => setCreateStartAfter(!!checked)}
-              />
-              <span className="text-sm">{t('HypervisorPage.createDialog.startAfterCreation')}</span>
-            </label>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateDialog(null)}>{t('HypervisorPage.actions.cancel')}</Button>
-            <Button
-              onClick={() => {
-                if (createDialog === 'vm') {
-                  createVMMutation.mutate();
-                } else {
-                  createCTMutation.mutate();
-                }
-              }}
-              disabled={
-                (createDialog === 'vm' ? createVMMutation.isPending : createCTMutation.isPending) ||
-                !createName.trim() ||
-                (createDialog === 'ct' && !createOsTemplate)
-              }
-            >
-              {(createDialog === 'vm' ? createVMMutation.isPending : createCTMutation.isPending) && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              {(createDialog === 'vm' ? createVMMutation.isPending : createCTMutation.isPending)
-                ? t('HypervisorPage.actions.creating')
-                : createDialog === 'vm' ? t('HypervisorPage.createDialog.createVm') : t('HypervisorPage.createDialog.createCt')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {createDialog && <CreateGuestDialog controllerId={controllerId} kind={createDialog}
+        nodes={nodes.map((node) => node.node)} onClose={() => setCreateDialog(null)} />}
 
       {/* ── Add HA Resource dialog ──────────────────────────────────────── */}
       <Dialog open={haResDialog} onOpenChange={setHaResDialog}>
@@ -3943,10 +3169,10 @@ export function HypervisorPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setHaResDialog(false)}>{t('HypervisorPage.actions.cancel')}</Button>
             <Button
-              onClick={() => createHAResourceMutation.mutate({ sid: haResSid, group: haResGroup || undefined })}
-              disabled={!haResSid || createHAResourceMutation.isPending}
+              onClick={() => { setHaResDialog(false); setClusterOperation({ action: 'ha.resource.create', target: haResSid, options: { sid: haResSid, group: haResGroup, state: 'started', max_restart: 1, max_relocate: 1, comment: '' } }); }}
+              disabled={!haResSid}
             >
-              {createHAResourceMutation.isPending ? t('HypervisorPage.haResourceDialog.adding') : t('HypervisorPage.ha.addResource')}
+              {t('ClusterOperationDialog.review')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -4007,10 +3233,10 @@ export function HypervisorPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setHaGrpDialog(false)}>{t('HypervisorPage.actions.cancel')}</Button>
             <Button
-              onClick={() => createHAGroupMutation.mutate()}
-              disabled={!haGrpName || !haGrpNodes || createHAGroupMutation.isPending}
+              onClick={() => { setHaGrpDialog(false); setClusterOperation({ action: 'ha.group.create', target: haGrpName, options: { group: haGrpName, nodes: haGrpNodes, nofailback: haGrpNofailback, restricted: haGrpRestricted, comment: haGrpComment } }); }}
+              disabled={!haGrpName || !haGrpNodes}
             >
-              {createHAGroupMutation.isPending ? t('HypervisorPage.actions.creating') : t('HypervisorPage.haGroupDialog.createGroup')}
+              {t('ClusterOperationDialog.review')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -4018,6 +3244,8 @@ export function HypervisorPage() {
 
       {/* ── Edit Config Dialog ─────────────────────────────────────────── */}
       <EditConfigDialog
+        key={`${controllerId}:${editConfigVM?.vm_type}:${editConfigVM?.vmid}:${!!editConfigVM}`}
+        onTracked={() => setPendingChangesOpen(true)}
         open={!!editConfigVM}
         onClose={() => setEditConfigVM(null)}
         controllerId={controllerId}
@@ -4025,17 +3253,24 @@ export function HypervisorPage() {
       />
 
       {/* ── Backup Job Dialog ──────────────────────────────────────────── */}
+      {taskStopTarget && <TaskStopDialog controllerId={controllerId} target={taskStopTarget}
+        onClose={() => setTaskStopTarget(null)}
+        onTracked={() => { setTaskStopTarget(null); setPendingChangesOpen(true); queryClient.invalidateQueries({ queryKey: ['hypervisor', 'tasks'] }); }} />}
+
       <BackupJobDialog
-        open={backupJobDialog}
-        onClose={() => { setBackupJobDialog(false); setEditBackupJob(null); }}
+        open={backupJobDialog || !!deleteBackupJob}
+        onClose={() => { setBackupJobDialog(false); setEditBackupJob(null); setDeleteBackupJob(null); }}
+        onTracked={() => { setBackupJobDialog(false); setEditBackupJob(null); setDeleteBackupJob(null); setPendingChangesOpen(true); queryClient.invalidateQueries({ queryKey: ['hypervisor', 'backup'] }); }}
         controllerId={controllerId}
         nodes={nodes}
         editJob={editBackupJob}
+        deleteJob={deleteBackupJob}
       />
 
       {/* ── Upload Dialog ──────────────────────────────────────────────── */}
       <UploadDialog
         open={!!uploadDialog}
+        onTracked={() => { setUploadDialog(null); setPendingChangesOpen(true); }}
         onClose={() => setUploadDialog(null)}
         controllerId={controllerId}
         storage={uploadDialog?.storage || ''}
@@ -4138,6 +3373,12 @@ export function HypervisorPage() {
           }}
         />
       )}
+
+      {deleteTarget && <DeleteGuestDialog
+        controllerId={controllerId}
+        targets={[{ node: deleteTarget.node, vm_type: deleteTarget.vmType, vmid: deleteTarget.vmid }]}
+        onClose={() => setDeleteTarget(null)}
+      />}
 
       {/* ── Bulk Action Bar ────────────────────────────────────────────── */}
       {selectedVMs.size > 0 && (

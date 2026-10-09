@@ -16,16 +16,20 @@ case "$SSL_MODE" in
         ;;
     self-signed|letsencrypt)
         echo "[entrypoint] SSL_MODE=$SSL_MODE - using SSL/TLS configuration"
-        # Verify cert files exist before starting with SSL
-        if [ ! -f /etc/nginx/ssl/fullchain.pem ] || [ ! -f /etc/nginx/ssl/privkey.pem ]; then
-            echo "[entrypoint] WARNING: SSL certificates not found at /etc/nginx/ssl/"
-            echo "[entrypoint]   Expected: fullchain.pem, privkey.pem"
-            echo "[entrypoint]   Falling back to HTTP-only mode"
-            cp "$TEMPLATES/http-only.conf" "$TARGET"
+        # A requested TLS deployment must not silently expose plaintext when
+        # its certificate mount is missing, empty or unreadable by this user.
+        if [ ! -f /etc/nginx/ssl/fullchain.pem ] || [ ! -s /etc/nginx/ssl/fullchain.pem ] || [ ! -r /etc/nginx/ssl/fullchain.pem ] || \
+           [ ! -f /etc/nginx/ssl/privkey.pem ] || [ ! -s /etc/nginx/ssl/privkey.pem ] || [ ! -r /etc/nginx/ssl/privkey.pem ]; then
+            echo "[entrypoint] ERROR: TLS certificate or key is missing, empty or unreadable; refusing startup" >&2
+            echo "[entrypoint]   Required: /etc/nginx/ssl/fullchain.pem and /etc/nginx/ssl/privkey.pem" >&2
+            echo "[entrypoint]   Correct the certificate mount and restricted read permissions. See docker/NGINX-TLS." >&2
+            echo "[entrypoint]   SSL_MODE=off is an explicit HTTP-only deployment choice, never an automatic fallback." >&2
+            exit 1
         else
             # Copy certs from read-only bind mount to /tmp/ssl/ (tmpfs, writable).
-            # This ensures the non-root nginx user can read the private key
-            # without weakening file permissions on the host.
+            # The source key must already be readable by the non-root nginx
+            # user. Copying cannot bypass host permissions; the runtime copy
+            # is restricted below, and the source mount remains unchanged.
             mkdir -p /tmp/ssl
             cp /etc/nginx/ssl/fullchain.pem /tmp/ssl/fullchain.pem
             cp /etc/nginx/ssl/privkey.pem /tmp/ssl/privkey.pem
@@ -37,7 +41,7 @@ case "$SSL_MODE" in
             # Check for DH params - not fatal but warn
             if [ ! -f /etc/nginx/ssl/dhparam.pem ]; then
                 echo "[entrypoint] WARNING: DH parameters not found at /etc/nginx/ssl/dhparam.pem"
-                echo "[entrypoint]   HTTPS will work but with reduced forward secrecy"
+                echo "[entrypoint]   Omitting the optional ssl_dhparam directive"
                 echo "[entrypoint]   Generate with: openssl dhparam -out docker/ssl/dhparam.pem 2048"
                 # Remove the dhparam directive so nginx doesn't fail
                 sed -i '/ssl_dhparam/d' "$TARGET"

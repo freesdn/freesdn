@@ -9,7 +9,7 @@ User management endpoints (admin only).
 
 import logging
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -19,14 +19,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_active_user
 from app.core.dependencies import (
+    CurrentUser,
+    _load_user_permissions,
+    _permission_granted_by,
     is_unscoped_org_admin,
     is_unscoped_superuser,
     validate_role_assignment,
 )
 from app.core.security import get_password_hash
 from app.core.tenancy import tenant_filter
+from app.core.user_lifecycle import lock_user_lifecycle
 from app.db import get_session
 from app.models import Organization, User, UserRole
+from app.models.api_keys import APIKey, verify_api_key
 from app.schemas import (
     PaginatedResponse,
     UserCreate,
@@ -46,7 +51,7 @@ async def _audit_user_change(
     session: AsyncSession,
     request: Request,
     action: str,
-    actor: User,
+    actor: User | CurrentUser,
     target: User,
     changes: dict[str, Any] | None = None,
 ) -> None:
@@ -151,7 +156,7 @@ def require_admin(current_user: User) -> User:
     return current_user
 
 
-def require_user_write(current_user: User, permission: str) -> User:
+def require_user_write[T: (User, CurrentUser)](current_user: T, permission: str) -> T:
     """Admin gate for user-management WRITES that also honors a scoped
     credential's permission ceiling.
 
@@ -173,8 +178,9 @@ def require_user_write(current_user: User, permission: str) -> User:
     Non-admin principals (and scoped keys lacking the permission) get the same
     403 ``require_admin`` always produced.
     """
-    has_perm = bool(getattr(current_user, "has_permission", None)) and current_user.has_permission(
-        permission
+    permission_check = getattr(current_user, "has_permission", None)
+    has_perm = (
+        permission_check is not None and bool(permission_check) and permission_check(permission)
     )
     if has_perm or is_unscoped_org_admin(current_user):
         return current_user
@@ -393,29 +399,125 @@ async def get_user(
     return user
 
 
+async def _locked_mutation_target(
+    session: AsyncSession,
+    request: Request,
+    current_user: CurrentUser,
+    user_id: UUID,
+) -> User:
+    """Revalidate the initiating principal after both lifecycle and target waits.
+
+    Do not re-run committing API-key authentication or add an actor/key row lock
+    after the target lock: both would change the critical section's lock order.
+    This is a fresh authority check, not serialization of every later revocation.
+    """
+    original = (
+        current_user.user.token_version,
+        current_user.role,
+        current_user.organization_id,
+        current_user.user.hashed_password,
+    )
+    original_permissions = set(current_user.permissions)
+    original_scoped = current_user.is_scoped
+    await lock_user_lifecycle(session)
+    target = (
+        await session.execute(
+            select(User)
+            .where(User.id == user_id, User.deleted_at.is_(None))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Scalar columns bypass an identity-cached actor loaded before the waits.
+    actor = (
+        await session.execute(
+            select(
+                User.token_version,
+                User.role,
+                User.organization_id,
+                User.hashed_password,
+                User.is_active,
+                User.deleted_at,
+            ).where(User.id == current_user.id)
+        )
+    ).one_or_none()
+    if (
+        actor is None
+        or not actor.is_active
+        or actor.deleted_at is not None
+        or original
+        != (actor.token_version, actor.role, actor.organization_id, actor.hashed_password)
+    ):
+        raise HTTPException(
+            status_code=401, detail="Authentication changed; retry with current credentials"
+        )
+    claims = current_user.token_claims
+    if claims.get("auth_method") == "api_key":
+        try:
+            key_id = UUID(claims["key_id"])
+        except (ValueError, TypeError, KeyError):
+            raise HTTPException(status_code=401, detail="Invalid API key authentication") from None
+        key = (
+            await session.execute(
+                select(APIKey.is_active, APIKey.expires_at, APIKey.key_hash, APIKey.scopes).where(
+                    APIKey.id == key_id, APIKey.user_id == current_user.id
+                )
+            )
+        ).one_or_none()
+        if (
+            key is None
+            or not key.is_active
+            or (key.expires_at is not None and key.expires_at <= datetime.now(UTC))
+            or not verify_api_key(request.headers.get("x-api-key", ""), key.key_hash)
+        ):
+            raise HTTPException(status_code=401, detail="API key was revoked or expired")
+        role_permissions = await _load_user_permissions(current_user.user)
+        permissions = (
+            {scope for scope in key.scopes if _permission_granted_by(scope, role_permissions)}
+            if key.scopes
+            else set(role_permissions)
+        )
+        # Retain both the permission ceiling and scoped-key tenant confinement.
+        # Even an equivalent user:* permission cannot retain unscoped authority.
+        if bool(key.scopes) != original_scoped or permissions != original_permissions:
+            raise HTTPException(
+                status_code=401, detail="API key authority changed; retry with current credentials"
+            )
+    else:
+        from app.core.session_revocation import is_session_revoked_for_access_jti
+        from app.core.token_blacklist import is_token_blacklisted
+
+        if claims.get("tv", 0) != actor.token_version:
+            raise HTTPException(status_code=401, detail="Session was revoked")
+        expiry = claims.get("exp")
+        if type(expiry) not in (int, float) or cast(float, expiry) <= datetime.now(UTC).timestamp():
+            raise HTTPException(status_code=401, detail="Session expired")
+        jti = claims.get("jti")
+        if jti and (
+            await is_token_blacklisted(str(jti))
+            or await is_session_revoked_for_access_jti(session, str(jti))
+        ):
+            raise HTTPException(status_code=401, detail="Session was revoked")
+    return target
+
+
 @router.patch("/{user_id}", response_model=UserResponse)
 async def update_user(
     request: Request,
     user_id: UUID,
     user_data: UserUpdate,
     session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
 ) -> Any:
     """Update user."""
     # Scope-aware admin gate: an unscoped super_admin / org_admin keeps its
     # existing role-based access; a scoped key must explicitly hold user:update.
     require_user_write(current_user, "user:update")
 
-    result = await session.execute(
-        select(User).where(User.id == user_id, User.deleted_at.is_(None))
-    )
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
+    user = await _locked_mutation_target(session, request, current_user, user_id)
 
     caller_role = _role_str(current_user.role)
 
@@ -562,7 +664,7 @@ async def delete_user(
     request: Request,
     user_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
 ) -> None:
     """Soft delete user."""
     # Scope-aware admin gate: an unscoped super_admin / org_admin keeps its
@@ -576,16 +678,7 @@ async def delete_user(
             detail="Cannot delete yourself",
         )
 
-    result = await session.execute(
-        select(User).where(User.id == user_id, User.deleted_at.is_(None))
-    )
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
+    user = await _locked_mutation_target(session, request, current_user, user_id)
 
     # Check access
     if not is_unscoped_superuser(current_user):  # scope-aware

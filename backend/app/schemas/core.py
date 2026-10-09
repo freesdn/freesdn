@@ -13,6 +13,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
+from app.core.controller_diagnostics import public_controller_error, public_controller_history
 from app.core.security import validate_password as _validate_password
 from app.models.core import ControllerStatus, ControllerType, UserRole
 
@@ -824,7 +825,7 @@ class ControllerBase(BaseSchema):
     host: str = Field(min_length=1, max_length=255)
     port: int = Field(ge=1, le=65535)
     use_ssl: bool = True
-    verify_ssl: bool = False
+    verify_ssl: bool = True
 
 
 class ControllerCreate(ControllerBase):
@@ -952,7 +953,7 @@ class ControllerProbe(BaseSchema):
     username: str = Field("", max_length=255)
     password: str = Field("", max_length=500)
     use_ssl: bool = True
-    verify_ssl: bool = False
+    verify_ssl: bool = True
     connection_mode: str = Field("local", pattern=r"^(local|cloud)$")
     # Cloud mode fields
     client_id: str | None = Field(None, max_length=255)
@@ -1002,10 +1003,13 @@ class ControllerResponse(ControllerBase, TimestampSchema):
     @model_validator(mode="after")
     def _redact_config_secrets(self) -> "ControllerResponse":
         """Strip sensitive credential values from config before serialization."""
+        self.last_error = public_controller_error(self.last_error)
         if self.config:
-            redacted = {}
+            redacted: dict[str, Any] = {}
             for k, v in self.config.items():
-                if any(s in k.lower() for s in self._SENSITIVE_CONFIG_KEYS):
+                if k == "error_history":
+                    redacted[k] = public_controller_history(v)
+                elif any(s in k.lower() for s in self._SENSITIVE_CONFIG_KEYS):
                     redacted[k] = "***REDACTED***" if v else v
                 else:
                     redacted[k] = v

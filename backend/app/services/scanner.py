@@ -614,20 +614,16 @@ class ServiceProber:
             use_ssl = port in {443, 8443}
 
         scheme = "https" if use_ssl else "http"
-        url = f"{scheme}://{host}:{port}/"
+        authority = f"[{host}]" if ":" in host and not host.startswith("[") else host
+        url = f"{scheme}://{authority}:{port}/"
 
         result: dict[str, Any] = {"service": "http", "ssl": use_ssl, "url": url}
 
         try:
-            # NOTE: verify=False is required for scanning unknown devices (self-signed certs).
-            # This is intentional for device discovery — never reuse this client for
-            # user-facing or SSRF-sensitive requests.
-            async with httpx.AsyncClient(
-                verify=False,
-                timeout=5.0,
-                follow_redirects=False,
-                max_redirects=0,
-            ) as client:
+            from app.core.discovery_http import DiscoveryProbe
+
+            result["identity_verified"] = False
+            async with DiscoveryProbe(host) as client:
                 resp = await client.get(url)
                 result["status_code"] = resp.status_code
                 result["server"] = resp.headers.get("server")
@@ -678,8 +674,8 @@ class ServiceProber:
             if use_ssl:
                 return await self.probe_http(host, port, use_ssl=False)
             result["error"] = "connection_refused"
-        except Exception as e:
-            result["error"] = str(e)
+        except Exception:
+            result["error"] = "http_probe_unavailable_or_limited"
 
         return result
 

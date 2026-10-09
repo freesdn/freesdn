@@ -1,0 +1,50 @@
+OpenWrt configuration export and saved-backup operations
+=======================================================
+
+The generic gateway create-backup route must not return a configuration archive.
+It accepts firewall.manage_rules, whereas full configuration download additionally
+requires controller:write and a super_admin role. Previously OpenWrt's adapter
+used its export helper for both operations. A successful export could therefore
+be returned through the narrower permission; binary data could also fail JSON
+serialization, and provider errors could appear in that write response.
+
+The adapter now refuses create_backup with NOT_SUPPORTED without invoking the
+export helper. The firewall API maps that result to HTTP 501. Read-only policy
+and force flags do not make an unsupported operation available. The separate
+configuration-download adapter method owns the existing export implementation;
+its existing permission, role, audit-log, content validation and base64 delivery
+remain in place. No saved gateway or FreeSDN backup is created by this change.
+
+Validation uses 36 new cases: 16 failures reproduced on the old implementation
+and 20 controls. All 1,044 related PostgreSQL tests pass after the correction.
+44 separate incoming TCP HTTP/PostgreSQL cases use synthetic authenticated
+identities and a doubled vendor-export method, not a physical OpenWrt appliance.
+Across the 22 old-code cases, four backup-route responses disclose synthetic
+configuration content and two return a synthetic provider error. Corrected
+backup-route responses disclose neither and never invoke export. The two
+privileged download controls still return the expected archive. Every request
+checks all eight fixture gateway rows for unwanted changes. Cancellation,
+read-only settings, scoped permissions and site/tenant denials retain their
+existing behavior. These tests do not validate real user login or vendor TLS.
+
+The initial permission-boundary work exposed a separate transport limitation.
+The upstream rpcd sys.c inspected on 2026-09-25 at commit
+ a6c6b63b47bd8f4f762ef2e6787210cd3e0fb8a0
+has no rpc-sys backup method. LuCI's backup UI at commit
+ f4f91aee257bab4eb9c6b7de6160cea294217956
+posts to cgi-backup. At that point FreeSDN's client helper still called rpc-sys
+backup. The subsequent correction is documented in OPENWRT-CONFIG-TRANSPORT; the
+dedicated page control is documented in OPENWRT-EXPORT-UI. Their synthetic checks
+do not establish physical-device/package compatibility or restore acceptance.
+No shell-command fallback or device write is added by these corrections.
+
+Sources:
+https://github.com/openwrt/rpcd/blob/a6c6b63b47bd8f4f762ef2e6787210cd3e0fb8a0/sys.c
+https://github.com/openwrt/luci/blob/f4f91aee257bab4eb9c6b7de6160cea294217956/modules/luci-mod-system/htdocs/luci-static/resources/view/system/flash.js
+
+Managed artifact storage, retention and restore remain unimplemented. The
+backup UI still needs operation-specific capability presentation. Other
+passthrough routes may map unsupported results to a generic gateway error;
+this adapter refusal prevents their export too but does not revise their HTTP
+contract. No hardware restore, backup durability, RPO/RTO or enterprise readiness
+is established by these synthetic tests.

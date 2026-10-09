@@ -32,7 +32,8 @@ Vulnerability Reporting or email **security@freesdn.org**. See
 
 ## What to expect
 
-FreeSDN is developed in-house by the small team that runs it in production. It's
-free and open source, and we don't run on sponsorships or paid tiers — that
-keeps the project's incentives clean and its recommendations honest. Issues and
-discussions are read and triaged; be clear and kind, and it goes a long way.
+FreeSDN is maintained by its sole owner and developer. Community support depends
+on maintainer capacity; this document does not promise a response time,
+availability commitment, or enterprise support SLA. Issues and discussions are
+read and triaged. Clear reproduction steps and redacted diagnostics help the
+maintainer investigate problems.

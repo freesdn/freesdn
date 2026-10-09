@@ -92,7 +92,7 @@ const defaultValues: HypervisorFormValues = {
   host: '',
   port: 8006,
   use_ssl: true,
-  verify_ssl: false,
+  verify_ssl: true,
   sync_enabled: true,
   sync_interval_seconds: 300,
   auth_mode: 'token',

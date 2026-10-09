@@ -10,3 +10,31 @@ docker-compose*.yml text eol=lf
 
 # Force LF for nginx configs
 *.conf text eol=lf
+
+# Recovery/development evidence is not part of source-distribution archives.
+docs/history/ export-ignore
+.recovery/ export-ignore
+backend/alembic/_archive/ export-ignore
+launch-kit/ export-ignore
+.qualification/ export-ignore
+
+# Vendored native-build inputs are hash-verified byte for byte: ffmpeg-build
+# carries verified-inputs.sha256, and netbird-build/prepare.go pins a SHA-256 of
+# the source it patches. A platform that rewrites their line endings changes
+# those bytes, the verification fails, and the image cannot be built at all --
+# observed as "3 computed checksums did NOT match" for ffmpeg-devel.asc,
+# ffmpeg-9.0.2.tar.xz.asc and posix-ioctl.patch on a Windows checkout with
+# core.autocrlf=true. The *.sh files beside them were already pinned by the rule
+# at the top of this file, which is why only the unpinned ones failed.
+# Verified before widening this: no binary files live under any *-build/ dir.
+**/*-build/** text eol=lf
+
+# The OpenAPI schema and the types generated from it are compared BYTE-FOR-BYTE
+# by `npm run gen:api-check` (openapi-typescript --check), which emits LF. On a
+# checkout with core.autocrlf=true these arrive as CRLF, so the gate reports
+# "Generated types are not up-to-date!" on a tree that has not drifted at all --
+# observed while restoring this guard, where the regenerated file was identical
+# to the committed one ignoring line endings. Pinning LF makes the check mean
+# the same thing on every platform instead of failing by host.
+frontend/openapi.json text eol=lf
+frontend/src/lib/api/generated/openapi.d.ts text eol=lf

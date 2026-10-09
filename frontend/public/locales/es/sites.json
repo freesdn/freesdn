@@ -240,7 +240,10 @@
         "title": "Importar configuración de OpenVPN",
         "description": "Pega el contenido de tu archivo .ovpn. Funciona con cualquier servidor OpenVPN (OPNsense, pfSense, MikroTik o independiente).",
         "submit": "Importar configuración",
-        "hint": "Se admiten certificados incrustados (<ca>, <cert>, <key>). Las directivas de script (up/down/plugin) se rechazan por seguridad."
+        "hint": "Se admiten certificados incrustados (<ca>, <cert>, <key>). Las directivas de script (up/down/plugin) se rechazan por seguridad.",
+        "profileLabel": "Perfil manual de OpenVPN existente",
+        "automaticProfile": "Automático (un perfil coincidente o crear uno nuevo)",
+        "profileHint": "Si existen varios perfiles manuales, seleccione uno explícitamente. Se conservan los demás tipos de VPN y los perfiles gestionados por el controlador."
       },
       "methods": {
         "title": "Métodos de conexión",

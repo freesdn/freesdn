@@ -856,137 +856,131 @@ async def fingerprint_device(
     Fingerprint a specific device by IP.
     Attempts vendor-specific API probes to identify the device.
     """
-    import httpx
-
     ip = request.ip_address
     ports = request.ports
     result = FingerprintResultSchema(ip_address=ip, probes_tried=[], probes_succeeded=[])
 
-    # SECURITY (SSRF-04): resolve+pin the target to a validated IP literal so the
-    # MANY follow-up probes on the shared client below cannot DNS-rebind a
-    # hostname target to loopback/link-local/metadata between validate-time and
-    # request-time. follow_redirects=False is set CLIENT-WIDE (not just on the
-    # first GET) so a 3xx Location can't re-introduce the hole on a sub-probe.
-    from app.core.security_utils import resolve_and_pin_host
+    from app.core.discovery_http import MAX_REQUESTS, DiscoveryProbe
 
+    result.raw_data = {"identity_verified": False, "credentials_used": False}
+    probe = DiscoveryProbe(ip)
     try:
-        ip = resolve_and_pin_host(ip)
-    except ValueError as e:
+        await probe.prepare()
+    except (ValueError, TimeoutError):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid target: {e}",
-        )
+            status_code=400, detail="Invalid or unresolvable discovery target"
+        ) from None
+    # Only validated literals enter URL construction; bracket IPv6 authority.
+    ip = f"[{probe.pinned}]" if ":" in probe.pinned else probe.pinned
+    client = probe
+    for port in ports:
+        for scheme in ["https", "http"]:
+            url = f"{scheme}://{ip}:{port}"
+            try:
+                resp = await client.get(f"{url}/", follow_redirects=False)
+                body = resp.text.lower()
+                server = (resp.headers.get("server") or "").lower()
 
-    async with httpx.AsyncClient(verify=False, timeout=5.0, follow_redirects=False) as client:
-        for port in ports:
-            for scheme in ["https", "http"]:
-                url = f"{scheme}://{ip}:{port}"
-                try:
-                    resp = await client.get(f"{url}/", follow_redirects=False)
-                    body = resp.text.lower()
-                    server = (resp.headers.get("server") or "").lower()
+                # Omada controller probe
+                if "omada" in body or "tplink" in body:
+                    result.probes_tried.append("omada")
+                    try:
+                        info_resp = await client.get(f"{url}/api/v2/info")
+                        if info_resp.status_code == 200:
+                            data = info_resp.json()
+                            result.vendor = "tp-link"
+                            result.device_type = "omada_controller"
+                            result.model = data.get("result", {}).get("controllerName")
+                            result.firmware_version = data.get("result", {}).get("controllerVer")
+                            result.probes_succeeded.append("omada")
+                            result.confidence = 0.95
+                    except Exception:
+                        pass
 
-                    # Omada controller probe
-                    if "omada" in body or "tplink" in body:
-                        result.probes_tried.append("omada")
-                        try:
-                            info_resp = await client.get(f"{url}/api/v2/info")
+                # Hikvision ISAPI probe
+                if "hikvision" in body or "hikvision" in server or "davinci" in server:
+                    result.probes_tried.append("isapi")
+                    try:
+                        import re
+
+                        info_resp = await client.get(f"{url}/ISAPI/System/deviceInfo", timeout=3.0)
+                        if info_resp.status_code in (200, 401):
+                            result.vendor = "hikvision"
+                            result.device_type = "camera" if 554 in ports else "nvr"
                             if info_resp.status_code == 200:
-                                data = info_resp.json()
-                                result.vendor = "tp-link"
-                                result.device_type = "omada_controller"
-                                result.model = data.get("result", {}).get("controllerName")
-                                result.firmware_version = data.get("result", {}).get(
-                                    "controllerVer"
+                                text = info_resp.text
+                                model_m = re.search(r"<model>(.*?)</model>", text, re.I)
+                                fw_m = re.search(
+                                    r"<firmwareVersion>(.*?)</firmwareVersion>", text, re.I
                                 )
-                                result.probes_succeeded.append("omada")
+                                sn_m = re.search(r"<serialNumber>(.*?)</serialNumber>", text, re.I)
+                                if model_m:
+                                    result.model = model_m.group(1)
+                                if fw_m:
+                                    result.firmware_version = fw_m.group(1)
+                                if sn_m:
+                                    result.serial_number = sn_m.group(1)
+                                result.probes_succeeded.append("isapi")
                                 result.confidence = 0.95
-                        except Exception:
-                            pass
+                            else:
+                                result.confidence = 0.7
+                    except Exception:
+                        pass
 
-                    # Hikvision ISAPI probe
-                    if "hikvision" in body or "hikvision" in server or "davinci" in server:
-                        result.probes_tried.append("isapi")
-                        try:
-                            import re
+                # MikroTik RouterOS probe
+                if "mikrotik" in body or "routeros" in body or "webfig" in body:
+                    result.probes_tried.append("mikrotik")
+                    result.vendor = "mikrotik"
+                    result.device_type = "router"
+                    result.confidence = 0.8
+                    result.probes_succeeded.append("mikrotik")
 
-                            info_resp = await client.get(
-                                f"{url}/ISAPI/System/deviceInfo", timeout=3.0
-                            )
-                            if info_resp.status_code in (200, 401):
-                                result.vendor = "hikvision"
-                                result.device_type = "camera" if 554 in ports else "nvr"
-                                if info_resp.status_code == 200:
-                                    text = info_resp.text
-                                    model_m = re.search(r"<model>(.*?)</model>", text, re.I)
-                                    fw_m = re.search(
-                                        r"<firmwareVersion>(.*?)</firmwareVersion>", text, re.I
-                                    )
-                                    sn_m = re.search(
-                                        r"<serialNumber>(.*?)</serialNumber>", text, re.I
-                                    )
-                                    if model_m:
-                                        result.model = model_m.group(1)
-                                    if fw_m:
-                                        result.firmware_version = fw_m.group(1)
-                                    if sn_m:
-                                        result.serial_number = sn_m.group(1)
-                                    result.probes_succeeded.append("isapi")
-                                    result.confidence = 0.95
-                                else:
-                                    result.confidence = 0.7
-                        except Exception:
-                            pass
+                # pfSense probe
+                if "pfsense" in body:
+                    result.probes_tried.append("pfsense")
+                    result.vendor = "netgate"
+                    result.device_type = "firewall"
+                    result.confidence = 0.85
+                    result.probes_succeeded.append("pfsense")
 
-                    # MikroTik RouterOS probe
-                    if "mikrotik" in body or "routeros" in body or "webfig" in body:
-                        result.probes_tried.append("mikrotik")
-                        result.vendor = "mikrotik"
-                        result.device_type = "router"
-                        result.confidence = 0.8
-                        result.probes_succeeded.append("mikrotik")
+                # OPNsense probe
+                if "opnsense" in body:
+                    result.probes_tried.append("opnsense")
+                    result.vendor = "deciso"
+                    result.device_type = "firewall"
+                    result.confidence = 0.85
+                    result.probes_succeeded.append("opnsense")
 
-                    # pfSense probe
-                    if "pfsense" in body:
-                        result.probes_tried.append("pfsense")
-                        result.vendor = "netgate"
-                        result.device_type = "firewall"
-                        result.confidence = 0.85
-                        result.probes_succeeded.append("pfsense")
+                # Grandstream probe
+                if "grandstream" in body:
+                    result.probes_tried.append("grandstream")
+                    result.vendor = "grandstream"
+                    result.device_type = "voip"
+                    result.confidence = 0.8
+                    result.probes_succeeded.append("grandstream")
 
-                    # OPNsense probe
-                    if "opnsense" in body:
-                        result.probes_tried.append("opnsense")
-                        result.vendor = "deciso"
-                        result.device_type = "firewall"
-                        result.confidence = 0.85
-                        result.probes_succeeded.append("opnsense")
+                # UniFi probe
+                if "unifi" in body or "ubiquiti" in body:
+                    result.probes_tried.append("unifi")
+                    result.vendor = "ubiquiti"
+                    result.device_type = "unifi_controller"
+                    result.confidence = 0.85
+                    result.probes_succeeded.append("unifi")
 
-                    # Grandstream probe
-                    if "grandstream" in body:
-                        result.probes_tried.append("grandstream")
-                        result.vendor = "grandstream"
-                        result.device_type = "voip"
-                        result.confidence = 0.8
-                        result.probes_succeeded.append("grandstream")
+                if result.confidence > 0:
+                    break
 
-                    # UniFi probe
-                    if "unifi" in body or "ubiquiti" in body:
-                        result.probes_tried.append("unifi")
-                        result.vendor = "ubiquiti"
-                        result.device_type = "unifi_controller"
-                        result.confidence = 0.85
-                        result.probes_succeeded.append("unifi")
+            except Exception:
+                continue
 
-                    if result.confidence > 0:
-                        break
+        if result.confidence >= 0.9:
+            break
 
-                except (httpx.ConnectError, httpx.ReadTimeout, Exception):
-                    continue
-
-            if result.confidence >= 0.9:
-                break
-
+    result.raw_data.update(
+        probe_requests=probe.requests,
+        incomplete=probe.limited,
+        request_limit=MAX_REQUESTS,
+    )
     return result
 
 

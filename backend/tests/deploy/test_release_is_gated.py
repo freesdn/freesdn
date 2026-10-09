@@ -23,6 +23,7 @@ them. This test is the check I should have written then.
 from __future__ import annotations
 
 import pathlib
+import re
 
 import pytest
 
@@ -58,9 +59,37 @@ def _ancestors(jobs: dict, name: str, seen: set[str] | None = None) -> set[str]:
     return seen
 
 
+def _assert_source_only(workflow: dict) -> None:
+    """A source-validation workflow must have no route to public promotion."""
+    events = workflow.get("on", workflow.get(True, {}))
+    assert "tags" not in events.get("push", {})
+    assert workflow.get("permissions") == {"contents": "read"}
+    jobs = workflow["jobs"]
+    assert not (_PUBLISH_CHAIN & jobs.keys())
+    for job in jobs.values():
+        assert all(value != "write" for value in job.get("permissions", {}).values())
+        for step in job.get("steps", []):
+            action = step.get("uses", "").split("@", 1)[0]
+            assert action not in {"softprops/action-gh-release", "ncipollo/release-action", "actions/attest-build-provenance"}
+            if action == "docker/build-push-action":
+                assert step.get("with", {}).get("push", False) in (False, "false")
+            assert not re.search(r"\b(?:docker\s+(?:image\s+)?push|gh\s+release\s+create|cosign\s+(?:sign|attest))\b", step.get("run", ""))
+
+
+def _source_only(workflow: dict) -> bool:
+    if _PUBLISH_CHAIN & workflow["jobs"].keys():
+        return False
+    _assert_source_only(workflow)
+    return True
+
+
 def test_the_workflow_parses_and_has_the_jobs_this_test_checks() -> None:
     """Guard the guard: an empty parse would make the assertions below vacuous."""
-    jobs = _workflow().get("jobs") or {}
+    workflow = _workflow()
+    jobs = workflow.get("jobs") or {}
+    assert {"backend", "frontend", "dependency-audit", "secret-scan", "application-image-security"} <= set(jobs)
+    if _source_only(workflow):
+        return
     assert {"release", "build-images", "dependency-audit"} <= set(jobs), (
         f"expected the publish chain and the audit job; found {sorted(jobs)}"
     )
@@ -68,7 +97,10 @@ def test_the_workflow_parses_and_has_the_jobs_this_test_checks() -> None:
 
 def test_every_blocking_job_can_stop_a_release() -> None:
     """The core regression. Fails before the fix, naming dependency-audit."""
-    jobs = _workflow().get("jobs") or {}
+    workflow = _workflow()
+    if _source_only(workflow):
+        return
+    jobs = workflow["jobs"]
     gating = _ancestors(jobs, "release")
 
     ungated = sorted(
@@ -94,7 +126,10 @@ def test_the_audit_gates_image_publication_not_merely_the_release() -> None:
     Gating ``release`` alone would still let a vulnerable image reach ghcr and be
     cosign-signed; only the GitHub release would be withheld.
     """
-    jobs = _workflow().get("jobs") or {}
+    workflow = _workflow()
+    if _source_only(workflow):
+        return
+    jobs = workflow["jobs"]
     assert "dependency-audit" in (jobs["build-images"].get("needs") or []), (
         "dependency-audit must gate build-images, so a vulnerable image is never "
         "pushed or signed at all"
@@ -116,3 +151,19 @@ def test_the_advisory_exemptions_are_actually_advisory() -> None:
         f"{wrong} are exempted here as advisory but no longer set "
         "continue-on-error, so they are blocking jobs that cannot stop a release"
     )
+
+
+@pytest.mark.parametrize("change", ["tag", "write", "push", "release", "attest", "publishing_action"])
+def test_source_only_contract_refuses_publication_paths(change):
+    workflow = {"on": {"push": {"branches": ["main"]}}, "permissions": {"contents": "read"}, "jobs": {"check": {"steps": []}}}
+    if change == "tag":
+        workflow["on"]["push"]["tags"] = ["v*"]
+    elif change == "write":
+        workflow["jobs"]["check"]["permissions"] = {"packages": "write"}
+    elif change == "publishing_action":
+        workflow["jobs"]["check"]["steps"] = [{"uses": "docker/build-push-action@pin", "with": {"push": True}}]
+    else:
+        command = {"push": "docker push candidate", "release": "gh release create v1", "attest": "cosign attest candidate"}[change]
+        workflow["jobs"]["check"]["steps"] = [{"run": command}]
+    with pytest.raises(AssertionError):
+        _assert_source_only(workflow)

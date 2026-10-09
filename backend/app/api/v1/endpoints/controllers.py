@@ -10,6 +10,7 @@ Full CRUD operations for controllers with:
 - Sync management
 """
 
+import copy
 import logging
 import time
 from datetime import UTC, datetime
@@ -19,10 +20,16 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 
 logger = logging.getLogger(__name__)
-from sqlalchemy import func, literal, select
+from sqlalchemy import Select, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.controller_diagnostics import (
+    CONNECTION_FAILED,
+    CONNECTION_SUCCEEDED,
+    public_controller_error,
+    public_controller_history,
+)
 from app.core.crypto import decrypt_credential, encrypt_credential, is_encrypted
 from app.core.dependencies import (
     CurrentUser,
@@ -32,7 +39,7 @@ from app.core.dependencies import (
 from app.core.site_access import assert_can_access_site, site_scope_filter
 from app.core.tenancy import tenant_filter
 from app.db import get_session
-from app.models import Controller, ControllerStatus, Device, DeviceStatus, Site
+from app.models import Controller, ControllerStatus, Device, DeviceStatus, Organization, Site
 from app.schemas import (
     ControllerCreate,
     ControllerProbe,
@@ -727,23 +734,58 @@ async def create_controller(
     await session.commit()
     await session.refresh(controller)
 
+    # Bind delayed work to the ownership scope that authorized creation.
+    initial_site_id = controller_data.site_id
+    initial_organization_id = site.organization_id
+
     # Schedule an initial connection test in the background so the create
     # response returns immediately while the controller is being probed.
     async def _initial_connection_test(controller_id: UUID) -> None:
         from app.adapters.registry import adapter_registry
         from app.db import async_session_factory
 
-        async with async_session_factory() as bg_session:
-            stmt = select(Controller).where(
-                Controller.id == controller_id,
-                Controller.deleted_at.is_(None),
+        def authority_query() -> Select[Controller]:
+            return (
+                select(Controller)
+                .join(Site, Controller.site_id == Site.id)
+                .join(Organization, Site.organization_id == Organization.id)
+                .where(
+                    Controller.id == controller_id,
+                    Controller.site_id == initial_site_id,
+                    Controller.deleted_at.is_(None),
+                    Controller.is_active.is_(True),
+                    Site.organization_id == initial_organization_id,
+                    Site.deleted_at.is_(None),
+                    Site.is_active.is_(True),
+                    Organization.deleted_at.is_(None),
+                    Organization.is_active.is_(True),
+                )
             )
-            row = await bg_session.execute(stmt)
-            ctrl = row.scalar_one_or_none()
-            if not ctrl:
-                return
 
-            mode = (ctrl.config or {}).get("connection_mode", "local")
+        def connection_snapshot(ctrl: Controller) -> tuple[Any, ...]:
+            # Include the revision and outcome so a newer edit or connection
+            # check wins even when it leaves connection settings unchanged.
+            return (
+                ctrl.controller_type,
+                ctrl.host,
+                ctrl.port,
+                ctrl.use_ssl,
+                ctrl.verify_ssl,
+                copy.deepcopy(ctrl.config or {}),
+                ctrl.updated_at,
+                ctrl.status,
+                ctrl.last_error,
+            )
+
+        async with async_session_factory() as bg_session:
+            ctrl = (await bg_session.execute(authority_query())).scalar_one_or_none()
+            if ctrl is None:
+                return
+            original = connection_snapshot(ctrl)
+
+        # No database transaction or authority lock spans controller I/O.
+        mode = (ctrl.config or {}).get("connection_mode", "local")
+        try:
             kwargs: dict[str, Any] = {
                 "port": ctrl.port,
                 "use_ssl": ctrl.use_ssl,
@@ -773,54 +815,57 @@ async def create_controller(
             if ctrl.controller_type == "truenas":
                 kwargs["api_key"] = _decrypt_if_needed((ctrl.config or {}).get("password"))
 
-            try:
-                adapter = adapter_registry.create_adapter(
-                    adapter_id=ctrl.controller_type.lower(),
-                    host=ctrl.host,
-                    username=_decrypt_if_needed((ctrl.config or {}).get("username")),
-                    password=_decrypt_if_needed((ctrl.config or {}).get("password")),
-                    **kwargs,
-                )
-                async with adapter:
-                    test_result = await adapter.test_connection()
+            adapter = adapter_registry.create_adapter(
+                adapter_id=ctrl.controller_type.lower(),
+                host=ctrl.host,
+                username=_decrypt_if_needed((ctrl.config or {}).get("username")),
+                password=_decrypt_if_needed((ctrl.config or {}).get("password")),
+                **kwargs,
+            )
+            async with adapter:
+                test_result = await adapter.test_connection()
 
-                success = bool(getattr(test_result, "success", False))
-                ctrl.status = (
-                    ControllerStatus.CONNECTED if success else ControllerStatus.DISCONNECTED
-                )
-                ctrl.last_error = (
-                    None
-                    if success
-                    else (getattr(test_result, "error", None) or "Connection test failed")
-                )
-                logger.info(
-                    "Initial connection test for controller %s: %s",
-                    controller_id,
-                    "success" if success else ctrl.last_error,
-                )
-            except Exception as exc:
-                ctrl.status = ControllerStatus.ERROR
-                # Strip URL fragments before persist — see /test handler.
-                import re as _re
+            success = bool(getattr(test_result, "success", False))
+            outcome_status = (
+                ControllerStatus.CONNECTED if success else ControllerStatus.DISCONNECTED
+            )
+            outcome_error = (
+                None
+                if success
+                else public_controller_error(getattr(test_result, "error", None))
+                or CONNECTION_FAILED
+            )
+        except Exception as exc:
+            outcome_status = ControllerStatus.ERROR
+            outcome_error = _build_error_hint(exc, mode)
+            success = False
+            logger.warning("Initial connection test failed for controller %s", controller_id)
 
-                ctrl.last_error = _re.sub(r"https?://\S+", "<redacted-url>", str(exc))[:500]
-                success = False
-                logger.warning(
-                    "Initial connection test failed for controller %s: %s",
-                    controller_id,
-                    exc,
+        async with async_session_factory() as bg_session:
+            # Re-read committed authority and hold it through the result commit.
+            current = (
+                await bg_session.execute(
+                    authority_query().with_for_update(of=(Controller, Site, Organization))
                 )
+            ).scalar_one_or_none()
+            if current is None or connection_snapshot(current) != original:
+                return
+            current.status = outcome_status
+            current.last_error = outcome_error
             await bg_session.commit()
 
-            # On successful connection, trigger immediate device discovery
-            if success:
-                from app.tasks.discovery import discover_devices_for_controller
+        logger.info(
+            "Initial connection test for controller %s: %s",
+            controller_id,
+            "success" if success else outcome_error,
+        )
+        # Broker publication remains a separate operation after the DB commit.
+        if success:
+            from app.tasks.discovery import discover_devices_for_controller
 
-                discover_devices_for_controller.apply_async(
-                    args=[str(controller_id)],
-                    countdown=3,
-                    queue="discovery",
-                )
+            discover_devices_for_controller.apply_async(
+                args=[str(controller_id)], countdown=3, queue="discovery"
+            )
 
     if background_tasks is not None:
         background_tasks.add_task(_initial_connection_test, controller.id)
@@ -837,8 +882,7 @@ async def create_controller(
             exc = task.exception()
             if exc is not None:
                 logger.warning(
-                    "Initial connection test orphan task failed: %s",
-                    exc,
+                    "Initial connection test orphan task failed",
                 )
 
         _t = asyncio.ensure_future(_initial_connection_test(controller.id))
@@ -1116,8 +1160,7 @@ def _build_error_hint(exc: Exception, mode: str | None = "local") -> str:
             )
         return (
             "Cannot reach the controller. "
-            "Verify the host address, port, and that the controller is running. "
-            "If using HTTPS with a self-signed certificate, disable 'Verify SSL'."
+            "Verify the host address, port, network access and the trusted TLS certificate configuration."
         )
     if isinstance(exc, OmadaTimeoutError):
         return "Connection timed out. The controller may be overloaded or unreachable."
@@ -1139,9 +1182,11 @@ def _build_error_hint(exc: Exception, mode: str | None = "local") -> str:
                 "The user or API token lacks the required privileges. "
                 "Ensure PVEAuditor or higher role is assigned."
             )
-        return f"Proxmox API error ({status_code}): {exc}"
+        if type(status_code) is int and 100 <= status_code <= 599:
+            return f"Proxmox API request failed (HTTP {status_code})."
+        return "Proxmox API request failed."
 
-    logger.error("Unexpected controller error: %s", exc)
+    logger.error("Unexpected controller error")
     return "An unexpected error occurred. Check server logs for details."
 
 
@@ -1209,6 +1254,10 @@ async def test_controller_connection(
             )
         kwargs["realm"] = (controller.config or {}).get("realm", "pam")
 
+    # Match onboarding and storage operations: the password field holds the API key.
+    if controller.type.lower() == "truenas":
+        kwargs["api_key"] = _decrypt_if_needed(controller.password)
+
     try:
         adapter = adapter_registry.create_adapter(
             adapter_id=controller.type.lower(),
@@ -1227,7 +1276,7 @@ async def test_controller_connection(
         controller.last_error = (
             None
             if success
-            else (getattr(test_result, "error", None) or getattr(test_result, "message", None))
+            else public_controller_error(getattr(test_result, "error", None)) or CONNECTION_FAILED
         )
         await session.commit()
 
@@ -1243,22 +1292,17 @@ async def test_controller_connection(
 
         return {
             "success": success,
-            "message": getattr(test_result, "message", None)
-            or ("Connection successful" if success else "Connection failed"),
+            "message": CONNECTION_SUCCEEDED if success else CONNECTION_FAILED,
             "controller_id": str(controller_id),
             "status": controller.status,
-            "error": getattr(test_result, "error", None),
+            "error": None
+            if success
+            else public_controller_error(getattr(test_result, "error", None)) or CONNECTION_FAILED,
             "details": details,
         }
     except Exception as exc:
         controller.status = ControllerStatus.DISCONNECTED
-        # ``str(exc)`` from httpx / asyncpg / adapter layers often
-        # embeds the full controller URL plus auth fragments. Strip
-        # URLs and cap length before persisting to ``last_error``
-        # since it surfaces in ``/stats`` and the FE detail view.
-        import re as _re
-
-        controller.last_error = _re.sub(r"https?://\S+", "<redacted-url>", str(exc))[:500]
+        controller.last_error = _build_error_hint(exc, controller.connection_mode)
         await session.commit()
 
         # Provide actionable error hints
@@ -1662,8 +1706,8 @@ async def get_controller_metadata(
         "sync": {
             "last_sync": controller.last_sync.isoformat() if controller.last_sync else None,
             "last_sync_duration_seconds": config.get("last_sync_duration_seconds"),
-            "last_error": controller.last_error,
-            "error_history": config.get("error_history", []),
+            "last_error": public_controller_error(controller.last_error),
+            "error_history": public_controller_history(config.get("error_history", [])),
         },
         # a site-limited caller must not see the full
         # {upstream_site: sibling_freesdn_uuid} map (it leaks sibling target site
@@ -1749,15 +1793,8 @@ async def get_controller_remote_sites(
     except Exception as e:
         # Don't leak raw controller-side exception text (httpx/asyncpg/adapter
         # layers embed full controller URLs + auth fragments) into the API
-        # response. Log the full detail server-side; return an actionable hint
-        # built from the exception TYPE only (mirrors _build_error_hint and the
-        # URL-strip done in the /test handlers).
-        logger.error(
-            "get_controller_remote_sites: failed to fetch sites from controller %s: %s",
-            controller_id,
-            e,
-            exc_info=True,
-        )
+        # response or logs. Keep an actionable hint based on known types.
+        logger.error("Controller site discovery failed (controller_id=%s)", controller_id)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=(
@@ -1942,8 +1979,8 @@ async def probe_remote_sites(
             password=password,
             **kwargs,
         )
-    except Exception as e:
-        logger.error("Failed to create adapter for '%s': %s", adapter_id, e, exc_info=True)
+    except Exception:
+        logger.error("Controller adapter creation failed")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to create adapter. Verify that the controller type is supported.",
@@ -1953,55 +1990,8 @@ async def probe_remote_sites(
         async with adapter:
             remote_sites = await adapter.get_sites()
     except Exception as e:
-        # Build a diagnostic message based on the exception type
-        from app.adapters.exceptions import (
-            AdapterAuthenticationError,
-            AdapterConnectionError,
-        )
-        from app.adapters.omada.exceptions import (
-            OmadaAuthError,
-            OmadaConnectionError,
-            OmadaTimeoutError,
-        )
-
-        logger.error("Controller connection test failed: %s", e, exc_info=True)
-
-        if isinstance(e, (AdapterAuthenticationError, OmadaAuthError)):
-            if mode == "cloud":
-                hint = (
-                    "Authentication failed with the Omada Cloud API. "
-                    "Please verify: (1) Client ID and Client Secret are correct and belong to an active OpenAPI application, "
-                    "(2) The Omada Controller ID (omadacId) matches your cloud controller, "
-                    "(3) The selected cloud region matches your controller's region. "
-                    "You can find these in Omada Settings, Platform Integration, OpenAPI."
-                )
-            else:
-                hint = (
-                    "Authentication failed with the local Omada controller. "
-                    "Please verify your username and password are correct. "
-                    "Ensure the account has admin privileges (viewer accounts cannot access the API)."
-                )
-        elif isinstance(e, (AdapterConnectionError, OmadaConnectionError)):
-            if mode == "cloud":
-                hint = (
-                    "Cannot reach the cloud endpoint. "
-                    "Verify the cloud region is correct. "
-                    "Also ensure outbound HTTPS (port 443) is not blocked by your firewall."
-                )
-            else:
-                hint = (
-                    "Cannot reach the Omada controller. "
-                    "Verify the host address and port are correct and the controller is running. "
-                    "If using HTTPS with a self-signed certificate, make sure 'Verify SSL' is disabled."
-                )
-        elif isinstance(e, OmadaTimeoutError):
-            hint = (
-                "The connection request timed out. "
-                "The controller may be overloaded or unreachable. "
-                "Check network connectivity and try again."
-            )
-        else:
-            hint = "An unexpected error occurred. Check the backend logs for full details."
+        logger.error("Controller site probe failed")
+        hint = _build_error_hint(e, mode)
 
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -2104,7 +2094,7 @@ async def test_connection_precreation(
             **kwargs,
         )
     except Exception as e:
-        logger.error("Failed to create adapter for '%s': %s", adapter_id, e, exc_info=True)
+        logger.error("Controller adapter creation failed")
         return {
             "success": False,
             "message": "Failed to create adapter. Verify that the controller type is supported.",
@@ -2131,13 +2121,14 @@ async def test_connection_precreation(
 
         return {
             "success": success,
-            "message": getattr(test_result, "message", None)
-            or ("Connection successful" if success else "Connection failed"),
-            "error": getattr(test_result, "error", None),
+            "message": CONNECTION_SUCCEEDED if success else CONNECTION_FAILED,
+            "error": None
+            if success
+            else public_controller_error(getattr(test_result, "error", None)) or CONNECTION_FAILED,
             "details": details,
         }
     except Exception as exc:
-        logger.error("Pre-creation connection test failed: %s", exc, exc_info=True)
+        logger.error("Pre-creation connection test failed")
         error_hint = _build_error_hint(exc, mode)
         return {
             "success": False,

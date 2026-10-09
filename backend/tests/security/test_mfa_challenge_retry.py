@@ -86,12 +86,19 @@ def _mfa_env(broken_redis: bool = False) -> Iterator[dict[str, Any]]:
     async def _is_blacklisted(jti: str) -> bool:
         return jti in blacklist
 
+    async def _claim(jti: str, exp: Any) -> bool:
+        if jti in blacklist:
+            return False
+        blacklist.add(jti)
+        return True
+
     with (
         patch("app.api.v1.endpoints.auth.check_auth_rate_limit", new=AsyncMock()),
         patch("app.api.v1.endpoints.auth._audit_failed_login", new=AsyncMock()),
         patch("app.api.v1.endpoints.auth._audit_auth_event", new=AsyncMock()),
         patch("app.api.v1.endpoints.auth.reset_auth_user_rate_limit", new=AsyncMock()),
         patch("app.core.token_blacklist.blacklist_token", new=_blacklist),
+        patch("app.core.token_blacklist.claim_token_jti", new=_claim),
         patch("app.core.token_blacklist.is_token_blacklisted", new=_is_blacklisted),
         patch(
             "app.core.redis_client.get_async_redis",
@@ -246,3 +253,22 @@ async def test_attempt_accounting_fails_closed_when_redis_is_down() -> None:
             await _attempt(user, token, pyotp.TOTP(secret).now())
 
     assert exc.value.status_code == 503
+
+
+async def test_valid_mfa_code_cannot_issue_a_session_after_losing_the_durable_claim():
+    secret = pyotp.random_base32()
+    user = _make_user(secret)
+    session = _session_for(user)
+    with (
+        _mfa_env(),
+        patch("app.core.token_blacklist.claim_token_jti", new=AsyncMock(return_value=False)),
+    ):
+        with pytest.raises(HTTPException) as refused:
+            await login_mfa(
+                request=_request(),
+                response=Response(),
+                data=MfaLoginRequest(mfa_token=_mfa_token(user), code=pyotp.TOTP(secret).now()),
+                session=session,
+            )
+    assert refused.value.status_code == 401
+    session.commit.assert_not_awaited()

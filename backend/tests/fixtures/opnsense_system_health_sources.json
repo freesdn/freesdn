@@ -1,0 +1,57 @@
+{
+  "purpose": "Synthetic test contracts tied to immutable upstream producers; not device captures",
+  "core_commit": "cdde38bee141a71733638a645600f68126ce1af7",
+  "sources": [
+    {
+      "path": "src/opnsense/mvc/app/controllers/OPNsense/Core/Api/FirmwareController.php",
+      "url": "https://raw.githubusercontent.com/opnsense/core/cdde38bee141a71733638a645600f68126ce1af7/src/opnsense/mvc/app/controllers/OPNsense/Core/Api/FirmwareController.php",
+      "git_blob_sha1": "20364f07f74e1fcf45b8561477a3bdad09329cd8",
+      "sha256": "27af247166e15dc3dcf6b61189045b6715298ebfd8c4d7f974ff4cf75a507a0d"
+    },
+    {
+      "path": "src/opnsense/mvc/app/controllers/OPNsense/Core/Api/SystemController.php",
+      "url": "https://raw.githubusercontent.com/opnsense/core/cdde38bee141a71733638a645600f68126ce1af7/src/opnsense/mvc/app/controllers/OPNsense/Core/Api/SystemController.php",
+      "git_blob_sha1": "587e6d0b2b771a4d4e0f3f9911b677348373306f",
+      "sha256": "e1d9be96b076b1b230325a25baf944a57f9e53c286f719114b78e74b282374ba"
+    },
+    {
+      "path": "src/opnsense/mvc/app/controllers/OPNsense/Diagnostics/Api/SystemController.php",
+      "url": "https://raw.githubusercontent.com/opnsense/core/cdde38bee141a71733638a645600f68126ce1af7/src/opnsense/mvc/app/controllers/OPNsense/Diagnostics/Api/SystemController.php",
+      "git_blob_sha1": "8cf5a981efd915a6b0cf0c99bda7406ae9bdc54e",
+      "sha256": "5b1c7a4dcf04be4a7dc3580a8d2cd21edd34a2b7a21f30183cfef1eaa4d03331"
+    },
+    {
+      "path": "src/opnsense/www/js/widgets/SystemInformation.js",
+      "url": "https://raw.githubusercontent.com/opnsense/core/cdde38bee141a71733638a645600f68126ce1af7/src/opnsense/www/js/widgets/SystemInformation.js",
+      "git_blob_sha1": "a4b46be7d52d95e0c75b651be876bb7b1c8bc273",
+      "sha256": "38c8b1114521512a6eb339551c161a09e634b962a29bfe1241e17d398ac7fc1d"
+    },
+    {
+      "path": "src/opnsense/scripts/routes/gateway_status.php",
+      "url": "https://raw.githubusercontent.com/opnsense/core/cdde38bee141a71733638a645600f68126ce1af7/src/opnsense/scripts/routes/gateway_status.php",
+      "git_blob_sha1": "4fc1384528a0abc074d5212ca02a408c8bcce36c",
+      "sha256": "c4bcc63820e6f343af8834ce454cd5d4cbacedd8a065204b1e1578466c5d05a8"
+    },
+    {
+      "path": "src/opnsense/www/js/widgets/Gateways.js",
+      "url": "https://raw.githubusercontent.com/opnsense/core/cdde38bee141a71733638a645600f68126ce1af7/src/opnsense/www/js/widgets/Gateways.js",
+      "git_blob_sha1": "b05f7ec76517c64465fc4dabd0e833d27c0e88bb",
+      "sha256": "0fd6ee241ce748f978c4092942ddf7f70a5d3e273bcb4862dee0947ca897ff54"
+    },
+    {
+      "path": "src/etc/inc/plugins.inc.d/dpinger.inc",
+      "url": "https://raw.githubusercontent.com/opnsense/core/cdde38bee141a71733638a645600f68126ce1af7/src/etc/inc/plugins.inc.d/dpinger.inc",
+      "git_blob_sha1": "53aed5a6e107d5a56213aa1655ea748c874d9a9b",
+      "sha256": "2713373089f75c8afc88b1728dc1d251b82c069b7dd8c95e2114309fc4a22360"
+    },
+    {
+      "path": "src/opnsense/mvc/app/models/OPNsense/Routing/Gateways.php",
+      "url": "https://raw.githubusercontent.com/opnsense/core/cdde38bee141a71733638a645600f68126ce1af7/src/opnsense/mvc/app/models/OPNsense/Routing/Gateways.php",
+      "git_blob_sha1": "87d700c661f44e65d7b9031561d69aa1f6ab91f1",
+      "sha256": "92e4dc78d6147d6ab53a529a0126fbf1c73a550016ce4c5dc0b6eb3b92d92387"
+    }
+  ],
+  "monitor_none_semantics": "Raw none can mean no monitor samples or monitored/no alarm; measured zero is preserved.",
+  "routing_join_scope": "searchGateway includes disabled/inactive entries which need not appear in status; reported active rows must match a unique configured name.",
+  "firmware_semantics": "Nested product metadata; status and product_check distinguish unchecked, checked none, update and upgrade; reboot flags do not determine update availability."
+}

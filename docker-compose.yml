@@ -28,11 +28,16 @@ x-backend-build: &backend-build
   dockerfile: Dockerfile
   target: ${BACKEND_TARGET:-production}
 
-# Data-tier images are BUILT from thin wrappers that apt-get upgrade the base at
-# build time (docker/Dockerfile.{postgres,valkey}), so the running database and
-# cache ship with current OS security patches regardless of when Docker Hub last
-# rebuilt the upstream tag. POSTGRES_VERSION / VALKEY_VERSION still select the
-# base via build args, exactly as the old `image:` lines did.
+# PostgreSQL stays on the Debian runtime, which is what makes an upgrade from
+# 26.09.0 an image-only change: the existing volume is adopted in place, with no
+# logical migration, no new volume and no locale change. See
+# docker/postgres/UPGRADING.
+#
+# This default MUST stay a trixie tag. It is a build argument, so it overrides
+# the Dockerfile's own default, and Dockerfile.postgres asserts
+# VERSION_CODENAME=trixie -- an Alpine tag here does not quietly produce a musl
+# image, it fails the build of every deployment that runs `compose build`.
+# Cache and database wrappers apply supported OS updates at build time.
 x-postgres-build: &postgres-build
   context: ./docker
   dockerfile: Dockerfile.postgres
@@ -42,7 +47,7 @@ x-valkey-build: &valkey-build
   context: ./docker
   dockerfile: Dockerfile.valkey
   args:
-    VALKEY_VERSION: ${VALKEY_VERSION:-8.1.9-trixie}
+    VALKEY_VERSION: ${VALKEY_VERSION:-9.1.2-alpine}
 
 x-backend-env: &backend-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-freesdn}:${POSTGRES_PASSWORD}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${POSTGRES_DB:-freesdn}
@@ -54,12 +59,23 @@ x-backend-env: &backend-env
   CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@redis:6379/2
   GO2RTC_URL: ${GO2RTC_URL:-http://go2rtc:1984}
   SECRET_KEY: ${SECRET_KEY}
+  # Optional auth-only rotation; keep SECRET_KEY/ENCRYPTION_SALT unchanged.
+  # All API/worker/scheduler replicas must switch together while isolated.
+  JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-}
+  # Explicit public HTTPS origin for authenticated report-notice links.
+  FRONTEND_URL: ${FRONTEND_URL:-}
+  SLA_REPORT_DELIVERY_EPOCH: ${SLA_REPORT_DELIVERY_EPOCH:-}
   ENCRYPTION_SALT: ${ENCRYPTION_SALT}
+  # Trusted same-origin vault confirmation callback; never derived from Host.
+  VAULT_OIDC_REDIRECT_URI: ${VAULT_OIDC_REDIRECT_URI:-}
   # Production validates POSTGRES_PASSWORD as a standalone setting (not just in
   # DATABASE_URL); pass it (and LOGDB_PASSWORD) explicitly to every service.
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
   LOGDB_PASSWORD: ${LOGDB_PASSWORD}
   ENVIRONMENT: ${ENVIRONMENT:-production}
+  # TrueNAS/UniFi Protect: optional additional private CA, mounted read-only
+  # into every connecting backend service. See docker/DEVICE-TLS.
+  FREESDN_DEVICE_CA_BUNDLE: ${FREESDN_DEVICE_CA_BUNDLE:-}
   LOG_LEVEL: ${LOG_LEVEL:-WARNING}
   # Adapter write safety — one switch, two states. Default read-WRITE (false):
   # FreeSDN manages your gear out of the box, like pfSense/OPNsense/Omada/UniFi.
@@ -72,6 +88,14 @@ x-backend-env: &backend-env
   # volumes on api/worker) instead of the image default /var/lib/freesdn/* which
   # is on the read-only rootfs and unwritable by the non-root appuser.
   FREESDN_AGENT_RELEASE_DIR: ${FREESDN_AGENT_RELEASE_DIR:-/data/agent-releases}
+  # New managed bytes use a marked private child of the existing release root.
+  # An explicit override's parent must already exist on a shared persistent
+  # volume. No startup adoption, chmod of old data, or implicit key generation.
+  FREESDN_AGENT_MANAGED_RELEASE_DIR: ${FREESDN_AGENT_MANAGED_RELEASE_DIR:-}
+  FREESDN_AGENT_RELEASE_GLOBAL_HISTORY_LIMIT: ${FREESDN_AGENT_RELEASE_GLOBAL_HISTORY_LIMIT:-10000}
+  FREESDN_AGENT_RELEASE_ORG_HISTORY_LIMIT: ${FREESDN_AGENT_RELEASE_ORG_HISTORY_LIMIT:-2000}
+  FREESDN_AGENT_RELEASE_GLOBAL_BYTE_LIMIT: ${FREESDN_AGENT_RELEASE_GLOBAL_BYTE_LIMIT:-53687091200}
+  FREESDN_AGENT_RELEASE_ORG_BYTE_LIMIT: ${FREESDN_AGENT_RELEASE_ORG_BYTE_LIMIT:-10737418240}
   PROXMOX_UPLOAD_DIR: ${PROXMOX_UPLOAD_DIR:-/data/proxmox-uploads}
   # Metrics gate: set METRICS_AUTH_TOKEN to enable authenticated
   # /metrics scraping in prod/staging; unset → the endpoint is not served.
@@ -92,6 +116,8 @@ x-backend-env: &backend-env
   MARKETPLACE_REGISTRY_URL: ${MARKETPLACE_REGISTRY_URL:-https://registry.freesdn.org/plugins.json}
   MARKETPLACE_PUBLISHER_PUBLIC_KEY: ${MARKETPLACE_PUBLISHER_PUBLIC_KEY:-580c30040c2eec36902d4ea9e778ee12cac270011703e9e9f8f7c617158711d5}
   MARKETPLACE_ALLOW_UNSIGNED: ${MARKETPLACE_ALLOW_UNSIGNED:-}
+  # Keep this floor outside database backups; raise it before restoring an older DB.
+  MARKETPLACE_MIN_SERIAL: ${MARKETPLACE_MIN_SERIAL:-0}
   # Hosts a PLUGIN's outbound HTTP may reach even when they are private/LAN.
   # Empty means public destinations only, which rules out most of what a
   # self-hosted operator would integrate with: their NetBox, Gotify, Grafana or
@@ -117,6 +143,7 @@ services:
   # ── PostgreSQL - primary relational DB (internal only) ─────────────────────
   postgres:
     build: *postgres-build
+    image: ${POSTGRES_IMAGE:-freesdn-postgres:local}
     restart: unless-stopped
     stop_grace_period: 60s
     init: true
@@ -124,7 +151,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-freesdn}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-freesdn}
-      POSTGRES_INITDB_ARGS: "--data-checksums"
+      POSTGRES_INITDB_ARGS: "${POSTGRES_INITDB_ARGS:---data-checksums}"
     volumes:
       - postgres_data:/var/lib/postgresql
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
@@ -164,7 +191,7 @@ services:
       POSTGRES_USER: ${LOGDB_USER:-freesdn}
       POSTGRES_PASSWORD: ${LOGDB_PASSWORD}
       POSTGRES_DB: ${LOGDB_DB:-freesdn_logs}
-      POSTGRES_INITDB_ARGS: "--data-checksums"
+      POSTGRES_INITDB_ARGS: "${POSTGRES_INITDB_ARGS:---data-checksums}"
     command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
     volumes:
       - logdb_data:/var/lib/postgresql
@@ -198,19 +225,22 @@ services:
   redis:
     build: *valkey-build
     restart: unless-stopped
+    # Keep the budget predictable; do not hide persistence pressure in swap.
+    memswap_limit: ${REDIS_MEM_LIMIT:-768M}
     stop_grace_period: 30s
     init: true
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     # maxmemory-policy volatile-lru is deliberate for this SHARED cache+broker
     # instance: it only evicts keys that carry a TTL (cache entries, rate-limit,
-    # blacklist, the worker heartbeat) - never the TTL-less Celery task messages,
+    # the worker heartbeat) - never the TTL-less Celery task messages,
     # so under memory pressure regenerable data is shed first and queued tasks are
     # preserved (full → producers get a hard OOM error, not silent task loss). The
     # one cost is the heartbeat key can be evicted under pressure, which surfaces
-    # as celery=degraded on the (non-gating) public health page. The max/HA tier
-    # splits broker onto its own noeviction instance; see
-    # https://docs.freesdn.org/deploy/deployment-tiers/.
+    # as celery=degraded on the (non-gating) public health page. Max/HA currently
+    # shares this policy across cache and broker databases; it does not deploy
+    # a separate broker instance. Token revocation/refresh consumption is durable
+    # in PostgreSQL and must never rely on the evictable TTL cache.
     command: >-
       valkey-server
       /usr/local/etc/valkey/valkey-custom.conf
@@ -223,7 +253,12 @@ services:
       --rename-command DEBUG ""
     volumes:
       - redis_data:/data
-      - ./docker/redis/redis-custom.conf:/usr/local/etc/valkey/valkey-custom.conf:ro
+      - type: bind
+        source: ${REDIS_CONFIG_PATH:-./docker/redis/redis-custom.conf}
+        target: /usr/local/etc/valkey/valkey-custom.conf
+        read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
       test: ["CMD-SHELL", "valkey-cli -a $$REDIS_PASSWORD ping | grep -q PONG"]
       interval: 10s
@@ -393,6 +428,9 @@ services:
       # somewhere tidier, and a nested named volume takes precedence over the
       # tmpfs beneath it.
       - import_export_data:/tmp/freesdn_data
+      # Shared local media and private coordinator socket for API workers and
+      # the api-2 service inherited by the single-host HA overlay.
+      - hls_media:/tmp/freesdn-hls
     depends_on:
       postgres: {condition: service_healthy}
       logdb: {condition: service_healthy}
@@ -707,7 +745,10 @@ services:
   # ── go2rtc - camera RTSP→MSE/WebRTC restream (feature: cameras) ────────────
   go2rtc:
     profiles: [cameras]
-    image: alexxit/go2rtc:${GO2RTC_VERSION:-1.9.14}
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.go2rtc
+    image: ${GO2RTC_IMAGE:-freesdn-go2rtc:local}
     restart: unless-stopped
     init: true
     volumes:
@@ -771,7 +812,7 @@ services:
       # (verified in all three CADDY_SITE_ADDRESS modes against
       # caddy:2.11.4-alpine, the pinned edge base). install.sh:238 already
       # probes this way, which is why the installer never surfaced the bug.
-      test: ["CMD", "curl", "-fsS", "--max-time", "5", "-o", "/dev/null", "http://127.0.0.1/health"]
+      test: ["CMD", "curl", "-fsS", "--max-time", "5", "-o", "/dev/null", "http://127.0.0.1/healthz"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -816,7 +857,7 @@ services:
       - /tmp:uid=999,gid=999
       - /etc/nginx/conf.d:uid=999,gid=999
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/healthz"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -828,7 +869,12 @@ services:
   # ── PgBouncer - connection poolers (feature: pooling; pro-opt/max) ─────────
   pgbouncer:
     profiles: [pooling]
-    image: edoburu/pgbouncer:${PGBOUNCER_VERSION:-v1.25.2-p0}
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.pgbouncer
+      args:
+        PGBOUNCER_VERSION: ${PGBOUNCER_VERSION:-v1.25.2-p0}
+    image: ${PGBOUNCER_IMAGE:-freesdn-pgbouncer:local}
     restart: unless-stopped
     stop_grace_period: 15s
     init: true
@@ -867,7 +913,12 @@ services:
 
   pgbouncer-logdb:
     profiles: [pooling]
-    image: edoburu/pgbouncer:${PGBOUNCER_VERSION:-v1.25.2-p0}
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.pgbouncer
+      args:
+        PGBOUNCER_VERSION: ${PGBOUNCER_VERSION:-v1.25.2-p0}
+    image: ${PGBOUNCER_IMAGE:-freesdn-pgbouncer:local}
     restart: unless-stopped
     stop_grace_period: 15s
     init: true
@@ -907,6 +958,7 @@ services:
   # ── pg-backup - encrypted pg_dump of both DBs (core; fail-closed in prod) ──
   pg-backup:
     build: *postgres-build
+    image: ${POSTGRES_IMAGE:-freesdn-postgres:local}
     restart: unless-stopped
     stop_grace_period: 30s
     init: true
@@ -925,6 +977,8 @@ services:
       BACKUP_ALLOW_PLAINTEXT: ${BACKUP_ALLOW_PLAINTEXT:-0}
       BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      # A completed pair must be younger than the interval plus this grace.
+      BACKUP_FRESHNESS_GRACE_SECONDS: ${BACKUP_FRESHNESS_GRACE_SECONDS:-7200}
     volumes:
       - pg_backups:/backups
       - ${BACKUP_GPG_PUBLIC_KEY_PATH:-./secrets/.gitkeep}:/etc/freesdn/gpg/backup-public.asc:ro
@@ -933,7 +987,15 @@ services:
       logdb: {condition: service_healthy}
     entrypoint: >-
       /bin/bash -c '
-      set -e;
+      set -eo pipefail;
+      mkdir -p /backups/.metrics;
+      LAST_SUCCESS=$$(awk "\$$1 == \"freesdn_pg_backup_last_success_timestamp\" {print \$$2}" /backups/.metrics/pg_backup.prom 2>/dev/null || true);
+      case "$$LAST_SUCCESS" in ""|*[!0-9]*) LAST_SUCCESS=0;; esac;
+      write_metrics() {
+        printf "freesdn_pg_backup_enabled %s\nfreesdn_pg_backup_encryption_enabled %s\nfreesdn_pg_backup_last_attempt_failed %s\nfreesdn_pg_backup_last_success_timestamp %s\n" "$$BACKUP_ENABLED" "$${GPG_ENABLED:-0}" "$$1" "$$LAST_SUCCESS" > /backups/.metrics/pg_backup.prom.tmp;
+        mv /backups/.metrics/pg_backup.prom.tmp /backups/.metrics/pg_backup.prom;
+      };
+      BACKUP_ENABLED=1;
       printf "postgres:*:*:%s:%s\n" "$$PGUSER" "$$PG_PASSWORD" > ~/.pgpass;
       printf "logdb:*:*:%s:%s\n" "$$LOGDB_USER" "$$LOGDB_PASS" >> ~/.pgpass;
       chmod 600 ~/.pgpass;
@@ -953,34 +1015,65 @@ services:
       if [ "$$GPG_ENABLED" != "1" ] && [ "$${BACKUP_ALLOW_PLAINTEXT:-0}" != "1" ]; then
         echo "Backups DISABLED: no encryption configured and BACKUP_ALLOW_PLAINTEXT is not set. Refusing to write plaintext dumps (secure by default).";
         echo "  Enable: set BACKUP_GPG_RECIPIENT + a valid BACKUP_GPG_PUBLIC_KEY_PATH, or set BACKUP_ALLOW_PLAINTEXT=1 (not recommended), then re-up.";
-        mkdir -p /backups/.metrics;
-        printf "freesdn_pg_backup_enabled 0\nfreesdn_pg_backup_encryption_enabled 0\n" > /backups/.metrics/pg_backup.prom;
+        BACKUP_ENABLED=0;
+        write_metrics 0;
         echo "Idling - container stays up but writes no backups until reconfigured (no crash-loop).";
         while true; do sleep 3600; done;
       fi;
       echo "FreeSDN DB Backup service started (interval $${BACKUP_INTERVAL_SECONDS}s, retention $${BACKUP_RETENTION_DAYS}d)";
       while true; do
         STAMP=$$(date +%Y%m%d_%H%M%S);
+        cleanup_partial() { rm -f /backups/freesdn_$$STAMP.sql.gz.partial /backups/logdb_$$STAMP.sql.gz.partial /backups/freesdn_$$STAMP.sql.gz.gpg.partial /backups/logdb_$$STAMP.sql.gz.gpg.partial; };
+        backup_exit() { result=$$?; cleanup_partial; if [ "$$result" != 0 ]; then write_metrics 1; fi; exit "$$result"; };
+        trap backup_exit EXIT;
         if [ "$$GPG_ENABLED" = "1" ]; then
-          pg_dump -h postgres -U $$PGUSER -d $${POSTGRES_DB:-freesdn} --no-owner --no-privileges | gzip | gpg --batch --yes --trust-model always --encrypt --recipient "$$BACKUP_GPG_RECIPIENT" --output /backups/freesdn_$$STAMP.sql.gz.gpg;
-          pg_dump -h logdb -U $$LOGDB_USER -d $$LOGDB_DB --no-owner --no-privileges | gzip | gpg --batch --yes --trust-model always --encrypt --recipient "$$BACKUP_GPG_RECIPIENT" --output /backups/logdb_$$STAMP.sql.gz.gpg;
+          pg_dump -h postgres -U $$PGUSER -d $${POSTGRES_DB:-freesdn} --no-owner --no-privileges | gzip | gpg --batch --yes --trust-model always --encrypt --recipient "$$BACKUP_GPG_RECIPIENT" --output /backups/freesdn_$$STAMP.sql.gz.gpg.partial;
+          pg_dump -h logdb -U $$LOGDB_USER -d $$LOGDB_DB --no-owner --no-privileges | gzip | gpg --batch --yes --trust-model always --encrypt --recipient "$$BACKUP_GPG_RECIPIENT" --output /backups/logdb_$$STAMP.sql.gz.gpg.partial;
+          mv /backups/freesdn_$$STAMP.sql.gz.gpg.partial /backups/freesdn_$$STAMP.sql.gz.gpg;
+          mv /backups/logdb_$$STAMP.sql.gz.gpg.partial /backups/logdb_$$STAMP.sql.gz.gpg;
         else
-          pg_dump -h postgres -U $$PGUSER -d $${POSTGRES_DB:-freesdn} --no-owner --no-privileges | gzip > /backups/freesdn_$$STAMP.sql.gz;
-          pg_dump -h logdb -U $$LOGDB_USER -d $$LOGDB_DB --no-owner --no-privileges | gzip > /backups/logdb_$$STAMP.sql.gz;
+          pg_dump -h postgres -U $$PGUSER -d $${POSTGRES_DB:-freesdn} --no-owner --no-privileges | gzip > /backups/freesdn_$$STAMP.sql.gz.partial;
+          pg_dump -h logdb -U $$LOGDB_USER -d $$LOGDB_DB --no-owner --no-privileges | gzip > /backups/logdb_$$STAMP.sql.gz.partial;
+          mv /backups/freesdn_$$STAMP.sql.gz.partial /backups/freesdn_$$STAMP.sql.gz;
+          mv /backups/logdb_$$STAMP.sql.gz.partial /backups/logdb_$$STAMP.sql.gz;
         fi;
-        find /backups \( -name "*.sql.gz" -o -name "*.sql.gz.gpg" \) -mtime +$${BACKUP_RETENTION_DAYS:-7} -delete;
+        find /backups \( -name "*.sql.gz" -o -name "*.sql.gz.gpg" -o -name "*.partial" \) -mtime +$${BACKUP_RETENTION_DAYS:-7} -delete;
         mkdir -p /backups/.metrics;
-        echo "freesdn_pg_backup_last_success_timestamp $$(date +%s)" > /backups/.metrics/pg_backup.prom;
-        echo "freesdn_pg_backup_encryption_enabled $$GPG_ENABLED" >> /backups/.metrics/pg_backup.prom;
+        LAST_SUCCESS=$$(date +%s);
+        EXTENSION=sql.gz; if [ "$$GPG_ENABLED" = 1 ]; then EXTENSION=sql.gz.gpg; fi;
+        printf "%s %s %s\n" "$$LAST_SUCCESS" "$$STAMP" "$$EXTENSION" > /backups/.metrics/pg_backup.last_success.tmp;
+        mv /backups/.metrics/pg_backup.last_success.tmp /backups/.metrics/pg_backup.last_success;
+        write_metrics 0;
+        trap - EXIT;
         echo "[$$STAMP] Backup complete. Next run in $${BACKUP_INTERVAL_SECONDS}s.";
         sleep $${BACKUP_INTERVAL_SECONDS:-86400};
       done'
     read_only: true
-    tmpfs: [/tmp]
+    # The shared PostgreSQL image declares this data-directory VOLUME, but the
+    # backup client never runs a database. Mask it so container recreation does
+    # not allocate and abandon an unused anonymous database volume each time.
+    tmpfs: [/tmp, /var/lib/postgresql]
     security_opt: [no-new-privileges:true]
     logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "ls /backups/freesdn_*.sql.gz.gpg 2>/dev/null | head -1 | grep -q . || ls /backups/freesdn_*.sql.gz 2>/dev/null | head -1 | grep -q . || test $(( $(date +%s) - $(stat -c %Y /backups/ 2>/dev/null || echo 0) )) -lt 90000"]
+      test:
+        - CMD-SHELL
+        - >-
+          read -r success batch extension < /backups/.metrics/pg_backup.last_success || exit 1;
+          case "$$batch" in ""|*[!0-9_]*) exit 1;; esac;
+          case "$$extension" in sql.gz|sql.gz.gpg) ;; *) exit 1;; esac;
+          test -s "/backups/freesdn_$${batch}.$${extension}" &&
+          test -s "/backups/logdb_$${batch}.$${extension}" &&
+          awk -v now="$$(date +%s)" -v pointer="$$success" -v interval="$${BACKUP_INTERVAL_SECONDS:-86400}"
+          -v grace="$${BACKUP_FRESHNESS_GRACE_SECONDS:-7200}"
+          "BEGIN {valid=1}
+          \$$1 == \"freesdn_pg_backup_enabled\" {enabled=\$$2; ec++}
+          \$$1 == \"freesdn_pg_backup_last_attempt_failed\" {failed=\$$2; fc++}
+          \$$1 == \"freesdn_pg_backup_last_success_timestamp\" {stamp=\$$2; sc++; if (\$$2 !~ /^[0-9]+$$/) valid=0}
+          END {exit !(valid && ec==1 && fc==1 && sc==1 && enabled==1 && failed==0
+          && interval ~ /^[0-9]+$$/ && interval>0 && grace ~ /^[0-9]+$$/
+          && pointer ~ /^[0-9]+$$/ && stamp==pointer && stamp>0 && stamp<=now && now-stamp<=interval+grace)}"
+          /backups/.metrics/pg_backup.prom
       interval: 60s
       timeout: 5s
       retries: 3
@@ -990,7 +1083,10 @@ services:
   # ── pg-backup-offsite - rclone copy to remote storage (feature: dr) ────────
   pg-backup-offsite:
     profiles: [dr]
-    image: rclone/rclone:${RCLONE_VERSION:-1.74.3}
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.rclone
+    image: ${RCLONE_IMAGE:-freesdn-rclone:local}
     restart: unless-stopped
     stop_grace_period: 30s
     init: true
@@ -999,29 +1095,23 @@ services:
       BACKUP_OFFSITE_PATH: ${BACKUP_OFFSITE_PATH:-freesdn-backups}
       BACKUP_OFFSITE_INTERVAL_HOURS: ${BACKUP_OFFSITE_INTERVAL_HOURS:-24}
       BACKUP_OFFSITE_RETENTION_DAYS: ${BACKUP_OFFSITE_RETENTION_DAYS:-30}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_FRESHNESS_GRACE_SECONDS: ${BACKUP_FRESHNESS_GRACE_SECONDS:-7200}
     volumes:
       - pg_backups:/backups:ro
+      - pg_backup_offsite_status:/offsite-status
+      - ./docker/backup-offsite.sh:/opt/freesdn/backup-offsite.sh:ro
+      - ./docker/backup-offsite-health.sh:/opt/freesdn/backup-offsite-health.sh:ro
       - ${BACKUP_OFFSITE_CONFIG_PATH:-./secrets/rclone.conf}:/config/rclone/rclone.conf:ro
     depends_on:
       pg-backup: {condition: service_started}
-    entrypoint: >-
-      /bin/sh -c '
-      set -e;
-      if [ -z "$$BACKUP_OFFSITE_REMOTE" ]; then echo "ERROR: BACKUP_OFFSITE_REMOTE not set; refusing to start."; exit 1; fi;
-      if ! rclone --config /config/rclone/rclone.conf listremotes 2>/dev/null | grep -qFx "$${BACKUP_OFFSITE_REMOTE}:"; then echo "ERROR: remote $${BACKUP_OFFSITE_REMOTE} not found in rclone.conf."; exit 1; fi;
-      DEST="$${BACKUP_OFFSITE_REMOTE}:$${BACKUP_OFFSITE_PATH}";
-      INTERVAL_SECONDS=$$(( BACKUP_OFFSITE_INTERVAL_HOURS * 3600 ));
-      echo "FreeSDN off-site backup sync → $$DEST every $${BACKUP_OFFSITE_INTERVAL_HOURS}h, retention $${BACKUP_OFFSITE_RETENTION_DAYS}d";
-      while true; do
-        STAMP=$$(date +%Y%m%d_%H%M%S);
-        if rclone --config /config/rclone/rclone.conf copy /backups "$$DEST" --immutable --include "freesdn_*.sql.gz*" --include "logdb_*.sql.gz*" --transfers 2 --checkers 4 --retries 3 --low-level-retries 10 --stats=0 --log-level=NOTICE; then
-          echo "[$$STAMP] Off-site copy OK";
-          rclone --config /config/rclone/rclone.conf delete "$$DEST" --min-age "$${BACKUP_OFFSITE_RETENTION_DAYS}d" --include "freesdn_*.sql.gz*" --include "logdb_*.sql.gz*" --log-level=NOTICE || echo "[$$STAMP] WARNING: retention sweep failed (non-fatal)";
-        else
-          echo "[$$STAMP] ERROR: off-site copy failed - retrying next cycle";
-        fi;
-        sleep $$INTERVAL_SECONDS;
-      done'
+    entrypoint: ["/bin/sh", "/opt/freesdn/backup-offsite.sh"]
+    healthcheck:
+      test: ["CMD", "/bin/sh", "/opt/freesdn/backup-offsite-health.sh"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
     read_only: true
     tmpfs:
       - /tmp
@@ -1036,7 +1126,10 @@ services:
   # Alertmanager + your channel to route the alerts.
   prometheus:
     profiles: [metrics]
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.12.0}
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.prometheus
+    image: ${PROMETHEUS_IMAGE:-freesdn-prometheus:local}
     restart: unless-stopped
     user: "65534:65534"
     volumes:
@@ -1065,9 +1158,52 @@ services:
     logging: *default-logging
     networks: [default]
 
+  backup-metrics:
+    profiles: [metrics]
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.backup-metrics
+    restart: unless-stopped
+    init: true
+    user: "65534:65534"
+    environment:
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_FRESHNESS_GRACE_SECONDS: ${BACKUP_FRESHNESS_GRACE_SECONDS:-7200}
+      BACKUP_OFFSITE_INTERVAL_HOURS: ${BACKUP_OFFSITE_INTERVAL_HOURS:-24}
+      # Set to 1 when enabling dr via --profile instead of COMPOSE_PROFILES.
+      BACKUP_OFFSITE_REQUIRED: ${BACKUP_OFFSITE_REQUIRED:-0}
+      COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
+    volumes:
+      - pg_backups:/backups:ro
+      - pg_backup_offsite_status:/offsite-status:ro
+    read_only: true
+    cap_drop: [ALL]
+    pids_limit: 32
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9788/healthz', timeout=3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.25'
+          pids: 32
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+    networks: [default]
+
   redis-exporter:
     profiles: [metrics]
-    image: oliver006/redis_exporter:${REDIS_EXPORTER_VERSION:-v1.86.0}
+    # Built from source like every other component. The published upstream image
+    # is compiled with an older Go toolchain and carried two fixable HIGH
+    # standard-library advisories with no patched tag available; see
+    # docker/Dockerfile.redis-exporter.
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.redis-exporter
+    image: ${REDIS_EXPORTER_IMAGE:-freesdn-redis-exporter:local}
     restart: unless-stopped
     environment:
       REDIS_ADDR: redis://redis:6379
@@ -1079,7 +1215,10 @@ services:
 
   postgres-exporter:
     profiles: [metrics]
-    image: prometheuscommunity/postgres-exporter:${PG_EXPORTER_VERSION:-v0.19.1}
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.postgres-exporter
+    image: ${POSTGRES_EXPORTER_IMAGE:-freesdn-postgres-exporter:local}
     restart: unless-stopped
     environment:
       DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-freesdn}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-freesdn}?sslmode=disable"
@@ -1096,7 +1235,10 @@ services:
 
   logdb-exporter:
     profiles: [metrics]
-    image: prometheuscommunity/postgres-exporter:${PG_EXPORTER_VERSION:-v0.19.1}
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.postgres-exporter
+    image: ${POSTGRES_EXPORTER_IMAGE:-freesdn-postgres-exporter:local}
     restart: unless-stopped
     environment:
       DATA_SOURCE_NAME: "postgresql://${LOGDB_USER:-freesdn}:${LOGDB_PASSWORD}@logdb:5432/${LOGDB_DB:-freesdn_logs}?sslmode=disable"
@@ -1125,8 +1267,10 @@ networks:
       driver: default
       config:
         - subnet: ${NETWORK_SUBNET:-172.28.0.0/16}
+          ip_range: ${NETWORK_IP_RANGE:-${NETWORK_SUBNET:-172.28.0.0/16}}
 
 volumes:
+  hls_media:           # derived camera media/control; local-host scope, not backup data
   postgres_data:
   logdb_data:
   redis_data:
@@ -1150,6 +1294,7 @@ volumes:
   wireguard_config:   # wg-quick INI configs the api writes, the sidecar brings up
   wireguard_run:      # wireguard desired/status markers (shared vpn <-> api)
   pg_backups:
+  pg_backup_offsite_status:
   go2rtc_config:
   caddy_data:
   caddy_config:

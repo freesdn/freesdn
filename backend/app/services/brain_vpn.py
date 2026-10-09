@@ -283,11 +283,13 @@ class BrainVPNService:
         # Verify site access
         site = (
             await self.session.execute(
-                select(Site).where(
+                select(Site)
+                .where(
                     Site.id == target_site_id,
                     Site.organization_id == org_id,
                     Site.deleted_at.is_(None),
                 )
+                .with_for_update()
             )
         ).scalar_one_or_none()
         if not site:
@@ -302,31 +304,24 @@ class BrainVPNService:
             if hasattr(adapter, "close"):
                 await adapter.close()
 
-        # Upsert SiteVPNConfiguration (FOR UPDATE prevents race on concurrent imports)
-        vpn_config = (
-            await self.session.execute(
-                select(SiteVPNConfiguration)
-                .where(
-                    SiteVPNConfiguration.site_id == target_site_id,
-                )
-                .with_for_update()
-            )
-        ).scalar_one_or_none()
+        # The parent site lock also serializes first imports, when no profile
+        # exists to lock. A different provider/server must not replace this one.
+        vpn_config = await self._import_profile(
+            target_site_id,
+            org_id,
+            SiteVPNConfiguration.vpn_type == vpn_type,
+            SiteVPNConfiguration.vpn_source == VPNSource.BRAIN_IMPORT,
+            SiteVPNConfiguration.controller_id == controller_id,
+            SiteVPNConfiguration.brain_vpn_server_id == vpn_server_id,
+        )
 
         if not vpn_config:
             # organization_id is required by every org-scoped read of this
             # table (endpoints/vpn.py, vpn_cert_lifecycle.py); a row created
             # without it is invisible to all of them.
-            _site = (
-                await self.db.execute(
-                    select(Site.organization_id).where(
-                        Site.id == target_site_id, Site.deleted_at.is_(None)
-                    )
-                )
-            ).scalar_one_or_none()
             vpn_config = SiteVPNConfiguration(
                 site_id=target_site_id,
-                organization_id=_site,
+                organization_id=site.organization_id,
                 vpn_type=vpn_type,
                 enabled=True,
                 vpn_source=VPNSource.BRAIN_IMPORT,
@@ -351,6 +346,31 @@ class BrainVPNService:
         await self.session.flush()
         await self.session.refresh(vpn_config)
         return vpn_config
+
+    async def _import_profile(
+        self,
+        site_id: UUID,
+        org_id: UUID,
+        *conditions: Any,
+    ) -> SiteVPNConfiguration | None:
+        """Refuse ambiguous legacy duplicates instead of selecting a secret to overwrite."""
+        result = await self.session.execute(
+            select(SiteVPNConfiguration)
+            .where(
+                SiteVPNConfiguration.site_id == site_id,
+                SiteVPNConfiguration.organization_id == org_id,
+                *conditions,
+            )
+            .order_by(SiteVPNConfiguration.id)
+            .limit(2)
+            .with_for_update()
+        )
+        rows = result.scalars().all()
+        if len(rows) > 1:
+            raise ValueError(
+                "Multiple matching VPN profiles; select a profile or resolve the duplicate import"
+            )
+        return rows[0] if rows else None
 
     async def _fetch_vpn_server_config(
         self,
@@ -736,6 +756,8 @@ class BrainVPNService:
         site_id: UUID,
         org_id: UUID,
         config_content: str,
+        *,
+        config_id: UUID | None = None,
     ) -> SiteVPNConfiguration:
         """
         Import an OpenVPN .ovpn config for a site.
@@ -747,40 +769,34 @@ class BrainVPNService:
         # Verify site access
         site = (
             await self.session.execute(
-                select(Site).where(
+                select(Site)
+                .where(
                     Site.id == site_id,
                     Site.organization_id == org_id,
                     Site.deleted_at.is_(None),
                 )
+                .with_for_update()
             )
         ).scalar_one_or_none()
         if not site:
             raise ValueError("Site not found")
 
-        # Upsert config (FOR UPDATE prevents race on concurrent imports)
-        vpn_config = (
-            await self.session.execute(
-                select(SiteVPNConfiguration)
-                .where(
-                    SiteVPNConfiguration.site_id == site_id,
-                )
-                .with_for_update()
-            )
-        ).scalar_one_or_none()
+        conditions = [
+            SiteVPNConfiguration.vpn_type == VPNType.OPENVPN,
+            SiteVPNConfiguration.vpn_source == VPNSource.MANUAL,
+        ]
+        if config_id is not None:
+            conditions.append(SiteVPNConfiguration.id == config_id)
+        vpn_config = await self._import_profile(site_id, org_id, *conditions)
+        if config_id is not None and vpn_config is None:
+            raise ValueError("VPN profile not found")
 
         if not vpn_config:
             # See the note on the sibling construction above: without
             # organization_id this row is invisible to every org-scoped read.
-            _site = (
-                await self.db.execute(
-                    select(Site.organization_id).where(
-                        Site.id == site_id, Site.deleted_at.is_(None)
-                    )
-                )
-            ).scalar_one_or_none()
             vpn_config = SiteVPNConfiguration(
                 site_id=site_id,
-                organization_id=_site,
+                organization_id=site.organization_id,
                 vpn_type=VPNType.OPENVPN,
                 enabled=True,
                 vpn_source=VPNSource.MANUAL,

@@ -238,6 +238,9 @@
       },
       "ovpnDialog": {
         "title": "Import OpenVPN Config",
+        "profileLabel": "Existing manual OpenVPN profile",
+        "automaticProfile": "Automatic (one matching profile or create new)",
+        "profileHint": "If several manual profiles exist, choose one explicitly. Other VPN types and controller-managed profiles are preserved.",
         "description": "Paste the contents of your .ovpn file. Works with any OpenVPN server (OPNsense, pfSense, MikroTik, or standalone).",
         "submit": "Import Config",
         "hint": "Embedded certificates (<ca>, <cert>, <key>) are supported. Script directives (up/down/plugin) are rejected for security."

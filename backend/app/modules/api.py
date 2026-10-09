@@ -346,8 +346,10 @@ async def disable_module(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> OrgModuleRead:
     """
-    Disable a module for an organization.
+    Disable navigation/widgets and invoke the module's organization stop hook.
 
+    This is not an API access or global background-job kill switch. Existing
+    endpoints remain subject to their normal permissions and site boundaries.
     Cannot disable core modules.
     """
     _verify_org_access(current_user, organization_id, require_admin=True)

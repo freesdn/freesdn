@@ -211,7 +211,8 @@ def collect_all_device_metrics(self: Any) -> dict[str, Any]:
     """
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    if not acquire_solo_lock("collect_all_device_metrics", ttl_seconds=300):
+    lock_token = acquire_solo_lock("collect_all_device_metrics", ttl_seconds=300)
+    if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:
 
@@ -274,7 +275,7 @@ def collect_all_device_metrics(self: Any) -> dict[str, Any]:
 
         return asyncio.run(_run())
     finally:
-        release_solo_lock("collect_all_device_metrics")
+        release_solo_lock("collect_all_device_metrics", lock_token)
 
 
 @celery_app.task(bind=True, base=FreeSDNTask, soft_time_limit=60, time_limit=90)  # type: ignore[misc]

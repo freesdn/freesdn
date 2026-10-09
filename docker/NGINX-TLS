@@ -1,0 +1,40 @@
+Optional NGINX edge: explicit transport and certificate ownership
+===============================================================
+
+Caddy is the default edge. These requirements apply to the optional
+edge-nginx service when it replaces Caddy. Do not start both services on the
+same published ports.
+
+SSL_MODE=self-signed or SSL_MODE=letsencrypt requires nonempty readable
+fullchain.pem and privkey.pem in the read-only /etc/nginx/ssl mount. Missing,
+empty or unreadable material now refuses startup; it never falls back to HTTP.
+NGINX also validates the certificate/key when loading its TLS configuration.
+This intentionally changes the previous unsafe missing-certificate behavior.
+
+Use SSL_MODE=off only as an explicit HTTP deployment, such as a private edge
+behind a separately configured TLS-terminating proxy. Protect that internal
+link and forwarded-header trust separately. Do not switch to off merely to
+make a failed TLS health check green.
+
+The shipped image runs as UID/GID999. The source key must be readable by that
+container identity; a read-only bind mount does not grant permissions, and
+copying the key to tmpfs cannot bypass source ownership. Deploy a dedicated
+runtime copy with restricted owner or group read access. Do not make the key
+world-readable or loosen permissions on the original ACME/private-key store.
+Account for user-namespace/rootless mappings when choosing host ownership.
+The entrypoint leaves the mounted source unchanged and writes its runtime
+key copy into tmpfs with mode0600. Renewals require securely updating that
+runtime source and reloading/recreating NGINX after validation.
+
+The ACME challenge directory is only a webroot; this container does not obtain
+or renew certificates. Use the configured certificate-management process.
+For a nonstandard published HTTPS port, use the explicit HTTPS URL and verify
+redirect behavior in the surrounding proxy. The TLS template's HTTP redirect
+targets the standard HTTPS authority and does not infer Docker port mappings.
+
+/healthz is edge liveness. /health and /health/* are SPA routes. Check both
+HTTPS document delivery and the backend /api/v1/health/ready endpoint; a green
+edge probe alone does not establish backend readiness or certificate validity
+as seen by an external client. Do not use insecure TLS client flags to qualify
+the deployment. This document is not evidence of a public-CA, customer proxy,
+certificate-renewal or multi-host acceptance test.

@@ -65,6 +65,7 @@ from app.schemas.agents import (
 )
 from app.schemas.core import MessageResponse, PaginatedResponse
 from app.services.adapter_preflight_common import payload_confirmed
+from app.services.release_signing_async import agent_release_operation
 from app.services.remote_agent import (
     AgentCommand,
     AgentCommandType,
@@ -204,6 +205,7 @@ async def _authenticate_agent(
 
 
 @router.post("/register", response_model=AgentRegisterResponse)
+@agent_release_operation
 async def register_agent(
     data: AgentRegisterRequest,
     current_user: Annotated[CurrentUser, Depends(require_permissions("agent:create"))],
@@ -235,14 +237,42 @@ async def register_agent(
     # a site-limited user may only register agents at granted sites.
     assert_can_access_site(current_user, data.site_id, detail="Site not found")
 
-    agent, api_key = await svc.register_agent(
-        name=data.name,
-        site_id=data.site_id,
-        organization_id=org_id,
-        description=data.description,
-        agent_type=data.agent_type,
+    # Resolve a separately trusted identity before minting an agent credential.
+    # A public-key read must never initialize a key, and a missing pin must not
+    # turn an otherwise successful registration into an unpinned installation.
+    from app.services.agent_signing_identity import (
+        persist_enrollment_pin,
+        read_trusted_signing_identity,
     )
-    await session.commit()
+    from app.services.release_signing import SigningKeyError
+
+    try:
+        identity = await read_trusted_signing_identity()
+    except SigningKeyError:
+        raise HTTPException(
+            503, "Initialize or adopt the installation signing identity before agent registration"
+        ) from None
+    try:
+        agent, api_key = await svc.register_agent(
+            name=data.name,
+            site_id=data.site_id,
+            organization_id=org_id,
+            description=data.description,
+            agent_type=data.agent_type,
+        )
+        await persist_enrollment_pin(
+            session, agent_id=agent.id, actor_id=current_user.id, identity=identity
+        )
+        await session.commit()
+    except SigningKeyError:
+        await session.rollback()
+        raise HTTPException(
+            503, "Signing identity changed; agent registration was not confirmed"
+        ) from None
+    except Exception:
+        await session.rollback()
+        raise
+    _release_key_fp = identity.public_key_sha256
 
     # NOTE: audit agent registration. Previously this endpoint
     # minted a long-lived API key without any audit trail — an attacker
@@ -288,21 +318,8 @@ async def register_agent(
     ws_base = base.replace("https://", "wss://").replace("http://", "ws://")
     ws_url = f"{ws_base}{settings.API_V1_PREFIX}/agents/ws/{agent.id}"
 
-    # Hand the agent the release-signing key fingerprint to PIN. Registration is
-    # the right moment: it is already authenticated and operator-approved,
-    # whereas fetching the key from the update feed on first contact proves
-    # nothing -- a compromised backend would simply serve its own key alongside
-    # its own binary and signature.
-    try:
-        import hashlib as _hashlib
-
-        from app.services.release_signing import public_key_pem
-
-        _release_key_fp = _hashlib.sha256(public_key_pem()).hexdigest()
-    except Exception:  # noqa: BLE001 - registration must not fail on this
-        logger.exception("Could not derive the release-signing key fingerprint")
-        _release_key_fp = ""
-
+    # Return exactly the immutable pin committed alongside this credential.
+    # No later filesystem lookup or empty-fingerprint fallback is permitted.
     return AgentRegisterResponse(
         agent_id=str(agent.id),
         agent_key=api_key,
@@ -313,7 +330,8 @@ async def register_agent(
             f"  FREESDN_AGENT_ID={agent.id}\n"
             f"  FREESDN_API_KEY={api_key}\n"
             f"  FREESDN_SERVER_URL={ws_url}\n"
-            f"\nThen start the agent process."
+            f"\nPin release_public_key_sha256={_release_key_fp} in daemon configuration.\n"
+            f"Then start the agent process."
         ),
     )
 

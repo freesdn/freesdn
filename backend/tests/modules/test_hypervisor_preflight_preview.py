@@ -8,6 +8,7 @@ through a connected (read-only) adapter and returns the serialized assessment �
 risk class, confirmation requirement, and device-observed impact — without ever
 mutating the cluster. Device-free: the adapter is a read-only stand-in.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -72,11 +73,13 @@ _CTRL = SimpleNamespace(id="c1", host="192.168.1.86", config={})
 
 @pytest.mark.asyncio
 async def test_preview_node_reboot_is_catastrophic_and_counts_guests() -> None:
-    adapter = _FakeAdapter(resources=[
-        {"type": "qemu", "vmid": 100, "node": "s1", "status": "running"},
-        {"type": "lxc", "vmid": 101, "node": "s1", "status": "running"},
-        {"type": "lxc", "vmid": 102, "node": "s2", "status": "running"},
-    ])
+    adapter = _FakeAdapter(
+        resources=[
+            {"type": "qemu", "vmid": 100, "node": "s1", "status": "running"},
+            {"type": "lxc", "vmid": 101, "node": "s1", "status": "running"},
+            {"type": "lxc", "vmid": 102, "node": "s2", "status": "running"},
+        ]
+    )
     out = await _svc(adapter).preflight_preview(
         _CTRL, "proxmox.node.reboot", "create", {"node": "s1"}
     )
@@ -88,23 +91,27 @@ async def test_preview_node_reboot_is_catastrophic_and_counts_guests() -> None:
 
 @pytest.mark.asyncio
 async def test_preview_vm_start_is_safe_no_confirmation() -> None:
-    adapter = _FakeAdapter(resources=[
-        {"type": "qemu", "vmid": 100, "node": "s1", "status": "stopped", "name": "db01"},
-    ])
-    out = await _svc(adapter).preflight_preview(
-        _CTRL, "proxmox.vm.start", "create", {"vmid": 100}
+    adapter = _FakeAdapter(
+        resources=[
+            {"type": "qemu", "vmid": 100, "node": "s1", "status": "stopped", "name": "db01"},
+        ]
     )
+    out = await _svc(adapter).preflight_preview(_CTRL, "proxmox.vm.start", "create", {"vmid": 100})
     assert out["risk"] == "safe"
     assert out["requires_confirmation"] is False
 
 
 @pytest.mark.asyncio
 async def test_preview_storage_delete_volume_reports_size() -> None:
-    adapter = _FakeAdapter(storage_content=[
-        {"volid": "local-lvm:vm-100-disk-0", "size": 8589934592, "format": "raw", "vmid": 100},
-    ])
+    adapter = _FakeAdapter(
+        storage_content=[
+            {"volid": "local-lvm:vm-100-disk-0", "size": 8589934592, "format": "raw", "vmid": 100},
+        ]
+    )
     out = await _svc(adapter).preflight_preview(
-        _CTRL, "proxmox.storage.delete_volume", "delete",
+        _CTRL,
+        "proxmox.storage.delete_volume",
+        "delete",
         {"node": "s1", "storage": "local-lvm", "volid": "local-lvm:vm-100-disk-0"},
     )
     assert out["risk"] == "catastrophic"
@@ -116,16 +123,18 @@ async def test_preview_storage_delete_volume_reports_size() -> None:
 # ── Direct-path confirm gate (guest ops: confirmed=true, force stays False) ──
 
 
-@pytest.mark.asyncio
-async def test_bulk_delete_threads_confirmed_not_force() -> None:
-    """Bulk delete must pass confirmed= (the type-to-confirm second factor) and
-    NOT force=, so each delete still honors the read-only gate underneath."""
+async def test_bulk_delete_confirmation_does_not_replace_actor_and_review() -> None:
+    from unittest.mock import AsyncMock
+
     adapter = _FakeAdapter()
-    results = await _svc(adapter).bulk_action(
+    svc = _svc(adapter)
+    svc.db.rollback = AsyncMock()
+    results = await svc.bulk_action(
         _CTRL, [{"node": "s1", "vmid": 100, "vm_type": "qemu"}], "delete", confirmed=True
     )
-    assert results[0]["success"] is True
-    assert adapter.delete_calls == [{"confirmed": True, "force": False}]
+    assert results[0]["success"] is False
+    assert "request_id" in results[0]["error"]
+    assert not adapter.delete_calls
 
 
 @pytest.mark.asyncio
@@ -141,11 +150,11 @@ async def test_rollback_without_confirmed_raises_409() -> None:
 
 
 @pytest.mark.asyncio
-async def test_rollback_with_confirmed_dispatches_without_force() -> None:
+async def test_rollback_confirmation_does_not_replace_actor_and_intent() -> None:
+    from fastapi import HTTPException
+
     adapter = _FakeAdapter()
-    out = await _svc(adapter).rollback_snapshot(
-        _CTRL, "s1", 100, "snap1", "qemu", confirmed=True
-    )
-    assert out["upid"] == "UPID:rollback"
-    # force NOT passed → the read-only gate still applies on the direct path.
-    assert adapter.rollback_calls == [{"force": False}]
+    with pytest.raises(HTTPException) as exc:
+        await _svc(adapter).rollback_snapshot(_CTRL, "s1", 100, "snap1", "qemu", confirmed=True)
+    assert exc.value.status_code == 400
+    assert adapter.rollback_calls == []

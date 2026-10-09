@@ -42,11 +42,11 @@ export function HealthTrendChart({ siteId }: { siteId?: string }) {
     if (!dailySnapshots) return [];
     return dailySnapshots.map((snap) => ({
       time: new Date(snap.snapshot_date).toLocaleDateString([], { month: 'short', day: 'numeric' }),
-      score: Math.round(snap.avg_health_score),
+      score: snap.avg_health_score == null ? null : Math.round(snap.avg_health_score),
     }));
   }, [dailySnapshots]);
 
-  const hasData = chartData.length > 0;
+  const hasData = chartData.some((point) => point.score !== null);
 
   return (
     <Card>

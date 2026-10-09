@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.crypto import decrypt_credential
+from app.core.crypto import decrypt_credential, is_encrypted
 from app.models.core import Controller, Site
 from app.models.radius import Dot1xAuthEvent, Dot1xPortConfig, RadiusServerProfile
 from app.services.adapter_factory import get_adapter
@@ -32,11 +32,12 @@ def _safe_decrypt(value: str | None) -> str:
     """Decrypt a credential, falling back to the raw value if not encrypted."""
     if not value:
         return ""
+    if not is_encrypted(value):
+        return value
     try:
         return decrypt_credential(value)
-    except Exception:
-        logger.warning("Failed to decrypt credential value, returning raw value", exc_info=True)
-        return value
+    except ValueError:
+        raise ValueError("Stored controller credential could not be decrypted") from None
 
 
 class RadiusProfileService:

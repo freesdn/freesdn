@@ -296,17 +296,6 @@ def test_no_dotfile_or_symlink_reaches_a_signed_archive(tmp_path) -> None:
         assert not leaked, f"{archive.name} packages dotfiles: {leaked}"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "The 12 published archives predate the determinism fix: 8 were packaged "
-        "from a CRLF checkout, 4 from LF, and all 12 carry create_system=0. "
-        "Reproducing them from source is therefore impossible by construction. "
-        "This goes green after the maintainer republishes the catalogue with the "
-        "publisher key (see docs/agents/REGISTRY-REPUBLISH.md); remove this "
-        "marker then."
-    ),
-    strict=False,
-)
 def test_the_published_catalogue_reproduces_from_source(tmp_path) -> None:
     """The end-state guard: every advertised checksum must be re-derivable.
 

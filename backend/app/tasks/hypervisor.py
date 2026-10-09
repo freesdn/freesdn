@@ -261,9 +261,22 @@ async def _poll_hypervisor_health() -> dict[str, Any]:
 @celery_app.task(bind=True, name="hypervisor.poll_health", soft_time_limit=240, time_limit=300)
 def poll_health(self) -> dict[str, Any]:
     """Periodic Proxmox health poll → hypervisor.* transition events."""
-    if not acquire_solo_lock("hypervisor.poll_health", ttl_seconds=180):
+    lock_token = acquire_solo_lock("hypervisor.poll_health", ttl_seconds=180)
+    if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:
         return asyncio.run(_poll_hypervisor_health())
     finally:
-        release_solo_lock("hypervisor.poll_health")
+        release_solo_lock("hypervisor.poll_health", lock_token)
+
+
+def _poll_provider_tasks() -> dict[str, int]:
+    """Resume read-only observation of acknowledged Proxmox tasks."""
+    from app.services.proxmox_task_tracking import poll_due_tasks
+
+    return asyncio.run(poll_due_tasks())
+
+
+poll_tasks = celery_app.task(
+    name="hypervisor.poll_tasks", soft_time_limit=55, time_limit=60, queue="sync"
+)(_poll_provider_tasks)

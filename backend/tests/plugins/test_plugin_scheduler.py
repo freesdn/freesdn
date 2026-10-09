@@ -28,6 +28,16 @@ ORG_A = UUID("11111111-1111-1111-1111-111111111111")
 ORG_B = UUID("22222222-2222-2222-2222-222222222222")
 
 
+@pytest.fixture(autouse=True)
+def preserve_scheduler_health():
+    from app.core.startup import SUBSYSTEM_STATUS
+
+    previous = dict(SUBSYSTEM_STATUS)
+    yield
+    SUBSYSTEM_STATUS.clear()
+    SUBSYSTEM_STATUS.update(previous)
+
+
 def _schedule(**kw):
     from app.plugins.schema import PluginSchedule
 
@@ -121,28 +131,29 @@ def test_a_schedule_cannot_call_a_private_method():
 # ── slot claims: at most once, everywhere ───────────────────────
 
 
+class _SharedClaims:
+    def __init__(self):
+        self.keys = set()
+
+    async def set(self, key, value, **kwargs):
+        if key in self.keys:
+            return None
+        self.keys.add(key)
+        return True
+
+
 async def test_a_slot_is_claimed_once_and_then_refused():
-    """
-    The tick runs every 15 seconds and a schedule runs every 60 or more, so
-    most ticks must decline. Without this the interval would mean nothing.
-    """
     from app.plugins.scheduler import PluginScheduler
 
     scheduler = PluginScheduler()
-    scheduler._redis = None  # exercise the no-Redis fallback deliberately
+    scheduler._redis = _SharedClaims()
     sched = _schedule(interval_seconds=3600)
-
     assert await scheduler._claim(_key(), sched) is True
     assert await scheduler._claim(_key(), sched) is False
     assert await scheduler._claim(_key(), sched) is False
 
 
-async def test_a_redis_failure_falls_back_rather_than_stopping_the_schedule():
-    """
-    Losing Redis must not silently stop every scheduled scan on the appliance.
-    It degrades to per-process claims -- correct on one instance -- and says so
-    once rather than on every tick.
-    """
+async def test_a_redis_failure_pauses_without_a_local_authorization():
     from app.plugins.scheduler import PluginScheduler
 
     class Exploding:
@@ -151,11 +162,10 @@ async def test_a_redis_failure_falls_back_rather_than_stopping_the_schedule():
 
     scheduler = PluginScheduler()
     scheduler._redis = Exploding()
-    sched = _schedule(interval_seconds=3600)
-
-    assert await scheduler._claim(_key(), sched) is True
-    assert await scheduler._claim(_key(), sched) is False
-    assert scheduler._warned_no_redis is True
+    assert await scheduler._claim(_key(), _schedule()) is False
+    assert scheduler.stats("config-drift-guard", ORG_A)["drift_scan"]["blocked"][
+        "reason"
+    ] == "coordination_unavailable"
 
 
 async def test_the_claim_is_scoped_per_organization():
@@ -167,7 +177,7 @@ async def test_the_claim_is_scoped_per_organization():
     from app.plugins.scheduler import PluginScheduler
 
     scheduler = PluginScheduler()
-    scheduler._redis = None
+    scheduler._redis = _SharedClaims()
     sched = _schedule(interval_seconds=3600)
 
     assert await scheduler._claim(_key(ORG_A), sched) is True
@@ -289,12 +299,8 @@ async def test_an_operators_choice_beats_the_default():
     assert await _disabled_with(("",), default=False) is False
 
 
-async def test_a_failed_lookup_falls_back_to_the_manifest_default():
-    """
-    Neither "run it" nor "skip it" is safe as a blanket answer: one starts an
-    unattended external write because a SELECT failed, the other silently stops
-    a monitoring scan. The author already answered "nobody has decided yet".
-    """
+async def test_a_failed_lookup_pauses_regardless_of_the_manifest_default():
+    """An unreadable operator choice must never authorize a default-on job."""
     from app.plugins.scheduler import PluginScheduler
     from app.plugins.sdk import _plugin_session
 
@@ -306,7 +312,7 @@ async def test_a_failed_lookup_falls_back_to_the_manifest_default():
     try:
         scheduler = PluginScheduler()
         assert await scheduler._is_disabled(_key(), _schedule(enabled_by_default=False)) is True
-        assert await scheduler._is_disabled(_key(), _schedule(enabled_by_default=True)) is False
+        assert await scheduler._is_disabled(_key(), _schedule(enabled_by_default=True)) is True
     finally:
         _plugin_session.reset(token)
 

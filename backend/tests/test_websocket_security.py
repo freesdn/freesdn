@@ -62,35 +62,8 @@ def test_websocket_rejects_missing_origin() -> None:
                 pass
 
 
-@pytest.mark.xfail(
-    reason=(
-        "TestClient lifespan binds a global async singleton to a stale event "
-        "loop inside the CI container. The security property is covered "
-        "deterministically by test_validate_ws_origin_* below."
-    ),
-    strict=False,
-)
 def test_websocket_rejects_evil_origin() -> None:
-    """Browser WS endpoint must reject unknown origins.
-
-    Still xfail, but for an accurate reason now, and no longer load-bearing.
-
-    The old marker justified itself by saying "the Origin-rejection LOGIC is
-    deterministically covered by test_origin_helper_unit". That was FALSE:
-    that unit test exercises ``_is_origin_allowed`` only, while
-    ``_validate_ws_origin`` short-circuits on ``_is_same_origin`` BEFORE it ever
-    consults the allowlist -- so weakening the short-circuit, which is the shape
-    a suffix or wildcard match would take, left this whole file green.
-
-    That gap is now genuinely closed by the ``test_validate_ws_origin_*`` tests
-    below, which drive the real function with no TestClient at all -- including
-    a sibling-host case that catches the substring match a loosened
-    ``_is_same_origin`` would become. This end-to-end case stays marked because the
-    flake it documents is real and environment-dependent: it passes on a Windows
-    host and fails inside the CI container, where the sync TestClient's lifespan
-    binds a global async singleton to a stale event loop. It is kept as a
-    smoke test; the security property itself is asserted deterministically below.
-    """
+    """Browser WS origin rejection must work across repeated app lifespans."""
     with _client() as client:
         with pytest.raises(WebSocketDisconnect):
             with client.websocket_connect(

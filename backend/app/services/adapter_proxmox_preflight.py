@@ -34,7 +34,11 @@ class Risk(StrEnum):
 #: to CATASTROPHIC; everything else (create/start/resume/clone/config/
 #: snapshot.create/migrate-in…) is SAFE.
 _FEATURE_RISK: dict[str, Risk] = {
+    # HA create can immediately start/stop workloads or alter placement.
+    "proxmox.ha.resource": Risk.CATASTROPHIC,
+    "proxmox.ha.group": Risk.CATASTROPHIC,
     "proxmox.vm.destroy": Risk.CATASTROPHIC,
+    "proxmox.vm.convert_to_template": Risk.CATASTROPHIC,
     "proxmox.vm.stop": Risk.DESTRUCTIVE,
     "proxmox.vm.shutdown": Risk.DESTRUCTIVE,
     "proxmox.vm.reboot": Risk.DESTRUCTIVE,
@@ -61,6 +65,7 @@ _FEATURE_RISK: dict[str, Risk] = {
     # staged apply path demands an explicit confirmed=true. (certificate_delete is
     # operation "delete" → already catastrophic via classify()'s delete-default.)
     "proxmox.node.certificate_upload": Risk.CATASTROPHIC,
+    "proxmox.node.acme_renew": Risk.CATASTROPHIC,
     "proxmox.snapshot.rollback": Risk.CATASTROPHIC,
     "proxmox.snapshot.delete": Risk.DESTRUCTIVE,
     "proxmox.storage.delete_volume": Risk.CATASTROPHIC,

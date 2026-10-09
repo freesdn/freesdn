@@ -26,6 +26,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import create_engine, text
 
+from scripts.migration_lock import migration_lock
+
 
 def _get_sync_logdb_url() -> str | None:
     """Return a synchronous LogDB URL or None if not configured."""
@@ -254,6 +256,7 @@ def main() -> None:
     sync_url = _get_sync_logdb_url()
     if not sync_url:
         import os
+
         env = os.getenv("ENVIRONMENT", "development")
         if env in ("production", "staging"):
             raise RuntimeError(
@@ -265,98 +268,103 @@ def main() -> None:
 
     engine = create_engine(sync_url)
     try:
-        with engine.begin() as conn:
-            # 1. Ensure TimescaleDB extension
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"))
-            ts_version = conn.execute(
-                text("SELECT extversion FROM pg_extension WHERE extname = 'timescaledb'")
-            ).scalar()
-            print(f"[logdb] TimescaleDB version: {ts_version}")
+        with migration_lock(engine):
+            with engine.begin() as conn:
+                # 1. Ensure TimescaleDB extension
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"))
+                ts_version = conn.execute(
+                    text("SELECT extversion FROM pg_extension WHERE extname = 'timescaledb'")
+                ).scalar()
+                print(f"[logdb] TimescaleDB version: {ts_version}")
 
-            # 2. Create schemas
-            for schema in LOGDB_SCHEMAS:
-                conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
-            print(f"[logdb] Schemas ready: {', '.join(LOGDB_SCHEMAS)}")
+                # 2. Create schemas
+                for schema in LOGDB_SCHEMAS:
+                    conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
+                print(f"[logdb] Schemas ready: {', '.join(LOGDB_SCHEMAS)}")
 
-        # 3. Create tables via raw DDL.
-        # We use explicit DDL instead of ORM table.create() because
-        # several models have ForeignKey references to the primary DB
-        # (e.g. core.organizations, agents.remote_agents) which cannot
-        # resolve in the separate LogDB instance.  The columns are kept
-        # as plain UUID / typed columns without FK constraints.
-        _create_logdb_tables(engine)
+            # 3. Create tables via raw DDL.
+            # We use explicit DDL instead of ORM table.create() because
+            # several models have ForeignKey references to the primary DB
+            # (e.g. core.organizations, agents.remote_agents) which cannot
+            # resolve in the separate LogDB instance.  The columns are kept
+            # as plain UUID / typed columns without FK constraints.
+            _create_logdb_tables(engine)
 
-        # 4. Convert to hypertables
-        with engine.begin() as conn:
-            for schema, table, time_col in HYPERTABLES:
-                if not _table_exists(conn, schema, table):
-                    print(f"[logdb] Skipping hypertable {schema}.{table} — table not found")
-                    continue
-                if _is_hypertable(conn, schema, table):
-                    print(f"[logdb] {schema}.{table} is already a hypertable")
-                    continue
+            # 4. Convert to hypertables
+            with engine.begin() as conn:
+                for schema, table, time_col in HYPERTABLES:
+                    if not _table_exists(conn, schema, table):
+                        print(f"[logdb] Skipping hypertable {schema}.{table} — table not found")
+                        continue
+                    if _is_hypertable(conn, schema, table):
+                        print(f"[logdb] {schema}.{table} is already a hypertable")
+                        continue
 
-                conn.execute(
-                    text(
-                        f"SELECT create_hypertable("
-                        f"'{schema}.{table}', '{time_col}', "
-                        f"migrate_data => true, if_not_exists => true"
-                        f")"
-                    )
-                )
-                print(f"[logdb] Converted {schema}.{table} to hypertable (time_column={time_col})")
-
-        # 5. Enable compression
-        with engine.begin() as conn:
-            for schema, table, after_interval in COMPRESSION_POLICIES:
-                if not _is_hypertable(conn, schema, table):
-                    continue
-
-                # Enable compression on the hypertable
-                conn.execute(
-                    text(
-                        f"ALTER TABLE {schema}.{table} SET ("
-                        f"timescaledb.compress, "
-                        f"timescaledb.compress_segmentby = ''"
-                        f")"
-                    )
-                )
-
-                if not _has_compression_policy(conn, schema, table):
                     conn.execute(
                         text(
-                            f"SELECT add_compression_policy("
-                            f"'{schema}.{table}', "
-                            f"INTERVAL '{after_interval}'"
+                            f"SELECT create_hypertable("
+                            f"'{schema}.{table}', '{time_col}', "
+                            f"migrate_data => true, if_not_exists => true"
                             f")"
                         )
                     )
-                    print(f"[logdb] Compression policy: {schema}.{table} after {after_interval}")
-                else:
-                    print(f"[logdb] Compression policy already exists: {schema}.{table}")
+                    print(
+                        f"[logdb] Converted {schema}.{table} to hypertable (time_column={time_col})"
+                    )
 
-        # 6. Add retention policies
-        with engine.begin() as conn:
-            for schema, table, drop_after in RETENTION_POLICIES:
-                if not _is_hypertable(conn, schema, table):
-                    continue
-                if not _has_retention_policy(conn, schema, table):
+            # 5. Enable compression
+            with engine.begin() as conn:
+                for schema, table, after_interval in COMPRESSION_POLICIES:
+                    if not _is_hypertable(conn, schema, table):
+                        continue
+
+                    # Enable compression on the hypertable
                     conn.execute(
                         text(
-                            f"SELECT add_retention_policy("
-                            f"'{schema}.{table}', "
-                            f"INTERVAL '{drop_after}'"
+                            f"ALTER TABLE {schema}.{table} SET ("
+                            f"timescaledb.compress, "
+                            f"timescaledb.compress_segmentby = ''"
                             f")"
                         )
                     )
-                    print(f"[logdb] Retention policy: {schema}.{table} drop after {drop_after}")
-                else:
-                    print(f"[logdb] Retention policy already exists: {schema}.{table}")
 
-        # 7. Create continuous aggregates for common queries
-        _create_continuous_aggregates(engine)
+                    if not _has_compression_policy(conn, schema, table):
+                        conn.execute(
+                            text(
+                                f"SELECT add_compression_policy("
+                                f"'{schema}.{table}', "
+                                f"INTERVAL '{after_interval}'"
+                                f")"
+                            )
+                        )
+                        print(
+                            f"[logdb] Compression policy: {schema}.{table} after {after_interval}"
+                        )
+                    else:
+                        print(f"[logdb] Compression policy already exists: {schema}.{table}")
 
-        print("[logdb] Migration complete")
+            # 6. Add retention policies
+            with engine.begin() as conn:
+                for schema, table, drop_after in RETENTION_POLICIES:
+                    if not _is_hypertable(conn, schema, table):
+                        continue
+                    if not _has_retention_policy(conn, schema, table):
+                        conn.execute(
+                            text(
+                                f"SELECT add_retention_policy("
+                                f"'{schema}.{table}', "
+                                f"INTERVAL '{drop_after}'"
+                                f")"
+                            )
+                        )
+                        print(f"[logdb] Retention policy: {schema}.{table} drop after {drop_after}")
+                    else:
+                        print(f"[logdb] Retention policy already exists: {schema}.{table}")
+
+            # 7. Create continuous aggregates for common queries
+            _create_continuous_aggregates(engine)
+
+            print("[logdb] Migration complete")
 
     finally:
         engine.dispose()
@@ -444,11 +452,17 @@ def _create_continuous_aggregates(engine) -> None:
 
             # Check that the source hypertable exists first
             source_table_exists = True
-            if "metric_data" in agg["query"] and not _table_exists(conn, "analytics", "metric_data"):
+            if "metric_data" in agg["query"] and not _table_exists(
+                conn, "analytics", "metric_data"
+            ):
                 source_table_exists = False
-            if "vpn_health_checks" in agg["query"] and not _table_exists(conn, "vpn", "vpn_health_checks"):
+            if "vpn_health_checks" in agg["query"] and not _table_exists(
+                conn, "vpn", "vpn_health_checks"
+            ):
                 source_table_exists = False
-            if "agent_heartbeats" in agg["query"] and not _table_exists(conn, "agents", "agent_heartbeats"):
+            if "agent_heartbeats" in agg["query"] and not _table_exists(
+                conn, "agents", "agent_heartbeats"
+            ):
                 source_table_exists = False
 
             if not source_table_exists:

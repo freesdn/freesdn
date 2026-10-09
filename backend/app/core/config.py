@@ -10,8 +10,9 @@ Supports .env files and environment variable overrides.
 
 import os
 from functools import lru_cache
+from uuid import UUID
 
-from pydantic import PostgresDsn, RedisDsn, field_validator, model_validator
+from pydantic import Field, PostgresDsn, RedisDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Version + license come from the one source of truth in app/__init__.py.
@@ -43,6 +44,45 @@ class Settings(BaseSettings):
     # API Settings
     API_V1_PREFIX: str = "/api/v1"
 
+    # Durable agent release storage. The managed directory is separate from
+    # legacy flat files; startup never adopts/chmods an existing unmarked root.
+    # These are physical-resource/history bounds, independent of SaaS quotas.
+    FREESDN_AGENT_RELEASE_DIR: str = "/var/lib/freesdn/agent-releases"
+    FREESDN_AGENT_MANAGED_RELEASE_DIR: str = ""
+    FREESDN_AGENT_RELEASE_GLOBAL_HISTORY_LIMIT: int = 10000
+    FREESDN_AGENT_RELEASE_ORG_HISTORY_LIMIT: int = 2000
+    FREESDN_AGENT_RELEASE_GLOBAL_BYTE_LIMIT: int = 50 * 1024**3
+    FREESDN_AGENT_RELEASE_ORG_BYTE_LIMIT: int = 10 * 1024**3
+
+    @field_validator(
+        "FREESDN_AGENT_RELEASE_GLOBAL_HISTORY_LIMIT",
+        "FREESDN_AGENT_RELEASE_ORG_HISTORY_LIMIT",
+        "FREESDN_AGENT_RELEASE_GLOBAL_BYTE_LIMIT",
+        "FREESDN_AGENT_RELEASE_ORG_BYTE_LIMIT",
+        mode="before",
+    )
+    @classmethod
+    def _release_budget_integer(cls, value: object) -> int:
+        # Accept canonical decimal environment values, never bools, floats,
+        # signs, exponent notation or coercion/truncation of a caller value.
+        if type(value) is str and 1 <= len(value) <= 19 and value.isascii() and value.isdecimal():
+            if value != "0" and value[0] != "0":
+                value = int(value)
+        if type(value) is not int or not 1 <= value <= 9223372036854775807:
+            raise ValueError("Release budgets require positive bounded decimal integers")
+        return value
+
+    @model_validator(mode="after")
+    def _release_runtime_policy(self) -> "Settings":
+        from app.core.agent_release_runtime_policy import ReleaseRuntimePolicy
+        from app.core.agent_release_storage_root import ReleaseStorageUnavailable
+
+        try:
+            ReleaseRuntimePolicy.from_settings(self)
+        except ReleaseStorageUnavailable as error:
+            raise ValueError(str(error)) from None
+        return self
+
     # Public base URL — the externally-reachable URL for this FreeSDN instance.
     # Set to your production domain in deployment (e.g., "https://freesdn.example.com").
     # Used to build agent WebSocket URLs and other external-facing links.
@@ -64,6 +104,10 @@ class Settings(BaseSettings):
     # Security Settings
     # ===========================================
     SECRET_KEY: str = ""  # Required — set via FREESDN_SECRET_KEY env var
+    # Optional separate signing key. Empty preserves existing installations;
+    # once configured, ONLY this key validates JWTs (no legacy-key fallback).
+    # Rotate this for disaster recovery, never the credential encryption key.
+    JWT_SIGNING_KEY: str = Field(default="", repr=False)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 14
@@ -214,6 +258,27 @@ class Settings(BaseSettings):
                 stacklevel=2,
             )
         return self
+
+    @field_validator("JWT_SIGNING_KEY")
+    @classmethod
+    def check_jwt_signing_key(cls, value: str) -> str:
+        """An explicitly supplied signing key must not silently weaken auth."""
+        if value and (
+            len(value) < 32
+            or any(char.isspace() for char in value)
+            or "change_me" in value.lower()
+            or "change-me" in value.lower()
+        ):
+            raise ValueError(
+                "JWT_SIGNING_KEY must be empty for legacy compatibility or a "
+                "random key of at least 32 characters, without whitespace/placeholders."
+            )
+        return value
+
+    @property
+    def jwt_signing_key(self) -> str:
+        """One active JWT key; credential encryption keeps using SECRET_KEY."""
+        return self.JWT_SIGNING_KEY or self.SECRET_KEY
 
     @model_validator(mode="after")
     def check_encryption_salt(self) -> "Settings":
@@ -599,6 +664,20 @@ class Settings(BaseSettings):
     # here — e.g. for portability to a host without this SECRET_KEY.
     BACKUP_ALLOW_PLAINTEXT: bool = False
 
+    # Disk-backed shared transfer pool, independent of an archive's NFS/provider
+    # root. All API processes using this path must use the same policy. /tmp in
+    # shipped containers is tmpfs and is deliberately refused by the pool.
+    BACKUP_DOWNLOAD_SPOOL: str = "/data/backups/.transfers"
+    BACKUP_DOWNLOAD_SLOTS: int = Field(default=4, ge=1, le=16)
+    BACKUP_DOWNLOAD_FREE_BYTES: int = Field(default=1024 * 1024 * 1024, ge=0)
+    BACKUP_DOWNLOAD_SECONDS: int = Field(default=900, ge=1, le=86400)
+
+    # Trusted deployment callback for vault OIDC confirmation only. Empty
+    # leaves OIDC confirmation unavailable; local/LDAP confirmation still use
+    # their existing factors. Application construction validates an explicit
+    # HTTPS URL and never derives it from request Host, Origin or login input.
+    VAULT_OIDC_REDIRECT_URI: str = Field(default="", max_length=2048)
+
     # Ollama is a "local LLM by design", so its provider base_url historically
     # accepted any host — which let an org_admin point it at internal services
     # (Redis/Postgres/other tenants) as a blind SSRF pivot. We now block
@@ -625,6 +704,23 @@ class Settings(BaseSettings):
     # FRONTEND_URL builds the password-reset link; empty keeps the existing
     # fallback to CORS_ORIGINS[0] then http://localhost:3000.
     FRONTEND_URL: str = ""
+    # An independently managed deployment identifier, not a secret or vault key.
+    # Empty disables report-mail approval. Rotate BEFORE starting restored workers.
+    SLA_REPORT_DELIVERY_EPOCH: str = ""
+
+    @field_validator("SLA_REPORT_DELIVERY_EPOCH")
+    @classmethod
+    def validate_report_delivery_epoch(cls, value: str) -> str:
+        if not value:
+            return ""
+        try:
+            epoch = UUID(value)
+            if epoch.version != 4:
+                raise ValueError
+        except ValueError:
+            raise ValueError("SLA_REPORT_DELIVERY_EPOCH must be empty or a UUID4") from None
+        return str(epoch)
+
     # UniFi refuses RFC1918 controller hosts when this is false. It defaulted to
     # True at the call site, so the guard could never be switched ON.
     ALLOW_PRIVATE_CONTROLLER_HOSTS: bool = True
@@ -712,7 +808,7 @@ class Settings(BaseSettings):
     # ===========================================
     # Plugin Supply-Chain Hardening
     # ===========================================
-    # When PLUGIN_ALLOW_RUNTIME_PYTHON_DEPS is on, pip installs for
+    # When PLUGIN_ALLOW_RUNTIME_PYTHON_DEPS is on, uv installs for
     # plugin Python deps are run with ``--require-hashes`` and pinned to
     # this index URL. Plugins MUST ship a ``requirements.txt`` containing
     # ``--hash=sha256:...`` annotations or the install is refused.

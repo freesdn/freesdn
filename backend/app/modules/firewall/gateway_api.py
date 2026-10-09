@@ -12,15 +12,24 @@ REST API for managing external firewall / router gateway connections
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import CurrentUser, get_current_active_user, require_permissions
 from app.db import get_session
 from app.modules.firewall.gateway_service import (
+    GatewayAggregateReadError,
+    GatewayBackupInventoryError,
+    GatewayCertificateInventoryError,
+    GatewayConfigBackupUnavailableError,
+    GatewayConfigComparisonError,
+    GatewayConfigDownloadError,
+    GatewayConnectionTestError,
+    GatewayLogReadError,
     GatewayNotFoundError,
     GatewayService,
+    GatewayTrustInventoryError,
 )
 from app.modules.firewall.schemas import (
     AliasRequest,
@@ -196,23 +205,26 @@ async def create_gateway(
     svc: Annotated[GatewayService, Depends(get_gateway_service)],
 ):
     """Add a new gateway connection."""
-    gw = await svc.create_gateway(
-        org_id=current_user.organization_id,
-        name=body.name,
-        description=body.description,
-        vendor=body.vendor,
-        host=body.host,
-        port=body.port,
-        verify_ssl=body.verify_ssl,
-        site_id=body.site_id,
-        api_key=body.api_key,
-        api_secret=body.api_secret,
-        username=body.username,
-        password=body.password,
-        sync_enabled=body.sync_enabled,
-        sync_interval_seconds=body.sync_interval_seconds,
-        settings=body.settings,
-    )
+    try:
+        gw = await svc.create_gateway(
+            org_id=current_user.organization_id,
+            name=body.name,
+            description=body.description,
+            vendor=body.vendor,
+            host=body.host,
+            port=body.port,
+            verify_ssl=body.verify_ssl,
+            site_id=body.site_id,
+            api_key=body.api_key,
+            api_secret=body.api_secret,
+            username=body.username,
+            password=body.password,
+            sync_enabled=body.sync_enabled,
+            sync_interval_seconds=body.sync_interval_seconds,
+            settings=body.settings,
+        )
+    except GatewayNotFoundError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
     from app.services.device_sync import trigger_device_registry_sync
 
     trigger_device_registry_sync("firewall")
@@ -323,6 +335,10 @@ async def test_existing_gateway(
         return GatewayTestResponse(**result)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayConnectionTestError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Gateway changed during its connection test; retry the test"
+        )
 
 
 @router.post("/{gateway_id}/preflight", response_model=GatewayPreflightResponse)
@@ -442,6 +458,8 @@ async def get_gateway_vpn_status(
         return await svc.get_live_vpn_status(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 @router.get("/{gateway_id}/interfaces")
@@ -1259,6 +1277,8 @@ async def get_gateway_health(
         return await svc.get_live_gateway_health(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1407,6 +1427,8 @@ async def get_backups(
         return await svc.get_live_backups(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayBackupInventoryError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 @router.post("/{gateway_id}/backups", response_model=GatewayWriteResponse)
@@ -1456,6 +1478,8 @@ async def get_firmware(
         return await svc.get_live_firmware(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1535,6 +1559,8 @@ async def get_system_log(
         return await svc.get_live_system_log(gateway_id, current_user.organization_id, limit=limit)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayLogReadError:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Gateway logs are unavailable") from None
 
 
 @router.get("/{gateway_id}/logs/firewall")
@@ -1551,6 +1577,8 @@ async def get_firewall_log(
         )
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayLogReadError:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Gateway logs are unavailable") from None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1569,6 +1597,8 @@ async def get_device_summary(
         return await svc.get_live_device_summary(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1822,6 +1852,8 @@ async def download_config(
         return await svc.download_live_config(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayConfigDownloadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 @router.delete("/{gateway_id}/backups/{filename}", response_model=GatewayWriteResponse)
@@ -2474,6 +2506,8 @@ async def get_tailscale_status(
         return await svc.get_live_tailscale_status(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2536,6 +2570,8 @@ async def get_haproxy_status(
         return await svc.get_live_haproxy_status(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 @router.get("/{gateway_id}/haproxy/servers")
@@ -2549,6 +2585,8 @@ async def get_haproxy_servers(
         return await svc.get_live_haproxy_servers(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 @router.get("/{gateway_id}/haproxy/backends")
@@ -2562,6 +2600,8 @@ async def get_haproxy_backends(
         return await svc.get_live_haproxy_backends(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 @router.get("/{gateway_id}/haproxy/frontends")
@@ -2575,6 +2615,8 @@ async def get_haproxy_frontends(
         return await svc.get_live_haproxy_frontends(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2593,6 +2635,8 @@ async def get_trust_overview(
         return await svc.get_live_trust_overview(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayTrustInventoryError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 @router.get("/{gateway_id}/certificates/certs")
@@ -2606,6 +2650,8 @@ async def get_certificates(
         return await svc.get_live_certificates(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayCertificateInventoryError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 @router.get("/{gateway_id}/certificates/cas")
@@ -2619,6 +2665,8 @@ async def get_certificate_authorities(
         return await svc.get_live_certificate_authorities(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayTrustInventoryError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2637,6 +2685,8 @@ async def get_acme_overview(
         return await svc.get_live_acme_overview(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayTrustInventoryError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 @router.get("/{gateway_id}/acme/certificates")
@@ -2650,6 +2700,8 @@ async def get_acme_certificates(
         return await svc.get_live_acme_certificates(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayTrustInventoryError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2864,6 +2916,8 @@ async def get_proxy_settings(
         return await svc.get_live_proxy_settings(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 @router.get("/{gateway_id}/proxy/blacklists")
@@ -2895,6 +2949,8 @@ async def get_crowdsec_status(
         return await svc.get_live_crowdsec_status(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2913,6 +2969,8 @@ async def get_telegraf_status(
         return await svc.get_live_telegraf_status(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2931,6 +2989,8 @@ async def get_monit_status(
         return await svc.get_live_monit_status(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2949,6 +3009,8 @@ async def get_netflow_status(
         return await svc.get_live_netflow_status(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayAggregateReadError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2959,6 +3021,7 @@ async def get_netflow_status(
 @router.get("/{gateway_id}/logs/stream")
 async def stream_firewall_logs(
     gateway_id: UUID,
+    request: Request,
     current_user: Annotated[CurrentUser, Depends(require_permissions("firewall.view"))],
     svc: Annotated[GatewayService, Depends(get_gateway_service)],
     limit: int = Query(50, ge=1, le=500),
@@ -2968,53 +3031,23 @@ async def stream_firewall_logs(
     Server-Sent Events stream of firewall logs.
     Polls the gateway every `interval` seconds and pushes new log entries.
     """
-    import asyncio
-    import json
-    from collections import OrderedDict
+    from app.modules.firewall.gateway_log_stream import GatewayLogStream
 
-    async def _event_generator():
-        seen_digests: OrderedDict[str, None] = OrderedDict()
-        MAX_SEEN = 1000
-        try:
-            while True:
-                try:
-                    result = await svc.get_live_firewall_log(
-                        gateway_id, current_user.organization_id, limit=limit
-                    )
-                    logs = []
-                    if isinstance(result, dict):
-                        logs = result.get("data", {}).get("logs", [])
-                    elif hasattr(result, "data"):
-                        logs = (result.data or {}).get("logs", [])
-
-                    new_entries = []
-                    for entry in logs:
-                        digest = json.dumps(entry, sort_keys=True, default=str)
-                        if digest not in seen_digests:
-                            seen_digests[digest] = None
-                            new_entries.append(entry)
-                            # Evict oldest entries when over limit
-                            while len(seen_digests) > MAX_SEEN:
-                                seen_digests.popitem(last=False)
-
-                    if new_entries:
-                        payload = json.dumps(new_entries, default=str)
-                        yield f"data: {payload}\n\n"
-                    else:
-                        yield ": keepalive\n\n"
-
-                except Exception:
-                    yield f"data: {json.dumps({'error': 'Failed to fetch logs'})}\n\n"
-
-                await asyncio.sleep(interval)
-        except asyncio.CancelledError:
-            return
+    stream = GatewayLogStream(request, current_user, gateway_id)
+    # Only the normal auth/read dependencies used this request session. Release
+    # their connection before the response can live indefinitely. The stream
+    # uses independent sessions, closed after each authorization/poll phase.
+    await svc.db.close()
+    try:
+        await stream.start()
+    except GatewayNotFoundError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found") from None
 
     return StreamingResponse(
-        _event_generator(),
+        stream.events(limit, interval),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-store",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
@@ -3115,6 +3148,8 @@ async def get_config_diff(
         return await svc.get_config_diff(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayConfigComparisonError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3133,6 +3168,8 @@ async def trigger_config_backup(
         return await svc.trigger_config_backup(gateway_id, current_user.organization_id)
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayConfigBackupUnavailableError as exc:
+        raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, str(exc)) from None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3157,3 +3194,5 @@ async def get_certificate_expiry(
         )
     except GatewayNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
+    except GatewayCertificateInventoryError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None

@@ -1,0 +1,38 @@
+Discovery failure transaction and diagnostic boundaries
+======================================================
+
+A generic discovery error first rolls back the current inventory transaction.
+Failure status must not commit pending device updates or inserts. If an earlier
+phase already committed inventory, rollback does not undo that completed phase.
+The failure result therefore does not claim that all external work was undone.
+
+Before recording controller ERROR, the handler reloads and locks the current
+controller, site and organization, requiring the original site and tenant and
+active, undeleted authority. A moved/disabled/deleted owner is refused without
+modifying its status or publishing a failure event attributed to that owner.
+Current configuration is loaded again, preserving unrelated concurrent edits.
+The authority locks remain held through the error-record commit.
+
+New error fields, the failure event, task return and this handler's log use
+fixed messages. Exception text, SQL parameters and vendor response bodies are
+not copied. When rewriting error history, only up to nine previous valid,
+bounded timestamps are retained with a fixed historical label; arbitrary
+legacy bodies/extra fields are discarded. Unrelated configuration remains.
+This is not a global migration or erasure of old diagnostic storage. Controllers
+which never enter this handler retain their prior records until a separate
+migration or administrative retention process addresses them.
+
+A bookkeeping/database failure leaves the task unsuccessful and logs a fixed
+category. A failed event publication after the error-record commit also retains
+a failed outcome; it must not trigger automatic repetition of discovery effects.
+The event is still best effort, not a transactional outbox. Pre-commit device
+events can already have escaped before rollback, and previously committed deep
+sync/ZTP/hardware actions are not transactionally reversed. Success-path partial
+errors, per-controller retry diagnostics, native Celery logs/results, execution-
+time caller grants and postcommit authorization races remain separate work.
+
+PostgreSQL checks cover updates, savepoint inserts, aborted outer transactions,
+current authority changes and locks, malformed/legacy histories, event outages,
+and successful/previously committed inventory controls. Separate application
+processes execute the real transaction path with synthetic adapters, deep sync,
+ZTP and event transport. No real hardware or external notification is contacted.

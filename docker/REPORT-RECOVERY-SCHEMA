@@ -1,0 +1,33 @@
+Report recovery checks bind to the supplied backend image
+========================================================
+
+scripts/check_report_recovery.py uses disposable containers, synthetic report
+data, real PostgreSQL dumps/restores and a local TLS SMTP fixture. It does not
+use customer backups, send external mail or contact managed hardware. Its
+--work-dir must be a new absolute directory on a POSIX filesystem that enforces
+0700 permissions. That directory contains synthetic credentials and database
+dumps; publish only its report.json, never the complete working directory.
+
+The helper resolves each supplied local image to an immutable image ID. After
+migration, it reads the single Alembic head from that exact backend image and
+requires the database's revision table to match. Empty, multiple, malformed
+or mismatched revisions fail before report creation or mail delivery. Each
+restored database must pass the same comparison before its recovery probe.
+The report records only validated revisions and qualified image identities.
+
+This replaces the previous fixed 018_report_recovery_epoch comparison. The
+check now works with later release migrations, including the in-app outbox,
+without treating a database left at the old revision as fully migrated.
+
+The seven existing recovery cases remain unchanged: create an approved pending
+notice; accept its original mail; demonstrate duplicate replay without an epoch
+change; quarantine with a missing epoch; quarantine with a rotated epoch;
+explicitly approve a new notice only; and preserve those outcomes after a
+fresh process and empty cache. The deliberately unsafe replay is confined to
+the synthetic fixture and explains why restoration requires an epoch change.
+
+A passing revision comparison establishes migration-version alignment, not
+complete physical schema equivalence, data integrity, customer restore time,
+cross-host recovery or exactly-once delivery. These require separate evidence.
+Multiple Alembic heads are refused until the release supplies a merged head
+and migration path. No image is pulled implicitly by image-ID resolution.

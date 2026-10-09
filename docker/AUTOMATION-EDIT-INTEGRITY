@@ -1,0 +1,39 @@
+Automation edit integrity
+=========================
+
+Ordinary action/condition edits arrive as JSON objects. The runtime evaluates
+Action and ConditionGroup instances. Assigning the incoming dictionaries to an
+already cached rule breaks later execution even if the update response can be
+serialized. Mutating that same cached object before a database lookup or flush
+also lets a failed request change the rule visible to the engine.
+
+The edit service now reads the organization-scoped persistent row, restricts
+updates to editable fields, normalizes typed/JSON input, and validates an isolated
+replacement with the shared record-to-runtime conversion. It writes and flushes
+the row before replacing the engine entry. The existing rule object is never
+mutated in place, so an already-held execution snapshot is not partially edited.
+Missing rows return not-found semantics instead of a phantom success.
+
+PATCH cannot explicitly null required names, trigger definitions, actions,
+priority or rate/cooldown values. Omitting these fields preserves them. Optional
+descriptions and conditions may still be cleared. Runtime identity, author and
+execution counters are not general editable fields.
+
+Qualification scope
+-------------------
+Regression cases cover normal API-shaped edits, harmless action execution,
+condition evaluation, current database definitions, protected fields and invalid
+shapes. Database qualification must verify actual committed JSON/runtime shape
+agreement, a rejected database write, missing rows and caller rollback against
+the exact candidate. Synthetic SQLite probes supplement but never replace the
+migrated PostgreSQL release checks. No device or external notification action is
+needed for these tests.
+
+Remaining lifecycle limits
+--------------------------
+Flush is not commit. The caller retains commit/rollback ownership. This change
+does not implement commit-aware cache publication: a successful flush followed
+by rollback can still leave this worker's cache out of date. Other workers can
+also hold older definitions. Authoritative execution-time rule loading,
+cross-worker invalidation and in-flight revocation need separate qualification.
+A completed external side effect cannot be recalled by disabling a rule.

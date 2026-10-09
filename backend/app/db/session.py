@@ -31,9 +31,13 @@ logger = logging.getLogger(__name__)
 # Primary Database (PostgreSQL) — relational data
 # =========================================================================
 
+# SQL parameters can include credentials and imported configuration. Keep them
+# out of engine logs and SQLAlchemy error parameter dumps, even with DEBUG/echo.
+# Driver error text and literal SQL still require safe handling at boundaries.
 # Create async engine with connection pooling
 engine = create_async_engine(
     str(settings.DATABASE_URL),
+    hide_parameters=True,
     echo=settings.DEBUG,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
@@ -65,6 +69,7 @@ AsyncSessionLocal = async_session_factory
 # infrequent + best-effort, so the connect-per-write cost is irrelevant.
 _audit_engine = create_async_engine(
     str(settings.DATABASE_URL),
+    hide_parameters=True,
     poolclass=NullPool,
     connect_args={"statement_cache_size": 0},
 )
@@ -106,12 +111,25 @@ if settings.ENABLE_SOFT_DELETE_GLOBAL_FILTER:
 _READINESS_TIMEOUT_S = 3
 readiness_engine = create_async_engine(
     str(settings.DATABASE_URL),
+    hide_parameters=True,
     poolclass=NullPool,
     connect_args={
         "timeout": _READINESS_TIMEOUT_S,
         "command_timeout": _READINESS_TIMEOUT_S,
         "statement_cache_size": 0,
     },
+)
+
+# Revocations commit independently before issuing a refresh. NullPool supports
+# HTTP and background event loops; driver timeouts bound storage failure.
+security_engine = create_async_engine(
+    str(settings.DATABASE_URL),
+    hide_parameters=True,
+    poolclass=NullPool,
+    connect_args={"timeout": 3, "command_timeout": 3, "statement_cache_size": 0},
+)
+security_session_factory = async_sessionmaker(
+    security_engine, class_=AsyncSession, expire_on_commit=False, autoflush=False
 )
 
 
@@ -125,6 +143,7 @@ readiness_engine = create_async_engine(
 
 _celery_engine = create_async_engine(
     str(settings.DATABASE_URL),
+    hide_parameters=True,
     echo=settings.DEBUG,
     poolclass=NullPool,
     pool_pre_ping=True,
@@ -163,6 +182,7 @@ CeleryLogDBSessionLocal = None
 if settings.LOGDB_URL:
     logdb_engine = create_async_engine(
         settings.LOGDB_URL,
+        hide_parameters=True,
         echo=settings.DEBUG,
         pool_size=settings.LOGDB_POOL_SIZE,
         max_overflow=settings.LOGDB_MAX_OVERFLOW,
@@ -172,6 +192,7 @@ if settings.LOGDB_URL:
     )
     readiness_logdb_engine = create_async_engine(
         settings.LOGDB_URL,
+        hide_parameters=True,
         poolclass=NullPool,
         connect_args={
             "timeout": _READINESS_TIMEOUT_S,
@@ -190,6 +211,7 @@ if settings.LOGDB_URL:
 
     _celery_logdb_engine = create_async_engine(
         settings.LOGDB_URL,
+        hide_parameters=True,
         echo=settings.DEBUG,
         poolclass=NullPool,
         pool_pre_ping=True,
@@ -280,6 +302,24 @@ def create_test_engine() -> Any:
     """Create a test engine without connection pooling."""
     return create_async_engine(
         str(settings.DATABASE_URL),
+        hide_parameters=True,
         echo=True,
         poolclass=NullPool,
     )
+
+
+async def dispose_api_engines() -> None:
+    """Close API-owned pools before their event loop exits.
+
+    NullPool worker engines are intentionally separate from application lifespan.
+    Disposing recreates each pool on subsequent use, so repeated lifespans work.
+    """
+    import asyncio
+
+    engines = (engine, _audit_engine, readiness_engine, logdb_engine, readiness_logdb_engine)
+    results = await asyncio.gather(
+        *(item.dispose() for item in engines if item is not None), return_exceptions=True
+    )
+    for result in results:
+        if isinstance(result, BaseException):
+            logger.warning("Database pool cleanup failed: %s", type(result).__name__)

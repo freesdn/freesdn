@@ -25,7 +25,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { dashboardSummary, devices, sites } from '../fixtures';
+import {
+  alerts,
+  dashboardSummary,
+  devices,
+  sites,
+} from '../fixtures';
 
 describe('demo dashboard summary matches the backend field names', () => {
   // Mirrors DashboardSummaryResponse in app/schemas/analytics.py. If the
@@ -114,5 +119,51 @@ describe('demo sites can be scored for health', () => {
     expect(score(42, 42)).toBe('healthy');
     expect(score(42, 30)).toBe('degraded');
     expect(score(42, 3)).toBe('critical');
+  });
+});
+
+describe('the demo fleet is one fleet', () => {
+  // The demo shipped for months with THREE device lists that disagreed: an
+  // 8-row `devices`, a 61-row fleet, and sites asserting 92 between them. The
+  // test above pinned dashboardSummary against `devices`, so it stayed green
+  // the whole time -- the sites were never checked against anything. A visitor
+  // saw site cards claiming 42 and 19 next to a device list of 8, which reads
+  // as a broken product rather than a new one.
+  it('every site counts the devices it actually has', () => {
+    const perSite = sites.reduce((n, s) => n + s.device_count, 0);
+    expect(perSite).toBe(devices.length);
+  });
+
+  it('every site counts the online devices it actually has', () => {
+    const online = sites.reduce((n, s) => n + s.online_device_count, 0);
+    expect(online).toBe(devices.filter((d) => d.status === 'online').length);
+  });
+
+  it('each site individually matches its own devices', () => {
+    for (const s of sites) {
+      const own = devices.filter((d) => d.site_id === s.id);
+      expect({ site: s.name, count: s.device_count }).toEqual({ site: s.name, count: own.length });
+    }
+  });
+});
+
+describe('the demo is populated enough to be worth visiting', () => {
+  // An empty page reads as an unfinished product, which is worse than no demo
+  // at all. These are floors, not targets: they exist so the fixtures cannot
+  // silently thin out again the way they had by 26.06.1, when 306 lines of
+  // data were spread across 261 pages.
+  it('ships a fleet rather than a handful of examples', () => {
+    expect(devices.length).toBeGreaterThanOrEqual(40);
+  });
+
+  it('has alerts in more than one state, so the alert UI has range', () => {
+    expect(alerts.length).toBeGreaterThanOrEqual(5);
+    expect(new Set(alerts.map((a) => a.severity)).size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('covers many collections, not just the dashboard', async () => {
+    const mod = await import('../fixtures');
+    const populated = Object.values(mod).filter((v) => Array.isArray(v) && v.length >= 5);
+    expect(populated.length).toBeGreaterThanOrEqual(30);
   });
 });

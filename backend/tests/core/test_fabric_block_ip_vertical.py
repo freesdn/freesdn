@@ -12,6 +12,7 @@ Changes — the negotiator NEVER force-applies a device write. The real
 ``firewall.block_ip`` Operation the module advertises is used; only the DB
 stage_change + the org-ownership guard are stubbed (no DB, no device).
 """
+
 from __future__ import annotations
 
 import uuid
@@ -23,8 +24,9 @@ import pytest
 from app.core.fabric.artifact_broker import ArtifactBroker
 from app.core.fabric.execution import OperationResult
 from app.core.fabric.executor import OperationExecutor
-from app.core.fabric.negotiator import Connection, ConnectionStep, Negotiator
+from app.core.fabric.negotiator import Connection, ConnectionStep
 from app.core.fabric.operations import Operation, OperationTier
+from tests.core.fabric_fakes import coordinated_negotiator
 
 ORG = uuid.uuid4()
 
@@ -47,10 +49,22 @@ class _FakeRegistry:
 
 class _FakeSession:
     async def __aenter__(self):
-        return object()  # non-None so the write path proceeds
+        return self
 
     async def __aexit__(self, *a):
         return False
+
+    async def commit(self):
+        # This positive fixture models a successful session, including commit.
+        return None
+
+    async def execute(self, _query):
+        # A positive vertical needs a verified author, not a DB-error fallback.
+        return SimpleNamespace(
+            scalar_one_or_none=lambda: SimpleNamespace(
+                role="org_admin", is_active=True, deleted_at=None, site_access=[]
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -66,9 +80,7 @@ async def test_ids_critical_stages_block_ip_and_notifies(tmp_path, monkeypatch) 
     assert block_op.write is True and block_op.feature == "opnsense.firewall.rule"
 
     # Org-ownership guard on the write plane → allow (real check needs a DB).
-    monkeypatch.setattr(
-        "app.core.fabric.executor._controller_in_org", AsyncMock(return_value=True)
-    )
+    monkeypatch.setattr("app.core.fabric.executor._controller_in_org", AsyncMock(return_value=True))
 
     # Capture what the Fabric STAGES (instead of hitting the DB).
     staged: dict = {}
@@ -88,14 +100,17 @@ async def test_ids_critical_stages_block_ip_and_notifies(tmp_path, monkeypatch) 
         return OperationResult.ok(output={"notified": True})
 
     notify_op = Operation(
-        id="test.notify", title="notify", handler=_notify,
-        tier=OperationTier.NATIVE, provider_id="test",
+        id="test.notify",
+        title="notify",
+        handler=_notify,
+        tier=OperationTier.NATIVE,
+        provider_id="test",
     )
 
     async def _allow(actor_id, permission, org_id):
         return True
 
-    neg = Negotiator(
+    neg = coordinated_negotiator(
         registry=_FakeRegistry([block_op, notify_op]),
         executor=OperationExecutor(artifact_broker=ArtifactBroker(base_dir=tmp_path)),
         permission_checker=_allow,
@@ -122,7 +137,10 @@ async def test_ids_critical_stages_block_ip_and_notifies(tmp_path, monkeypatch) 
                 ),
                 ConnectionStep(
                     "test.notify",
-                    params={"gateway": "{{trigger.gateway_name}}", "blocked": "{{trigger.source_ip}}"},
+                    params={
+                        "gateway": "{{trigger.gateway_name}}",
+                        "blocked": "{{trigger.source_ip}}",
+                    },
                 ),
             ],
             actor_id=uuid.uuid4(),

@@ -110,7 +110,7 @@ _ROLE_DISPLAY_NAMES: dict[str, str] = {
 
 def _deterministic_uuid(slug: str) -> str:
     """Produce a stable, deterministic UUID-shaped id from the role slug."""
-    h = hashlib.md5(f"freesdn-role-{slug}".encode()).hexdigest()  # noqa: S324
+    h = hashlib.md5(f"freesdn-role-{slug}".encode(), usedforsecurity=False).hexdigest()
     return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
 
 
@@ -226,7 +226,7 @@ async def list_roles(
             .group_by(User.role)
         )
         result = await session.execute(stmt)
-        counts: dict[str, int] = dict(result.all())  # type: ignore[arg-type]
+        counts: dict[str, int] = dict(result.all())
         roles = [r.model_copy(update={"user_count": counts.get(r.slug, 0)}) for r in roles]
     except Exception:
         pass  # If DB is unavailable, return 0 counts

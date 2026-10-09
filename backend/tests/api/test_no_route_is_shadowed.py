@@ -212,40 +212,21 @@ def _first_match(
     return None
 
 
-#: Routes that ARE unreachable, are known to be, and are deliberately not fixed
-#: yet. Asserted as an EQUALITY, so a new one fails the gate and a fixed one
-#: must be removed from this list.
-#:
-#: All thirteen are app/modules/network/api.py losing to
-#: app/api/v1/endpoints/network.py. Both routers mount at /api/v1/network -- the
-#: core one at app construction (api/v1/__init__.py:461), the module one in the
-#: lifespan (main.py:228) -- and Starlette answers with the first full match.
-#: The module is NOT a dead duplicate: its other 24 routes are live and own every
-#: device action (reboot, PoE cycle, discovery, sync), and the two interleave on
-#: one resource -- GET /vlans/{vlan_uuid} is dead here while PUT is live. So
-#: neither deleting the module nor reordering the includes is safe, and the
-#: choice between them is a design decision. 153f8da2 fixed the part that was
-#: actually shipping harm -- the OpenAPI schema published these 13, so the
-#: generated frontend types described handlers that never run -- by marking them
-#: include_in_schema=False. Removing the handler bodies, or rationalising the
-#: split, is tracked separately.
-KNOWN_SHADOWED = frozenset(
-    {
-        "[DELETE] /api/v1/network/vlans/{vlan_uuid}",
-        "[DELETE] /api/v1/network/wifi/{wifi_id}",
-        "[GET] /api/v1/network/clients",
-        "[GET] /api/v1/network/clients/{client_id}",
-        "[GET] /api/v1/network/devices",
-        "[GET] /api/v1/network/devices/{device_id}/ports",
-        "[GET] /api/v1/network/topology",
-        "[GET] /api/v1/network/vlans",
-        "[GET] /api/v1/network/vlans/{vlan_uuid}",
-        "[GET] /api/v1/network/wifi",
-        "[GET] /api/v1/network/wifi/{wifi_id}",
-        "[POST] /api/v1/network/vlans",
-        "[POST] /api/v1/network/wifi",
-    }
-)
+# No knowingly unreachable HTTP routes remain. Core network endpoints retain
+# ownership of the retired module method/path registrations.
+KNOWN_SHADOWED: frozenset[str] = frozenset()
+
+
+def test_each_normalized_method_path_has_one_owner() -> None:
+    import re
+    from collections import Counter
+
+    counts = Counter(
+        (method, re.sub(r"\{[^}]+\}", "{parameter}", path))
+        for path, methods, _endpoint in _routes()
+        for method in methods
+    )
+    assert {key: count for key, count in counts.items() if count > 1} == {}
 
 
 def test_the_walk_sees_every_route_the_schema_publishes() -> None:

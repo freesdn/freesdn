@@ -1,0 +1,53 @@
+Health scores and missing observations
+=====================================
+
+Health scores are a weighted summary of available component scores, from 0 to
+100. A measured zero means a failed measurement. Missing data has no numeric
+score and is shown as N/A with unknown status. An empty site is not healthy.
+
+Site, organization, module, ranking, WAN and SLA calculations exclude unknown
+DeviceHealth records from score averages. The measured_device_count fields
+identify the denominator for current aggregates; device_count counts health
+records, including unknown records, not a complete discovery inventory. The
+organization average weights sites by their measured records, not by unknown
+records. Inspect coverage as well as the score.
+
+Top Issues reports a worst component only when an actual component score is
+present. Missing components are N/A, never a green "unknown: 100" badge. A real
+100 remains a measured component, and a real zero remains critical. An older
+aggregate row can retain its overall score while lacking component observations;
+the API represents those two facts separately rather than inventing a cause.
+
+The scheduled device calculation currently contributes online/offline status
+and configuration drift only when a running configuration has been collected.
+It clears unobserved components on each recomputation; it does not assume that
+firmware is current or that error rates are zero. Partial reconciliation updates
+may retain previously collected components. A high score can therefore reflect
+only one available component. It does not certify firmware security, overall
+device correctness, or full monitoring coverage.
+
+Reachability scores are not availability percentages over time. These health
+endpoints leave uptime_percent unavailable until a time-window availability
+collector provides evidence. Rankings report unknown trend when either today's
+score or a usable previous daily snapshot is missing. Missing daily values and
+sparkline values remain gaps rather than zeroes.
+
+Upgrade and historical limits
+-----------------------------
+
+No database migration or history deletion is required. The existing non-null
+numeric database columns remain for compatibility. health_status=unknown makes
+the stored device number unavailable through the API and aggregate queries.
+Daily snapshot status counts likewise distinguish unmeasured snapshots.
+
+The next scheduled recomputation corrects current managed-device rows. Existing
+scores previously marked healthy cannot be retroactively certified: their
+component provenance was not recorded. Existing historical records are retained
+unchanged and may include older assumed values. Do not use that history as
+independently verified SLA or security evidence.
+
+These changes do not establish a freshness SLA for device status/configuration,
+deduplicate physical observations, or implement missing firmware, latency,
+utilization and error collectors. Review collection timestamps and monitoring
+coverage before acting on a score. Full freshness/provenance qualification is a
+separate release requirement.

@@ -11,7 +11,7 @@ REST API for monitoring and managing background tasks.
 import logging
 from datetime import datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -543,38 +543,55 @@ async def trigger_task(
     # raised ``TypeError: unexpected keyword argument 'organization_id'`` before
     # entering the task body -- for all 17 entries. The endpoint returned "queued"
     # and nothing ever ran. Ownership for audit/progress is tracked separately
-    # (``set_progress`` below), which is where it belongs.
+    # (``seed_progress`` below), which is where it belongs.
     task_kwargs = build_task_kwargs(task, task_kwargs, organization_id)
 
-    # Submit task
-    options = {"queue": expected_queue}
-
-    result = task.apply_async(
-        args=request.args,
-        kwargs=task_kwargs,
-        **options,
-    )
-
-    # Seed the progress store with org context so subsequent lookups
-    # can enforce tenant isolation.
-    progress_store.set_progress(
-        result.id,
+    # Reserve the identity and owner before the broker can deliver the message.
+    # Never overwrite worker progress after publishing: a fast task may already
+    # have completed by the time apply_async returns.
+    task_id = str(uuid4())
+    if not progress_store.seed_progress(
+        task_id,
         TaskProgress(
-            task_id=result.id,
+            task_id=task_id,
             task_name=request.task_name,
             organization_id=str(organization_id),
             status=TaskStatus.PENDING,
-            message="Task queued",
+            message="Task awaiting worker",
         ),
-    )
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Task ownership could not be reserved; task was not submitted",
+        )
+
+    try:
+        task.apply_async(
+            task_id=task_id,
+            args=request.args,
+            kwargs=task_kwargs,
+            queue=expected_queue,
+        )
+    except Exception:
+        # The broker may have accepted the message before acknowledgement failed.
+        # Retain the owner and any worker result; do not delete, requeue or mark
+        # the run failed. The caller can inspect this exact ID before retrying.
+        logger.warning("Task submission acknowledgement unavailable (task_id=%s)", task_id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "message": "Task submission outcome is unknown; inspect this task before retrying",
+                "task_id": task_id,
+            },
+        ) from None
 
     logger.info(
         f"Task {request.task_name} triggered by {current_user.user.email} "
-        f"(org={organization_id}): {result.id}"
+        f"(org={organization_id}): {task_id}"
     )
 
     return TaskSubmitResponse(
-        task_id=result.id,
+        task_id=task_id,
         task_name=request.task_name,
         status="queued",
         message="Task submitted successfully",

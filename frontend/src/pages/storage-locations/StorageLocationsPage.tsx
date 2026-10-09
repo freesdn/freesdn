@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, useId, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -75,6 +75,8 @@ import {
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthStore } from '@/stores/authStore';
+import { beginStorageProbe, StorageProbeError } from '@/lib/api/storageProbeTransport';
 
 // ─── Icon map for storage types ─────────────────────────────────────────────
 const STORAGE_ICONS: Record<string, React.ElementType> = {
@@ -211,7 +213,47 @@ function storageSchemaForMode(mode: 'create' | 'edit', currentFields: StorageTyp
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
+// Bind visible data and late callbacks to the current page identity. This is
+// presentation isolation, not server authorization or cancellation of a write.
+function storagePageIdentity() {
+  const auth = useAuthStore.getState();
+  const user = auth.user;
+  if (!auth.isAuthenticated || !auth._isHydrated || !auth._isAuthInitialized
+      || auth.isLoading || auth.mfaPending || !user?.is_active) return null;
+  return JSON.stringify([user.id, user.organization_id, user.role, user.is_superuser,
+    user.is_org_admin, user.mfa_enabled, [...user.permissions].sort(), [...user.roles].sort()]);
+}
+
+function createStoragePageObserver() {
+  let snapshot = { identity: storagePageIdentity(), revision: 0 };
+  const getSnapshot = () => {
+    const identity = storagePageIdentity();
+    if (identity !== snapshot.identity) snapshot = { identity, revision: snapshot.revision + 1 };
+    return snapshot;
+  };
+  return {
+    getSnapshot,
+    subscribe: (notify: () => void) => useAuthStore.subscribe(() => {
+      const previous = snapshot;
+      // Observe every transition, including A -> B -> A within a React batch.
+      if (getSnapshot() !== previous) notify();
+    }),
+  };
+}
+
 export default function StorageLocationsPage() {
+  const [observer] = useState(createStoragePageObserver);
+  const context = useSyncExternalStore(observer.subscribe, observer.getSnapshot, observer.getSnapshot);
+  const instance = useId();
+  if (context.identity === null) return null;
+  return <StorageLocationsContent key={context.revision}
+    cacheOwner={[instance, context.revision, context.identity]}
+    contextCurrent={() => observer.getSnapshot() === context} />;
+}
+
+function StorageLocationsContent({ cacheOwner, contextCurrent }: {
+  cacheOwner: readonly [string, number, string]; contextCurrent: () => boolean;
+}) {
   const { t } = useTranslation('backup');
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -232,6 +274,48 @@ export default function StorageLocationsPage() {
   const [testResult, setTestResult] = useState<StorageLocationTestResult | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
 
+  // A probe owns its initiating identity until its visible result is closed.
+  // Disposing the browser request never establishes remote rollback.
+  const auth = useAuthStore();
+  const canTest = auth.isAuthenticated && auth._isHydrated && auth._isAuthInitialized
+    && !auth.isLoading && !auth.mfaPending && auth.user?.is_active === true
+    && auth.user.is_org_admin === true
+    && ['admin', 'org_admin', 'super_admin'].includes(auth.user.role);
+  const probe = useRef<ReturnType<typeof beginStorageProbe> | null>(null);
+  const probeLifetime = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const mounted = useRef(false);
+  const pageCurrent = () => mounted.current && contextCurrent();
+  const requirePageCurrent = () => {
+    if (!pageCurrent()) throw new Error('Storage page context changed');
+  };
+  const locationsKey = ['storage-locations', ...cacheOwner];
+  const disposeProbe = useCallback(() => {
+    const owned = probe.current;
+    probe.current = null;
+    owned?.dispose();
+    if (probeLifetime.current !== undefined) clearTimeout(probeLifetime.current);
+    probeLifetime.current = undefined;
+  }, []);
+  const clearProbe = useCallback(() => {
+    disposeProbe();
+    setTestingId(null);
+    setTestResult(null);
+    setTestResultOpen(false);
+  }, [disposeProbe]);
+  useEffect(() => {
+    mounted.current = true;
+    const unsubscribe = useAuthStore.subscribe(() => {
+      const owned = probe.current;
+      if (!owned) return;
+      try { owned.assertCurrent(); } catch { clearProbe(); }
+    });
+    return () => {
+      mounted.current = false;
+      unsubscribe();
+      disposeProbe();
+    };
+  }, [clearProbe, disposeProbe]);
+
   // ── Queries ─────────────────────────────────────────────────────────────
   const {
     data: locations = [],
@@ -239,17 +323,24 @@ export default function StorageLocationsPage() {
     isError,
     refetch,
   } = useQuery({
-    queryKey: ['storage-locations'],
-    queryFn: async () => {
-      const res = await storageLocationsApi.list();
+    queryKey: locationsKey,
+    gcTime: 0,
+    queryFn: async ({ signal }) => {
+      // Query functions can start before passive effects set mounted.current.
+      if (!contextCurrent()) throw new Error('Storage page context changed');
+      const res = await storageLocationsApi.list(undefined, { signal });
+      if (!contextCurrent()) throw new Error('Storage page context changed');
       return res.data;
     },
   });
 
   const { data: supportedTypes, isLoading: typesLoading, isError: typesError } = useQuery({
-    queryKey: ['storage-types'],
-    queryFn: async () => {
-      const res = await storageLocationsApi.getSupportedTypes();
+    queryKey: ['storage-types', ...cacheOwner],
+    gcTime: 0,
+    queryFn: async ({ signal }) => {
+      if (!contextCurrent()) throw new Error('Storage page context changed');
+      const res = await storageLocationsApi.getSupportedTypes({ signal });
+      if (!contextCurrent()) throw new Error('Storage page context changed');
       return res.data;
     },
   });
@@ -257,72 +348,99 @@ export default function StorageLocationsPage() {
   // ── Mutations ───────────────────────────────────────────────────────────
   const createMutation = useMutation({
     mutationFn: async (data: StorageLocationCreate) => {
+      requirePageCurrent();
       const res = await storageLocationsApi.create(data);
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['storage-locations'] });
+      if (!pageCurrent()) return;
+      queryClient.invalidateQueries({ queryKey: locationsKey, exact: true });
       setCreateOpen(false);
       setCreatePrefilledType('');
       toast({ title: t('StorageLocationsPage.notifications.created.title'), description: t('StorageLocationsPage.notifications.created.message') });
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
+      if (!pageCurrent()) return;
       toast({ title: t('StorageLocationsPage.notifications.error'), description: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.createFailed'), variant: 'destructive' });
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: StorageLocationUpdate }) => {
+      requirePageCurrent();
       const res = await storageLocationsApi.update(id, data);
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['storage-locations'] });
+      if (!pageCurrent()) return;
+      queryClient.invalidateQueries({ queryKey: locationsKey, exact: true });
       setEditOpen(false);
       setSelectedLocation(null);
       toast({ title: t('StorageLocationsPage.notifications.updated.title'), description: t('StorageLocationsPage.notifications.updated.message') });
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
+      if (!pageCurrent()) return;
       toast({ title: t('StorageLocationsPage.notifications.error'), description: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.updateFailed'), variant: 'destructive' });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      requirePageCurrent();
       await storageLocationsApi.delete(id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['storage-locations'] });
+      if (!pageCurrent()) return;
+      queryClient.invalidateQueries({ queryKey: locationsKey, exact: true });
       setDeleteOpen(false);
       setSelectedLocation(null);
       toast({ title: t('StorageLocationsPage.notifications.deleted.title'), description: t('StorageLocationsPage.notifications.deleted.message') });
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
+      if (!pageCurrent()) return;
       toast({ title: t('StorageLocationsPage.notifications.error'), description: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.deleteFailed'), variant: 'destructive' });
     },
   });
 
-  const testMutation = useMutation({
-    mutationFn: async (id: string) => {
-      setTestingId(id);
-      const res = await storageLocationsApi.test(id);
-      return res.data;
-    },
-    onSuccess: (data) => {
-      setTestResult(data);
+  // Do not put result details into the shared mutation cache. Keep only the
+  // current page-owned result, and drop it on identity change or teardown.
+  const testConnection = async (id: string) => {
+    if (!canTest || probe.current) return;
+    let owned: ReturnType<typeof beginStorageProbe>;
+    try { owned = beginStorageProbe(id); }
+    catch {
+      toast({ title: t('StorageLocationsPage.notifications.testFailed.title'),
+        description: t('StorageLocationsPage.notifications.testFailed.message'), variant: 'destructive' });
+      return;
+    }
+    probe.current = owned;
+    setTestResult(null);
+    setTestResultOpen(false);
+    setTestingId(id);
+    // Match the transport's existing lifetime; never retain a result beyond it.
+    probeLifetime.current = setTimeout(() => {
+      if (probe.current === owned && mounted.current) clearProbe();
+    }, 180000);
+    try {
+      const response = await owned.run();
+      if (!mounted.current || probe.current !== owned) return;
+      owned.assertCurrent();
+      setTestResult(response.data);
       setTestResultOpen(true);
       setTestingId(null);
-      queryClient.invalidateQueries({ queryKey: ['storage-locations'] });
-    },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (err: any) => {
-      setTestingId(null);
-      toast({ title: t('StorageLocationsPage.notifications.testFailed.title'), description: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.testFailed.message'), variant: 'destructive' });
-    },
-  });
+      void queryClient.invalidateQueries({ queryKey: locationsKey, exact: true });
+    } catch (error: unknown) {
+      if (!mounted.current || probe.current !== owned) return;
+      clearProbe();
+      toast({ title: t('StorageLocationsPage.notifications.testFailed.title'),
+        description: error instanceof StorageProbeError ? error.message
+          : t('StorageLocationsPage.notifications.testFailed.message'),
+        variant: 'destructive' });
+    }
+  };
 
   // ── Helpers ─────────────────────────────────────────────────────────────
   const openCreate = (prefilledType?: string) => {
@@ -440,6 +558,7 @@ export default function StorageLocationsPage() {
             const Icon = getStorageIcon(loc.storage_type);
             const typeInfo = getTypeInfo(loc.storage_type);
             const isTesting = testingId === loc.id;
+            const needsSecurityReview = loc.transport_security_review_required === true;
 
             return (
               <Card
@@ -451,6 +570,11 @@ export default function StorageLocationsPage() {
                 )}
               >
                 <CardContent noOffset className="p-5">
+                  {needsSecurityReview && (
+                    <p role="status" className="mb-3 text-sm text-destructive">
+                      {t('StorageLocationsPage.transport.reviewRequired')}
+                    </p>
+                  )}
                   {/* Header row */}
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3 min-w-0">
@@ -482,7 +606,7 @@ export default function StorageLocationsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => testMutation.mutate(loc.id)} disabled={isTesting}>
+                        <DropdownMenuItem onClick={() => { void testConnection(loc.id); }} disabled={!canTest || testingId !== null}>
                           <TestTube2 className="h-4 w-4 mr-2" />
                           {t('StorageLocationsPage.actions.testConnection')}
                         </DropdownMenuItem>
@@ -509,7 +633,7 @@ export default function StorageLocationsPage() {
                     <Badge variant={loc.is_active ? 'default' : 'secondary'} className="text-xs">
                       {loc.is_active ? t('StorageLocationsPage.status.active') : t('StorageLocationsPage.status.inactive')}
                     </Badge>
-                    {loc.last_test_status === 'success' && (
+                    {loc.last_test_status === 'success' && !needsSecurityReview && (
                       <Badge variant="outline" className="text-xs gap-1 text-green-600 border-green-300">
                         <CheckCircle2 className="h-3 w-3" />
                         {t('StorageLocationsPage.status.connected')}
@@ -673,7 +797,7 @@ export default function StorageLocationsPage() {
       </Dialog>
 
       {/* ─── Test Result Dialog ─────────────────────────────────────────── */}
-      <Dialog open={testResultOpen} onOpenChange={setTestResultOpen}>
+      <Dialog open={testResultOpen} onOpenChange={(open) => { if (!open) clearProbe(); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -716,7 +840,7 @@ export default function StorageLocationsPage() {
             )}
           </div>
           <DialogFooter>
-            <Button onClick={() => setTestResultOpen(false)}>{t('StorageLocationsPage.actions.close')}</Button>
+            <Button onClick={clearProbe}>{t('StorageLocationsPage.actions.close')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -759,9 +883,8 @@ function StorageLocationFormDialog({
     onOpenChange(next);
   };
 
-  // Default values: blank for create (optionally with prefilled type),
-  // prefilled from editingLocation for edit. config is never prefilled
-  // (the API never returns secrets).
+  // The API deliberately withholds connection config and secrets.
+  // Leave dynamic fields blank on edit; the service merges only submitted fields.
   const defaultValues: StorageFormValues =
     mode === 'edit' && editingLocation
       ? {
@@ -910,6 +1033,11 @@ function StorageLocationFormDialog({
               </div>
             )}
 
+            {(storageType === 'ftp' || storageType === 'sftp') && (
+              <p className="text-sm text-muted-foreground">
+                {t(`StorageLocationsPage.transport.${storageType}`)}
+              </p>
+            )}
             {/* Dynamic config fields */}
             {currentFields.length > 0 && (
               <div className="space-y-3 pt-2 border-t">
@@ -992,7 +1120,7 @@ function DynamicConfigField({ field, mode, idPrefix, showSecrets, form }: Dynami
       control={form.control}
       name={`config.${field.name}` as `config.${string}`}
       render={({ field: rhfField }) => {
-        const value = (rhfField.value as string | undefined) ?? '';
+        const value = (rhfField.value as string | undefined) ?? (mode === 'create' && field.default != null ? String(field.default) : '');
         const placeholder = mode === 'edit'
           ? (field.placeholder || t('StorageLocationsPage.dynamicField.leaveEmptyPlaceholder'))
           : (field.placeholder || '');

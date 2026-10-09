@@ -21,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import cast, func, or_, select, update
+from sqlalchemy import Select, cast, func, or_, select, update
 from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -226,9 +226,10 @@ class AlertRuleService:
     async def resolve_alert(
         self,
         alert_id: UUID,
-        user_id: UUID,
+        user_id: UUID | None,
         note: str | None = None,
     ) -> Alert | None:
+        """Resolve an alert; None attributes an internal automated resolution."""
         alert = await self.get_alert(alert_id)
         if not alert or alert.status == AlertStatus.RESOLVED:
             return None
@@ -255,7 +256,7 @@ class AlertRuleService:
                         "rule_id": str(alert.rule_id) if alert.rule_id else None,
                         "severity": alert.severity,
                         "title": alert.title,
-                        "resolved_by": str(user_id),
+                        "resolved_by": str(user_id) if user_id is not None else None,
                     },
                 )
             )
@@ -631,7 +632,7 @@ class AlertRuleService:
         scope_sites = await self._resolve_scope_site_ids(rule)
         stmt = select(EventRecord).where(
             EventRecord.organization_id == rule.organization_id,
-            EventRecord.timestamp >= cutoff,
+            EventRecord.__table__.c.timestamp >= cutoff,
             EventRecord.event_type.like(f"%{metric.replace('%', '').replace('_', '')}%"),
             *self._site_in(scope_sites, EventRecord.site_id),
         )
@@ -706,14 +707,14 @@ class AlertRuleService:
 
         cutoff = datetime.now(UTC) - timedelta(seconds=time_window)
         scope_sites = await self._resolve_scope_site_ids(rule)
-        stmt = (
+        stmt: Select[*tuple[Any, ...]] = (
             select(
                 EventRecord.site_id,
                 func.count(EventRecord.id).label("cnt"),
             )
             .where(
                 EventRecord.organization_id == rule.organization_id,
-                EventRecord.timestamp >= cutoff,
+                EventRecord.__table__.c.timestamp >= cutoff,
                 EventRecord.event_type.like(event_type.replace("_", r"\_").replace("*", "%")),
                 *self._site_in(scope_sites, EventRecord.site_id),
             )

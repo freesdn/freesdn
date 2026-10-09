@@ -416,9 +416,14 @@ class ModuleLoader:
             prefix: API prefix (default: /api/v1)
         """
         self.subscribe_event_handlers()
+        registered: set[tuple[str, str]] = getattr(app.state, "module_route_registrations", set())
+        app.state.module_route_registrations = registered
 
         for module in self.registry.modules.values():
             try:
+                key = (prefix, module.id)
+                if key in registered:
+                    continue
                 router = module.get_router()
                 if router:
                     app.include_router(
@@ -426,6 +431,9 @@ class ModuleLoader:
                         prefix=f"{prefix}/{module.id}",
                         tags=[module.name],
                     )
+                    registered.add(key)
+                    # Invalidate a schema generated before optional modules loaded.
+                    app.openapi_schema = None
                     logger.info(
                         f"Registered routes for module: {module.id} at {prefix}/{module.id}"
                     )

@@ -1,0 +1,52 @@
+Notification provider diagnostic privacy
+========================================
+
+Scope
+-----
+Built-in SMTP, Gmail OAuth, Slack, Teams, generic webhook, Discord, Ntfy,
+Gotify, HTTP email and Twilio providers omit raw exception text and rejected
+vendor response bodies from delivery errors, verification failures and their
+provider logs. These values can include credentials, recipient information,
+message content or private endpoint addresses. Local input validation uses
+fixed messages and never echoes a rejected email address.
+
+Operator behavior
+-----------------
+Failed deliveries remain failed. HTTP status codes and fixed categories are
+retained for diagnosis. HTTP 429 and 5xx remain eligible for bounded retries;
+other HTTP 4xx preserve the existing permanent-failure policy. SMTP numeric
+4xx replies are temporary and 5xx replies permanent. A mixed or incomplete
+set of refused-recipient codes is treated conservatively as temporary.
+Invalid TLS certificates and local configuration/input failures remain
+visible without including certificate, address or exception details.
+Malformed provider JSON is a provider failure, not a configuration refusal.
+
+The successful provider request payloads, authentication, returned message
+identities and database schema are unchanged. Use the status/category to
+check provider credentials, sender authorization, rate limits or availability.
+Consult the provider's authenticated administration console for additional
+vendor diagnostics; do not paste credentials or message content into tickets.
+
+Qualification
+-------------
+Synthetic HTTP/SMTP cases check diagnostics, verification and retry policy.
+A local real STARTTLS peer checks authentication, recipient and DATA refusals;
+certificate-chain/hostname rejection and acceptance/lost-ack cases remain in
+the protocol suite. Before/after database qualification checks actual persisted
+tracking errors and caller commit/rollback in an isolated migrated PostgreSQL.
+These checks do not contact customer mail relays, vendor accounts or hardware.
+The release evidence must bind them to the exact source and production images.
+
+Limits
+------
+This correction does not scrub historical records, general application logs,
+plugin-defined outputs, successful vendor message identifiers, template errors
+or arbitrary user-supplied content. Historical diagnostic review follows the
+operator's retention and incident-response policy; no records are deleted by
+this change. No secret exposure or credential rotation is presumed.
+
+Generic notification dispatch still lacks a transactional outbox. A process
+failure after provider acceptance and before the database commit can cause
+uncertain or duplicate delivery. Cancellation cannot recall a message already
+accepted by a provider. No exactly-once or enterprise-availability guarantee is
+created by sanitizing diagnostics.

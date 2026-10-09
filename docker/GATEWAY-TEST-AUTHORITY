@@ -1,0 +1,35 @@
+Saved gateway connection-test resource authority
+================================================
+
+A saved gateway test checks the currently active organization and, when the
+connection is assigned to a site, that site's organization, active status and
+soft-delete state before contacting the device. Existing organization and
+site-grant admission checks remain. Unassigned gateways remain supported for
+callers whose existing access allows them.
+
+After device I/O ends, the service reloads the original gateway scope with
+populate_existing and row locks on the gateway, organization and optional site.
+The locks remain until the request transaction commits or rolls back. Lost or
+inactive resource scope returns HTTP 404 without the old test metadata. Changed
+connection inputs, encrypted credentials, settings, revision or status/metadata
+return HTTP 409 with a fixed instruction to retry. The obsolete result is not
+persisted or returned. A concurrent edit or newer check therefore wins.
+
+No resource lock spans device I/O. The existing request database transaction
+still remains open during that I/O; this change does not introduce a separate
+request transaction lifecycle. Adapter cleanup completes before result locking.
+Explicit certificate-verification overrides and unchanged successful/failed
+outcomes retain their existing semantics without rewriting saved trust/settings.
+
+The qualification uses actual encrypted PostgreSQL rows, HTTP routes and
+independently committed writers. Separate-process checks exercise concurrent
+mutations and NOWAIT lock contention, including release after commit. The
+request's authenticated identity and adapter results are synthetic. This is a
+database/HTTP authority proof, not a vendor transport or hardware qualification.
+Existing related HTTP/TLS tests remain regression coverage for the clients.
+
+The resource guard does not reload caller sessions, API keys, roles or site-grant
+records after I/O. It cannot recall credentials already sent or cancel device
+I/O immediately when authority changes, and it does not undo external device
+operations. Other gateway live/sync/write paths and arbitrary provider metadata
+or other logs require their own review. No schema or dependency changes occur.

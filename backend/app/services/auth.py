@@ -615,13 +615,10 @@ class AuthService:
 
         reset_jti = payload.get("jti")
         reset_exp = payload.get("exp")
-        if reset_jti:
-            from app.core.token_blacklist import blacklist_token, is_token_blacklisted
+        from app.core.token_blacklist import claim_token_jti
 
-            if await is_token_blacklisted(reset_jti):
-                raise TokenInvalidError()
-            if reset_exp:
-                await blacklist_token(reset_jti, reset_exp)
+        if not reset_jti or not reset_exp or not await claim_token_jti(reset_jti, reset_exp):
+            raise TokenInvalidError()
 
         user_id = payload.get("sub")
         result = await self.db.execute(
@@ -630,6 +627,8 @@ class AuthService:
         user = result.scalar_one_or_none()
 
         if not user:
+            raise TokenInvalidError()
+        if int(payload.get("tv", 0) or 0) != int(getattr(user, "token_version", 0) or 0):
             raise TokenInvalidError()
 
         # Validate password

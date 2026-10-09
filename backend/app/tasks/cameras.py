@@ -771,7 +771,15 @@ async def _ingest_nvr_alerts(nvr_id: UUID) -> dict[str, Any]:
                 )
             if ingested:
                 await session.commit()
-                await _dispatch_alerts(session, nvr, alert_details)
+                try:
+                    await _dispatch_alerts(session, nvr, alert_details)
+                    await session.commit()
+                except Exception:
+                    # Camera events already committed above. A notification
+                    # transaction failure must not report their ingestion lost.
+                    with contextlib.suppress(Exception):
+                        await session.rollback()
+                    logger.warning("Camera alert notification persistence failed")
 
         except Exception as exc:
             logger.error("Alert ingestion failed for NVR %s: %s", nvr_id, exc)

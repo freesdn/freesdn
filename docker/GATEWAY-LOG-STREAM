@@ -1,0 +1,39 @@
+GATEWAY LOG DELIVERY AND STREAM AUTHORIZATION
+
+The system/firewall REST log endpoints return a bounded logs array. OPNsense
+rows envelopes, OpenWrt logs envelopes and direct list responses are normalized;
+plain text rows become message objects for the existing dashboard. Failed or
+malformed adapter results return an opaque 502 instead of a successful empty log.
+No vendor exception body or credentials are returned in that error.
+
+OPNsense log queries POST to exactly /api/diagnostics/log/core/system and
+/api/diagnostics/log/core/filter with current=1 and a bounded rowCount. The
+read-only classifier permits only those two POST paths within the diagnostics
+log controller. Clear actions, including clear/status or clear/searchRows
+suffixes, remain blocked. This follows the upstream controller inspected on
+2026-09-25:
+https://github.com/opnsense/core/blob/master/src/opnsense/mvc/app/controllers/OPNsense/Diagnostics/Api/LogController.php
+This source review is not acceptance against a particular firmware/hardware.
+
+The /firewall/gateways/{id}/logs/stream endpoint uses the original authenticated
+credential, user, organization, original site ceiling and gateway target as the
+subscription boundary. It reloads authentication, current role, API-key scopes,
+site grants/access level, gateway and active parents before each device poll and
+again after the response. It uses the normal JWT/API-key validators, including
+expiry, token-version changes, durable token blacklisting and per-device session
+revocation. Removing the final site grant cannot widen an already-open stream
+through the legacy zero-grant account policy.
+
+The initial auth/read database session is released before streaming. Subsequent
+sessions close between polls. An authorization change or unavailable check ends
+the stream with an opaque named close event; a client must close its EventSource
+and may reconnect through normal authentication. Data already delivered cannot
+be withdrawn. Revocation does not cancel or undo device work already dispatched.
+
+SSE rows come from the actual service logs field, with at most the requested
+limit (maximum 500). Recent duplicate suppression retains at most 1000 SHA-256
+row fingerprints. This is bounded best-effort polling, not a durable cursor,
+complete audit archive, exactly-once subscription or evidence retention system.
+A reconnect resets duplicate history and may repeat records or miss records
+outside the polled page. This change does not implement authority revalidation
+for every other gateway read/write or certify production hardware, HA or RTO/RPO.

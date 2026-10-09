@@ -11,17 +11,20 @@ proves it fires and threads the trigger payload — so it fails if the catalog a
 the firing namespace ever diverge, the headline "any app → any app" promise for
 the firewall source.
 """
+
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
 from app.core.fabric.artifact_broker import ArtifactBroker
 from app.core.fabric.execution import OperationResult
 from app.core.fabric.executor import OperationExecutor
-from app.core.fabric.negotiator import Connection, ConnectionStep, Negotiator
+from app.core.fabric.negotiator import Connection, ConnectionStep
 from app.core.fabric.operations import Operation, OperationTier
+from tests.core.fabric_fakes import coordinated_negotiator
 
 ORG = uuid.uuid4()
 
@@ -44,10 +47,22 @@ class _FakeRegistry:
 
 class _FakeSession:
     async def __aenter__(self):
-        return object()
+        return self
 
     async def __aexit__(self, *a):
         return False
+
+    async def commit(self):
+        # This positive fixture models a successful session, including commit.
+        return None
+
+    async def execute(self, _query):
+        # A positive vertical needs a verified author, not a DB-error fallback.
+        return SimpleNamespace(
+            scalar_one_or_none=lambda: SimpleNamespace(
+                role="org_admin", is_active=True, deleted_at=None, site_access=[]
+            )
+        )
 
 
 def test_firewall_transition_events_are_advertised() -> None:
@@ -91,7 +106,7 @@ async def test_wan_down_drives_a_connection(tmp_path) -> None:
         return True
 
     executor = OperationExecutor(artifact_broker=ArtifactBroker(base_dir=tmp_path))
-    neg = Negotiator(
+    neg = coordinated_negotiator(
         registry=_FakeRegistry([notify_op]),
         executor=executor,
         permission_checker=_allow,
@@ -120,7 +135,12 @@ async def test_wan_down_drives_a_connection(tmp_path) -> None:
     runs = await neg.handle_event(
         _Event(
             "firewall.event.wan_down",
-            {"gateway_id": gw_id, "gateway_name": "OpnSenseX", "gateway": "WAN_GW", "status": "down"},
+            {
+                "gateway_id": gw_id,
+                "gateway_name": "OpnSenseX",
+                "gateway": "WAN_GW",
+                "status": "down",
+            },
             ORG,
         )
     )
@@ -139,14 +159,17 @@ async def test_unrelated_event_does_not_fire_firewall_connection(tmp_path) -> No
         return OperationResult.ok(output={})
 
     notify_op = Operation(
-        id="test.notify", title="notify", handler=_notify,
-        tier=OperationTier.NATIVE, provider_id="test",
+        id="test.notify",
+        title="notify",
+        handler=_notify,
+        tier=OperationTier.NATIVE,
+        provider_id="test",
     )
 
     async def _allow(actor_id, permission, org_id):
         return True
 
-    neg = Negotiator(
+    neg = coordinated_negotiator(
         registry=_FakeRegistry([notify_op]),
         executor=OperationExecutor(artifact_broker=ArtifactBroker(base_dir=tmp_path)),
         permission_checker=_allow,

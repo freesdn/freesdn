@@ -1,0 +1,37 @@
+Firewall gateway collection in site backups
+===========================================
+
+When BackupService passes a site_id to the firewall contributor, gateway
+connections must belong to that site AND the requested organization. The site
+must not be soft-deleted. The SQL query excludes gateways from sibling sites,
+organization-wide gateways with no site, deleted gateway rows, gateways owned
+by another organization, and invalid cross-organization site associations.
+Filtering happens before credential decryption and serialization.
+
+Previously only firewall devices and their child rules/NAT/VPN tunnels honored
+site_id; gateway connections from every site in the organization were included.
+This could put unintended credentials in a passphrase-protected site backup.
+The HTTP create/download routes already require an unscoped organization
+administrator; this finding does not establish a lower-privilege HTTP bypass.
+
+With no site_id, existing organization-wide gateway selection is unchanged,
+including gateways without a site. Config snapshots still omit gateway
+credentials and redact recognized secret settings. Vault snapshots still carry
+decrypted credentials inside the encrypted archive. The firewall manifest's
+secrets_excluded flag now correctly reflects the selected mode rather than
+always claiming that secrets are absent.
+
+This change is limited to the firewall contributor. Other contributors may
+include organization-wide data in a site backup; this is NOT a guarantee that
+the whole archive contains only data for one site. Core credentials, users and
+their grants, automation, VPN records and camera grouping/view metadata require
+separate scope review. Existing archives are not modified or reclassified.
+Organization-wide lifecycle inconsistencies and authorization changes during
+collection are not addressed here.
+
+Qualification uses actual PostgreSQL rows and the real core/firewall collectors,
+backup service, local file storage, compression, checksums and encryption. It
+reads back and decrypts disposable config/vault files and checks their gateway
+contents. This is not a hardware configuration capture, restore qualification,
+remote-storage durability check, or HTTP authentication test. No database
+migration, public schema, frontend or dependency change is required.

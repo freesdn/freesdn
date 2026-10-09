@@ -1,0 +1,61 @@
+# Gateway trust-store and ACME inventory reads
+
+These are read-only inventory summaries. They do not issue, renew, revoke,
+install or validate certificates, change ACME accounts, install plugins, run
+automation actions, or prove that a certificate is trusted by a client.
+
+The following routes require firewall.view and retain organization, active
+parent and site-access admission before connecting to the gateway:
+
+- GET /firewall/gateways/{id}/certificates
+- GET /firewall/gateways/{id}/certificates/cas
+- GET /firewall/gateways/{id}/acme
+- GET /firewall/gateways/{id}/acme/certificates
+
+Unsupported operations return 501. Unavailable connections, failed component
+reads, incomplete pages and malformed responses return a generic 502. An
+overview requires every component. A failed component cannot silently become
+an empty array in a successful overview. The admitted gateway identity is not
+replaced by adapter-supplied metadata. Cancellation remains cancellation, even
+when another component has failed. Raw device errors and private key material
+must not appear in responses or diagnostic stack traces from these reads.
+
+The OPNsense adapter uses the documented Trust CA search and ACME search actions
+for certificates, accounts, validations and actions. It requests all rows where
+the search API supports it and requires matching total and returned counts,
+page one and unique identities. The documented CRL GET uses the server's default
+recordset limit; a truncated answer is refused. CRL search includes CA records,
+so only rows indicating a configured CRL are counted as revocation lists. This
+is not verification of CRL content, validity, distribution or revocation status.
+
+ACME settings are read from acmeclient.settings, including the selected values
+of the environment and log-level options. Normalized public fields exclude
+account credentials, private keys and plugin-specific secret configuration.
+The certificate search does not establish private-key presence; an absent key
+field must not be interpreted as confirmation that no private key exists.
+
+The dashboard validates gateway identity, inventory shapes and counts. It shows
+loading while refreshing, hides stale counts after a failure, and offers an
+explicit retry. An empty state requires a complete successful inventory. ACME
+row badges describe whether configuration is enabled; they do not assert that
+issuance, validation or renewal succeeded. All four ACME lists must be empty
+before the overview is described as empty.
+
+Compatibility is version-specific. These contracts follow the OPNsense API
+documentation and reviewed upstream controller/model source. A response from a
+different firmware or plugin version may be refused rather than guessed.
+Validate the release image against the exact firmware, os-acme-client version
+and read privileges you intend to support before claiming hardware acceptance.
+
+Regression checks use real PostgreSQL/ASGI and the actual HTTP client/parser
+with synthetic device transport and identity fixtures. Separate frontend tests
+exercise the real page/query components. These are not live device acceptance,
+normal-login hardware tests, continuous monitoring, CA-chain verification,
+renewal automation, a recovery guarantee or enterprise certification.
+
+The independent expiry inventory is described in CERTIFICATE-INVENTORY-READS.
+Gateway backup restore remains a separate capability and acceptance gate.
+
+API references:
+https://docs.opnsense.org/development/api/core/trust.html
+https://docs.opnsense.org/development/api/plugins/acmeclient.html

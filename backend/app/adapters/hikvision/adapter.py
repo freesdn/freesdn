@@ -73,6 +73,7 @@ from app.adapters.exceptions import (
 )
 from app.adapters.http_utils import CircuitBreaker
 from app.core.http_client import build_async_client
+from app.core.xml_utils import UnsafeXML, parse_untrusted_xml
 
 logger = logging.getLogger(__name__)
 
@@ -277,12 +278,6 @@ def _safe_float(value: str | None, default: float = 0.0) -> float:
         return default
 
 
-try:
-    import defusedxml.ElementTree as SafeET  # noqa: F401 — used in _parse_xml
-except ImportError:
-    SafeET = None
-
-
 # hard ceiling on device-controlled XML before parsing. 8 MB is
 # generous for any legitimate ISAPI response (deviceInfo/channels/health are
 # KBs); a real NVR never approaches it.
@@ -306,32 +301,10 @@ def _clamp_name(name: str | None, fallback: str) -> str:
 
 def _parse_xml(text: str) -> ET.Element | None:
     """Parse XML text safely, returning root element or None on failure."""
-    # hard size cap on the PRODUCTION path, not just the
-    # defusedxml-absent fallback. defusedxml blocks DTD/entity-expansion but
-    # does NOT cap total document size or nesting depth, and httpx has no
-    # default body limit — so a compromised/brownfield NVR could answer a
-    # routine poll with a multi-hundred-MB XML doc that ElementTree multiplies
-    # into a multi-GB in-memory tree, OOM-ing the (auto-polling) worker. Every
-    # parse funnels through here, so one guard covers all ~45 call sites.
-    if text is not None and len(text) > _MAX_XML_BYTES:
-        logger.warning(
-            "XML response too large (%d bytes > %d cap), rejecting", len(text), _MAX_XML_BYTES
-        )
-        return None
     try:
-        if SafeET is not None:
-            result: ET.Element = SafeET.fromstring(text)
-            return result
-        # defusedxml not installed — reject large payloads and warn
-        logger.error(
-            "defusedxml is not installed — XML parsing is insecure. "
-            "Install defusedxml: pip install defusedxml"
-        )
-        return ET.fromstring(text)
-    except Exception:
-        # Catches ET.ParseError, defusedxml.DefusedXmlException (ValueError subclass),
-        # and any other XML parsing failure
-        logger.warning("Failed to parse XML response")
+        return parse_untrusted_xml(text, max_bytes=_MAX_XML_BYTES)
+    except UnsafeXML:
+        logger.warning("Rejected unsafe, malformed or oversized XML response")
         return None
 
 

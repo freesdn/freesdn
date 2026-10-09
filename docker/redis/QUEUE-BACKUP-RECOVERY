@@ -1,0 +1,62 @@
+SAVED QUEUE BACKUP RECOVERY — BOUNDED SYNTHETIC QUALIFICATION
+=========================================================
+
+Run scripts/check_queue_backup_recovery.py with retained trusted --backend-image,
+--valkey-image, optional --docker, and a NEW absolute private POSIX --work-dir.
+The runner resolves immutable image IDs. It does not accept installation source
+containers, volumes or customer backups and is NOT a production migration tool.
+Only its report.json is shareable. Other files contain synthetic credentials,
+task arguments, envelopes and private backup data and must not be uploaded.
+
+The fixture creates 120 legacy Celery jobs across DB0/1/2, five queues and four
+priority buckets, reserves one delivery, saves an RDB, then creates a multipart
+AOF and adds a newer task after its base rewrite. After the owned server stops,
+the entire RDB/AOF set and file hashes are retained privately. All loads use
+new network=none containers, read-only roots, bounded writable tmpfs and no
+published ports, production volumes or hardware access. Images are not deleted.
+
+Acceptance checks:
+- RDB-only and AOF-only copies load; a mixed set uses the newer AOF state.
+- Mandatory logical-data comparison detects a healthy-but-empty wrong-mode load
+  and a healthy-but-stale RDB load. Server readiness alone is not proof.
+- Lists retain order; sets/hashes are canonicalized independently of their
+  internal serialization. All 16 fixture databases, types, values and absolute
+  expiry timestamps are compared. Only elapsed expected TTLs may disappear.
+- Missing multipart segments/manifests and unexpected members are refused.
+  Link, traversal, duplicate and malformed archive/manifest cases fail closed.
+- aof-load-truncated=no refuses partial incremental tails. RDB checksum and
+  malformed AOF failures stay disconnected. No check-aof --fix is performed.
+- After loading, persistence is disabled on the disposable copy before the
+  separately qualified read-only queue inventory runs.
+- An explicit SYNTHETIC-only review approves 120 queued messages, chooses the
+  cross-DB merge order, and quarantines the reserved delivery. A real Celery
+  worker consumes these on a separate empty target. Only an inert fixture task
+  is registered; no FreeSDN hardware modules are imported. Per-queue FIFO,
+  unique execution counts, results and empty unacked state are verified.
+- Original stopped-source files, the retained backup archive, and the loaded
+  review copy are checked again after consumption. Abandoning a target before
+  its first write preserves the retained backup.
+
+Limits which remain release gates:
+- This exact-version synthetic fixture does not select the authoritative old
+  primary, qualify older Redis formats, or establish customer backup completeness.
+  Preserve both HA data volumes and Sentinel identity/epoch state. Source role,
+  election history, replication offsets and fencing need site evidence.
+- A multipart AOF backup needs its complete manifest, base and incremental files.
+  A running server can rewrite/remove segments during a copy. The rehearsal
+  fences its own source before copying; it does not provide live backup capture.
+- A file hash proves the copied bytes, not that all original work was captured.
+  Capture expected source counts and semantic fingerprints BEFORE restore; never
+  use the restored target's own inventory as the only expected inventory.
+- Empty, expired or missing result records never authorize task replay. Reserved
+  deliveries and duplicate/conflicting jobs require application/device review.
+  The synthetic cross-DB order is an explicit test decision, not an inferred
+  historical global ordering or a customer migration policy.
+- No production queue replay, HA volume adoption, password rotation, coordinated
+  PostgreSQL/queue cutover, customer backup acceptance, host-loss recovery,
+  production-scale RTO/RPO or rollback after target/device writes is qualified.
+- Cleanup is limited to this run's exact owned container IDs and labels. On
+  engine failure, report.json remains incomplete and cleanup-required.json names
+  pending owned resources. Inspect that private record before manual cleanup.
+
+Read QUEUE-INVENTORY and HA-UPGRADING before planning an existing-site migration.

@@ -15,6 +15,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -22,6 +23,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -323,8 +325,8 @@ class SLAReportSchedule(Base, UUIDMixin, AuditMixin):
     """
     Scheduled automatic SLA report generation.
 
-    Defines when and for whom reports should be generated
-    and emailed.
+    Defines calendar timing and scope for generated report files.
+    Email notices require explicit delivery approval; upgrades never opt in.
     """
 
     __tablename__ = "sla_report_schedules"
@@ -346,9 +348,25 @@ class SLAReportSchedule(Base, UUIDMixin, AuditMixin):
     )  # weekly, monthly, quarterly
     day_of_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
     day_of_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    timezone: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="UTC", server_default="UTC"
+    )
+    time_of_day: Mapped[str] = mapped_column(
+        String(5), nullable=False, default="09:00", server_default="09:00"
+    )
     recipients: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    delivery_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    delivery_provider_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("core.notification_providers.id", ondelete="SET NULL"), nullable=True
+    )
+    delivery_approval: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     sla_policy_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # NULL marks a legacy schedule requiring explicit approval after upgrade.
+    execution_scope: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    execution_error: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_generated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -356,4 +374,54 @@ class SLAReportSchedule(Base, UUIDMixin, AuditMixin):
     next_run_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+
+class SLAReportDelivery(Base, UUIDMixin):
+    """Durable email notice, committed with its report before any SMTP I/O.
+
+    Accepted means the SMTP server acknowledged DATA, not inbox delivery.
+    Unknown outcomes are never automatically resent.
+    """
+
+    __tablename__ = "sla_report_deliveries"
+    __table_args__ = (
+        UniqueConstraint("report_id", "recipient_id", name="uq_sla_report_delivery_recipient"),
+        CheckConstraint(
+            "state IN ('pending', 'retry', 'sending', 'accepted', 'failed', "
+            "'cancelled', 'unknown', 'skipped')",
+            name="state",
+        ),
+        CheckConstraint("attempts >= 0 AND attempts <= 5", name="attempts"),
+        Index("ix_sla_delivery_due", "state", "next_attempt_at"),
+        Index("ix_sla_delivery_org", "organization_id", "created_at"),
+        {"schema": "analytics"},
+    )
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("core.organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    schedule_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("analytics.sla_report_schedules.id", ondelete="SET NULL"), nullable=True
+    )
+    report_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("analytics.sla_reports.id", ondelete="SET NULL"), nullable=True
+    )
+    recipient_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("core.users.id", ondelete="SET NULL"), nullable=True
+    )
+    # Approved identity and address are immutable: an email change cannot redirect a notice.
+    recipient_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    approval_revision: Mapped[str] = mapped_column(String(36), nullable=False)
+    # NULL is legacy, unapproved state. Never backfill from restored configuration.
+    delivery_epoch: Mapped[UUID | None] = mapped_column(nullable=True)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )

@@ -10,6 +10,7 @@
  * via props.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { GatewayLiveReadNotice } from './GatewayLiveReadNotice';
 import { useTranslation } from 'react-i18next';
 import {
   Activity,
@@ -58,9 +59,13 @@ export interface GatewayVpnTabProps {
   // Tailscale
   tailscaleData: any;
   tailscaleLoading: boolean;
+  tailscaleError?: boolean;
+  onRetryTailscale?: () => void;
   // Raw VPN fallback
   vpn: any;
   vpnLoading: boolean;
+  vpnError?: boolean;
+  onRetryVpn?: () => void;
 }
 
 export function GatewayVpnTab({
@@ -87,8 +92,12 @@ export function GatewayVpnTab({
   onDisconnectIpsec,
   tailscaleData,
   tailscaleLoading,
+  tailscaleError,
+  onRetryTailscale,
   vpn,
   vpnLoading,
+  vpnError,
+  onRetryVpn,
 }: GatewayVpnTabProps) {
   const { t } = useTranslation('firewall');
 
@@ -347,7 +356,6 @@ export function GatewayVpnTab({
       {/* Tailscale VPN */}
       {(() => {
         const ts = tailscaleData?.data?.tailscale;
-        if (!ts && !tailscaleLoading) return null;
         const settings = ts?.settings || {};
         return (
           <Card className="border-border/50">
@@ -357,12 +365,14 @@ export function GatewayVpnTab({
                   <CardTitle className="flex items-center gap-2"><Globe className="h-4 w-4" /> {t('GatewayVpnTab.tailscale.title')}</CardTitle>
                   <CardDescription>{t('GatewayVpnTab.tailscale.description')}</CardDescription>
                 </div>
-                <Badge variant={ts?.running ? 'default' : 'secondary'}>{ts?.running ? t('GatewayVpnTab.status.running') : t('GatewayVpnTab.status.stopped')}</Badge>
+                {!tailscaleLoading && !tailscaleError && ts && <Badge variant={ts?.running ? 'default' : 'secondary'}>{ts?.running ? t('GatewayVpnTab.status.running') : t('GatewayVpnTab.status.stopped')}</Badge>}
               </div>
             </CardHeader>
             {tailscaleLoading ? (
-              <CardContent><Skeleton className="h-24" /></CardContent>
-            ) : (
+          <GatewayLiveReadNotice loading />
+        ) : tailscaleError || !tailscaleData ? (
+          <GatewayLiveReadNotice onRetry={onRetryTailscale} />
+        ) : (
               <CardContent>
                 <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm">
                   {[
@@ -397,16 +407,16 @@ export function GatewayVpnTab({
       })()}
 
       {/* Legacy VPN raw data */}
-      {vpn && !vpnLoading && (
+      {(
         <Card className="border-border/50">
           <CardHeader className="pb-4">
             <CardTitle>{t('GatewayVpnTab.rawStatus.title')}</CardTitle>
           </CardHeader>
-          <CardContent>
+          {vpnLoading ? <GatewayLiveReadNotice loading /> : vpnError || !vpn ? <GatewayLiveReadNotice onRetry={onRetryVpn} /> : <CardContent>
             <pre className="text-xs bg-muted p-4 rounded-lg overflow-auto max-h-[300px]">
               {JSON.stringify(redactVpnSecrets(vpn), null, 2)}
             </pre>
-          </CardContent>
+          </CardContent>}
         </Card>
       )}
     </>
@@ -424,14 +434,16 @@ export function GatewayVpnTab({
 const _VPN_SECRET_KEY_RE = /(?:^|[._-])(?:priv(?:ate)?[_-]?key|preshared(?:_?key)?|psk|secret|password|passphrase|auth[_-]?key|tls[_-]?key|ca[_-]?key|cert[_-]?key|node[_-]?key|auth[_-]?token|api[_-]?key|access[_-]?token|client[_-]?secret)$/i;
 
 function redactVpnSecrets(value: unknown, depth = 0): unknown {
-  if (depth > 12 || value == null) return value;
+  if (value == null) return value;
+  // Never return an uninspected subtree when the recursion limit is reached.
+  if (depth > 12) return typeof value === 'object' ? '«redacted»' : value;
   if (Array.isArray(value)) {
     return value.map((v) => redactVpnSecrets(v, depth + 1));
   }
   if (typeof value === 'object') {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (_VPN_SECRET_KEY_RE.test(k) && typeof v === 'string' && v.length > 0) {
+      if (_VPN_SECRET_KEY_RE.test(k)) {
         out[k] = '«redacted»';
       } else {
         out[k] = redactVpnSecrets(v, depth + 1);

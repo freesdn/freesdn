@@ -36,8 +36,8 @@
 		-Server
 	}
 
-	# Liveness probe for the Docker healthcheck.
-	handle /health {
+	# Edge liveness only; /health and /health/* belong to the SPA dashboard.
+	handle /healthz {
 		respond "healthy" 200
 	}
 

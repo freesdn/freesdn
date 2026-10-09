@@ -25,8 +25,7 @@ from __future__ import annotations
 
 import logging
 import re
-from xml.dom import minidom
-from xml.etree.ElementTree import Element, SubElement, tostring
+from xml.etree.ElementTree import Element, SubElement, indent, tostring
 
 from .constants import (
     CODEC_MAP,
@@ -349,6 +348,22 @@ class GrandstreamProvisioner:
               </config>
             </gs_provision>
         """
+        # Raw overrides are user-controlled. ElementTree escapes text, but does
+        # not validate tag names or reject XML 1.0 control characters itself.
+        for key, value in p_values.items():
+            if re.fullmatch(r"P[0-9]{1,10}", key) is None:
+                raise ValueError("Provisioning keys must be P followed by 1-10 digits")
+            if any(
+                not (
+                    char in "\t\n\r"
+                    or 0x20 <= ord(char) <= 0xD7FF
+                    or 0xE000 <= ord(char) <= 0xFFFD
+                    or 0x10000 <= ord(char) <= 0x10FFFF
+                )
+                for char in value
+            ):
+                raise ValueError("Provisioning values must contain valid XML 1.0 characters")
+
         root = Element("gs_provision", version="1")
         config_el = SubElement(root, "config", version="1")
 
@@ -356,13 +371,10 @@ class GrandstreamProvisioner:
             el = SubElement(config_el, key)
             el.text = p_values[key]
 
-        raw_xml = tostring(root, encoding="unicode", xml_declaration=True)
-
         if pretty:
-            dom = minidom.parseString(raw_xml)
-            return dom.toprettyxml(indent="  ", encoding=None)
-
-        return raw_xml
+            # Format the tree we constructed; do not reparse serialized XML.
+            indent(root, space="  ")
+        return tostring(root, encoding="unicode", xml_declaration=True)
 
 
 def _p_sort_key(p_name: str) -> int:

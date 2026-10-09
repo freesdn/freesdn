@@ -156,15 +156,15 @@ class DeviceFirmwareStatusListResponse(BaseSchema):
 class UpgradeJobCreate(BaseSchema):
     """Create a firmware upgrade job."""
 
-    device_ids: list[UUID] = Field(max_length=1000)
+    device_ids: list[UUID] = Field(min_length=1, max_length=1000)
     firmware_id: UUID | None = None
     firmware_version: str | None = None
     site_id: UUID | None = None
     scheduled_at: datetime | None = None
     backup_before: bool = True
     rollback_on_failure: bool = True
-    batch_size: int = 5
-    delay_between_batches: int = 30
+    batch_size: int = Field(default=5, ge=1, le=100)
+    delay_between_batches: int = Field(default=30, ge=0, le=3600)
     notify_on_complete: bool = True
     notify_on_failure: bool = True
 

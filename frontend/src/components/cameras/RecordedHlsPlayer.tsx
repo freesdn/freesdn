@@ -58,31 +58,62 @@ export function RecordedHlsPlayer({
   onPlayheadTimeRef.current = onPlayheadTime;
   const startMs = new Date(startTime).getTime();
 
-  const [src, setSrc] = useState('');
+  const [playback, setPlayback] = useState<{ url: string; onError: (reason: string) => void } | null>(null);
   const [starting, setStarting] = useState(true);
   const [failed, setFailed] = useState<string | null>(null);
-  const sessionRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let finished = false;
+    let sessionId: string | null = null;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
+    let deadline: ReturnType<typeof setTimeout> | null = null;
+    const manifest = new AbortController();
     setStarting(true);
     setFailed(null);
-    setSrc('');
+    setPlayback(null);
 
-    // Demo build: the smooth-HLS path POSTs to start a session and then polls
-    // ``${API_URL}${playlist_url}`` directly with fetch() + feeds it to hls.js,
-    // both bypass the demo axios adapter and would emit real same-origin /api
-    // requests from the static demo bundle. Never start a recorded-HLS session
-    // in demo mode; surface "unavailable" so the parent (MultiPlaybackPage)
-    // degrades this cell to the demo-mocked per-frame snapshot path.
-    if (isDemoMode) {
-      const unavailable = tRef.current('RecordedHlsPlayer.notSupported');
-      setFailed(unavailable);
+    // Each effect owns only its own session. Terminal failures must release it
+    // even if the parent keeps this component mounted to display the error.
+    const release = () => {
+      if (heartbeat !== null) clearInterval(heartbeat);
+      if (deadline !== null) clearTimeout(deadline);
+      heartbeat = null;
+      deadline = null;
+      manifest.abort();
+      const sid = sessionId;
+      sessionId = null;
+      if (sid) hlsStreamApi.stop(sid).catch(() => {});
+    };
+    const fail = (reason: string, notify = true) => {
+      if (cancelled || finished) return;
+      finished = true;
+      release();
+      setPlayback(null);
+      setFailed(reason);
       setStarting(false);
-      onUnavailableRef.current?.(unavailable);
-      return () => { cancelled = true; };
+      if (notify) onUnavailableRef.current?.(reason);
+    };
+    const close = () => {
+      cancelled = true;
+      release();
+    };
+
+    // Demo playback must never escape its mocked API transport via fetch/HLS.
+    if (isDemoMode) {
+      fail(tRef.current('RecordedHlsPlayer.notSupported'));
+      return close;
     }
+
+    const waitForPoll = () => new Promise<void>((resolve) => {
+      if (manifest.signal.aborted) { resolve(); return; }
+      const onAbort = () => { clearTimeout(timer); resolve(); };
+      const timer = setTimeout(() => {
+        manifest.signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, 1200);
+      manifest.signal.addEventListener('abort', onAbort, { once: true });
+    });
 
     (async () => {
       try {
@@ -91,74 +122,69 @@ export function RecordedHlsPlayer({
           quality,
           duration_s: durationS,
         });
-        if (cancelled) {
+        if (cancelled || finished) {
           if (data?.session_id) hlsStreamApi.stop(data.session_id).catch(() => {});
           return;
         }
-        sessionRef.current = data.session_id;
+        sessionId = data.session_id;
         const url = `${API_URL}${data.playlist_url}`;
-        // Heartbeat immediately so the session isn't reaped during cold-start.
         heartbeat = setInterval(() => {
-          if (sessionRef.current) hlsStreamApi.heartbeat(sessionRef.current).catch(() => {});
+          const sid = sessionId;
+          if (!sid || cancelled || finished) return;
+          hlsStreamApi.heartbeat(sid).catch((err: unknown) => {
+            const status = (err as { response?: { status?: number } })?.response?.status;
+            if (status === 401 || status === 403 || status === 404) {
+              // A permission refusal cannot be repaired by falling back to
+              // snapshots. A missing session may use the existing fallback.
+              fail(tRef.current('RecordedHlsPlayer.startFailed'), status === 404);
+            }
+          });
         }, 15_000);
 
-        // Poll the manifest until ffmpeg has written the first segment before
-        // handing the URL to hls.js. Transcoding a 4K-HEVC recording cold-starts
-        // in ~3-15s; giving hls.js a not-ready (404) manifest makes it retry a
-        // few times and fatally bail with "Network error: unable to load stream".
-        // We wait here (the spinner shows) and only set src once a segment exists.
-        const deadline = Date.now() + 30_000;
-        while (Date.now() <= deadline) {
-          if (cancelled) return;
+        // A timer independent of fetch also bounds stalled response bodies.
+        // Abort stops the owned request and any pending polling delay.
+        deadline = setTimeout(() => fail(tRef.current('RecordedHlsPlayer.startFailed')), 30_000);
+        while (!cancelled && !finished) {
           try {
-            const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
+            const res = await fetch(url, {
+              credentials: 'include', cache: 'no-store', signal: manifest.signal,
+            });
+            if (cancelled || finished) return;
+            if (res.status === 401 || res.status === 403) {
+              fail(tRef.current('RecordedHlsPlayer.startFailed'), false);
+              return;
+            }
             if (res.ok && (await res.text()).includes('.ts')) {
-              if (cancelled) return;
-              setSrc(url);
+              if (cancelled || finished) return;
+              if (deadline !== null) clearTimeout(deadline);
+              deadline = null;
+              // This callback retains the effect's cancellation guard. A late
+              // error from an old player cannot release a replacement session.
+              setPlayback({ url, onError: (reason) => fail(reason) });
               setStarting(false);
               return;
             }
           } catch {
-            // network blip, keep polling until the deadline
+            if (cancelled || finished) return;
+            // Transient network errors and not-ready manifests may retry.
           }
-          await new Promise((r) => setTimeout(r, 1200));
+          await waitForPoll();
         }
-        // Cold-start exceeded the deadline, surface as unavailable so the
-        // caller can fall back (e.g. to per-frame snapshot playback).
-        if (cancelled) return;
-        const timedOut = tRef.current('RecordedHlsPlayer.startFailed');
-        setFailed(timedOut);
-        setStarting(false);
-        onUnavailableRef.current?.(timedOut);
       } catch (err: unknown) {
-        if (cancelled) return;
+        if (cancelled || finished) return;
         const status = (err as { response?: { status?: number } })?.response?.status;
-        // 422 = the NVR's recorded stream is undecodable (a device limitation,
-        // e.g. a classic NVR whose recorded HEVC has no decodable parameter sets).
-        // The per-frame path fails the same way, so show an honest message and do
-        // NOT call onUnavailable (no pointless fall-back to frames).
         if (status === 422) {
-          setFailed(tRef.current('RecordedHlsPlayer.notDecodable'));
-          setStarting(false);
+          fail(tRef.current('RecordedHlsPlayer.notDecodable'), false);
           return;
         }
-        const reason =
-          status === 501
-            ? tRef.current('RecordedHlsPlayer.notSupported')
-            : tRef.current('RecordedHlsPlayer.startFailed');
-        setFailed(reason);
-        setStarting(false);
-        onUnavailableRef.current?.(reason);
+        const reason = status === 501
+          ? tRef.current('RecordedHlsPlayer.notSupported')
+          : tRef.current('RecordedHlsPlayer.startFailed');
+        fail(reason, status !== 401 && status !== 403);
       }
     })();
 
-    return () => {
-      cancelled = true;
-      if (heartbeat) clearInterval(heartbeat);
-      const sid = sessionRef.current;
-      sessionRef.current = null;
-      if (sid) hlsStreamApi.stop(sid).catch(() => {});
-    };
+    return close;
   }, [cameraId, startTime, quality, durationS]);
 
   if (failed) {
@@ -169,7 +195,7 @@ export function RecordedHlsPlayer({
     );
   }
 
-  if (starting || !src) {
+  if (starting || !playback) {
     return (
       <div className={cn('relative flex items-center justify-center bg-black', className)}>
         <div className="text-center text-white/60">
@@ -182,13 +208,13 @@ export function RecordedHlsPlayer({
 
   return (
     <HLSPlayer
-      src={src}
+      src={playback.url}
       className={className}
       autoPlay
       muted={muted}
       paused={paused}
       live={false}
-      onError={(e) => onUnavailableRef.current?.(e)}
+      onError={playback.onError}
       onProgress={(sec) => onPlayheadTimeRef.current?.(startMs + sec * 1000)}
     />
   );

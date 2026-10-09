@@ -16,8 +16,6 @@ import {
   Shield,
   Settings,
   LayoutDashboard,
-  Plus,
-  Trash2,
   Loader2,
   Cloud,
   RefreshCw,
@@ -37,13 +35,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+
 import {
   Table,
   TableBody,
@@ -55,7 +47,8 @@ import {
 import { DestructiveConfirmDialog } from '@/components/ui/destructive-confirm-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { hypervisorApi } from '@/lib/api';
-import type { HypervisorVM, HypervisorFirewallRule } from '@/lib/api';
+import type { HypervisorVM } from '@/lib/api';
+import { FirewallPanel } from './FirewallPanel';
 import { formatBytes, formatUptime } from './helpers';
 import { statusBadge } from './StatusBadge';
 
@@ -80,15 +73,6 @@ export function GuestDetailDrawer({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<Section>('overview');
-
-  // ── Firewall rules ───────────────────────────────────────────────────
-  const { data: fwResp, isLoading: fwLoading, isError: fwError } = useQuery({
-    queryKey: ['hypervisor', 'guest-fw', controllerId, vm.node, vm.vm_type, vm.vmid],
-    queryFn: () =>
-      hypervisorApi.getGuestFirewallRules(controllerId, vm.node, vm.vm_type, vm.vmid),
-    enabled: isOpen && activeSection === 'firewall',
-  });
-  const fwRules: HypervisorFirewallRule[] = fwResp?.data || [];
 
   // ── Config ───────────────────────────────────────────────────────────
   const { data: configResp, isLoading: configLoading, isError: configError } = useQuery({
@@ -184,8 +168,6 @@ export function GuestDetailDrawer({
   // Reset state when VM changes
   useEffect(() => {
     setActiveSection('overview');
-    setShowAddRule(false);
-    setDeleteRuleTarget(null);
     setRegenerateConfirmOpen(false);
     setCiUser('');
     setCiPassword('');
@@ -195,64 +177,7 @@ export function GuestDetailDrawer({
     setCiSearchDomain('');
   }, [vm?.vmid]);
 
-  const [showAddRule, setShowAddRule] = useState(false);
-  // Typed-confirm targets for irreversible actions (replace native
-  // confirm()).
-  const [deleteRuleTarget, setDeleteRuleTarget] = useState<number | null>(null);
   const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
-  const [newRuleAction, setNewRuleAction] = useState('ACCEPT');
-  const [newRuleType, setNewRuleType] = useState('in');
-  const [newRuleProto, setNewRuleProto] = useState('tcp');
-  const [newRuleDport, setNewRuleDport] = useState('');
-  const [newRuleSource, setNewRuleSource] = useState('');
-  const [newRuleComment, setNewRuleComment] = useState('');
-
-  const createRuleMutation = useMutation({
-    mutationFn: () =>
-      hypervisorApi.createGuestFirewallRule(controllerId, vm.node, vm.vm_type, vm.vmid, {
-        action: newRuleAction,
-        type: newRuleType,
-        proto: newRuleProto || undefined,
-        dport: newRuleDport || undefined,
-        source: newRuleSource || undefined,
-        comment: newRuleComment || undefined,
-      }),
-    onSuccess: () => {
-      toast({ title: t('GuestDetailDrawer.toasts.ruleCreated') });
-      setShowAddRule(false);
-      setNewRuleDport('');
-      setNewRuleSource('');
-      setNewRuleComment('');
-      queryClient.invalidateQueries({
-        queryKey: ['hypervisor', 'guest-fw', controllerId, vm.node, vm.vm_type, vm.vmid],
-      });
-    },
-    onError: (err: any) => {
-      toast({
-        title: t('GuestDetailDrawer.toasts.createRuleFailed'),
-        description: err?.response?.data?.detail || err.message,
-        variant: 'destructive',
-      });
-    },
-  });
-
-  const deleteRuleMutation = useMutation({
-    mutationFn: (pos: number) =>
-      hypervisorApi.deleteGuestFirewallRule(controllerId, vm.node, vm.vm_type, vm.vmid, pos),
-    onSuccess: () => {
-      toast({ title: t('GuestDetailDrawer.toasts.ruleDeleted') });
-      queryClient.invalidateQueries({
-        queryKey: ['hypervisor', 'guest-fw', controllerId, vm.node, vm.vm_type, vm.vmid],
-      });
-    },
-    onError: (err: any) => {
-      toast({
-        title: t('GuestDetailDrawer.toasts.deleteRuleFailed'),
-        description: err?.response?.data?.detail || err.message,
-        variant: 'destructive',
-      });
-    },
-  });
 
   // ── Config display helpers ────────────────────────────────────────────
   const pendingKeys = new Set(
@@ -452,179 +377,7 @@ export function GuestDetailDrawer({
           </div>
         )}
 
-        {/* ── Firewall section ─────────────────────────────────────────────── */}
-        {activeSection === 'firewall' && (
-          <div className="space-y-4 mt-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium">{t('GuestDetailDrawer.firewall.heading')}</h4>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowAddRule(!showAddRule)}
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                {showAddRule ? t('GuestDetailDrawer.firewall.cancel') : t('GuestDetailDrawer.firewall.addRule')}
-              </Button>
-            </div>
-
-            {showAddRule && (
-              <div className="border rounded-md p-3 space-y-3 bg-muted/30">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs">{t('GuestDetailDrawer.firewall.action')}</Label>
-                    <Select value={newRuleAction} onValueChange={setNewRuleAction}>
-                      <SelectTrigger className="h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ACCEPT">ACCEPT</SelectItem>
-                        <SelectItem value="DROP">DROP</SelectItem>
-                        <SelectItem value="REJECT">REJECT</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs">{t('GuestDetailDrawer.firewall.direction')}</Label>
-                    <Select value={newRuleType} onValueChange={setNewRuleType}>
-                      <SelectTrigger className="h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="in">{t('GuestDetailDrawer.firewall.inbound')}</SelectItem>
-                        <SelectItem value="out">{t('GuestDetailDrawer.firewall.outbound')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs">{t('GuestDetailDrawer.firewall.protocol')}</Label>
-                    <Select value={newRuleProto} onValueChange={setNewRuleProto}>
-                      <SelectTrigger className="h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="tcp">TCP</SelectItem>
-                        <SelectItem value="udp">UDP</SelectItem>
-                        <SelectItem value="icmp">ICMP</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs">{t('GuestDetailDrawer.firewall.destPort')}</Label>
-                    <Input
-                      className="h-8"
-                      value={newRuleDport}
-                      onChange={(e) => setNewRuleDport(e.target.value)}
-                      placeholder="80,443"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-xs">{t('GuestDetailDrawer.firewall.sourceOptional')}</Label>
-                  <Input
-                    className="h-8"
-                    value={newRuleSource}
-                    onChange={(e) => setNewRuleSource(e.target.value)}
-                    placeholder="10.0.0.0/24"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">{t('GuestDetailDrawer.firewall.commentOptional')}</Label>
-                  <Input
-                    className="h-8"
-                    value={newRuleComment}
-                    onChange={(e) => setNewRuleComment(e.target.value)}
-                    placeholder={t('GuestDetailDrawer.firewall.commentPlaceholder')}
-                  />
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => createRuleMutation.mutate()}
-                  disabled={createRuleMutation.isPending}
-                >
-                  {createRuleMutation.isPending && (
-                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                  )}
-                  {t('GuestDetailDrawer.firewall.createRule')}
-                </Button>
-              </div>
-            )}
-
-            {fwError ? (
-              <p className="text-sm text-destructive py-4">{t('GuestDetailDrawer.firewall.loadError')}</p>
-            ) : fwLoading ? (
-              <Skeleton className="h-32" />
-            ) : fwRules.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4">
-                {t('GuestDetailDrawer.firewall.empty')}
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>#</TableHead>
-                    <TableHead>{t('GuestDetailDrawer.firewall.colDir')}</TableHead>
-                    <TableHead>{t('GuestDetailDrawer.firewall.colAction')}</TableHead>
-                    <TableHead>{t('GuestDetailDrawer.firewall.colProto')}</TableHead>
-                    <TableHead>{t('GuestDetailDrawer.firewall.colSource')}</TableHead>
-                    <TableHead>{t('GuestDetailDrawer.firewall.colDport')}</TableHead>
-                    <TableHead>{t('GuestDetailDrawer.firewall.colComment')}</TableHead>
-                    <TableHead className="w-[40px]" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {fwRules.map((rule) => (
-                    <TableRow key={rule.pos}>
-                      <TableCell className="font-mono text-xs">{rule.pos}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-[10px]">
-                          {rule.type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            rule.action === 'ACCEPT'
-                              ? 'default'
-                              : rule.action === 'DROP'
-                                ? 'destructive'
-                                : 'secondary'
-                          }
-                        >
-                          {rule.action}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs">{rule.proto || '-'}</TableCell>
-                      <TableCell className="text-xs font-mono">
-                        {rule.source || '-'}
-                      </TableCell>
-                      <TableCell className="text-xs font-mono">
-                        {rule.dport || '-'}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[120px] truncate">
-                        {rule.comment || '-'}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 text-destructive"
-                          disabled={deleteRuleMutation.isPending}
-                          onClick={() => setDeleteRuleTarget(rule.pos)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              </div>
-            )}
-          </div>
-        )}
+        {activeSection === 'firewall' && <FirewallPanel controllerId={controllerId} guest={vm} />}
 
         {/* ── Config section ───────────────────────────────────────────────── */}
         {activeSection === 'config' && (
@@ -771,19 +524,6 @@ export function GuestDetailDrawer({
         )}
 
         {/* Typed-confirm dialogs for irreversible actions (replace native confirm()) */}
-        <DestructiveConfirmDialog
-          open={deleteRuleTarget !== null}
-          onOpenChange={(o) => { if (!o) setDeleteRuleTarget(null); }}
-          title={t('GuestDetailDrawer.firewall.heading')}
-          description={t('GuestDetailDrawer.confirms.deleteRule', { pos: deleteRuleTarget ?? '' })}
-          confirmationText={deleteRuleTarget !== null ? String(deleteRuleTarget) : ''}
-          confirmLabel={t('common:delete')}
-          isPending={deleteRuleMutation.isPending}
-          onConfirm={() => {
-            if (deleteRuleTarget !== null) deleteRuleMutation.mutate(deleteRuleTarget);
-            setDeleteRuleTarget(null);
-          }}
-        />
         <DestructiveConfirmDialog
           open={regenerateConfirmOpen}
           onOpenChange={setRegenerateConfirmOpen}

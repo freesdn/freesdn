@@ -45,6 +45,7 @@ from uuid import uuid4
 import pytest
 
 from app.adapters.exceptions import AdapterError
+from app.modules.backup.models import Backup
 from app.services.backup import (
     SUPPORTED_STORAGE_TYPES,
     BackupStorageBackend,
@@ -238,7 +239,8 @@ async def test_a_delete_incapable_backend_does_not_orphan_its_file(monkeypatch):
 
     from app.services.backup import BackupService
 
-    backup = SimpleNamespace(
+    backup = Backup(
+        metadata_json={},
         id=uuid4(),
         storage_path="2026/08/24/bkp_config.fsdn",
         # Not TrueNAS any more -- it can delete. This guards the GENERIC
@@ -279,7 +281,8 @@ async def test_deleting_a_normal_backup_still_removes_the_record(monkeypatch):
             self.deleted_path = path
             return True
 
-    backup = SimpleNamespace(
+    backup = Backup(
+        metadata_json={},
         id=uuid4(),
         storage_path="2026/08/24/bkp_config.fsdn",
         storage_type="s3",
@@ -334,8 +337,9 @@ class _FakeSession:
     it would keep testing an implementation the product no longer has.
     """
 
-    def __init__(self, controller):
+    def __init__(self, controller, site_organization_id):
         self._controller = controller
+        self._site_organization_id = site_organization_id
 
     async def __aenter__(self):
         return self
@@ -345,19 +349,20 @@ class _FakeSession:
 
     async def execute(self, _stmt):
         controller = self._controller
+        site_organization_id = self._site_organization_id
 
         class _Result:
-            def scalar_one_or_none(self):
-                return controller
+            def one_or_none(self):
+                return None if controller is None else (controller, site_organization_id)
 
         return _Result()
 
 
-def _patch_lookup(monkeypatch, controller):
+def _patch_lookup(monkeypatch, controller, site_organization_id=None):
     import app.db.session as session_mod
 
     monkeypatch.setattr(
-        session_mod, "AsyncSessionLocal", lambda: _FakeSession(controller), raising=False
+        session_mod, "AsyncSessionLocal", lambda: _FakeSession(controller, site_organization_id), raising=False
     )
 
 
@@ -371,8 +376,8 @@ async def test_a_controller_from_another_org_is_refused(monkeypatch):
     This is the same shape one level down: without the check, org A points a
     backup at org B's appliance and writes through org B's stored API key.
     """
-    foreign = SimpleNamespace(id=CONTROLLER, organization_id=OTHER_ORG)
-    _patch_lookup(monkeypatch, foreign)
+    foreign = SimpleNamespace(id=CONTROLLER)
+    _patch_lookup(monkeypatch, foreign, OTHER_ORG)
 
     backend = get_storage_backend("truenas", _config())
 
@@ -393,20 +398,35 @@ async def test_a_missing_controller_is_refused(monkeypatch):
         await backend._adapter()
 
 
-def test_the_resolver_threads_the_org_into_the_config():
-    """
-    The backend can only enforce the org check if it is told the org. This is
-    the wiring: ``_resolve_storage`` has already proved the StorageLocation
-    belongs to the caller, and passes that down.
-    """
-    import inspect
+async def test_the_resolver_threads_the_org_into_the_config(monkeypatch):
+    """The same scoped configuration must reach backup execution and probes."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+    from uuid import uuid4
 
     from app.services.backup import BackupService
 
-    src = inspect.getsource(BackupService._resolve_storage)
-    body = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("#"))
-
-    assert 'config["_organization_id"] = str(loc.organization_id)' in body
+    org = uuid4()
+    loc = SimpleNamespace(
+        id=uuid4(),
+        organization_id=org,
+        is_active=True,
+        storage_type="truenas",
+        encrypted_credentials=None,
+        config={"controller_id": str(CONTROLLER), "dataset_path": DATASET},
+    )
+    db = AsyncMock()
+    db.get.return_value = loc
+    factory = MagicMock()
+    monkeypatch.setattr("app.services.backup.get_storage_backend", factory)
+    service = BackupService(db)
+    service.org_id = org
+    await service._resolve_storage(storage_location_id=loc.id)
+    assert factory.call_args.args[1]["_organization_id"] == str(org)
+    factory.reset_mock()
+    factory.return_value.SUPPORTS_DELETE = False
+    await service.test_storage_location(loc.id)
+    assert factory.call_args.args[1]["_organization_id"] == str(org)
 
 
 def test_an_unscoped_backend_still_refuses_nothing_silently():
@@ -416,7 +436,9 @@ def test_an_unscoped_backend_still_refuses_nothing_silently():
     if it ever did, the field being None must not read as "any org is fine"
     without someone having decided that.
     """
-    backend = get_storage_backend("truenas", {"controller_id": str(CONTROLLER), "dataset_path": DATASET})
+    backend = get_storage_backend(
+        "truenas", {"controller_id": str(CONTROLLER), "dataset_path": DATASET}
+    )
 
     assert backend._organization_id is None
 

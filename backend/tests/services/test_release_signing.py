@@ -96,6 +96,15 @@ class TestSignVerify:
 # signature now covers a canonical manifest carrying all of them.
 
 
+@pytest.fixture
+def isolated_manifest_keys(tmp_path, monkeypatch):
+    """Use owned real key storage without reloading or replacing signer behavior."""
+    directory = str(tmp_path / "owned-manifest-keys")
+    monkeypatch.setenv("FREESDN_SIGNING_KEY_DIR", directory)
+    monkeypatch.setenv("FREESDN_AGENT_RELEASE_DIR", directory)
+
+
+@pytest.mark.usefixtures("isolated_manifest_keys")
 class TestReleaseManifestSigning:
     @staticmethod
     def _manifest(**overrides):
@@ -173,6 +182,7 @@ class TestReleaseManifestSigning:
             self._manifest(**kwargs)
 
 
+@pytest.mark.usefixtures("isolated_manifest_keys")
 class TestManifestSurvivesThePersistenceLifecycle:
     """Sign -> persist -> rebuild -> verify must hold for accepted input.
 

@@ -1,0 +1,83 @@
+ISOLATED INSTALLATION AND ENCRYPTED RECOVERY ACCEPTANCE
+=====================================================
+
+FreeSDN remains Community / Early Access. This rehearsal checks a bounded Lite
+deployment; it does not certify a customer upgrade or an enterprise release.
+
+Installer security
+------------------
+install.sh creates .env.lite/.env.pro/.env.max/.env.dev with random credentials
+and verified mode 0600. It preserves existing credentials when rerun, including
+SECRET_KEY, ENCRYPTION_SALT, JWT_SIGNING_KEY and SLA_REPORT_DELIVERY_EPOCH. Existing
+files must be owned by the invoking account, regular and singly linked. Symlinks,
+hard links, special files and filesystems that cannot enforce private permissions
+are refused. With WSL, install on its Linux filesystem if the Windows mount does
+not support POSIX permissions. Do not make secrets world-readable as a workaround.
+
+--domain accepts a DNS hostname without scheme/port/path; --email also requires
+--domain. Invalid arguments are refused before image build or service startup.
+The chosen HTTPS origin sets both PUBLIC_BASE_URL and FRONTEND_URL. This does not
+enable report mail, create an epoch, configure DNS or provide a valid backup key.
+Backup encryption still requires an independently retained private key. The
+installer does not generate or pretend to validate that operator recovery key.
+
+Production cookies remain Secure. Access over a LAN address must use HTTPS with
+a certificate trusted by the client. Lite's local HTTP mode is not approval to
+send credentials over a remote unencrypted connection. Use --domain with valid
+DNS and TLS, or provision a trusted private certificate/reverse proxy. Never
+disable Secure cookies or TLS verification to make a remote login appear to work.
+
+Run the rehearsal
+-----------------
+Use Linux amd64, Docker Engine/Compose, Python 3 and already-built candidate
+backend, PostgreSQL, TimescaleDB, Valkey and Caddy application images. Run against
+a reviewed public source export, never a live installation directory:
+
+    python3 scripts/check_install_acceptance.py \
+      --source /absolute/path/to/reviewed-public-source \
+      --backend CANDIDATE_BACKEND --postgres CANDIDATE_POSTGRES \
+      --logdb CANDIDATE_LOGDB --valkey CANDIDATE_VALKEY --edge CANDIDATE_CADDY \
+      --work-dir /absolute/new/private/acceptance-run
+
+The directory must not already exist and must support 0700. Images are resolved
+once to exact IDs. No images are pulled by the runner. The runner creates its own
+random projects, internal networks and named volumes, with no published ports.
+It removes builds and host port mappings from the resolved shipped Lite Compose
+plan, disables automatic restarts, uses monitor-only adapter mode and chooses
+Caddy's localhost TLS mode. The HTTP probe trusts only that fixture's private CA
+and verifies certificate hostname/TLS; it does not set verify=False. Only reviewed
+source configuration files and the disposable public backup key are host-mounted.
+
+The test exercises real service startup under Lite limits; actual edge/API setup
+and anonymous setup refusal; Secure cookie authentication and CSRF enforcement;
+dashboard reads; CSV/PDF generation/download; a live Celery worker and all five
+queues; container recreation; backup refusal without encryption; the actual GPG
+backup pipeline without unused anonymous database volumes; offline restoration to fresh database and application volumes;
+Timescale event content, original credential ciphertext and archive fidelity;
+and denial of old JWTs after an independent signing-key cutover. Application
+writers are stopped before backup; every source service is stopped before target
+writers start. Vault keys stay unchanged. pg_dump changes search_path, so the
+Timescale pre/post-restore functions are explicitly schema-qualified.
+
+Only report.json is designed for sharing. Keep every other file private: the
+directory contains configuration credentials, tokens, backup decryption keys,
+database dumps, file archives and raw logs. Synthetic keys are intentionally
+disposable test material, not a model for production private-key storage.
+On failure, inspect its partial report and private logs. The runner removes only
+its own temporary resources and reports cleanup failures; it never prunes Docker.
+Retain original deployment volumes, images and backups separately.
+
+What a pass does NOT establish
+-----------------------------
+- Same-candidate recreation is not a legacy-version/database-runtime upgrade.
+- Recovery deliberately starts an empty broker. Customer jobs, reserved work,
+  HA credentials, primary election, failover and device-side reconciliation are
+  separate gates in redis/HA-UPGRADING, QUEUE-INVENTORY and QUEUE-BACKUP-RECOVERY.
+- This does not preserve arbitrary PostgreSQL roles/ACLs using the scheduled
+  --no-owner/--no-privileges dumps. Custom role migration needs separate acceptance.
+- No original hardware, external SMTP, public ACME, VPN or browser-rendered UI is
+  used. The report-mail epoch has its own check_report_recovery.py rehearsal.
+- The dataset and timings are bounded synthetic evidence, not production fleet
+  capacity, sustained soak, retention, host-loss protection or RTO/RPO promises.
+- Published-image installation, hosted CI, signing and release support remain
+  separate acceptance requirements. Do not label this an enterprise certification.

@@ -89,6 +89,18 @@ import { cn } from '@/lib/utils';
 // ops on a system feature).
 
 const CATASTROPHIC_FEATURE_PREFIXES: readonly string[] = [
+  'proxmox.backup.job',
+  'proxmox.cluster.task_stop',
+  'proxmox.firewall.operation',
+  'proxmox.storage.upload',
+  'proxmox.storage.delete_volume',
+  'proxmox.node.certificate_upload',
+  'proxmox.node.certificate_delete',
+  'proxmox.node.acme_renew',
+  'proxmox.node.reboot',
+  'proxmox.node.shutdown',
+  'proxmox.ha.resource',
+  'proxmox.ha.group',
   // MikroTik
   'mikrotik.system.reboot',
   'mikrotik.system.shutdown',
@@ -192,9 +204,17 @@ export function PendingChangesDrawer({
     [changes],
   );
   const applied = useMemo(
-    () => changes.filter((c) => c.status === 'applied').slice(0, 20),
+    () => changes.filter((c) => c.status === 'applied' &&
+      (!c.provider_task || c.provider_task.status === 'succeeded')).slice(0, 20),
     [changes],
   );
+  const providerTasks = useMemo(
+    () => changes.filter((c) => c.status === 'applied' && c.provider_task &&
+      c.provider_task.status !== 'succeeded'),
+    [changes],
+  );
+  const providerBusy = providerTasks.some((c) =>
+    ['pending', 'running', 'unknown'].includes(c.provider_task!.status));
   const failed = useMemo(
     () => changes.filter((c) => c.status === 'failed'),
     [changes],
@@ -273,10 +293,11 @@ export function PendingChangesDrawer({
     // the backend vendor pre-flights require. Non-destructive applies omit it.
     mutationFn: (change: PendingChangeResponse) =>
       applyPendingChange(change.id, { confirmed: isCatastrophic(change) }),
-    onSuccess: (_res, _change) => {
+    onSuccess: (res) => {
+      const accepted = !!res.data.provider_task;
       toast({
-        title: t('PendingChangesDrawer.toasts.applied.title'),
-        description: t('PendingChangesDrawer.toasts.applied.description', {
+        title: t(accepted ? 'PendingChangesDrawer.provider.acceptedTitle' : 'PendingChangesDrawer.toasts.applied.title'),
+        description: t(accepted ? 'PendingChangesDrawer.provider.acceptedDescription' : 'PendingChangesDrawer.toasts.applied.description', {
           gatewayName,
         }),
       });
@@ -337,7 +358,14 @@ export function PendingChangesDrawer({
       try {
         // Bulk is disabled when any catastrophic change is queued, so these are
         // all non-destructive; pass confirmed for parity with the per-row path.
-        await applyPendingChange(change.id, { confirmed: isCatastrophic(change) });
+        const response = await applyPendingChange(change.id, { confirmed: isCatastrophic(change) });
+        if (response.data.provider_task && response.data.provider_task.status !== 'succeeded') {
+          setBulkProgress({ current: i + 1, total: pending.length,
+            error: t('PendingChangesDrawer.provider.bulkPaused') });
+          invalidate();
+          onApplied?.();
+          return;
+        }
       } catch (err) {
         const info = describeApplyError(err);
         if (info.isReadOnly) setReadOnlyBanner(info.message);
@@ -433,6 +461,20 @@ export function PendingChangesDrawer({
           )}
         </div>
 
+        {change.provider_task && (
+          <div className="text-xs space-y-1" role="status">
+            <Badge variant={change.provider_task.status === 'succeeded' ? 'success' : 'secondary'}>
+              {t(`PendingChangesDrawer.provider.status.${change.provider_task.status}`)}
+            </Badge>
+            {change.provider_task.id && <p className="font-mono break-all">{change.provider_task.id}</p>}
+            {change.provider_task.checked_at && <p>
+              {t('PendingChangesDrawer.provider.checked', { when: new Date(change.provider_task.checked_at).toLocaleString() })}
+            </p>}
+            {change.provider_task.detail && <p className="text-amber-700 dark:text-amber-400">
+              {t(change.provider_task.detail?.startsWith('certificate_') ? (change.provider_task.detail === 'certificate_endpoint_verified' || change.provider_task.detail === 'certificate_fallback_endpoint_verified' ? 'PendingChangesDrawer.provider.certificateVerified' : 'PendingChangesDrawer.provider.certificateVerify') : change.provider_task.detail === 'node_power_requires_manual_verification' ? 'PendingChangesDrawer.provider.nodePowerManual' : change.provider_task.detail === 'ha_configuration_verified' ? 'PendingChangesDrawer.provider.haVerified' : change.provider_task.detail === 'configuration_pending_restart' ? 'PendingChangesDrawer.provider.pendingRestart' : change.provider_task.detail === 'guest_deletion_verified' ? 'PendingChangesDrawer.provider.deletionVerified' : change.provider_task.detail === 'guest_state_verified' ? 'PendingChangesDrawer.provider.stateVerified' : 'PendingChangesDrawer.provider.verify')}
+            </p>}
+          </div>
+        )}
         <details className="text-xs">
           <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
             {t('PendingChangesDrawer.change.payload')}
@@ -449,7 +491,7 @@ export function PendingChangesDrawer({
           </p>
         )}
 
-        {kind === 'reconciliation' && (
+        {(kind === 'reconciliation' || (change.status === 'applied' && (change.payload?.guest_change_version === 1 || change.payload?.deletion_version === 1 || change.payload?.creation_version === 1 || change.payload?.cluster_operation_version === 1 || change.payload?.certificate_version === 1 || change.payload?.storage_version === 1 || change.payload?.backup_job_version === 1 || change.payload?.task_stop_version === 1 || change.payload?.firewall_operation_version === 1) && change.provider_task?.status === 'unknown')) && (
           <div className="mt-2 flex justify-end">
             {/* The operator's escape hatch. Without it a row whose outcome is
                 unknown sits in the drawer forever: the ordinary apply and
@@ -561,7 +603,7 @@ export function PendingChangesDrawer({
           ) : pending.length === 0 &&
             applied.length === 0 &&
             failed.length === 0 &&
-            reconciliation.length === 0 ? (
+            reconciliation.length === 0 && applying.length === 0 && providerTasks.length === 0 ? (
             <EmptyState
               icon={ClipboardList}
               title={t('PendingChangesDrawer.empty.title')}
@@ -587,12 +629,12 @@ export function PendingChangesDrawer({
                         setBulkProgress(null);
                       }}
                       disabled={
-                        applyMutation.isPending || bulkHasCatastrophic
+                        applyMutation.isPending || bulkHasCatastrophic || providerBusy
                       }
                       title={
                         bulkHasCatastrophic
                           ? t('PendingChangesDrawer.sections.pending.bulkDisabledTooltip')
-                          : undefined
+                          : providerBusy ? t('PendingChangesDrawer.provider.bulkPaused') : undefined
                       }
                     >
                       {t('PendingChangesDrawer.actions.applyAll')}
@@ -705,6 +747,13 @@ export function PendingChangesDrawer({
                 </section>
               )}
 
+              {providerTasks.length > 0 && (
+                <section aria-label={t('PendingChangesDrawer.provider.heading')}>
+                  <h3 className="text-sm font-semibold mb-2">{t('PendingChangesDrawer.provider.heading')}</h3>
+                  <p className="text-xs text-muted-foreground mb-2">{t('PendingChangesDrawer.provider.description')}</p>
+                  <ul className="space-y-2">{providerTasks.map((c) => renderChange(c, 'applied'))}</ul>
+                </section>
+              )}
               {/* Recently applied (collapsed by default) */}
               {applied.length > 0 && (
                 <section aria-label={t('PendingChangesDrawer.sections.recentlyApplied.aria')}>

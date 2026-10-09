@@ -335,11 +335,13 @@ class HealthService:
         error_score: int | None = None,
         utilization_score: int | None = None,
         firmware_score: int | None = None,
+        replace_components: bool = False,
     ) -> DeviceHealth:
         """
         Compute and persist the health score for a device.
 
-        Any score not provided is left at its previous value.
+        Partial updates retain omitted scores. Periodic full recomputation uses
+        replace_components=True to clear components without observations.
         Returns the updated DeviceHealth row.
         """
         result = await self.db.execute(
@@ -356,17 +358,17 @@ class HealthService:
             self.db.add(health)
 
         # Update component scores (keep previous if not provided)
-        if reachability_score is not None:
+        if replace_components or reachability_score is not None:
             health.reachability_score = reachability_score
-        if latency_score is not None:
+        if replace_components or latency_score is not None:
             health.latency_score = latency_score
-        if drift_score is not None:
+        if replace_components or drift_score is not None:
             health.drift_score = drift_score
-        if error_score is not None:
+        if replace_components or error_score is not None:
             health.error_score = error_score
-        if utilization_score is not None:
+        if replace_components or utilization_score is not None:
             health.utilization_score = utilization_score
-        if firmware_score is not None:
+        if replace_components or firmware_score is not None:
             health.firmware_score = firmware_score
 
         # Compute weighted average of available scores
@@ -381,9 +383,13 @@ class HealthService:
         if total_weight > 0:
             health.health_score = round(weighted_sum / total_weight)
         else:
-            health.health_score = 100  # no data = assume healthy
+            # The legacy column is non-null. UNKNOWN makes this sentinel
+            # unavailable through measured_score, API responses and SQL rollups.
+            health.health_score = 0
 
-        health.health_status = DeviceHealth.compute_status(health.health_score)
+        health.health_status = DeviceHealth.compute_status(
+            health.health_score if total_weight else None
+        )
         health.updated_at = datetime.now(UTC)
 
         # Append to sparkline history (keep last 288 entries = 24h at 5-min intervals)
@@ -391,7 +397,7 @@ class HealthService:
         history.append(
             {
                 "t": health.updated_at.isoformat(),
-                "s": health.health_score,
+                "s": health.measured_score,
             }
         )
         if len(history) > 288:
@@ -409,10 +415,10 @@ class HealthService:
         return max(0, 100 - (flap_count_last_hour * 10))
 
     @staticmethod
-    def score_latency(avg_ms: float | None) -> int:
+    def score_latency(avg_ms: float | None) -> int | None:
         """Score latency: <10ms=100, >500ms=0, linear interpolation."""
         if avg_ms is None:
-            return 100  # no data = assume good
+            return None
         if avg_ms <= 10:
             return 100
         if avg_ms >= 500:
@@ -425,7 +431,7 @@ class HealthService:
         return 0 if has_drift else 100
 
     @staticmethod
-    def score_utilization(cpu_pct: float | None = None, mem_pct: float | None = None) -> int:
+    def score_utilization(cpu_pct: float | None = None, mem_pct: float | None = None) -> int | None:
         """Score resource utilization. Uses worst of CPU/memory."""
         scores = []
         for pct in (cpu_pct, mem_pct):
@@ -436,7 +442,7 @@ class HealthService:
                     scores.append(0)
                 else:
                     scores.append(round(100 - ((pct - 80) / 15) * 100))
-        return min(scores) if scores else 100
+        return min(scores) if scores else None
 
     @staticmethod
     def score_firmware(is_latest: bool, versions_behind: int = 0) -> int:

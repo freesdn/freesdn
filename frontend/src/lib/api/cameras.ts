@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
 import { api, API_URL, getWebSocketUrl } from './client';
-import { getDemoCameraSnapshotPath } from '@/demo/fixtures';
+import { getDemoCameraSnapshotPath } from '@/demo/cameraSnapshots';
 import { isDemoMode } from '@/demo/mode';
 import type {
   SmartCapabilities, MotionDetectionConfig, PrivacyMaskConfig, LineCrossingConfig,

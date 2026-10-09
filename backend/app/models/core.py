@@ -252,6 +252,18 @@ class Site(Base, UUIDMixin, AuditMixin, SoftDeleteMixin):
 # ===========================================
 
 
+class TokenRevocation(Base):
+    """Durable token consumption/revocation, independent of evictable caches."""
+
+    __tablename__ = "token_revocations"
+    __table_args__ = (
+        Index("ix_token_revocations_expires_at", "expires_at"),
+        {"schema": "core"},
+    )
+    jti_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class Controller(Base, UUIDMixin, AuditMixin, SoftDeleteMixin):
     """
     Controller - External system that manages devices.
@@ -281,7 +293,7 @@ class Controller(Base, UUIDMixin, AuditMixin, SoftDeleteMixin):
     host: Mapped[str] = mapped_column(String(255), nullable=False)
     port: Mapped[int] = mapped_column(nullable=False)
     use_ssl: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    verify_ssl: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    verify_ssl: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Credentials (encrypted reference - actual credentials in vault)
     credential_id: Mapped[UUID | None] = mapped_column(nullable=True)
@@ -411,6 +423,17 @@ class User(Base, UUIDMixin, AuditMixin, SoftDeleteMixin):
             unique=True,
             postgresql_where=text("deleted_at IS NULL"),
         ),
+        # Disabled accounts still own their external binding. Only explicit
+        # soft deletion releases it; email is not an external identity key.
+        Index(
+            "ix_users_external_binding",
+            "sso_provider_id",
+            "external_id",
+            unique=True,
+            postgresql_where=text(
+                "deleted_at IS NULL AND sso_provider_id IS NOT NULL AND external_id IS NOT NULL"
+            ),
+        ),
         Index("ix_users_organization_id", "organization_id"),
         {"schema": "core"},
     )
@@ -508,9 +531,12 @@ class UserSiteAccess(Base, UUIDMixin, AuditMixin):
     """
     Junction table granting a user access to specific sites.
 
-    When no rows exist for a user, behaviour depends on their role:
-      • super_admin / org_admin → implicit access to every site in their org.
-      • site_admin / operator / viewer → NO site access (deny-by-default).
+    CurrentUser applies a hybrid site-scope policy: zero grants add no site
+    restriction; role permissions, credential scopes and organization ownership
+    still apply. For a principal subject to site limits, one or more grants
+    restrict access to those sites. Unscoped super_admin / org_admin principals
+    bypass site limits. Removing the final grant therefore removes this site
+    restriction; it does not disable the account or deny all site access.
 
     ``access_level`` lets you further restrict what the user can do inside
     the site without changing their global role:
@@ -686,7 +712,7 @@ class Credential(Base, UUIDMixin, AuditMixin, SoftDeleteMixin):
     certificate: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # SNMP
-    snmp_community: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    snmp_community: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Extended options
     options: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)

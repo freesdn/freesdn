@@ -48,18 +48,64 @@ async def _fabric_snapshot_handler(ctx: Any) -> Any:
     if ctx.db is None:
         return OperationResult.fail("snapshot requires a DB session", "NO_DB")
 
-    # get_snapshot lives on StreamService (it resolves the vendor adapter +
-    # decrypts creds), NOT CameraService — the previous import was wrong, so the
-    # operation always failed with "'CameraService' has no attribute
-    # 'get_snapshot'" (swallowed into a failed result). The camera→snapshot→
-    # store/notify vertical was dead at the snapshot step until this fix.
+    # A module permission is not a camera grant. Recheck the stored author and
+    # target before StreamService can decrypt credentials or open an adapter.
+    # The caller's context may be narrower than the author's current site set;
+    # retain that ceiling as well as the fresh database-backed authorization.
+    from app.core.dependencies import CurrentUser, _get_user_by_id, _load_user_permissions
+    from app.modules.cameras.api import _enforce_camera_access
+    from app.modules.cameras.models import Camera
+
+    try:
+        actor_id = getattr(ctx, "actor_id", None)
+        if actor_id is None:
+            raise PermissionError("Missing snapshot author")
+        author = await _get_user_by_id(ctx.db, str(UUID(str(actor_id))))
+        if (
+            author is None
+            or not author.is_active
+            or author.deleted_at is not None
+            or str(author.organization_id) != str(ctx.organization_id)
+        ):
+            raise PermissionError("Snapshot author unavailable")
+        grants = author.site_access or []
+        principal = CurrentUser(
+            author,
+            await _load_user_permissions(author),
+            accessible_site_ids={grant.site_id for grant in grants},
+            site_access_levels={grant.site_id: grant.access_level for grant in grants},
+        )
+        camera = await ctx.db.get(Camera, camera_id)
+        if (
+            camera is None
+            or camera.deleted_at is not None
+            or str(camera.organization_id) != str(ctx.organization_id)
+        ):
+            raise PermissionError("Snapshot target unavailable")
+        allowed_sites = getattr(ctx, "accessible_site_ids", None)
+        if (
+            allowed_sites is not None
+            and camera.site_id is not None
+            and camera.site_id not in allowed_sites
+        ):
+            raise PermissionError("Snapshot site outside invocation scope")
+        if not principal.has_site_permission("cameras.view", camera.site_id):
+            raise PermissionError("Snapshot permission denied")
+        await _enforce_camera_access(ctx.db, principal, camera.id, "live")
+    except Exception:
+        # Do not leak database/client internals or target existence to a caller.
+        return OperationResult.fail(
+            "Camera snapshot access denied or unavailable", "CAMERA_ACCESS_DENIED"
+        )
+
     from app.modules.cameras.service import StreamService
 
     svc = StreamService(ctx.db)
     try:
         data = await svc.get_snapshot(camera_id, organization_id=ctx.organization_id)
-    except Exception as exc:  # noqa: BLE001 — normalize for the executor
-        return OperationResult.fail(f"snapshot failed: {exc}", "SNAPSHOT_FAILED")
+    except Exception:
+        # Adapter errors may contain device URLs or credentials.
+        return OperationResult.fail("Camera snapshot unavailable", "SNAPSHOT_FAILED")
     if not data:
         return OperationResult.fail("camera returned no snapshot", "NO_SNAPSHOT")
 

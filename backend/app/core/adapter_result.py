@@ -33,6 +33,7 @@ Usage::
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from fastapi import HTTPException
@@ -78,19 +79,28 @@ _HTTP_STATUS: dict[str, int] = {
 }
 
 
+def adapter_result_field(result: Any, name: str, default: Any = None) -> Any:
+    """Read the same outcome from an AdapterResult or its serialized envelope."""
+    if isinstance(result, Mapping):
+        return result.get(name, default)
+    return getattr(result, name, default)
+
+
 def raise_for_adapter_result(result: Any, *, not_found_ok: bool = False) -> None:
     """Raise the appropriate error for a failed ``AdapterResult``; no-op on success.
 
     ``not_found_ok`` lets a caller treat a ``NOT_FOUND`` failure as non-fatal
     (returns instead of raising 404) — e.g. an idempotent delete.
     """
-    if getattr(result, "success", True):
+    if adapter_result_field(result, "success", True):
         return
 
-    code = getattr(result, "error_code", None)
+    code = adapter_result_field(result, "error_code")
+    if not isinstance(code, str):
+        code = None
     detail = (
-        getattr(result, "error", None)
-        or getattr(result, "message", None)
+        adapter_result_field(result, "error")
+        or adapter_result_field(result, "message")
         or "adapter operation failed"
     )
 

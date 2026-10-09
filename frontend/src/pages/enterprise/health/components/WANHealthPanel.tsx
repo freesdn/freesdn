@@ -107,7 +107,7 @@ export function WANHealthPanel({ siteId }: WANHealthPanelProps) {
                     <td className="py-2 pr-3 text-muted-foreground">{device.site_name}</td>
                     <td className="py-2 pr-3 text-muted-foreground font-mono text-xs">{device.ip_address ?? '-'}</td>
                     <td className="py-2 pr-3">
-                      <HealthGauge score={Math.round(device.health_score)} size="sm" />
+                      <HealthGauge score={device.health_score} size="sm" />
                     </td>
                     <td className="py-2 pr-3">
                       <MiniScoreBar label={t('WANHealthPanel.columns.latency')} score={device.latency_score} />

@@ -43,6 +43,8 @@ import pathlib
 
 import pytest
 
+from tests.services.test_marketplace_replay_regression import _sync_with_catalog_actor
+
 
 def _sync_source() -> str:
     from app.api.v1.endpoints.marketplace import sync_marketplace
@@ -50,7 +52,7 @@ def _sync_source() -> str:
     return inspect.getsource(sync_marketplace)
 
 
-async def test_an_unreachable_registry_falls_back_to_the_seed(monkeypatch):
+async def test_an_unreachable_registry_falls_back_to_the_seed(monkeypatch, db_session):
     """
     Behavioural, not structural. My first version of this test asserted that an
     `except Exception` appeared between the fetch and the seed load -- which was
@@ -79,64 +81,21 @@ async def test_an_unreachable_registry_falls_back_to_the_seed(monkeypatch):
 
     monkeypatch.setattr(mp, "_verify_catalog_signature", _record)
 
-    captured: dict = {}
-
-    class _FakeSession:
-        async def execute(self, *a, **k):
-            class _R:
-                def scalar_one_or_none(self):
-                    return None
-
-                def scalars(self):
-                    class _S:
-                        def all(self_inner):
-                            return []
-
-                    return _S()
-
-            return _R()
-
-        def add(self, obj):
-            captured.setdefault("added", []).append(obj)
-
-        async def commit(self):
-            captured["committed"] = True
-
-        async def flush(self):
-            pass
-
-        async def rollback(self):
-            pass
-
-        def begin_nested(self):
-            # Each entry is ingested inside a SAVEPOINT so one bad row cannot
-            # abort the batch; the double has to model that or the loop dies on
-            # the first entry.
-            class _Savepoint:
-                async def __aenter__(self_inner):
-                    return self_inner
-
-                async def __aexit__(self_inner, *exc):
-                    return False
-
-            return _Savepoint()
-
-    class _User:
-        id = None
-        organization_id = None
-        role = "super_admin"
-        is_superuser = True
-
-        def has_permission(self, _p):
-            return True
-
     monkeypatch.setattr(mp, "is_unscoped_superuser", lambda _u: True)
 
-    out = await mp.sync_marketplace(current_user=_User(), session=_FakeSession())
+    out = await _sync_with_catalog_actor(db_session)
 
     assert out["synced"] > 0, f"the seed fallback produced nothing: {out}"
     # A seeded catalogue is first-party and must NOT be signature-checked.
     assert "verified" not in seen, "the bundled seed was signature-checked"
+    from sqlalchemy import select
+
+    from app.models.marketplace import MarketplacePlugin
+
+    rows = (await db_session.execute(select(MarketplacePlugin))).scalars().all()
+    assert rows and all(r.catalog_serial is None and r.catalog_identity is None for r in rows)
+    with pytest.raises(HTTPException):
+        await mp._resolve_published(db_session, rows[0].slug)
 
 
 def test_a_signature_failure_still_refuses_outright():

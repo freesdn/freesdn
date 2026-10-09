@@ -26,6 +26,17 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from app.api.v1 import api_router  # noqa: E402
+from app.api.v1.endpoints.agent_release_operations import (  # noqa: E402
+    ReleaseOperationPolicy,
+    create_release_operation_router,
+)
+from app.api.v1.endpoints.agent_signing import router as agent_signing_router  # noqa: E402
+from app.api.v1.endpoints.vault_export import (  # noqa: E402
+    VaultConfirmationPolicy,
+    create_vault_confirmation_router,
+)
+from app.core.agent_release_runtime_policy import ReleaseRuntimePolicy  # noqa: E402
+from app.core.backup_download_lifetime import DownloadLifetimeMiddleware  # noqa: E402
 from app.core.events import event_bus  # noqa: E402
 from app.core.metrics import setup_metrics  # noqa: E402
 from app.core.middleware import setup_middleware  # noqa: E402
@@ -33,6 +44,7 @@ from app.modules.api import router as modules_router  # noqa: E402
 from app.modules.loader import ModuleLoader  # noqa: E402
 from app.modules.registry import module_registry  # noqa: E402
 from app.plugins.loader import plugin_loader  # noqa: E402
+from app.services.agent_release_request import ReleaseReservationBudget  # noqa: E402
 from app.setup.api import router as setup_router  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -108,6 +120,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("Starting %s v%s", settings.APP_NAME, settings.APP_VERSION)
     logger.info("Environment: %s", settings.ENVIRONMENT)
     logger.info("Debug: %s", settings.DEBUG)
+
+    # Independent observations, not blanket enablement or permission. Never
+    # generate/adopt a signing key or repair a schema/root during startup.
+    # Each actual release action must still revalidate its current prerequisites.
+    from app.services.agent_release_startup import observe_release_startup
+
+    app.state.agent_release_startup = None
+    app.state.agent_release_startup = await observe_release_startup(app.state.agent_release_policy)
 
     # ── Credential key-canary ────────────────────────────────────────────
     # Confirm SECRET_KEY can still decrypt EXISTING stored credentials BEFORE
@@ -401,16 +421,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         SUBSYSTEM_STATUS["dpi_rules"] = "degraded"
         logger.warning("DPI rule seeding failed: %s", exc, exc_info=True)
 
-    # HLS session reaper — MUST run in THIS (API) process because HLS sessions
-    # live in HLSStreamService._sessions, a per-process in-memory ClassVar. The
-    # Celery beat reaper runs in the worker process where that dict is always
-    # empty, so it can never see/kill a real session. Without this,
-    # any abandoned playback tab leaks a live ffmpeg transcode + dir + FD until
-    # the API restarts.
+    # Only the elected local HLS coordinator owns media Process handles. Keep
+    # its reaper in the API process; follower workers have an empty local table.
     try:
         import asyncio as _asyncio
 
+        from app.modules.cameras.coordinator import begin_coordinator_lifecycle
         from app.modules.cameras.service import HLSStreamService
+
+        begin_coordinator_lifecycle()
 
         _hls_svc = HLSStreamService()
 
@@ -432,6 +451,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     yield
 
     # Shutdown
+    app.state.agent_release_startup = None
     # Stop the scheduler FIRST, before plugins are stopped below. The other
     # order lets a run that is already in flight call into a runtime whose
     # on_stop has torn down its context, so the last thing in the log before a
@@ -449,6 +469,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         import asyncio as _asyncio
         import contextlib as _contextlib
 
+        from app.modules.cameras.coordinator import shutdown_coordinator
         from app.modules.cameras.service import HLSStreamService
 
         task = getattr(app.state, "_hls_reaper_task", None)
@@ -456,6 +477,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             task.cancel()
             with _contextlib.suppress(Exception, _asyncio.CancelledError):
                 await task
+        await shutdown_coordinator(permanent=True)
         async with HLSStreamService._lock:
             _svc = HLSStreamService()
             for _sid in list(HLSStreamService._sessions.keys()):
@@ -527,6 +549,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await adapter_pool.stop()
     except Exception:
         logger.debug("Error stopping adapter pool", exc_info=True)
+    from app.db.session import dispose_api_engines
+
+    await dispose_api_engines()
     logger.info("Shutting down %s", settings.APP_NAME)
 
 
@@ -559,9 +584,20 @@ def create_application() -> FastAPI:
         # without any client-visible redirect.
         redirect_slashes=False,
     )
+    # Capture deployment input once per application, before routes or lifespan.
+    # Constructing the app performs no filesystem or database provisioning.
+    app.state.agent_release_policy = ReleaseRuntimePolicy.from_settings(settings)
+    app.state.agent_release_startup = None
+    app.state.vault_confirmation_policy = VaultConfirmationPolicy(
+        oidc_redirect_uri=settings.VAULT_OIDC_REDIRECT_URI or None,
+    )
 
     # Setup middleware (request ID, logging, rate limiting, exception handlers)
-    setup_middleware(app)
+    setup_middleware(app, auth_path_prefix=settings.API_V1_PREFIX + "/auth/")
+
+    # Outside body-forwarding middleware, inside transparent CORS/metrics send
+    # wrappers: keep slots through actual sends, including safe pre-header 504s.
+    app.add_middleware(DownloadLifetimeMiddleware)
 
     # Add CORS middleware
     app.add_middleware(
@@ -575,6 +611,13 @@ def create_application() -> FastAPI:
             "X-Request-ID",
             "X-API-Key",
             "X-CSRF-Token",
+            "X-FreeSDN-Release-Actor",
+            "X-FreeSDN-Release-Organization",
+            "X-FreeSDN-Vault-Proof",
+            "X-FreeSDN-Vault-Actor",
+            "X-FreeSDN-Vault-Organization",
+            "X-FreeSDN-Storage-Probe-Actor",
+            "X-FreeSDN-Storage-Probe-Organization",
             "Accept",
             "Origin",
         ],
@@ -583,11 +626,46 @@ def create_application() -> FastAPI:
             "X-Response-Time",
             "X-RateLimit-Limit",
             "X-RateLimit-Remaining",
+            "X-FreeSDN-Artifact-Integrity",
+            "Content-Disposition",
         ],
     )
 
     # Include API router
     app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+    # Existing auth-prefix middleware remains in front of fresh confirmation.
+    # Registration performs no IdP exchange or archive access.
+    app.include_router(
+        create_vault_confirmation_router(app.state.vault_confirmation_policy),
+        prefix=settings.API_V1_PREFIX + "/auth/vault-export",
+        tags=["Vault export confirmation"],
+    )
+    # Explicit platform-authorized setup/recovery. Registration itself must
+    # never initialize, adopt or rotate a signing key.
+    app.include_router(
+        agent_signing_router,
+        prefix=settings.API_V1_PREFIX + "/auth/agent-signing",
+        tags=["Agent signing"],
+    )
+
+    # Each application captures one deployment policy; request metadata and
+    # later settings changes cannot replace its root or reservation budgets.
+    release_policy = app.state.agent_release_policy
+    app.include_router(
+        create_release_operation_router(
+            ReleaseOperationPolicy(
+                root=release_policy.managed_root,
+                budget=ReleaseReservationBudget(
+                    global_history=release_policy.global_history,
+                    organization_history=release_policy.organization_history,
+                    global_owned_bytes=release_policy.global_owned_bytes,
+                    organization_owned_bytes=release_policy.organization_owned_bytes,
+                ),
+            )
+        ),
+        prefix=settings.API_V1_PREFIX + "/agents",
+        tags=["Agents"],
+    )
 
     # Include modules management router
     app.include_router(modules_router, prefix=settings.API_V1_PREFIX)

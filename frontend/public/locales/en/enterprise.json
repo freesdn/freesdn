@@ -397,7 +397,8 @@
       "healthy": "Healthy",
       "warning": "Warning",
       "degraded": "Degraded",
-      "critical": "Critical"
+      "critical": "Critical",
+      "unknown": "Unknown"
     },
     "errorLoading": "Failed to load device health data.",
     "empty": "No devices match the current filters.",
@@ -504,6 +505,7 @@
     }
   },
   "HealthDashboardPage": {
+    "measurementCoverage": "{{measured}} / {{total}} health records measured",
     "title": "Network Health",
     "description": {
       "site": "Site health monitoring · {{devices}} devices",

@@ -4,7 +4,7 @@
 FreeSDN — Gateway Proxmox Backup service
 =========================================
 
-Read-and-stage for Proxmox vzdump backup configuration: scheduled
+Reviewed scheduled jobs and read-and-stage Proxmox vzdump configuration: scheduled
 backup jobs, ad-hoc runs, restore-from-archive, and retention pruning.
 Mirrors ``adapter_opnsense_firewall.py``: live reads, staged writes,
 shared apply dispatcher.
@@ -22,7 +22,7 @@ AND ``force=true`` in the apply call) is the last guardrail.
 
 Supported features::
 
-    proxmox.backup.job        create | update | delete  (target_id = jobid)
+    proxmox.backup.job        reviewed create | update | delete (legacy staging refused)
     proxmox.backup.run        create  (ad-hoc vzdump)
     proxmox.backup.restore    create  — CATASTROPHIC (overwrites VM/CT)
     proxmox.backup.prune      create  — IRREVERSIBLE (drops backup files)
@@ -50,7 +50,7 @@ from app.adapters.proxmox.adapter import ProxmoxAdapter
 from app.adapters.validation import validate_id
 from app.models.core import Controller
 from app.services.adapter_base import GatewayServiceBase
-from app.services.adapter_proxmox_vm import build_proxmox_adapter
+from app.services.adapter_proxmox_vm import build_proxmox_adapter, close_proxmox_adapter
 from app.services.adapter_redaction import redact_list
 
 logger = logging.getLogger(__name__)
@@ -60,11 +60,25 @@ logger = logging.getLogger(__name__)
 # anything else (``/etc/passwd`` / ``http://...``) is rejected here
 # before the adapter ever sees it.
 _VOLID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*:[A-Za-z0-9][A-Za-z0-9._/-]*$")
+# PBSPlugin::print_volid uses UTC timestamps containing colons. Permit only
+# the documented guest-backup shape, not arbitrary colon-bearing paths/URLs.
+_PBS_ARCHIVE_RE = re.compile(
+    r"[A-Za-z0-9][A-Za-z0-9._-]*:backup/(?:vm|ct)/[0-9]+/"
+    r"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)"
+)
 
 
 def _validate_archive(value: str) -> str:
     value = value or ""
-    if not _VOLID_RE.match(value):
+    if len(value) > 512:
+        raise HTTPException(400, detail="Archive volume id is too long")
+    if match := _PBS_ARCHIVE_RE.fullmatch(value):
+        try:
+            datetime.strptime(match[1], "%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            raise HTTPException(400, detail="Invalid PBS archive timestamp") from None
+        return value
+    if not _VOLID_RE.fullmatch(value):
         raise HTTPException(
             400,
             detail=("invalid archive volume id — expected <storage>:<path> shape"),
@@ -82,39 +96,9 @@ def _validate_archive(value: str) -> str:
     return value
 
 
-# Allow-list of payload keys the applier passes through to the
-# adapter's ``create_backup_job`` / ``update_backup_job`` calls. Stops a
-# malicious staging payload from setting Proxmox-internal flags
-# (``script``, ``mailto`` could be inert but ``script`` would let an
-# operator run arbitrary shell on the cluster). Update this set when
-# Proxmox documents new safe vzdump options.
-_BACKUP_JOB_ALLOWED_KEYS: frozenset[str] = frozenset(
-    {
-        "storage",
-        "schedule",
-        "vmid",
-        "mode",
-        "compress",
-        "node",
-        "enabled",
-        "mailto",
-        "mailnotification",
-    }
-)
-
-
-def _filter_backup_job_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Drop unknown/unsafe keys from a backup-job create/update payload.
-
-    ``force`` collides with the staging applier's keyword-only
-    ``force=True`` so it's stripped here for safety even though it
-    isn't in the allow-list.
-    """
-    return {k: v for k, v in payload.items() if k in _BACKUP_JOB_ALLOWED_KEYS}
-
-
 # (feature, operation) → bound adapter method name. The applier
-# uses this to dispatch — same pattern Omada / OPNsense services use.
+# uses this to dispatch. Job entries remain for capability introspection;
+# build_applier routes them through hypervisor_backup_jobs before credential access.
 _APPLY: dict[tuple[str, str], str] = {
     ("proxmox.backup.job", "create"): "create_backup_job",
     ("proxmox.backup.job", "update"): "update_backup_job",
@@ -141,7 +125,7 @@ class GatewayProxmoxBackupService(GatewayServiceBase):
         self, controller_id: UUID, organization_id: UUID
     ) -> ProxmoxAdapter:
         ctrl = await self._get_controller(controller_id, organization_id)
-        if ctrl.controller_type != "proxmox":
+        if ctrl.controller_type not in ("proxmox", "pve"):
             raise HTTPException(
                 400,
                 detail=(
@@ -184,11 +168,14 @@ class GatewayProxmoxBackupService(GatewayServiceBase):
         """
 
         async def _apply(c: Any) -> Any:
+            if c.feature == "proxmox.backup.job":
+                from app.services.hypervisor_backup_jobs import apply_backup_job
+
+                return await apply_backup_job(self, c)
             adapter: ProxmoxAdapter | None = None
             try:
                 adapter = await self._get_proxmox_adapter(c.controller_id, c.organization_id)
                 payload = dict(c.payload or {})
-                target_id = c.target_id or ""
 
                 method_name = _APPLY.get((c.feature, c.operation))
                 if method_name is None:
@@ -233,22 +220,6 @@ class GatewayProxmoxBackupService(GatewayServiceBase):
                                 "to proceed"
                             ),
                         )
-
-                # ── Backup jobs ────────────────────────────────────────
-                if c.feature == "proxmox.backup.job":
-                    if c.operation == "create":
-                        # Allow-list payload keys so a malicious caller
-                        # can't smuggle ``script`` (which would run
-                        # arbitrary shell on the cluster as root).
-                        kwargs = _filter_backup_job_payload(payload)
-                        return await method(force=True, **kwargs)
-                    if c.operation == "update":
-                        job_id = validate_id(target_id, label="job_id")
-                        kwargs = _filter_backup_job_payload(payload)
-                        return await method(job_id, force=True, **kwargs)
-                    if c.operation == "delete":
-                        job_id = validate_id(target_id, label="job_id")
-                        return await method(job_id, force=True)
 
                 # ── Ad-hoc backup ──────────────────────────────────────
                 if c.feature == "proxmox.backup.run":
@@ -312,9 +283,9 @@ class GatewayProxmoxBackupService(GatewayServiceBase):
                 if c.feature == "proxmox.backup.prune":
                     node = validate_id(str(payload.get("node", "")), label="node")
                     storage = validate_id(str(payload.get("storage", "")), label="storage")
-                    # Build the keep-* kwargs only when present so the
+                    # Build the keep-* prune_options only when present so the
                     # adapter omits the corresponding query params.
-                    kwargs: dict[str, Any] = {}
+                    prune_options: dict[str, Any] = {}
                     for key in (
                         "keep_last",
                         "keep_hourly",
@@ -324,14 +295,14 @@ class GatewayProxmoxBackupService(GatewayServiceBase):
                         "keep_yearly",
                     ):
                         if key in payload and payload[key] is not None:
-                            kwargs[key] = int(payload[key])
+                            prune_options[key] = int(payload[key])
                     if "vmid" in payload and payload["vmid"] is not None:
-                        kwargs["vmid"] = int(payload["vmid"])
-                    return await method(node, storage, **kwargs, force=True)
+                        prune_options["vmid"] = int(payload["vmid"])
+                    return await method(node, storage, **prune_options, force=True)
 
                 raise HTTPException(400, detail=f"unhandled feature={c.feature!r}")
             finally:
                 if adapter is not None:
-                    await adapter.disconnect()
+                    await close_proxmox_adapter(adapter)
 
         return _apply

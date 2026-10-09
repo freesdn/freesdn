@@ -12,10 +12,10 @@ Lifecycle, Health Scores.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Any, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # ==========================================================================
 # Site Groups
@@ -330,7 +330,7 @@ class DeviceHealthResponse(BaseModel):
     device_id: UUID
     organization_id: UUID
     site_id: UUID | None = None
-    health_score: int
+    health_score: int | None
     health_status: str
     reachability_score: int | None
     latency_score: int | None
@@ -341,6 +341,12 @@ class DeviceHealthResponse(BaseModel):
     updated_at: datetime | None
     score_history: list[dict[str, Any]]
 
+    @model_validator(mode="after")
+    def hide_unknown_score(self) -> Self:
+        if self.health_status not in {"healthy", "warning", "degraded", "critical"}:
+            self.health_score = None
+        return self
+
     model_config = {"from_attributes": True}
 
 
@@ -348,7 +354,8 @@ class SiteHealthSummary(BaseModel):
     site_id: UUID
     site_name: str
     device_count: int
-    avg_health_score: float
+    measured_device_count: int = 0
+    avg_health_score: float | None
     health_status: str
     healthy: int
     warning: int
@@ -361,7 +368,8 @@ class OrgHealthSummary(BaseModel):
     organization_id: UUID
     site_count: int
     device_count: int
-    avg_health_score: float
+    measured_device_count: int = 0
+    avg_health_score: float | None
     health_status: str
     sites: list[SiteHealthSummary]
 
@@ -511,8 +519,8 @@ class TopHealthIssue(BaseModel):
     site_id: UUID | None = None
     health_score: int
     health_status: str
-    worst_component: str
-    worst_component_score: int
+    worst_component: str | None
+    worst_component_score: int | None
 
 
 class TopIssuesResponse(BaseModel):
@@ -556,7 +564,8 @@ class InfrastructureHealthResponse(BaseModel):
 class ModuleHealthSummary(BaseModel):
     module: str
     device_count: int = 0
-    avg_health_score: float = 0
+    measured_device_count: int = 0
+    avg_health_score: float | None = None
     healthy: int = 0
     warning: int = 0
     degraded: int = 0
@@ -573,13 +582,21 @@ class HealthDailySnapshotResponse(BaseModel):
     organization_id: UUID
     site_id: UUID | None = None
     snapshot_date: date
-    avg_health_score: float
+    avg_health_score: float | None
     device_count: int
     healthy_count: int
     warning_count: int
     degraded_count: int
     critical_count: int
     created_at: datetime
+
+    @model_validator(mode="after")
+    def hide_unmeasured_average(self) -> Self:
+        if not (
+            self.healthy_count + self.warning_count + self.degraded_count + self.critical_count
+        ):
+            self.avg_health_score = None
+        return self
 
     model_config = {"from_attributes": True}
 
@@ -595,7 +612,7 @@ class WANDeviceHealth(BaseModel):
     device_type: str
     site_name: str | None = None
     ip_address: str | None = None
-    health_score: int
+    health_score: int | None
     latency_score: int | None = None
     reachability_score: int | None = None
     utilization_score: int | None = None
@@ -609,8 +626,9 @@ class WANDeviceHealth(BaseModel):
 class SiteRanking(BaseModel):
     site_id: UUID
     site_name: str
-    avg_health_score: float
+    measured_device_count: int = 0
+    avg_health_score: float | None
     device_count: int
     uptime_percent: float | None = None
-    trend: Literal["up", "down", "stable"] = "stable"
-    trend_delta: float = 0.0
+    trend: Literal["up", "down", "stable", "unknown"] = "unknown"
+    trend_delta: float | None = None

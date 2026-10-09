@@ -1,49 +1,18 @@
 # mypy: ignore-errors
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2024-2026 FreeSDN
-"""
-FreeSDN - Notification Retry Task
-=====================================
+"""Retry failed notifications under the persisted delivery's authority.
 
-Background retry queue for transient notification delivery failures.
+Only the next attempt on an owned failed row may send. A PostgreSQL row lock
+serializes competing retries until their outcome commits. Explicit providers
+must remain enabled and match the delivery organization and channel. Platform
+retries may use only platform providers, never a tenant's default provider.
 
-Why this exists
----------------
-``notification_helpers.dispatch_notifications`` runs channel sends
-concurrently via ``asyncio.gather``. Before this task existed, any
-transient SMTP / Slack 5xx / timeout returned
-``DeliveryResult(success=False)`` and the notification was lost forever
-— there was no DLQ and no observability. That meant a single 30-second
-Slack outage could silently drop hundreds of alerts.
-
-How it works
-------------
-``dispatch_notifications`` calls :func:`schedule_retry` for every
-``DeliveryResult(success=False)`` whose error shape looks transient
-(network error, 5xx, timeout). That helper either:
-
-  1. Enqueues this Celery task with an exponential-backoff
-     ``countdown=`` (2 ** attempt minutes, capped at 60 min), OR
-  2. If Celery is unavailable, emits a structured log line
-     ``notification.delivery.retry_scheduled`` carrying all the context
-     an external retry runner / SRE script needs to re-drive the send.
-
-The task itself rebuilds the runtime provider from the
-``NotificationProviderRecord`` row (the same way ``test_stored_provider``
-does), invokes ``provider.send()``, and either:
-
-  - On success: updates the ``NotificationDelivery`` row to
-    ``status=sent``, ``success=true``, ``last_error=null``.
-  - On transient failure with attempts left: re-enqueues itself with
-    the next backoff window.
-  - On permanent failure or final attempt: flips ``retry_dead_letter=true``,
-    sets ``status=failed``, populates ``last_error``, and emits a
-    structured DLQ log line.
-
-Configuration knobs
--------------------
-- ``DEFAULT_MAX_RETRIES = 5`` — total attempts before DLQ (initial + 4 retries).
-- ``MAX_BACKOFF_MINUTES = 60`` — backoff is min(2**attempt, 60) minutes.
+Queue submission logs success only after the broker call returns; a failed
+submission remains visible and is not a durable dead-letter queue. Delivery
+content still comes from the trusted task payload. A crash after a provider
+accepts a message but before commit can cause a duplicate on a later retry;
+this module does not provide a transactional outbox or exactly-once effects.
 """
 
 import asyncio
@@ -52,11 +21,13 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy import update as sa_update
 
 from app.core.celery_app import celery_app
 from app.db.session import CelerySessionLocal as AsyncSessionLocal
-from app.models.notification import NotificationDelivery
+from app.models.core import Organization
+from app.models.notification import NotificationDelivery, NotificationProviderRecord
 from app.services.notification import (
     DeliveryResult,
     DeliveryStatus,
@@ -81,6 +52,7 @@ MAX_BACKOFF_MINUTES: int = 60
 # rate limit, timeout) and retried with backoff.
 _PERMANENT_ERROR_MARKERS: tuple[str, ...] = (
     "header injection",
+    "smtp permanent failure",
     "invalid email",
     "config error",
     "no provider configured",
@@ -117,7 +89,7 @@ def _backoff_minutes(attempt: int) -> int:
 
     attempt=1 → 2 min, 2 → 4, 3 → 8, 4 → 16, 5 → 32, 6+ → 60.
     """
-    return min(2**attempt, MAX_BACKOFF_MINUTES)
+    return min(2 ** min(attempt, 6), MAX_BACKOFF_MINUTES)
 
 
 # ---------------------------------------------------------------------------
@@ -138,27 +110,30 @@ def schedule_retry(
     error: str | None,
     attempt: int = 1,
     max_retries: int = DEFAULT_MAX_RETRIES,
-) -> None:
-    """Enqueue a retry attempt — or emit a structured DLQ log if we cannot.
+) -> bool:
+    """Return whether the broker accepted scheduling the next bounded attempt.
 
-    ``delivery_id`` is the PK of the ``NotificationDelivery`` row that
-    captured the failed send. If we can't enqueue (Celery broker down,
-    not configured), we log enough context that an external retry runner
-    or SRE script can pick up the failure manually.
+    The caller owns committing the failed delivery before this operation.
+    False means no acknowledgement, not proof that a timed-out broker could
+    not have accepted a task. Logs contain identifiers, not message content
+    or transport exceptions. They are not a recoverable payload store.
     """
-    if attempt > max_retries:
+    if (
+        type(attempt) is not int
+        or type(max_retries) is not int
+        or not 1 <= attempt < max_retries <= DEFAULT_MAX_RETRIES
+    ):
         logger.error(
-            "notification.delivery.dlq",
+            "notification.delivery.retry_not_scheduled",
             extra={
                 "delivery_id": delivery_id,
                 "provider_id": provider_id,
                 "channel": channel,
                 "organization_id": organization_id,
                 "attempt": attempt,
-                "error": error,
             },
         )
-        return
+        return False
 
     if not is_transient_error(error):
         logger.info(
@@ -169,29 +144,11 @@ def schedule_retry(
                 "channel": channel,
                 "organization_id": organization_id,
                 "attempt": attempt,
-                "error": error,
             },
         )
-        return
+        return False
 
     countdown = _backoff_minutes(attempt) * 60
-
-    # Always emit the structured "scheduled" log so external retry runners
-    # (or operators tailing logs) can observe the queue even when Celery is
-    # not reachable.
-    logger.info(
-        "notification.delivery.retry_scheduled",
-        extra={
-            "delivery_id": delivery_id,
-            "provider_id": provider_id,
-            "channel": channel,
-            "organization_id": organization_id,
-            "attempt": attempt,
-            "next_attempt": attempt + 1,
-            "countdown_seconds": countdown,
-            "error": error,
-        },
-    )
 
     try:
         retry_notification_delivery.apply_async(
@@ -210,14 +167,25 @@ def schedule_retry(
             countdown=countdown,
             queue="default",
         )
-    except Exception as exc:  # pragma: no cover — broker outage path
-        # If we cannot enqueue, the structured log above is the DLQ
-        # signal an external runner needs.
+    except Exception:
         logger.warning(
-            "notification.delivery.retry_enqueue_failed delivery_id=%s err=%s",
+            "notification.delivery.retry_enqueue_failed delivery_id=%s",
             delivery_id,
-            exc,
         )
+        return False
+    logger.info(
+        "notification.delivery.retry_scheduled",
+        extra={
+            "delivery_id": delivery_id,
+            "provider_id": provider_id,
+            "channel": channel,
+            "organization_id": organization_id,
+            "attempt": attempt,
+            "next_attempt": attempt + 1,
+            "countdown_seconds": countdown,
+        },
+    )
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -238,154 +206,185 @@ async def _do_retry(
     attempt: int,
     max_retries: int,
 ) -> dict[str, Any]:
-    """Re-attempt a single notification send, recording the outcome."""
-    async with AsyncSessionLocal() as session:
-        service = NotificationService(session)
-        try:
-            ch_enum = NotificationChannel(channel)
-        except ValueError:
-            logger.error(
-                "notification.delivery.retry_invalid_channel delivery_id=%s ch=%s",
-                delivery_id,
-                channel,
-            )
-            return {"success": False, "error": "invalid_channel"}
+    """Retry only the current failed attempt under its persisted tenant scope.
 
-        # Resolve provider — either an explicit stored record or the
-        # currently-registered in-memory provider for this channel.
-        runtime = None
-        if provider_id:
-            try:
-                record = await service.get_provider(UUID(provider_id))
-            except Exception:
-                record = None
-            if record is not None:
-                runtime = service._build_runtime_provider(record)
-        if runtime is None:
-            runtime = service._providers.get(ch_enum)
+    The row lock prevents concurrent workers from sending the same committed
+    attempt. A provider effect followed by a failed database commit is still
+    uncertain: this is not an exactly-once protocol or a transactional outbox.
+    """
+    try:
+        delivery_uuid = UUID(delivery_id)
+        organization_uuid = UUID(organization_id) if organization_id is not None else None
+        provider_uuid = UUID(provider_id) if provider_id is not None else None
+        ch_enum = NotificationChannel(channel)
+    except (ValueError, TypeError, AttributeError):
+        return {"success": False, "error": "invalid_retry_arguments"}
+    if (
+        type(attempt) is not int
+        or type(max_retries) is not int
+        or not 2 <= attempt <= max_retries <= DEFAULT_MAX_RETRIES
+    ):
+        return {"success": False, "error": "invalid_retry_arguments"}
 
-        if runtime is None:
-            # THE RETRY QUEUE NEVER RETRIED ANYTHING.
-            #
-            # ``NotificationService._providers`` is an INSTANCE attribute,
-            # populated by ``load_providers_from_db()`` during API startup. This
-            # task runs in a Celery worker -- a different process, with a
-            # brand-new NotificationService whose ``_providers`` is ``{}`` --
-            # and nothing here ever loaded it. The dispatch path meanwhile
-            # enqueues with ``provider_id=None`` ("dispatch path uses in-memory
-            # provider"), which is true of the API process and false of this
-            # one.
-            #
-            # So the first branch found no record, the second found no
-            # in-memory provider, and every single retry fell straight to the
-            # dead-letter below on attempt 1 with "No provider available". The
-            # feature logged ``retry_scheduled``, enqueued a real Celery task,
-            # and dead-lettered it -- an exponential-backoff queue that has
-            # never resent one notification.
-            #
-            # Load them the same way the API process does before giving up.
-            try:
-                await service.load_providers_from_db(
-                    UUID(organization_id) if organization_id else None
+    try:
+        async with AsyncSessionLocal() as session:
+            statement = (
+                select(NotificationDelivery)
+                .where(
+                    NotificationDelivery.id == delivery_uuid,
+                    NotificationDelivery.organization_id == organization_uuid,
+                    NotificationDelivery.channel == ch_enum.value,
+                    NotificationDelivery.subject == title,
+                    NotificationDelivery.success.is_(False),
+                    NotificationDelivery.status == DeliveryStatus.FAILED.value,
+                    NotificationDelivery.retry_dead_letter.is_(False),
+                    NotificationDelivery.attempt == attempt - 1,
                 )
+                .with_for_update()
+            )
+            delivery = (await session.execute(statement)).scalar_one_or_none()
+            if delivery is None:
+                return {"success": False, "error": "delivery_not_retryable"}
+            if organization_uuid is not None:
+                organization = await session.execute(
+                    select(Organization.id).where(
+                        Organization.id == organization_uuid,
+                        Organization.is_active.is_(True),
+                        Organization.deleted_at.is_(None),
+                    )
+                )
+                if organization.scalar_one_or_none() is None:
+                    return {"success": False, "error": "delivery_not_retryable"}
+
+            service = NotificationService(session)
+            runtime = None
+            if provider_uuid is not None:
+                # No fallback from an explicit stale, disabled or foreign ID.
+                record = (
+                    await session.execute(
+                        select(NotificationProviderRecord).where(
+                            NotificationProviderRecord.id == provider_uuid,
+                            NotificationProviderRecord.organization_id == organization_uuid,
+                            NotificationProviderRecord.channel == ch_enum.value,
+                            NotificationProviderRecord.is_enabled.is_(True),
+                        )
+                    )
+                ).scalar_one_or_none()
+                if record is not None:
+                    runtime = service._build_runtime_provider(record)
+            elif organization_uuid is not None:
+                # A fresh worker has no in-memory providers. Load only this org.
+                await service.load_providers_from_db(organization_id=organization_uuid)
                 runtime = service._providers.get(ch_enum)
+            else:
+                # list_providers(None) means all organizations for management.
+                # A platform-scoped delivery may use only a platform provider.
+                record = (
+                    await session.execute(
+                        select(NotificationProviderRecord)
+                        .where(
+                            NotificationProviderRecord.organization_id.is_(None),
+                            NotificationProviderRecord.channel == ch_enum.value,
+                            NotificationProviderRecord.is_enabled.is_(True),
+                        )
+                        .order_by(
+                            NotificationProviderRecord.is_default.desc(),
+                            NotificationProviderRecord.created_at.desc(),
+                            NotificationProviderRecord.id,
+                        )
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                if record is not None:
+                    runtime = service._build_runtime_provider(record)
+
+            if runtime is None:
+                await _mark_dead_letter(
+                    session,
+                    delivery_id=delivery_id,
+                    attempt=attempt,
+                    error="No provider available for retry",
+                )
+                await session.commit()
+                return {"success": False, "error": "no_provider", "dead_letter": True}
+
+            payload = NotificationPayload(title=title, body=body, body_html=body_html)
+            try:
+                result: DeliveryResult = await runtime.send(recipient, payload)
             except Exception:
-                logger.warning(
-                    "notification.delivery.retry_provider_load_failed delivery_id=%s ch=%s",
-                    delivery_id,
-                    channel,
-                    exc_info=True,
+                result = DeliveryResult(
+                    success=False,
+                    channel=ch_enum,
+                    status=DeliveryStatus.FAILED,
+                    error="Notification retry failed",
+                    provider=getattr(runtime, "provider_type", None),
                 )
 
-        if runtime is None:
-            await _mark_dead_letter(
-                session,
-                delivery_id=delivery_id,
-                attempt=attempt,
-                error=f"No provider available for channel {channel}",
-            )
-            await session.commit()
-            return {"success": False, "error": "no_provider"}
+            if result.success:
+                await session.execute(
+                    sa_update(NotificationDelivery)
+                    .where(NotificationDelivery.id == delivery_uuid)
+                    .values(
+                        status=result.status.value,
+                        success=True,
+                        attempt=attempt,
+                        last_error=None,
+                        error_message=None,
+                        retry_dead_letter=False,
+                        sent_at=datetime.now(UTC),
+                    )
+                )
+                await session.commit()
+                logger.info(
+                    "notification.delivery.retry_completed delivery_id=%s attempt=%d",
+                    delivery_id,
+                    attempt,
+                )
+                return {"success": True, "attempt": attempt, "status": result.status.value}
 
-        payload = NotificationPayload(title=title, body=body, body_html=body_html)
-        try:
-            result: DeliveryResult = await runtime.send(recipient, payload)
-        except Exception as exc:  # noqa: BLE001 — any provider exception
-            result = DeliveryResult(
-                success=False,
-                channel=ch_enum,
-                status=DeliveryStatus.FAILED,
-                error=str(exc),
-                provider=getattr(runtime, "provider_type", None),
-            )
+            if attempt >= max_retries or not is_transient_error(result.error):
+                await _mark_dead_letter(
+                    session, delivery_id=delivery_id, attempt=attempt, error=result.error
+                )
+                await session.commit()
+                logger.error(
+                    "notification.delivery.dlq delivery_id=%s attempt=%d",
+                    delivery_id,
+                    attempt,
+                )
+                return {"success": False, "dead_letter": True, "error": result.error}
 
-        if result.success:
             await session.execute(
                 sa_update(NotificationDelivery)
-                .where(NotificationDelivery.id == UUID(delivery_id))
+                .where(NotificationDelivery.id == delivery_uuid)
                 .values(
-                    status=DeliveryStatus.SENT.value,
-                    success=True,
+                    status=DeliveryStatus.FAILED.value,
+                    success=False,
                     attempt=attempt,
-                    last_error=None,
-                    error_message=None,
-                    retry_dead_letter=False,
-                    sent_at=datetime.now(UTC),
+                    last_error=result.error,
+                    error_message=result.error,
                 )
             )
             await session.commit()
-            logger.info(
-                "notification.delivery.retry_succeeded delivery_id=%s attempt=%d",
-                delivery_id,
-                attempt,
-            )
-            return {"success": True, "attempt": attempt}
-
-        # Failure path — decide between DLQ and another retry.
-        if attempt >= max_retries or not is_transient_error(result.error):
-            await _mark_dead_letter(
-                session,
+            scheduled = schedule_retry(
                 delivery_id=delivery_id,
-                attempt=attempt,
+                provider_id=provider_id,
+                channel=channel,
+                recipient=recipient,
+                title=title,
+                body=body,
+                body_html=body_html,
+                organization_id=organization_id,
                 error=result.error,
-            )
-            await session.commit()
-            logger.error(
-                "notification.delivery.dlq delivery_id=%s attempt=%d err=%s",
-                delivery_id,
-                attempt,
-                result.error,
-            )
-            return {"success": False, "dead_letter": True, "error": result.error}
-
-        # Update row, schedule next attempt.
-        await session.execute(
-            sa_update(NotificationDelivery)
-            .where(NotificationDelivery.id == UUID(delivery_id))
-            .values(
-                status=DeliveryStatus.FAILED.value,
-                success=False,
                 attempt=attempt,
-                last_error=result.error,
-                error_message=result.error,
+                max_retries=max_retries,
             )
-        )
-        await session.commit()
-
-        schedule_retry(
-            delivery_id=delivery_id,
-            provider_id=provider_id,
-            channel=channel,
-            recipient=recipient,
-            title=title,
-            body=body,
-            body_html=body_html,
-            organization_id=organization_id,
-            error=result.error,
-            attempt=attempt,
-            max_retries=max_retries,
-        )
-        return {"success": False, "rescheduled": True, "error": result.error}
+            return {"success": False, "rescheduled": scheduled, "error": result.error}
+    except Exception:
+        # Includes a failed/uncertain commit after a provider effect. Never
+        # report successful persistence or serialize database/transport secrets.
+        logger.warning("notification.delivery.retry_state_unavailable")
+        return {"success": False, "error": "retry_state_unavailable"}
 
 
 async def _mark_dead_letter(

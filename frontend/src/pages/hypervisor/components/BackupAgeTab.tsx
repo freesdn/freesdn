@@ -31,6 +31,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { hypervisorApi } from '@/lib/api';
 import { formatBytes } from './helpers';
+import { backupAgeStatus, backupAgeCounts } from './backupAge';
 
 interface BackupAgeTabProps {
   controllerId: string;
@@ -70,30 +71,16 @@ export function BackupAgeTab({ controllerId, nodes }: BackupAgeTabProps) {
   const report: any = reportResp?.data || {};
   const vms: any[] = report?.vms || report?.guests || [];
 
-  // This tab read `v.status` and `v.last_backup`. Neither field exists.
-  // BackupAgeReport carries `last_backup_time`, `age_hours` and `is_stale`,
-  // so `v.status === 'never'` was never true and `v.last_backup == null` was
-  // ALWAYS true -- every guest counted and rendered as "Never backed up",
-  // including ones backed up an hour ago. `stale` and `ok` were always 0 and
-  // the sort was a no-op.
-  const statusOf = (v: any): 'never' | 'stale' | 'ok' => {
-    if (v?.last_backup_time == null) return 'never';
-    return v?.is_stale ? 'stale' : 'ok';
-  };
-
-  // Prefer the server's own counts -- it computed them against the same
-  // threshold and does not depend on this page agreeing about field names.
-  const totalVMs = report?.total_vms ?? vms.length;
-  const neverBacked = report?.never_backed_up ?? vms.filter((v) => statusOf(v) === 'never').length;
-  const stale = report?.stale ?? vms.filter((v) => statusOf(v) === 'stale').length;
-  const ok = report?.backed_up ?? vms.filter((v) => statusOf(v) === 'ok').length;
-
-  // Sort by age descending (worst first): never > stale > ok
+  const statusOf = (v: any) => backupAgeStatus(v, report.complete ?? true);
+  const counts = backupAgeCounts({ ...report, vms });
+  const totalVMs = counts.total;
+  const neverBacked = counts.never;
+  const stale = counts.stale;
+  const ok = counts.ok;
   const sorted = [...vms].sort((a: any, b: any) => {
-    const statusOrder = (s: string) => (s === 'never' ? 3 : s === 'stale' ? 2 : 1);
-    const orderDiff = statusOrder(statusOf(b)) - statusOrder(statusOf(a));
-    if (orderDiff !== 0) return orderDiff;
-    return (b.age_hours ?? Infinity) - (a.age_hours ?? Infinity);
+    const order = { unknown: 4, never: 3, stale: 2, ok: 1 };
+    const difference = order[statusOf(b)] - order[statusOf(a)];
+    return difference || (b.age_hours ?? Infinity) - (a.age_hours ?? Infinity);
   });
 
   // ── Prune section state ─────────────────────────────────────────────
@@ -208,8 +195,13 @@ export function BackupAgeTab({ controllerId, nodes }: BackupAgeTabProps) {
         <ErrorState message={t('BackupAgeTab.errors.loadReport')} onRetry={() => refetch()} />
       ) : (
         <>
+          {report.complete === false && (
+            <div role="status" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+              {t('BackupAgeTab.errors.incomplete')}
+            </div>
+          )}
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <Card>
               <CardContent noOffset className="text-center">
                 <p className="text-xs text-muted-foreground mb-1">{t('BackupAgeTab.summary.totalVMs')}</p>
@@ -232,6 +224,12 @@ export function BackupAgeTab({ controllerId, nodes }: BackupAgeTabProps) {
               <CardContent noOffset className="text-center">
                 <p className="text-xs text-muted-foreground mb-1">{t('BackupAgeTab.summary.neverBackedUp')}</p>
                 <p className="text-2xl font-bold text-red-500">{neverBacked}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent noOffset className="text-center">
+                <p className="text-xs text-muted-foreground mb-1">{t('BackupAgeTab.summary.unknown')}</p>
+                <p className="text-2xl font-bold text-amber-500">{counts.unknown}</p>
               </CardContent>
             </Card>
           </div>
@@ -263,9 +261,13 @@ export function BackupAgeTab({ controllerId, nodes }: BackupAgeTabProps) {
                         ? new Date(typeof vm.last_backup_time === 'number' ? vm.last_backup_time * 1000 : vm.last_backup_time).toLocaleString()
                         : '-'}
                     </TableCell>
-                    <TableCell className="text-xs tabular-nums">{formatAge(vm.age_hours, t)}</TableCell>
+                    <TableCell className="text-xs tabular-nums">{statusOf(vm) === 'unknown' && vm.age_hours == null ? t('BackupAgeTab.status.unknown') : formatAge(vm.age_hours, t)}</TableCell>
                     <TableCell>
-                      {statusOf(vm) === 'ok' ? (
+                      {statusOf(vm) === 'unknown' ? (
+                        <Badge variant="outline" className="gap-1 text-xs">
+                          <AlertTriangle className="h-3 w-3" /> {t('BackupAgeTab.status.unknown')}
+                        </Badge>
+                      ) : statusOf(vm) === 'ok' ? (
                         <Badge variant="default" className="gap-1 text-xs">
                           <CheckCircle className="h-3 w-3" /> {t('BackupAgeTab.status.ok')}
                         </Badge>

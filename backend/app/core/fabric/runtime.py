@@ -110,8 +110,18 @@ async def fabric_permission_checker(actor_id: UUID | None, permission: str, org_
         from app.models.core import User
 
         async with async_session_factory() as db:
-            user = (await db.execute(select(User).where(User.id == actor_id))).scalar_one_or_none()
-            if user is None or not getattr(user, "is_active", False):
+            user = (
+                await db.execute(
+                    select(User).where(
+                        User.id == actor_id, User.deleted_at.is_(None), User.is_active.is_(True)
+                    )
+                )
+            ).scalar_one_or_none()
+            if (
+                user is None
+                or not getattr(user, "is_active", False)
+                or getattr(user, "deleted_at", None) is not None
+            ):
                 return False
             # The author must still belong to the Connection's org.
             if user.organization_id != org_id:
@@ -119,7 +129,7 @@ async def fabric_permission_checker(actor_id: UUID | None, permission: str, org_
             perms = await _load_user_permissions(user)
             return CurrentUser(user, perms).has_permission(permission)
     except Exception:
-        logger.exception("Fabric: permission check failed for %r; denying", permission)
+        logger.warning("Fabric: permission check unavailable for %r; denying", permission)
         return False
 
 

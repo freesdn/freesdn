@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2024-2026 FreeSDN
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -69,19 +69,22 @@ async def test_trigger_task_queues_allowed_task_on_fixed_queue() -> None:
     fake_task = MagicMock()
     fake_task.apply_async.return_value = fake_result
 
-    with patch("app.api.v1.endpoints.tasks.celery_app.tasks.get", return_value=fake_task), patch(
-        "app.api.v1.endpoints.tasks.progress_store.set_progress"
-    ) as set_progress:
+    with (
+        patch("app.api.v1.endpoints.tasks.celery_app.tasks.get", return_value=fake_task),
+        patch(
+            "app.api.v1.endpoints.tasks.progress_store.seed_progress", return_value=True
+        ) as seed_progress,
+    ):
         response = await trigger_task(
             _request("backup.run_scheduled"),
             current_user=_user(),
         )
 
-    assert response.task_id == "task-123"
+    assert response.task_id == fake_task.apply_async.call_args.kwargs["task_id"]
     assert response.task_name == "backup.run_scheduled"
     # The endpoint injects the caller's organization_id into the task kwargs for
     # tenant scoping (overwriting any caller-supplied value); _user() is org-1.
     fake_task.apply_async.assert_called_once_with(
-        args=[], kwargs={"organization_id": "org-1"}, queue="default"
+        task_id=ANY, args=[], kwargs={"organization_id": "org-1"}, queue="default"
     )
-    set_progress.assert_called_once()
+    seed_progress.assert_called_once()

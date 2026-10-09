@@ -1,0 +1,42 @@
+Optional development and Prometheus image qualification
+======================================================
+
+The development frontend uses Node 24.21.0 LTS on Alpine 3.24. This is a
+development-only platform change from Debian/glibc to Alpine/musl. The production
+frontend still serves compiled static assets through Caddy (or optional NGINX).
+Do not infer production readiness, a supported architecture matrix or a zero-risk
+claim from a clean scanner result.
+
+The official Node image documentation identifies musl builds as experimental in
+Node's platform support policy; non-amd64 native modules require separate tests.
+Do not reuse host-built node_modules across architectures or libc families.
+The development entrypoint hashes package.json, package-lock.json, .npmrc,
+Node version/ABI, platform, architecture, libc and npm version. It runs npm ci
+when the fingerprint changes or required dependency files are absent. The stamp
+is written only after success. Keep the lockfile committed and consistent with
+package.json: lock drift now refuses startup rather than rewriting the lock.
+Two simultaneous installers must not share the same writable dependency volume.
+
+The development Dockerfile permits a Node heap up to 4 GiB; a smaller container
+limit can still terminate the process. A heap limit is not a total memory budget.
+The development Compose service currently has no explicit memory limit. The
+qualification harness uses a bounded 4 GiB/no-swap container for its short HTTP
+smoke, records actual cgroup metrics, and does not establish a sustained-load
+memory recommendation. Vite's hostname protection remains enabled.
+
+Prometheus keeps its checksum-verified 3.14.0 source and existing frozen UI lock.
+The Go build overlay selects OpenTelemetry 1.45.0 to fix CVE-2026-81870. Review
+transitive module changes and scan both prometheus and promtool. An Unknown
+OpenPGP advisory must remain visible and requires fresh source reachability and
+exact runtime binary verification; it is not an automatic scanner exemption.
+
+Build release qualification images with refreshed base manifests and invalidated
+package-install layers. A cached RUN apt/apk upgrade does not refresh packages.
+Preserve raw scanner output, failed attempts, source and image identifiers. Test
+the exact image digests being considered, including dependency-volume migration,
+default entrypoint, native module transforms, locked install and hostname refusal.
+
+References:
+https://github.com/nodejs/docker-node#image-variants
+https://github.com/nodejs/docker-node#supported-platforms
+https://github.com/open-telemetry/opentelemetry-go/releases/tag/v1.45.0

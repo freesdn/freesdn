@@ -1265,6 +1265,7 @@ function SiteVPNTab({ siteId, vpnConfig, vpnLoading, vpnError, toast }: {
       });
       toast({ title: t('SiteDetailPage.vpn.toasts.imported'), description: res.data.message });
       queryClient.invalidateQueries({ queryKey: ['site-vpn', siteId] });
+      queryClient.invalidateQueries({ queryKey: ['siteVpnConfigs', siteId] });
       setBrainDiscovery(null);
     } catch (err: unknown) {
       toast({ title: t('SiteDetailPage.vpn.toasts.importFailed'), description: getApiErrorMessage(err, t('SiteDetailPage.vpn.toasts.importConfigFailed')).slice(0, 200), variant: 'destructive' });
@@ -1290,17 +1291,19 @@ function SiteVPNTab({ siteId, vpnConfig, vpnLoading, vpnError, toast }: {
 
   // OpenVPN config import. Errors propagate to FormDialog's banner.
   const ovpnImportMutation = useMutation({
-    mutationFn: (configContent: string) =>
-      vpnApi.importOpenVPNConfig({ site_id: siteId, config_content: configContent }),
+    mutationFn: (values: { config_content: string; config_id?: string }) =>
+      vpnApi.importOpenVPNConfig({ site_id: siteId, ...values }),
     onSuccess: (res) => {
       toast({ title: t('SiteDetailPage.vpn.toasts.ovpnImported'), description: t('SiteDetailPage.vpn.toasts.ovpnEndpoint', { endpoint: res.data.vpn_endpoint, port: res.data.port }) });
       queryClient.invalidateQueries({ queryKey: ['site-vpn', siteId] });
+      queryClient.invalidateQueries({ queryKey: ['siteVpnConfigs', siteId] });
       setShowOvpnImport(false);
     },
   });
 
   const ovpnSchema = z.object({
     config_content: z.string().min(1, t('SiteDetailPage.vpn.validation.pasteConfig')).max(102400, t('SiteDetailPage.vpn.validation.configTooLarge')),
+    config_id: z.union([z.string().uuid(), z.literal('')]),
   });
   type OvpnFormValues = z.infer<typeof ovpnSchema>;
 
@@ -1930,14 +1933,40 @@ function SiteVPNTab({ siteId, vpnConfig, vpnLoading, vpnError, toast }: {
         title={t('SiteDetailPage.vpn.ovpnDialog.title')}
         description={t('SiteDetailPage.vpn.ovpnDialog.description')}
         schema={ovpnSchema}
-        defaultValues={{ config_content: '' }}
+        defaultValues={{ config_content: '', config_id: '' }}
         submitLabel={t('SiteDetailPage.vpn.ovpnDialog.submit')}
         contentClassName="sm:max-w-xl"
         onSubmit={async (values) => {
-          await ovpnImportMutation.mutateAsync(values.config_content);
+          await ovpnImportMutation.mutateAsync({
+            config_content: values.config_content,
+            config_id: values.config_id || undefined,
+          });
         }}
       >
         {(form) => (
+          <>
+          <FormField
+            control={form.control}
+            name="config_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('SiteDetailPage.vpn.ovpnDialog.profileLabel')}</FormLabel>
+                <Select value={field.value || 'automatic'} onValueChange={(value) => field.onChange(value === 'automatic' ? '' : value)}>
+                  <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="automatic">{t('SiteDetailPage.vpn.ovpnDialog.automaticProfile')}</SelectItem>
+                    {multiConfigs?.configs.filter((cfg) => cfg.vpn_type === 'openvpn' && cfg.vpn_source === 'manual').map((cfg) => (
+                      <SelectItem key={cfg.id} value={cfg.id}>
+                        {cfg.vpn_endpoint || 'OpenVPN'} · {cfg.id.slice(0, 8)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t('SiteDetailPage.vpn.ovpnDialog.profileHint')}</p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <FormField
             control={form.control}
             name="config_content"
@@ -1958,6 +1987,7 @@ function SiteVPNTab({ siteId, vpnConfig, vpnLoading, vpnError, toast }: {
               </FormItem>
             )}
           />
+          </>
         )}
       </FormDialog>
 

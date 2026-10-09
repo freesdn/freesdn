@@ -131,10 +131,15 @@ async def resolve_actor_site_grants(db: Any, actor_id: UUID | None) -> set[UUID]
     an empty set for those would be fail-CLOSED and would silently break every
     existing automation rule, which is a different outage rather than a fix.
 
-    ``None`` is also returned when the actor cannot be resolved (deleted user,
-    missing id). That is deliberate: these paths already re-check the author's
-    PERMISSION at run time, and failing closed here would disable automations
-    on a lookup blip. The grant is a narrowing, not the authorisation.
+    A missing, inactive or deleted actor row, or an unsuccessful lookup, raises
+    ``PermissionError``. A preceding permission check cannot make a later grant
+    lookup failure safe: returning ``None`` would remove the author's site
+    restrictions. No operation may run on the strength of that fallback.
+
+    A missing actor id remains neutral only for explicitly permission-free
+    native operations. Protected operations must reject it at their permission
+    gate. Successfully resolved administrators and users with no grants retain
+    the existing hybrid-model behavior described above.
     """
     if actor_id is None:
         return None
@@ -147,20 +152,21 @@ async def resolve_actor_site_grants(db: Any, actor_id: UUID | None) -> set[UUID]
         result = await db.execute(
             select(User)
             .options(selectinload(User.site_access))
-            .where(User.id == actor_id, User.deleted_at.is_(None))
+            .where(User.id == actor_id, User.deleted_at.is_(None), User.is_active.is_(True))
         )
         user = result.scalar_one_or_none()
-        if user is None:
-            return None
+        if user is None or not user.is_active or user.deleted_at is not None:
+            raise PermissionError("Author is unavailable for site authorization")
         # Mirrors CurrentUser.is_org_admin / is_superuser.
         if (user.role or "") in ("super_admin", "admin", "org_admin"):
             return None
         granted = {sa.site_id for sa in (user.site_access or []) if sa.site_id}
         return granted or None
-    except Exception:  # pragma: no cover - defensive, see docstring
+    except Exception:
         logger.warning(
-            "Could not resolve site grants for actor %s; proceeding unrestricted",
+            "Could not verify site grants for actor %s; refusing operation",
             actor_id,
-            exc_info=True,
         )
-        return None
+        # Do not expose database/client exception details through caller logs
+        # or stored execution errors.
+        raise PermissionError("Site authorization denied or unavailable") from None

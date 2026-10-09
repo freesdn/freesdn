@@ -2,7 +2,7 @@
   "FirmwarePage": {
     "header": {
       "title": "Firmware Management",
-      "description": "Manage and deploy firmware updates across your devices"
+      "description": "Manage the firmware catalog and review recorded job history"
     },
     "errors": {
       "partialLoad": "Some data failed to load. Results may be incomplete."
@@ -224,6 +224,7 @@
       "selectFirmware": "Please select a firmware version",
       "upgradeFailed": "Upgrade failed",
       "unknownError": "Unknown error"
-    }
+    },
+    "catalogExecutionUnavailable": "This catalog stores firmware images and job history. Catalog deployment, automatic backup and rollback are unavailable. Use the controller-specific staged firmware workflow for supported upgrades. Historical catalog completions were not verified against hardware."
   }
 }

@@ -1,22 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
-/**
- * Hypervisor Module - Kiosk Mode
- * Fullscreen NOC display with auto-refresh dashboard metrics
- */
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { X, Server, Monitor, Box, Cpu, MemoryStick, HardDrive } from 'lucide-react';
+import { X, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { hypervisorApi } from '@/lib/api';
-import { formatBytes } from './helpers';
-import type { HypervisorNode } from '@/lib/api';
+import { DashboardObservation } from './DashboardObservation';
+import { useObservationFreshness } from './dashboardObservationState';
 
 interface KioskModeProps {
   controllerId: string;
-  nodes: HypervisorNode[];
   onExit: () => void;
 }
 
@@ -57,176 +51,70 @@ function RingChart({ value, size = 120, strokeWidth = 10, color = '#3b82f6' }: {
   );
 }
 
-export function KioskMode({ controllerId, nodes, onExit }: KioskModeProps) {
+export function KioskMode({ controllerId, onExit }: KioskModeProps) {
   const { t } = useTranslation('hypervisor');
   const [currentTime, setCurrentTime] = useState(new Date());
-
-  // Auto-update clock every second
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-
-  // ESC key to exit
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onExit();
-    };
+    const handleKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onExit(); };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onExit]);
-
-  // Dashboard data with 10s auto-refresh
-  const { data: dashResp, isError } = useQuery({
+  const { data: response, isError, isPending } = useQuery({
     queryKey: ['hypervisor', 'kiosk', 'dashboard', controllerId],
     queryFn: () => hypervisorApi.getDashboard(controllerId),
     enabled: !!controllerId,
+    retry: false,
     refetchInterval: 10_000,
   });
-  const dash = dashResp?.data;
-
-  const cpuColor = (dash?.cpu_usage_percent ?? 0) > 80 ? '#ef4444' : (dash?.cpu_usage_percent ?? 0) > 60 ? '#f59e0b' : '#3b82f6';
-  const memColor = (dash?.memory_usage_percent ?? 0) > 80 ? '#ef4444' : (dash?.memory_usage_percent ?? 0) > 60 ? '#f59e0b' : '#8b5cf6';
-  const storColor = (dash?.storage_usage_percent ?? 0) > 85 ? '#ef4444' : (dash?.storage_usage_percent ?? 0) > 70 ? '#f59e0b' : '#10b981';
-
-  return (
-    <div className="fixed inset-0 z-50 bg-gray-950 text-white overflow-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 sm:px-8 py-4 border-b border-gray-800">
-        <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
-          <Server className="h-6 w-6 text-blue-400 hidden sm:block" />
-          <span className="text-sm sm:text-lg font-medium text-gray-300">{t('KioskMode.header.title')}</span>
-          <span className="text-2xl sm:text-4xl font-mono tabular-nums text-white">
-            {currentTime.toLocaleTimeString()}
-          </span>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onExit}
-          className="text-gray-400 hover:text-white hover:bg-gray-800"
-        >
-          <X className="h-5 w-5" />
-        </Button>
+  const dash = response?.data;
+  const freshness = useObservationFreshness(dash);
+  const validIdentity = !!controllerId && dash?.controller_id === controllerId;
+  const show = !isError && !isPending && validIdentity && freshness.state === 'current';
+  const unknown = t('HypervisorPage.stats.unknown');
+  const count = (value: number | null) => value == null ? unknown : value;
+  return <div className="fixed inset-0 z-50 bg-background text-foreground overflow-auto">
+    <div className="flex items-center justify-between px-4 sm:px-8 py-4 border-b border-border">
+      <div className="flex items-center gap-4 flex-wrap"><Server className="h-6 w-6 text-primary" />
+        <span>{t('KioskMode.header.title')}</span><span className="text-2xl font-mono">{currentTime.toLocaleTimeString()}</span>
       </div>
-
-      {/* Error State */}
-      {isError && (
-        <div className="col-span-full text-center py-8">
-          <p className="text-red-400 text-xl">{t('KioskMode.error.connectionLost')}</p>
-          <p className="text-gray-500 text-sm mt-2">{t('KioskMode.error.autoRetrying')}</p>
-        </div>
-      )}
-
-      {/* Main Grid */}
-      <div className="p-4 sm:p-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-8">
-        {/* CPU Usage */}
-        <div className="bg-gray-900 rounded-xl p-8 flex flex-col items-center justify-center border border-gray-800">
-          <div className="flex items-center gap-2 mb-4 text-gray-400">
-            <Cpu className="h-5 w-5" />
-            <span className="text-sm font-medium uppercase tracking-wider">{t('KioskMode.metrics.cpuUsage')}</span>
-          </div>
-          <div className="relative">
-            <RingChart value={dash?.cpu_usage_percent ?? 0} size={160} strokeWidth={12} color={cpuColor} />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-6xl font-bold tabular-nums">{dash?.cpu_usage_percent ?? 0}</span>
-              <span className="text-2xl text-gray-400 ml-1">%</span>
-            </div>
-          </div>
-          <p className="text-sm text-gray-500 mt-4">{t('KioskMode.metrics.cores', { count: dash?.total_cpu_cores ?? 0 })}</p>
-        </div>
-
-        {/* Memory Usage */}
-        <div className="bg-gray-900 rounded-xl p-8 flex flex-col items-center justify-center border border-gray-800">
-          <div className="flex items-center gap-2 mb-4 text-gray-400">
-            <MemoryStick className="h-5 w-5" />
-            <span className="text-sm font-medium uppercase tracking-wider">{t('KioskMode.metrics.memoryUsage')}</span>
-          </div>
-          <div className="relative">
-            <RingChart value={dash?.memory_usage_percent ?? 0} size={160} strokeWidth={12} color={memColor} />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-6xl font-bold tabular-nums">{dash?.memory_usage_percent ?? 0}</span>
-              <span className="text-2xl text-gray-400 ml-1">%</span>
-            </div>
-          </div>
-          <p className="text-sm text-gray-500 mt-4">{t('KioskMode.metrics.total', { value: formatBytes(dash?.total_memory_bytes ?? 0) })}</p>
-        </div>
-
-        {/* Storage Usage */}
-        <div className="bg-gray-900 rounded-xl p-8 flex flex-col items-center justify-center border border-gray-800">
-          <div className="flex items-center gap-2 mb-4 text-gray-400">
-            <HardDrive className="h-5 w-5" />
-            <span className="text-sm font-medium uppercase tracking-wider">{t('KioskMode.metrics.storageUsage')}</span>
-          </div>
-          <div className="relative">
-            <RingChart value={dash?.storage_usage_percent ?? 0} size={160} strokeWidth={12} color={storColor} />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-6xl font-bold tabular-nums">{dash?.storage_usage_percent ?? 0}</span>
-              <span className="text-2xl text-gray-400 ml-1">%</span>
-            </div>
-          </div>
-          <p className="text-sm text-gray-500 mt-4">{t('KioskMode.metrics.total', { value: formatBytes(dash?.total_storage_bytes ?? 0) })}</p>
-        </div>
-
-        {/* Node Status Grid */}
-        <div className="bg-gray-900 rounded-xl p-8 border border-gray-800">
-          <div className="flex items-center gap-2 mb-6 text-gray-400">
-            <Server className="h-5 w-5" />
-            <span className="text-sm font-medium uppercase tracking-wider">{t('KioskMode.metrics.nodeStatus')}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {nodes.map((node) => (
-              <div
-                key={node.node}
-                className="flex items-center gap-2 p-3 rounded-lg bg-gray-800/50"
-              >
-                <div className={`h-3 w-3 rounded-full ${node.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-sm font-medium truncate">{node.node}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-sm text-gray-500 mt-4">
-            {t('KioskMode.metrics.nodesOnline', {
-              online: nodes.filter((n) => n.status === 'online').length,
-              total: nodes.length,
-            })}
-          </p>
-        </div>
-
-        {/* Running VMs */}
-        <div className="bg-gray-900 rounded-xl p-8 flex flex-col items-center justify-center border border-gray-800">
-          <div className="flex items-center gap-2 mb-4 text-gray-400">
-            <Monitor className="h-5 w-5" />
-            <span className="text-sm font-medium uppercase tracking-wider">{t('KioskMode.metrics.virtualMachines')}</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-6xl font-bold tabular-nums text-blue-400">
-              {dash?.running_vms ?? 0}
-            </span>
-            <span className="text-2xl text-gray-500">/ {dash?.total_vms ?? 0}</span>
-          </div>
-          <Badge variant="outline" className="mt-4 text-gray-400 border-gray-700">
-            {t('KioskMode.metrics.running')}
-          </Badge>
-        </div>
-
-        {/* Running Containers */}
-        <div className="bg-gray-900 rounded-xl p-8 flex flex-col items-center justify-center border border-gray-800">
-          <div className="flex items-center gap-2 mb-4 text-gray-400">
-            <Box className="h-5 w-5" />
-            <span className="text-sm font-medium uppercase tracking-wider">{t('KioskMode.metrics.containers')}</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-6xl font-bold tabular-nums text-purple-400">
-              {dash?.running_containers ?? 0}
-            </span>
-            <span className="text-2xl text-gray-500">/ {dash?.total_containers ?? 0}</span>
-          </div>
-          <Badge variant="outline" className="mt-4 text-gray-400 border-gray-700">
-            {t('KioskMode.metrics.running')}
-          </Badge>
-        </div>
-      </div>
+      <Button variant="ghost" size="sm" onClick={onExit} aria-label={t('DashboardObservation.exitKiosk')}><X className="h-5 w-5" /></Button>
     </div>
-  );
+    <div className="p-4 sm:p-8 space-y-6">
+      {isPending && controllerId ? <p role="status">{t('DashboardObservation.loading')}</p>
+        : isError || !validIdentity ? <div role="alert"><p className="text-destructive">{t('KioskMode.error.connectionLost')}</p><p>{t('KioskMode.error.autoRetrying')}</p></div>
+          : dash && <DashboardObservation data={dash} />}
+      {show && dash && <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {([
+          { key: 'cpu', value: dash.cpu_usage_percent },
+          { key: 'memory', value: dash.memory_usage_percent },
+          { key: 'node_filesystem', value: dash.storage_usage_percent },
+        ] as const).map(item => {
+          const available = dash.metric_coverage?.[item.key]?.status === 'available' && item.value != null && Number.isFinite(item.value) && item.value >= 0 && item.value <= 100;
+          return <div key={item.key} className="bg-card rounded-xl p-8 flex flex-col items-center border border-border">
+            <h2 className="mb-4 text-muted-foreground">{t(`DashboardObservation.metrics.${item.key}`)}</h2>
+            {available ? <div className="relative" data-testid={`kiosk-gauge-${item.key}`}>
+              <RingChart value={item.value!} size={160} color={item.value! > 85 ? 'var(--color-destructive)' : 'var(--color-primary)'} />
+              <strong className="absolute inset-0 flex items-center justify-center text-4xl">{item.value}%</strong>
+            </div> : <p className="text-3xl text-warning">{unknown}</p>}
+          </div>;
+        })}
+        <div className="bg-card rounded-xl p-8 border border-border">
+          <h2 className="mb-4">{t('KioskMode.metrics.nodeStatus')}</h2>
+          {dash.nodes.map(node => <p key={node.node} className="flex justify-between gap-4"><span>{node.node}</span><span className={node.status === 'online' ? 'text-success' : node.status === 'offline' ? 'text-destructive' : 'text-warning'}>{t(`DashboardObservation.nodeStatus.${node.status}`)}</span></p>)}
+          <p className="mt-4 text-muted-foreground">{count(dash.online_nodes)} / {count(dash.total_nodes)}</p>
+        </div>
+        {([
+          ['virtualMachines', dash.running_vms, dash.total_vms],
+          ['containers', dash.running_containers, dash.total_containers],
+        ] as const).map(([key, running, total]) => <div key={key} className="bg-card rounded-xl p-8 border border-border">
+          <h2>{t(`KioskMode.metrics.${key}`)}</h2><p className="mt-6 text-4xl">{count(running)} / {count(total)}</p><p className="mt-4 text-muted-foreground">{t('KioskMode.metrics.running')}</p>
+        </div>)}
+      </div>}
+      {!isPending && !isError && validIdentity && freshness.state !== 'current' && <p role="alert" className="text-warning">{t('DashboardObservation.refreshRequired')}</p>}
+    </div>
+  </div>;
 }

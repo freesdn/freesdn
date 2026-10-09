@@ -430,7 +430,8 @@
       "passLabel": "备份口令",
       "passPlaceholder": "创建该备份时使用的口令",
       "submit": "还原此实例",
-      "failed": "还原失败——请检查文件和口令。"
+      "failed": "还原失败——请检查文件和口令。",
+      "unconfirmed": "恢复尚未确认。请在重试前查看服务器状态。"
     },
     "hero": {
       "title": "欢迎使用 {{appName}}",

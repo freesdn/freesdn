@@ -1,0 +1,289 @@
+FreeSDN database runtime: upgrading, and the exceptional migration path
+======================================================================
+
+Upgrading from 26.09.0 to 26.10.0 is an IMAGE-ONLY update. Pull the new images
+and start the stack. There is no logical migration, no new volume, no locale
+change and no downtime beyond the restart. The procedure in the second half of
+this file is NOT part of that upgrade.
+
+This file previously documented a Debian -> Alpine transition. That transition
+was not shipped: 26.10.0 stays on the Debian runtime precisely so that the
+ordinary upgrade stays an image swap. The statements it carried about Alpine
+3.24, the builtin C.UTF-8 locale provider and postgres UID 70 were true only of
+that withdrawn candidate and are corrected below.
+
+The ordinary upgrade
+--------------------
+The shipped images use PostgreSQL 18 on Debian trixie, with rebuilt gosu and
+supported OS updates. LogDB contains checksum-pinned TimescaleDB 2.30.2, with
+the 2.30.1 versioned library and install SQL retained for exact logical
+restores. Fresh databases select 2.30.2. A restored database retains its source
+extension version; the migration tool does not upgrade or downgrade it
+implicitly. Extension upgrades remain a separate reviewed operation on the
+recovered target, never on the sole source copy.
+
+New clusters use data checksums. The locale provider, collation and the
+postgres OS UID/GID (999) are unchanged from 26.09.0, which is what makes the
+existing volume directly reusable.
+
+What the entrypoint does to an existing volume
+----------------------------------------------
+The entrypoint records a runtime marker, FREESDN_RUNTIME, inside PGDATA, and
+decides before upstream's startup or any ownership change:
+
+  * No marker, PostgreSQL 18: ADOPTED. It logs the adoption, writes the marker,
+    and reads, rewrites or converts nothing. Every cluster created by a release
+    older than the marker -- including every 26.09.0 deployment -- is in this
+    state, because the marker is a FreeSDN invention that those releases could
+    not have written. An operator who knows their unmarked cluster is NOT a
+    glibc cluster can set FREESDN_REFUSE_UNMARKED=1 to force a refusal instead.
+  * Marker present and matching: started normally, with no further action.
+  * Marker present and DIFFERENT (for example a cluster initialised by the
+    withdrawn Alpine candidate): REFUSED, exit 78.
+  * A different PostgreSQL major version, or another cluster layout in the
+    volume: REFUSED, exit 78.
+
+Collation is deliberately not consulted. PostgreSQL 16 removed LC_COLLATE and
+LC_CTYPE from both the server GUC and pg_controldata output, so a guard that
+tried to read one back would compare empty strings and refuse every valid
+cluster while appearing careful.
+
+Do not manufacture this marker. It is an accidental-upgrade guard, not an
+access-control boundary against a Docker administrator. Do not override the
+entrypoint or use a different data_directory to bypass it.
+
+When the exceptional path applies
+---------------------------------
+Everything from here on is for a cluster the guard REFUSES, which on a normal
+26.09.0 -> 26.10.0 upgrade does not happen. It is an OFFLINE LOGICAL migration,
+not an image-only update: read the entire procedure and rehearse on a restored
+copy before changing a customer deployment. Keep a verified encrypted backup
+and the old source images, configuration, secrets and volumes. Never run two
+servers against the same data directory.
+
+Supported automatic logical-copy scope
+--------------------------------------
+scripts/migrate_database_runtime.py supports PostgreSQL 18 -> equal/newer 18,
+one application database per cluster plus an empty postgres maintenance DB,
+UTF8, named Docker volumes and matching extension versions. Both containers
+must use --network none, no published ports, local socket authentication and
+the SAME initdb bootstrap role (OID 10, normally freesdn). Target initialization
+must use POSTGRES_DB=postgres, not the application database name.
+
+Matching bootstrap identities matter: PostgreSQL 16+ role grants retain a
+grantor that cannot be substituted by an arbitrary new superuser. The tool
+restores roles, attributes, original password hashes and memberships. It skips
+only the already-existing bootstrap role's exact CREATE ROLE statement.
+
+Custom tablespaces, foreign tables, subscriptions, replication slots, prepared
+transactions, explicit nonportable libc collations, extra application databases
+missing extension versions and Timescale installed outside public are refused. Review these cases separately;
+never delete them solely to bypass preflight. In HA, fence/remove the old
+standby from service and rebuild a NEW standby from the migrated primary. Do
+not reconnect an old physical standby to the new runtime.
+
+This tool creates the recovered database with PostgreSQL's builtin C.UTF-8
+locale provider (migrate_database_runtime.py: CREATE DATABASE ... LOCALE_PROVIDER
+builtin BUILTIN_LOCALE 'C.UTF-8'), whatever the source used. That was chosen
+for a musl target and is retained, so a migration OUT OF a glibc en_US.utf8
+cluster DOES change the default locale even though the shipped runtime is still
+glibc. Text sorting, case conversion and expression/unique index behaviour can
+differ from en_US.utf8. Indexes are rebuilt by logical restore and pg_amcheck
+verifies them, which does not prove that every application relies on the same
+sorting. This is why --accept-locale-change cannot be omitted, and it is a
+further reason not to use this path for an upgrade the entrypoint would simply
+adopt.
+Review custom queries/constraints and test application behavior. The explicit
+--accept-locale-change acknowledgement cannot be omitted.
+
+Offline workflow
+----------------
+1. Record exact old image IDs, volume names and compose configuration privately.
+   Verify both encrypted database backups by restoring them into an isolated
+   environment. Budget space for original volumes, new volumes, logical dumps,
+   sort/temp files and a safety margin. Fingerprinting reads and sorts all user
+   rows; large deployments need a measured maintenance window.
+2. Stop ALL application writers (API, workers, scheduler, collector, plugins,
+   backup/maintenance clients) and BOTH database services. Stop/fence HA peers.
+   Do not use `docker compose down -v`, prune, or delete old volumes.
+3. Start an isolated source helper using the EXACT old image ID, the old named
+   volume mounted at /var/lib/postgresql, --network none, no port publishing,
+   and command: postgres -c default_transaction_read_only=on
+   For LogDB also pass -c shared_preload_libraries=timescaledb and
+   -c timescaledb.max_background_workers=0. Preserve its original PGDATA.
+   Never start this helper while another server uses the same volume.
+4. Create a NEW named target volume. Start the new FreeSDN database image using
+   --network none, that new volume at /var/lib/postgresql, POSTGRES_DB=postgres,
+   and POSTGRES_USER matching the original bootstrap role. Supply a temporary
+   initialization password through a private --env-file; do not use trust host
+   authentication or put real passwords into command history. The restore will
+   replace the temporary password hash with the original source role hash.
+   For LogDB pass -c shared_preload_libraries=timescaledb and
+   -c timescaledb.max_background_workers=0 on this helper too.
+   Do not attach application init scripts to the target helper.
+5. Run read-only preflight, separately for primary and LogDB:
+
+   python3 scripts/migrate_database_runtime.py \
+     --source old-primary-helper --target new-primary-helper \
+     --source-user freesdn --database freesdn
+
+   Substitute the actual helper/user/database names. Use --database freesdn_logs
+   for the usual LogDB database. Resolve every refusal before execution.
+6. Re-run with --execute --accept-locale-change and a NEW absolute --work-dir on
+   trusted POSIX storage. The script creates it with mode 0700 and files 0600:
+
+   python3 scripts/migrate_database_runtime.py \
+     --source old-primary-helper --target new-primary-helper \
+     --source-user freesdn --database freesdn \
+     --execute --accept-locale-change \
+     --work-dir /secure-private-storage/primary-runtime-migration
+
+   The directory contains database.dump and roles.sql, including confidential
+   data and password hashes. Protect/encrypt it; never attach it to an issue or
+   publish it as release evidence. Receipts contain metadata/content digests,
+   not row contents. This is a migration workspace, not the encrypted backup.
+7. Require exit 0 AND receipt.json with verified=true for BOTH databases. The
+   tool checks original and restored rows, sequences, large objects, role and
+   permission metadata, Timescale objects/jobs, checksums and indexes. It also
+   checks the source again for changes. Timescale restore is serial, using
+   timescaledb_pre_restore()/timescaledb_post_restore(). A failed target is
+   incomplete: preserve diagnostics and retry into a NEW disposable target.
+   The tool never drops databases, deletes volumes or switches the application.
+8. Stop both helper containers. Record and review a compose override selecting
+   the NEW primary/LogDB volumes by their exact names (external: true). Keep old
+   volumes and the old configuration. Rebuild HA standby on another NEW volume.
+   Start the new databases with normal configuration, without the offline
+   read-only/background-worker restrictions. Start application services in
+   maintenance/read-only mode, verify login, migrations, queries, background
+   processing, log ingestion and encrypted backup/restore before admitting users.
+   Only then resume production writes. Match every service's credentials to the
+   restored roles. Environment POSTGRES_PASSWORD does not reset an existing DB.
+
+I/O budgets and interrupted operations
+-------------------------------------
+The tool bounds captured SQL output plus diagnostics to4MiB per command and
+in-memory SQL/role input to16MiB. Metadata must be unambiguous JSON rows with
+at most64 levels of nesting. These are memory limits, not dump-size limits.
+Roles exports are also limited to16MiB before reading or rewriting their exact
+bootstrap CREATE ROLE statement. Review larger role catalogues separately.
+
+Dump/restore inputs and streamed fingerprint files have a default64GiB ceiling
+per file; the combined migration workspace defaults to128GiB. The flags
+--file-limit-bytes and --workspace-limit-bytes set positive finite limits up to
+4TiB. The work directory may contain only the tool's known private regular
+files. Dumps, roles, temporary fingerprints and receipts all count toward its
+budget. Do not place unrelated files there or run multiple writers against it.
+
+The free-space reserve defaults to the smaller of4GiB or one quarter of the
+filesystem capacity. --min-free-bytes sets an explicit positive reserve. This
+is checked as output is written; it is not a disk reservation against other
+processes. Reserve additional space for database volumes, server-side sorting,
+WAL and other workloads: those are outside the host-workspace quota.
+
+--timeout remains the maximum per database command (positive, at most24hours).
+--operation-timeout additionally bounds the whole migration or preflight;
+it defaults to6hours, with a maximum7days. Fingerprint stream and hash share
+one command deadline. Time spent in filesystem workers counts toward these
+limits; deadline cleanup may take the supervisor's additional cleanup grace.
+
+Named binary file streams must be regular, single-linked, owned by the current
+user and inside a private owned directory. Pending buffered output is refused.
+The worker inherits pinned descriptors instead of reopening a path; identity,
+file position and modification metadata are checked during/after I/O. Maintain
+exclusive ownership: these checks are not protection against a privileged
+filesystem or Docker administrator, or every hostile same-user writer.
+
+Blocking reads/writes/hashes execute in a separately supervised process group.
+No client timeout promises to cancel or roll back work already accepted by the
+Docker daemon. Kernel uninterruptible I/O, process creation itself, escaped
+process groups and external child reapers need independent host containment.
+A failed attempt retains private partial files and an unqualified target.
+Never resume it in place or mistake receipt.pending for a completed receipt.
+Require both exit0 and the final receipt.json; interruption during final atomic
+receipt publication can leave a receipt despite an uncertain caller outcome.
+Preserve that first outcome and inspect/reconcile rather than blindly retrying.
+
+Rollback and limits
+-------------------
+Before admitting writes: stop the candidate services/helpers and restart the
+old exact images/configuration on their untouched original volumes. The old
+source helper was logically read-only; normal PostgreSQL startup/checkpoint
+files may still have changed. No physical copy to the new runtime is performed.
+After admitting writes: simply returning to the old volume loses those writes.
+Use a reviewed reverse logical migration/data reconciliation and backup plan.
+Never promise zero RPO or instant rollback after cutover.
+
+Custom postgresql.conf, pg_hba.conf, certificates, role authorization policy,
+replication slots and external dependencies are operational configuration. The
+logical tool does not copy these files across runtimes. Review and reapply them
+deliberately. Verification is not a claim of identical locale semantics.
+
+Repeatable disposable qualification
+-----------------------------------
+Run scripts/check_database_runtime.py against the old and candidate images.
+Run scripts/check_database_ha.py for streaming/recreation/manual promotion and
+scripts/restore_drill.sh with POSTGRES_IMAGE/LOGDB_IMAGE set to the built images
+for encrypted backup recovery and rejection of damaged/missing-key restores.
+docker/qualification/Dockerfile.legacy-logdb is an offline CI source fixture,
+NOT a deployment or release image. Never publish it as a supported runtime.
+
+The runtime checker now requires an unused report name in an existing directory
+owned by the invoking user and not writable by a group or other users. Symlink
+path components and existing reports are refused before engine contact. It also
+exclusively creates REPORT.artifacts alongside the report; an existing attempt
+directory is not reused, even if its final report is missing.
+
+The artifact directory is private. It retains the initial intent, append-only
+resource plans and observations, migration work, bounded private service logs,
+and the first outcome. Treat it as sensitive: role dumps can contain password
+hashes. Do not publish it with ordinary CI logs. No automatic filesystem cleanup
+removes it. Review and archive it before any deliberate retention cleanup.
+
+Image references must already exist locally. The checker records their resolved
+Linux image IDs and uses those IDs with --pull=never for disposable containers.
+It does not build, pull, scan or sign images. Separate image build/provenance and
+vulnerability qualification remain required. Both normal and guard containers
+have memory, swap, CPU, PID and log bounds; no ports or external container network
+are enabled. This is a synthetic migration fixture, not a customer-scale test.
+
+--timeout-seconds controls work, from a positive value up to the default 900
+seconds. Database operations share that deadline. Evidence collection and cleanup
+have separate 60/120-second budgets so work cannot renew its lifetime through a
+retry loop. Local descriptor acquisition and filesystem synchronization are
+ordinary OS calls, not hard realtime guarantees. An external watchdog still
+needs to reconcile daemon work: killing a Docker client does not prove that the
+engine cancelled its command.
+
+SIGINT and SIGTERM request a failed qualification. The command supervisor stops
+work and terminates its owned client process group; bounded evidence collection
+and resource reconciliation may continue. Repeated signals do not interrupt
+first-result writes or renew cleanup deadlines. Original signal handlers are
+restored before returning to an embedding caller. Require the actual process
+exit status: a signal during final publication may leave a report whose earlier
+snapshot cannot represent that late interruption.
+
+SIGKILL, host failure and a privileged engine/filesystem changing underneath the
+checker are outside cooperative cancellation. Retained intent is not proof that
+daemon resources were removed. An independent owner must reconcile such an
+uncertain attempt before another qualification uses its resources.
+
+Resource plans are persisted before creation. Lost acknowledgements and failed
+inspection remain uncertainty. Cleanup verifies exact planned names, labels and
+known container identities; it does not prune shared resources or infer absence
+from an inspection error. A trusted engine administrator and exclusive ownership
+of the evidence paths are required. Volumes do not have immutable Docker IDs.
+For an interrupted process, use the retained intent and events to inspect only
+that attempt's resources; never rerun into the same targets or sweep by prefix.
+
+Require exit 0, a newly published report with qualification_complete=true, reviewed
+artifact hashes and reviewed cleanup. An internal outcome alone is insufficient:
+exclusive report publication or synchronization can fail after it is written.
+The checker retains snapshots and bounded logs; these do not replace full engine
+event, production deployment, hardware, recovery-time or high-availability gates.
+
+References
+----------
+https://www.postgresql.org/docs/18/app-pgdump.html
+https://www.postgresql.org/docs/18/app-initdb.html
+https://www.postgresql.org/docs/18/collation.html
+https://docs.timescale.com/self-hosted/latest/backup-and-restore/logical-backup/

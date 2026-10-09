@@ -1,0 +1,9 @@
+Proxmox connection cooldown isolation
+
+Direct-client network cooldowns are scoped to the process-local authentication/endpoint/TLS/proxy digest already used for authentication caches. Changed credentials, endpoints, trust or routing do not inherit an unrelated failure. Custom transports have per-client cooldown trackers because the same private IP may refer to different appliances through different sites. This does not coordinate failures across separate client instances using the same agent.
+
+Only connection errors and timeouts start the ten-second cooldown. Authentication rejection, missing tickets and incomplete credentials still fail closed without declaring a network outage. A successful connection clears only its own context. The explicit host-reset helper clears that host's direct contexts; it does not enumerate or reset custom-client trackers.
+
+Failure storage removes expired entries and retains at most 256 entries per tracker. Eviction permits an older context to retry sooner; this cooldown is an availability safeguard, not an authentication rate limiter. Cooldowns use monotonic time and include a failure recorded at time zero.
+
+Qualification: 29 new regressions/controls and 764 related PostgreSQL-backed tests. Before/after tests over four actual local TLS HTTP peers, a reserved unlistening TCP port and the real AgentHTTPTransport exercise the application protocol boundary. Appliance responses and agent delivery are synthetic. Shipping image checks and the full backend suite must pass before publication. These checks are not real hardware acceptance, concurrent client ownership, distributed fencing, or a service-level guarantee.

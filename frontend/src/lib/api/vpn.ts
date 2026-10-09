@@ -261,7 +261,7 @@ export const vpnApi = {
   importOpenVPNConfig: (data: {
     site_id: string;
     config_content: string;
-    description?: string;
+    config_id?: string;
   }) => api.post<{
     success: boolean;
     message: string;

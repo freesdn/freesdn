@@ -1,0 +1,31 @@
+Device update omission and explicit null
+========================================
+
+PATCH device requests may omit name, is_active and is_managed to leave those
+values unchanged. Explicit null is rejected with field validation status 422
+before the update reaches PostgreSQL NOT NULL constraints. Previously those
+inputs produced status 500. Invalid mixed requests do not partially change the
+device. Empty PATCH requests keep existing behavior.
+
+The request schema and generated frontend types show these fields as optional
+but non-null. Name length limits remain 1..255. Existing boolean coercion is not
+changed; false is a valid explicit update. Location, floor, room, notes and
+credential_id remain nullable so callers can clear them. Organization, site,
+permission and credential-reference checks remain in the endpoint.
+
+Tests use real PostgreSQL rows and HTTP-ASGI plus a separate TCP HTTP probe.
+They check explicit null, mixed requests, omission, false values, existing boolean
+coercion, invalid lengths/values, missing credentials and clearing nullable data.
+Stored state is checked after each response. OpenAPI checks preserve the name
+limits and distinguish omitted fields from null. The authenticated principal is
+synthetic; this is not real-login or concurrent-revocation qualification.
+
+Only the DeviceUpdate schema, its generated frontend contract and associated
+regression checks change. No migration, database data rewrite or hardware
+operation occurs. Fresh frontend lint, tests and strict build are required for
+the changed types; shipping/runtime qualification is separately recorded.
+
+Implementation references:
+https://pydantic.dev/docs/validation/latest/concepts/validators/
+https://pydantic.dev/docs/validation/latest/api/pydantic/json_schema/
+https://pydantic.dev/docs/validation/latest/api/pydantic/fields/

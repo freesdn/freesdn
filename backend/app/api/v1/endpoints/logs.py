@@ -340,7 +340,6 @@ def _security_to_log(row: SecurityEventRecord) -> LogEntry:
 
 
 @router.get("/", response_model=LogListResponse)
-@router.get("/", response_model=LogListResponse, include_in_schema=False)
 async def list_logs(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_active_user)],

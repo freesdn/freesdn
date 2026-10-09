@@ -205,7 +205,7 @@ def create_access_token(
     if extra_claims:
         to_encode.update(extra_claims)
 
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return jwt.encode(to_encode, settings.jwt_signing_key, algorithm=settings.ALGORITHM)
 
 
 def create_refresh_token(
@@ -246,7 +246,7 @@ def create_refresh_token(
     if extra_claims:
         to_encode.update(extra_claims)
 
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return jwt.encode(to_encode, settings.jwt_signing_key, algorithm=settings.ALGORITHM)
 
 
 async def decode_token(token: str) -> dict[str, Any] | None:
@@ -262,7 +262,7 @@ async def decode_token(token: str) -> dict[str, Any] | None:
     try:
         payload = jwt.decode(
             token,
-            settings.SECRET_KEY,
+            settings.jwt_signing_key,
             algorithms=[settings.ALGORITHM],
             options={"require": ["exp", "iat", "sub"]},
             audience="freesdn-api",

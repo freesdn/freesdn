@@ -1045,6 +1045,30 @@
     "confirmResolve": {
       "title": "¿Marcar este cambio como resuelto?",
       "body": "Puede que este cambio ya esté aplicado en el dispositivo. Confirma solo después de comprobarlo: esto lo elimina de la cola y no deshace nada."
+    },
+    "provider": {
+      "heading": "Tareas del proveedor",
+      "description": "Las solicitudes aceptadas se supervisan por separado de su finalización. La supervisión nunca repite la escritura.",
+      "acceptedTitle": "Solicitud aceptada",
+      "acceptedDescription": "{{gatewayName}} aceptó la solicitud. La finalización aún no está verificada.",
+      "bulkPaused": "Aplicación masiva en pausa. Verifique la tarea del proveedor antes de aplicar los cambios restantes.",
+      "checked": "Última comprobación: {{when}}",
+      "verify": "Revise la tarea en Proxmox antes de continuar. Una tarea fallida o no observada puede haber realizado cambios parciales; no la repita sin verificarla.",
+      "status": {
+        "pending": "Aceptada — pendiente de supervisión",
+        "running": "En ejecución en Proxmox",
+        "succeeded": "Tarea del proveedor completada",
+        "warnings": "Completada con advertencias",
+        "failed": "Tarea fallida — verifique los cambios",
+        "unknown": "Resultado no verificado"
+      },
+      "pendingRestart": "La configuración está guardada, pero los ajustes actuales aún difieren. Programe un reinicio; FreeSDN volverá a comprobar sin repetir la escritura.",
+      "stateVerified": "El estado solicitado se verificó leyendo la configuración del proveedor.",
+      "deletionVerified": "La tarea de eliminación terminó y se verificó que el ID está libre. Esto no certifica el borrado del almacenamiento.",
+      "nodePowerManual": "Verifique el apagado o reinicio del host por una vía de gestión independiente antes de resolver el recibo. Perder la conexión no demuestra la finalización.",
+      "haVerified": "Se verificó la configuración de HA solicitada. No se verificaron la salud de las cargas ni la conmutación por error.",
+      "certificateVerified": "Se verificaron el certificado guardado y el punto TLS configurado; no todos los nodos, la confianza completa ni el borrado de claves.",
+      "certificateVerify": "La activación no está verificada por completo. Compruebe el punto de conexión y la consola antes de resolver. No repita la escritura a ciegas."
     }
   },
   "CameraAccessPanel": {

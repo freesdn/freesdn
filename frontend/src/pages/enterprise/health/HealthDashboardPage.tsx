@@ -51,11 +51,11 @@ import {
 function SiteCard({ site }: { site: SiteHealthSummary }) {
   const { t } = useTranslation('enterprise');
   return (
-    <Card className="hover:border-primary/30 transition-colors">
+    <Card className="min-w-0 hover:border-primary/30 transition-colors">
       <CardContent noOffset className="p-5">
-        <div className="flex items-start justify-between mb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
           <div>
-            <h3 className="font-semibold text-foreground">{site.site_name}</h3>
+            <h3 className="font-semibold text-foreground break-words">{site.site_name}</h3>
             <p className="text-sm text-muted-foreground">
               {t('HealthDashboardPage.siteCard.deviceCount', { count: site.device_count })}
             </p>
@@ -71,7 +71,14 @@ function SiteCard({ site }: { site: SiteHealthSummary }) {
               </p>
             )}
           </div>
-          <HealthGauge score={Math.round(site.avg_health_score)} size="sm" />
+          <div className="w-36 max-w-full shrink-0 text-center">
+            <HealthGauge score={site.avg_health_score} size="sm" />
+            {site.measured_device_count != null && (
+              <p className="text-xs text-muted-foreground">
+                {t('HealthDashboardPage.measurementCoverage', { measured: site.measured_device_count, total: site.device_count })}
+              </p>
+            )}
+          </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <div className="text-center">
@@ -149,7 +156,7 @@ export default function HealthDashboardPage() {
     },
   });
 
-  const score = orgHealth ? Math.round(orgHealth.avg_health_score) : 0;
+  const score = orgHealth?.avg_health_score ?? null;
   const totalDevices = orgHealth?.device_count ?? 0;
   const totalSites = orgHealth?.site_count ?? 0;
 
@@ -166,9 +173,9 @@ export default function HealthDashboardPage() {
   const stats = [
     {
       title: t('HealthDashboardPage.stats.overallScore'),
-      value: isLoading ? '-' : score,
+      value: isLoading ? '-' : score ?? 'N/A',
       icon: Heart,
-      variant: (score >= 90 ? 'success' : score >= 70 ? 'warning' : 'destructive') as 'success' | 'warning' | 'destructive',
+      variant: (score == null ? 'default' : score >= 90 ? 'success' : score >= 70 ? 'warning' : 'destructive') as 'default' | 'success' | 'warning' | 'destructive',
     },
     { title: t('HealthDashboardPage.stats.healthyDevices'), value: healthyCounts.healthy, icon: CheckCircle2, variant: 'success' as const },
     { title: t('HealthDashboardPage.stats.warnings'), value: healthyCounts.warning + healthyCounts.degraded, icon: AlertTriangle, variant: 'warning' as const },
@@ -204,7 +211,14 @@ export default function HealthDashboardPage() {
       {!isLoading && orgHealth && (
         <Card>
           <CardContent noOffset className="flex flex-col md:flex-row items-center gap-8">
-            <HealthGauge score={score} size="lg" />
+            <div className="text-center">
+              <HealthGauge score={score} size="lg" />
+              {orgHealth.measured_device_count != null && (
+                <p className="text-xs text-muted-foreground">
+                  {t('HealthDashboardPage.measurementCoverage', { measured: orgHealth.measured_device_count, total: orgHealth.device_count })}
+                </p>
+              )}
+            </div>
             <div className="flex-1 space-y-3">
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-semibold">{t('HealthDashboardPage.orgHealth.heading')}</h2>
@@ -252,13 +266,13 @@ export default function HealthDashboardPage() {
           )}
 
           {/* Two-column: top issues + site grid */}
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-1">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="min-w-0 lg:col-span-1">
               <TopIssuesPanel siteId={selectedSiteId ?? undefined} />
             </div>
-            <div className="lg:col-span-2">
+            <div className="min-w-0 lg:col-span-2">
               {isLoading ? (
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {Array.from({ length: 4 }).map((_, i) => (
                     <Card key={i}>
                       <CardContent noOffset className="p-5">
@@ -268,9 +282,9 @@ export default function HealthDashboardPage() {
                   ))}
                 </div>
               ) : orgHealth?.sites.length ? (
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {orgHealth.sites
-                    .sort((a, b) => a.avg_health_score - b.avg_health_score)
+                    .sort((a, b) => (a.avg_health_score ?? Infinity) - (b.avg_health_score ?? Infinity))
                     .map((site) => (
                       <SiteCard key={site.site_id} site={site} />
                     ))}

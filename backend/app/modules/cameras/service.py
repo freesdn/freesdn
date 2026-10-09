@@ -9,6 +9,8 @@ Business logic for camera management and streaming.
 
 import asyncio
 import contextlib
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -27,6 +29,7 @@ from app.adapters.exceptions import (
 )
 from app.core.crypto import decrypt_credential
 from app.core.events import Event, EventCategory, EventPriority, get_event_bus
+from app.core.owned_child import owned_child_command
 
 logger = logging.getLogger(__name__)
 
@@ -263,14 +266,14 @@ class CameraService:
             latest = latest.where(CameraHealthSnapshot.organization_id == organization_id)
         if accessible_site_ids is not None:
             latest = latest.where(Camera.site_id.in_(list(accessible_site_ids)))
-        latest = latest.group_by(CameraHealthSnapshot.camera_id).subquery()
+        latest_rows = latest.group_by(CameraHealthSnapshot.camera_id).subquery()
 
         q = (
             select(CameraHealthSnapshot.bitrate_kbps)
             .join(
-                latest,
-                (CameraHealthSnapshot.camera_id == latest.c.camera_id)
-                & (CameraHealthSnapshot.captured_at == latest.c.max_ts),
+                latest_rows,
+                (CameraHealthSnapshot.camera_id == latest_rows.c.camera_id)
+                & (CameraHealthSnapshot.captured_at == latest_rows.c.max_ts),
             )
             .where(CameraHealthSnapshot.bitrate_kbps.isnot(None))
         )
@@ -457,7 +460,7 @@ class CameraService:
         query = query.group_by(Camera.status)
 
         result = await self.db.execute(query)
-        stats: dict[str, int] = dict(result.all())  # type: ignore[arg-type]
+        stats: dict[str, int] = dict(result.all())
 
         return {
             "total": sum(stats.values()),
@@ -725,7 +728,7 @@ class StreamService:
                 username=username,
                 password=password,
                 port=port if port not in (None, 0, 80) else 443,
-                verify_ssl=False,
+                verify_ssl=True,
             )
 
         # For all other vendors (Dahua, Axis, Reolink, Amcrest, etc.)
@@ -1241,7 +1244,7 @@ class NVRService:
         query = query.group_by(NVR.status)
 
         result = await self.db.execute(query)
-        stats: dict[str, int] = dict(result.all())  # type: ignore[arg-type]
+        stats: dict[str, int] = dict(result.all())
 
         return {
             "total": sum(stats.values()),
@@ -2798,6 +2801,7 @@ class CameraAccessService:
             .where(
                 CameraGroupMember.camera_id == camera_id,
                 CameraGroup.organization_id == organization_id,
+                CameraGroup.deleted_at.is_(None),
             )
         )
         group_ids = [r[0] for r in group_ids_result.all()]
@@ -2860,13 +2864,24 @@ class CameraAccessService:
 # =============================================================================
 
 
+def camera_media_identity(*parts: Any) -> str:
+    """Opaque source/request identity without retaining credentials in a cache key."""
+    from app.core.config import settings
+
+    payload = json.dumps(parts, ensure_ascii=True, separators=(",", ":"), default=str).encode()
+    return hmac.new(
+        settings.SECRET_KEY.encode(), b"freesdn-camera-media-v1\0" + payload, hashlib.sha256
+    ).hexdigest()
+
+
 class HLSStreamService:
     """HLS streaming via FFmpeg RTSP-to-HLS transcoding."""
 
     _sessions: ClassVar[dict[str, dict[str, Any]]] = {}
     _lock: ClassVar[asyncio.Lock] = asyncio.Lock()
     HLS_DIR = "/tmp/freesdn-hls"
-    SESSION_TIMEOUT = 30  # seconds without heartbeat (only reaps when viewers<=0)
+    STDERR_CAPTURE_LIMIT = 64 * 1024
+    SESSION_TIMEOUT = 30  # seconds without a heartbeat, playlist or segment read
     MAX_SESSION_AGE = (
         6 * 3600
     )  # hard ceiling — reap regardless of viewers (crashed-client backstop)
@@ -2875,7 +2890,7 @@ class HLSStreamService:
         "low": {"crf": "28", "maxrate": "500k", "bufsize": "1000k", "scale": "640:360"},
         "medium": {"crf": "23", "maxrate": "1500k", "bufsize": "3000k", "scale": "1280:720"},
         "high": {"crf": "20", "maxrate": "3000k", "bufsize": "6000k", "scale": ""},
-        "source": {},  # copy mode for h264, or transcode with no scaling for h265
+        "source": {},  # preserve the input video codec and resolution
     }
 
     async def start_session(
@@ -2890,7 +2905,7 @@ class HLSStreamService:
     ) -> dict[str, Any]:
         """Start or join an HLS transcoding session.
 
-        If a session already exists for this camera+quality, the viewer count
+        If a session already exists for this exact source and scope, the viewer count
         is incremented and the existing session info is returned.  Otherwise a
         new FFmpeg subprocess is spawned.
 
@@ -2899,8 +2914,8 @@ class HLSStreamService:
             quality: One of ``low``, ``medium``, ``high``, ``source``.
             rtsp_url: Fully-qualified RTSP URL with credentials.
             source_codec: Source video codec (``h264`` / ``h265``).
-            organization_id: Optional org scope (unused internally but
-                carried on the session metadata for auditing).
+            organization_id: Optional org scope, included in reuse identity and
+                carried on the session metadata for access checks.
 
         Returns:
             Dict with ``session_id``, ``playlist_url``, ``codec``, ``quality``,
@@ -2912,15 +2927,20 @@ class HLSStreamService:
         if not re.match(r"^rtsps?://", rtsp_url):
             return {"error": "Invalid RTSP URL scheme"}
 
-        # Live sessions key on camera+quality (so viewers of the same live feed
-        # share one ffmpeg); recorded-playback passes an explicit key that also
-        # includes the seek instant so different time-windows don't collide.
-        session_key = session_key or f"{camera_id}:{quality}"
+        # Explicit caller keys refine scope; they cannot bypass source, tenant,
+        # mode or encoding identity. Never persist the authenticated URL as a key.
+        session_key = camera_media_identity(
+            camera_id, organization_id, quality, source_codec, is_recorded, rtsp_url, session_key
+        )
 
         async with self._lock:
-            # Re-use existing session
-            for sid, meta in self._sessions.items():
+            # Join only a child that is running, or a completed recording with
+            # retained media. Failed/dead live producers must be replaced.
+            for sid, meta in list(self._sessions.items()):
                 if meta["session_key"] == session_key:
+                    if not self._reusable_session(meta):
+                        await self._kill_session(sid, meta)
+                        continue
                     meta["viewers"] += 1
                     meta["last_heartbeat"] = datetime.now(UTC)
                     return {
@@ -2934,24 +2954,35 @@ class HLSStreamService:
             # Create new session
             session_id = uuid4().hex
             output_dir = os.path.join(self.HLS_DIR, session_id)
-            os.makedirs(output_dir, exist_ok=True)
+            from pathlib import Path
+
+            from app.core.private_files import create_private, private_directory
+
+            with private_directory(Path(output_dir)):
+                pass
 
             ffmpeg_args = self._build_ffmpeg_args(
                 rtsp_url, output_dir, source_codec, quality, is_recorded
             )
 
-            # Capture ffmpeg stderr to a per-session log instead of discarding it —
-            # when a session produces no segments (e.g. an NVR whose recorded HEVC
-            # has no decodable parameter sets) the tail is logged on teardown so the
-            # failure is diagnosable rather than a silent spinner.
+            # Native stderr can contain RTSP credentials. Store it privately for
+            # local diagnosis while the session runs; never copy it into app logs.
             log_path = os.path.join(output_dir, "ffmpeg.log")
-            log_file = open(log_path, "wb")  # noqa: SIM115 — closed in _kill_session
-            process = await asyncio.create_subprocess_exec(
-                *ffmpeg_args,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=log_file,
-            )
+            log_file = create_private(Path(log_path))
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    *owned_child_command(ffmpeg_args),
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE,
+                    umask=0o077,
+                )
+            except BaseException:
+                log_file.close()
+                shutil.rmtree(output_dir, ignore_errors=True)
+                raise
 
+            stderr_task = asyncio.create_task(self._capture_stderr(process, log_file))
             self._sessions[session_id] = {
                 "session_key": session_key,
                 "camera_id": str(camera_id),
@@ -2961,6 +2992,7 @@ class HLSStreamService:
                 "output_dir": output_dir,
                 "process": process,
                 "log_file": log_file,
+                "stderr_task": stderr_task,
                 "log_path": log_path,
                 "is_recorded": is_recorded,
                 "viewers": 1,
@@ -3039,7 +3071,7 @@ class HLSStreamService:
     async def cleanup_stale_sessions(self) -> int:
         """Kill FFmpeg and remove directories for sessions without a recent heartbeat.
 
-        Intended to be called periodically (e.g. every 60 s by a Celery beat task).
+        Called by the API process's reaper, which owns the child processes.
 
         Returns:
             Number of sessions cleaned up.
@@ -3051,12 +3083,11 @@ class HLSStreamService:
             for sid, meta in self._sessions.items():
                 elapsed = (now - meta["last_heartbeat"]).total_seconds()
                 age = (now - meta.get("started_at", now)).total_seconds()
-                # Reap when there are no active viewers AND no recent heartbeat
-                # (honours the viewer count so a still-watched stream whose
-                # heartbeat is briefly throttled isn't killed), OR when the
-                # session exceeds the hard age ceiling regardless of viewers
-                # (backstop for a crashed client that left viewers pinned > 0).
-                idle = elapsed > self.SESSION_TIMEOUT and meta.get("viewers", 0) <= 0
+                # A crashed tab never decrements its viewer count. Treat recent
+                # activity as the liveness signal: heartbeats and playlist or
+                # segment reads all refresh it. Otherwise an abandoned viewer
+                # retains its transcoder and private files until the hard ceiling.
+                idle = elapsed > self.SESSION_TIMEOUT
                 expired = age > self.MAX_SESSION_AGE
                 if idle or expired:
                     stale_ids.append(sid)
@@ -3074,6 +3105,43 @@ class HLSStreamService:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _reusable_session(meta: dict[str, Any]) -> bool:
+        code = meta["process"].returncode
+        if code is None:
+            return True
+        if code != 0 or not meta.get("is_recorded"):
+            return False
+        output = meta["output_dir"]
+        try:
+            return os.path.isfile(os.path.join(output, "stream.m3u8")) and any(
+                re.fullmatch(r"\d{5}\.ts", name) for name in os.listdir(output)
+            )
+        except OSError:
+            return False
+
+    async def _capture_stderr(self, process: asyncio.subprocess.Process, handle: Any) -> None:
+        """Drain native output continuously, retaining only a bounded private prefix."""
+        stored = 0
+        writable = True
+        try:
+            if process.stderr is None:
+                return
+            while chunk := await process.stderr.read(4096):
+                if writable and stored < self.STDERR_CAPTURE_LIMIT:
+                    prefix = chunk[: self.STDERR_CAPTURE_LIMIT - stored]
+                    try:
+                        handle.write(prefix)
+                        handle.flush()
+                        stored += len(prefix)
+                    except OSError:
+                        # A full/failed diagnostic disk must not block the media
+                        # child on a full pipe. Never log native text or paths.
+                        writable = False
+        finally:
+            with contextlib.suppress(OSError):
+                handle.close()
+
     async def _kill_session(self, session_id: str, meta: dict[str, Any]) -> None:
         """Terminate FFmpeg process and remove output directory."""
         process: asyncio.subprocess.Process = meta["process"]
@@ -3083,15 +3151,20 @@ class HLSStreamService:
                 await asyncio.wait_for(process.wait(), timeout=5.0)
             except TimeoutError:
                 process.kill()
+                await asyncio.wait_for(process.wait(), timeout=5.0)
         except ProcessLookupError:
             pass  # already exited
 
+        stderr_task = meta.get("stderr_task")
+        if stderr_task is not None:
+            try:
+                await asyncio.wait_for(stderr_task, timeout=2.0)
+            except TimeoutError:
+                logger.warning("HLS diagnostic drain exceeded its cleanup deadline")
+
         output_dir = meta["output_dir"]
 
-        # Diagnose silent failures: a session that produced no .ts segments almost
-        # always means ffmpeg couldn't open/decode the source (e.g. a classic NVR
-        # whose recorded HEVC carries no decodable parameter sets). Log the stderr
-        # tail so it isn't an unexplained spinner.
+        # Report empty sessions without copying secret-bearing native stderr.
         log_file = meta.get("log_file")
         if log_file is not None:
             with contextlib.suppress(Exception):
@@ -3103,14 +3176,14 @@ class HLSStreamService:
                 else []
             )
             if not produced and meta.get("log_path") and os.path.isfile(meta["log_path"]):
-                with open(meta["log_path"], errors="replace") as fh:
-                    tail = fh.read()[-800:]
+                # Native stderr may contain RTSP userinfo and credentials.
+                # Keep diagnostics private on disk; never forward raw stderr.
                 logger.warning(
-                    "HLS session %s (camera=%s, recorded=%s) produced NO segments — ffmpeg tail: %s",
+                    "HLS session %s (camera=%s, recorded=%s) produced no segments; "
+                    "check camera connectivity and codec compatibility",
                     session_id,
                     meta.get("camera_id"),
                     meta.get("is_recorded"),
-                    tail.replace("\n", " | ")[-600:],
                 )
         except Exception:  # pragma: no cover - diagnostics must never raise
             pass
@@ -3131,9 +3204,9 @@ class HLSStreamService:
     ) -> list[str]:
         """Build FFmpeg command-line arguments.
 
-        For h264 sources in ``source`` quality the video stream is copied
-        without transcoding.  For h265 sources (or when a quality preset
-        requests scaling / bitrate limiting) the stream is transcoded to h264.
+        ``source`` quality preserves the original video codec and resolution.
+        Every other quality transcodes to h264 and applies its configured
+        scaling and bitrate limits, including when the input is already h264.
 
         ``is_recorded`` switches the HLS muxer from a small rolling live window
         to a growing, bounded VOD-style playlist (see the HLS section below) so
@@ -3152,16 +3225,10 @@ class HLSStreamService:
             rtsp_url,
         ]
 
-        # Copy (remux, no transcode) when the source is already browser-universal
-        # H.264 — from ANY vendor/NVR — or when the caller explicitly asks for the
-        # original codec. This is the smoothest, cheapest path and needs no decode.
-        # H.265/HEVC (and anything else) is transcoded to H.264 below for universal
-        # browser playback, unless quality=source (HEVC-capable clients only).
-        if quality == "source" or source_codec == "h264":
-            # For h265 'source' this produces HEVC segments playable only by
-            # HEVC-capable clients (Safari / hls.js+MSE); for h264 it's universal.
-            # 4K-HEVC software decode can't sustain real-time transcode, so 'source'
-            # (copy) is the only real-time full-res option for HEVC.
+        # Only explicit source quality bypasses encoding. HEVC source playback
+        # still requires a client that supports the original codec. H.264 input
+        # must also be encoded when a lower-bandwidth quality is requested.
+        if quality == "source":
             args.extend(["-c:v", "copy"])
         else:
             # Recorded playback decodes a heavy 4K-HEVC source — use ultrafast to
@@ -3239,106 +3306,168 @@ class HLSStreamService:
 class TranscodeService:
     """FFmpeg-based codec detection and transcoding configuration."""
 
+    PROBE_TIMEOUT_SECONDS = 15.0
+    MAX_PROBE_OUTPUT_BYTES = 1024 * 1024
+
+    RECORDED_PROBE_TIMEOUT_SECONDS = 10.0
+
+    async def _probe_document(
+        self, rtsp_url: str, *, recorded: bool = False
+    ) -> dict[str, Any] | None:
+        """Read bounded probe metadata; None means discovery was inconclusive."""
+        if not re.match(r"^rtsps?://", rtsp_url):
+            return None
+        args = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams"]
+        if recorded:
+            args.extend(
+                ["-rtsp_transport", "tcp", "-probesize", "2000000", "-analyzeduration", "3000000"]
+            )
+        args.append(rtsp_url)
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *owned_child_command(args),
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+        except FileNotFoundError:
+            raise StreamError("ffprobe is not installed or not on PATH") from None
+        except OSError:
+            raise StreamError("Unable to start camera codec probe") from None
+
+        async def collect() -> bytes:
+            if process.stdout is None:
+                raise StreamError("Camera codec probe output is unavailable")
+            output = bytearray()
+            while chunk := await process.stdout.read(65536):
+                if len(output) + len(chunk) > self.MAX_PROBE_OUTPUT_BYTES:
+                    raise ValueError("Codec probe output exceeds limit")
+                output.extend(chunk)
+            await process.wait()
+            return bytes(output)
+
+        try:
+            try:
+                stdout = await asyncio.wait_for(
+                    collect(),
+                    timeout=self.RECORDED_PROBE_TIMEOUT_SECONDS
+                    if recorded
+                    else self.PROBE_TIMEOUT_SECONDS,
+                )
+            except TimeoutError:
+                logger.warning("Camera codec probe timed out")
+                return None
+            except ValueError:
+                logger.warning("Camera codec probe output exceeded its size limit")
+                return None
+        finally:
+            # Cancellation must propagate, but only after the owned child is
+            # killed and its pipe drained. Native stderr can contain credentials
+            # and is discarded rather than retained or copied into application logs.
+            if process.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    process.kill()
+            if process.stdout is not None:
+                while await process.stdout.read(65536):
+                    pass
+            await process.wait()
+
+        if process.returncode != 0:
+            logger.warning("Camera codec probe failed (exit=%s)", process.returncode)
+            return None
+        try:
+            data = json.loads(stdout)
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            return None
+        if not isinstance(data, dict) or not isinstance(data.get("streams"), list):
+            return None
+        if not all(isinstance(item, dict) for item in data["streams"]):
+            return None
+        return data
+
     async def detect_codec(self, rtsp_url: str) -> dict[str, Any]:
-        """Probe an RTSP stream to detect codec, resolution and bitrate.
-
-        Runs ``ffprobe`` in a subprocess and parses its JSON output.
-
-        Args:
-            rtsp_url: Fully-qualified RTSP URL.
-
-        Returns:
-            Dict with ``codec``, ``resolution``, ``bitrate_kbps``,
-            ``needs_transcode``.
-        """
+        """Probe codec metadata with bounded output and owned-child cleanup."""
         if not re.match(r"^rtsps?://", rtsp_url):
             return {"error": "Invalid RTSP URL scheme"}
 
-        args = [
-            "ffprobe",
-            "-v",
-            "quiet",
-            "-print_format",
-            "json",
-            "-show_streams",
-            "-rtsp_transport",
-            "tcp",
-            rtsp_url,
-        ]
+        unknown = {
+            "codec": "unknown",
+            "resolution": "unknown",
+            "bitrate_kbps": 0,
+            "needs_transcode": False,
+        }
+        data = await self._probe_document(rtsp_url)
+        if data is None:
+            return unknown
+        video = next(
+            (
+                item
+                for item in data["streams"]
+                if isinstance(item, dict) and item.get("codec_type") == "video"
+            ),
+            None,
+        )
+        if video is None:
+            return unknown
+        codec = video.get("codec_name")
+        if not isinstance(codec, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", codec):
+            return unknown
 
-        try:
-            process = await asyncio.create_subprocess_exec(
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=15.0)
-        except TimeoutError:
-            process.kill()
-            await process.wait()
-            logger.warning("ffprobe timed out for %s", _sanitize_url(rtsp_url))
-            return {
-                "codec": "unknown",
-                "resolution": "unknown",
-                "bitrate_kbps": 0,
-                "needs_transcode": False,
-            }
-        except FileNotFoundError:
-            raise StreamError("ffprobe is not installed or not on PATH")
+        def bounded_integer(value: Any, maximum: int) -> int:
+            if isinstance(value, bool) or not isinstance(value, (str, int)):
+                return 0
+            try:
+                number = int(value)
+            except ValueError:
+                return 0
+            return number if 0 <= number <= maximum else 0
 
-        if process.returncode != 0:
-            logger.warning(
-                "ffprobe failed (rc=%s) for %s: %s",
-                process.returncode,
-                _sanitize_url(rtsp_url),
-                stderr.decode(errors="replace")[:500],
-            )
-            return {
-                "codec": "unknown",
-                "resolution": "unknown",
-                "bitrate_kbps": 0,
-                "needs_transcode": False,
-            }
-
-        try:
-            probe_data = json.loads(stdout.decode())
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return {
-                "codec": "unknown",
-                "resolution": "unknown",
-                "bitrate_kbps": 0,
-                "needs_transcode": False,
-            }
-
-        # Find the first video stream
-        video_stream: dict[str, Any] | None = None
-        for stream in probe_data.get("streams", []):
-            if stream.get("codec_type") == "video":
-                video_stream = stream
-                break
-
-        if video_stream is None:
-            return {
-                "codec": "unknown",
-                "resolution": "unknown",
-                "bitrate_kbps": 0,
-                "needs_transcode": False,
-            }
-
-        codec_name = video_stream.get("codec_name", "unknown")
-        width = video_stream.get("width", 0)
-        height = video_stream.get("height", 0)
-        bit_rate_str = video_stream.get("bit_rate", "0")
-        try:
-            bitrate_kbps = int(bit_rate_str) // 1000
-        except (ValueError, TypeError):
-            bitrate_kbps = 0
-
+        width = bounded_integer(video.get("width"), 65535)
+        height = bounded_integer(video.get("height"), 65535)
+        bitrate = bounded_integer(video.get("bit_rate"), 10**12)
         return {
-            "codec": codec_name,
+            "codec": codec,
             "resolution": f"{width}x{height}" if width and height else "unknown",
-            "bitrate_kbps": bitrate_kbps,
-            "needs_transcode": self.needs_transcode(codec_name),
+            "bitrate_kbps": bitrate // 1000,
+            "needs_transcode": self.needs_transcode(codec),
+        }
+
+    async def probe_recorded_stream(self, rtsp_url: str) -> dict[str, Any] | None:
+        """Separate failed discovery from a definitive stream without video."""
+        try:
+            data = await self._probe_document(rtsp_url, recorded=True)
+        except StreamError:
+            return None
+        if data is None:
+            return None
+        video = next((item for item in data["streams"] if item.get("codec_type") == "video"), None)
+        if video is None:
+            return {"playable": False, "codec": None, "width": 0, "height": 0}
+        codec = video.get("codec_name")
+        if codec is not None and (
+            not isinstance(codec, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", codec)
+        ):
+            return None
+        dimensions = []
+        for name in ["width", "height"]:
+            value = video.get(name)
+            if value is None:
+                value = 0
+            if isinstance(value, bool) or not isinstance(value, (str, int)):
+                return None
+            try:
+                dimension = int(value)
+            except ValueError:
+                return None
+            if not 0 <= dimension <= 65535:
+                return None
+            dimensions.append(dimension)
+        width, height = dimensions
+        return {
+            "playable": bool(width and height),
+            "codec": codec,
+            "width": width,
+            "height": height,
         }
 
     @staticmethod

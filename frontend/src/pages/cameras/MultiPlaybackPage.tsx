@@ -60,7 +60,7 @@ import { cn } from '@/lib/utils';
 import { camerasApi } from '@/lib/api';
 import { API_URL } from '@/lib/api/client';
 import { isDemoMode } from '@/demo/mode';
-import { getDemoCameraSnapshotPath } from '@/demo/fixtures';
+import { getDemoCameraSnapshotPath } from '@/demo/cameraSnapshots';
 import { useSiteStore } from '@/stores/siteStore';
 import { mapToWallCameras } from '@/components/cameras/wall/mapToWallCamera';
 import type { WallCamera } from '@/components/cameras/wall/types';

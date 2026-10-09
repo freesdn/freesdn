@@ -27,20 +27,21 @@ interface NetworkMetric {
   value: string;
   unit: string;
   trend: number[];
-  status: 'good' | 'warning' | 'critical';
+  status: 'good' | 'warning' | 'critical' | 'unknown';
   icon: typeof Activity;
 }
 
 interface NetworkHealthWidgetProps {
-  latency: { value: number; history: number[] };
-  throughput: { download: number; upload: number; history: { download: number; upload: number }[] };
-  packetLoss: { value: number; history: number[] };
-  uptime: { value: number; label: string };
+  latency: { value: number | null; history: number[] };
+  throughput: { download: number | null; upload: number | null; history: { download: number; upload: number }[] };
+  packetLoss: { value: number | null; history: number[] };
+  uptime: { value: number | null; label: string };
   className?: string;
 }
 
 // stroke hex values are required by Recharts; bg/text use semantic tokens
 const statusColors = {
+  unknown: { bg: 'bg-muted', text: 'text-muted-foreground', stroke: '#94a3b8' },
   good: { bg: 'bg-success/10', text: 'text-success', stroke: '#10b981' },
   warning: { bg: 'bg-warning/10', text: 'text-warning', stroke: '#f59e0b' },
   critical: { bg: 'bg-destructive/10', text: 'text-destructive', stroke: '#ef4444' },
@@ -143,20 +144,20 @@ export function NetworkHealthWidget({
       <div className="grid gap-4">
         <MetricCard
           label={t('NetworkHealthWidget.metrics.latency')}
-          value={latency.value.toString()}
-          unit="ms"
+          value={latency.value?.toString() ?? '—'}
+          unit={latency.value == null ? '' : 'ms'}
           trend={latency.history}
-          status={getLatencyStatus(latency.value)}
+          status={latency.value == null ? 'unknown' : getLatencyStatus(latency.value)}
           icon={Gauge}
           delay={0}
         />
         
         <MetricCard
           label={t('NetworkHealthWidget.metrics.packetLoss')}
-          value={packetLoss.value.toFixed(2)}
-          unit="%"
+          value={packetLoss.value?.toFixed(2) ?? '—'}
+          unit={packetLoss.value == null ? '' : '%'}
           trend={packetLoss.history}
-          status={getPacketLossStatus(packetLoss.value)}
+          status={packetLoss.value == null ? 'unknown' : getPacketLossStatus(packetLoss.value)}
           icon={Activity}
           delay={0.1}
         />
@@ -176,14 +177,14 @@ export function NetworkHealthWidget({
           <div className="flex items-center gap-2">
             <Download className="h-4 w-4 text-success" />
             <div>
-              <p className="text-sm font-semibold">{throughput.download.toFixed(1)} Mbps</p>
+              <p className="text-sm font-semibold">{throughput.download == null ? '—' : `${throughput.download.toFixed(1)} Mbps`}</p>
               <p className="text-xs text-muted-foreground">{t('NetworkHealthWidget.throughput.download')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Upload className="h-4 w-4 text-info" />
             <div>
-              <p className="text-sm font-semibold">{throughput.upload.toFixed(1)} Mbps</p>
+              <p className="text-sm font-semibold">{throughput.upload == null ? '—' : `${throughput.upload.toFixed(1)} Mbps`}</p>
               <p className="text-xs text-muted-foreground">{t('NetworkHealthWidget.throughput.upload')}</p>
             </div>
           </div>
@@ -204,7 +205,7 @@ export function NetworkHealthWidget({
           <span className="text-xs font-medium text-muted-foreground">{t('NetworkHealthWidget.uptime.title')}</span>
         </div>
         <div className="text-right">
-          <p className="text-sm font-semibold">{uptime.value.toFixed(2)}%</p>
+          <p className="text-sm font-semibold">{uptime.value == null ? '—' : `${uptime.value.toFixed(2)}%`}</p>
           <p className="text-xs text-muted-foreground">{uptime.label}</p>
         </div>
       </motion.div>

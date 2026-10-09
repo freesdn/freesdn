@@ -1,0 +1,30 @@
+Fabric executor and handler exception boundaries
+===================================
+
+Caught native-operation, target-lookup, artifact-persistence, staging and plugin
+exceptions are normalized without copying their text or traceback into an
+OperationResult or the executor's logs. Such exceptions may contain database
+parameters, connection URLs, credentials or private payloads. Operation IDs and
+fixed failure categories remain available for diagnosis. Existing error codes
+and the API's failed-operation mapping are preserved.
+
+The change does not retry an operation, change authorization, auto-apply a staged
+write or promise rollback of an external effect. Artifact cleanup after a failed
+stage is still attempted under the same organization. Cancellation propagates.
+Successful outputs and explicit OperationResult.fail messages returned by a
+handler are preserved; each handler remains responsible for making its own
+outputs and declared errors safe. The three VPN status/peer/route handlers and
+four VoIP status/call/extension/origination handlers now return fixed errors for
+caught service exceptions, including construction failures. Their existing error
+codes, invocation scope, successful response shapes and cancellation behavior
+remain intact. Built-in notifications and webhooks also normalize dispatch,
+transport and SSRF/URL exceptions without their text or traceback; notification
+failure logs keep only a fixed message. Successful webhook response bodies are
+still intentional output, not sanitized by this change. A failed origination response does not prove that the external
+call had no effect; operators must verify PBX state before retrying. Other services' logging and the contents of
+historical run records are outside this bounded correction.
+
+The regression suite uses synthetic canary details and mocked faulting services.
+It checks both serialized results and captured logs, staging call counts, artifact
+cleanup, the invocation endpoint's error bridge, success/refusal controls and
+cancellation. It does not contact hardware or simulate production credentials.

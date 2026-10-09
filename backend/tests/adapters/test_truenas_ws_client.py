@@ -67,7 +67,7 @@ def _client_with(monkeypatch: pytest.MonkeyPatch, outbox: list[str], **kw: Any) 
         return fake
 
     monkeypatch.setattr(
-        "app.adapters.truenas.ws_client.websockets.connect", fake_connect
+        "app.adapters.truenas.ws_client._NoRedirectConnect", fake_connect
     )
     c = TrueNASWSClient(host="nas.lab", username="truenas_admin", api_key="4-k", **kw)
     return c, fake
@@ -135,7 +135,7 @@ class TestAuth:
             return fake
 
         monkeypatch.setattr(
-            "app.adapters.truenas.ws_client.websockets.connect", fake_connect
+            "app.adapters.truenas.ws_client._NoRedirectConnect", fake_connect
         )
         c = TrueNASWSClient(host="nas.lab", username="truenas_admin", password="pw")
         await c.connect()

@@ -20,6 +20,7 @@ import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export interface GatewaySystemTabProps {
+  gatewayId: string;
   packagesData: any;
   packagesLoading: boolean;
   pluginsData: any;
@@ -27,20 +28,64 @@ export interface GatewaySystemTabProps {
   cronLoading: boolean;
   trustData: any;
   trustLoading: boolean;
+  trustError: boolean;
+  onRetryTrust: () => void;
   acmeData: any;
   acmeLoading: boolean;
+  acmeError: boolean;
+  onRetryAcme: () => void;
   syslogData: any;
   syslogLoading: boolean;
   haStatusData: any;
   haStatusLoading: boolean;
   certExpiryData: any;
   certExpiryLoading: boolean;
+  certExpiryError: boolean;
+  onRetryCertificateExpiry: () => void;
   onCheckUpdates: () => void;
   onDownloadConfig: () => void;
+  isDownloadingConfig?: boolean;
   onHaltGateway: () => void;
 }
 
+function validTrustInventory(data: any, gatewayId: string, kind: 'trust' | 'acme'): boolean {
+  if (!data || data.gateway_id !== gatewayId) return false;
+  const inventory = data[kind];
+  if (!inventory || typeof inventory !== 'object' || Array.isArray(inventory)) return false;
+  const keys = kind === 'trust' ? ['certificates', 'certificate_authorities', 'crls'] : ['certificates', 'accounts', 'validations', 'actions'];
+  if (!keys.every((key) => Array.isArray(inventory[key]) && inventory[key].every((row: any) =>
+    row && typeof row === 'object' && !Array.isArray(row) && typeof row.uuid === 'string' && row.uuid.trim() &&
+    Object.values(row).every((value) => value === null || typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)))
+  ))) return false;
+  const counts = kind === 'trust'
+    ? [['cert_count', 'certificates'], ['ca_count', 'certificate_authorities'], ['crl_count', 'crls']]
+    : [['cert_count', 'certificates'], ['account_count', 'accounts']];
+  if (!counts.every(([count, key]) => Number.isSafeInteger(inventory[count]) && inventory[count] === inventory[key].length)) return false;
+  return kind === 'trust' || (
+    typeof inventory.settings?.enabled === 'boolean' && typeof inventory.settings?.auto_renewal === 'boolean' &&
+    [...inventory.certificates, ...inventory.accounts].every((row: any) => typeof row.enabled === 'boolean')
+  );
+}
+
+function validCertificateSummary(data: any, gatewayId: string): boolean {
+  if (!data || data.gateway_id !== gatewayId || data.days_threshold !== 30) return false;
+  const counts = [data.total_certificates, data.valid_count, data.unknown_count];
+  if (!counts.every((value) => Number.isSafeInteger(value) && value >= 0)) return false;
+  const rowsValid = (rows: any, status: string) => Array.isArray(rows) && rows.every((row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row) || row.status !== status ||
+      typeof row.name !== 'string' || typeof row.common_name !== 'string') return false;
+    return status === 'unknown'
+      ? row.expires === null && row.days_remaining === null
+      : typeof row.expires === 'string' && Number.isFinite(Date.parse(row.expires)) && Number.isSafeInteger(row.days_remaining);
+  });
+  if (!rowsValid(data.expired, 'expired') || !rowsValid(data.expiring_soon, 'expiring_soon') || !rowsValid(data.unknown, 'unknown')) return false;
+  const warnings = data.expired.length + data.expiring_soon.length + data.unknown.length;
+  return data.unknown_count === data.unknown.length &&
+    data.total_certificates === data.valid_count + warnings && data.needs_attention === (warnings > 0);
+}
+
 export function GatewaySystemTab({
+  gatewayId,
   packagesData,
   packagesLoading,
   pluginsData,
@@ -48,16 +93,23 @@ export function GatewaySystemTab({
   cronLoading,
   trustData,
   trustLoading,
+  trustError,
+  onRetryTrust,
   acmeData,
   acmeLoading,
+  acmeError,
+  onRetryAcme,
   syslogData,
   syslogLoading,
   haStatusData,
   haStatusLoading,
   certExpiryData,
   certExpiryLoading,
+  certExpiryError,
+  onRetryCertificateExpiry,
   onCheckUpdates,
   onDownloadConfig,
+  isDownloadingConfig = false,
   onHaltGateway,
 }: GatewaySystemTabProps) {
   const { t } = useTranslation('firewall');
@@ -67,7 +119,7 @@ export function GatewaySystemTab({
         <Button variant="outline" size="sm" onClick={onCheckUpdates}>
           <Search className="h-4 w-4 mr-1" /> {t('GatewaySystemTab.actions.checkUpdates')}
         </Button>
-        <Button variant="outline" size="sm" onClick={onDownloadConfig}>
+        <Button variant="outline" size="sm" onClick={onDownloadConfig} disabled={isDownloadingConfig} aria-busy={isDownloadingConfig}>
           <Archive className="h-4 w-4 mr-1" /> {t('GatewaySystemTab.actions.downloadConfig')}
         </Button>
         <Button variant="destructive" size="sm" onClick={() => {
@@ -137,11 +189,16 @@ export function GatewaySystemTab({
         </CardHeader>
         {trustLoading ? (
           <CardContent><Skeleton className="h-24" /></CardContent>
+        ) : trustError || !validTrustInventory(trustData?.data, gatewayId, 'trust') ? (
+          <CardContent className="space-y-3" role="status">
+            <p className="text-sm text-muted-foreground">{t('GatewaySystemTab.trust.unavailable')}</p>
+            <Button variant="outline" size="sm" onClick={onRetryTrust}>{t('GatewaySystemTab.trust.retry')}</Button>
+          </CardContent>
         ) : (() => {
           const trust = trustData?.data?.trust;
           const certs = trust?.certificates || [];
           const cas = trust?.certificate_authorities || [];
-          const crls = trust?.certificate_revocation_lists || [];
+          const crls = trust.crls;
           return (
             <CardContent noOffset className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -229,6 +286,11 @@ export function GatewaySystemTab({
         </CardHeader>
         {acmeLoading ? (
           <CardContent><Skeleton className="h-24" /></CardContent>
+        ) : acmeError || !validTrustInventory(acmeData?.data, gatewayId, 'acme') ? (
+          <CardContent className="space-y-3" role="status">
+            <p className="text-sm text-muted-foreground">{t('GatewaySystemTab.acme.unavailable')}</p>
+            <Button variant="outline" size="sm" onClick={onRetryAcme}>{t('GatewaySystemTab.acme.retry')}</Button>
+          </CardContent>
         ) : (() => {
           const acme = acmeData?.data?.acme;
           const acmeCerts = acme?.certificates || [];
@@ -272,10 +334,10 @@ export function GatewaySystemTab({
                         {acmeCerts.map((c: any, i: number) => (
                           <tr key={i} className="border-b last:border-0">
                             <td className="px-3 py-2 font-medium">{c.name || c.description}</td>
-                            <td className="px-3 py-2 font-mono text-xs">{c.altNames || c.domain || '-'}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{c.alt_names || '-'}</td>
                             <td className="px-3 py-2">{c.account || '-'}</td>
-                            <td className="px-3 py-2 text-xs">{c.lastUpdate || '-'}</td>
-                            <td className="px-3 py-2"><Badge variant={c.enabled ? 'default' : 'secondary'}>{c.enabled ? t('GatewaySystemTab.common.active') : t('GatewaySystemTab.common.disabled')}</Badge></td>
+                            <td className="px-3 py-2 text-xs">{c.last_update || '-'}</td>
+                            <td className="px-3 py-2"><Badge variant={c.enabled ? 'default' : 'secondary'}>{c.enabled ? t('GatewaySystemTab.acme.enabled') : t('GatewaySystemTab.acme.disabled')}</Badge></td>
                           </tr>
                         ))}
                       </tbody>
@@ -301,7 +363,7 @@ export function GatewaySystemTab({
                             <td className="px-3 py-2 font-medium">{a.name || a.description}</td>
                             <td className="px-3 py-2">{a.email || '-'}</td>
                             <td className="px-3 py-2">{a.ca || a.certificateAuthority || '-'}</td>
-                            <td className="px-3 py-2"><Badge variant={a.enabled ? 'default' : 'secondary'}>{a.enabled ? t('GatewaySystemTab.common.active') : t('GatewaySystemTab.common.disabled')}</Badge></td>
+                            <td className="px-3 py-2"><Badge variant={a.enabled ? 'default' : 'secondary'}>{a.enabled ? t('GatewaySystemTab.acme.enabled') : t('GatewaySystemTab.acme.disabled')}</Badge></td>
                           </tr>
                         ))}
                       </tbody>
@@ -310,7 +372,7 @@ export function GatewaySystemTab({
                 </div>
               )}
 
-              {acmeCerts.length === 0 && accounts.length === 0 && (
+              {acmeCerts.length === 0 && accounts.length === 0 && validations.length === 0 && actions.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">{t('GatewaySystemTab.acme.empty')}</p>
               )}
             </CardContent>
@@ -404,12 +466,19 @@ export function GatewaySystemTab({
         {certExpiryLoading ? (
           <CardContent><div className="flex items-center gap-2 text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" /> {t('GatewaySystemTab.lifecycle.checking')}</div></CardContent>
         ) : (() => {
-          const ce = certExpiryData?.data || {};
-          const expired = ce.expired || [];
-          const expiring = ce.expiring_soon || [];
+          const ce = certExpiryData?.data;
+          if (certExpiryError || !validCertificateSummary(ce, gatewayId)) return (
+            <CardContent className="space-y-3">
+              <p role="alert" className="text-sm text-muted-foreground">{t('GatewaySystemTab.lifecycle.unavailable')}</p>
+              <Button variant="outline" size="sm" onClick={onRetryCertificateExpiry}>{t('GatewaySystemTab.lifecycle.retry')}</Button>
+            </CardContent>
+          );
+          const expired = ce.expired;
+          const expiring = ce.expiring_soon;
+          const unknown = ce.unknown;
           return (
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                 <div className="text-center p-3 rounded-lg border">
                   <p className="text-2xl font-bold">{ce.total_certificates || 0}</p>
                   <p className="text-xs text-muted-foreground">{t('GatewaySystemTab.lifecycle.totalCertificates')}</p>
@@ -426,26 +495,32 @@ export function GatewaySystemTab({
                   <p className="text-2xl font-bold text-red-600">{expired.length}</p>
                   <p className="text-xs text-muted-foreground">{t('GatewaySystemTab.lifecycle.expired')}</p>
                 </div>
+                <div className="text-center p-3 rounded-lg border">
+                  <p className="text-2xl font-bold text-yellow-600">{ce.unknown_count}</p>
+                  <p className="text-xs text-muted-foreground">{t('GatewaySystemTab.lifecycle.unknown')}</p>
+                </div>
               </div>
-              {(expired.length > 0 || expiring.length > 0) && (
+              {unknown.length > 0 && <p role="alert" className="text-sm text-muted-foreground">{t('GatewaySystemTab.lifecycle.unknownExpiry')}</p>}
+              {(expired.length > 0 || expiring.length > 0 || unknown.length > 0) && (
                 <div className="overflow-auto max-h-[250px] rounded border">
                   <table className="w-full text-xs">
                     <thead className="bg-muted sticky top-0"><tr><th className="px-3 py-2 text-left">{t('GatewaySystemTab.lifecycle.columns.certificate')}</th><th className="px-3 py-2 text-left">{t('GatewaySystemTab.lifecycle.columns.cn')}</th><th className="px-3 py-2 text-left">{t('GatewaySystemTab.lifecycle.columns.status')}</th><th className="px-3 py-2 text-left">{t('GatewaySystemTab.lifecycle.columns.daysRemaining')}</th><th className="px-3 py-2 text-left">{t('GatewaySystemTab.lifecycle.columns.expires')}</th></tr></thead>
                     <tbody>
-                      {[...expired, ...expiring].map((c: any, i: number) => (
+                      {[...expired, ...expiring, ...unknown].map((c: any, i: number) => (
                         <tr key={i} className="border-t">
                           <td className="px-3 py-1.5 font-medium">{c.name}</td>
                           <td className="px-3 py-1.5 font-mono">{c.common_name}</td>
-                          <td className="px-3 py-1.5"><Badge variant={c.status === 'expired' ? 'destructive' : 'outline'}>{c.status === 'expired' ? t('GatewaySystemTab.lifecycle.expired') : t('GatewaySystemTab.lifecycle.expiringSoon')}</Badge></td>
-                          <td className="px-3 py-1.5 font-mono">{c.days_remaining}</td>
-                          <td className="px-3 py-1.5">{new Date(c.expires).toLocaleDateString()}</td>
+                          <td className="px-3 py-1.5"><Badge variant={c.status === 'expired' ? 'destructive' : 'outline'}>{c.status === 'expired' ? t('GatewaySystemTab.lifecycle.expired') : c.status === 'unknown' ? t('GatewaySystemTab.lifecycle.unknown') : t('GatewaySystemTab.lifecycle.expiringSoon')}</Badge></td>
+                          <td className="px-3 py-1.5 font-mono">{c.days_remaining ?? '—'}</td>
+                          <td className="px-3 py-1.5">{c.expires === null ? '—' : new Date(c.expires).toLocaleDateString()}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
-              {!ce.needs_attention && <p className="text-sm text-muted-foreground">{t('GatewaySystemTab.lifecycle.allValid')}</p>}
+              {ce.total_certificates === 0 && <p className="text-sm text-muted-foreground">{t('GatewaySystemTab.lifecycle.empty')}</p>}
+              {!ce.needs_attention && ce.total_certificates > 0 && <p className="text-sm text-muted-foreground">{t('GatewaySystemTab.lifecycle.allValid')}</p>}
             </CardContent>
           );
         })()}

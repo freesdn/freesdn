@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
 /**
@@ -50,6 +51,17 @@ if (!i18n.isInitialized) {
     react: { useSuspense: false },
   });
 }
+
+// happy-dom's new partial Web Animations implementation eagerly creates a
+// rejecting `finished` promise on cancellation, even when Motion never reads it.
+// Component tests do not assert compositor animation timing: use Motion's JS
+// fallback here. Do not swallow unhandled rejections or change production code.
+// Real browser/visual tests remain responsible for the native animation path.
+Object.defineProperty(Element.prototype, 'animate', {
+  configurable: true,
+  writable: true,
+  value: undefined,
+});
 
 afterEach(() => {
   cleanup();

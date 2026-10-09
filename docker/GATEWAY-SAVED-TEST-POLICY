@@ -1,0 +1,30 @@
+Saved gateway connection-test settings
+======================================
+
+Testing a saved gateway forwards its saved vendor options to the same adapter
+construction path used by live operations. This includes explicit use_ssl
+selection on custom ports. The explicit test certificate-verification override
+still takes precedence over the saved verify_ssl field; neither is rewritten.
+
+A shared settings projection protects adapter identity, destination, credential
+and certificate-verification fields against settings collisions. Matching is
+case-insensitive. Existing forbidden write-control options remain excluded.
+Valid vendor options remain available. Historical stored JSON is not rewritten.
+Absent or empty settings retain existing defaults. Cross-organization requests
+remain refused before adapter creation.
+
+Before/after qualification uses actual encrypted PostgreSQL rows and local
+HTTP/TLS peers with real MikroTik and pfSense clients. Only the fixture hostname
+is relocated to loopback; clients select the real scheme and custom port.
+The old path can send HTTP authentication despite a saved MikroTik HTTPS choice.
+The repaired path honors all eight saved-protocol/peer combinations. Verification
+is deliberately disabled in these transport-selection cases; they do not prove
+certificate trust. Four-vendor settings/identity checks additionally use adapter
+factory doubles, with actual database rows and explicit trust overrides.
+
+Constructor exception mapping is covered by GATEWAY-CONSTRUCTION-FAILURES.
+Saved-test resource authority and stale results are covered by
+GATEWAY-TEST-AUTHORITY. Current caller/session/grant revalidation, broader
+provider metadata and other diagnostic logs remain separate.
+No hardware operations, schema changes or dependency upgrades are performed.
+See GATEWAY-HTTPS-POLICY, GATEWAY-TEST-LIFECYCLE and GATEWAY-TEST-DIAGNOSTICS.

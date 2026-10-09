@@ -1,0 +1,57 @@
+Discovery job ownership and safe status responses
+================================================
+
+POST /network/discovery/start and POST /network/topology/refresh reserve a
+random UUID with its organization, optional site and exact discovery task kind
+before publishing the task. Redis SET NX prevents replacement; the record
+expires after 24 hours. The existing Sentinel-aware client factory is used.
+A store failure or reservation collision refuses publication. If broker
+acknowledgement fails, the API retains the owner and returns HTTP 503 with the
+same task ID and an explicit unknown-outcome message. Inspect that ID before
+retrying: this is not durable publication recovery or exactly-once execution.
+
+GET /network/discovery/status requires the separate ownership record. A task ID,
+Celery result or generic progress record alone never grants access. The caller
+must have the current organization context and current site grant; a named site
+must still be active, not deleted and in that organization. This applies even
+to administrators using a selected organization. Site-limited callers cannot
+read organization-wide jobs. Existing device-read/admin permissions still apply.
+
+The result response contains only task ID, a known state, fixed message, bounded
+integer discovered-device count, coarse completion percentage and null timing
+fields. It does not expose controller diagnostics, tracebacks or arbitrary result
+fields. The real aggregate total_devices_discovered takes precedence over the
+legacy devices_found field. Explicit success:false maps to failure; malformed
+counts/backend states return a safe unavailable response. This boundary does not
+redefine partial-controller success semantics in the discovery worker.
+
+Upgrade and operational limits
+------------------------------
+
+Legacy and expired IDs without the new ownership record return 404, even when a
+Celery result remains. Scheduled maintenance tasks are not tenant-submitted jobs
+and do not receive a public status owner. A job queued for more than 24 hours can
+lose status visibility. Redis eviction or loss also removes visibility; there is
+no database recovery or legacy ownership backfill. Deploy all API replicas
+consistently: an older replica retains the unsafe legacy result access path.
+
+Authorization is checked at read/submission time; this does not fence a running
+hardware operation if authorization changes afterward. Zero explicit site grants
+retain the existing unrestricted-within-organization policy. Raw Celery result
+storage and infrastructure logs remain sensitive. Discovery lock ownership,
+controller aggregation, controller error persistence and device identity matching
+are separate audit work. No multi-host failover or hardware write qualification
+is claimed by these tests.
+
+Verification
+------------
+
+Boundary regressions reproduce cross-tenant/unowned reads on the preceding code.
+Store and projection tests cover malformed records, cancellation, closure,
+non-overwriting reservation and diagnostic suppression. Real PostgreSQL tests
+apply site disable/delete/move changes in separate committed transactions.
+Release probes additionally use real Redis/Valkey, API routes and a separate
+Celery worker executing the shipping task wrapper. Authentication and the
+controller-discovery coroutine are synthetic, so these probes do not contact
+hardware or qualify adapter behavior. They exercise acknowledgement loss after
+actual broker acceptance and observe ownership before the synthetic effect.

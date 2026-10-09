@@ -8,7 +8,7 @@ Pydantic v2 schemas for backup management API.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -222,6 +222,7 @@ class StorageLocationResponse(BaseSchema):
     name: str
     description: str | None = None
     storage_type: str
+    transport_security_review_required: bool = False
     is_active: bool = True
     is_default: bool = False
     last_test_at: datetime | None = None
@@ -315,6 +316,9 @@ class BackupResponse(BaseSchema):
     storage_location_id: UUID | None = None
     storage_path: str | None = None
     file_size: int | None = None
+    artifact_integrity: Literal["recorded", "legacy_unverified", "invalid"] = "legacy_unverified"
+    remote_write_operation_id: UUID | None = None
+    remote_write_recovery_required: bool = False
     site_id: UUID | None = None
     device_ids: list[Any] | None = None
     include_devices: bool = True
@@ -393,12 +397,16 @@ class BackupScheduleCreate(BaseSchema):
     @field_validator("cron_expression")
     @classmethod
     def _validate_cron(cls, v: str) -> str:
-        from app.core.security_utils import validate_cron_expression
+        from app.core.backup_schedule import validate_backup_cron
 
-        result = validate_cron_expression(v)
-        if result is None:
-            raise ValueError("Invalid cron expression")
-        return result
+        return validate_backup_cron(v)
+
+    @field_validator("timezone")
+    @classmethod
+    def _validate_timezone(cls, v: str) -> str:
+        from app.core.backup_schedule import validate_backup_timezone
+
+        return validate_backup_timezone(v)
 
 
 class BackupScheduleUpdate(BaseSchema):
@@ -427,12 +435,18 @@ class BackupScheduleUpdate(BaseSchema):
     @classmethod
     def _validate_cron(cls, v: str | None) -> str | None:
         if v is not None:
-            from app.core.security_utils import validate_cron_expression
+            from app.core.backup_schedule import validate_backup_cron
 
-            result = validate_cron_expression(v)
-            if result is None:
-                raise ValueError("Invalid cron expression")
-            return result
+            return validate_backup_cron(v)
+        return v
+
+    @field_validator("timezone")
+    @classmethod
+    def _validate_timezone(cls, v: str | None) -> str | None:
+        if v is not None:
+            from app.core.backup_schedule import validate_backup_timezone
+
+            return validate_backup_timezone(v)
         return v
 
 
@@ -525,7 +539,12 @@ class BackupManifestPreview(BaseSchema):
     """
 
     backup_id: UUID
-    format_version: str
+    format_version: str | None
+    requires_passphrase: bool = False
+    reason: str | None = None
+    artifact_integrity: Literal["recorded", "verified", "legacy_unverified", "invalid"] = (
+        "legacy_unverified"
+    )
     created_at: datetime | None = None
     source_version: str | None = None
     organization_id: str | None = None

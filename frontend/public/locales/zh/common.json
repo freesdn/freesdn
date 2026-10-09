@@ -1045,6 +1045,30 @@
     "confirmResolve": {
       "title": "将此更改标记为已解决？",
       "body": "此更改可能已在设备上生效。请先检查设备再确认：此操作仅将其从队列中清除，不会撤销任何更改。"
+    },
+    "provider": {
+      "heading": "提供方任务",
+      "description": "请求已接受与任务已完成分别记录。状态检查不会重试写入。",
+      "acceptedTitle": "请求已接受",
+      "acceptedDescription": "{{gatewayName}} 已接受请求，尚未验证任务完成。",
+      "bulkPaused": "批量应用已暂停。请先验证提供方任务，再应用剩余更改。",
+      "checked": "上次检查：{{when}}",
+      "verify": "继续前请在 Proxmox 中检查任务。失败或未能观测的任务可能已进行了部分更改，请勿直接重复执行。",
+      "status": {
+        "pending": "已接受，等待状态检查",
+        "running": "正在 Proxmox 上运行",
+        "succeeded": "提供方任务已完成",
+        "warnings": "已完成，但有警告",
+        "failed": "任务失败，请验证更改",
+        "unknown": "结果尚未验证"
+      },
+      "pendingRestart": "配置已保存，但来宾的当前设置仍不同。请安排重启；FreeSDN 将再次检查，不会重复写入。",
+      "stateVerified": "已通过读取提供程序配置验证所请求的来宾状态。",
+      "deletionVerified": "删除任务已完成，已确认客户机 ID 未被占用。这不代表已验证存储数据擦除。",
+      "nodePowerManual": "解决此回执前，请通过独立管理通道验证主机电源或重启。连接丢失并不能证明操作完成。",
+      "haVerified": "已验证请求的 HA 配置。未验证工作负载健康或故障转移成功。",
+      "certificateVerified": "已验证保存的叶证书和配置的 TLS 端点；不代表所有端点、完整信任链或私钥已擦除。",
+      "certificateVerify": "证书生效情况尚未完全验证。解决前请检查配置的端点和控制台恢复方式。不要盲目重复写入。"
     }
   },
   "CameraAccessPanel": {

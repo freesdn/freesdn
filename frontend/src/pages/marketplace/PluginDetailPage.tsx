@@ -24,7 +24,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 
-import { api } from '@/lib/api';
+import { api, getApiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { safeExternalUrl } from '@/lib/utils';
 import { PageHeader } from '@/components/layout';
@@ -364,9 +364,7 @@ export default function PluginDetailPage() {
       {(installMutation.isError || upgradeMutation.isError) && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>            {(installMutation.error as any)?.response?.data?.detail ||
-              (upgradeMutation.error as any)?.response?.data?.detail ||
-              t('PluginDetailPage.installFailed')}
+          <AlertDescription>            {getApiErrorMessage(upgradeMutation.isError ? upgradeMutation.error : installMutation.error, t('PluginDetailPage.installFailed'))}
           </AlertDescription>
         </Alert>
       )}
@@ -484,7 +482,7 @@ export default function PluginDetailPage() {
             {t('PluginDetailPage.submitReview')}
           </Button>
           {submitReviewMutation.isError && (
-            <p className="text-xs text-destructive">              {(submitReviewMutation.error as any)?.response?.data?.detail || t('PluginDetailPage.submitReviewFailed')}
+            <p className="text-xs text-destructive">              {getApiErrorMessage(submitReviewMutation.error, t('PluginDetailPage.submitReviewFailed'))}
             </p>
           )}
         </div>

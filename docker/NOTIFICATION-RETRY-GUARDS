@@ -1,0 +1,48 @@
+Notification retry authority and attempt lifecycle
+=================================================
+
+The retry worker reads the persisted delivery before any provider call. Its
+organization, channel, subject, failed state and prior attempt must match the
+task. Successful, skipped, dead-lettered, missing, foreign and stale attempts
+are refused. A tenant must still be active and not deleted. Invalid identifiers
+or attempts are refused without delivery. The total attempt ceiling is five,
+including the initial send; an explicitly lower ceiling remains supported.
+
+A PostgreSQL row lock serializes workers retrying the same delivery. A worker
+that waits for another worker's committed result rechecks the eligibility
+predicate before sending. This lock is held across the provider call and commit;
+worker time limits still apply. Tests using SQLite cannot establish this lock
+behavior and must be supplemented by real PostgreSQL qualification.
+
+Explicit provider IDs must identify an enabled provider in the exact delivery
+organization and channel. A missing or ineligible explicit provider does not
+fall back to a different provider. Default tenant retries load only that tenant's
+enabled providers. A platform-scoped retry can select only a platform provider.
+These are lookup-time lifecycle checks; concurrent provider/tenant changes are
+not atomically fenced with the external delivery.
+
+The scheduling helper returns whether the broker call completed successfully.
+It emits retry_scheduled only after that call. Broker failures emit a fixed
+failure log without exception text, and the worker reports rescheduled=false.
+Logs are not a durable retry payload or dead-letter queue. A broker timeout can
+be ambiguous, so a failed call is not proof that no task reached the broker.
+
+Provider exceptions become a fixed failure message. Provider-reported errors
+retain their existing classification/storage behavior; this correction does not
+claim all provider responses are scrubbed. Successful provider skips are stored
+as skipped, not sent. Failed or uncertain commits are never reported as success.
+
+Remaining limits
+----------------
+The original dispatcher may still enqueue before its outer transaction commits
+and may use one AsyncSession concurrently. This worker correction does not make
+those initial transactions durable. Retry content and recipient still come from
+the trusted task payload, not a persisted immutable outbox. Protect broker write
+access accordingly. A provider effect followed by a crash or failed commit can
+still be repeated by a later retry; exactly-once delivery is not guaranteed.
+Retry provider calls retain their existing rate-limit/preference behavior; this
+change does not establish a new end-to-end delivery or spending guarantee.
+
+Synthetic provider mocks and short database fixtures are not external SMTP,
+SMS, webhook or live hardware acceptance. Do not describe these guards alone as
+enterprise production readiness.

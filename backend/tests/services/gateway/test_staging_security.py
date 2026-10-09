@@ -465,7 +465,10 @@ class TestApplyChangeAtomicClaim:
         assert change.failure_reason == "RuntimeError"
 
     @pytest.mark.asyncio
-    async def test_applier_returns_failed_result_marks_row_failed(self, monkeypatch) -> None:
+    @pytest.mark.parametrize("serialized", [False, True])
+    async def test_applier_returns_failed_result_marks_row_failed(
+        self, monkeypatch, serialized
+    ) -> None:
         """An applier that RETURNS a failed AdapterResult (``success=False``)
         — instead of raising — must NOT be recorded as 'applied'. ``apply_change``
         must guard against both raised exceptions and returned failure results, so a
@@ -486,11 +489,10 @@ class TestApplyChangeAtomicClaim:
         session.execute.return_value = MagicMock(scalar_one_or_none=MagicMock(return_value=change))
 
         # Applier RETURNS (does not raise) a failed result.
-        applier = AsyncMock(
-            return_value=SimpleNamespace(
-                success=False, error="device rejected: rule conflict", message=None
-            )
+        response = SimpleNamespace(
+            success=False, error="device rejected: rule conflict", message=None
         )
+        applier = AsyncMock(return_value=vars(response) if serialized else response)
         svc = AdapterStagingService(session)
         with pytest.raises(HTTPException) as exc:
             await svc.apply_change(change.id, force=True, applier=applier)

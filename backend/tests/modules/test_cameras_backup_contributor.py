@@ -12,6 +12,7 @@ exclusion, and restore tenant/FK guards (now via the shared
 from __future__ import annotations
 
 from collections import deque
+from contextlib import nullcontext
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
@@ -37,9 +38,15 @@ class FakeAsyncSession:
         self._store = store or {}
         self.added: list[Any] = []
         self.flush_count = 0
+        self.is_active = True
+
+    def begin_nested(self):
+        # Shape-only unit double: transaction/refresh behavior is qualified by
+        # the real PostgreSQL contributor cases, never by this context manager.
+        return nullcontext()
 
     async def execute(self, _q): return _Result(self._q.popleft() if self._q else [])
-    async def get(self, model_cls, pk): return self._store.get((model_cls.__name__, str(pk)))
+    async def get(self, model_cls, pk, *, populate_existing=False, with_for_update=None): return self._store.get((model_cls.__name__, str(pk)))
     def add(self, obj): self.added.append(obj)
     async def flush(self): self.flush_count += 1
 
@@ -246,16 +253,16 @@ class TestRestore:
 
     @pytest.mark.asyncio
     async def test_force_org_on_insert(self) -> None:
-        """A record claiming a foreign organization_id still gets the
-        caller's org forced on insert (defense-in-depth — and the
-        Camera's site_id keeps it in-org anyway)."""
+        """An omitted organization is filled from the authorized target.
+
+        Explicit foreign claims are rejected by the real PostgreSQL negative
+        cases; they must not be silently rewritten into this organization.
+        """
         org, site = uuid4(), uuid4()
-        foreign_org = uuid4()
         session = FakeAsyncSession(execute_results=[[site], [], []])
         data = {
             "nvrs": [], "cameras": [],
             "camera_groups": [{"id": str(uuid4()),
-                               "organization_id": str(foreign_org),
                                "name": "G"}],
             "camera_group_members": [],
             "camera_views": [], "recording_schedule_templates": [],
@@ -264,7 +271,7 @@ class TestRestore:
             session, org, self._payload(data), dry_run=False, options={},
         )
         grp = [o for o in session.added if type(o).__name__ == "CameraGroup"][0]
-        # organization_id forced to caller's org, NOT the foreign one.
+        # Missing organization_id is filled from the authorized target.
         assert grp.organization_id == org
 
     @pytest.mark.asyncio

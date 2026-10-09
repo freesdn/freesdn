@@ -397,7 +397,8 @@
       "healthy": "Correcto",
       "warning": "Advertencia",
       "degraded": "Degradado",
-      "critical": "Crítico"
+      "critical": "Crítico",
+      "unknown": "Desconocido"
     },
     "errorLoading": "No se pudieron cargar los datos de estado de los dispositivos.",
     "empty": "Ningún dispositivo coincide con los filtros actuales.",
@@ -575,7 +576,8 @@
         "degraded": "50-69 · Degradado",
         "critical": "0-49 · Crítico"
       }
-    }
+    },
+    "measurementCoverage": "{{measured}} / {{total}} registros de estado con mediciones"
   },
   "IncidentsPage": {
     "header": {

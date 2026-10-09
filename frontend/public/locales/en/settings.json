@@ -257,7 +257,8 @@
       },
       "modules": {
         "title": "Module Management",
-        "description": "Enable, disable, and configure FreeSDN modules. Modules add new functionality like cameras, VoIP, firewall management, and more."
+        "description": "Enable, disable, and configure FreeSDN modules. Modules add new functionality like cameras, VoIP, firewall management, and more.",
+        "enablementBoundary": "Module selection controls navigation and lifecycle hooks. It does not block API access or cancel every background job. Use permissions, site grants and explicit scheduler controls for those purposes."
       }
     }
   },
@@ -952,7 +953,18 @@
       "savedOk": "Saved.",
       "checkTitle": "Saved, with something to check",
       "secretConfigured": "Configured. Type to replace it.",
-      "secretEmpty": "Not set"
+      "secretEmpty": "Not set",
+      "secretChoiceConfigured": "Configured. Select an option to replace it.",
+      "emptyChoice": "Empty string",
+      "retainedChoice": "{{value}} (saved value)",
+      "retainedChoiceHint": "This saved value is not in the current options. Select an option to change it.",
+      "typedChoice": "{{value}} ({{type}})",
+      "choiceType": {
+        "string": "text",
+        "number": "number",
+        "boolean": "boolean",
+        "null": "null"
+      }
     }
   },
   "SSOSettingsPage": {

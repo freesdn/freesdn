@@ -40,9 +40,11 @@ from app.adapters.exceptions import (
     AdapterAuthenticationError,
     AdapterConnectionError,
     AdapterError,
+    CapabilityNotSupportedError,
 )
 from app.adapters.http_utils import CircuitBreaker
 from app.core.http_client import build_async_client
+from app.core.xml_utils import UnsafeXML, parse_untrusted_xml
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +166,10 @@ _READ_POST_VERBS: tuple[str, ...] = (
 
 def _is_read_only_post(path: str) -> bool:
     """True if a POST to ``path`` is an OPNsense READ (search/get/list/…)."""
+    # LogController reads are POSTs to exactly these resource paths. Never
+    # allow /clear or arbitrary suffixes via this exception.
+    if path.startswith("/api/diagnostics/log/"):
+        return path in {"/api/diagnostics/log/core/system", "/api/diagnostics/log/core/filter"}
     seg = path.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0].lower()
     return seg.startswith(_READ_POST_VERBS)
 
@@ -212,6 +218,18 @@ def _record_error(error_type: str) -> None:
         adapter_errors_total.labels(adapter="opnsense", error_type=error_type).inc()
     except Exception:
         pass
+
+
+def _validate_backup_filename(filename: str) -> str:
+    """Accept one filename segment within the existing API path size limit."""
+    if (
+        not isinstance(filename, str)
+        or re.fullmatch(r"[a-zA-Z0-9_.-]{1,128}", filename) is None
+        or ".." in filename
+        or filename == "."
+    ):
+        raise ValueError("Invalid backup filename")
+    return filename
 
 
 class OPNsenseAPIError(AdapterError):
@@ -523,7 +541,7 @@ class OPNsenseClient:
                         path,
                         attempt,
                         self.max_retries,
-                        exc,
+                        type(exc).__name__,
                         delay,
                     )
                     await asyncio.sleep(delay)
@@ -681,14 +699,20 @@ class OPNsenseClient:
     # System
     # ═══════════════════════════════════════════════════════════════════════
 
+    async def get_system_information(self) -> dict[str, Any]:
+        return await self.get("/api/diagnostics/system/system_information")
+
+    async def get_system_time(self) -> dict[str, Any]:
+        return await self.get("/api/diagnostics/system/system_time")
+
+    async def get_gateway_inventory(self) -> dict[str, Any]:
+        return await self.get("/api/routing/settings/search_gateway")
+
     async def get_system_status(self) -> dict[str, Any]:
         return await self.get("/api/core/system/status")
 
     async def get_firmware_status(self) -> dict[str, Any]:
         return await self.get("/api/core/firmware/status")
-
-    async def get_system_time(self) -> dict[str, Any]:
-        return await self.get("/api/core/system/time")
 
     # ═══════════════════════════════════════════════════════════════════════
     # Interfaces
@@ -898,10 +922,16 @@ class OPNsenseClient:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_system_log(self, limit: int = 100) -> dict[str, Any]:
-        return await self.get(f"/api/diagnostics/log/core/system/{limit}")
+        return await self.post(
+            "/api/diagnostics/log/core/system",
+            {"current": 1, "rowCount": max(1, min(int(limit), 5000))},
+        )
 
     async def get_firewall_log(self, limit: int = 100) -> dict[str, Any]:
-        return await self.get(f"/api/diagnostics/log/core/filter/{limit}")
+        return await self.post(
+            "/api/diagnostics/log/core/filter",
+            {"current": 1, "rowCount": max(1, min(int(limit), 5000))},
+        )
 
     async def get_traffic_stats(self) -> dict[str, Any]:
         return await self.get("/api/diagnostics/traffic/top/wan")
@@ -952,28 +982,44 @@ class OPNsenseClient:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def get_backup_list(self) -> dict[str, Any]:
-        return await self.get("/api/core/backup/backups")
+        return await self.get("/api/core/backup/backups/this")
 
     async def create_backup(self, *, force: bool = False) -> dict[str, Any]:
-        return await self.post("/api/core/backup/backup", force=force)
+        """The core backup API has no operation to create a history entry."""
+        raise CapabilityNotSupportedError(
+            "OPNsense backup creation is not supported by this API; no backup was created",
+            adapter_id="opnsense",
+            capability="create_backup",
+        )
 
     async def delete_backup(self, filename: str, *, force: bool = False) -> dict[str, Any]:
+        filename = _validate_backup_filename(filename)
         return await self.post(
-            "/api/core/backup/deleteBackup",
-            {"filename": filename},
+            f"/api/core/backup/deleteBackup/{filename}",
             force=force,
         )
 
     async def revert_backup(self, filename: str, *, force: bool = False) -> dict[str, Any]:
+        filename = _validate_backup_filename(filename)
         return await self.post(
-            "/api/core/backup/revertBackup",
-            {"filename": filename},
+            f"/api/core/backup/revertBackup/{filename}",
             force=force,
         )
 
     async def download_config(self) -> dict[str, Any]:
         """Download the current running configuration (XML)."""
-        return await self.get("/api/core/backup/download/this")
+        xml_text = await self.download_config_xml()
+        try:
+            root = parse_untrusted_xml(xml_text, max_bytes=16 * 1024 * 1024)
+            if root.tag != "opnsense":
+                raise UnsafeXML("Unexpected configuration root")
+        except UnsafeXML:
+            # Full configuration bodies contain credentials and private keys.
+            # Do not include the response or parser exception in diagnostics.
+            raise OPNsenseAPIError(
+                "OPNsense returned an invalid configuration document", status_code=502
+            ) from None
+        return {"config_xml": xml_text}
 
     # ═══════════════════════════════════════════════════════════════════════
     # NAT — Source NAT (CRUD)
@@ -1240,10 +1286,10 @@ class OPNsenseClient:
         )
 
     async def get_ipsec_status(self) -> dict[str, Any]:
-        return await self.get("/api/ipsec/sessions/searchSad")
+        return await self.get("/api/ipsec/sad/search")
 
     async def get_ipsec_spd(self) -> dict[str, Any]:
-        return await self.get("/api/ipsec/sessions/searchSpd")
+        return await self.get("/api/ipsec/spd/search")
 
     async def get_ipsec_sa(self) -> dict[str, Any]:
         return await self.get("/api/ipsec/leases/pool")

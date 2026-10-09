@@ -19,6 +19,7 @@ contract (the rate-limiter and RBAC helpers have their own tests).
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -33,6 +34,14 @@ from app.api.v1.endpoints import agent_downloads as endpoint
 from app.core.config import settings
 from app.core.dependencies import get_current_active_user
 from app.db.session import get_session
+from app.schemas.agent_release_operations import encode_release_command
+from tests.api import release_operation_contract as contract
+from tests.db.conftest import maintenance_engine as maintenance_engine
+from tests.services import test_agent_release_deletion as deletion
+from tests.services import test_agent_release_publication as publication
+from tests.services import test_agent_signing_lifecycle as lifecycle
+from tests.services.test_public_release_binary import public_reader as public_reader
+from tests.services.test_public_release_operations import PREFIX, command
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -78,6 +87,8 @@ def _agent(
         # global-release path the fake session serves.
         organization_id=None,
     )
+
+
 
 
 class _Scalars:
@@ -129,6 +140,16 @@ class _FakeSession:
 
     async def commit(self) -> None:
         self.commits += 1
+
+    async def flush(self) -> None:
+        for obj in self.added:
+            await self.refresh(obj)
+
+    async def scalar(self, query: Any, params: dict[str, Any]) -> bool:
+        # Only the real bucket-lock statement is expected in this unit fake.
+        assert "pg_try_advisory_xact_lock" in str(query)
+        assert set(params) == {"key"} and type(params["key"]) is int
+        return True
 
     async def rollback(self) -> None:
         self.rollbacks = getattr(self, "rollbacks", 0) + 1
@@ -187,12 +208,14 @@ def app_factory():
 
 
 @pytest.fixture(autouse=True)
-def _disable_rate_limit(monkeypatch):
+def _disable_rate_limit(monkeypatch, request):
     """Strip the per-IP rate limiter so 30+ test calls don't 429.
 
     Production behaviour (settings.RATE_LIMIT_ENABLED=true) is verified
     by manual smoke; here we only care about endpoint contracts.
     """
+    if "public_reader" in request.fixturenames:
+        return
     monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", False)
     # Defensive — wipe any state the bucket built up across tests.
     endpoint._public_rate_buckets.clear()
@@ -484,107 +507,69 @@ class TestUpdatesCheck:
 
 
 class TestPublishRelease:
-    @pytest.mark.asyncio
-    async def test_creates_release_row(self, app_factory, monkeypatch, tmp_path) -> None:
-        # Publishing a `is_latest` release signs the checksum, which lazily
-        # generates the signing keypair under the agent-release dir. Point it at
-        # a writable tmp dir (and reset the cached keys) so the test never tries
-        # to create /var/lib/freesdn — which a non-root CI runner cannot write.
-        monkeypatch.setenv("FREESDN_SIGNING_KEY_DIR", str(tmp_path))
-        monkeypatch.setenv("FREESDN_AGENT_RELEASE_DIR", str(tmp_path))
-        import app.services.release_signing as _signing
-
-        monkeypatch.setattr(_signing, "_PRIVATE_KEY", None)
-        monkeypatch.setattr(_signing, "_PUBLIC_KEY_PEM", None)
-        session = _FakeSession()
-        app = app_factory(session)
-        payload = {
-            "version": "1.2.0",
-            "platform": "linux",
-            "agent_type": "daemon",
-            "download_url": "https://example.com/v1.2.0",
-            "checksum_sha256": "c" * 64,
-            "file_size": 5_000_000,
-            "release_notes": "test release",
-            "is_prerelease": False,
-        }
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
-            r = await c.post("/api/v1/agents/downloads/releases", json=payload)
-        assert r.status_code == 201, r.text
-        body = r.json()
-        assert body["version"] == "1.2.0"
-        assert body["is_latest"] is True
-        assert session.commits == 1
-        assert len(session.added) == 1
+    """Actual SQL/signing/auth; the other classes retain their scoped unit doubles."""
 
     @pytest.mark.asyncio
-    async def test_bad_checksum_format_rejected(self, app_factory) -> None:
-        """The agent verifies sha256 byte-for-byte; pydantic must
-        reject anything that isn't 64 hex chars before it hits the DB."""
-        app = app_factory(_FakeSession())
-        payload = {
-            "version": "1.0.0",
-            "platform": "linux",
-            "agent_type": "daemon",
-            "download_url": "https://example.com/x",
-            "checksum_sha256": "not-a-real-hash",
-            "file_size": 100,
-        }
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
-            r = await c.post("/api/v1/agents/downloads/releases", json=payload)
-        assert r.status_code == 422
+    async def test_creates_release_row(self, public_reader) -> None:
+        f = public_reader
+        contract.intent(f, storage="external", version="1.2.0")
+        headers = await contract.prepare(f)
+        response = await command(f, headers, "publish")
+        assert response.status_code == 200, response.text
+        rows = await publication.releases(f)
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["version"] == "1.2.0" and row["is_latest"] is True
+        assert row["organization_id"] == f.org
+        await contract.verify_persisted_signature(f, row)
 
     @pytest.mark.asyncio
-    async def test_unknown_platform_rejected(self, app_factory) -> None:
-        app = app_factory(_FakeSession())
-        payload = {
-            "version": "1.0.0",
-            "platform": "freebsd",
-            "agent_type": "daemon",
-            "download_url": "/relative/path",
-            "checksum_sha256": "d" * 64,
-            "file_size": 100,
-        }
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
-            r = await c.post("/api/v1/agents/downloads/releases", json=payload)
-        assert r.status_code == 400
+    async def test_bad_checksum_format_rejected(self, public_reader) -> None:
+        """Unrepresentable metadata is refused before journal or release writes."""
+        f = public_reader
+        intent = contract.intent(f, storage="external")
+        headers = await lifecycle.headers(f)
+        payload = json.loads(encode_release_command(intent))
+        payload["metadata"]["checksum_sha256"] = "not-a-real-hash"
+        before = await deletion.state(f)
+        response = await f.public_client.post(
+            f"{PREFIX}/release-operations/{intent.operation_id}/reserve",
+            headers=headers, json=payload,
+        )
+        assert response.status_code == 422, response.text
+        assert await deletion.state(f) == before
 
+    @pytest.mark.asyncio
+    async def test_unknown_platform_rejected(self, public_reader) -> None:
+        f = public_reader
+        intent = contract.intent(f, storage="external")
+        headers = await lifecycle.headers(f)
+        payload = json.loads(encode_release_command(intent))
+        payload["metadata"]["platform"] = "freebsd"
+        # Keep an otherwise valid URL so only the unsupported platform is tested.
+        before = await deletion.state(f)
+        response = await f.public_client.post(
+            f"{PREFIX}/release-operations/{intent.operation_id}/reserve",
+            headers=headers, json=payload,
+        )
+        assert response.status_code == 422, response.text
+        assert await deletion.state(f) == before
 
     @pytest.mark.asyncio
     async def test_signing_failure_on_latest_raises_500_and_does_not_persist(
-        self, app_factory
+        self, public_reader
     ) -> None:
-        """a signing failure during publish must fail closed.
-
-        The endpoint always sets is_latest=True for published releases.
-        When sign_manifest raises, the release must NOT be created and the
-        session must be rolled back (restoring the previously-demoted
-        latest release row) so agents continue to receive the last
-        known-good signed update.
-        """
-        session = _FakeSession()
-        app = app_factory(session)
-        payload = {
-            "version": "2.0.0",
-            "platform": "windows",
-            "agent_type": "daemon",
-            "download_url": "https://example.com/v2.0.0.exe",
-            "checksum_sha256": "e" * 64,
-            "file_size": 1_000_000,
-            "release_notes": "signing test",
-            "is_prerelease": False,
-        }
-        with patch(
-            "app.services.release_signing.sign_manifest",
-            side_effect=RuntimeError("signing key unavailable"),
-        ):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
-                r = await c.post("/api/v1/agents/downloads/releases", json=payload)
-
-        assert r.status_code == 500, r.text
-        assert "signing" in r.json()["detail"].lower()
-        # No release row must have been persisted.
-        assert len(session.added) == 0
-        assert session.commits == 0
-        # The is_latest demotion UPDATE is rolled back.
-        assert getattr(session, "rollbacks", 0) == 1
+        """Historical test ID retained; uncertain operation errors now return503."""
+        f = public_reader
+        contract.intent(f, storage="external", version="2.0.0")
+        await publication.seed(f, organization=f.org)
+        before = await publication.releases(f)
+        headers = await contract.prepare(f)
+        with patch("app.services.agent_release_publication.sign_manifest_async",
+                   side_effect=RuntimeError("owned unexpected signing failure")):
+            response = await command(f, headers, "publish")
+        assert response.status_code == 503, response.text
+        assert response.json()["error"]["code"] == 503
+        assert "inspect the same operation" in response.json()["error"]["message"]
+        assert "owned unexpected signing failure" not in response.text
+        await contract.unchanged_release_rows_and_cleanup(f, headers, before)

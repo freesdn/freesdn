@@ -1,0 +1,31 @@
+Gateway HTTPS policy on custom ports
+====================================
+
+When verify_ssl is true, OpenWRT and automatic MikroTik transport selection
+use HTTPS regardless of the configured port. A nonstandard HTTPS listener
+no longer silently becomes an HTTP connection. An HTTP-only endpoint fails
+before credential-bearing HTTP; there is no automatic insecure fallback.
+
+MikroTik and pfSense constructors reject the contradictory combination
+use_ssl=false and verify_ssl=true before constructing an HTTP client.
+Correct the connection settings to select HTTPS and a trusted certificate.
+An intentionally insecure legacy connection requires verify_ssl=false.
+That explicit opt-out preserves prior port/protocol selection: OpenWRT and
+automatic MikroTik use their previous port heuristics, while explicit
+MikroTik/pfSense use_ssl choices remain effective. OPNsense remains HTTPS.
+This patch does not globally change low-level constructor default values.
+
+Existing database rows are not rewritten. However, a saved verified custom-
+port OpenWRT/MikroTik connection now actually requires HTTPS. Operators who
+previously relied on accidental plaintext must configure TLS or deliberately
+disable verification. Verified explicit-HTTP settings are now refused.
+No schema migration, dependency change or device configuration write occurs.
+
+Qualification includes actual HTTPX and vendor clients against isolated
+HTTP-only and private-CA TLS peers. The harness relocates only the validated
+fixture hostname to loopback; it preserves the selected scheme and actual
+custom port. Trusted controls alone inject the fixture CA. Appliance payloads
+are synthetic and the probe closes its own clients. These checks do not
+establish hardware interoperability, general SSRF safety, custom trust-store
+installation. Standalone service cleanup is qualified separately in
+GATEWAY-TEST-LIFECYCLE, including its best-effort cleanup limits.

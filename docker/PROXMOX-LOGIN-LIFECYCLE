@@ -1,0 +1,28 @@
+Proxmox login lifecycle and response validation
+==============================================
+
+Malformed ticket envelopes, unexpected transport errors and cancelled login
+attempts now close the HTTP pool allocated by connect(). A failed async context
+entry does not rely on __aexit__, which Python does not call for failed entry.
+Only an authenticated open connection satisfies repeated connect(). A stranded
+unauthenticated pool is closed before starting a fresh login.
+
+Password login requires an object envelope containing an object data field and a
+nonempty string ticket. Ticket and optional string CSRF fields cannot contain CR,
+LF or NUL. Missing/empty CSRF remains compatible. Malformed responses raise a fixed
+authentication error without the response body. API-token authentication remains
+separate, and a rejected token never falls back to a password.
+
+close() clears authentication, local ticket/CSRF state and the client cache identity
+in a finally block, including when transport closure fails. During failed login,
+a secondary closure error does not replace the original error or cancellation;
+its log uses a fixed message. Existing transport failure/cooldown classification
+and valid shared-ticket reuse remain unchanged.
+
+Limits: this does not implement concurrent shared-client ownership, distributed
+operation fencing, or server-side ticket revocation. It cannot guarantee that a
+broken transport or repeated cancellation completes resource cleanup; cleared
+local state prevents reuse but is not proof of successful remote closure. A
+synthetic TLS peer does not establish live Proxmox hardware acceptance. Update
+all workers and API instances; process-local caches are not migrated across
+old/new running versions.

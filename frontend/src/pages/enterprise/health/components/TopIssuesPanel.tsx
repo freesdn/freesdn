@@ -22,7 +22,8 @@ function scoreColor(score: number): string {
   return 'text-red-500';
 }
 
-function componentBadgeColor(score: number): string {
+function componentBadgeColor(score: number | null, name: string | null): string {
+  if (score == null || name == null) return 'text-muted-foreground';
   if (score >= 90) return 'bg-green-500/10 text-green-500 border-green-500/20';
   if (score >= 70) return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
   if (score >= 50) return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
@@ -38,7 +39,7 @@ export function TopIssuesPanel({ siteId }: TopIssuesPanelProps) {
   });
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <AlertTriangle className="h-4 w-4" />
@@ -66,7 +67,7 @@ export function TopIssuesPanel({ siteId }: TopIssuesPanelProps) {
             {data.issues.map((issue) => (
               <div
                 key={issue.device_id}
-                className="flex items-center justify-between rounded-lg border p-3"
+                className="flex min-w-0 flex-col items-stretch gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -82,9 +83,11 @@ export function TopIssuesPanel({ siteId }: TopIssuesPanelProps) {
                     <p className="text-xs text-muted-foreground mt-0.5">{issue.site_name}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-3 flex-shrink-0 ml-3">
-                  <Badge variant="outline" className={componentBadgeColor(issue.worst_component_score)}>
-                    {issue.worst_component}: {issue.worst_component_score}
+                <div className="flex flex-wrap items-center gap-3 sm:ml-3 sm:shrink-0">
+                  <Badge variant="outline" className={componentBadgeColor(issue.worst_component_score, issue.worst_component)}>
+                    {issue.worst_component == null || issue.worst_component_score == null
+                      ? 'N/A'
+                      : `${issue.worst_component}: ${issue.worst_component_score}`}
                   </Badge>
                   <span className={cn('text-lg font-bold tabular-nums', scoreColor(issue.health_score))}>
                     {issue.health_score}

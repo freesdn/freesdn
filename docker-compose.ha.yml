@@ -9,20 +9,24 @@
 #     actually FOLLOW a Valkey master failover (not just observe it)
 #   - 2 API replicas behind an nginx round-robin LB (cross-instance WS pubsub)
 #
+# Scope: single-host process failover, not protection against host loss.
+# Asynchronous Valkey replication is not partition fencing or zero-RPO.
+# Existing installations MUST read docker/redis/HA-UPGRADING before upgrading.
+#
 # Usage (with the max tier env):
 #   docker compose --env-file .env.max -f docker-compose.yml -f docker-compose.ha.yml up -d
 #
-# Failover drill: scripts/redis_failover_drill.sh (kill master → assert promote
-# + app follows). RTO/RPO for the Postgres path: scripts/ha_drill.py.
+# Isolated fault qualification: scripts/check_valkey_ha.py --help.
+# RTO/RPO for the Postgres path: scripts/ha_drill.py.
 
 # Wire every backend service to Sentinel (merged into each service's base env).
 x-sentinel-env: &sentinel-env
-  REDIS_SENTINELS: "redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379"
+  REDIS_SENTINELS: "${HA_SENTINEL_1_IP:-172.30.255.21}:26379,${HA_SENTINEL_2_IP:-172.30.255.22}:26379,${HA_SENTINEL_3_IP:-172.30.255.23}:26379"
   REDIS_MASTER_NAME: "freesdn-master"
-  CELERY_BROKER_URL: "sentinel://:${REDIS_PASSWORD}@redis-sentinel-1:26379;sentinel://:${REDIS_PASSWORD}@redis-sentinel-2:26379;sentinel://:${REDIS_PASSWORD}@redis-sentinel-3:26379/1"
-  CELERY_RESULT_BACKEND: "sentinel://:${REDIS_PASSWORD}@redis-sentinel-1:26379;sentinel://:${REDIS_PASSWORD}@redis-sentinel-2:26379;sentinel://:${REDIS_PASSWORD}@redis-sentinel-3:26379/2"
+  CELERY_BROKER_URL: "sentinel://:${REDIS_PASSWORD}@${HA_SENTINEL_1_IP:-172.30.255.21}:26379/1;sentinel://:${REDIS_PASSWORD}@${HA_SENTINEL_2_IP:-172.30.255.22}:26379/1;sentinel://:${REDIS_PASSWORD}@${HA_SENTINEL_3_IP:-172.30.255.23}:26379/1"
+  CELERY_RESULT_BACKEND: "sentinel://:${REDIS_PASSWORD}@${HA_SENTINEL_1_IP:-172.30.255.21}:26379/2;sentinel://:${REDIS_PASSWORD}@${HA_SENTINEL_2_IP:-172.30.255.22}:26379/2;sentinel://:${REDIS_PASSWORD}@${HA_SENTINEL_3_IP:-172.30.255.23}:26379/2"
 
-# HA data-tier nodes are BUILT from the same apt-get-upgrade wrappers the base
+# HA data-tier nodes are BUILT from the same OS-patching wrappers the base
 # stack uses (docker/Dockerfile.{postgres,valkey}), so the standby and the
 # replica ship the same current OS patches as the primary. Anchors are per-file,
 # so these mirror the base compose's definitions.
@@ -30,14 +34,23 @@ x-postgres-build: &postgres-build
   context: ./docker
   dockerfile: Dockerfile.postgres
   args:
+    # Must stay a trixie tag; see docker-compose.yml.
     POSTGRES_VERSION: ${POSTGRES_VERSION:-18.6-trixie}
 x-valkey-build: &valkey-build
   context: ./docker
   dockerfile: Dockerfile.valkey
   args:
-    VALKEY_VERSION: ${VALKEY_VERSION:-8.1.9-trixie}
+    VALKEY_VERSION: ${VALKEY_VERSION:-9.1.2-alpine}
 
 services:
+  # The public edge must use both replicas, not the base stack's single API.
+  edge:
+    environment:
+      API_UPSTREAM: ${API_UPSTREAM:-ha-lb:80}
+    depends_on:
+      ha-lb:
+        condition: service_healthy
+
   # ── The PRIMARY needs a replication role before a standby can stream ───────
   # Only the HA overlay runs a standby, so only the HA overlay creates this.
   # Without it `postgres-standby` fails every pg_basebackup with "no pg_hba.conf
@@ -81,45 +94,72 @@ services:
   collector:
     environment: *sentinel-env
 
-  # ── Valkey replica - Sentinel's promotion target ───────────────────────────
-  # Replicates the base `redis` master. On a master failure Sentinel promotes
-  # this node; the app (master_for) re-resolves and follows it.
+  # Stable, reserved addresses avoid blocking DNS lookups when a node stops.
+  # Use .env.max; custom NETWORK_SUBNET requires all five HA_*_IP values and
+  # NETWORK_IP_RANGE to be changed together. See docker/redis/HA-UPGRADING.
+  redis:
+    environment:
+      HA_NODE_IP: ${HA_PRIMARY_IP:-172.30.255.10}
+      HA_PRIMARY_IP: ${HA_PRIMARY_IP:-172.30.255.10}
+    command: ["sh", "/usr/local/bin/freesdn-ha-entrypoint.sh", "primary"]
+    volumes:
+      - type: bind
+        source: ./docker/redis/ha-entrypoint.sh
+        target: /usr/local/bin/freesdn-ha-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      default:
+        ipv4_address: ${HA_PRIMARY_IP:-172.30.255.10}
+
   redis-replica:
     build: *valkey-build
-    container_name: freesdn-redis-replica
     restart: unless-stopped
+    memswap_limit: ${REDIS_MEM_LIMIT:-768M}
+    stop_grace_period: 30s
     init: true
-    depends_on:
-      redis:
-        condition: service_healthy
-    # The healthcheck below expands $$REDIS_PASSWORD INSIDE the container, so the
-    # variable has to exist there. It did not, so valkey-cli authenticated with an
-    # empty password and the replica sat permanently `unhealthy` --
-    # "AUTH failed: WRONGPASS" -- while replicating perfectly happily. The primary
-    # `redis` service has carried this same block all along
-    # (docker-compose.yml:203); only the replica was missing it.
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-    command: >-
-      valkey-server
-      --replicaof redis 6379
-      --masterauth ${REDIS_PASSWORD}
-      --requirepass ${REDIS_PASSWORD}
-      --appendonly yes
-      --maxmemory-policy volatile-lru
-      --replica-announce-ip redis-replica
+      HA_NODE_IP: ${HA_REPLICA_IP:-172.30.255.11}
+      HA_PRIMARY_IP: ${HA_PRIMARY_IP:-172.30.255.10}
+    command: ["sh", "/usr/local/bin/freesdn-ha-entrypoint.sh", "replica"]
+    volumes:
+      - redis_replica_data:/data
+      - type: bind
+        source: ${REDIS_CONFIG_PATH:-./docker/redis/redis-custom.conf}
+        target: /usr/local/etc/valkey/valkey-custom.conf
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./docker/redis/ha-entrypoint.sh
+        target: /usr/local/bin/freesdn-ha-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
-      test: ["CMD-SHELL", "valkey-cli -a $$REDIS_PASSWORD ping | grep -q PONG"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD valkey-cli ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
+    read_only: true
+    tmpfs: [/tmp]
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_MEM_LIMIT:-768M}
+          cpus: '${REDIS_CPU_LIMIT:-1.0}'
     security_opt: [no-new-privileges:true]
-    networks: [default]
+    networks:
+      default:
+        ipv4_address: ${HA_REPLICA_IP:-172.30.255.11}
 
   # ── PostgreSQL standby (streaming replica of the primary) ───────────────────
   postgres-standby:
     build: *postgres-build
+    image: ${POSTGRES_IMAGE:-freesdn-postgres:local}
     container_name: freesdn-postgres-standby
     restart: unless-stopped
     init: true
@@ -136,7 +176,7 @@ services:
       REPL_USER: ${POSTGRES_REPL_USER:-repl}
       REPL_PASSWORD: ${POSTGRES_REPL_PASSWORD}
     volumes:
-      - postgres_standby_data:/var/lib/postgresql/data
+      - postgres_standby_data:/var/lib/postgresql
       - ./docker/postgres/standby-entrypoint.sh:/standby-entrypoint.sh:ro
     entrypoint: ["/standby-entrypoint.sh"]
     ports:
@@ -149,50 +189,79 @@ services:
       start_period: 60s
     networks: [default]
 
-  # ── Valkey Sentinels - 3-node quorum, AUTH + hostname-aware (Docker) ────────
-  # The config is built with printf (NOT a heredoc): a heredoc inside a YAML
-  # folded `>-` scalar collapses to one line and breaks. resolve/announce-
-  # hostnames make Sentinel address master+replica by their Docker service
-  # names rather than ephemeral IPs. requirepass lets the app's Sentinel client
-  # AUTH to the sentinels.
+  # Persist Sentinel configuration, including epochs and elected master.
+  # No dependency on the bootstrap primary: a promoted replica must be able
+  # to restart while that original node is still down.
   redis-sentinel-1: &sentinel
     build: *valkey-build
-    container_name: freesdn-redis-sentinel-1
     restart: unless-stopped
     init: true
-    depends_on:
-      redis:
-        condition: service_healthy
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-    command: >-
-      sh -c "printf '%s\n'
-      'port 26379'
-      'sentinel resolve-hostnames yes'
-      'sentinel announce-hostnames yes'
-      'sentinel monitor freesdn-master redis 6379 2'
-      'sentinel auth-pass freesdn-master ${REDIS_PASSWORD}'
-      'requirepass ${REDIS_PASSWORD}'
-      'sentinel down-after-milliseconds freesdn-master 5000'
-      'sentinel failover-timeout freesdn-master 10000'
-      'sentinel parallel-syncs freesdn-master 1'
-      > /tmp/sentinel.conf && exec valkey-sentinel /tmp/sentinel.conf"
+      HA_NODE_IP: ${HA_SENTINEL_1_IP:-172.30.255.21}
+      HA_PRIMARY_IP: ${HA_PRIMARY_IP:-172.30.255.10}
+    command: ["sh", "/usr/local/bin/freesdn-ha-entrypoint.sh", "sentinel"]
+    volumes:
+      - redis_sentinel_1_data:/data
+      - type: bind
+        source: ./docker/redis/ha-entrypoint.sh
+        target: /usr/local/bin/freesdn-ha-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
-      test: ["CMD-SHELL", "valkey-cli -p 26379 -a $$REDIS_PASSWORD ping | grep -q PONG"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD valkey-cli -p 26379 ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
+    read_only: true
+    tmpfs: [/tmp]
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.5'
     security_opt: [no-new-privileges:true]
-    networks: [default]
+    networks:
+      default:
+        ipv4_address: ${HA_SENTINEL_1_IP:-172.30.255.21}
 
   redis-sentinel-2:
     <<: *sentinel
-    container_name: freesdn-redis-sentinel-2
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      HA_NODE_IP: ${HA_SENTINEL_2_IP:-172.30.255.22}
+      HA_PRIMARY_IP: ${HA_PRIMARY_IP:-172.30.255.10}
+    volumes:
+      - redis_sentinel_2_data:/data
+      - type: bind
+        source: ./docker/redis/ha-entrypoint.sh
+        target: /usr/local/bin/freesdn-ha-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      default:
+        ipv4_address: ${HA_SENTINEL_2_IP:-172.30.255.22}
 
   redis-sentinel-3:
     <<: *sentinel
-    container_name: freesdn-redis-sentinel-3
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      HA_NODE_IP: ${HA_SENTINEL_3_IP:-172.30.255.23}
+      HA_PRIMARY_IP: ${HA_PRIMARY_IP:-172.30.255.10}
+    volumes:
+      - redis_sentinel_3_data:/data
+      - type: bind
+        source: ./docker/redis/ha-entrypoint.sh
+        target: /usr/local/bin/freesdn-ha-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      default:
+        ipv4_address: ${HA_SENTINEL_3_IP:-172.30.255.23}
 
   # ── Second API replica - proves cross-instance WS pubsub ────────────────────
   api-2:
@@ -211,7 +280,12 @@ services:
 
   # ── nginx round-robin LB across the two API replicas ────────────────────────
   ha-lb:
-    image: nginx:1.31.4-alpine
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.ha-lb
+      args:
+        NGINX_VERSION: ${HA_NGINX_VERSION:-1.30.5-alpine}
+    image: ${HA_LB_IMAGE:-freesdn-ha-lb:local}
     container_name: freesdn-ha-lb
     restart: unless-stopped
     depends_on:
@@ -232,3 +306,7 @@ services:
 
 volumes:
   postgres_standby_data:
+  redis_replica_data:
+  redis_sentinel_1_data:
+  redis_sentinel_2_data:
+  redis_sentinel_3_data:

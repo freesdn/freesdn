@@ -1,0 +1,48 @@
+Gateway creation and reassignment authority
+==========================================
+
+Creating or editing a saved gateway must validate its destination against the
+current database. The organization must be active and not deleted. An assigned
+site must be active, not deleted, and belong to that organization. Existing
+caller site restrictions also apply. An invalid destination produces the fixed
+404 message "Gateway not found" through the standard API error envelope.
+
+Destination checks use PostgreSQL SHARE row locks until the request transaction
+ends. KEY SHARE alone is insufficient because changing an active/deleted flag
+does not change the parent's key. A parent writer already in progress must
+finish before the assignment proceeds; a newly invalid parent is then refused.
+A parent status change begun after validation waits for assignment commit.
+
+An update additionally selects and refreshes the current gateway under a row
+lock before applying local fields or merging encrypted credentials. The initial
+gateway lookup, current organization/site predicate, host validation and role
+permissions remain enforced. No vendor adapter is constructed by these save
+operations. Registry dispatch and adapter eviction keep their existing behavior.
+
+Compatibility
+-------------
+- An unrestricted caller may create an unassigned organization-wide gateway.
+- A caller restricted to specific sites must supply a site when creating; the
+  existing required-site 422 remains unchanged.
+- A missing or explicitly null site in an update still means no site change.
+- The application's existing zero-explicit-grant organization-wide policy is
+  unchanged; this change does not introduce a new role or grant model.
+- Credentials remain encrypted and absent from the save response.
+
+Qualification scope and remaining limits
+---------------------------------------
+The added tests use real committed PostgreSQL rows with synthetic caller identity
+and dispatch counters. They cover invalid destinations, inactive organizations,
+stale ORM site records, allowed saves, denied roles and transaction lock lifetime.
+Separate TCP tests use real HTTP listeners and independent parent writers,
+including a writer held open while a save attempts to acquire its parent lock.
+These checks do not establish hardware interoperability or complete production
+acceptance. Frozen source, full-suite and runtime qualification are recorded
+separately; local focused passes must not be presented as shipping passes.
+
+Caller role, session, API-key and site-grant revocation during a request remains
+a separate concern. Registry notification is not made transactional by this
+change. Reads and vendor operations already in flight are not recalled, and a
+parent can legitimately become inactive after the assignment transaction ends.
+No managed backup storage, restore, distributed cache invalidation, HA or
+availability/latency guarantee is added.

@@ -60,3 +60,7 @@ certbot/
 # --- Keep the intended build inputs (config the images may reference) ---
 !Dockerfile.logdb
 !**/*.conf
+
+# Pinned public FFmpeg verification inputs; all other armored keys stay excluded.
+!ffmpeg-build/ffmpeg-devel.asc
+!ffmpeg-build/ffmpeg-9.0.2.tar.xz.asc

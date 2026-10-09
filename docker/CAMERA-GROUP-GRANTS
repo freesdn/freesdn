@@ -1,0 +1,23 @@
+Camera group lifecycle and effective access
+===========================================
+
+Soft-deleted camera groups no longer contribute grants to CameraAccessService.
+The group membership query checks organization and deleted_at before resolving
+and merging the user's group grants. Historical memberships and grants may
+remain stored; deleting them is not required for revocation to take effect.
+
+Direct camera grants retain precedence. Active groups continue to merge their
+permissions. Independent administrator or organization-role permissions remain
+available. Deleting a restrictive group may therefore restore the user's role
+permissions; group deletion is not a global deny or a user-account revocation.
+The existing live-camera and organization check runs before all grants/roles.
+
+Regression tests execute ORM queries against a minimal SQLite schema and verify
+all five permission flags, deletion after an initial successful check, active
+group merging, role fallback, direct grants and invalid-target controls. This
+suite does not claim PostgreSQL schema/migration or HTTP authentication coverage;
+those are separate release qualification checks. No hardware is accessed.
+
+Current authority is checked at query time. This change does not fence a delete
+that commits after the check, recall already delivered media, coordinate HLS
+workers, or implement per-viewer stream leases.

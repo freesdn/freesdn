@@ -11,7 +11,7 @@
  * config and only sends fields that actually changed (preserves the
  * original "no-op when nothing changed" behavior).
  */
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
@@ -30,10 +30,12 @@ import {
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { hypervisorApi } from '@/lib/api';
+import { newHypervisorRequestId, reviewedGuestDigest } from '@/lib/api/hypervisor';
 import type { HypervisorVM, GuestAgentInfo } from '@/lib/api';
 
 interface EditConfigDialogProps {
   open: boolean;
+  onTracked?: () => void;
   onClose: () => void;
   controllerId: string;
   vm: HypervisorVM | null;
@@ -42,7 +44,7 @@ interface EditConfigDialogProps {
 function parseDisks(config: Record<string, unknown>): { key: string; value: string }[] {
   const diskPrefixes = ['scsi', 'virtio', 'ide', 'sata', 'efidisk', 'rootfs', 'mp'];
   return Object.entries(config)
-    .filter(([k]) => diskPrefixes.some((p) => k.startsWith(p) && /\d/.test(k.replace(p, ''))))
+    .filter(([k]) => k === 'rootfs' || diskPrefixes.some((p) => k.startsWith(p) && /\d/.test(k.replace(p, ''))))
     .map(([key, value]) => ({ key, value: String(value) }))
     .sort((a, b) => a.key.localeCompare(b.key));
 }
@@ -64,15 +66,23 @@ const schema = z.object({
 });
 type EditConfigFormValues = z.infer<typeof schema>;
 
-export function EditConfigDialog({ open, onClose, controllerId, vm }: EditConfigDialogProps) {
+export function EditConfigDialog({ open, onClose, controllerId, vm, onTracked }: EditConfigDialogProps) {
   const { t } = useTranslation('hypervisor');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const [requestId] = useState(newHypervisorRequestId);
+  const reviewed = useRef<Awaited<ReturnType<typeof hypervisorApi.getVMConfig>> | null>(null);
+  const submitted = useRef<string | null>(null);
+  // Keep the reviewed snapshot fixed throughout this dialog, including retries.
+  // The parent remounts the dialog when another guest/review is opened.
   // Fetch current config
   const { data: configResp, isLoading: configLoading } = useQuery({
-    queryKey: ['hypervisor', 'config', controllerId, vm?.node, vm?.vm_type, vm?.vmid],
-    queryFn: () => hypervisorApi.getVMConfig(controllerId, vm!.node, vm!.vm_type, vm!.vmid),
+    queryKey: ['hypervisor', 'config-review', controllerId, vm?.node, vm?.vm_type, vm?.vmid, requestId],
+    queryFn: async () => {
+      if (!reviewed.current) reviewed.current = await hypervisorApi.getVMConfig(controllerId, vm!.node, vm!.vm_type, vm!.vmid);
+      return reviewed.current;
+    },
     enabled: open && !!vm,
   });
   const config = useMemo(
@@ -100,25 +110,35 @@ export function EditConfigDialog({ open, onClose, controllerId, vm }: EditConfig
   }), [config, vm]);
 
   const updateMutation = useMutation({
+    retry: false,
     mutationFn: (values: EditConfigFormValues) => {
-      if (!vm) throw new Error('No VM');
+      const digest = reviewedGuestDigest(config);
+      if (!vm || !digest) throw new Error(t('HypervisorPage.toast.reviewUnavailable'));
       const payload: Record<string, unknown> = {};
       if (values.cores !== Number(config.cores)) payload.cores = values.cores;
       if (values.memory !== Number(config.memory)) payload.memory = values.memory;
-      if (values.balloon !== Number(config.balloon)) payload.balloon = values.balloon;
+      if (vm.vm_type === 'qemu' && values.balloon !== Number(config.balloon || 0)) payload.balloon = values.balloon;
       if (values.description !== String(config.description || '')) payload.description = values.description;
       if (values.tags !== String(config.tags || '')) payload.tags = values.tags;
       const configOnboot = config.onboot === 1 || config.onboot === true;
       if (values.onboot !== configOnboot) payload.onboot = values.onboot;
       if (Object.keys(payload).length === 0) throw new Error('No changes');
-      return hypervisorApi.updateConfig(controllerId, vm.node, vm.vm_type, vm.vmid, payload);
+      const body = { ...payload, request_id: requestId, expected_digest: digest };
+      const signature = JSON.stringify(body);
+      if (submitted.current && submitted.current !== signature) throw new Error(t('HypervisorPage.toast.intentChanged'));
+      submitted.current = signature;
+      return hypervisorApi.updateConfig(controllerId, vm.node, vm.vm_type, vm.vmid, body);
     },
-    onSuccess: () => {
-      toast({ title: t('EditConfigDialog.toast.updated') });
+    onSuccess: (response) => {
+      const task = response.data.provider_task;
+      const key = task?.status === 'succeeded' ? 'guestChangeVerified' : task?.detail === 'configuration_pending_restart' ? 'pendingRestart' : response.data.status === 'applied' ? 'operationAccepted' : 'actionNeedsReview';
+      toast({ title: t(`HypervisorPage.toast.${key}`), description: t('HypervisorPage.toast.operationTracked', { id: response.data.change_id }) });
+      onTracked?.();
       queryClient.invalidateQueries({ queryKey: ['hypervisor'] });
       onClose();
     },
     onError: (err: unknown) => {
+      onTracked?.();
       const e = err as { response?: { data?: { detail?: string } }; message?: string };
       const msg = e.message === 'No changes' ? t('EditConfigDialog.toast.noChanges') : (e?.response?.data?.detail || e.message);
       toast({ title: t('EditConfigDialog.toast.updateFailed'), description: msg, variant: 'destructive' });
@@ -141,7 +161,7 @@ export function EditConfigDialog({ open, onClose, controllerId, vm }: EditConfig
       schema={schema}
       defaultValues={defaultValues}
       submitLabel={updateMutation.isPending ? t('EditConfigDialog.submit.saving') : t('EditConfigDialog.submit.save')}
-      submitDisabled={configLoading}
+      submitDisabled={configLoading || !reviewedGuestDigest(config)}
       contentClassName="sm:max-w-2xl max-h-[85vh] overflow-hidden"
       onSubmit={async (values) => {
         await updateMutation.mutateAsync(values);

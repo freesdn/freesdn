@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
 import { useState, useMemo } from 'react';
+import { SLAReportsPanel } from './SLAReportsPanel';
+import { ComplianceGauge, complianceVariant, formatCompliance } from './SLACompliance';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -18,7 +20,6 @@ import { SearchBar } from '@/components/ui/search-bar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -60,18 +61,7 @@ const BREACH_STATUS_VARIANT: Record<string, StatusVariant> = {
   acknowledged: 'info',
 };
 
-function ComplianceGauge({ value }: { value: number | null }) {
-  const pct = value ?? 0;
-  const color = pct >= 95 ? 'text-success' : pct >= 80 ? 'text-warning' : 'text-destructive';
-  return (
-    <div className="flex items-center gap-2">
-      <Progress value={pct} className="h-2 flex-1" />
-      <span className={`font-mono font-bold ${color}`}>{pct.toFixed(1)}%</span>
-    </div>
-  );
-}
-
-const SLA_TABS = ['overview', 'policies', 'breaches'] as const;
+const SLA_TABS = ['overview', 'policies', 'breaches', 'reports'] as const;
 
 export default function SLAPage() {
   const { t } = useTranslation('enterprise');
@@ -215,7 +205,7 @@ export default function SLAPage() {
     scope_name: '',
     window: 15,
     health_min: '80',
-    uptime_min: '99.5',
+    uptime_min: '',
     latency_max: '',
   };
 
@@ -285,7 +275,7 @@ export default function SLAPage() {
       id: 'compliance',
       header: t('SLAPage.columns.compliance'),
       accessorKey: 'current_compliance_percent',
-      cell: (row) => <ComplianceGauge value={row.current_compliance_percent} />,
+      cell: (row) => <ComplianceGauge value={row.current_compliance_percent} unavailable={t('SLAPage.stats.notAvailable')} />,
     },
     {
       id: 'last_evaluated',
@@ -410,13 +400,17 @@ export default function SLAPage() {
         primaryAction={{ label: t('SLAPage.actions.newPolicy'), icon: Plus, onClick: () => setShowCreateDialog(true) }}
       />
 
+      <p className="text-sm text-muted-foreground" role="status">
+        {t('SLAPage.measurementScope', { defaultValue: 'Compliance requires data for every configured target. Site and organization policies currently measure device health; sampled uptime is available for camera and NVR policies. Missing observations show N/A, not success. Historical reports are not a contractual availability guarantee.' })}
+      </p>
+
       <StatsGrid
         columns={4}
         isLoading={summaryQuery.isLoading}
         stats={[
           { title: t('SLAPage.stats.activePolicies.title'), value: summary?.active_policies ?? 0, icon: Shield, variant: 'default', description: t('SLAPage.stats.activePolicies.description') },
           { title: t('SLAPage.stats.activeBreaches.title'), value: summary?.active_breaches ?? 0, icon: AlertTriangle, variant: 'destructive', description: t('SLAPage.stats.activeBreaches.description') },
-          { title: t('SLAPage.stats.avgCompliance.title'), value: summary?.avg_compliance_percent != null ? `${summary.avg_compliance_percent.toFixed(1)}%` : t('SLAPage.stats.notAvailable'), icon: Gauge, variant: 'success', description: t('SLAPage.stats.avgCompliance.description') },
+          { title: t('SLAPage.stats.avgCompliance.title'), value: formatCompliance(summary?.avg_compliance_percent, t('SLAPage.stats.notAvailable')), icon: Gauge, variant: complianceVariant(summary?.avg_compliance_percent), description: t('SLAPage.stats.avgCompliance.description') },
           { title: t('SLAPage.stats.breaches24h.title'), value: summary?.breaches_last_24h ?? 0, icon: XCircle, variant: 'default', description: t('SLAPage.stats.breaches24h.description') },
         ]}
       />
@@ -426,8 +420,10 @@ export default function SLAPage() {
           <TabsTrigger value="overview">{t('SLAPage.tabs.overview')}</TabsTrigger>
           <TabsTrigger value="policies">{t('SLAPage.tabs.policies', { count: allPolicies.length })}</TabsTrigger>
           <TabsTrigger value="breaches">{t('SLAPage.tabs.breaches', { count: allBreaches.length })}</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="reports"><SLAReportsPanel policies={allPolicies} /></TabsContent>
         <TabsContent value="overview" className="space-y-4">
           {summaryQuery.isLoading && (
             <div className="space-y-4">
@@ -452,7 +448,7 @@ export default function SLAPage() {
                     <p className="font-medium">{summary.worst_policy.name}</p>
                     <p className="text-sm text-muted-foreground">{summary.worst_policy.scope}: {summary.worst_policy.scope_name || '-'}</p>
                   </div>
-                  <ComplianceGauge value={summary.worst_policy.current_compliance_percent} />
+                  <ComplianceGauge value={summary.worst_policy.current_compliance_percent} unavailable={t('SLAPage.stats.notAvailable')} />
                 </div>
               </CardContent>
             </Card>
@@ -468,7 +464,7 @@ export default function SLAPage() {
                     </div>
                     <StatusBadge variant={policy.status === 'active' ? 'success' : 'neutral'}>{policy.status}</StatusBadge>
                   </div>
-                  <ComplianceGauge value={policy.current_compliance_percent} />
+                  <ComplianceGauge value={policy.current_compliance_percent} unavailable={t('SLAPage.stats.notAvailable')} />
                 </CardContent>
               </Card>
             ))}
@@ -578,7 +574,7 @@ export default function SLAPage() {
           <DialogHeader><DialogTitle>{selectedPolicy?.name}</DialogTitle></DialogHeader>
           {selectedPolicy && (
             <div className="space-y-4 text-sm">
-              <ComplianceGauge value={selectedPolicy.current_compliance_percent} />
+              <ComplianceGauge value={selectedPolicy.current_compliance_percent} unavailable={t('SLAPage.stats.notAvailable')} />
               <div className="grid grid-cols-2 gap-3">
                 <div><span className="text-muted-foreground">{t('SLAPage.detail.scope')}</span> {selectedPolicy.scope}</div>
                 <div><span className="text-muted-foreground">{t('SLAPage.detail.target')}</span> {selectedPolicy.scope_name || '-'}</div>

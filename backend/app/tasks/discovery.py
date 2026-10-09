@@ -11,9 +11,10 @@ Celery tasks for discovering devices from controllers.
 import asyncio
 import logging
 import time
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
@@ -24,10 +25,15 @@ from app.core.crypto import decrypt_credential, is_encrypted
 from app.core.events import EventType, publish_controller_event, publish_device_event
 from app.db.models import Controller, ControllerStatus, Device
 from app.db.session import CelerySessionLocal as AsyncSessionLocal
+from app.models.core import Organization, Site
 from app.services.adapter_factory import get_adapter
 from app.services.controller_sync import deep_sync_controller
 
 logger = logging.getLogger(__name__)
+
+
+class _DiscoveryDeviceScopeConflict(RuntimeError):
+    """Inventory cannot be safely attributed to the captured tenant."""
 
 
 def _decrypt_if_needed(value: str | None) -> str:
@@ -115,7 +121,8 @@ async def _discover_devices_for_controller(controller_id: str) -> dict[str, Any]
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
     lock_key = f"discover_devices:{controller_id}"
-    if not acquire_solo_lock(lock_key, ttl_seconds=720):
+    lock_token = acquire_solo_lock(lock_key, ttl_seconds=720)
+    if not lock_token:
         logger.info("Discovery already running for controller %s; skipping overlap", controller_id)
         return {
             "success": True,
@@ -126,7 +133,7 @@ async def _discover_devices_for_controller(controller_id: str) -> dict[str, Any]
     try:
         return await _discover_devices_for_controller_impl(controller_id)
     finally:
-        release_solo_lock(lock_key)
+        release_solo_lock(lock_key, lock_token)
 
 
 async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str, Any]:
@@ -157,6 +164,24 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
                 "error": f"Controller {controller_id} is disabled",
             }
 
+        if (
+            controller.site is None
+            or controller.site.deleted_at is not None
+            or not controller.site.is_active
+        ):
+            return {"success": False, "error": "discovery_device_scope_conflict"}
+        organization_id = controller.site.organization_id
+        source_site_id = controller.site_id
+        active_org = await session.scalar(
+            select(Organization.id).where(
+                Organization.id == organization_id,
+                Organization.deleted_at.is_(None),
+                Organization.is_active.is_(True),
+            )
+        )
+        if active_org is None:
+            return {"success": False, "error": "discovery_device_scope_conflict"}
+
         # Publish sync started event
         await publish_controller_event(
             EventType.CONTROLLER_SYNC_STARTED,
@@ -184,6 +209,15 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
                 adapter_kwargs["omada_id"] = controller.omada_id or ""
                 adapter_kwargs["cloud_region"] = controller.cloud_region or ""
 
+            # Preserve Proxmox credentials in discovery and its later deep-sync adapter.
+            if controller.type.lower() == "proxmox":
+                config = controller.config or {}
+                token_id = config.get("token_id", "")
+                if token_id:
+                    adapter_kwargs["token_id"] = token_id
+                    adapter_kwargs["token_secret"] = _decrypt_if_needed(config.get("token_secret"))
+                adapter_kwargs["realm"] = config.get("realm", "pam")
+
             # Create properly configured adapter (credentials in __init__)
             adapter = get_adapter(
                 controller.type,
@@ -201,6 +235,49 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
                 # Discover devices (returns DiscoveredDevice objects)
                 discovered_devices = await adapter.discover_devices()
 
+            # Recheck after adapter I/O, then hold shared authority row locks
+            # through the inventory transaction. A changed controller/site
+            # owner cannot make the captured adapter data belong to a new tenant.
+            current_site_id = await session.scalar(
+                select(Controller.site_id)
+                .where(
+                    Controller.id == controller.id,
+                    Controller.deleted_at.is_(None),
+                    Controller.is_active.is_(True),
+                )
+                .with_for_update(read=True)
+            )
+            if current_site_id != source_site_id:
+                raise _DiscoveryDeviceScopeConflict
+            permitted_sites = set(
+                (
+                    await session.scalars(
+                        select(Site.id)
+                        .join(Organization, Site.organization_id == Organization.id)
+                        .where(
+                            Site.organization_id == organization_id,
+                            Site.deleted_at.is_(None),
+                            Site.is_active.is_(True),
+                            Organization.deleted_at.is_(None),
+                            Organization.is_active.is_(True),
+                        )
+                        .order_by(Site.id)
+                        .with_for_update(read=True, of=(Site, Organization))
+                    )
+                ).all()
+            )
+            if source_site_id not in permitted_sites:
+                raise _DiscoveryDeviceScopeConflict
+            # Validate every requested mapping before any inventory changes.
+            for discovered in discovered_devices:
+                if getattr(discovered, "device_type", None) == "hypervisor":
+                    continue
+                if (
+                    _resolve_device_site_id(discovered, controller, site_mappings)
+                    not in permitted_sites
+                ):
+                    raise _DiscoveryDeviceScopeConflict
+
             # Track counts
             created_count = 0
             updated_count = 0
@@ -215,6 +292,7 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
                     select(Device)
                     .where(
                         Device.mac_address.in_(all_macs),
+                        Device.site_id.in_(permitted_sites),
                         Device.deleted_at.is_(None),
                     )
                     .with_for_update(skip_locked=True)
@@ -234,6 +312,7 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
                 select(Device)
                 .where(
                     Device.controller_id == controller.id,
+                    Device.site_id.in_(permitted_sites),
                     Device.deleted_at.is_(None),
                     or_(Device.mac_address.is_(None), Device.mac_address == ""),
                 )
@@ -269,7 +348,7 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
                 mac_address = device_data.mac_address
                 mac_upper = mac_address.upper() if mac_address else ""
 
-                # Global dedup: lookup pre-loaded device by MAC (case-insensitive).
+                # Tenant-scoped dedup: a matching MAC never transfers foreign inventory.
                 # MAC-less devices fall back to a per-controller stable key
                 # (serial → ip → name) so a controller's "self" device updates in
                 # place instead of duplicating on every sync.
@@ -367,11 +446,16 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
                             select(Device)
                             .where(
                                 Device.mac_address == (mac_upper or mac_address),
+                                Device.site_id.in_(permitted_sites),
                                 Device.deleted_at.is_(None),
                             )
                             .with_for_update()
                         )
                         winner = conflict.scalar_one_or_none()
+                        if winner is None:
+                            # The global unique MAC backstop may belong to a
+                            # different tenant. Refuse, never load/rehome it.
+                            raise _DiscoveryDeviceScopeConflict from None
                         if winner is not None:
                             winner.controller_id = controller.id
                             winner.name = device_data.name
@@ -530,44 +614,96 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
                 "deep_sync": deep_sync_summary,
             }
 
-        except Exception as e:
-            logger.exception("Error discovering devices from controller %s", controller_id)
-
-            # Update controller status + error history
-            controller.status = ControllerStatus.ERROR
-            controller.last_error = str(e)
-            config = dict(controller.config or {})
-            error_history = config.get("error_history", [])
-            error_history.insert(
-                0,
-                {
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "error": str(e)[:500],
-                },
-            )
-            config["error_history"] = error_history[:10]  # Keep last 10
-            config["last_sync_duration_seconds"] = round(time.monotonic() - sync_start, 2)
-            controller.config = config
-            await session.commit()
-
-            # Publish sync failed event
-            await publish_controller_event(
-                EventType.CONTROLLER_SYNC_FAILED,
-                controller_id=str(controller.id),
-                data={
-                    "controller_name": controller.name,
-                    "error": str(e),
-                },
-                controller_type=controller.type,
-                site_id=str(controller.site_id) if controller.site_id else None,
-                organization_id=str(controller.site.organization_id) if controller.site else None,
-            )
-
+        except _DiscoveryDeviceScopeConflict:
+            await session.rollback()
+            logger.warning("Discovery inventory scope conflict (controller_id=%s)", controller_id)
             return {
                 "success": False,
-                "controller_id": str(controller.id),
-                "error": str(e),
+                "controller_id": controller_id,
+                "error": "discovery_device_scope_conflict",
             }
+
+        except Exception:
+            # Error bookkeeping must never commit a partially failed inventory
+            # batch or reuse ORM ownership captured before adapter I/O.
+            error = "Discovery failed; verify controller connectivity and configuration."
+            logger.error("Controller discovery failed (controller_id=%s)", controller_id)
+            failure = {"success": False, "controller_id": controller_id, "error": error}
+            try:
+                await session.rollback()
+                current = await session.scalar(
+                    select(Controller)
+                    .join(Site, Controller.site_id == Site.id)
+                    .join(Organization, Site.organization_id == Organization.id)
+                    .where(
+                        Controller.id == controller_id,
+                        Controller.site_id == source_site_id,
+                        Controller.deleted_at.is_(None),
+                        Controller.is_active.is_(True),
+                        Site.organization_id == organization_id,
+                        Site.deleted_at.is_(None),
+                        Site.is_active.is_(True),
+                        Organization.deleted_at.is_(None),
+                        Organization.is_active.is_(True),
+                    )
+                    .execution_options(populate_existing=True)
+                    .with_for_update(of=(Controller, Site, Organization))
+                )
+                if current is None:
+                    await session.rollback()
+                    return {
+                        "success": False,
+                        "controller_id": controller_id,
+                        "error": "discovery_device_scope_conflict",
+                    }
+                current.status = ControllerStatus.ERROR
+                current.last_error = error
+                config = dict(current.config or {})
+                history = config.get("error_history")
+                # Legacy exception bodies are not safe diagnostic fields. Keep
+                # only bounded, valid timestamps and a fixed historical label.
+                prior = []
+                for item in history[:9] if isinstance(history, list) else []:
+                    stamp = item.get("timestamp") if isinstance(item, dict) else None
+                    if not isinstance(stamp, str) or len(stamp) > 40:
+                        continue
+                    try:
+                        datetime.fromisoformat(stamp)
+                    except ValueError:
+                        continue
+                    prior.append({"timestamp": stamp, "error": "Previous discovery failure"})
+                config["error_history"] = [
+                    {"timestamp": datetime.now(UTC).isoformat(), "error": error},
+                    *prior,
+                ]
+                config["last_sync_duration_seconds"] = round(time.monotonic() - sync_start, 2)
+                current.config = config
+                # Capture scalar event fields before commit; no expired ORM
+                # attributes are read after rollback or transaction completion.
+                controller_name, controller_type = current.name, current.type
+                await session.commit()
+            except Exception:
+                # Database failure must not turn a failed discovery into a
+                # success or disclose SQL parameters through its result.
+                with suppress(Exception):
+                    await session.rollback()
+                logger.warning("Discovery failure bookkeeping unavailable")
+                return failure
+
+            try:
+                await publish_controller_event(
+                    EventType.CONTROLLER_SYNC_FAILED,
+                    controller_id=controller_id,
+                    data={"controller_name": controller_name, "error": error},
+                    controller_type=controller_type,
+                    site_id=str(source_site_id),
+                    organization_id=str(organization_id),
+                )
+            except Exception:
+                # Notification transport cannot undo committed inventory or
+                # justify automatically rerunning discovery side effects.
+                logger.warning("Discovery failure event publication unavailable")
+            return failure
 
 
 @celery_app.task(bind=True, max_retries=3, soft_time_limit=600, time_limit=720)
@@ -654,10 +790,10 @@ async def _discover_all_devices(
     total_updated = sum(r.get("devices_updated", 0) for r in successful)
 
     return {
-        "success": True,
+        "success": not failed and not exceptions,
         "controllers_processed": len(controller_ids),
         "controllers_successful": len(successful),
-        "controllers_failed": len(failed),
+        "controllers_failed": len(failed) + len(exceptions),
         "total_devices_discovered": total_discovered,
         "total_devices_created": total_created,
         "total_devices_updated": total_updated,
@@ -671,43 +807,53 @@ _DISCOVERY_LOCK_KEY = "freesdn:discovery:running"
 _DISCOVERY_LOCK_TTL = 900  # seconds — auto-expire stuck lock
 
 
-def _acquire_discovery_lock(lock_key: str = _DISCOVERY_LOCK_KEY) -> bool:
-    """Acquire a Redis-based distributed lock for discovery.
+class _DiscoveryLockUnavailable(RuntimeError):
+    """Discovery cannot proceed without a confirmed lease."""
 
-    Returns True if the lock was acquired, False if discovery is
-    already running (on this or any other Celery worker).
-    Falls back to always-acquire if Redis is unavailable.
-    """
+
+_DISCOVERY_RELEASE_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+end
+return 0
+"""
+
+
+def _acquire_discovery_lock(lock_key: str = _DISCOVERY_LOCK_KEY) -> str | None:
+    """Return this acquisition's token, or None on existing-lease contention."""
+    client = None
     try:
         from app.core.redis_client import get_sync_redis
 
-        client = get_sync_redis()
-        acquired = client.set(
-            lock_key,
-            "1",
-            nx=True,
-            ex=_DISCOVERY_LOCK_TTL,
-        )
-        client.close()
-        return bool(acquired)
+        client = get_sync_redis(socket_timeout=2, socket_connect_timeout=2)
+        token = uuid4().hex
+        acquired = client.set(lock_key, token, nx=True, ex=_DISCOVERY_LOCK_TTL)
+        return token if acquired else None
     except Exception:
-        logger.warning(
-            "Redis unavailable for discovery lock — allowing run (fallback)",
-            exc_info=True,
-        )
-        return True
+        raise _DiscoveryLockUnavailable("Discovery lease store unavailable") from None
+    finally:
+        if client is not None:
+            with suppress(Exception):
+                client.close()
 
 
-def _release_discovery_lock(lock_key: str = _DISCOVERY_LOCK_KEY) -> None:
-    """Release the Redis-based distributed lock for discovery."""
+def _release_discovery_lock(lock_key: str, token: str) -> None:
+    """A late caller may release only its own unexpired acquisition."""
+    if not isinstance(token, str) or not token:
+        raise ValueError("A discovery lease token is required")
+    client = None
     try:
         from app.core.redis_client import get_sync_redis
 
-        client = get_sync_redis()
-        client.delete(lock_key)
-        client.close()
+        client = get_sync_redis(socket_timeout=2, socket_connect_timeout=2)
+        client.eval(_DISCOVERY_RELEASE_LUA, 1, lock_key, token)
     except Exception:
-        logger.warning("Failed to release discovery lock in Redis", exc_info=True)
+        # Effects may already have committed; cleanup failure cannot retry them.
+        logger.warning("Discovery lease release unavailable")
+    finally:
+        if client is not None:
+            with suppress(Exception):
+                client.close()
 
 
 @celery_app.task(soft_time_limit=600, time_limit=900)
@@ -730,14 +876,15 @@ def discover_all_devices(
     lock_key = (
         f"{_DISCOVERY_LOCK_KEY}:{organization_id}" if organization_id else _DISCOVERY_LOCK_KEY
     )
-    if not _acquire_discovery_lock(lock_key):
+    token = _acquire_discovery_lock(lock_key)
+    if token is None:
         logger.info("Discovery already running (lock=%s) — skipping", lock_key)
         return {"success": True, "skipped": True, "reason": "already_running"}
 
     try:
         return asyncio.run(_discover_all_devices(organization_id, site_id))
     finally:
-        _release_discovery_lock(lock_key)
+        _release_discovery_lock(lock_key, token)
 
 
 @celery_app.task(soft_time_limit=120, time_limit=180)

@@ -24,16 +24,21 @@ import contextlib
 import importlib.util
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
+from collections.abc import AsyncIterator, Awaitable, Callable
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile, status
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.utils import canonicalize_name
 
 from app import __version__ as CORE_VERSION
 from app.core.config import settings
@@ -256,6 +261,10 @@ class PluginLoader:
         db: AsyncSession,
         installed_by_id: Any,
         source_url: str | None = None,
+        *,
+        expected_plugin_id: str | None = None,
+        expected_version: str | None = None,
+        before_mutation: Callable[[], Awaitable[None]] | None = None,
     ) -> InstalledPlugin:
         """
         Install a plugin from a ZIP archive.
@@ -312,7 +321,28 @@ class PluginLoader:
                 raise PluginLoadError("No plugin.yaml found in ZIP archive")
 
             manifest = PluginManifest.from_yaml(str(manifest_path))
+            # An upgrade must never install a different plugin and strand the
+            # requested row at "upgrading". Check before destination writes,
+            # dependency installation, plugin imports, or lifecycle hooks.
+            if expected_plugin_id is not None and manifest.id != expected_plugin_id:
+                raise PluginLoadError(
+                    f"Plugin archive ID '{manifest.id}' does not match "
+                    f"upgrade target '{expected_plugin_id}'"
+                )
+            # The signed marketplace offer binds the manifest version as well
+            # as the archive checksum. A publisher packaging mistake must not
+            # install a different version than the operator selected.
+            if expected_version is not None and manifest.version != expected_version:
+                raise PluginLoadError(
+                    f"Plugin archive version '{manifest.version}' does not match "
+                    f"requested version '{expected_version}'"
+                )
             _check_core_compatibility(manifest)
+            if manifest.python_dependencies and not settings.PLUGIN_ALLOW_RUNTIME_PYTHON_DEPS:
+                raise PluginLoadError(
+                    "Plugin declares python_dependencies but runtime dependency "
+                    "installs are disabled by policy"
+                )
             plugin_dest = PLUGIN_DIR / manifest.id
 
             # NOTE: serialise lifecycle operations from this point
@@ -324,6 +354,8 @@ class PluginLoader:
             # below.
             lifecycle_lock = await self._lock_for(manifest.id)
             async with lifecycle_lock:
+                if before_mutation is not None:
+                    await before_mutation()
                 # Check if already installed (upgrade path)
                 existing_db = await _get_installed_plugin(db, manifest.id)
                 if existing_db and existing_db.status == "installed":
@@ -332,99 +364,234 @@ class PluginLoader:
                         "Use upgrade_plugin() to upgrade."
                     )
 
-                # Ensure plugin dir exists
                 PLUGIN_DIR.mkdir(parents=True, exist_ok=True)
+                async with self._preserve_installation(manifest.id, plugin_dest, db) as (
+                    candidate,
+                    promote,
+                ):
+                    shutil.copytree(tmp, candidate)
+                    if expected_plugin_id is not None:
+                        # Only validated archives reach shutdown; prior files stay
+                        # recoverable until the install transaction commits.
+                        await self.stop_plugin_everywhere(manifest.id, db)
+                    promote()
 
-                # Copy to destination
-                if plugin_dest.exists():
-                    shutil.rmtree(plugin_dest)
-                shutil.copytree(tmp, plugin_dest)
+                    # Install python dependencies into isolated venv (in thread to avoid
+                    # blocking the event loop) only when explicitly enabled.
+                    if manifest.python_dependencies:
+                        await _await_python_deps(plugin_dest, manifest.python_dependencies)
 
-                # Install python dependencies into isolated venv (in thread to avoid
-                # blocking the event loop) only when explicitly enabled.
-                if manifest.python_dependencies:
-                    if not settings.PLUGIN_ALLOW_RUNTIME_PYTHON_DEPS:
-                        raise PluginLoadError(
-                            "Plugin declares python_dependencies but runtime dependency "
-                            "installs are disabled by policy"
-                        )
-                    await asyncio.to_thread(
-                        _install_python_deps, plugin_dest, manifest.python_dependencies
+                    # Load the plugin class
+                    plugin_instance, plugin_cls, added_paths = _load_plugin_class(
+                        plugin_dest, manifest
                     )
+                    self._plugin_paths[manifest.id] = added_paths
+                    self._plugin_classes[manifest.id] = plugin_cls
 
-                # Load the plugin class
-                plugin_instance, plugin_cls, added_paths = _load_plugin_class(plugin_dest, manifest)
-                self._plugin_paths[manifest.id] = added_paths
-                self._plugin_classes[manifest.id] = plugin_cls
-
-                # Reinstalling over a plugin whose routes are already mounted:
-                # let the EXISTING template adopt the new code, so the handlers
-                # closed over it start running the upgrade immediately. Records
-                # whether a restart is still needed for a changed route table.
-                self._restart_required.discard(manifest.id)
-                if manifest.id in self._registered_routes:
-                    # The object the mounted handlers are closed over. Normally
-                    # that is the live template; after an uninstall ``_loaded``
-                    # no longer has it, because uninstall drops the entry while
-                    # DELIBERATELY keeping ``_registered_routes`` (FastAPI cannot
-                    # unmount, and forgetting would mount a second copy of every
-                    # route). Reading ``_loaded`` directly therefore raised
-                    # KeyError and turned every install-uninstall-reinstall into
-                    # a 500 -- for any plugin that had ever served a request.
-                    bound = self.mounted_template(manifest.id)
-                    if bound is None:
-                        # Routes are mounted and nothing here can reach what they
-                        # point at. Say so rather than report a live upgrade.
-                        self._restart_required.add(manifest.id)
-                    else:
-                        self._loaded[manifest.id] = bound
-                        if not self.adopt_new_code(manifest.id, plugin_instance):
+                    # Reinstalling over a plugin whose routes are already mounted:
+                    # let the EXISTING template adopt the new code, so the handlers
+                    # closed over it start running the upgrade immediately. Records
+                    # whether a restart is still needed for a changed route table.
+                    self._restart_required.discard(manifest.id)
+                    if manifest.id in self._registered_routes:
+                        # The object the mounted handlers are closed over. Normally
+                        # that is the live template; after an uninstall ``_loaded``
+                        # no longer has it, because uninstall drops the entry while
+                        # DELIBERATELY keeping ``_registered_routes`` (FastAPI cannot
+                        # unmount, and forgetting would mount a second copy of every
+                        # route). Reading ``_loaded`` directly therefore raised
+                        # KeyError and turned every install-uninstall-reinstall into
+                        # a 500 -- for any plugin that had ever served a request.
+                        bound = self.mounted_template(manifest.id)
+                        if bound is None:
+                            # Routes are mounted and nothing here can reach what they
+                            # point at. Say so rather than report a live upgrade.
                             self._restart_required.add(manifest.id)
-                        # Keep serving the object the routes point at.
-                        plugin_instance = self._loaded[manifest.id]
-                    self._orphaned_template.pop(manifest.id, None)
+                        else:
+                            self._loaded[manifest.id] = bound
+                            if not self.adopt_new_code(manifest.id, plugin_instance):
+                                self._restart_required.add(manifest.id)
+                            # Keep serving the object the routes point at.
+                            plugin_instance = self._loaded[manifest.id]
+                        self._orphaned_template.pop(manifest.id, None)
 
-                # Call on_install lifecycle hook
-                try:
-                    async with supervisor.guard(manifest.id, "lifecycle", record_only=True):
-                        await plugin_instance.on_install(db)
-                except Exception as exc:
-                    logger.warning("Plugin %s on_install raised: %s", manifest.id, exc)
+                    # Call on_install lifecycle hook
+                    try:
+                        async with supervisor.guard(manifest.id, "lifecycle", record_only=True):
+                            await plugin_instance.on_install(db)
+                    except Exception as exc:
+                        logger.warning("Plugin %s on_install raised: %s", manifest.id, exc)
 
-                # Save to DB
-                # Register in memory (must happen before any return)
-                self._loaded[manifest.id] = plugin_instance
+                    # Save to DB
+                    # Register in memory (must happen before any return)
+                    self._loaded[manifest.id] = plugin_instance
 
-                if existing_db:
-                    existing_db.version = manifest.version
-                    existing_db.status = "installed"
-                    existing_db.is_active = True
-                    existing_db.manifest_cache = manifest.model_dump()
-                    await db.commit()
-                    return existing_db
+                    if existing_db:
+                        existing_db.version = manifest.version
+                        existing_db.status = "installed"
+                        existing_db.is_active = True
+                        existing_db.manifest_cache = manifest.model_dump()
+                        await db.commit()
+                        return existing_db
+                    else:
+                        record = InstalledPlugin(
+                            plugin_id=manifest.id,
+                            name=manifest.name,
+                            version=manifest.version,
+                            description=manifest.description,
+                            author=manifest.author,
+                            license=manifest.license,
+                            homepage=manifest.homepage,
+                            installed_by=installed_by_id,
+                            installed_from=source_url,
+                            plugin_dir=str(plugin_dest),
+                            is_active=True,
+                            status="installed",
+                            manifest_cache=manifest.model_dump(),
+                        )
+                        db.add(record)
+                        await db.flush()
+                        await db.refresh(record)
+                        await db.commit()
+
+                    return record
+
+    @contextlib.asynccontextmanager
+    async def _preserve_installation(
+        self,
+        plugin_id: str,
+        plugin_dest: Path,
+        db: AsyncSession,
+    ) -> AsyncIterator[tuple[Path, Callable[[], None]]]:
+        """Keep the prior package and runtime state until installation commits.
+
+        The caller holds the per-plugin lifecycle lock. This recovers handled
+        request failures; it is not a durable cross-process/crash transaction
+        and cannot undo side effects a trusted plugin commits in its own hooks.
+        """
+        if plugin_dest.is_symlink() or (plugin_dest.exists() and not plugin_dest.is_dir()):
+            raise PluginLoadError("The plugin destination must be a real directory")
+        rollback_root = Path(tempfile.mkdtemp(prefix=f".{plugin_id}-rollback-", dir=PLUGIN_DIR))
+        candidate = rollback_root / "candidate"
+        previous = rollback_root / "previous"
+        maps = (
+            "_loaded",
+            "_plugin_classes",
+            "_plugin_paths",
+            "_orphaned_template",
+            "_router_source",
+        )
+        saved = {
+            name: (plugin_id in getattr(self, name), getattr(self, name).get(plugin_id))
+            for name in maps
+        }
+        templates = {}
+        for name in ("_loaded", "_orphaned_template"):
+            obj = saved[name][1]
+            if obj is not None:
+                templates[id(obj)] = (obj, obj.__class__, dict(obj.__dict__))
+        previous_runtimes = {
+            org: runtime for (pid, org), runtime in self._active.items() if pid == plugin_id
+        }
+        previous_restart = plugin_id in self._restart_required
+        import_paths = set(sys.path)
+        promoted = previous_moved = False
+        retain_recovery = False
+
+        def promote() -> None:
+            nonlocal promoted, previous_moved
+            if plugin_dest.exists():
+                plugin_dest.rename(previous)
+                previous_moved = True
+            candidate.rename(plugin_dest)
+            promoted = True
+
+        try:
+            yield candidate, promote
+        except BaseException as original_error:
+            # Roll back the failed SQL transaction before old hooks see it.
+            try:
+                await db.rollback()
+            except BaseException:
+                retain_recovery = True
+                logger.exception("Could not roll back plugin %s database transaction", plugin_id)
+            try:
+                if promoted:
+                    shutil.rmtree(plugin_dest)
+                if previous_moved:
+                    previous.rename(plugin_dest)
+                for name, (present, value) in saved.items():
+                    target = getattr(self, name)
+                    if present:
+                        target[plugin_id] = value
+                    else:
+                        target.pop(plugin_id, None)
+                for obj, cls, attrs in templates.values():
+                    obj.__class__ = cls
+                    obj.__dict__.clear()
+                    obj.__dict__.update(attrs)
+                if previous_restart:
+                    self._restart_required.add(plugin_id)
                 else:
-                    record = InstalledPlugin(
-                        plugin_id=manifest.id,
-                        name=manifest.name,
-                        version=manifest.version,
-                        description=manifest.description,
-                        author=manifest.author,
-                        license=manifest.license,
-                        homepage=manifest.homepage,
-                        installed_by=installed_by_id,
-                        installed_from=source_url,
-                        plugin_dir=str(plugin_dest),
-                        is_active=True,
-                        status="installed",
-                        manifest_cache=manifest.model_dump(),
+                    self._restart_required.discard(plugin_id)
+                # Remove only paths this attempted plugin load introduced;
+                # another plugin may have loaded while a hook was awaiting I/O.
+                prefix = str(plugin_dest / ".venv") + os.sep
+                sys.path[:] = [
+                    path for path in sys.path if path in import_paths or not path.startswith(prefix)
+                ]
+            except BaseException:
+                retain_recovery = True
+                logger.exception("Could not restore plugin %s files or code", plugin_id)
+            if not retain_recovery:
+                for org_id, runtime in previous_runtimes.items():
+                    if self._active.get((plugin_id, org_id)) is runtime:
+                        continue
+                    try:
+                        # Reuse the prior instance so its in-memory counters
+                        # survive; recreate contexts/subscriptions closed by stop.
+                        runtime._init_context(org_id, db)
+                        await runtime.on_start(org_id, db)
+                        runtime.bind_event_subscriptions()
+                        self._active[(plugin_id, org_id)] = runtime
+                    except BaseException:
+                        retain_recovery = True
+                        with contextlib.suppress(BaseException):
+                            await runtime.on_stop(org_id, db)
+                        logger.exception(
+                            "Could not restore plugin %s runtime for org %s", plugin_id, org_id
+                        )
+            if retain_recovery:
+                # The upgrade caller must not advertise a restored healthy row
+                # when any part of recovery failed. Keep recoverable old files.
+                setattr(original_error, "plugin_recovery_failed", True)  # noqa: B010 - runtime recovery marker
+                with contextlib.suppress(BaseException):
+                    await self.stop_plugin_everywhere(plugin_id, db)
+                logger.error(
+                    "Plugin %s recovery incomplete; retained files at %s", plugin_id, rollback_root
+                )
+            raise
+        finally:
+            if not retain_recovery:
+                try:
+                    shutil.rmtree(rollback_root)
+                except OSError:
+                    # Do not turn an already committed install into a reported
+                    # failure merely because removing its old directory failed.
+                    logger.warning(
+                        "Plugin %s rollback-directory cleanup failed at %s",
+                        plugin_id,
+                        rollback_root,
+                        exc_info=True,
                     )
-                    db.add(record)
-                    await db.commit()
-                    await db.refresh(record)
 
-                return record
-
-    async def uninstall_plugin(self, plugin_id: str, db: AsyncSession) -> None:
+    async def uninstall_plugin(
+        self,
+        plugin_id: str,
+        db: AsyncSession,
+        *,
+        before_mutation: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
         """
         Remove a plugin.
 
@@ -436,6 +603,8 @@ class PluginLoader:
         # NOTE: serialise per-plugin lifecycle (see install_plugin).
         lifecycle_lock = await self._lock_for(plugin_id)
         async with lifecycle_lock:
+            if before_mutation is not None:
+                await before_mutation()
             record = await _get_installed_plugin(db, plugin_id)
             if not record:
                 raise PluginLoadError(f"Plugin '{plugin_id}' is not installed")
@@ -493,6 +662,9 @@ class PluginLoader:
         source: bytes | UploadFile,
         db: AsyncSession,
         installed_by_id: Any,
+        *,
+        expected_version: str | None = None,
+        before_mutation: Callable[[], Awaitable[None]] | None = None,
     ) -> InstalledPlugin:
         """Upgrade an installed plugin to a new version."""
 
@@ -512,14 +684,24 @@ class PluginLoader:
         # dropped at every subsequent startup: a single bad upload permanently
         # disabled a working plugin, and the only visible symptom was that it
         # stopped existing.
+        if before_mutation is not None:
+            await before_mutation()
         previous_status = existing.status
         previous_active = existing.is_active
+        previous_manifest = existing.manifest_cache
         existing.status = "upgrading"
         await db.commit()
 
         try:
-            record = await self.install_plugin(source, db, installed_by_id)
-        except Exception:
+            record = await self.install_plugin(
+                source,
+                db,
+                installed_by_id,
+                expected_plugin_id=plugin_id,
+                expected_version=expected_version,
+                before_mutation=before_mutation,
+            )
+        except BaseException as original_error:
             # Put the row back the way we found it, then let the caller see the
             # real error. Best-effort: a rollback failure must not mask the
             # original exception.
@@ -527,8 +709,11 @@ class PluginLoader:
                 await db.rollback()
                 stale = await _get_installed_plugin(db, plugin_id)
                 if stale is not None:
-                    stale.status = previous_status
-                    stale.is_active = previous_active
+                    recovery_failed = getattr(original_error, "plugin_recovery_failed", False)
+                    stale.status = "error" if recovery_failed else previous_status
+                    stale.is_active = False if recovery_failed else previous_active
+                    stale.version = from_version
+                    stale.manifest_cache = previous_manifest
                     await db.commit()
             except Exception:
                 logger.error(
@@ -1199,132 +1384,155 @@ async def _get_installed_plugin(db: AsyncSession, plugin_id: str) -> InstalledPl
     return result.scalar_one_or_none()
 
 
-def _install_python_deps(plugin_dir: Path, deps: list[str]) -> None:
-    """Create isolated venv and install python dependencies.
+def _validate_python_lock(text: str, deps: list[str]) -> None:
+    """Accept only complete, hash-pinned wheel requirements from one index.
 
-    NOTE: supply-chain hardening.
-
-    Plugins that declare Python deps MUST now ship a ``requirements.txt``
-    file (alongside ``plugin.yaml``) that pins every dependency to a
-    specific version AND a sha256 hash::
-
-        requests==2.31.0 \
-            --hash=sha256:58cd2187c01e70e6e26505bca751777aa9f2ee0b7f4300988b709f44e013003f
-
-    The shipped file is used verbatim with ``pip install
-    --require-hashes`` so a typo-squatted package on PyPI cannot be
-    silently substituted. The index URL is pinned to
-    ``settings.PLUGIN_PYPI_INDEX_URL`` and ``--no-cache-dir`` is set so
-    cached attacker artifacts on the host can't poison the install.
-
-    If ``settings.PLUGIN_ALLOW_RUNTIME_PYTHON_DEPS`` is False this
-    function is unreachable (the caller raises before getting here).
-
-    TODO: document the lockfile requirement in the plugin SDK docs.
+    A plugin lock is data: recursive files, URLs and installer options must not
+    override the operator's package index or execute code before plugin review.
     """
-    venv_dir = plugin_dir / ".venv"
-    shipped_req = plugin_dir / "requirements.txt"
-
-    # The plugin MUST ship a hash-pinned requirements.txt. If it doesn't,
-    # refuse the install: the legacy "synthesize requirements.txt from the
-    # manifest's python_dependencies list" path generated unhashed pins
-    # like ``requests>=2.0`` and ran them straight through pip, which is
-    # the exact supply-chain hole this fix closes.
-    if not shipped_req.exists():
-        raise PluginLoadError(
-            "Plugin declares python_dependencies but ships no "
-            "requirements.txt with hash pins. Generate one with "
-            "`pip-compile --generate-hashes` and include it in the "
-            "plugin archive alongside plugin.yaml."
-        )
-
-    req_text = shipped_req.read_text(encoding="utf-8", errors="replace")
-    if "--hash=" not in req_text:
-        raise PluginLoadError(
-            "Plugin requirements.txt is missing --hash= annotations. "
-            "FreeSDN requires every dependency to be pinned by sha256. "
-            "Regenerate with `pip-compile --generate-hashes`."
-        )
-
-    # Sanity check the manifest deps against the requirements file. We
-    # don't try to parse hashes; we just confirm each manifest entry
-    # appears somewhere in the file so a plugin can't list `requests` in
-    # the manifest but quietly install `evil-package` via requirements.txt.
-    # (The reverse — file contains deps not in manifest — is allowed for
-    # transitives the manifest author chose to pin explicitly.)
-    req_lower = req_text.lower()
-    for dep in deps:
-        # Extract the bare distribution name from manifest entries like
-        # "requests>=2.0" or "requests[socks]==2.31.0".
-        name = dep
-        for sep in ("[", "=", ">", "<", "!", "~", ";", " "):
-            idx = name.find(sep)
-            if idx >= 0:
-                name = name[:idx]
-        name = name.strip().lower()
-        if name and name not in req_lower:
+    if len(text.encode("utf-8")) > 1024 * 1024:
+        raise PluginLoadError("Plugin requirements.txt exceeds the 1 MiB limit.")
+    names: set[str] = set()
+    logical = text.replace("\\\r\n", " ").replace("\\\n", " ")
+    for line in logical.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        line = line.split(" #", 1)[0].rstrip()
+        parts = re.split(r"\s+(?=--hash=)", line, maxsplit=1)
+        if len(parts) != 2 or not re.fullmatch(
+            r"--hash=sha256:[0-9a-fA-F]{64}(?:\s+--hash=sha256:[0-9a-fA-F]{64})*",
+            parts[1],
+        ):
+            raise PluginLoadError("Each dependency requires an exact version and SHA-256 hashes.")
+        try:
+            requirement = Requirement(parts[0])
+        except InvalidRequirement as exc:
             raise PluginLoadError(
-                f"Plugin manifest declares dependency '{dep}' but it is "
-                f"not present in the shipped requirements.txt. Regenerate "
-                f"the lockfile to match the manifest."
+                "Invalid plugin requirement; installer options are forbidden."
+            ) from exc
+        pins = list(requirement.specifier)
+        if requirement.url or len(pins) != 1 or pins[0].operator != "==" or "*" in pins[0].version:
+            raise PluginLoadError(
+                "Plugin dependencies must use exact index versions, not URLs or ranges."
             )
+        names.add(canonicalize_name(requirement.name))
+    if not names:
+        raise PluginLoadError("Plugin requirements.txt is empty.")
+    for dep in deps:
+        try:
+            name = canonicalize_name(Requirement(dep).name)
+        except InvalidRequirement as exc:
+            raise PluginLoadError("Invalid dependency in plugin manifest.") from exc
+        if name not in names:
+            raise PluginLoadError("A manifest dependency is missing from requirements.txt.")
 
-    # Create venv
+
+async def _await_python_deps(plugin_dir: Path, deps: list[str]) -> None:
+    """Keep the destination owned until the dependency worker stops writing.
+
+    Cancelling a to_thread await does not stop its underlying thread. The
+    caller holds the plugin lifecycle lock and may restore the old directory
+    as soon as this function raises, so cancellation must wait for the worker.
+    Repeated cancellation still propagates after the worker completes. The
+    installer's command timeouts remain in force; this is not crash recovery.
+    """
+    worker = asyncio.create_task(asyncio.to_thread(_install_python_deps, plugin_dir, deps))
+    try:
+        await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        while not worker.done():
+            try:
+                await asyncio.shield(worker)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                # Preserve the caller's cancellation, while retrieving a
+                # worker failure before the filesystem rollback can begin.
+                break
+        if not worker.cancelled():
+            with contextlib.suppress(Exception):
+                worker.result()
+        raise
+
+
+def _install_python_deps(plugin_dir: Path, deps: list[str]) -> None:
+    """Install reviewed hash-pinned wheels without shipping pip in the runtime.
+
+    Runtime dependency installation remains opt-in. uv installs into an isolated
+    pip-free venv; configuration files, inherited installer settings, source
+    builds, transitive resolution and Python downloads cannot change this policy.
+    """
+    shipped_req = plugin_dir / "requirements.txt"
+    if not shipped_req.is_file() or shipped_req.is_symlink():
+        raise PluginLoadError("Plugin requires a regular requirements.txt with SHA-256 pins.")
+    if shipped_req.stat().st_size > 1024 * 1024:
+        raise PluginLoadError("Plugin requirements.txt exceeds the 1 MiB limit.")
+    try:
+        lock_text = shipped_req.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise PluginLoadError("Cannot read the plugin dependency lock.") from exc
+    _validate_python_lock(lock_text, deps)
+    installer = shutil.which("uv")
+    if installer is None:
+        raise PluginLoadError(
+            "The supported uv installer is missing from this FreeSDN environment."
+        )
+    venv_dir = plugin_dir / ".venv"
+    python = venv_dir / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("UV_", "PIP_")) and key not in {"VIRTUAL_ENV", "CONDA_PREFIX"}
+    }
     try:
         subprocess.run(
-            [sys.executable, "-m", "venv", str(venv_dir)],
+            [sys.executable, "-m", "venv", "--without-pip", str(venv_dir)],
             check=True,
             capture_output=True,
+            timeout=30,
+            env=env,
         )
-        pip = venv_dir / ("Scripts" if sys.platform == "win32" else "bin") / "pip"
-        # --require-hashes:   every package must have at least one
-        #                     --hash= annotation in the requirements file.
-        # --no-deps:          transitive resolution off — the lockfile
-        #                     must already enumerate every package.
-        # --no-cache-dir:     do not reuse cached wheels from the host
-        #                     (defeats local-cache poisoning).
-        # --only-binary :all: never run setup.py from a sdist — sdists
-        #                     execute arbitrary Python at install time.
-        # --index-url pinned: a future-deprecated extra-index-url won't
-        #                     be silently consulted; only this one is.
-        # --no-input:         pip 23+ defaults to interactive in some
-        #                     code paths, which would hang the worker.
-        subprocess.run(
-            [
-                str(pip),
-                "install",
-                "--require-hashes",
-                "--no-deps",
-                "--no-cache-dir",
-                "--only-binary",
-                ":all:",
-                "--index-url",
-                settings.PLUGIN_PYPI_INDEX_URL,
-                "--no-input",
-                "-r",
-                str(shipped_req),
-                "--quiet",
-            ],
-            check=True,
-            capture_output=True,
-            timeout=180,
-        )
-        logger.info(
-            "Installed hashed Python deps for plugin at %s (manifest: %d entries)",
-            plugin_dir,
-            len(deps),
-        )
-    except subprocess.CalledProcessError as exc:
-        stderr = (
-            (exc.stderr or b"").decode("utf-8", errors="replace")
-            if isinstance(exc.stderr, bytes)
-            else str(exc.stderr or "")
-        )
-        logger.error("Plugin dependency installation failed: %s", stderr)
+        # Install exactly the bytes that passed validation, even if the plugin
+        # directory changes while the installer runs. The temporary directory is
+        # private to this process user and removed on success or failure.
+        with tempfile.TemporaryDirectory(prefix="freesdn-plugin-lock-") as temporary:
+            verified_lock = Path(temporary) / "requirements.txt"
+            verified_lock.write_text(lock_text, encoding="utf-8")
+            verified_lock.chmod(0o600)
+            subprocess.run(
+                [
+                    installer,
+                    "--no-config",
+                    "--no-cache",
+                    "--no-python-downloads",
+                    "pip",
+                    "install",
+                    "--python",
+                    str(python),
+                    "--require-hashes",
+                    "--no-deps",
+                    "--only-binary",
+                    ":all:",
+                    "--default-index",
+                    settings.PLUGIN_PYPI_INDEX_URL,
+                    "-r",
+                    str(verified_lock),
+                    "--quiet",
+                ],
+                check=True,
+                capture_output=True,
+                timeout=180,
+                env=env,
+            )
+    except (subprocess.SubprocessError, OSError) as exc:
+        # Installer output can contain private index credentials or untrusted
+        # requirement contents. Keep it out of API responses and application logs.
+        logger.warning("Plugin dependency installation failed (%s)", type(exc).__name__)
         raise PluginLoadError(
-            "Failed to install plugin dependencies — check that every "
-            "package in requirements.txt has a valid --hash= sha256 pin."
+            "Plugin dependency installation failed; verify the wheel lock and index."
         ) from exc
+    logger.info("Installed verified Python dependencies for plugin at %s", plugin_dir)
 
 
 def _load_plugin_class(

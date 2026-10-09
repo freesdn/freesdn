@@ -1,0 +1,21 @@
+Automation alert-resolution outcomes
+====================================
+
+The alert.resolve action uses the rule's trusted organization context. Action
+parameters cannot override that context. Missing, foreign or unavailable alerts
+and a service refusal are failed actions; execution history records failure and
+the next action runs only if continue_on_error is enabled. The existing resolved
+field is retained alongside the standard success field. An already-resolved
+alert is a refused change rather than a newly successful resolution.
+
+Internal automated resolution has no interactive user, so resolved_by is NULL.
+The system resolution note remains attached to the alert. Do not create a fake
+all-zero user to satisfy the foreign key. Interactive API calls still pass their
+authenticated user UUID. System resolution events represent absent attribution
+as JSON null, not the string "None". No database migration is needed because the
+foreign-key column is already nullable.
+
+This correction does not add automatic retries, change authorization or make
+alert events transactional with the database commit. The existing event and
+notification publication path is not a transactional outbox. Customer delivery,
+failover and exactly-once claims still require independent qualification.

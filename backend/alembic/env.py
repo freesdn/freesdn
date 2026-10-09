@@ -10,25 +10,25 @@ Configures Alembic for async SQLAlchemy migrations.
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from alembic import context
 from app.core.config import settings
 from app.db.base import Base
 
 # Import all models to register them with Base.metadata
 from app.models import *  # noqa: F401, F403
+from app.modules.access_control.models import *  # noqa: F401, F403
+from app.modules.ai.models import *  # noqa: F401, F403
 
 # Import module models not re-exported by app.models
 from app.modules.cameras.models import *  # noqa: F401, F403
 from app.modules.firewall.models import *  # noqa: F401, F403
-from app.modules.voip.models import *  # noqa: F401, F403
-from app.modules.access_control.models import *  # noqa: F401, F403
-from app.modules.ai.models import *  # noqa: F401, F403
 from app.modules.gateway.models import *  # noqa: F401, F403
 from app.modules.hypervisor.models import *  # noqa: F401, F403
+from app.modules.voip.models import *  # noqa: F401, F403
 
 # Alembic Config object
 config = context.config
@@ -113,11 +113,18 @@ async def run_async_migrations() -> None:
 def run_migrations_online() -> None:
     """
     Run migrations in 'online' mode.
-    
+
     In this scenario we need to create an Engine and associate a
     connection with the context.
     """
-    asyncio.run(run_async_migrations())
+    # Programmatic fresh startup supplies its schema-creation transaction.
+    # Keep normal CLI upgrades on the existing async path: some incremental
+    # migrations explicitly require autocommit.
+    connection = config.attributes.get("connection")
+    if connection is not None:
+        do_run_migrations(connection)
+    else:
+        asyncio.run(run_async_migrations())
 
 
 if context.is_offline_mode():

@@ -89,10 +89,30 @@ async def _notify_handler(ctx: OperationContext) -> OperationResult:
         from app.services.notification_helpers import dispatch_notifications
 
         results = await dispatch_notifications(ctx.db, channels, title, body, ctx.organization_id)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Fabric notify failed: %s", exc)
-        return OperationResult.fail(f"notify dispatch failed: {exc}", "NOTIFY_ERROR")
-    return OperationResult.ok(output={"dispatched": len(results) if results else 0})
+    except Exception:  # noqa: BLE001
+        logger.warning("Fabric notify dispatch failed")
+        return OperationResult.fail("notify dispatch failed", "NOTIFY_ERROR")
+    from app.services.notification import DeliveryStatus
+
+    # A returned attempt is not necessarily a send: failed attempts and policy
+    # skips must not inflate the count exposed to later Fabric steps.
+    outcomes = results or []
+    skipped = sum(result.status == DeliveryStatus.SKIPPED for result in outcomes)
+    failed = sum(
+        not result.success and result.status != DeliveryStatus.SKIPPED for result in outcomes
+    )
+    output = {"dispatched": len(outcomes) - failed - skipped}
+    if skipped:
+        output["skipped"] = skipped
+    if failed:
+        output["failed"] = failed
+        return OperationResult(
+            success=False,
+            output=output,
+            error="one or more notification attempts failed",
+            error_code="NOTIFY_ERROR",
+        )
+    return OperationResult.ok(output=output)
 
 
 async def _log_handler(ctx: OperationContext) -> OperationResult:
@@ -174,11 +194,11 @@ async def _webhook_handler(ctx: OperationContext) -> OperationResult:
             allow_hosts=allow_hosts,
             **send_kwargs,
         )
-    except ValueError as exc:
+    except ValueError:
         # SSRF guard / bad URL — refuse, don't leak which internal target.
-        return OperationResult.fail(f"webhook refused: {exc}", "SSRF_BLOCKED")
-    except Exception as exc:  # noqa: BLE001 — normalize transport errors
-        return OperationResult.fail(f"webhook delivery failed: {exc}", "DELIVERY_ERROR")
+        return OperationResult.fail("webhook destination refused", "SSRF_BLOCKED")
+    except Exception:  # noqa: BLE001 — normalize transport errors
+        return OperationResult.fail("webhook delivery failed", "DELIVERY_ERROR")
 
     status = int(getattr(resp, "status_code", 0))
     body = ""

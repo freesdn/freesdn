@@ -238,9 +238,10 @@ async def _poll_firewall_health() -> dict[str, Any]:
 @celery_app.task(bind=True, name="firewall.poll_health", soft_time_limit=240, time_limit=300)
 def poll_health(self) -> dict[str, Any]:
     """Periodic firewall/gateway health poll → firewall.event.* transitions."""
-    if not acquire_solo_lock("firewall.poll_health", ttl_seconds=180):
+    lock_token = acquire_solo_lock("firewall.poll_health", ttl_seconds=180)
+    if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:
         return asyncio.run(_poll_firewall_health())
     finally:
-        release_solo_lock("firewall.poll_health")
+        release_solo_lock("firewall.poll_health", lock_token)

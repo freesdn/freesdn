@@ -1,0 +1,31 @@
+Device updates: site permission caps and credential references
+===============================================================
+
+PATCH /devices/{device_id} now applies the resolved device site's permission
+cap after the existing organization and site-access checks, before changing any
+field. A read-only or unknown site access level cannot update the device even
+when the user's role allows device:update. The actual route-level role/API-key
+permission dependency remains in place. Denial is 403 for an insufficient cap;
+existing out-of-scope device 404 and foreign-organization 403 behavior is retained.
+
+A non-null credential_id must also pass the same site visibility check as the
+credential read endpoints, after the existing organization and deleted-row
+checks. An inaccessible credential returns Credential not found (404), without
+applying other fields in that PATCH. Explicit null still clears a reference;
+omitting the field preserves it. No secret is decrypted by this endpoint.
+
+Organization-wide credentials (site_id null), administrator privileges and the
+existing grant-less-user hybrid access model remain unchanged. A user granted
+both sites can attach a credential across those granted sites. This correction
+does not require the credential and device to share one site, migrate existing
+links, or change the credential's lifecycle/ownership rules. It does not fix
+other device mutation routes or claim that credentials were exfiltrated.
+
+Qualification uses actual PostgreSQL rows, HTTP-ASGI regression tests and an
+independent loopback TCP HTTP server. The authenticated CurrentUser is synthetic;
+the real route permission dependency and device endpoint run unmodified. Checks
+cover forbidden sibling credentials, read/unknown site caps, scoped API-key
+ceilings, administrators, grant-less and multi-site callers, missing/deleted/
+foreign records, allowed credential clearing and all-field atomic refusal.
+No vendor hardware, login/token verification or concurrent grant revocation is
+exercised. Public-image and full-system acceptance remain separately recorded.

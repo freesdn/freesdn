@@ -138,11 +138,18 @@ async def test_setup_status_endpoint_reflects_super_admin_presence(
     assert r1.status_code == 200
     assert r1.json()["is_complete"] is False
 
-    # Case 2: super_admin exists -> is_complete True (even with NO flag)
+    # An admin alone locks admin creation, but the UI still needs an org.
     await _seed_super_admin(db_session, email="status-check@admin.com")
     r2 = await async_client.get("/api/v1/setup/status")
     assert r2.status_code == 200
-    assert r2.json()["is_complete"] is True
+    assert r2.json()["is_complete"] is False
+
+    # Previously this test relied on an organization leaked by an earlier test.
+    # Seed its own organization; no setup_completed flag is required.
+    await _seed_org(db_session)
+    r3 = await async_client.get("/api/v1/setup/status")
+    assert r3.status_code == 200
+    assert r3.json()["is_complete"] is True
 
 
 @pytest.mark.asyncio
@@ -354,17 +361,6 @@ async def test_post_modules_allowed_for_authenticated_super_admin(
     assert {m.module_id for m in persisted} == {"network", "devices"}
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Pre-existing test-infra issue (not a product bug): POST /setup/complete "
-        "resolves the org via an internally-created DB session, so this test's "
-        "flushed-not-committed finalized org is invisible to it and the endpoint falls "
-        "back to a generated 'offline-<uuid>' org -> 200 instead of 403. In prod the "
-        "finalized flag is COMMITTED and IS seen, so the TOCTOU guard works. TODO: "
-        "align the seed (commit+cleanup) or the endpoint session, then drop this xfail."
-    ),
-    strict=False,
-)
 @pytest.mark.asyncio
 async def test_complete_blocked_when_already_finalized(
     async_client,

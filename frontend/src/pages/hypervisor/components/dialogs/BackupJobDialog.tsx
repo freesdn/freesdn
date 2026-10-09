@@ -1,334 +1,111 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
-/**
- * Hypervisor Module - Backup Job Create/Edit Dialog
- *
- * Built on the canonical FormDialog primitive (zod + react-hook-form).
- * Day/time are stored as separate fields and joined into the API
- * `schedule` string on submit; the same applies to the "All nodes" sentinel.
- */
-import { useMemo } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
-import { z } from 'zod';
-import { FormDialog } from '@/components/ui/form-dialog';
-import { FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { hypervisorApi, type HypervisorBackupJob, type HypervisorNode } from '@/lib/api';
+import { newHypervisorRequestId, type BackupJobReviewIntent, type BackupJobSettings } from '@/lib/api/hypervisor';
+import { useUIStore } from '@/stores';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { hypervisorApi } from '@/lib/api';
-import type { HypervisorBackupJob, HypervisorNode } from '@/lib/api';
+import { Label } from '@/components/ui/label';
 
-interface BackupJobDialogProps {
-  open: boolean;
-  onClose: () => void;
-  controllerId: string;
-  nodes: HypervisorNode[];
-  editJob?: HypervisorBackupJob | null;
+interface Props {
+  open: boolean; onClose: () => void; onTracked: () => void; controllerId: string;
+  nodes: HypervisorNode[]; editJob?: HypervisorBackupJob | null; deleteJob?: HypervisorBackupJob | null;
 }
-
-// Day option values are stable identifiers; labels are translated at render.
-const DAYS = [
-  { value: 'mon', labelKey: 'days.mon' },
-  { value: 'tue', labelKey: 'days.tue' },
-  { value: 'wed', labelKey: 'days.wed' },
-  { value: 'thu', labelKey: 'days.thu' },
-  { value: 'fri', labelKey: 'days.fri' },
-  { value: 'sat', labelKey: 'days.sat' },
-  { value: 'sun', labelKey: 'days.sun' },
-];
-
-// Sentinels · Radix <SelectItem> rejects empty-string values.
-const ANY_DAY = '__any_day__';
-const ALL_NODES = '__all_nodes__';
-
-const buildSchema = (t: TFunction) => z.object({
-  scheduleDay: z.string().min(1),
-  scheduleTime: z.string().min(1, t('BackupJobDialog.validation.timeRequired')),
-  storage: z.string().min(1, t('BackupJobDialog.validation.storageRequired')),
-  vmid: z.string(),
-  node: z.string().min(1),
-  mode: z.string().min(1),
-  compress: z.string().min(1),
-  enabled: z.boolean(),
-  mailto: z.string(),
-});
-type BackupJobFormValues = z.infer<ReturnType<typeof buildSchema>>;
-
-export function BackupJobDialog({ open, onClose, controllerId, nodes, editJob }: BackupJobDialogProps) {
+export function BackupJobDialog(props: Props) {
+  return props.open ? <ReviewedBackupJob {...props} /> : null;
+}
+function ReviewedBackupJob({ controllerId, nodes, editJob, deleteJob, onClose, onTracked }: Props) {
   const { t } = useTranslation('hypervisor');
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const isEdit = !!editJob;
-
-  const schema = useMemo(() => buildSchema(t), [t]);
-
-  // Derive default values from `editJob` (parsing schedule into day + time).
-  const defaultValues = useMemo<BackupJobFormValues>(() => {
-    if (editJob) {
-      const parts = editJob.schedule.split(' ');
-      let day = ANY_DAY;
-      let time = editJob.schedule;
-      if (parts.length === 2) {
-        day = parts[0];
-        time = parts[1];
-      }
-      return {
-        scheduleDay: day,
-        scheduleTime: time,
-        storage: editJob.storage,
-        vmid: editJob.vmid || '',
-        node: editJob.node || ALL_NODES,
-        mode: editJob.mode,
-        compress: editJob.compress,
-        enabled: editJob.enabled,
-        mailto: editJob.mailto || '',
-      };
+  const readOnly = useUIStore((s) => s.readOnlyMode);
+  const action = deleteJob ? 'delete' : editJob ? 'update' : 'create';
+  const job = deleteJob ?? editJob;
+  const [target] = useState<{ controllerId: string; action: BackupJobReviewIntent['action']; job_id: string; request_id: string }>(() => {
+    const request_id = newHypervisorRequestId();
+    return { controllerId, action, job_id: job?.id ?? `freesdn-${request_id}`, request_id };
+  });
+  const [settings, setSettings] = useState<BackupJobSettings>(() => ({
+    node: job?.node ?? nodes[0]?.node ?? '', storage: job?.storage ?? 'local',
+    schedule: job?.schedule ?? 'sat 02:00', vmid: job?.vmid ?? '',
+    mode: (job?.mode ?? 'snapshot') as BackupJobSettings['mode'],
+    compress: (job?.compress === 'none' ? '0' : job?.compress ?? 'zstd') as BackupJobSettings['compress'],
+    enabled: job?.enabled ?? false,
+  }));
+  const [confirmation, setConfirmation] = useState('');
+  const [frozen, setFrozen] = useState(false);
+  const intent = useRef<BackupJobReviewIntent | null>(null);
+  const changed = target.controllerId !== controllerId || target.action !== action || (!!job && target.job_id !== job.id);
+  const review = useMutation({
+    retry: false, gcTime: 0,
+    mutationFn: () => {
+      if (!intent.current || changed) throw new Error('Backup job target changed');
+      return hypervisorApi.reviewBackupJob(target.controllerId, intent.current);
+    },
+  });
+  const reviewed = review.data?.data;
+  const desired = reviewed?.snapshot.desired;
+  const valid = Boolean(!!reviewed && /^[a-f0-9]{64}$/.test(reviewed.expected_digest)
+    && reviewed.snapshot.action === target.action && reviewed.snapshot.job_id === target.job_id
+    && (action === 'delete' ? desired === null : desired && typeof desired === 'object'
+      && Object.entries(settings).every(([key, value]) => {
+        const actual = (desired as Record<string, unknown>)[key];
+        return key === 'enabled' ? actual === Number(value) : key === 'vmid'
+          ? actual === String(value).split(',').sort((a, b) => Number(a) - Number(b)).join(',') : actual === value;
+      })));
+  const mutation = useMutation({
+    retry: false, gcTime: 0,
+    mutationFn: () => {
+      if (!intent.current || !valid || !reviewed || changed || readOnly || confirmation !== target.job_id) throw new Error('Backup job review unavailable');
+      const body = { ...intent.current, request_id: target.request_id, expected_digest: reviewed.expected_digest, force: true, confirmed: true };
+      if (target.action === 'create') return hypervisorApi.createBackupJob(target.controllerId, body);
+      if (target.action === 'update') return hypervisorApi.updateBackupJob(target.controllerId, target.job_id, body);
+      return hypervisorApi.deleteBackupJob(target.controllerId, target.job_id, body);
+    },
+    onSuccess: onTracked,
+  });
+  const pending = review.isPending || mutation.isPending;
+  const startReview = () => {
+    if (!intent.current) {
+      intent.current = { action: target.action, job_id: target.job_id, settings: target.action === 'delete' ? null : { ...settings } };
+      setFrozen(true);
     }
-    return {
-      scheduleDay: 'sat',
-      scheduleTime: '02:00',
-      storage: 'local',
-      vmid: '',
-      node: ALL_NODES,
-      mode: 'snapshot',
-      compress: 'zstd',
-      enabled: true,
-      mailto: '',
-    };
-  }, [editJob]);
-
-  const buildPayload = (values: BackupJobFormValues) => {
-    const schedule = values.scheduleDay && values.scheduleDay !== ANY_DAY
-      ? `${values.scheduleDay} ${values.scheduleTime}`
-      : values.scheduleTime;
-    const nodeForApi = values.node && values.node !== ALL_NODES ? values.node : undefined;
-    return {
-      storage: values.storage,
-      schedule,
-      vmid: values.vmid || undefined,
-      mode: values.mode,
-      compress: values.compress,
-      node: nodeForApi,
-      enabled: values.enabled,
-      mailto: values.mailto || undefined,
-    };
+    review.mutate();
   };
-
-  const createMutation = useMutation({
-    mutationFn: (values: BackupJobFormValues) =>
-      hypervisorApi.createBackupJob(controllerId, buildPayload(values)),
-    onSuccess: () => {
-      toast({ title: t('BackupJobDialog.toasts.created') });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'backup'] });
-      onClose();
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: (values: BackupJobFormValues) => {
-      if (!editJob) throw new Error('No job');
-      return hypervisorApi.updateBackupJob(controllerId, editJob.id, buildPayload(values));
-    },
-    onSuccess: () => {
-      toast({ title: t('BackupJobDialog.toasts.updated') });
-      queryClient.invalidateQueries({ queryKey: ['hypervisor', 'backup'] });
-      onClose();
-    },
-  });
-
-  return (
-    <FormDialog<BackupJobFormValues>
-      open={open}
-      onOpenChange={(o) => { if (!o) onClose(); }}
-      title={isEdit ? t('BackupJobDialog.title.edit') : t('BackupJobDialog.title.create')}
-      description={isEdit ? t('BackupJobDialog.description.edit', { id: editJob?.id }) : t('BackupJobDialog.description.create')}
-      schema={schema}
-      defaultValues={defaultValues}
-      submitLabel={isEdit ? t('BackupJobDialog.submit.update') : t('BackupJobDialog.submit.create')}
-      contentClassName="sm:max-w-lg"
-      onSubmit={async (values) => {
-        if (isEdit) {
-          await updateMutation.mutateAsync(values);
-        } else {
-          await createMutation.mutateAsync(values);
-        }
-      }}
-    >
-      {(form) => (
-        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-          {/* Schedule */}
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="scheduleDay"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('BackupJobDialog.fields.day.label')}</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger><SelectValue placeholder={t('BackupJobDialog.fields.day.placeholder')} /></SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value={ANY_DAY}>{t('BackupJobDialog.fields.day.everyDay')}</SelectItem>
-                      {DAYS.map((d) => (
-                        <SelectItem key={d.value} value={d.value}>{t(`BackupJobDialog.${d.labelKey}`)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="scheduleTime"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('BackupJobDialog.fields.time.label')}</FormLabel>
-                  <FormControl>
-                    <Input type="time" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          {/* Storage */}
-          <FormField
-            control={form.control}
-            name="storage"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('BackupJobDialog.fields.storage.label')}</FormLabel>
-                <FormControl>
-                  <Input placeholder="local" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* VMIDs */}
-          <FormField
-            control={form.control}
-            name="vmid"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('BackupJobDialog.fields.vmid.label')}</FormLabel>
-                <FormControl>
-                  <Input placeholder={t('BackupJobDialog.fields.vmid.placeholder')} {...field} />
-                </FormControl>
-                <FormDescription>{t('BackupJobDialog.fields.vmid.description')}</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Node */}
-          <FormField
-            control={form.control}
-            name="node"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('BackupJobDialog.fields.node.label')}</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl>
-                    <SelectTrigger><SelectValue placeholder={t('BackupJobDialog.fields.node.allNodes')} /></SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value={ALL_NODES}>{t('BackupJobDialog.fields.node.allNodes')}</SelectItem>
-                    {nodes.map((n) => (
-                      <SelectItem key={n.node} value={n.node}>{n.node}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Mode & Compress */}
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="mode"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('BackupJobDialog.fields.mode.label')}</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="snapshot">{t('BackupJobDialog.fields.mode.snapshot')}</SelectItem>
-                      <SelectItem value="suspend">{t('BackupJobDialog.fields.mode.suspend')}</SelectItem>
-                      <SelectItem value="stop">{t('BackupJobDialog.fields.mode.stop')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="compress"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('BackupJobDialog.fields.compress.label')}</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="zstd">ZSTD</SelectItem>
-                      <SelectItem value="lzo">LZO</SelectItem>
-                      <SelectItem value="gzip">GZIP</SelectItem>
-                      <SelectItem value="none">{t('BackupJobDialog.fields.compress.none')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          {/* Email */}
-          <FormField
-            control={form.control}
-            name="mailto"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('BackupJobDialog.fields.mailto.label')}</FormLabel>
-                <FormControl>
-                  <Input type="email" placeholder="admin@example.com" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Enabled */}
-          <FormField
-            control={form.control}
-            name="enabled"
-            render={({ field }) => (
-              <FormItem>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(!!v)} />
-                  </FormControl>
-                  <span className="text-sm">{t('BackupJobDialog.fields.enabled.label')}</span>
-                </label>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-      )}
-    </FormDialog>
-  );
+  return <Dialog open onOpenChange={(open) => { if (!open && !pending) onClose(); }}>
+    <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogHeader><DialogTitle>{t(`ReviewedBackupJob.${action}`)}</DialogTitle><DialogDescription>{t('ReviewedBackupJob.warning')}</DialogDescription></DialogHeader>
+      <p className="break-all font-mono text-sm">{target.job_id}</p>
+      <p className="text-sm">{t('ReviewedBackupJob.limits')}</p>
+      {action !== 'delete' && <fieldset disabled={frozen || pending || changed} className="space-y-3">
+        {(['node', 'storage', 'schedule', 'vmid'] as const).map((key) => <div key={key}>
+          <Label htmlFor={`backup-${key}`}>{t(`ReviewedBackupJob.${key}`)}</Label>
+          <Input id={`backup-${key}`} value={settings[key]} onChange={(e) => setSettings({ ...settings, [key]: e.target.value })} />
+        </div>)}
+        <div><Label htmlFor="backup-mode">{t('BackupJobDialog.fields.mode.label')}</Label>
+          <select id="backup-mode" className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={settings.mode} onChange={(e) => setSettings({ ...settings, mode: e.target.value as BackupJobSettings['mode'] })}>
+            {(['snapshot', 'suspend', 'stop'] as const).map((v) => <option key={v} value={v}>{t(`BackupJobDialog.fields.mode.${v}`)}</option>)}
+          </select></div>
+        <div><Label htmlFor="backup-compress">{t('BackupJobDialog.fields.compress.label')}</Label>
+          <select id="backup-compress" className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={settings.compress} onChange={(e) => setSettings({ ...settings, compress: e.target.value as BackupJobSettings['compress'] })}>
+            {['zstd', 'lzo', 'gzip', '0'].map((v) => <option key={v} value={v}>{v === '0' ? t('BackupJobDialog.fields.compress.none') : v}</option>)}
+          </select></div>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={settings.enabled} onChange={(e) => setSettings({ ...settings, enabled: e.target.checked })} />{t('BackupJobDialog.fields.enabled.label')}</label>
+      </fieldset>}
+      {reviewed && valid && <>
+        <Label>{t('ReviewedBackupJob.snapshot')}</Label>
+        <pre className="max-h-64 overflow-auto rounded bg-muted p-3 text-xs">{JSON.stringify(reviewed.snapshot, null, 2)}</pre>
+        <Label htmlFor="backup-confirmation">{t('ReviewedBackupJob.confirm', { id: target.job_id })}</Label>
+        <Input id="backup-confirmation" value={confirmation} onChange={(e) => setConfirmation(e.target.value)} disabled={pending} autoComplete="off" />
+      </>}
+      {(review.isError || mutation.isError || changed || (reviewed && !valid)) && <p role="alert" className="text-sm text-destructive">{t('ReviewedBackupJob.error')}</p>}
+      <DialogFooter>
+        <Button variant="outline" disabled={pending} onClick={onClose}>{t('common:actions.cancel')}</Button>
+        <Button variant="outline" disabled={pending || changed || !!reviewed} onClick={startReview}>{t('ReviewedBackupJob.review')}</Button>
+        <Button disabled={!valid || pending || changed || readOnly || confirmation !== target.job_id} onClick={() => mutation.mutate()}>{t('ReviewedBackupJob.submit')}</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>;
 }

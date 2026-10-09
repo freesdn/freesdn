@@ -1,0 +1,30 @@
+Camera source and playback request identity
+===========================================
+
+HLS reuse now requires the same camera, organization scope, quality, source codec,
+live/recorded mode, authenticated source URL and optional caller request key.
+An explicit key cannot override those boundaries. Identical requests still share
+one owned child. The stored key is a namespaced HMAC using the application secret;
+it does not retain raw URL credentials or caller text in session/cache keys.
+
+Recorded request identity includes the full ISO start time (including fractional
+seconds and offset) and duration. Equivalent instants expressed with different
+offsets may create separate sessions; requests for distinct instants cannot join
+because second-only formatting discarded an offset or fractional component.
+
+The recorded probe cache uses organization, camera, authenticated source and exact
+recording request identity. A negative result for one window cannot block a
+separate window. Quality-only changes reuse probe metadata while using their own
+encoding session. Inconclusive probes are never cached. The existing 30-minute
+TTL remains; expired entries are removed on access and the process-local cache is
+bounded to 256 entries, evicting oldest inserted results. An exact cached window
+can still remain stale within that TTL. No distributed cache or single-flight
+probe deduplication is claimed.
+
+Playback URL-build failures log only the camera identifier and a fixed category,
+not native adapter exception text that may contain credentials.
+
+Current permission checks remain required before start and continuation. This
+change does not distribute sessions between API workers or hosts, add viewer
+leases, change finite-recording completion behavior, fence device writes, or
+qualify vendor hardware. Local synthetic media tests are not RTSP acceptance.

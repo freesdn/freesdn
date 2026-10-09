@@ -92,7 +92,7 @@ export function DeviceHealthDrawer({ deviceId, deviceName, siteName, onClose }: 
 
             {/* Large gauge */}
             <div className="flex justify-center">
-              <HealthGauge score={Math.round(device.health_score)} size="lg" />
+              <HealthGauge score={device.health_score} size="lg" />
             </div>
 
             {/* Component scores */}

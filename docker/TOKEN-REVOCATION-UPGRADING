@@ -1,0 +1,153 @@
+# Durable token revocation and session cutover
+
+The shared Valkey TTL cache is no longer authoritative for JWT revocation or
+single-use token consumption. Cache eviction or asynchronous replication loss
+could erase those decisions. The application now commits SHA-256 token identifier
+hashes and expiry times to `core.token_revocations` in PostgreSQL. It does not
+store the bearer token. Refresh, password-reset and successful MFA challenges
+use unique, atomic claims. A claimed token is consumed even if a later operation
+fails: request a new login/reset challenge instead of replaying an old token.
+
+## Upgrade with a maintenance window
+
+1. Take and verify recoverable backups of the primary database, LogDB, application
+   volumes and the existing encryption configuration. If changing the database
+   image or HA topology too, also follow `postgres/UPGRADING` and
+   `redis/HA-UPGRADING`. These are separate migration requirements.
+2. Block user ingress and stop **all** old API processes and background workers,
+   including the second Max API and external workers. Do not perform a rolling
+   mixed-version upgrade: old processes still use an evictable blacklist.
+3. Keep `SECRET_KEY` and `ENCRYPTION_SALT` **unchanged**. They also protect encrypted
+   device credentials. A JWT cutover does not require changing either value.
+   Changing a key without a qualified re-encryption procedure can strand secrets.
+4. Run the candidate's normal migration entry point against the backed-up
+   database. Revision `016_durable_token_revocations` creates the table/index,
+   increments every account's token version and revokes existing device-session
+   rows in one transaction. This invalidates pre-upgrade access/refresh tokens,
+   password-reset links and pending MFA challenges, including tokens whose cache
+   revocation has already disappeared. Do not stamp over this migration.
+5. Start only the new application version, verify readiness and migration head,
+   and verify that old sessions/reset links/MFA challenges are refused. Sign in
+   again and check refresh rotation, per-device logout and vault decryption.
+   Reopen ingress only after those checks. This guide is a runbook, not evidence
+   that a particular customer's installation has passed the procedure.
+
+Fresh empty databases receive the model table when bootstrapped. The test suite
+also runs the actual migration from a frozen older schema with a real user and
+session; creating a new schema alone does not prove an upgrade works.
+
+## Failure, retention and capacity
+
+PostgreSQL availability is now required for token checks as well as account and
+session data. Revocation lookup errors deny authentication; claim errors cannot
+issue replacement credentials. A failed revocation write cannot acknowledge a
+successful logout and is reported as an unavailable operation. Connect and query
+operations have driver timeouts. Loss of the response after a committed claim
+can require the user to sign in again; no automatic token replay is attempted.
+
+The `cleanup-token-revocations` beat job runs on the `default` queue every five
+minutes. Each transaction removes at most 1,000 rows expired for over a day;
+`SKIP LOCKED` allows concurrent maintenance without waiting on those rows. Keep
+beat and a worker consuming `default` running. Monitor the expired backlog,
+database size, connection load and authentication latency. This bounded cleanup
+rate is not a fleet-capacity promise. A growing backlog needs operator action
+and measured capacity tuning; do not delete unexpired security rows.
+
+Read-only operational checks (run with the installation's database access):
+
+```sql
+SELECT count(*) AS retained_revocations,
+       count(*) FILTER (WHERE expires_at < now() - interval '1 day') AS cleanup_backlog,
+       min(expires_at) AS oldest_retained_expiry
+FROM core.token_revocations;
+```
+
+Revocation correctness inherits PostgreSQL durability and recovery properties.
+This change does not promise zero loss with asynchronous database replication,
+a lost primary volume or a rollback to an older database snapshot.
+
+## Rollback and restored backups
+
+Keep ingress blocked and all application processes stopped during rollback.
+The migration's downgrade increments account token versions again and keeps
+session rows revoked before dropping the new table, so it does not intentionally
+revive ordinary sessions. Downgrading to the old application also restores its
+cache-dependent security limitation; it is not a security-equivalent fallback.
+Prefer repairing or restoring the fixed version.
+
+Restoring an older backup can restore formerly valid token versions and erase
+later revocations. **Incrementing a restored token version once is not a complete
+recovery fence:** a token issued after that snapshot may already carry exactly
+that incremented version. Do not reopen a restored database merely because a
+version-bump query succeeded.
+
+The candidate supports a separate `JWT_SIGNING_KEY`. Empty/unset retains the
+legacy `SECRET_KEY` signing behavior for ordinary upgrades. When set, ONLY the
+new key signs/verifies FreeSDN JWTs; the old key is not accepted as a fallback.
+This does not change the encryption derivation for device/controller passwords,
+MFA/webhook secrets, backup encryption, audit HMACs or phone provisioning.
+
+For recovery from an older snapshot, rehearse this coordinated offline procedure
+with your backup and exact candidate images before the real maintenance window:
+
+1. Fence ingress and stop ALL APIs, workers, schedulers and other old application
+   processes. Keep the original deployment and backups isolated. A rolling key
+   change is not supported: an old process would still accept the old JWTs.
+2. Restore into an isolated database. Keep the ORIGINAL `SECRET_KEY` and
+   `ENCRYPTION_SALT` that match its ciphertext. Run candidate schema migrations
+   once, then verify the encrypted credentials before starting adapter work.
+3. Generate a fresh, cryptographically random `JWT_SIGNING_KEY` (at least 32
+   characters; use `secrets.token_urlsafe(48)`), different from every previous
+   signing key and the vault key. Store it privately in the deployment's secret
+   configuration, outside the database snapshot. Never log it or put it in a
+   release report. There is no need to re-encrypt the vault for this auth cutover.
+4. Set the SAME new value on every candidate API/worker/scheduler replica. The
+   base Compose backend environment passes it to those services, including HA
+   replicas. Recreate containers; a restart alone does not update their env.
+   Revoke restored session rows as defense in depth and for an accurate session
+   inventory. Version increments alone are not the recovery fence.
+5. While still isolated, verify that old access, remembered refresh, password
+   reset and pending MFA tokens all fail; include tokens issued AFTER the backup.
+   Verify fresh login, refresh, reset and MFA, including single-use rejection,
+   and decrypt representative stored credentials in a fresh process.
+6. Reconcile restored API keys, OAuth credentials, agent credentials, provider
+   keys, queued jobs and other non-JWT authorization separately. JWT rotation
+   does not revoke these, restore lost work or undo device operations. Reopen
+   only after those site-specific checks and the other recovery gates pass.
+
+Never restore an older env file over the new signing key, remove the key after
+rotation, reuse a previous key, or start an older backend that ignores this
+setting. Any of those actions can re-enable old signatures. Preserve the active
+key through restart/redeployment; use another fresh key for each later disaster
+recovery. The application does not automatically detect a restored snapshot or
+rotate secrets for the operator. If key compromise includes `SECRET_KEY`, this
+procedure is not full incident recovery: vault re-encryption and downstream
+credential rotation need a separate plan.
+
+The alternative is to keep the restored installation isolated until every
+potentially valid pre-recovery JWT has expired, including remembered sessions
+and all configured/custom token lifetimes. Do not guess that waiting one access
+token lifetime is sufficient.
+
+## Disposable authentication recovery qualification
+
+`scripts/check_auth_recovery.py` accepts a retained revision-015 backend, the
+candidate backend, PostgreSQL and Valkey images. It resolves their exact IDs,
+uses only new internal Docker resources with no published ports, and exercises
+real application routes as UID 1001 with PostgreSQL/Valkey (no dependency mocks).
+It does not start hardware adapters or operate on an existing installation.
+
+Example, using your retained local image names and a NEW private work directory:
+
+    python scripts/check_auth_recovery.py \
+      --legacy-backend <retained-revision-015-image> \
+      --backend <candidate-production-image> \
+      --postgres <qualified-postgres-image> --valkey <qualified-valkey-image> \
+      --work-dir /private/new-auth-recovery-run
+
+The two negative controls must demonstrate token resurrection with the old key
+and with a restored token-version-plus-one before the safe recovery checks can
+pass. The synthetic dump, state and failure logs remain PRIVATE (0600); only
+`report.json` is intended as shareable evidence. This gate does not qualify a
+PostgreSQL runtime conversion, LogDB/HA recovery, DB0/1/2 queue reconciliation,
+customer backup fidelity, load capacity or a production RTO/RPO.

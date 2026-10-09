@@ -1,0 +1,67 @@
+Transactional in-app event publication
+======================================
+
+The notification bell row and its pending realtime event are flushed together.
+Shared notification dispatch leaves commit/rollback to the business owner. A
+standalone create_in_app call may retain commit=True. No realtime event is
+published inside that creation call, including when commit=False is used.
+
+The worker polls committed pending rows every five seconds on the default
+queue. Each row is locked with SKIP LOCKED through publication and commit, so
+competing workers do not intentionally handle the same row simultaneously.
+The worker rechecks the current notification, recipient, organization, active
+and deleted state, and read/dismissed state. It suppresses ineligible rows.
+The captured tenant and recipient cannot be replaced by a later reassignment;
+hard deletion cascades pending work instead of promoting it to platform scope.
+A platform-originated personal notification captures the recipient's actual
+organization at creation. Organizationless platform users retain their bell
+rows; the existing event WebSocket rejects organizationless broadcasts.
+
+A failed/uncertain publish or zero subscribers leaves the event pending with
+backoff capped at60seconds. Each invocation handles at most50rows by default,
+with a20second loop budget and a3second individual publication timeout. A
+Redis/Valkey acknowledgment with subscribers means publication was accepted;
+it is not an acknowledgment from a browser, another handler or an end user.
+The persisted bell remains available through the normal notifications API.
+
+A crash after publication but before database commit can cause a duplicate.
+Retries use the same event ID, correlation ID, timestamp and content for an
+unchanged notification. This is not exactly-once delivery. There is no claim
+that arbitrary downstream handlers deduplicate these events or that a change
+made after the final eligibility check is fenced against publication.
+
+Deployment and migration
+------------------------
+Apply020_inapp_event_outbox before running new API/worker code. Roll out the
+matching API, workers and beat together: an old API still publishes directly,
+and an old worker does not register the new task. Pending rows remain durable
+while workers or the broker are unavailable, provided PostgreSQL is retained.
+
+Fresh installs and upgrades from the frozen legacy schema are checked. Existing
+bell rows are preserved without inventing or replaying historical events. A
+downgrade refuses pending events; an operator must reconcile them explicitly.
+No automatic marking, discarding or truncation is provided by the migration.
+Completed/suppressed outbox rows remain until their bell, user or organization
+is physically deleted; an independent retention policy remains operational work.
+
+The camera-ingest, plugin-alert and remote-scan owners that already commit their
+source record before notifying now commit the separate notification transaction
+explicitly. A notification failure cannot undo the already-persisted source
+record. A crash between those two transactions can still omit the notification;
+this change does not introduce a durable job for every source event.
+
+Qualification and limits
+------------------------
+Behavioral checks reproduce the old early publication/owner-commit defects.
+Independent PostgreSQL sessions check visibility, rollback, row locks, concurrent
+workers, current authority and migration safety. Additional isolated fixtures use
+actual Redis/Valkey and separate task processes, including SIGKILL before commit
+and after acknowledged publication while the database write is blocked. The
+latter demonstrates recovery with duplicate publication rather than concealing
+it. These fixtures do not exercise customer hardware or send external messages.
+
+External email/SMS/webhook delivery and generic retry scheduling are unchanged:
+their database/queue commit gap and ambiguous external acceptance remain open.
+This in-app outbox is not the existing SLA report SMTP outbox and does not reuse
+its approval, delivery-epoch or report recovery semantics. It is not a general
+application event outbox or a complete disaster-recovery/retention qualification.

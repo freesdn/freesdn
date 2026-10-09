@@ -5,6 +5,8 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import type { components } from './generated/openapi';
+
 // =============================================================================
 // SWITCHES
 // =============================================================================
@@ -2983,6 +2985,7 @@ export type BackupStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 
 export type BackupStorageType = 'local' | 's3' | 'sftp' | 'ftp' | 'nfs' | 'google_drive' | 'dropbox' | 'webdav';
 
 export interface Backup {
+  artifact_integrity?: 'recorded' | 'legacy_unverified' | 'invalid';
   id: string;
   name: string;
   description: string | null;
@@ -3106,11 +3109,38 @@ export interface ContributorPreview {
 
 export interface BackupManifestPreview {
   backup_id: string;
-  format_version: string;
+  format_version: string | null;
+  requires_passphrase?: boolean;
+  reason?: string | null;
+  // A metadata-only response records an identity without reading current bytes.
+  artifact_integrity?: 'recorded' | 'verified' | 'legacy_unverified' | 'invalid';
   created_at: string | null;
   source_version: string | null;
   organization_id: string | null;
   contributors: ContributorPreview[];
+}
+
+export interface RestoreContributorReport {
+  contributor_id: string;
+  status: string;
+  created: Record<string, number>;
+  updated: Record<string, number>;
+  skipped: Record<string, number>;
+  errors: string[];
+  warnings: string[];
+  duration_sec?: number;
+}
+
+export interface RestoreReport {
+  contributors: RestoreContributorReport[];
+  summary: {
+    total_created: number;
+    total_updated: number;
+    total_skipped: number;
+    total_errors: number;
+    contributors_ok: number;
+    contributors_failed: number;
+  };
 }
 
 export interface RestoreJob {
@@ -3122,7 +3152,10 @@ export interface RestoreJob {
   completed_at: string | null;
   error_message: string | null;
   dry_run: boolean;
-  dry_run_report: Record<string, any> | null;
+  dry_run_report: RestoreReport | null;
+  restore_log: RestoreReport | null;
+  items_restored: number;
+  items_failed: number;
   created_at: string;
 }
 
@@ -3148,26 +3181,18 @@ export interface ExportOptions {
   compress?: boolean;
 }
 
+export interface ImportEntitySummary {
+  created: number;
+  updated: number;
+  skipped: number;
+  rejected_cross_org: number;
+}
+
 export interface ImportResult {
-  success?: boolean;
-  dry_run?: boolean;
-  would_import?: {
-    devices: number;
-    vlans: number;
-    sites: number;
-    controllers: number;
-    users: number;
-    automation_rules: number;
-  };
-  imported?: {
-    devices: { restored: number; skipped: number; failed: number };
-    vlans: { restored: number; skipped: number; failed: number };
-    sites: { restored: number; skipped: number; failed: number };
-    controllers: { restored: number; skipped: number; failed: number };
-    users: { restored: number; skipped: number; failed: number };
-    automation_rules: { restored: number; skipped: number; failed: number };
-    errors: string[];
-  };
+  success: boolean;
+  dry_run: boolean;
+  would_import?: Partial<Record<'sites' | 'controllers' | 'devices' | 'users', ImportEntitySummary>>;
+  imported?: Partial<Record<'sites' | 'controllers' | 'devices' | 'users', ImportEntitySummary>>;
   message?: string;
   metadata?: Record<string, unknown>;
 }
@@ -3178,6 +3203,7 @@ export interface StorageLocation {
   name: string;
   description: string | null;
   storage_type: BackupStorageType;
+  transport_security_review_required?: boolean;
   is_active: boolean;
   is_default: boolean;
   last_test_at: string | null;
@@ -4031,7 +4057,7 @@ export interface DeviceHealthResponse {
   device_id: string;
   organization_id: string;
   site_id: string;
-  health_score: number;
+  health_score: number | null;
   health_status: 'healthy' | 'warning' | 'degraded' | 'critical' | 'unknown';
   reachability_score: number | null;
   latency_score: number | null;
@@ -4045,27 +4071,29 @@ export interface DeviceHealthResponse {
   // Sparkline points emit ``{t: ISO, s: int}`` per ``services/enterprise.py:_record_score``.
   // The previous ``{score, time}`` was wrong, the Y-axis read undefined and the X-axis
   // rendered ``Invalid Date`` on every probe.
-  score_history: Array<{ t: string; s: number }>;
+  score_history: Array<{ t: string; s: number | null }>;
 }
 
 export interface SiteHealthSummary {
   site_id: string;
   site_name: string;
   device_count: number;
-  avg_health_score: number;
+  measured_device_count?: number;
+  avg_health_score: number | null;
   health_status: string;
   healthy: number;
   warning: number;
   degraded: number;
   critical: number;
-  uptime_percent?: number;
+  uptime_percent?: number | null;
 }
 
 export interface OrgHealthSummary {
   organization_id: string;
   site_count: number;
   device_count: number;
-  avg_health_score: number;
+  measured_device_count?: number;
+  avg_health_score: number | null;
   health_status: string;
   sites: SiteHealthSummary[];
 }
@@ -4911,25 +4939,7 @@ export interface GatewayServiceRestartRequest {
 // HYPERVISOR (Proxmox VE)
 // =============================================================================
 
-export interface HypervisorDashboard {
-  cluster_name: string;
-  quorate: boolean;
-  total_nodes: number;
-  online_nodes: number;
-  total_vms: number;
-  running_vms: number;
-  total_containers: number;
-  running_containers: number;
-  total_cpu_cores: number;
-  cpu_usage_percent: number;
-  total_memory_bytes: number;
-  used_memory_bytes: number;
-  memory_usage_percent: number;
-  total_storage_bytes: number;
-  used_storage_bytes: number;
-  storage_usage_percent: number;
-  ha_active: boolean;
-}
+export type HypervisorDashboard = Required<components['schemas']['HypervisorDashboardResponse']>;
 
 export interface HypervisorClusterStatus {
   name: string;
@@ -5201,7 +5211,9 @@ export interface HypervisorCephStatus {
 
 // ── VM/CT Creation ─────────────────────────────────────────────────────
 export interface CreateVMRequest {
-  vmid?: number;
+  request_id: string;
+  force: true;
+  vmid: number;
   name: string;
   node: string;
   cores: number;
@@ -5225,7 +5237,9 @@ export interface CreateVMRequest {
 }
 
 export interface CreateContainerRequest {
-  vmid?: number;
+  request_id: string;
+  force: true;
+  vmid: number;
   hostname: string;
   node: string;
   ostemplate: string;
@@ -5248,63 +5262,22 @@ export interface CreateContainerRequest {
   searchdomain?: string;
 }
 
-export interface CreateVMResponse {
-  vmid: number;
-  upid: string;
-  message: string;
-}
+export type CreateVMResponse = components['schemas']['CreateVMResponse'];
 
 export interface NextVMIDResponse {
   vmid: number;
 }
 
 // ── Fleet (Multi-Cluster) ──────────────────────────────────────────────
-export interface FleetClusterSummary {
-  controller_id: string;
-  controller_name: string;
-  cluster_name: string;
-  quorate: boolean;
-  total_nodes: number;
-  online_nodes: number;
-  total_vms: number;
-  running_vms: number;
-  total_containers: number;
-  running_containers: number;
-  total_cpu_cores: number;
-  cpu_usage_percent: number;
-  total_memory_bytes: number;
-  used_memory_bytes: number;
-  memory_usage_percent: number;
-  total_storage_bytes: number;
-  used_storage_bytes: number;
-  storage_usage_percent: number;
-  status: string;
-  error: string;
-}
+export type FleetClusterSummary = Required<components['schemas']['FleetClusterSummary']>;
 
-export interface FleetDashboard {
-  total_clusters: number;
-  online_clusters: number;
-  total_nodes: number;
-  online_nodes: number;
-  total_vms: number;
-  running_vms: number;
-  total_containers: number;
-  running_containers: number;
-  total_cpu_cores: number;
-  cpu_usage_percent: number;
-  total_memory_bytes: number;
-  used_memory_bytes: number;
-  memory_usage_percent: number;
-  total_storage_bytes: number;
-  used_storage_bytes: number;
-  storage_usage_percent: number;
-  clusters: FleetClusterSummary[];
-}
+export type FleetDashboard = Omit<Required<components['schemas']['FleetDashboardResponse']>, 'clusters'> & { clusters: FleetClusterSummary[] };
 
 // ── Hypervisor: Bulk Operations ────────────────────────────────────────────
 
 export interface BulkVMTarget {
+  request_id?: string;
+  expected_digest?: string;
   node: string;
   vm_type: string;
   vmid: number;
@@ -5319,15 +5292,10 @@ export interface BulkMigrateRequest {
   targets: BulkVMTarget[];
   target_node: string;
   online: boolean;
+  restart?: boolean;
 }
 
-export interface BulkActionResult {
-  vmid: number;
-  node: string;
-  success: boolean;
-  upid?: string;
-  error?: string;
-}
+export type BulkActionResult = components['schemas']['BulkActionResult'];
 
 // ── Hypervisor: Guest Agent ────────────────────────────────────────────────
 
@@ -5378,7 +5346,7 @@ export interface DeviceHealthDetail {
   ip_address: string | null;
   site_name: string | null;
   site_id: string | null;
-  health_score: number;
+  health_score: number | null;
   health_status: string;
   // Backend (DeviceHealthDetail inherits from DeviceHealthResponse) uses
   // ``<dimension>_score``, NOT ``score_<dimension>``. The previous names
@@ -5390,7 +5358,7 @@ export interface DeviceHealthDetail {
   error_score: number | null;
   utilization_score: number | null;
   firmware_score: number | null;
-  score_history: Array<{ t: string; s: number }>;
+  score_history: Array<{ t: string; s: number | null }>;
   updated_at: string;
 }
 
@@ -5407,8 +5375,8 @@ export interface TopHealthIssue {
   site_id: string | null;
   health_score: number;
   health_status: string;
-  worst_component: string;
-  worst_component_score: number;
+  worst_component: string | null;
+  worst_component_score: number | null;
 }
 
 export interface TopIssuesResponse {
@@ -5431,7 +5399,8 @@ export interface InfrastructureHealthResponse {
 export interface ModuleHealthSummary {
   module: string;
   device_count: number;
-  avg_health_score: number;
+  measured_device_count?: number;
+  avg_health_score: number | null;
   healthy: number;
   warning: number;
   degraded: number;
@@ -5442,7 +5411,7 @@ export interface ModuleHealthSummary {
 
 export interface HealthDailySnapshotResponse {
   snapshot_date: string;
-  avg_health_score: number;
+  avg_health_score: number | null;
   device_count: number;
   healthy_count: number;
   warning_count: number;
@@ -5458,7 +5427,7 @@ export interface WANDeviceHealth {
   device_type: string;
   site_name: string;
   ip_address: string | null;
-  health_score: number;
+  health_score: number | null;
   latency_score: number | null;
   reachability_score: number | null;
   utilization_score: number | null;
@@ -5469,11 +5438,12 @@ export interface WANDeviceHealth {
 export interface SiteRanking {
   site_id: string;
   site_name: string;
-  avg_health_score: number;
+  measured_device_count?: number;
+  avg_health_score: number | null;
   device_count: number;
   // Nullable: backend ``SiteHealthSummary.uptime_percent`` is ``float | None``
-  // when the site has no reachability samples (fresh device / new site).
+  // until a real time-window availability collector provides evidence.
   uptime_percent: number | null;
-  trend: 'up' | 'down' | 'stable';
-  trend_delta: number;
+  trend: 'up' | 'down' | 'stable' | 'unknown';
+  trend_delta: number | null;
 }

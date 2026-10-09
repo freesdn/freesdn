@@ -44,14 +44,28 @@ from app.core.site_access import site_scope_filter
 TENANT_EXEMPT: dict[str, str] = {
     # --- genuinely platform-global / cross-org ---
     "app.models.core:Organization": "global: the tenant root itself",
+    # Authentication checks happen before a tenant is established. Only hashes
+    # and expiry are retained; no tenant-facing collection endpoint exposes them.
+    "app.models.core:TokenRevocation": "global: internal JWT revocation and single-use claims",
     "app.models.security_audit:FailedLoginRecord": "global: platform brute-force tracking (no org column)",
     "app.models.security_audit:IPBlockRecord": "global: platform IP block list (no org column)",
+    # Internal singleton for the installation-wide signed chain and retention
+    # boundary, never a tenant-facing collection. Audit records retain org/site
+    # scoping; the global verifier still requires an unscoped platform superuser.
+    # This classification grants no permission to read or mutate the state.
+    "app.models.security_audit:AuditChainState": "global: internal audit-chain position and retention state",
     "app.models.sync_lock:DeviceSyncLock": "global: process concurrency lock",
     "app.models.analytics:MetricDefinitionRecord": "global: shared metric catalog",
+    "app.models.marketplace:MarketplaceCatalogState": "global: marketplace anti-rollback state",
     "app.models.marketplace:MarketplacePlugin": "global: marketplace catalog (cross-org by design)",
     "app.models.marketplace:MarketplacePluginVersion": "global: marketplace catalog versions",
     "app.models.marketplace:PluginReview": "global: cross-org plugin reviews",
     "app.models.plugins:InstalledPlugin": "global: plugin registry (per-org state in PluginOrganizationState)",
+    # Installation-wide public trust and retained operator history. Lifecycle
+    # transitions still require current unscoped platform-admin authority;
+    # classification grants no permission and actor UUIDs are audit snapshots.
+    "app.models.agent_signing:AgentSigningIntent": "global: installation signing lifecycle history",
+    "app.models.agent_signing:AgentSigningIdentity": "global: installation public signing identity",
     # --- user-scoped (org reached via the owning user) ---
     "app.models.api_keys:APIKey": "user-scoped: org via owning user",
     "app.models.core:UserSession": "user-scoped: org via owning user",
@@ -62,6 +76,7 @@ TENANT_EXEMPT: dict[str, str] = {
     # --- child rows scoped via a parent FK ---
     "app.models.agents:AgentScheduleRun": "viaparent: AgentSchedule",
     "app.models.agents:AgentTask": "viaparent: RemoteAgent",
+    "app.models.agent_signing:AgentSigningEnrollment": "viaparent: RemoteAgent enrollment trust pin",
     "app.models.agents:AgentHeartbeat": "viaparent: RemoteAgent (LogDB)",
     "app.models.correlation:IncidentEvent": "viaparent: Incident",
     "app.models.devices:DeviceClient": "viaparent: Device",
