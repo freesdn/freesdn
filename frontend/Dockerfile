@@ -125,7 +125,7 @@ CMD ["nginx", "-g", "daemon off;"]
 # `production` stage + the certbot container + the cert scripts. The nginx
 # stage above is retained as an opt-in escape hatch (`nginx` compose profile)
 # for shops that standardize on nginx / terminate TLS upstream.
-FROM caddy:2.11.4-alpine AS caddy
+FROM caddy:2.11.7-alpine AS caddy
 
 # Apply the latest Alpine security patches (openssl libcrypto3/libssl3, etc.) on
 # top of the pinned caddy base, so a freshly built edge image picks up CVE fixes
