@@ -74,7 +74,7 @@ RUN go mod vendor && go run -mod=vendor ./prepare.go \
 # ============================================
 # The patched Alpine variant avoids Debian media/system packages that have
 # unresolved advisories. Preserve UID/GID 999 for existing Compose tmpfs mounts.
-FROM nginx:1.30.5-alpine AS production
+FROM nginx:1.31.0-alpine AS production
 RUN apk upgrade --no-cache && apk add --no-cache curl \
     && deluser nginx \
     && delgroup ping \
