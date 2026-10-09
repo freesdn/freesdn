@@ -5,16 +5,43 @@ All notable changes to FreeSDN are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Calendar Versioning](https://calver.org/) (`YY.MM.PATCH`).
 
-FreeSDN is a Community Edition / Early Access project. Releases may contain
-breaking changes between versions - **back up your data before upgrading.**
+FreeSDN is a Community Edition project maintained by its sole owner and
+developer. Releases may contain breaking changes between versions -
+**back up your data before upgrading.**
+
+## [26.10.1] - 2026-10-09 - Documentation corrected after publication
+
+26.10.0 published with documentation that still described it as unreleased.
+There are no application changes in this release.
+
+### Fixed
+
+- `README.md` opened with "Development target: 26.10.0 (unreleased)" on a
+  repository that already carried the v26.10.0 tag and release. It now states
+  the current release and the gates every release has to clear.
+- `SECURITY.md` said a version in source does not mean a public release or its
+  images have been qualified. Both had been.
+- The support boundary, installation acceptance and upgrade documents described
+  the release as a "prepared candidate" and the project as "Early Access".
+  `docker/RELEASE-SUPPORT` is retitled from PUBLIC CANDIDATE SUPPORT BOUNDARY.
+- Upgrade and quickstart guidance told readers not to invent a tag for the
+  prepared candidate. v26.10.0 exists, so the guidance is now the useful one:
+  install from a published release tag rather than the default branch.
+
+Unchanged, and still stated plainly in the same documents: one owner and
+developer, no commercial support contract, no SLA, no third-party security
+audit or compliance certification, Linux amd64 only with ARM64 unqualified, the
+HA overlay providing single-host service failover rather than host-loss
+protection, asynchronous replication able to lose acknowledged writes, Proxmox
+SDN apply blocked, and no adapter claiming live-validated writes.
 
 ## [26.10.0] - 2026-10-09 - Guards that did not guard
 
 This release brings together the recovered and reconciled FreeSDN work and the
 subsequent qualification fixes. It focuses on authorization, audit integrity,
-recovery, dependency security and operational reliability as the project moves
-toward broader enterprise use. FreeSDN remains Community / Early Access; this is
-not an enterprise certification or a production-readiness claim.
+recovery, dependency security and operational reliability. It is not a claim of
+independent certification: there is no third-party security audit, no compliance
+attestation and no commercial support contract.
 
 ### Release preparation
 

@@ -64,5 +64,5 @@ The separate firmware-information, system-information and gateway-health
 adapter methods are not certified by this summary correction and remain audit
 work. These read results do not qualify gateway writes, backups, retention,
 restore, high availability, production RTO/RPO or an enterprise SLA. Follow the
-candidate support boundary and test the exact release images against the
+support boundary and test the exact release images against the
 intended device models, firmware versions and operations before deployment.

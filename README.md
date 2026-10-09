@@ -15,16 +15,20 @@
 
 # FreeSDN
 
-**Development target: 26.10.0 (unreleased).** This release prepares the recovered,
-reconciled and internally qualified hardening work for the next release cycle.
-See the [draft changelog](CHANGELOG.md) for scope and remaining qualification.
+**Current release: 26.10.0.** Every release is gated on acceptance that runs the
+real stack: a fresh install driven as a user, an in-place upgrade from the
+previously published release on a real volume, encrypted backup and restore into
+a clean target, a failover drill, and a vulnerability scan of all fifteen shipped
+images. See the [changelog](CHANGELOG.md) for what changed.
 
-> **Candidate support scope:** Linux **amd64** only; ARM64 appliance releases are
-> not qualified. FreeSDN remains Community / Early Access, with no enterprise-stable
-> or third-party-audit claim. The HA overlay provides single-host service failover,
+> **Support scope:** Linux **amd64** only; ARM64 appliance releases are not
+> qualified. FreeSDN is maintained by its sole owner and developer: there is no
+> commercial support contract, no SLA, and no third-party security audit or
+> compliance certification. The HA overlay provides single-host service failover,
 > not host-loss protection. Proxmox SDN apply stays blocked, and scheduled reports
-> offer opt-in, authenticated SMTP notices (no attachments or external recipients). Read the [candidate support boundary](docker/RELEASE-SUPPORT)
-> before planning deployment or an existing-site upgrade.
+> offer opt-in, authenticated SMTP notices (no attachments or external recipients).
+> Read the [support boundary](docker/RELEASE-SUPPORT) before planning a deployment
+> or an existing-site upgrade.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![CI](https://github.com/freesdn/freesdn/actions/workflows/ci.yml/badge.svg)](https://github.com/freesdn/freesdn/actions/workflows/ci.yml)

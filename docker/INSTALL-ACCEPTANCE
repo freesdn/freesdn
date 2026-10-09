@@ -1,8 +1,8 @@
 ISOLATED INSTALLATION AND ENCRYPTED RECOVERY ACCEPTANCE
 =====================================================
 
-FreeSDN remains Community / Early Access. This rehearsal checks a bounded Lite
-deployment; it does not certify a customer upgrade or an enterprise release.
+This rehearsal checks a bounded Lite deployment. It is one of the release
+acceptance gates, not a certification of a particular customer upgrade.
 
 Installer security
 ------------------

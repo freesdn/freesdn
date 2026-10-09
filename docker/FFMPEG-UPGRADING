@@ -27,7 +27,7 @@ H.264/HEVC quality presets, source copy and mono 8 kHz AAC have synthetic native
 encode/decode coverage. Hardware, RTSP-network and accelerator-driver acceptance
 remain separate. Preserve the previously qualified image digests for rollback.
 
-The candidate support boundary remains Linux amd64. An arm64 recipe branch is
+The support boundary remains Linux amd64. An arm64 recipe branch is
 not arm64 release acceptance. No stable multi-architecture manifest is authorized
 by an amd64 test pass. Every produced image needs fresh SBOM/vulnerability scans,
 media/runtime tests, immutable digest binding and release provenance. Upstream

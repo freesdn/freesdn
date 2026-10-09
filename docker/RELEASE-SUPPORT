@@ -1,10 +1,11 @@
-PUBLIC CANDIDATE SUPPORT BOUNDARY
-===============================
+PUBLIC SUPPORT BOUNDARY
+=======================
 
-FreeSDN remains Community / Early Access. This source and its local qualification
-artifacts are not an enterprise-stable release or a published-image acceptance.
+FreeSDN is maintained by its sole owner and developer. Release acceptance gates
+and local qualification artifacts are not a third-party audit, a compliance
+attestation or a commercial support contract.
 
-Platform: the appliance candidate is qualified only for Linux amd64. ARM64 builds
+Platform: the appliance is qualified only for Linux amd64. ARM64 builds
 and ARM64 installation are unsupported by this evidence. Do not publish an ARM64
 stable manifest until the runtime, database, media/VPN binaries, restore and
 installation gates pass on that architecture. Agent desktop/platform releases

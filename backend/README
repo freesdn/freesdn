@@ -2,9 +2,9 @@ FreeSDN backend
 ===============
 
 The backend provides the FastAPI API, PostgreSQL data model and migrations,
-Celery workers, and managed-device adapters for FreeSDN Community Edition /
-Early Access. It is one component of the appliance, not a standalone supported
-deployment or an independently qualified PyPI distribution.
+Celery workers, and managed-device adapters for FreeSDN. It is one component of
+the appliance, not a standalone supported deployment or an independently
+qualified PyPI distribution.
 
 Use the repository's root README, install.sh and docker/RELEASE-SUPPORT for
 installation and supported deployment boundaries. The qualified appliance

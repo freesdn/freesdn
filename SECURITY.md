@@ -1,15 +1,15 @@
 # Security Policy
 
-FreeSDN is maintained by its sole owner and developer. It is Community Edition /
-Early Access software. Automated tests, internal review and the maintainer's
-reported production use do not establish independent security certification,
-enterprise support coverage or acceptance of every firmware and deployment.
+FreeSDN is maintained by its sole owner and developer. Automated tests, release
+acceptance gates, internal review and the maintainer's own production use do not
+establish independent security certification, commercial support coverage or
+acceptance of every firmware and deployment.
 Read the [release support boundary](docker/RELEASE-SUPPORT) before deploying.
 
 ## Versions and maintenance
 
-This checkout identifies the application as `26.10.0`. A version in source does
-not mean that a stable public release or its images have been qualified and
+This checkout identifies the application as `26.10.0`. A version in source is not
+by itself evidence that a public release and its images have been qualified and
 published. Use the release's actual source commit, image digests and acceptance
 record when deciding what to install. The current appliance qualification scope
 is Linux amd64; agent platforms have separate qualification requirements.
