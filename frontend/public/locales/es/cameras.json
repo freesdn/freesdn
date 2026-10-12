@@ -44,6 +44,10 @@
       "description": "La cámara que buscas no existe o ha sido eliminada.",
       "backToCameras": "Volver a Cámaras"
     },
+    "invalidLink": {
+      "title": "Enlace de cámara no válido",
+      "description": "Esta dirección no contiene un id de cámara válido, por lo que no hay nada que mostrar. Es probable que el enlace se haya copiado mal o lo haya generado una página desactualizada."
+    },
     "header": {
       "channel": "Canal {{channel}}",
       "back": "Volver"

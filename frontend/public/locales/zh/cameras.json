@@ -44,6 +44,10 @@
       "description": "您查找的摄像头不存在或已被移除。",
       "backToCameras": "返回摄像头列表"
     },
+    "invalidLink": {
+      "title": "无效的摄像机链接",
+      "description": "此地址不包含有效的摄像机 ID，因此无内容可显示。该链接可能被错误复制，或由过期页面生成。"
+    },
     "header": {
       "channel": "通道 {{channel}}",
       "back": "返回"

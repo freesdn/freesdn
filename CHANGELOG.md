@@ -9,6 +9,141 @@ FreeSDN is a Community Edition project maintained by its sole owner and
 developer. Releases may contain breaking changes between versions -
 **back up your data before upgrading.**
 
+## [26.10.2] - 2026-10-12 - A controller that imported nothing, quietly
+
+Every fix here was found by running v26.10.1 against real hardware - a TP-Link
+Omada controller, a UniFi gateway, an OPNsense firewall, a Hikvision NVR, Proxmox
+and TrueNAS - rather than by reading code. The first one had been silently
+breaking device discovery for every controller type.
+
+### Fixed
+
+- **Device discovery crashed before contacting any device, for every controller
+  type, without reporting it.** Publishing the "discovery started" event raised
+  `TypeError: Object of type UUID is not JSON serializable`, so the task died and
+  retried forever. Nothing surfaced it: the separate health check kept stamping the
+  controller `connected` with a fresh last-sync time and an empty error field, so
+  the UI showed a healthy, recently-synced controller that had never imported a
+  single device. Only counting the devices revealed it. On the test fleet the
+  device count went from 7 to 19 once fixed, including every access point and
+  switch behind the Omada controller.
+- **A newly created site did not appear when adding a device, hypervisor or NVR**
+  for up to five minutes. The dialogs served a cached site list and, because they
+  stay mounted, never refetched on reopen.
+- **Asking a camera for its RTSP URL returned a server error for every device.**
+  The device-type check read an attribute that is a plain string on any device
+  loaded from the database.
+- **The Omada Open API integration had never worked.** Its token, refresh, site-list
+  and introspection calls all read a configuration field that does not exist, so
+  each failed on its first line. The site list now returns real data.
+- **Pointing an Omada-only endpoint at a controller of another vendor returned a
+  server error** instead of saying so. It now answers with a message naming both
+  the controller type and the operation, consistent with the rest of the API.
+- **Asking an Omada controller for a feature its firmware does not implement
+  returned a server error.** The controller answers such requests with an HTML page
+  rather than JSON; that now surfaces as an upstream error naming the cause.
+- **Three VPN endpoints took more than twelve seconds each whenever NetBird is not
+  configured**, which is the default. The result of the failed check was never
+  cached and each request re-ran it, so the VPN page appeared frozen. Repeat calls
+  are now immediate.
+- **Requesting an import session, recording, or camera analytics setting that does
+  not exist returned a server error** instead of "not found", and camera errors
+  reported only what had failed rather than why.
+- **Tailscale could not start inside the API container**, whose filesystem is
+  read-only by design, so the sidecar state and socket had nowhere to go.
+- **Discovered devices could be recorded with a status the rest of the product does
+  not understand.** Adapters report health words such as `ok` and `warning`; those
+  were stored verbatim into a field that expects reachability, so a healthy
+  appliance counted as offline in every per-controller total.
+- **Firmware showed as unavailable for devices whose version had already been
+  collected**, and Proxmox node versions were never stored at all, because the code
+  path that writes to the database did not gather what the live view does.
+- **TrueNAS synchronisation failed while its own controller page reported a
+  successful connection.** Credential assembly existed in three places that had
+  drifted apart; TrueNAS authenticates with an API key and only one of them passed
+  it.
+- **Camera detail pages could be opened with an invalid address** from a dialog that
+  passed an event object where an identifier was expected.
+- **A VoIP discovery scan failed** when more than one provisioning record matched.
+- **Pages could fail to load after an upgrade** until a manual refresh, because the
+  browser held an asset reference the new release no longer serves.
+- **Pressing Disable did nothing for a module nobody had explicitly enabled** -
+  which is most of them, and exactly the ones serving traffic. The call found no
+  stored record, returned "module not found" for the organization, and wrote
+  nothing, so the toggle still misreported; it had only changed which modules it
+  misreported. Disabling now records the decision.
+- **TrueNAS write support was under-reported in the product for two months.** The
+  maturity badge read "mock tested - no real-device write validated yet" while
+  the published 26.08.4 notes stated, correctly, that the storage write path had
+  been validated end to end against a real appliance. The badge's note predated
+  the backup-destination write path and was simply stale. It now reads
+  **partial**, not live-validated: the honesty ratchet requires a recorded
+  device cassette for that claim and none is in the tree. Under-selling is still
+  a defect when the maturity labels are the one thing the project asks you to
+  trust.
+
+### Added
+
+- **Disabling a module now actually closes its endpoints.** Until this release
+  the Settings > Modules toggle hid the navigation and nothing else: every route
+  of a "disabled" module stayed callable by anyone with valid credentials. The
+  registry had a `require_enabled` helper written for exactly this job with no
+  callers, route registration mounted every discovered module with no dependency,
+  and a comment in the frontend asserted the opposite ("the backend enforces real
+  module access"). The gate is now applied where routes are registered, so an
+  endpoint added later cannot miss it.
+
+  One limit, stated plainly because it decides whether you can rely on this:
+  only an **explicit** "off" refuses. An organization that has never recorded a
+  choice for a module is still served, because treating a missing record as
+  "disabled" would lock such an organization out of the entire product - for
+  instance one created through the API, or one that skipped the setup wizard's
+  module step. Making absence mean denial needs a data migration first and is a
+  separate change.
+- **AI provider model lists now come from the provider, using your own API key.**
+  Which models a key may call depends on the account, so a list compiled at build
+  time is wrong for somebody by definition: it offered models a key cannot use and
+  hid ones it can. The settings page says whether a list came from your account or
+  from the built-in fallback, and refreshes when a key changes. The fallback list
+  itself was also out of date.
+
+### Changed
+
+- `.env.example` documented four settings nothing reads (`DOMAIN`,
+  `LETSENCRYPT_EMAIL`, `FRONTEND_HTTP_PORT`, `FRONTEND_HTTPS_PORT`) and omitted the
+  ones that actually drive TLS and ports (`CADDY_SITE_ADDRESS`, `CADDY_ACME_EMAIL`,
+  `EDGE_HTTP_PORT`, `EDGE_HTTPS_PORT`). Following it to enable Let's Encrypt changed
+  nothing. It now describes the real settings, including why browsing `:8080`
+  redirects to a port that is not published.
+- The `metrics` profile is included in the Max tier preset. It was absent, so an
+  enterprise install evaluated no alert rules at all.
+- `SECURITY.md` named a specific version in prose and had drifted a release behind.
+  It now points at the version file.
+
+### Release engineering
+
+- **The `metrics` profile could not be built from a published release.** The
+  vendored Prometheus UI lockfile - which carries a critical `handlebars` pin - was
+  copied into the release tree and then silently dropped by a blanket
+  `pnpm-lock.yaml` ignore rule, so it never reached the published repository. Every
+  existing gate stayed green, because none of them compared what the release copied
+  against what it committed. One now does, and the release fails rather than
+  publishing a tree that cannot build.
+- The frontend lockfile's version metadata was left at `26.10.0` by the 26.10.1
+  release and is corrected.
+- The integration suite could not reach any of the ten modules; it now exercises
+  the module surface, every module write endpoint's authentication, the module
+  toggle against a running stack, and login against a real identity provider
+  including OIDC callback and multi-factor with recovery codes. A MikroTik test
+  appliance that will not boot is now a skip rather than 22 errors.
+
+Unchanged, and still stated plainly: one owner and developer, no commercial support
+contract, no SLA, no third-party security audit or compliance certification, Linux
+amd64 only with ARM64 unqualified, the HA overlay providing single-host service
+failover rather than host-loss protection, asynchronous replication able to lose
+acknowledged writes, Proxmox SDN apply blocked, and no adapter claiming
+live-validated writes.
+
 ## [26.10.1] - 2026-10-09 - Documentation corrected after publication
 
 26.10.0 published with documentation that still described it as unreleased.

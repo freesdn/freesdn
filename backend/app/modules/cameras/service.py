@@ -57,6 +57,17 @@ class RecordingError(CameraError):
     pass
 
 
+class RecordingNotFoundError(RecordingError):
+    """A recording does not exist, or is not visible to this caller.
+
+    Distinct from the generic RecordingError, which also covers real
+    failures: mapping that whole class to 404 would hide them. Mirrors
+    CameraNotFoundError, which exists for the same reason.
+    """
+
+    pass
+
+
 class CameraNotFoundError(CameraError):
     """Camera not found."""
 
@@ -848,7 +859,7 @@ class RecordingService:
         recording = result.scalar_one_or_none()
 
         if not recording:
-            raise RecordingError(f"Recording not found: {recording_id}")
+            raise RecordingNotFoundError(f"Recording not found: {recording_id}")
 
         # Return proxy URL for playback
         return f"/api/v1/cameras/recordings/{recording_id}/play/{protocol}"
@@ -882,7 +893,7 @@ class RecordingService:
         recording = result.scalar_one_or_none()
 
         if not recording:
-            raise RecordingError(f"Recording not found: {recording_id}")
+            raise RecordingNotFoundError(f"Recording not found: {recording_id}")
 
         recording.is_locked = locked
         await self.db.commit()

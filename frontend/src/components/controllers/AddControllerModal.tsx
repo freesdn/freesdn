@@ -44,7 +44,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { controllersApi, sitesApi } from '@/lib/api';
+import { controllersApi, sitePickerQuery } from '@/lib/api';
 
 interface AddControllerModalProps {
   open: boolean;
@@ -207,11 +207,7 @@ export function AddControllerModal({ open, onOpenChange }: AddControllerModalPro
 
   // Fetch sites for dropdown
   const { data: sitesData } = useQuery({
-    queryKey: ['sites'],
-    queryFn: async () => {
-      const response = await sitesApi.getAll();
-      return response.data;
-    },
+    ...sitePickerQuery,
     enabled: open,
   });
   const sites = useMemo(() => sitesData?.items ?? [], [sitesData]);

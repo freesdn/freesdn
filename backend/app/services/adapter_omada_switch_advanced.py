@@ -55,10 +55,10 @@ class GatewaySwitchAdvancedService(GatewayServiceBase):
                 400,
                 detail=f"unknown config={config_name!r}; expected one of {sorted(_READ_PER_SWITCH)}",
             )
-        _, client, omada_site_id = await self._resolve_site_context(
+        ctrl, client, omada_site_id = await self._resolve_site_context(
             controller_id, organization_id, site_id
         )
-        item = await getattr(client, method_name)(omada_site_id, mac)
+        item = await self._client_method(ctrl, client, method_name)(omada_site_id, mac)
         return {
             "controller_id": controller_id,
             "site_id": site_id,
@@ -122,7 +122,7 @@ class GatewaySwitchAdvancedService(GatewayServiceBase):
                     400,
                     detail=f"no applier for {c.feature!r}/{c.operation!r}",
                 )
-            method = getattr(client, method_name)
+            method = self._client_method(ctrl, client, method_name)
 
             mac = payload["mac"]
             cfg = payload.get("config", {})

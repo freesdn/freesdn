@@ -164,11 +164,12 @@ class ProvisioningService:
 
         site_id = data.get("site_id")
         if self.organization_id and site_id is not None:
+            # ONE subquery, reused -- see _assert_site_in_org. Calling it twice
+            # cross-joins two copies and yields one row per accessible site.
+            sites = self._sites_for_org()
             allowed = (
-                await self.db.execute(
-                    select(self._sites_for_org().c.id).where(self._sites_for_org().c.id == site_id)
-                )
-            ).scalar_one_or_none()
+                await self.db.execute(select(sites.c.id).where(sites.c.id == site_id).limit(1))
+            ).scalar()
             if allowed is None:
                 raise ProvisioningError(f"Site not accessible: {site_id}")
 

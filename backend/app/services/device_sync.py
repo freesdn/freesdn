@@ -513,6 +513,13 @@ class DeviceSyncService:
                 "mac_address",
                 "serial_number",
                 "last_seen",
+                # Opt-in: a module whose source row knows which controller
+                # discovered it can map `controller_id` and have the device
+                # attributed to that controller. Without this the value is
+                # extracted and then dropped here, so module-owned devices
+                # (Proxmox nodes, for one) show up unattached and their
+                # controller reports "0 devices" while managing them.
+                "controller_id",
             ):
                 if f in fields and fields[f] is not None:
                     values[f] = fields[f]

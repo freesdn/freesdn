@@ -170,6 +170,7 @@ from app.modules.cameras.service import (
     NVRService,
     PTZService,
     RecordingError,
+    RecordingNotFoundError,
     RecordingService,
     StreamError,
     StreamService,
@@ -2093,12 +2094,19 @@ async def get_playback_url(
     # R5 site-grant: a site-limited caller may only resolve a recording whose
     # parent camera lives in a granted site. No-op for super/org-admin.
     _sites = current_user.accessible_site_ids if current_user.is_site_limited else None
-    url = await service.get_playback_url(
-        recording_id,
-        protocol,
-        organization_id=org_scope_or_platform(current_user),
-        accessible_site_ids=_sites,
-    )
+    try:
+        url = await service.get_playback_url(
+            recording_id,
+            protocol,
+            organization_id=org_scope_or_platform(current_user),
+            accessible_site_ids=_sites,
+        )
+    except RecordingNotFoundError:
+        # Was an unmapped RecordingError, so a recording id that does not
+        # exist crashed the request instead of answering 404.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Recording not found"
+        ) from None
     return {"url": url, "protocol": protocol}
 
 
@@ -2692,8 +2700,13 @@ async def get_motion_detection(
     try:
         data = await adapter.get_motion_detection(channel=channel)
         if "error" in data:
+            # The adapter reports the cause (e.g. "HTTP 403" when this
+            # model does not expose the feature); it used to be discarded,
+            # leaving an unsupported feature indistinguishable from a
+            # broken camera.
             raise HTTPException(
-                status_code=502, detail="Failed to retrieve motion detection config"
+                status_code=502,
+                detail=f"Failed to retrieve motion detection config: {data['error']}",
             )
         return MotionDetectionResponse(**data)
     except HTTPException:
@@ -2798,7 +2811,13 @@ async def get_privacy_masks(
     try:
         data = await adapter.get_privacy_masks(channel=channel)
         if "error" in data:
-            raise HTTPException(status_code=502, detail="Failed to retrieve privacy mask config")
+            # The adapter reports the cause (e.g. "HTTP 403" when this
+            # model does not expose the feature); it used to be discarded,
+            # leaving an unsupported feature indistinguishable from a
+            # broken camera.
+            raise HTTPException(
+                status_code=502, detail=f"Failed to retrieve privacy mask config: {data['error']}"
+            )
         return PrivacyMaskResponse(**data)
     except HTTPException:
         raise
@@ -2885,7 +2904,13 @@ async def get_line_crossing(
     try:
         data = await adapter.get_line_crossing(channel=channel)
         if "error" in data:
-            raise HTTPException(status_code=502, detail="Failed to retrieve line crossing config")
+            # The adapter reports the cause (e.g. "HTTP 403" when this
+            # model does not expose the feature); it used to be discarded,
+            # leaving an unsupported feature indistinguishable from a
+            # broken camera.
+            raise HTTPException(
+                status_code=502, detail=f"Failed to retrieve line crossing config: {data['error']}"
+            )
         return LineCrossingResponse(**data)
     except HTTPException:
         raise
@@ -2972,8 +2997,13 @@ async def get_intrusion_detection(
     try:
         data = await adapter.get_intrusion_detection(channel=channel)
         if "error" in data:
+            # The adapter reports the cause (e.g. "HTTP 403" when this
+            # model does not expose the feature); it used to be discarded,
+            # leaving an unsupported feature indistinguishable from a
+            # broken camera.
             raise HTTPException(
-                status_code=502, detail="Failed to retrieve intrusion detection config"
+                status_code=502,
+                detail=f"Failed to retrieve intrusion detection config: {data['error']}",
             )
         return IntrusionDetectionResponse(**data)
     except HTTPException:
@@ -3091,7 +3121,13 @@ async def get_face_detection(
     try:
         data = await adapter.get_face_detection(channel=channel)
         if "error" in data:
-            raise HTTPException(status_code=502, detail="Failed to retrieve face detection config")
+            # The adapter reports the cause (e.g. "HTTP 403" when this
+            # model does not expose the feature); it used to be discarded,
+            # leaving an unsupported feature indistinguishable from a
+            # broken camera.
+            raise HTTPException(
+                status_code=502, detail=f"Failed to retrieve face detection config: {data['error']}"
+            )
         return FaceDetectionResponse(**data)
     except HTTPException:
         raise
@@ -3283,7 +3319,13 @@ async def get_holiday_schedule(
     try:
         data = await adapter.get_holiday_schedule(channel=channel)
         if "error" in data:
-            raise HTTPException(status_code=502, detail="Failed to retrieve holiday schedule")
+            # The adapter reports the cause (e.g. "HTTP 403" when this
+            # model does not expose the feature); it used to be discarded,
+            # leaving an unsupported feature indistinguishable from a
+            # broken camera.
+            raise HTTPException(
+                status_code=502, detail=f"Failed to retrieve holiday schedule: {data['error']}"
+            )
         return HolidayScheduleResponse(**data)
     except HTTPException:
         raise
@@ -4662,7 +4704,13 @@ async def get_nvr_holidays(
         await adapter.connect()
         data = await adapter.get_holidays()
         if "error" in data:
-            raise HTTPException(status_code=502, detail="Failed to retrieve holidays")
+            # The adapter reports the cause (e.g. "HTTP 403" when this
+            # model does not expose the feature); it used to be discarded,
+            # leaving an unsupported feature indistinguishable from a
+            # broken camera.
+            raise HTTPException(
+                status_code=502, detail=f"Failed to retrieve holidays: {data['error']}"
+            )
         return HolidayListResponse(**data)
     except HTTPException:
         raise

@@ -304,8 +304,37 @@ async def integration_db(integration_engine: Any) -> AsyncGenerator[Any]:
 # HTTP client bound to the FastAPI app, with the test session injected
 # ---------------------------------------------------------------------------
 
+@pytest_asyncio.fixture(scope="session")
+async def _module_routes() -> None:
+    """Register the module routers once per session.
+
+    ASGITransport does not run the lifespan, and app/main.py mounts every module
+    router there, so without this every /api/v1/<module>/... request 404s and no
+    integration test can reach any of the ten modules.
+
+    Mirrors main.py's sequence. ``register_routes`` records what it mounted on
+    ``app.state.module_route_registrations`` and skips anything already present,
+    so this is safe if the app object is ever shared or the fixture re-entered.
+    Only routes are registered: the rest of the lifespan (event bus, Redis
+    subscriptions, fabric, scheduler) is not what these tests exercise and
+    starting it would add minutes and flakiness for no coverage.
+    """
+    from app.main import app
+    from app.modules.loader import ModuleLoader
+
+    if getattr(app.state, "module_route_registrations", None):
+        return
+    loader = ModuleLoader()
+    if not loader.discover_modules():
+        return
+    await loader.load_all_modules()
+    loader.register_routes(app, prefix="/api/v1")
+
+
 @pytest_asyncio.fixture
-async def integration_client(integration_db: Any) -> AsyncGenerator[Any]:
+async def integration_client(
+    integration_db: Any, _module_routes: None
+) -> AsyncGenerator[Any]:
     """HTTPX client that routes requests through the live FastAPI app.
 
     The ``get_session`` dependency is overridden to yield the per-test
@@ -318,6 +347,60 @@ async def integration_client(integration_db: Any) -> AsyncGenerator[Any]:
 
     async def _override_get_session() -> AsyncGenerator[Any]:
         yield integration_db
+
+    app.dependency_overrides[get_session] = _override_get_session
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+
+# ---------------------------------------------------------------------------
+# Session with PRODUCTION commit semantics, for code that nests transactions
+# ---------------------------------------------------------------------------
+
+@pytest_asyncio.fixture
+async def committed_db(integration_engine: Any) -> AsyncGenerator[Any]:
+    """An AsyncSession whose commits really commit.
+
+    ``integration_db`` joins an outer transaction and translates ``commit()``
+    into a SAVEPOINT release, which is what makes every other test roll back
+    cleanly. Code that opens its own ``begin_nested()`` collides with that
+    scheme -- ``SSOService._provision_or_update_user`` does -- and the test
+    fails with "Can't operate on closed transaction inside context manager",
+    which looks like a product defect and is not one.
+
+    Nothing is rolled back here, so a test using this fixture MUST delete what
+    it created. The database is a disposable testcontainer, but other tests in
+    the same session still see whatever is left behind.
+    """
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    session = AsyncSession(bind=integration_engine, expire_on_commit=False)
+    try:
+        yield session
+    finally:
+        await session.close()
+
+
+@pytest_asyncio.fixture
+async def committed_client(
+    committed_db: Any, _module_routes: None
+) -> AsyncGenerator[Any]:
+    """HTTP client whose requests use the committed session.
+
+    Same override as ``integration_client``, pointed at ``committed_db`` so an
+    endpoint that commits behaves the way it does in production.
+    """
+    from httpx import ASGITransport, AsyncClient
+
+    from app.db.session import get_session
+    from app.main import app
+
+    async def _override_get_session() -> AsyncGenerator[Any]:
+        yield committed_db
 
     app.dependency_overrides[get_session] = _override_get_session
     try:

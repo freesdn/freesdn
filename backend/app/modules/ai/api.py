@@ -700,6 +700,97 @@ async def test_provider(
         return {"success": False, "error": f"Connection test failed ({type(e).__name__})"}
 
 
+@router.get("/providers/{provider_id}/models")
+async def list_provider_models(
+    provider_id: str,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """List the models the configured credentials may actually call.
+
+    Which models a key can use depends on the account and tier, so a built-in
+    list is wrong for somebody by construction: it offers models the key
+    cannot call and hides ones it can. This asks the provider instead, with
+    the operator's own stored credentials.
+
+    Always 200. A provider that is unconfigured or unreachable returns the
+    built-in fallback with ``source`` saying so, because a settings page that
+    errors out leaves the operator with an empty model picker and no
+    explanation.
+    """
+    if not current_user.has_permission("ai.admin") and not is_unscoped_org_admin(current_user):
+        raise HTTPException(status_code=403, detail="Requires ai.admin permission")
+    if provider_id not in ("openai", "anthropic", "ollama"):
+        raise HTTPException(status_code=400, detail=f"Unknown provider: {provider_id}")
+
+    result = await session.execute(
+        select(AIProviderConfig).where(
+            AIProviderConfig.organization_id == current_user.organization_id,
+            AIProviderConfig.provider == provider_id,
+        )
+    )
+    config = result.scalar_one_or_none()
+
+    def _fallback(reason: str) -> dict[str, Any]:
+        if provider_id == "openai":
+            from app.modules.ai.providers.openai import SUPPORTED_MODELS as fb
+        elif provider_id == "anthropic":
+            from app.modules.ai.providers.anthropic import SUPPORTED_MODELS as fb
+        else:
+            fb = ["llama3", "mistral", "codestral", "gemma2", "phi3", "qwen2"]
+        return {
+            "provider": provider_id,
+            "models": list(fb),
+            "source": "fallback",
+            "detail": reason,
+        }
+
+    # Ollama is keyless; the other two cannot be asked without a key.
+    if provider_id != "ollama" and (not config or not config.api_key_encrypted):
+        return _fallback("Provider not configured")
+
+    try:
+        if provider_id == "openai":
+            from app.modules.ai.providers.openai import OPENAI_API_BASE, OpenAIProvider
+
+            async with OpenAIProvider(
+                api_key=_decrypt(config.api_key_encrypted),
+                base_url=(config.base_url or OPENAI_API_BASE),
+            ) as p:
+                models = await p.fetch_models()
+                static = p.list_models()
+        elif provider_id == "anthropic":
+            from app.modules.ai.providers.anthropic import AnthropicProvider
+
+            async with AnthropicProvider(api_key=_decrypt(config.api_key_encrypted)) as p:
+                models = await p.fetch_models()
+                static = p.list_models()
+        else:
+            from app.modules.ai.providers.ollama import OllamaProvider
+
+            base = (config.base_url if config else None) or "http://localhost:11434"
+            async with OllamaProvider(base_url=base) as p:
+                models = await p.fetch_models()
+                static = p.list_models()
+    except Exception as e:
+        logger.error("AI provider model listing failed: %s", e, exc_info=True)
+        return _fallback(f"Listing failed ({type(e).__name__})")
+
+    if not models:
+        return _fallback("Provider returned no models")
+    # fetch_models() never raises -- it degrades to the built-in list -- so an
+    # exact match with the static list means the live call did not get through.
+    # Reporting that as "live" would tell the operator these are their entitled
+    # models when nobody ever asked the provider.
+    live = list(models) != list(static)
+    return {
+        "provider": provider_id,
+        "models": list(models),
+        "source": "live" if live else "fallback",
+        "detail": None if live else "Could not reach the provider; showing built-in list",
+    }
+
+
 @router.get("/tools")
 async def list_tools(
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)],

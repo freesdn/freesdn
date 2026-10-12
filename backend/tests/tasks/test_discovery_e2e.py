@@ -76,7 +76,9 @@ async def test_discover_creates_then_resync_updates_no_dupes(db_session, monkeyp
     ]
 
     # ── stub the external edges ──
-    monkeypatch.setattr(discovery, "get_adapter", lambda *_a, **_k: _FakeAdapter(devices))
+    monkeypatch.setattr(
+        discovery, "build_adapter_for_controller", lambda *_a, **_k: _FakeAdapter(devices)
+    )
 
     class _Ctx:  # the impl does `async with AsyncSessionLocal() as session`
         async def __aenter__(self):
@@ -162,7 +164,9 @@ async def test_resync_with_new_device_creates_only_the_new_one(db_session, monke
         async def __aexit__(self, *exc):
             return False
 
-    monkeypatch.setattr(discovery, "get_adapter", lambda *_a, **_k: _FakeAdapter(state["devices"]))
+    monkeypatch.setattr(
+        discovery, "build_adapter_for_controller", lambda *_a, **_k: _FakeAdapter(state["devices"])
+    )
     monkeypatch.setattr(discovery, "AsyncSessionLocal", lambda: _Ctx())
     monkeypatch.setattr(db_session, "commit", db_session.flush)
 

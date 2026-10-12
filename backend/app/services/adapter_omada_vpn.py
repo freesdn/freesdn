@@ -242,7 +242,7 @@ class GatewayVPNService(GatewayServiceBase):
         ctrl, client, omada_site_id = await self._resolve_site_context(
             controller_id, organization_id, site_id
         )
-        items = await getattr(client, method_name)(omada_site_id)
+        items = await self._client_method(ctrl, client, method_name)(omada_site_id)
         return self._envelope(
             controller_id,
             site_id,
@@ -274,7 +274,7 @@ class GatewayVPNService(GatewayServiceBase):
         ctrl, client, omada_site_id = await self._resolve_site_context(
             controller_id, organization_id, site_id
         )
-        items = await getattr(client, method_name)(omada_site_id)
+        items = await self._client_method(ctrl, client, method_name)(omada_site_id)
         redacted = redact_list(items) if isinstance(items, list) else redact_secrets(items)
         return self._envelope(
             controller_id,
@@ -306,7 +306,7 @@ class GatewayVPNService(GatewayServiceBase):
         ctrl, client, omada_site_id = await self._resolve_site_context(
             controller_id, organization_id, site_id
         )
-        config = await getattr(client, method_name)(omada_site_id)
+        config = await self._client_method(ctrl, client, method_name)(omada_site_id)
         return self._detail_envelope(controller_id, site_id, omada_site_id, redact_secrets(config))
 
     async def list_gre_tunnels(
@@ -431,7 +431,7 @@ class GatewayVPNService(GatewayServiceBase):
                     detail=(f"no applier mapped for feature={feature!r} operation={operation!r}"),
                 )
 
-            method = getattr(client, method_name)
+            method = self._client_method(ctrl, client, method_name)
 
             # Argument shape varies by operation.
             if operation == "create":

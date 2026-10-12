@@ -167,7 +167,7 @@ class GatewaySystemService(GatewayServiceBase):
             )
         ctrl = await self._get_controller(controller_id, organization_id)
         client = await self._get_client(ctrl)
-        item = await getattr(client, method_name)()
+        item = await self._client_method(ctrl, client, method_name)()
         # Strip secrets before returning. The Omada response for
         # smtp/ssl_cert/notifications routinely carries password +
         # private-key fields; we never want those reaching the UI.
@@ -193,10 +193,10 @@ class GatewaySystemService(GatewayServiceBase):
                     f"unknown site config={config_name!r}; expected one of {sorted(_READ_SITE)}"
                 ),
             )
-        _, client, omada_site_id = await self._resolve_site_context(
+        ctrl, client, omada_site_id = await self._resolve_site_context(
             controller_id, organization_id, site_id
         )
-        item = await getattr(client, method_name)(omada_site_id)
+        item = await self._client_method(ctrl, client, method_name)(omada_site_id)
         return {
             "controller_id": controller_id,
             "site_id": site_id,
@@ -261,7 +261,7 @@ class GatewaySystemService(GatewayServiceBase):
                     400,
                     detail=(f"no applier for feature={c.feature!r} operation={c.operation!r}"),
                 )
-            method = getattr(client, method_name)
+            method = self._client_method(ctrl, client, method_name)
 
             # Controller-scoped (no site arg)
             controller_features = (

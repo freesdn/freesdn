@@ -1918,6 +1918,33 @@ class HypervisorService:
             if not result.success:
                 return 0
 
+            # Proxmox's /nodes list carries no pveversion / kversion /
+            # cpuinfo.model -- those live on /nodes/{node}/status. Without this
+            # the upsert below assigned `row.pve_version = node_info.pve_version`
+            # from a field the list never fills, so every node was written with
+            # an empty version and the Devices page showed "-" for firmware on
+            # every hypervisor. list_nodes() already enriches for the live read
+            # path; the DB-writing path has to do the same or the UI, which
+            # reads these rows, can never show it.
+            async def _enrich(n: Any) -> Any:
+                try:
+                    detail = await adapter.get_node_status(n.node)
+                    if detail.success and detail.data:
+                        d = detail.data
+                        n.cpu_model = d.cpu_model or n.cpu_model
+                        n.pve_version = d.pve_version or n.pve_version
+                        n.kernel_version = d.kernel_version or n.kernel_version
+                except Exception:
+                    # One unreachable node must not fail the whole sync; it
+                    # keeps whatever values it already had.
+                    pass
+                return n
+
+            enriched = await asyncio.gather(
+                *[_enrich(n) for n in (result.data or [])], return_exceptions=True
+            )
+            result.data = [n for n in enriched if not isinstance(n, BaseException)]
+
             now = datetime.now(UTC)
 
             # Batch-fetch all existing nodes for this controller (eliminates N+1)

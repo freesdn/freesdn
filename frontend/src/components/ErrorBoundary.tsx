@@ -57,6 +57,40 @@ function tr(key: string, defaultValue: string, options?: Record<string, unknown>
 }
 
 /**
+ * A lazy chunk the running app references no longer exists on the server.
+ *
+ * This is what a deploy looks like from inside a tab that was already open:
+ * Vite content-hashes every chunk, so the new release renames them and the old
+ * names 404. The error text differs per browser, hence the alternation.
+ */
+function isStaleChunkError(error: Error): boolean {
+  const text = `${error?.name ?? ''} ${error?.message ?? ''}`;
+  return (
+    /Failed to fetch dynamically imported module/i.test(text) ||
+    /error loading dynamically imported module/i.test(text) ||
+    /Importing a module script failed/i.test(text) ||
+    /ChunkLoadError/i.test(text) ||
+    /Loading chunk \d+ failed/i.test(text)
+  );
+}
+
+/** Reload at most once per minute, so a genuinely broken deploy cannot loop. */
+const RELOAD_STAMP = 'freesdn:stale-chunk-reload';
+
+function reloadOnceForStaleChunk(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(RELOAD_STAMP) ?? 0);
+    if (Date.now() - last < 60_000) return false;
+    sessionStorage.setItem(RELOAD_STAMP, String(Date.now()));
+  } catch {
+    // Private mode / blocked storage: reloading once is still better than a
+    // dead Retry button, and without the stamp we simply cannot rate-limit.
+  }
+  window.location.reload();
+  return true;
+}
+
+/**
  * Generic error boundary. Catches render-time errors in its subtree and shows
  * a recovery UI sized to the boundary's `level`. Auto-resets when `resetKeys`
  * change so navigating away from a crashed page returns the user to a working state.
@@ -76,6 +110,15 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       console.error('[ErrorBoundary] Unhandled error:', error, errorInfo);
     }
     this.props.onError?.(error, errorInfo);
+
+    // A chunk that vanished under us means this tab is running a release the
+    // server no longer serves. Retrying re-runs the same dead import; only a
+    // reload can fix it, so do that instead of showing a button that cannot
+    // work. Rate-limited, so a genuinely broken deploy falls through to the
+    // normal error UI rather than reloading forever.
+    if (isStaleChunkError(error)) {
+      reloadOnceForStaleChunk();
+    }
   }
 
   componentDidUpdate(prevProps: ErrorBoundaryProps) {

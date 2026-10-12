@@ -348,7 +348,9 @@ class DiscoveryService:
                 site_id=str(site_id),
                 organization_id=discovered_org_id,
                 name=device.name,
-                device_type=device.device_type.value,
+                # str() not .value: this works on the enum the caller just
+                # assigned AND on the plain str a reloaded row would carry.
+                device_type=str(device.device_type),
                 vendor=device.vendor,
             )
         )

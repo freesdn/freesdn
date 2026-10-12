@@ -10,6 +10,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useSidebarStore } from '@/stores/sidebarStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
@@ -143,11 +144,24 @@ const DEFAULT_TAB = 'overview';
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
+// One report per distinct bad id, so a render loop cannot flood the console.
+const reportedBadId = new Set<string>();
+
 export default function CameraDetailPage() {
   const { t } = useTranslation('cameras');
   const { id, tab } = useParams<{ id: string; tab?: string }>();
   const navigate = useNavigate();
   const activeTab = tab && VALID_TABS.has(tab) ? tab : DEFAULT_TAB;
+
+  // This route is the '/cameras/:id' CATCH-ALL (see modules/cameras/manifest),
+  // so anything that does not match an earlier literal path arrives here --
+  // including a malformed link such as '/cameras/[object Object]' produced by
+  // interpolating an object instead of its id. Without this check that value
+  // is handed to the API, which answers 422, and the page then claims the
+  // camera "has been removed" -- a confusing lie about a camera that never
+  // existed. Validate the shape first and say what is actually wrong.
+  const idLooksValid =
+    !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
   // ── Camera data ─────────────────────────────────────────
   const {
@@ -158,7 +172,8 @@ export default function CameraDetailPage() {
   } = useQuery({
     queryKey: ['camera', id],
     queryFn: () => camerasApi.getById(id!),
-    enabled: !!id,
+    // Never spend a request on a param that cannot be a camera id.
+    enabled: idLooksValid,
     refetchInterval: 30_000,
   });
 
@@ -185,6 +200,47 @@ export default function CameraDetailPage() {
         </div>
         <Skeleton className="h-96 w-full" />
       </div>
+    );
+  }
+
+  // ── Malformed link ─────────────────────────────────────
+  // Distinct from "not found": nothing was deleted, the address is not a
+  // camera id at all. Saying "removed" sends the operator hunting a deletion
+  // that never happened.
+  if (!idLooksValid) {
+    // Name the source. Every /cameras/${...} in the tree interpolates a real
+    // id, so whatever produced this is not visible by reading the code -- the
+    // previous route is the only lead the next occurrence will give us.
+    if (!reportedBadId.has(String(id))) {
+      reportedBadId.add(String(id));
+      // recentRoutes is derived on trackVisit; after a FULL page load only the
+      // persisted recentRoutesV2 is populated, so read both or the report says
+      // "unknown" exactly when it is most needed.
+      const st = useSidebarStore.getState() as unknown as {
+        recentRoutes?: string[];
+        recentRoutesV2?: { path: string }[];
+      };
+      const trail = st.recentRoutes?.length
+        ? st.recentRoutes
+        : (st.recentRoutesV2 ?? []).map((r) => r.path);
+      // eslint-disable-next-line no-console
+      console.error(
+        `[FreeSDN] /cameras/:id received a non-id param (${String(id)}). ` +
+          `Arrived from: ${trail.find((p) => !p.includes('[object')) ?? 'unknown'}. ` +
+          'Something interpolated an object into a camera route.'
+      );
+    }
+    return (
+      <EmptyState
+        icon={VideoOff}
+        title={t('CameraDetailPage.invalidLink.title')}
+        description={t('CameraDetailPage.invalidLink.description')}
+        action={{
+          label: t('CameraDetailPage.notFound.backToCameras'),
+          icon: ArrowLeft,
+          onClick: () => navigate('/cameras'),
+        }}
+      />
     );
   }
 

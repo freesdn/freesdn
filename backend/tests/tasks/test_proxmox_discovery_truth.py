@@ -82,7 +82,9 @@ def peer(monkeypatch):
     monkeypatch.setattr(client_module, "_ticket_cache", client_module._TicketCache())
     monkeypatch.setattr(client_module, "_connection_cache", client_module._ConnectionCache())
     monkeypatch.setattr(client_module, "_reachability", client_module._ReachabilityTracker())
-    monkeypatch.setattr(discovery, "get_adapter", adapter_factory.get_adapter)
+    monkeypatch.setattr(
+        discovery, "build_adapter_for_controller", adapter_factory.build_adapter_for_controller
+    )
     return state
 
 

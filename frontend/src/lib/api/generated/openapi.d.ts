@@ -2130,6 +2130,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/providers/{provider_id}/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Provider Models
+         * @description List the models the configured credentials may actually call.
+         *
+         *     Which models a key can use depends on the account and tier, so a built-in
+         *     list is wrong for somebody by construction: it offers models the key
+         *     cannot call and hides ones it can. This asks the provider instead, with
+         *     the operator's own stored credentials.
+         *
+         *     Always 200. A provider that is unconfigured or unreachable returns the
+         *     built-in fallback with ``source`` saying so, because a settings page that
+         *     errors out leaves the operator with an empty model picker and no
+         *     explanation.
+         */
+        get: operations["list_provider_models_api_v1_ai_providers__provider_id__models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/providers/{provider_id}/test": {
         parameters: {
             query?: never;
@@ -68664,6 +68694,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_provider_models_api_v1_ai_providers__provider_id__models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

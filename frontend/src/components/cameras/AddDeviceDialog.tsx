@@ -66,18 +66,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
-import {
-  camerasApi,
-  nvrApi,
-  sitesApi,
-  cameraDiscoveryApi,
-  type NVRConnectionTestRequest,
-  type NVRConnectionTestResponse,
-  type NVRDiscoveryResponse,
-  type DiscoveredChannel,
-  type NVRImportResponse,
-  type StandaloneCameraImportResponse,
-} from '@/lib/api';
+import { cameraDiscoveryApi, camerasApi, nvrApi, sitePickerQuery, sitesApi, type DiscoveredChannel, type NVRConnectionTestRequest, type NVRConnectionTestResponse, type NVRDiscoveryResponse, type NVRImportResponse, type StandaloneCameraImportResponse } from '@/lib/api';
 
 // ─── Host / IP validation ────────────────────────────────────────────────────
 // Accept an IPv4 address or a DNS hostname (RFC-1123 labels). Used to gate the
@@ -102,12 +91,17 @@ function SiteSelectWithCreate({
   const [creating, setCreating] = useState(false);
   const [newSiteName, setNewSiteName] = useState('');
 
+  // NOTE: deliberately no `enabled: <dialog open>` here. This component does
+  // not receive the dialog's open state, and a bare `open` would resolve to
+  // the GLOBAL window.open -- which React Query accepts, because v5 types
+  // `enabled` as `boolean | ((query) => boolean)`, and then CALLS on every
+  // re-render: window.open(queryObject) spawns a tab at "[object Object]"
+  // resolved against the current path. It does not need the flag anyway: the
+  // tab subtrees are keyed by `dialogKey` (incremented in handleClose), so
+  // this remounts per open and sitePickerQuery's refetchOnMount: 'always'
+  // already revalidates.
   const { data: sitesData, isLoading: sitesLoading } = useQuery({
-    queryKey: ['sites'],
-    queryFn: async () => {
-      const response = await sitesApi.getAll({ per_page: 100 });
-      return response.data;
-    },
+    ...sitePickerQuery,
   });
   const sites: { id: string; name: string }[] = sitesData?.items || [];
 

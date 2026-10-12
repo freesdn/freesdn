@@ -62,7 +62,9 @@ def peer(monkeypatch):
     monkeypatch.setattr(proxmox_client, "_ticket_cache", proxmox_client._TicketCache())
     monkeypatch.setattr(proxmox_client, "_connection_cache", proxmox_client._ConnectionCache())
     monkeypatch.setattr(proxmox_client, "_reachability", proxmox_client._ReachabilityTracker())
-    monkeypatch.setattr(discovery, "get_adapter", adapter_factory.get_adapter)
+    monkeypatch.setattr(
+        discovery, "build_adapter_for_controller", adapter_factory.build_adapter_for_controller
+    )
     return state
 
 

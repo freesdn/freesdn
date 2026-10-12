@@ -22,7 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { controllersApi, sitesApi } from '@/lib/api';
+import { controllersApi, sitePickerQuery } from '@/lib/api';
 
 interface AddHypervisorDialogProps {
   open: boolean;
@@ -114,11 +114,11 @@ export function AddHypervisorDialog({ open, onOpenChange }: AddHypervisorDialogP
   const schema = buildSchema(t);
 
   const { data: sitesData } = useQuery({
-    queryKey: ['sites'],
-    queryFn: async () => {
-      const response = await sitesApi.getAll();
-      return response.data;
-    },
+    ...sitePickerQuery,
+    // Load-bearing: the dialog stays MOUNTED between opens, so
+    // refetchOnMount never fires. Toggling enabled on open is what
+    // actually refetches, so a site created since last open appears.
+    enabled: open,
   });
 
   const sites = sitesData?.items || [];

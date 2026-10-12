@@ -177,6 +177,15 @@ def worker_heartbeat() -> None:
 # ===========================================
 
 celery_app.conf.update(
+    # Logging: Celery hijacks the ROOT logger by default, which replaces the
+    # handler `configure_worker_logging` (worker_process_init) just installed
+    # via setup_logging(). The result is a worker that emits NO application
+    # logs at all -- verified on a live stack: the whole worker container held
+    # 18 lines, zero JSON records and zero ERROR records, while tasks were
+    # failing. Every background failure was undiagnosable from logs; the only
+    # way to see one was to read the Celery result backend out of Redis by
+    # hand. Keep our own structured JSON handler.
+    worker_hijack_root_logger=False,
     # Serialization
     task_serializer="json",
     accept_content=["json"],
@@ -827,10 +836,29 @@ from celery.signals import (
     worker_ready,
     worker_shutdown,
 )
+from celery.signals import (
+    setup_logging as celery_setup_logging,
+)
 
 from app.core.logging import request_id_var, setup_logging
 
 logger = logging.getLogger(__name__)
+
+
+@celery_setup_logging.connect  # type: ignore[untyped-decorator]
+def configure_celery_logging(**_: Any) -> None:
+    """Own logging configuration outright, instead of racing Celery for it.
+
+    Connecting ANY receiver to ``setup_logging`` makes Celery skip its own
+    logging setup, so our structured handler is the one that survives. Without
+    this a worker ran with the root logger at WARNING and ``handlers: []`` --
+    every application record was discarded, and a failing background task left
+    no trace anywhere except the Celery result backend in Redis.
+    """
+    setup_logging(
+        level=settings.LOG_LEVEL,
+        json_format=(settings.LOG_FORMAT.lower() == "json"),
+    )
 
 
 @worker_process_init.connect  # type: ignore[untyped-decorator]

@@ -180,10 +180,10 @@ class GatewayWifiService(GatewayServiceBase):
                 400,
                 detail=(f"unknown wifi config={config_name!r}; expected one of {sorted(_READ)}"),
             )
-        _, client, omada_site_id = await self._resolve_site_context(
+        ctrl, client, omada_site_id = await self._resolve_site_context(
             controller_id, organization_id, site_id
         )
-        item = redact_secrets(await getattr(client, method_name)(omada_site_id))
+        item = redact_secrets(await self._client_method(ctrl, client, method_name)(omada_site_id))
         return {
             "controller_id": controller_id,
             "site_id": site_id,
@@ -224,7 +224,7 @@ class GatewayWifiService(GatewayServiceBase):
                     400,
                     detail=(f"no applier for feature={c.feature!r} operation={c.operation!r}"),
                 )
-            method = getattr(client, method_name)
+            method = self._client_method(ctrl, client, method_name)
 
             # Most WiFi writes need an entity-context arg before payload.
             # We carry that context inside payload itself (e.g.

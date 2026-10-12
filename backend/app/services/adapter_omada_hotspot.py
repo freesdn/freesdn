@@ -105,7 +105,7 @@ class GatewayHotspotService(GatewayServiceBase):
             method_name = _APPLY.get((c.feature, c.operation))
             if method_name is None:
                 raise HTTPException(400, detail=f"no applier for {c.feature!r}/{c.operation!r}")
-            method = getattr(client, method_name)
+            method = self._client_method(ctrl, client, method_name)
 
             if c.feature == "hotspot.operator":
                 if c.operation == "create":

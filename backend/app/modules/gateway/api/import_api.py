@@ -8,7 +8,7 @@ Gateway Orchestration — Import Wizard API
 Endpoints for the brownfield import wizard (6-step state machine).
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -22,7 +22,10 @@ from app.modules.gateway.schemas import (
     ImportSessionResponse,
     ImportSessionStep,
 )
-from app.modules.gateway.services.import_service import ImportService
+from app.modules.gateway.services.import_service import (
+    ImportService,
+    ImportSessionNotFoundError,
+)
 
 router = APIRouter(prefix="/import", tags=["Gateway Import Wizard"])
 
@@ -100,6 +103,25 @@ async def start_import(
 # ── GET  /gateway/import/{session_id} ───────────────────────────────────
 
 
+async def _load_session(
+    svc: ImportService,
+    session_id: UUID,
+    org_id: UUID | None,
+) -> Any:
+    """Fetch an import session, or 404 if there is no such session.
+
+    `ImportSessionNotFoundError` had no handler anywhere, so an unknown
+    session id surfaced as a 500 on every session-scoped endpoint. Centralised
+    so the next one added inherits the 404 instead of the crash.
+    """
+    try:
+        return await svc.get_session(session_id, org_id=org_id)
+    except ImportSessionNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Import session not found"
+        ) from None
+
+
 @router.get("/{session_id}", response_model=ImportSessionResponse)
 async def get_import_session(
     session_id: UUID,
@@ -108,7 +130,7 @@ async def get_import_session(
 ):
     """Get current import session state."""
     org_id = _org_id(current_user)
-    session = await svc.get_session(session_id, org_id=org_id)
+    session = await _load_session(svc, session_id, org_id)
     assert_can_access_site(current_user, session.site_id, detail="Import session not found")
     return ImportSessionResponse.model_validate(session)
 
@@ -130,7 +152,7 @@ async def advance_step(
     - Step 4-6 (reconciliation): ``{"decisions": {"<resource_id>": "adopt"}}``
     """
     org_id = _org_id(current_user)
-    session = await svc.get_session(session_id, org_id=org_id)
+    session = await _load_session(svc, session_id, org_id)
     assert_can_access_site(current_user, session.site_id, detail="Import session not found")
 
     if session.current_step == 2:
@@ -175,6 +197,6 @@ async def cancel_import(
 ):
     """Cancel an in-progress import session."""
     org_id = _org_id(current_user)
-    session = await svc.get_session(session_id, org_id=org_id)
+    session = await _load_session(svc, session_id, org_id)
     assert_can_access_site(current_user, session.site_id, detail="Import session not found")
     await svc.cancel_session(session_id, org_id=org_id)

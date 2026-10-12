@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "freesdn-backend"
-version = "26.10.1"
+version = "26.10.2"
 description = "FreeSDN - Unified Network Management Platform"
 license = "AGPL-3.0-only"
 authors = ["PyPV - Python Platform Ventures <contact@freesdn.org>"]

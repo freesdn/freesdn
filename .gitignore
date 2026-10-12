@@ -158,6 +158,12 @@ yarn.lock
 
 # pnpm
 pnpm-lock.yaml
+# ...except the vendored Prometheus UI lock, which is tracked on purpose and
+# carries the CRITICAL handlebars pin. The blanket rule above silently dropped
+# it from the published tree (an ignore rule does not untrack it here, but the
+# release worktree stages it fresh), leaving the `metrics` profile unbuildable
+# from a published release. The release gate now fails on this class.
+!docker/prometheus-build/ui/pnpm-lock.yaml
 
 # Turbo
 .turbo

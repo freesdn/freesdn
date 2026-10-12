@@ -7,7 +7,7 @@
  * base URLs, default models, and connectivity testing.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -18,6 +18,7 @@ import {
   Loader2,
   ExternalLink,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 import { api } from '@/lib/api';
@@ -88,6 +89,15 @@ interface LLMCallLogEntry {
 interface TestResult {
   success: boolean;
   error?: string;
+}
+
+/** GET /ai/providers/{id}/models -- the live, per-key list. */
+interface ProviderModels {
+  provider: string;
+  models: string[];
+  /** 'live' = answered by the provider for THIS key; 'fallback' = built-in. */
+  source: 'live' | 'fallback';
+  detail?: string | null;
 }
 
 const PROVIDER_META: Record<string, {
@@ -164,6 +174,28 @@ function ProviderCard({ config }: { config: ProviderConfig }) {
     setDefaultModel(config.default_model ?? '');
   }, [config.is_enabled, config.base_url, config.default_model]);
 
+  // Which models a key may call is a property of the account, not of this
+  // build, so ask the provider rather than trusting PROVIDER_META. The
+  // endpoint answers 200 with the built-in list when it cannot ask, so there
+  // is no error state to render here -- `source` says which one arrived.
+  const modelsQuery = useQuery<ProviderModels>({
+    queryKey: ['ai-provider-models', config.provider],
+    queryFn: () => api.get(`/ai/providers/${config.provider}/models`).then((r) => r.data),
+    // Nothing to ask until a key is stored. Ollama is keyless and lists
+    // whatever the host has actually pulled.
+    enabled: config.provider === 'ollama' || config.api_key_set,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // The saved default_model stays selectable even when the provider does not
+  // list it -- otherwise the Select renders blank for a model already in use
+  // and saving the card would silently clear it.
+  const modelOptions = useMemo(() => {
+    const fetched = modelsQuery.data?.models ?? [];
+    const base = fetched.length > 0 ? fetched : meta.models;
+    return Array.from(new Set([...base, ...(defaultModel ? [defaultModel] : [])]));
+  }, [modelsQuery.data, meta.models, defaultModel]);
+
   const updateMutation = useMutation({
     mutationFn: (data: Partial<{
       api_key: string;
@@ -174,6 +206,9 @@ function ProviderCard({ config }: { config: ProviderConfig }) {
       api.put(`/ai/providers/${config.provider}`, data).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ai-providers'] });
+      // A new key means a different entitlement set, so the cached list is
+      // stale the moment the key is saved.
+      queryClient.invalidateQueries({ queryKey: ['ai-provider-models', config.provider] });
     },
     onError: () => {
       // Roll back optimistic toggle state on failure
@@ -286,19 +321,42 @@ function ProviderCard({ config }: { config: ProviderConfig }) {
 
         {/* Default model */}
         <div className="space-y-1.5">
-          <Label htmlFor={`${config.provider}-model`}>{t('AISettingsPage.fields.defaultModel')}</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor={`${config.provider}-model`}>{t('AISettingsPage.fields.defaultModel')}</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs text-muted-foreground"
+              onClick={() => modelsQuery.refetch()}
+              disabled={modelsQuery.isFetching || !(config.provider === 'ollama' || config.api_key_set)}
+              title={t('AISettingsPage.models.refresh')}
+            >
+              <RefreshCw
+                className={`mr-1 h-3 w-3 ${modelsQuery.isFetching ? 'animate-spin' : ''}`}
+              />
+              {t('AISettingsPage.models.refresh')}
+            </Button>
+          </div>
           <Select value={defaultModel} onValueChange={setDefaultModel}>
             <SelectTrigger id={`${config.provider}-model`}>
               <SelectValue placeholder={t('AISettingsPage.fields.defaultModelPlaceholder')} />
             </SelectTrigger>
             <SelectContent>
-              {meta.models.map((m) => (
+              {modelOptions.map((m) => (
                 <SelectItem key={m} value={m}>
                   {m}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            {modelsQuery.isFetching
+              ? t('AISettingsPage.models.loading')
+              : modelsQuery.data?.source === 'live'
+                ? t('AISettingsPage.models.live', { count: modelsQuery.data.models.length })
+                : t('AISettingsPage.models.fallbackHint')}
+          </p>
         </div>
 
         {/* Test result */}

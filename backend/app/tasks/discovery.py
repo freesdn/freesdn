@@ -26,7 +26,8 @@ from app.core.events import EventType, publish_controller_event, publish_device_
 from app.db.models import Controller, ControllerStatus, Device
 from app.db.session import CelerySessionLocal as AsyncSessionLocal
 from app.models.core import Organization, Site
-from app.services.adapter_factory import get_adapter
+from app.models.devices import normalize_device_type
+from app.services.adapter_factory import build_adapter_for_controller
 from app.services.controller_sync import deep_sync_controller
 
 logger = logging.getLogger(__name__)
@@ -188,44 +189,24 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
             controller_id=controller_id,
             data={"controller_name": controller.name},
             controller_type=controller.type,
-            site_id=controller.site_id,
-            organization_id=controller.site.organization_id if controller.site else None,
+            site_id=str(controller.site_id),
+            organization_id=(str(controller.site.organization_id) if controller.site else None),
         )
 
         sync_start = time.monotonic()
         try:
-            # Build adapter kwargs from controller model
-            adapter_kwargs: dict[str, Any] = {
-                "port": controller.port,
-                "use_ssl": controller.use_ssl,
-                "verify_ssl": controller.verify_ssl,
-                "mode": controller.connection_mode,
-            }
-
-            # Add cloud credentials when in cloud mode
-            if controller.connection_mode == "cloud":
-                adapter_kwargs["client_id"] = controller.client_id or ""
-                adapter_kwargs["client_secret"] = _decrypt_if_needed(controller.client_secret)
-                adapter_kwargs["omada_id"] = controller.omada_id or ""
-                adapter_kwargs["cloud_region"] = controller.cloud_region or ""
-
-            # Preserve Proxmox credentials in discovery and its later deep-sync adapter.
-            if controller.type.lower() == "proxmox":
-                config = controller.config or {}
-                token_id = config.get("token_id", "")
-                if token_id:
-                    adapter_kwargs["token_id"] = token_id
-                    adapter_kwargs["token_secret"] = _decrypt_if_needed(config.get("token_secret"))
-                adapter_kwargs["realm"] = config.get("realm", "pam")
-
-            # Create properly configured adapter (credentials in __init__)
-            adapter = get_adapter(
-                controller.type,
-                host=controller.host,
-                username=controller.username or "",
-                password=_decrypt_if_needed(controller.password),
-                **adapter_kwargs,
-            )
+            # Build the adapter through the shared helper rather than
+            # re-deriving per-vendor credentials here.
+            #
+            # This block used to assemble its own kwargs with a Proxmox branch
+            # and no TrueNAS one, while /controllers/{id}/test passed the
+            # TrueNAS API key and build_adapter_for_controller did something
+            # third. The same appliance therefore reported "Connection
+            # Successful" on its page and "Controller operation failed" with
+            # Last Sync "Never" directly underneath -- both true, for different
+            # code paths. One assembly point means the next vendor cannot
+            # drift the same way.
+            adapter = build_adapter_for_controller(controller)
 
             # Connect and discover using async context manager
             async with adapter:
@@ -412,7 +393,14 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
                         controller_id=controller.id,
                         site_id=resolved_site_id,
                         name=device_data.name,
-                        device_type=device_data.device_type,
+                        # Adapters report vendor strings ("ap" from UniFi,
+                        # "storage" from TrueNAS). device_type is a String(50),
+                        # so an unmapped value is written happily and only
+                        # explodes later when DeviceResponse tries to serialise
+                        # it -- a 500 on /devices that takes out the WHOLE
+                        # inventory page because of ONE row. normalize_device_type
+                        # never raises and its alias table already covers both.
+                        device_type=normalize_device_type(device_data.device_type),
                         model=device_data.model,
                         manufacturer=device_data.vendor,
                         # Normalize an absent MAC to NULL (never "") so the
@@ -550,19 +538,17 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
             # --- Deep sync: import ports, VLANs, SSIDs, LAGs, topology, clients ---
             deep_sync_summary: dict[str, Any] = {}
             try:
-                deep_adapter = get_adapter(
-                    controller.type,
-                    host=controller.host,
-                    username=controller.username or "",
-                    password=_decrypt_if_needed(controller.password),
-                    **adapter_kwargs,
-                )
+                # Same shared assembly as the discovery adapter above: this
+                # is the "later deep-sync adapter" the old per-vendor kwargs
+                # block was duplicated for, and it needs the identical
+                # credentials (TrueNAS api_key, Proxmox token, Omada cloud).
+                deep_adapter = build_adapter_for_controller(controller)
                 async with deep_adapter:
                     deep_sync_summary = await deep_sync_controller(
                         session,
                         deep_adapter,
                         controller,
-                        site_id=controller.site_id,
+                        site_id=str(controller.site_id),
                     )
                 await session.commit()
                 logger.info(
@@ -627,6 +613,20 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
             # Error bookkeeping must never commit a partially failed inventory
             # batch or reuse ORM ownership captured before adapter I/O.
             error = "Discovery failed; verify controller connectivity and configuration."
+            # NO traceback here, on purpose: logger.error, never
+            # logger.exception. An adapter exception can carry credentials -- a
+            # URL with an embedded password, a bearer token, a wireless PSK --
+            # and this handler catches whatever any vendor adapter raised. The
+            # same reasoning makes the camera codec probe discard ffprobe's
+            # native stderr instead of logging it.
+            #
+            # tests/tasks/test_discovery_failure_transaction.py pins this: it
+            # injects RuntimeError(MARKER) and asserts MARKER reaches none of
+            # last_error, the history row, the event, or caplog.text. Switching
+            # to logger.exception fails the log arm of those four cases.
+            #
+            # The cause is still diagnosable: controller_diagnostics records it
+            # through the redacting path, which is what that table is for.
             logger.error("Controller discovery failed (controller_id=%s)", controller_id)
             failure = {"success": False, "controller_id": controller_id, "error": error}
             try:

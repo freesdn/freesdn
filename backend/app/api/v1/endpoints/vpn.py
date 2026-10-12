@@ -96,7 +96,6 @@ from app.schemas.vpn import (
     VPNSubnetResponse,
 )
 from app.services.vpn_integration import (
-    NetbirdService,
     OpenVPNService,
     PersistentVPNService,
     TailscaleService,
@@ -1239,7 +1238,11 @@ async def get_netbird_status(
     user: CurrentUser = Depends(require_permissions("vpn:read")),
 ) -> Any:
     """Get Netbird daemon status."""
-    nb = NetbirdService()
+    # The process-wide instance, so its status cache actually survives
+    # between requests -- a fresh NetbirdService() here threw the cache away
+    # on every call and re-paid the daemon timeout. Same singleton the
+    # Tailscale endpoints use.
+    nb = get_vpn_manager().netbird
     nb_status = await nb.get_status(refresh=True)
 
     peers = []
@@ -1265,7 +1268,11 @@ async def list_netbird_peers(
     user: CurrentUser = Depends(require_permissions("vpn:read")),
 ) -> Any:
     """List all Netbird peers."""
-    nb = NetbirdService()
+    # The process-wide instance, so its status cache actually survives
+    # between requests -- a fresh NetbirdService() here threw the cache away
+    # on every call and re-paid the daemon timeout. Same singleton the
+    # Tailscale endpoints use.
+    nb = get_vpn_manager().netbird
     peers = await nb.list_peers()
     return [NetbirdPeerResponse(**p) for p in peers]
 
@@ -1278,7 +1285,11 @@ async def ping_netbird_target(
     """Ping a Netbird peer."""
     if not _PING_TARGET_RE.match(target):
         raise HTTPException(status_code=400, detail="Invalid ping target (IP or hostname expected)")
-    nb = NetbirdService()
+    # The process-wide instance, so its status cache actually survives
+    # between requests -- a fresh NetbirdService() here threw the cache away
+    # on every call and re-paid the daemon timeout. Same singleton the
+    # Tailscale endpoints use.
+    nb = get_vpn_manager().netbird
     latency = await nb.ping(target)
     return {
         "target": target,

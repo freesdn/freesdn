@@ -354,6 +354,12 @@
       "encryption": "API 密钥在静态时使用 Fernet 对称加密进行加密",
       "ollamaLocal": "Ollama 连接到本地运行的模型服务器 · 没有数据离开你的网络",
       "readAccess": "除非你明确授予写入工具，否则 AI 助手仅对你的网络数据具有读取访问权限"
+    },
+    "models": {
+      "live": "您的 API 密钥可用的 {{count}} 个模型",
+      "fallbackHint": "内置列表 - 请添加 API 密钥或检查网络连接，以加载该密钥允许的模型",
+      "refresh": "刷新",
+      "loading": "正在加载模型..."
     }
   },
   "APIKeysTab": {

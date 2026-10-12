@@ -94,7 +94,9 @@ async def inventory(monkeypatch):
                 await state.before_return()
             return state.devices
 
-    monkeypatch.setattr(discovery, "get_adapter", lambda *_args, **_kwargs: Adapter())
+    monkeypatch.setattr(
+        discovery, "build_adapter_for_controller", lambda *_args, **_kwargs: Adapter()
+    )
     state.events = AsyncMock()
     monkeypatch.setattr(discovery, "publish_device_event", state.events)
     monkeypatch.setattr(discovery, "publish_controller_event", AsyncMock())

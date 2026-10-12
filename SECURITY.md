@@ -8,9 +8,9 @@ Read the [release support boundary](docker/RELEASE-SUPPORT) before deploying.
 
 ## Versions and maintenance
 
-This checkout identifies the application as `26.10.0`. A version in source is not
-by itself evidence that a public release and its images have been qualified and
-published. Use the release's actual source commit, image digests and acceptance
+This checkout's application version is recorded in `backend/app/__init__.py`. A
+version in source is not by itself evidence that a public release and its images
+have been qualified and published. Use the release's actual source commit, image digests and acceptance
 record when deciding what to install. The current appliance qualification scope
 is Linux amd64; agent platforms have separate qualification requirements.
 

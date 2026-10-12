@@ -46,8 +46,20 @@ class OllamaProvider(BaseLLMProvider):
         await self._client.aclose()
 
     def list_models(self) -> list[str]:
-        # Dynamic — populated from /api/tags at runtime
+        """Offline fallback only.
+
+        The comment here used to claim this was "populated from /api/tags at
+        runtime", which it never was -- the method returns a literal. The
+        actual dynamic read is `list_available_models()`, now also exposed as
+        `fetch_models()` so every provider answers the same question the same
+        way. These names are examples of commonly pulled models; a given host
+        may have none of them.
+        """
         return ["llama3", "mistral", "codestral", "gemma2", "phi3", "qwen2"]
+
+    async def fetch_models(self) -> list[str]:
+        """The models actually pulled on this host (`/api/tags`)."""
+        return await self.list_available_models()
 
     async def test_connection(self) -> bool:
         try:

@@ -34,6 +34,7 @@ from app.core.security_utils import sanitize_filename
 from app.core.site_access import assert_can_access_site
 from app.db import get_session
 from app.models import Controller, Device, Site
+from app.models.devices import normalize_device_type
 from app.modules.cameras.models import Camera
 
 logger = logging.getLogger(__name__)
@@ -103,7 +104,12 @@ async def get_device_with_access(
     # existence oracle, matching the convention in devices.py:_load_device.
     assert_can_access_site(current_user, device.site_id, detail="Device not found")
 
-    if device_type and device.device_type.value != device_type:
+    # device.device_type is a plain str on a LOADED row -- the column is
+    # String(50) despite the Mapped[DeviceType] annotation -- so `.value` here
+    # raised AttributeError and this endpoint answered 500 for every real
+    # device. normalize_device_type also folds the legacy spellings ("ap"),
+    # which is what an access check should be comparing on.
+    if device_type and normalize_device_type(device.device_type) != device_type:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"Device is not a {device_type}"
         )

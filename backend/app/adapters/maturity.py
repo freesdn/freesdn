@@ -90,9 +90,22 @@ ADAPTER_MATURITY: dict[str, MaturityInfo] = {
     ),
     "truenas": MaturityInfo(
         _VERIFIED,
-        write_maturity=_W_MOCK,
-        write_note="The blob-upload (filesystem.put) write path is implemented + mock-tested; "
-        "no real-device write validated yet.",
+        write_maturity=_W_PARTIAL,
+        # CORRECTED 2026-10-09: this entry was last edited 2026-06-30 and still
+        # described only the pre-26.08.4 blob-upload path, asserting "no
+        # real-device write validated yet". 26.08.4 (2026-08-24) added the
+        # backup-destination write path and validated it live end to end on a
+        # real TrueNAS 26.0 appliance; save, restore and prune were each proven
+        # against the appliance, with retention pruning by destroying the
+        # per-backup child dataset. maturity.py was never updated, so the
+        # product under-reported its own evidence for two months. PARTIAL, not
+        # LIVE_VALIDATED: no cassette was persisted, which is the same basis on
+        # which freepbx is PARTIAL below.
+        write_note="Backup-destination writes (per-backup child dataset create, "
+        "save, restore, and prune by destroying the dataset) were proven live "
+        "end to end against a real TrueNAS 26.0 appliance in 26.08.4, not "
+        "persisted as a cassette. The blob-upload (filesystem.put) path remains "
+        "mock-tested.",
     ),
     "mikrotik": MaturityInfo(
         _VERIFIED,

@@ -354,6 +354,12 @@
       "encryption": "API keys are encrypted at rest using Fernet symmetric encryption",
       "ollamaLocal": "Ollama connects to a locally-running model server · no data leaves your network",
       "readAccess": "The AI assistant only has read access to your network data unless you explicitly grant write tools"
+    },
+    "models": {
+      "live": "{{count}} models listed by your API key",
+      "fallbackHint": "Built-in list - add an API key, or check connectivity, to load the models your key allows",
+      "refresh": "Refresh",
+      "loading": "Loading models..."
     }
   },
   "APIKeysTab": {

@@ -17,6 +17,7 @@ Ported from FreeSDN v1 with async/await improvements.
 """
 
 import asyncio
+import contextlib
 import ipaddress
 import json
 import logging
@@ -796,14 +797,54 @@ class TailscaleSetupService:
                 "state": status["state"],
             }
 
+        # The DEFAULT deployment is capless: tailscaled lives in the privileged
+        # `vpn` sidecar, and the api container only gets its control socket when
+        # docker-compose.vpn.yml is layered on (see the note by the api volumes).
+        # Without that overlay /var/run/tailscale and /var/lib/tailscale sit on
+        # the read-only rootfs, so spawning tailscaled here CANNOT work -- it
+        # dies in safesocket.Listen and the operator was handed the raw Go
+        # stacktrace (TPM + filch noise included) instead of the one fact that
+        # matters. vpn.py already computes `sidecar_reachable`; this is the same
+        # signal, applied before we spawn rather than after it fails.
+        unwritable = [
+            d for d in ("/var/run/tailscale", "/var/lib/tailscale") if not os.access(d, os.W_OK)
+        ]
+        if unwritable:
+            return {
+                "success": False,
+                "message": (
+                    "The Tailscale VPN sidecar is not enabled in this "
+                    "deployment, so the daemon cannot start here ("
+                    f"{', '.join(unwritable)} "
+                    f"{'are' if len(unwritable) > 1 else 'is'} read-only). "
+                    "tailscaled runs in the privileged `vpn` sidecar, which is "
+                    "opt-in. Enabling it takes BOTH parts of this command -- "
+                    "the -f flag alone leaves the sidecar behind its profile "
+                    "and nothing starts: COMPOSE_PROFILES=vpn docker compose "
+                    "--env-file .env.<tier> -f docker-compose.yml "
+                    "-f docker-compose.vpn.yml up -d"
+                ),
+                "state": "sidecar_unavailable",
+            }
+
         try:
             proc = await asyncio.create_subprocess_exec(
                 "tailscaled",
                 "--state=/var/lib/tailscale/tailscaled.state",
                 "--socket=/var/run/tailscale/tailscaled.sock",
                 "--tun=userspace-networking",
+                # netstack SOCKS5. app/core/http_client.py:overlay_socks_proxy()
+                # expects exactly this endpoint when VPN_MODE=userspace, so the
+                # overlay is usable rather than merely connected.
+                "--socks5-server=127.0.0.1:1055",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                # tailscaled's log policy writes to UserCacheDir, i.e. $HOME/.cache.
+                # The image has no /home/appuser and the rootfs is read-only, so
+                # without this it fails on `mkdir /home/appuser` before it ever
+                # gets to work. /tmp is this container's private writable tmpfs --
+                # the same trick pg-backup already uses for the same reason.
+                env={**os.environ, "HOME": "/tmp"},
             )
             # Give it a couple seconds to start
             await asyncio.sleep(2)
@@ -1962,6 +2003,11 @@ class NetbirdService:
         self._status_cache: dict[str, Any] | None = None
         self._cache_time: datetime | None = None
         self._cache_ttl_seconds = 30
+        # A DOWN daemon is the expensive case -- the CLI burns its whole budget
+        # retrying gRPC at nothing -- and it was the one case never cached. It
+        # gets a much shorter TTL than a good status so that a daemon coming up
+        # is still noticed promptly.
+        self._negative_cache_ttl_seconds = 10
 
     def _nb_cmd(self, subcommand: str, *args: str) -> tuple[str, ...]:
         """Build a ``netbird`` argv, injecting ``--daemon-addr`` when configured.
@@ -1972,12 +2018,45 @@ class NetbirdService:
         addr_flag = ("--daemon-addr", self.daemon_addr) if self.daemon_addr else ()
         return ("netbird", subcommand, *addr_flag, *args)
 
+    def _remember(self, status: dict[str, Any]) -> dict[str, Any]:
+        """Cache an outcome -- success OR failure -- and return it.
+
+        Only successes were cached before, which left the single expensive
+        case (no daemon listening, the CLI retrying until the timeout) paying
+        full price on every request.
+        """
+        self._status_cache = status
+        self._cache_time = datetime.now(UTC)
+        return status
+
+    def _cached_status(self, refresh: bool) -> dict[str, Any] | None:
+        """Return the still-valid cached status, or None to go ask the daemon."""
+        if not self._status_cache or not self._cache_time:
+            return None
+        elapsed = (datetime.now(UTC) - self._cache_time).total_seconds()
+
+        if self._status_cache.get("connected"):
+            # A good status is live data, and re-reading it is cheap, so this is
+            # what refresh=True is for.
+            if refresh or elapsed >= self._cache_ttl_seconds:
+                return None
+            return self._status_cache
+
+        # A NEGATIVE result is honoured even when refresh=True. Re-running a
+        # multi-second CLI timeout that failed moments ago cannot tell the
+        # caller anything it does not already know, and /netbird/status asks
+        # with refresh=True on every dashboard poll. The window is short on
+        # purpose: at worst a daemon that just came up is reported absent for a
+        # few more seconds.
+        if elapsed < self._negative_cache_ttl_seconds:
+            return self._status_cache
+        return None
+
     async def get_status(self, refresh: bool = False) -> dict[str, Any]:
         """Get Netbird daemon status."""
-        if not refresh and self._status_cache and self._cache_time:
-            elapsed = (datetime.now(UTC) - self._cache_time).total_seconds()
-            if elapsed < self._cache_ttl_seconds:
-                return self._status_cache
+        cached = self._cached_status(refresh)
+        if cached is not None:
+            return cached
 
         try:
             result = await asyncio.create_subprocess_exec(
@@ -1985,26 +2064,41 @@ class NetbirdService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=15)
+            try:
+                # `netbird status` talks to the LOCAL daemon over IPC, so a
+                # healthy one answers in milliseconds; the old 15s budget was
+                # spent entirely on the CLI retrying gRPC at a daemon that is
+                # not listening. That is how three VPN endpoints came to exceed
+                # a 12s client timeout on a deployment with no Netbird.
+                stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=5)
+            except TimeoutError:
+                # wait_for cancels the await, NOT the child, so without this
+                # every timed-out request left a `netbird` process behind.
+                with contextlib.suppress(ProcessLookupError):
+                    result.kill()
+                with contextlib.suppress(Exception):
+                    await result.wait()
+                raise
 
             if result.returncode != 0:
                 logger.error("Netbird status error: %s", stderr.decode())
-                return {"connected": False, "management_state": "Error", "peers": []}
+                return self._remember(
+                    {"connected": False, "management_state": "Error", "peers": []}
+                )
 
             data = json.loads(stdout.decode())
             status = self._parse_status(data)
 
-            self._status_cache = status
-            self._cache_time = datetime.now(UTC)
-
-            return status
+            return self._remember(status)
 
         except FileNotFoundError:
             logger.debug("Netbird CLI not found")
-            return {"connected": False, "management_state": "NotInstalled", "peers": []}
+            return self._remember(
+                {"connected": False, "management_state": "NotInstalled", "peers": []}
+            )
         except Exception as e:
             logger.error("Failed to get Netbird status: %s", e)
-            return {"connected": False, "management_state": "Error", "peers": []}
+            return self._remember({"connected": False, "management_state": "Error", "peers": []})
 
     def _parse_status(self, data: dict[str, Any]) -> dict[str, Any]:
         """Parse Netbird status JSON output."""

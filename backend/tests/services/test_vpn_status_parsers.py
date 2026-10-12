@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -476,3 +477,154 @@ def test_tailscale_parse_node_null_list_fields_coerced_to_empty():
     assert node.tailscale_ips == []
     assert node.advertised_routes == []
     assert node.tags == []
+
+
+# ── NetBird: a DOWN daemon must not cost a full CLI timeout per request ──────
+#
+# Sweeping every param-less GET on the live stack turned up three endpoints
+# over a 12s client timeout -- /vpn/netbird/status, /vpn/netbird/peers and
+# /vpn/subnets -- on a deployment where NetBird simply is not configured. The
+# 30s status cache that should have absorbed this was dead three times over:
+# only SUCCESS was cached, vpn.py built a throwaway NetbirdService() per
+# request so the cache never survived to be read, and /netbird/status passed
+# refresh=True anyway.
+
+
+class _CountingExec:
+    """Stand-in for asyncio.create_subprocess_exec that counts invocations."""
+
+    def __init__(self, rc=1, stdout=b"", stderr=b"connect: connection refused"):
+        self.calls = 0
+        self._rc, self._stdout, self._stderr = rc, stdout, stderr
+
+    async def __call__(self, *args, **kwargs):
+        self.calls += 1
+        parent = self
+
+        class _P:
+            returncode = parent._rc
+
+            async def communicate(self):
+                return (parent._stdout, parent._stderr)
+
+        return _P()
+
+
+async def test_netbird_negative_result_is_cached(monkeypatch):
+    """A daemon that is not listening is remembered, not re-probed every call.
+
+    Pre-fix every failure path returned before touching ``_status_cache``, so
+    the SECOND call re-ran the CLI and re-paid the timeout -- forever.
+    """
+    fake = _CountingExec()
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake)
+
+    nb = NetbirdService()
+    first = await nb.get_status()
+    second = await nb.get_status()
+
+    assert first["connected"] is False
+    assert second == first
+    assert fake.calls == 1, "the failed probe was not cached; every request re-pays it"
+
+
+async def test_netbird_refresh_honours_negative_cache(monkeypatch):
+    """refresh=True must not re-run a probe that just failed.
+
+    ``/netbird/status`` passes refresh=True on every dashboard poll. Re-running
+    a multi-second timeout that failed moments ago cannot return new
+    information, so within the short negative window the cached answer stands.
+    """
+    fake = _CountingExec()
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake)
+
+    nb = NetbirdService()
+    await nb.get_status()
+    again = await nb.get_status(refresh=True)
+
+    assert again["connected"] is False
+    assert fake.calls == 1, "refresh=True re-paid the daemon timeout"
+
+
+async def test_netbird_negative_cache_expires(monkeypatch):
+    """The negative cache is a short window, not a permanent 'down' latch.
+
+    A daemon that comes up has to be noticed, so once the negative TTL has
+    passed the next call probes again.
+    """
+    fake = _CountingExec()
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake)
+
+    nb = NetbirdService()
+    await nb.get_status()
+    assert fake.calls == 1
+
+    # Age the cached failure past its TTL.
+    nb._cache_time = datetime.now(UTC) - timedelta(seconds=nb._negative_cache_ttl_seconds + 1)
+    await nb.get_status()
+    assert fake.calls == 2, "an expired negative cache must be re-probed"
+
+    # And a GOOD status keeps the longer TTL -- it is live data, not an absence.
+    assert nb._negative_cache_ttl_seconds < nb._cache_ttl_seconds
+
+
+async def test_netbird_timeout_reaps_child_and_caches(monkeypatch):
+    """On timeout the `netbird` child is killed and the failure is remembered.
+
+    ``asyncio.wait_for`` cancels the await, NOT the subprocess, so pre-fix
+    every timed-out request left a `netbird` process behind -- and the
+    catch-all that caught the TimeoutError returned without caching, which is
+    the exact path a missing daemon takes.
+    """
+    killed = []
+    budget = {}
+
+    class _Hanging:
+        returncode = None
+
+        async def communicate(self):  # pragma: no cover - never completes
+            await asyncio.sleep(3600)
+
+        def kill(self):
+            killed.append(True)
+
+        async def wait(self):
+            return 0
+
+    async def fake_exec(*args, **kwargs):
+        return _Hanging()
+
+    async def fake_wait_for(coro, timeout):
+        budget["timeout"] = timeout
+        coro.close()  # don't leave an un-awaited coroutine behind
+        raise TimeoutError
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(asyncio, "wait_for", fake_wait_for)
+
+    nb = NetbirdService()
+    status = await nb.get_status()
+
+    assert status["connected"] is False
+    assert killed == [True], "the timed-out `netbird` child was never reaped"
+    assert nb._status_cache is not None, "a timed-out probe must still be cached"
+    # A web request cannot wait 15s on an optional daemon.
+    assert budget["timeout"] <= 6, f"status budget {budget['timeout']}s is too long for a request"
+
+
+def test_netbird_endpoints_do_not_build_their_own_service():
+    """The VPN endpoints must share the process-wide NetbirdService.
+
+    A per-request ``NetbirdService()`` throws the status cache away before it
+    can ever be read back, which is why these endpoints kept re-paying the
+    daemon timeout while the Tailscale ones (reached through the same
+    ``get_vpn_manager()`` singleton) did not.
+    """
+    from app.api.v1.endpoints import vpn as vpn_endpoints
+    from app.services import overlay_discovery
+
+    for mod in (vpn_endpoints, overlay_discovery):
+        assert not hasattr(mod, "NetbirdService"), (
+            f"{mod.__name__} imports NetbirdService; use get_vpn_manager().netbird "
+            "so the status cache is shared across requests"
+        )

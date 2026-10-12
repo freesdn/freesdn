@@ -23,7 +23,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { controllersApi, sitesApi } from '@/lib/api';
+import { controllersApi, sitePickerQuery } from '@/lib/api';
 
 interface Controller {
   id: string;
@@ -71,11 +71,7 @@ export function EditControllerModal({ controller, open, onOpenChange }: EditCont
 
   // Fetch sites for reference (display only · site_id is immutable here)
   const { data: sitesData } = useQuery({
-    queryKey: ['sites'],
-    queryFn: async () => {
-      const response = await sitesApi.getAll();
-      return response.data;
-    },
+    ...sitePickerQuery,
     enabled: open,
   });
 

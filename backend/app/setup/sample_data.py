@@ -1973,7 +1973,7 @@ async def _create_firmware_data(
             critical_update_available=needs_update and fw_img.is_critical,
             can_upgrade=True,
             device_name=device.name,
-            device_type=device.device_type.value
+            device_type=str(device.device_type)
             if hasattr(device.device_type, "value")
             else str(device.device_type),
             vendor=device.manufacturer,

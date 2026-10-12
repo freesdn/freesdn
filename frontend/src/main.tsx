@@ -16,6 +16,7 @@ import './lib/i18n';
 // The shared QueryClient (incl. the global pending-changes MutationCache hook)
 // now lives in ./lib/queryClient so the auth store can clear it on logout.
 
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Suspense

@@ -27,7 +27,35 @@ from app.modules.ai.providers.base import (
 logger = logging.getLogger(__name__)
 
 OPENAI_API_BASE = "https://api.openai.com/v1"
+# OFFLINE FALLBACK ONLY -- `fetch_models()` asks the account what it may
+# actually call. Entitlements are per-key, so this can never be right for
+# every operator. These ids are left as-is rather than refreshed by guesswork:
+# a fallback naming models that do not exist, or that the key cannot call, is
+# worse than a dated one, and it is only ever reached when the API is
+# unreachable.
 SUPPORTED_MODELS = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"]
+
+# `GET /models` returns every model on the account, including ones that are
+# not chat completions endpoints at all. Offering those in a chat model picker
+# produces a confusing list and a runtime error if one is chosen.
+_NON_CHAT_MARKERS = (
+    "embedding",
+    "whisper",
+    "tts",
+    "dall-e",
+    "moderation",
+    "audio",
+    "image",
+    "transcribe",
+    "search",
+    "similarity",
+    "edit",
+    "davinci",
+    "babbage",
+    "curie",
+    "ada",
+    "codex",
+)
 
 
 class OpenAIProvider(BaseLLMProvider):
@@ -52,6 +80,35 @@ class OpenAIProvider(BaseLLMProvider):
 
     def list_models(self) -> list[str]:
         return SUPPORTED_MODELS
+
+    async def fetch_models(self) -> list[str]:
+        """Ask the account which models this key may call.
+
+        `test_connection()` already hit this endpoint and discarded the body,
+        keeping only the status code -- the listing was always available, it
+        was just never read.
+        """
+        try:
+            r = await self._client.get("/models")
+            r.raise_for_status()
+            payload = r.json()
+        except Exception:
+            logger.warning(
+                "OpenAI model listing failed; falling back to the built-in list",
+                exc_info=True,
+            )
+            return self.list_models()
+
+        ids = [
+            str(m.get("id"))
+            for m in (payload.get("data") or [])
+            if isinstance(m, dict) and m.get("id")
+        ]
+        chat = [i for i in ids if not any(mark in i.lower() for mark in _NON_CHAT_MARKERS)]
+        # If the filter removed everything the account is presumably not a
+        # standard OpenAI one (a compatible gateway naming models differently),
+        # so show what it reported rather than an empty picker.
+        return sorted(set(chat or ids)) or self.list_models()
 
     async def test_connection(self) -> bool:
         try:

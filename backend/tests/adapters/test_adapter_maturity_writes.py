@@ -50,13 +50,19 @@ def test_known_honest_write_grades_are_locked() -> None:
         # reads live (owner's fleet) but writes only mock-tested:
         "omada": WriteMaturity.MOCK_TESTED,
         "opnsense": WriteMaturity.MOCK_TESTED,
-        "truenas": WriteMaturity.MOCK_TESTED,
         "hikvision": WriteMaturity.MOCK_TESTED,
         "grandstream": WriteMaturity.MOCK_TESTED,
         "mikrotik": WriteMaturity.MOCK_TESTED,
         # some live-proven (historically / one persisted cassette), rest mock:
         "unifi": WriteMaturity.PARTIAL,
         "freepbx": WriteMaturity.PARTIAL,
+        # truenas moved MOCK_TESTED -> PARTIAL on 2026-10-09. Its entry had not
+        # been edited since 2026-06-30 and still claimed "no real-device write
+        # validated yet", two months after 26.08.4 validated the
+        # backup-destination write path live on a real TrueNAS 26.0 appliance.
+        # The grade is PARTIAL rather than LIVE_VALIDATED because no cassette
+        # was persisted. This lock exists so the correction cannot drift back.
+        "truenas": WriteMaturity.PARTIAL,
         # writes intentionally off:
         "proxmox": WriteMaturity.DISABLED,
         # experimental adapters — writes experimental:

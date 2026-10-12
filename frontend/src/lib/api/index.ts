@@ -26,7 +26,7 @@ export {
   type StorageAlert,
   type StorageService,
 } from './controllers';
-export { sitesApi, sitesApiV2 } from './sites';
+export { sitePickerQuery, sitesApi, sitesApiV2 } from './sites';
 export { usersApi } from './users';
 export { camerasApi, nvrApi, cameraAccessApi, cameraDiscoveryApi, evidenceApi, cameraReportsApi, type EvidenceArchive, type CameraReport } from './cameras';
 export { discoveryApi } from './discovery';

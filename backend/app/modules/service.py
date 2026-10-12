@@ -231,7 +231,32 @@ class ModuleService:
         # Get record
         org_module = await self.get_org_module(organization_id, module_id)
         if not org_module:
-            return None
+            # No row yet. Under the enablement gate's absence-is-permitted rule
+            # (see app/modules/enablement.py) that means the module is SERVING
+            # right now, so "disable" is a real request with a real effect and
+            # must be recorded rather than refused. Returning None here made the
+            # API answer 404 and write nothing, which left the toggle inert for
+            # exactly the modules nobody had explicitly enabled.
+            org_module = OrganizationModule(
+                organization_id=organization_id,
+                module_id=module_id,
+                is_enabled=False,
+                disabled_at=datetime.now(UTC),
+                settings={},
+            )
+            self.db.add(org_module)
+            # stop_module_for_org is deliberately NOT called: the module was
+            # never started for this organization, so there is no per-org state
+            # to tear down.
+            await self._log_event(
+                organization_id=organization_id,
+                module_id=module_id,
+                event_type="disabled",
+                user_id=user_id,
+            )
+            await self.db.commit()
+            await self.db.refresh(org_module)
+            return org_module
 
         if not org_module.is_enabled:
             return org_module  # Already disabled

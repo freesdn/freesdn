@@ -16,6 +16,37 @@ export const sitesApi = {
  *  asking for more get the max instead of a 422. */
 const SITES_MAX_PER_PAGE = 100;
 
+/** Shared query config for every "pick a site" dropdown.
+ *
+ * Two defects made this shared rather than copied into each dialog:
+ *
+ * 1. The app QueryClient sets `staleTime: 5 minutes` with
+ *    `refetchOnWindowFocus: false` (see lib/queryClient.ts). A site created
+ *    while a dialog had already fetched ['sites'] stayed INVISIBLE for five
+ *    minutes: reopening the dialog served cache and never revalidated, so a
+ *    freshly created site could not be chosen. A picker is opened precisely
+ *    when the list has to be current, so it always revalidates.
+ *
+ * 2. Five dialogs registered DIFFERENT query functions under the IDENTICAL
+ *    key ['sites'] -- most with the default per_page (20), one with 100.
+ *    React Query caches by key alone, so whichever dialog mounted first
+ *    decided the page size for all of them. Above 20 sites the rest silently
+ *    truncated. One key, one fetch, one page size.
+ *
+ * NOTE: staleTime alone is not a refetch TRIGGER. These dialogs stay
+ * mounted between opens, so each consumer must also pass `enabled: open`
+ * -- re-enabling a stale query is what actually refetches it.
+ *
+ * The key stays prefixed with 'sites' so existing
+ * `invalidateQueries({ queryKey: ['sites'] })` calls still match it.
+ */
+export const sitePickerQuery = {
+  queryKey: ['sites', 'picker', { per_page: SITES_MAX_PER_PAGE }] as const,
+  queryFn: async () => (await sitesApi.getAll({ per_page: SITES_MAX_PER_PAGE })).data,
+  staleTime: 0,
+  refetchOnMount: 'always' as const,
+};
+
 export const sitesApiV2 = {
   list: (params?: { page?: number; per_page?: number; page_size?: number; search?: string; site_type?: string }) => {
     // Backend only accepts `per_page` (not `page_size`); accept either here and

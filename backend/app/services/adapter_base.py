@@ -747,6 +747,32 @@ class GatewayServiceBase:
                 return omada_sid
         return None
 
+    def _client_method(self, ctrl: Controller, client: Any, method_name: str) -> Any:
+        """Resolve ``client.method_name``, or 501 if this vendor lacks it.
+
+        The vendor-specific services dispatch by name
+        (``getattr(client, method_name)``) onto whatever client the resolved
+        controller's vendor produces. A controller id is just a uuid, so
+        nothing stops an Omada-only endpoint being handed a Proxmox
+        controller -- and the AttributeError that followed surfaced as a bare
+        500 ("'ProxmoxClient' object has no attribute 'get_top_talkers'")
+        rather than telling the caller they addressed the wrong controller.
+
+        501 matches what controllers.py already returns for an operation a
+        controller type does not support.
+        """
+        method = getattr(client, method_name, None)
+        if method is None or not callable(method):
+            raise HTTPException(
+                status_code=501,
+                detail=(
+                    f"Controller type '{ctrl.controller_type}' does not support this "
+                    f"operation ({method_name}). Check that the controller id belongs "
+                    "to the vendor this endpoint is for."
+                ),
+            )
+        return method
+
     async def _resolve_site_context(
         self,
         controller_id: UUID,

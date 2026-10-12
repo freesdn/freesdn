@@ -55,6 +55,10 @@ class IntrospectRequest(BaseModel):
 
 
 class _OpenApiService(GatewayServiceBase):
+    # The Open API is Omada-only; a client of another vendor has no
+    # open_api_* methods and used to surface as a 500.
+    SUPPORTED_CONTROLLER_TYPE = "omada"
+
     """Thin service wrapping the four bootstrap calls on the client."""
 
 
@@ -155,4 +159,7 @@ async def open_api_sites(
     svc = _OpenApiService(session)
     ctrl = await svc._get_controller(controller_id, user.organization_id)
     client = await svc._get_client(ctrl)
-    return await client.open_api_get_sites(access_token=token, page=page, page_size=page_size)
+    # Only the Omada client speaks the Open API; any other vendor's client
+    # reached this call and raised AttributeError as a 500.
+    method = svc._client_method(ctrl, client, "open_api_get_sites")
+    return await method(access_token=token, page=page, page_size=page_size)

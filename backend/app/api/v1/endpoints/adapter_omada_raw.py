@@ -149,6 +149,10 @@ class RawCallResponse(BaseModel):
 class _RawService(GatewayServiceBase):
     """Tiny service — just the controller resolution from the base."""
 
+    # This endpoint is an Omada v2 passthrough, so a controller of any other
+    # vendor must be refused at resolution rather than handed to the client.
+    SUPPORTED_CONTROLLER_TYPE = "omada"
+
 
 @router.post(
     "/{controller_id}/call",

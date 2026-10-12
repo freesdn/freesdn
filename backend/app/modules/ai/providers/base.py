@@ -88,8 +88,26 @@ class BaseLLMProvider(ABC):
 
     @abstractmethod
     def list_models(self) -> list[str]:
-        """Return list of supported model IDs."""
+        """Built-in fallback model IDs, used when the provider cannot be asked.
+
+        This is deliberately NOT the list to show an operator. Which models a
+        key may call depends on the account and tier, so prefer
+        :meth:`fetch_models`, which asks the provider with the configured
+        credentials. This signature is sync and therefore cannot make a
+        request -- that is why ``fetch_models`` exists.
+        """
         ...
+
+    async def fetch_models(self) -> list[str]:
+        """Model IDs this provider will actually accept for these credentials.
+
+        Overridden per provider to query the live listing endpoint. The base
+        implementation falls back to the built-in list so a provider that has
+        no listing API still works. Must never raise: a provider that is
+        unreachable degrades to the fallback rather than breaking the settings
+        page.
+        """
+        return self.list_models()
 
     @abstractmethod
     async def test_connection(self) -> bool:

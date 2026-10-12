@@ -41,11 +41,15 @@ Skip conditions
   QEMU boot is too slow).
 - Docker socket unreachable    → cannot manage containers, skip cleanly.
 - testcontainers import fails  → unexpected, but skip rather than error.
+- CHR will not boot            → no appliance to test against, skip cleanly.
+  Hosts without ``/dev/kvm`` fall back to TCG emulation and are usually too
+  slow for the default budget; raise it with ``CHR_BOOT_TIMEOUT_S``.
 """
 
 from __future__ import annotations
 
 import os
+import pathlib
 import time
 import uuid
 from collections.abc import AsyncGenerator, Generator
@@ -87,8 +91,24 @@ pytestmark = pytest.mark.skipif(
 # Boot budget for QEMU-backed CHR.  The image's README claims ~30 s but
 # we've seen 90 s on cold runners.  Cap at 180 s so a stuck boot fails
 # fast rather than burning the whole 10-minute workflow budget.
-_CHR_BOOT_TIMEOUT_S = 180.0
+_CHR_BOOT_TIMEOUT_S = float(os.environ.get("CHR_BOOT_TIMEOUT_S", "180"))
 _CHR_POLL_INTERVAL_S = 2.0
+
+def _boot_hint() -> str:
+    """Name the usual cause so the skip line is actionable on its own.
+
+    Without /dev/kvm the image emulates the CPU rather than virtualising it,
+    which commonly exceeds the default budget. Reporting that beats leaving
+    someone to discover it from a traceback.
+    """
+    if not pathlib.Path("/dev/kvm").exists():
+        return (
+            " (no /dev/kvm on this host, so the image falls back to TCG"
+            f" emulation; raise CHR_BOOT_TIMEOUT_S above {_CHR_BOOT_TIMEOUT_S:.0f}s"
+            " or run where KVM is available)"
+        )
+    return f" (boot budget {_CHR_BOOT_TIMEOUT_S:.0f}s; raise CHR_BOOT_TIMEOUT_S to extend)"
+
 
 # Default image tag.  7.18 was the latest stable in the 7.x line at the
 # time of writing and matches the 7.x family this integration suite
@@ -146,7 +166,10 @@ def chr_endpoint() -> Generator[dict[str, Any]]:
         # but boots much slower.
         .with_kwargs(privileged=True)
     )
-    container.start()
+    try:
+        container.start()
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"CHR container would not start: {exc}{_boot_hint()}")
     try:
         # Don't strictly require a log line — different image revisions
         # log differently.  Best-effort wait for the most stable marker.
@@ -157,12 +180,24 @@ def chr_endpoint() -> Generator[dict[str, Any]]:
             # health probe which is the authoritative readiness signal.
             pass
 
-        host = container.get_container_host_ip()
-        port = int(container.get_exposed_port(80))
+        # get_exposed_port blocks until the container is running and
+        # raises if it never does, which is how a slow TCG boot surfaced as
+        # 22 fixture ERRORs rather than one skip.
+        try:
+            host = container.get_container_host_ip()
+            port = int(container.get_exposed_port(80))
+        except Exception as exc:  # pragma: no cover - environment dependent
+            pytest.skip(f"CHR container never became running: {exc}{_boot_hint()}")
+
         username = os.environ.get("ROUTEROS_USERNAME", "admin")
         password = os.environ.get("ROUTEROS_PASSWORD", "")
 
-        _wait_for_rest_ready(host, port, username, password)
+        try:
+            _wait_for_rest_ready(host, port, username, password)
+        except TimeoutError as exc:
+            # The appliance never answered. That is the harness failing to
+            # provide a CHR, not RouterOS support being broken.
+            pytest.skip(f"CHR REST never became ready: {exc}{_boot_hint()}")
         yield {
             "host": host,
             "port": port,

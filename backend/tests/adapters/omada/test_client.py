@@ -131,9 +131,7 @@ class TestOmadaApiClient:
     @pytest.mark.asyncio
     async def test_request_with_fallback_uses_next_endpoint_on_not_found(self):
         client, _ = _make_client()
-        client._request = AsyncMock(
-            side_effect=[OmadaNotFoundError("not found"), {"ok": True}]
-        )
+        client._request = AsyncMock(side_effect=[OmadaNotFoundError("not found"), {"ok": True}])
 
         result = await client._request_with_fallback("GET", ["/primary", "/fallback"])
 
@@ -154,4 +152,93 @@ class TestOmadaApiClient:
                 "/sites/site-1/cmd/devices/AA:BB:CC:DD:EE:FF/upgrade",
                 "/sites/site-1/devices/AA:BB:CC:DD:EE:FF/firmware/upgrade",
             ],
+        )
+
+
+# ── Found by the live parameterized-endpoint sweep: two 500s ────────────────
+
+
+class NonJsonResponse:
+    """A 200 whose body is not JSON.
+
+    An Omada controller serves its HTML app for API paths the firmware does
+    not implement, so `raise_for_status()` passes and `.json()` then raises.
+    """
+
+    status_code = 200
+    text = "<!DOCTYPE html><html><head><title>Omada</title></head><body></body></html>"
+
+    def json(self) -> dict:
+        import json
+
+        raise json.JSONDecodeError("Expecting value", self.text, 0)
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+class TestOmadaLiveSweepRegressions:
+    @pytest.mark.asyncio
+    async def test_non_json_200_raises_adapter_error_not_jsondecodeerror(self):
+        """A non-JSON 200 must surface as OmadaApiError, which maps to 502.
+
+        Before: the JSONDecodeError escaped the adapter uncaught and the
+        request answered 500. Confirmed live on
+        /gateway-system/{id}/sites/{id}/reboot-schedules and
+        /gateway-vpn/{id}/sites/{id}/wireguard/peers.
+        """
+        from app.adapters.omada.exceptions import OmadaApiError
+
+        client, http = _make_client()
+        http.request.side_effect = [NonJsonResponse()]
+
+        with pytest.raises(OmadaApiError) as ei:
+            await client._request("GET", "/reboot-schedules")
+
+        # The message has to name the real cause, or the operator is told
+        # nothing actionable.
+        msg = str(ei.value)
+        assert "non-JSON" in msg
+        assert "/reboot-schedules" in msg
+
+    @pytest.mark.asyncio
+    async def test_open_api_builds_url_from_the_resolved_base(self):
+        """The Open API block read a config attribute that does not exist.
+
+        `OmadaClientConfig` has host/port/use_ssl and a computed
+        `effective_base_url`; it has never had `base_url`. Every Open API entry
+        point -- token, refresh, sites, introspect -- raised AttributeError on
+        its first line of real work, so /gateway-openapi/{id}/sites was a 500.
+        """
+        client, http = _make_client()
+        client._ensure_session = AsyncMock()
+        captured: dict[str, str] = {}
+
+        async def fake_get(url, **_kw):
+            captured["url"] = url
+            return MockHttpResponse(200, {"result": {"data": [{"siteId": "s1"}]}})
+
+        http.get = fake_get
+
+        sites = await client.open_api_get_sites(access_token="tok")
+
+        assert sites == [{"siteId": "s1"}]
+        assert captured["url"] == f"{client.base_url}/openapi/v1/sites"
+
+    def test_no_code_references_a_config_attribute_that_does_not_exist(self):
+        """Ratchet: `config.base_url` must not come back.
+
+        The resolved value lives on the CLIENT (`self.base_url`, set in
+        __init__ from `config.effective_base_url`). Four call sites reached
+        through `self.config` instead, and because nothing exercised the Open
+        API path the mistake shipped.
+        """
+        import inspect
+
+        from app.adapters.omada import client as omada_client
+
+        assert not hasattr(OmadaClientConfig(host="h"), "base_url")
+        src = inspect.getsource(omada_client)
+        assert "config.base_url" not in src, (
+            "OmadaClientConfig has no `base_url`; use self.base_url (or config.effective_base_url)"
         )

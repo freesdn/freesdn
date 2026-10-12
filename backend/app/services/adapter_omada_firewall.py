@@ -92,10 +92,10 @@ class GatewayFirewallService(GatewayServiceBase):
                     f"unknown collection={collection!r}; expected one of {sorted(_READ_LISTS)}"
                 ),
             )
-        _, client, omada_site_id = await self._resolve_site_context(
+        ctrl, client, omada_site_id = await self._resolve_site_context(
             controller_id, organization_id, site_id
         )
-        items = await getattr(client, method_name)(omada_site_id)
+        items = await self._client_method(ctrl, client, method_name)(omada_site_id)
         return {
             "controller_id": controller_id,
             "site_id": site_id,
@@ -117,10 +117,10 @@ class GatewayFirewallService(GatewayServiceBase):
                 400,
                 detail=(f"unknown config={config_name!r}; expected one of {sorted(_READ_CONFIGS)}"),
             )
-        _, client, omada_site_id = await self._resolve_site_context(
+        ctrl, client, omada_site_id = await self._resolve_site_context(
             controller_id, organization_id, site_id
         )
-        item = await getattr(client, method_name)(omada_site_id)
+        item = await self._client_method(ctrl, client, method_name)(omada_site_id)
         return {
             "controller_id": controller_id,
             "site_id": site_id,
@@ -143,7 +143,7 @@ class GatewayFirewallService(GatewayServiceBase):
                     400,
                     detail=(f"no applier for feature={c.feature!r} operation={c.operation!r}"),
                 )
-            method = getattr(client, method_name)
+            method = self._client_method(ctrl, client, method_name)
 
             # Command trigger, not a config write. ``update_ids_ips_signatures``
             # is ``POST /sites/{id}/cmd/idsIps/updateDb`` and takes site_id

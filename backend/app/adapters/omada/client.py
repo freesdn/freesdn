@@ -865,7 +865,24 @@ class OmadaApiClient:
                     error_code=response.status_code,
                 ) from exc
 
-            payload = response.json()
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                # raise_for_status() passed, so this is a 200 carrying a body
+                # that is not JSON -- an Omada controller serves its HTML app
+                # for API paths its firmware does not implement. Uncaught, the
+                # JSONDecodeError escaped the adapter and the request answered
+                # 500; OmadaApiError maps to a 502 that names the real cause.
+                self._error_count += 1
+                _record_metric(method_upper, "non_json_body")
+                snippet = (response.text or "")[:120].replace("\n", " ").strip()
+                raise OmadaApiError(
+                    "Controller returned HTTP "
+                    f"{response.status_code} with a non-JSON body for {path} "
+                    "(the firmware most likely does not implement this path): "
+                    f"{snippet!r}",
+                    error_code=response.status_code,
+                ) from exc
             envelope = OmadaApiEnvelope.model_validate(payload)
             code = envelope.errorCode
 
@@ -5128,7 +5145,7 @@ class OmadaApiClient:
         if not self._http:
             raise OmadaConnectionError("HTTP client is not initialized")
 
-        url = f"{self.config.base_url.rstrip('/')}/openapi/authorize/token"
+        url = f"{self.base_url.rstrip('/')}/openapi/authorize/token"
         body = {
             "grant_type": "client_credentials",
             "client_id": client_id,
@@ -5156,7 +5173,7 @@ class OmadaApiClient:
         if not self._http:
             raise OmadaConnectionError("HTTP client is not initialized")
 
-        url = f"{self.config.base_url.rstrip('/')}/openapi/authorize/token"
+        url = f"{self.base_url.rstrip('/')}/openapi/authorize/token"
         body = {
             "grant_type": "refresh_token",
             "client_id": client_id,
@@ -5177,7 +5194,7 @@ class OmadaApiClient:
         if not self._http:
             raise OmadaConnectionError("HTTP client is not initialized")
 
-        url = f"{self.config.base_url.rstrip('/')}/openapi/v1/sites"
+        url = f"{self.base_url.rstrip('/')}/openapi/v1/sites"
         resp = await self._http.get(
             url,
             params={"page": page, "pageSize": page_size},
@@ -5196,7 +5213,7 @@ class OmadaApiClient:
         if not self._http:
             raise OmadaConnectionError("HTTP client is not initialized")
 
-        url = f"{self.config.base_url.rstrip('/')}/openapi/authorize/introspect"
+        url = f"{self.base_url.rstrip('/')}/openapi/authorize/introspect"
         resp = await self._http.post(
             url,
             json={"access_token": access_token},

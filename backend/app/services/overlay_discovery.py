@@ -21,7 +21,7 @@ import logging
 from typing import Any
 
 from app.core.config import settings
-from app.services.vpn_integration import NetbirdService, TailscaleService
+from app.services.vpn_integration import TailscaleService, get_vpn_manager
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ async def discover_overlay_devices() -> list[dict[str, Any]]:
 
     # ── NetBird peers (hostname/ip only; no os/tags in status) ──────────────────
     try:
-        nb = NetbirdService()
+        nb = get_vpn_manager().netbird
         for peer in await nb.list_peers():
             ip = peer.get("ip")
             if not ip:

@@ -47,13 +47,13 @@ class GatewayRoutingService(GatewayServiceBase):
         method_name = _READ.get(what)
         if method_name is None:
             raise HTTPException(400, detail=f"unknown what={what!r}; expected {sorted(_READ)}")
-        _, client, omada_site_id = await self._resolve_site_context(
+        ctrl, client, omada_site_id = await self._resolve_site_context(
             controller_id, organization_id, site_id
         )
         if what == "routing_table":
             data = await client.get_routing_table(omada_site_id, family=family)
         else:
-            data = await getattr(client, method_name)(omada_site_id)
+            data = await self._client_method(ctrl, client, method_name)(omada_site_id)
         # redact device-native routing secrets (BGP neighbor MD5 `password`,
         # VRRP group `authKey`) before returning to a network:read (viewer) caller —
         # parity with the VPN sibling (adapter_omada_vpn) which redacts every read.
@@ -77,7 +77,7 @@ class GatewayRoutingService(GatewayServiceBase):
             method_name = _APPLY.get((c.feature, c.operation))
             if method_name is None:
                 raise HTTPException(400, detail=f"no applier for {c.feature!r}/{c.operation!r}")
-            method = getattr(client, method_name)
+            method = self._client_method(ctrl, client, method_name)
 
             if c.feature == "routing.ipv6_static":
                 if c.operation == "create":

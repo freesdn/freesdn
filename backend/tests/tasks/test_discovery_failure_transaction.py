@@ -51,7 +51,7 @@ async def test_failed_discovery_never_exposes_raw_adapter_diagnostic(
     f = inventory
     monkeypatch.setattr(
         discovery,
-        "get_adapter",
+        "build_adapter_for_controller",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError(MARKER)),
     )
     event = AsyncMock()
@@ -111,7 +111,7 @@ async def test_failure_does_not_delete_previously_committed_inventory(inventory,
     def failed_adapter(*_args, **_kwargs):
         raise RuntimeError(MARKER)
 
-    monkeypatch.setattr(discovery, "get_adapter", failed_adapter)
+    monkeypatch.setattr(discovery, "build_adapter_for_controller", failed_adapter)
     outcome = await discovery._discover_devices_for_controller_impl(str(f.controller))
     assert outcome["success"] is False
     assert await snapshot(f) == before
@@ -196,7 +196,7 @@ async def test_failure_history_is_bounded_safe_and_tolerates_legacy_shapes(
     def failed_adapter(*_args, **_kwargs):
         raise RuntimeError(MARKER)
 
-    monkeypatch.setattr(discovery, "get_adapter", failed_adapter)
+    monkeypatch.setattr(discovery, "build_adapter_for_controller", failed_adapter)
     outcome = await discovery._discover_devices_for_controller_impl(str(f.controller))
     assert outcome["success"] is False
     async with CelerySessionLocal() as db:
@@ -215,7 +215,7 @@ async def test_failure_event_outage_preserves_failed_outcome_without_raw_error(
     def failed_adapter(*_args, **_kwargs):
         raise RuntimeError(MARKER)
 
-    monkeypatch.setattr(discovery, "get_adapter", failed_adapter)
+    monkeypatch.setattr(discovery, "build_adapter_for_controller", failed_adapter)
 
     async def event(kind, **_kwargs):
         if kind == discovery.EventType.CONTROLLER_SYNC_FAILED:
@@ -281,7 +281,7 @@ async def test_error_record_holds_current_authority_until_commit(inventory, monk
     def failed_adapter(*_args, **_kwargs):
         raise RuntimeError(MARKER)
 
-    monkeypatch.setattr(discovery, "get_adapter", failed_adapter)
+    monkeypatch.setattr(discovery, "build_adapter_for_controller", failed_adapter)
 
     @asynccontextmanager
     async def session():

@@ -1632,6 +1632,13 @@ async def get_controller_metadata(
     for d in devices:
         meta = d.device_metadata or {}
         fw = meta.get("firmware", {})
+        # Adapters that populate device_metadata["firmware"] (Omada, UniFi)
+        # take the branch below. Module-synced devices (Proxmox nodes, the
+        # TrueNAS appliance) only ever get the Device.firmware_version COLUMN,
+        # so without this fallback their Firmware tab reported "no data" for a
+        # version FreeSDN had already collected and stored.
+        if not fw and d.firmware_version:
+            fw = {"current_version": d.firmware_version, "needs_upgrade": False}
         if fw:
             needs = fw.get("needs_upgrade", False)
             if needs:
@@ -1661,7 +1668,9 @@ async def get_controller_metadata(
                 "mac": d.mac_address,
                 "ip": d.ip_address,
                 "model": d.model,
-                "firmware_version": meta.get("firmware_version"),
+                # The column is the source the module sync fills; the metadata
+                # blob is the controller-specific one. Prefer whichever exists.
+                "firmware_version": meta.get("firmware_version") or d.firmware_version,
                 "cpu_usage": meta.get("cpu_usage"),
                 "memory_usage": meta.get("memory_usage"),
                 "uptime": meta.get("uptime"),

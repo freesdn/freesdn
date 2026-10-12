@@ -479,7 +479,11 @@ class EventBus:
 
         org_scope = event.organization_id or "system"
         channel = f"freesdn:events:{event.category.value}:{org_scope}"
-        body = json.dumps(event.to_dict())
+        # default=str so a UUID/datetime/Enum that reaches a payload serializes
+        # instead of raising. Without it, publish() raises TypeError and every
+        # caller that publishes before doing its real work dies -- which is how
+        # controller discovery was killed before it ever contacted a device.
+        body = json.dumps(event.to_dict(), default=str)
 
         if self._redis:
             await self._redis.publish(channel, body)

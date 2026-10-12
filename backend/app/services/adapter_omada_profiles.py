@@ -182,7 +182,7 @@ class GatewayProfilesService(GatewayServiceBase):
                                 f"operation={c.operation!r} not supported for profile_type={ptype}"
                             ),
                         )
-                    method = getattr(client, method_name)
+                    method = self._client_method(ctrl, client, method_name)
                     if c.operation == "create":
                         return await method(omada_site_id, payload)
                     if c.operation == "update":

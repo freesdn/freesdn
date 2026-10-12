@@ -53,6 +53,23 @@
 	}
 
 	# Single-page app: long-cache the fingerprinted assets, fall back to
+	# Fingerprinted build assets. These MUST 404 when absent, so they are served
+	# here rather than falling through to the SPA handler's
+	# `try_files {path} /index.html` below.
+	#
+	# Without this, a chunk removed by a deploy answers with index.html and a
+	# 200, so the browser parses HTML as JavaScript ("Failed to fetch
+	# dynamically imported module") -- and because the `@assets` matcher there
+	# matches the REQUEST path (*.js) whatever the body turned out to be, that
+	# wrong response is stamped `immutable, max-age=31536000` and cached against
+	# the chunk URL for a year. Every tab open across a release hits it, and no
+	# amount of reloading clears it.
+	handle /assets/* {
+		root * /srv
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
 	# index.html for client-side routes. Framing + CSP belong to the HTML app
 	# surface, so they are scoped here (not at the site level above).
 	handle {
@@ -65,8 +82,20 @@
 			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';"
 		}
 		root * /srv
-		@assets path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2
-		header @assets Cache-Control "public, max-age=31536000, immutable"
+		# Everything this handler serves is UNfingerprinted: index.html itself,
+		# theme-init.js, locales, the manifest. It must revalidate every time.
+		# Without this index.html carried no Cache-Control at all, so browsers
+		# applied heuristic caching and kept a stale shell pointing at chunk
+		# names a later release had deleted -- the app then could not load its
+		# routes and a logged-in operator sat on the login page holding a valid
+		# session cookie. The ETag makes revalidation a 304, not a download.
+		#
+		# The fingerprinted files are served by `handle /assets/*` above and
+		# keep their year-long immutable caching. The old `@assets path *.js`
+		# matcher lived here and, after that split, only matched the
+		# UNfingerprinted root scripts -- pinning theme-init.js immutable for a
+		# year so a change to it could never reach anyone.
+		header Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}

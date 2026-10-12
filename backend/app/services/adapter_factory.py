@@ -49,14 +49,27 @@ def get_adapter_class(controller_type: str):
         AdapterNotFoundError: If no adapter exists for the given type
     """
     # Import here to avoid circular imports
+    from app.adapters.freepbx import FreePBXAdapter
+    from app.adapters.grandstream import GrandstreamAdapter
     from app.adapters.hikvision import HikvisionAdapter
     from app.adapters.mikrotik import MikroTikAdapter
     from app.adapters.omada import OmadaAdapter
+    from app.adapters.onvif import ONVIFAdapter
+    from app.adapters.openwrt import OpenWRTAdapter
     from app.adapters.opnsense import OPNsenseAdapter
     from app.adapters.pfsense import PfSenseAdapter
     from app.adapters.proxmox import ProxmoxAdapter
+    from app.adapters.truenas import TrueNASAdapter
     from app.adapters.unifi import UniFiAdapter
+    from app.adapters.unifi_protect import UniFiProtectAdapter
 
+    # Keep this in step with ``adapter_registry.auto_discover()``. It used to
+    # list only nine of the thirteen shipped adapters, so TrueNAS, OpenWRT,
+    # FreePBX, Grandstream, UniFi Protect and ONVIF could not be added as
+    # controllers AT ALL -- the row just sat `unreachable` with
+    # "No adapter found for controller type: ...", while the device was
+    # perfectly reachable. Every adapter below takes the same
+    # ``(host, username, password, **kwargs)`` constructor this factory calls.
     adapters = {
         "omada": OmadaAdapter,
         "tplink_omada": OmadaAdapter,
@@ -67,6 +80,12 @@ def get_adapter_class(controller_type: str):
         "proxmox": ProxmoxAdapter,
         "unifi": UniFiAdapter,
         "ubiquiti": UniFiAdapter,
+        "unifi_protect": UniFiProtectAdapter,
+        "openwrt": OpenWRTAdapter,
+        "freepbx": FreePBXAdapter,
+        "grandstream": GrandstreamAdapter,
+        "truenas": TrueNASAdapter,
+        "onvif": ONVIFAdapter,
     }
 
     adapter_class = adapters.get(controller_type.lower())
@@ -129,6 +148,18 @@ def build_adapter_for_controller(controller: Any) -> "BaseAdapter":
             "omada_id": getattr(controller, "omada_id", "") or "",
             "cloud_region": getattr(controller, "cloud_region", None) or "us",
         }
+
+    # TrueNAS authenticates with an API KEY, and the stored secret IS that key.
+    # /controllers/{id}/test already passes it as `api_key`; this path did not,
+    # so the adapter fell back to username/password and TrueNAS refused it.
+    # That split produced a controller page reading "Connection Successful"
+    # next to "Controller operation failed" with Last Sync "Never" -- the test
+    # endpoint and every sync path disagreeing because they built the adapter
+    # differently. Keep the two in step.
+    if controller.controller_type.lower() == "truenas":
+        secret = _decrypt_secret(getattr(controller, "password", None))
+        if secret:
+            cloud_kwargs["api_key"] = secret
 
     # Match controller onboarding: API tokens take precedence over ticket login.
     if controller.controller_type.lower() == "proxmox":

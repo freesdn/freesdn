@@ -367,6 +367,14 @@ services:
       DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-30}
       DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
     volumes:
+      # Tailscale, capless. `--tun=userspace-networking` runs in netstack,
+      # so it needs NO NET_ADMIN and NO /dev/net/tun -- only somewhere to
+      # write. Without these two the daemon dies in safesocket.Listen on
+      # the read-only rootfs and the UI's Connect button can never work.
+      # Same named volumes the privileged sidecar uses, so the node
+      # identity is shared (and survives) if that overlay is enabled later.
+      - tailscale_state:/var/lib/tailscale
+      - tailscale_run:/var/run/tailscale
       # NOTE: the VPN control volumes (tailscale_run / openvpn_config / vpn_run /
       # wireguard_config / wireguard_run) are added back by docker-compose.vpn.yml
       # only when the privileged VPN sidecar is enabled. Default api is capless.

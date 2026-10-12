@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { controllersApi, sitesApi } from '@/lib/api';
+import { controllersApi, sitePickerQuery } from '@/lib/api';
 
 interface AddTrueNASDialogProps {
   open: boolean;
@@ -66,8 +66,11 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
   const [isTesting, setIsTesting] = useState(false);
 
   const { data: sitesData } = useQuery({
-    queryKey: ['sites'],
-    queryFn: async () => (await sitesApi.getAll()).data,
+    ...sitePickerQuery,
+    // Load-bearing: the dialog stays MOUNTED between opens, so
+    // refetchOnMount never fires. Toggling enabled on open is what
+    // actually refetches, so a site created since last open appears.
+    enabled: open,
   });
   const sites = sitesData?.items || [];
 

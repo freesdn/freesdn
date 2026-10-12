@@ -229,26 +229,47 @@ class TrueNASWSClient:
     async def _authenticate(self) -> None:
         """Authenticate via ``auth.login_ex``.
 
-        Prefers API-key auth (``API_KEY_PLAIN``); falls back to
-        password auth (``PASSWORD_PLAIN``) when no key is configured.
+        Prefers API-key auth (``API_KEY_PLAIN``). When no explicit key is
+        configured the stored secret is tried as a key FIRST and then as a
+        password, because FreeSDN keeps whatever the operator supplied in
+        ``config.password`` and for TrueNAS that is usually an API key.
         """
+        # Which secrets to try, in order.
+        #
+        # An explicit api_key means the caller already knows what it holds.
+        # Otherwise the secret came from the controller's `config.password`,
+        # which for TrueNAS is USUALLY an API key and occasionally a real
+        # password -- the storage shape does not say which. Trying the key
+        # mechanism first and falling back on AUTH_ERR supports both without
+        # every call site having to know. Before this, any caller that did not
+        # pass `api_key=` went straight to PASSWORD_PLAIN and an API key failed
+        # there every time.
         if self.api_key:
-            login = {
-                "mechanism": "API_KEY_PLAIN",
-                "username": self.username,
-                "api_key": self.api_key,
-            }
+            attempts = [("API_KEY_PLAIN", "api_key", self.api_key)]
+        elif self.password:
+            attempts = [
+                ("API_KEY_PLAIN", "api_key", self.password),
+                ("PASSWORD_PLAIN", "password", self.password),
+            ]
         else:
-            login = {
-                "mechanism": "PASSWORD_PLAIN",
-                "username": self.username,
-                "password": self.password,
-            }
+            attempts = [("PASSWORD_PLAIN", "password", self.password)]
 
-        result = await self._call("auth.login_ex", [login])
-        response_type = (result or {}).get("response_type")
-        if response_type == "SUCCESS":
-            return
+        response_type: object = None
+        for mechanism, field, secret in attempts:
+            login = {
+                "mechanism": mechanism,
+                "username": self.username,
+                field: secret,
+            }
+            result = await self._call("auth.login_ex", [login])
+            response_type = (result or {}).get("response_type")
+            if response_type == "SUCCESS":
+                return
+            if str(response_type) != "AUTH_ERR":
+                # EXPIRED / OTP_REQUIRED / REDIRECT are not "wrong mechanism";
+                # retrying with another secret shape cannot help and would only
+                # burn a second login attempt against the appliance.
+                break
 
         # Map the documented non-success outcomes to a clear auth error.
         hint = {

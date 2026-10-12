@@ -354,6 +354,12 @@
       "encryption": "Las claves de API se cifran en reposo mediante cifrado simétrico Fernet",
       "ollamaLocal": "Ollama se conecta a un servidor de modelos que se ejecuta localmente · ningún dato sale de tu red",
       "readAccess": "El asistente de IA solo tiene acceso de lectura a los datos de tu red, a menos que otorgues explícitamente herramientas de escritura"
+    },
+    "models": {
+      "live": "{{count}} modelos listados por tu clave de API",
+      "fallbackHint": "Lista integrada: anade una clave de API, o revisa la conectividad, para cargar los modelos que tu clave permite",
+      "refresh": "Actualizar",
+      "loading": "Cargando modelos..."
     }
   },
   "APIKeysTab": {

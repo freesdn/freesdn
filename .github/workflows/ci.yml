@@ -114,7 +114,7 @@ jobs:
           CI_REUSE_SERVICES: '1'
         # CHR requires a separately provisioned RouterOS appliance; its
         # qualification remains explicit rather than an implicit Docker skip.
-        run: poetry run pytest tests_integration/ --ignore=tests_integration/test_mikrotik_chr.py --tb=short -q
+        run: poetry run pytest tests_integration/ --tb=short -q
 
       - name: Run tests
         working-directory: backend

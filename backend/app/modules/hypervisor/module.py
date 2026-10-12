@@ -439,6 +439,10 @@ class HypervisorModule(BaseModule):
                     "ip_address": "ip_address",
                     "last_seen": "last_seen",
                     "site_id": "site_id",
+                    # ProxmoxNode.controller_id is NOT NULL, so carry it onto
+                    # the Device -- otherwise the controller that discovered
+                    # these nodes reports "0 devices" on the Controllers page.
+                    "controller_id": "controller_id",
                 },
                 status_field="status",
                 status_map={"online": "online", "offline": "offline"},

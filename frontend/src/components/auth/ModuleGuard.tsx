@@ -39,8 +39,11 @@ export function ModuleGuard({ moduleId, children, redirect = false }: ModuleGuar
   // enabled" while the org-enablement query is still resolving. enabledModules
   // is loaded fresh from the API each session (never persisted — see
   // moduleStore), and isLoaded only flips once that enablement has resolved
-  // (see useModulesInit). The backend enforces real module access, so this
-  // optimistic render is UX-only.
+  // (see useModulesInit). The backend enforces a module an administrator has
+  // explicitly DISABLED (app/modules/enablement.py, mounted on every module
+  // router), so this optimistic render is UX-only for that case. A module
+  // that was simply never enabled is not refused by the backend, so do not
+  // treat this guard as the only thing standing between a user and data.
   if (!isLoaded) {
     return <>{children}</>;
   }

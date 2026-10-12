@@ -143,6 +143,65 @@ def normalize_device_type(value: object) -> DeviceType:
     return DeviceType.OTHER
 
 
+_DEVICE_STATUS_ALIASES: dict[str, str] = {
+    # Health rollups. Adapters answer get_device_status() with a HEALTH word,
+    # not a reachability word: TrueNAS rolls pool health up to ok/warning/error,
+    # and other adapters use up/down/connected. The appliance was reached in
+    # order to learn any of these, so "error" is DEGRADED (unhealthy but
+    # present), never OFFLINE.
+    "ok": "online",
+    "up": "online",
+    "connected": "online",
+    "active": "online",
+    "running": "online",
+    "warning": "degraded",
+    "warn": "degraded",
+    "error": "degraded",
+    "faulted": "degraded",
+    "critical": "degraded",
+    # Reachability failures.
+    "down": "offline",
+    "disconnected": "offline",
+    "unreachable": "offline",
+    "inactive": "offline",
+    # We could not determine the state -- distinct from "it is down".
+    "auth_failed": "unknown",
+    "pending": "unknown",
+}
+
+
+def normalize_device_status(value: object) -> "DeviceStatus":
+    """Coerce an adapter's status word into a DeviceStatus. NEVER raises.
+
+    ``Device.status`` is a plain string column, so an adapter's health word is
+    written happily and only misleads later -- "ok" is not DeviceStatus.ONLINE,
+    so a healthy device counts as offline in every per-controller total.
+    """
+    if value is None:
+        return DeviceStatus.UNKNOWN
+    if isinstance(value, DeviceStatus):
+        return value
+
+    raw = str(value).strip().lower().replace(" ", "_")
+    if not raw:
+        return DeviceStatus.UNKNOWN
+    try:
+        return DeviceStatus(raw)
+    except ValueError:
+        pass
+
+    alias = _DEVICE_STATUS_ALIASES.get(raw)
+    if alias is not None:
+        return DeviceStatus(alias)
+
+    logger.warning(
+        "Unrecognised device status %r; storing as unknown. Add an alias in "
+        "_DEVICE_STATUS_ALIASES if this is a real adapter value.",
+        raw,
+    )
+    return DeviceStatus.UNKNOWN
+
+
 class DeviceStatus(StrEnum):
     """Device online status."""
 

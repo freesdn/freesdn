@@ -46,6 +46,11 @@ router = APIRouter(prefix="/gateway-insights", tags=["gateway-insights"])
 class _InsightsService(GatewayServiceBase):
     """Pure read service — no writes, no staging."""
 
+    # Without this, a controller id of another vendor resolved fine and the
+    # name-based dispatch below hit AttributeError as a 500. The base class
+    # refuses it with a 400 naming both types instead.
+    SUPPORTED_CONTROLLER_TYPE = "omada"
+
     async def get(
         self,
         controller_id: UUID,
@@ -55,10 +60,13 @@ class _InsightsService(GatewayServiceBase):
         *args: Any,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        _, client, omada_site_id = await self._resolve_site_context(
+        ctrl, client, omada_site_id = await self._resolve_site_context(
             controller_id, organization_id, site_id
         )
-        result = await getattr(client, method_name)(omada_site_id, *args, **kwargs)
+        # Guarded: a controller of another vendor used to reach getattr() and
+        # crash with AttributeError as a 500.
+        method = self._client_method(ctrl, client, method_name)
+        result = await method(omada_site_id, *args, **kwargs)
         return {
             "controller_id": controller_id,
             "site_id": site_id,

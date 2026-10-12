@@ -44,6 +44,10 @@
       "description": "The camera you're looking for doesn't exist or has been removed.",
       "backToCameras": "Back to Cameras"
     },
+    "invalidLink": {
+      "title": "Invalid camera link",
+      "description": "This address does not contain a valid camera id, so there is nothing to show. The link was probably copied incorrectly or produced by an out-of-date page."
+    },
     "header": {
       "channel": "Channel {{channel}}",
       "back": "Back"

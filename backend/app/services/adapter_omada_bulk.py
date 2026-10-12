@@ -82,7 +82,7 @@ class GatewayBulkService(GatewayServiceBase):
                     400,
                     detail=(f"no applier for feature={c.feature!r} operation={c.operation!r}"),
                 )
-            method = getattr(client, method_name)
+            method = self._client_method(ctrl, client, method_name)
 
             # Bulk device ops (the macs are in payload["macs"])
             if (

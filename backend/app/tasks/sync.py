@@ -21,6 +21,7 @@ from app.core.crypto import decrypt_credential, is_encrypted
 from app.core.events import EventType, org_id_for_site, publish_device_event
 from app.db.models import Controller, ControllerStatus, Device, DeviceStatus
 from app.db.session import CelerySessionLocal as AsyncSessionLocal
+from app.models.devices import normalize_device_status
 from app.services.adapter_factory import get_adapter
 
 logger = logging.getLogger(__name__)
@@ -104,7 +105,10 @@ async def _sync_device_status(device_id: str) -> dict[str, Any]:
 
             if status_data:
                 old_status = device.status
-                new_status = status_data.get("status", device.status)
+                # get_device_status returns HEALTH ("ok"/"warning"/"error"),
+                # not DeviceStatus. Writing it raw made a healthy appliance
+                # count as offline.
+                new_status = normalize_device_status(status_data.get("status", device.status))
 
                 # Update device
                 device.status = new_status
@@ -299,7 +303,9 @@ async def _sync_all_device_statuses(
                                     continue
                                 old_status = d.status
                                 if status_data:
-                                    new_status = status_data.get("status", d.status)
+                                    new_status = normalize_device_status(
+                                        status_data.get("status", d.status)
+                                    )
                                     d.status = new_status
                                     d.last_seen = datetime.now(UTC)
                                     if "ip_address" in status_data:

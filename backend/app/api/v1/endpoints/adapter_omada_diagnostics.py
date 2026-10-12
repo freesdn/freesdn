@@ -25,6 +25,10 @@ router = APIRouter(prefix="/gateway-diagnostics", tags=["gateway-diagnostics"])
 
 
 class _DiagService(GatewayServiceBase):
+    # See _InsightsService: without this a non-Omada controller reached the
+    # name-based dispatch and raised AttributeError as a 500.
+    SUPPORTED_CONTROLLER_TYPE = "omada"
+
     async def call(
         self,
         controller_id: UUID,
@@ -34,10 +38,13 @@ class _DiagService(GatewayServiceBase):
         *args: Any,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        _, client, omada_site_id = await self._resolve_site_context(
+        ctrl, client, omada_site_id = await self._resolve_site_context(
             controller_id, organization_id, site_id
         )
-        result = await getattr(client, method_name)(omada_site_id, *args, **kwargs)
+        # Guarded: a controller of another vendor used to reach getattr() and
+        # crash with AttributeError as a 500.
+        method = self._client_method(ctrl, client, method_name)
+        result = await method(omada_site_id, *args, **kwargs)
         return {
             "controller_id": controller_id,
             "site_id": site_id,

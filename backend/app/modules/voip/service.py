@@ -452,10 +452,12 @@ class VoIPService:
         if not self.organization_id:
             return
 
-        result = await self.db.execute(
-            select(self._sites_for_org().c.id).where(self._sites_for_org().c.id == site_id)
-        )
-        if result.scalar_one_or_none() is None:
+        # ONE subquery, reused. Two calls would be two FROM entities and a
+        # cartesian product -- one row per accessible site, which blows up
+        # scalar_one_or_none() as soon as the org has more than one site.
+        sites = self._sites_for_org()
+        result = await self.db.execute(select(sites.c.id).where(sites.c.id == site_id).limit(1))
+        if result.scalar() is None:
             raise CrossTenantError(f"site_id {site_id} is not in your organization")
 
     async def _assert_pbx_in_org(self, pbx_id: UUID) -> None:

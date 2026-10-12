@@ -20,9 +20,10 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 
 from app.modules.base import BaseModule, ModuleLoadError, ModuleState
+from app.modules.enablement import module_enabled_dependency
 from app.modules.registry import ModuleRegistry, module_registry
 
 if TYPE_CHECKING:
@@ -426,10 +427,16 @@ class ModuleLoader:
                     continue
                 router = module.get_router()
                 if router:
+                    # Enforce the Settings > Modules toggle at the router, not
+                    # per endpoint: a gate applied here cannot be forgotten on a
+                    # route added later. Refuses only an EXPLICIT is_enabled=False
+                    # row; see app/modules/enablement.py for why a missing row
+                    # must not refuse.
                     app.include_router(
                         router,
                         prefix=f"{prefix}/{module.id}",
                         tags=[module.name],
+                        dependencies=[Depends(module_enabled_dependency(module.id))],
                     )
                     registered.add(key)
                     # Invalidate a schema generated before optional modules loaded.

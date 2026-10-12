@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <!-- Copyright (C) 2024-2026 FreeSDN -->
 
-> **Existing database installations:** upgrading from 26.09.0 is an image-only
-> update. The database stays on the Debian runtime, so your existing volume is
-> adopted in place -- no logical migration, no new volume, no locale change.
+> **Existing database installations:** upgrading is an image-only update. The
+> database stays on the Debian runtime, so your existing volume is adopted in
+> place -- no logical migration, no new volume, no locale change.
 > [The database runtime guide](docker/postgres/UPGRADING) covers the exceptional
 > case where the entrypoint refuses a cluster it cannot safely serve.
 
@@ -15,11 +15,15 @@
 
 # FreeSDN
 
-**Current release: 26.10.0.** Every release is gated on acceptance that runs the
+Every release is gated on acceptance that runs the
 real stack: a fresh install driven as a user, an in-place upgrade from the
 previously published release on a real volume, encrypted backup and restore into
 a clean target, a failover drill, and a vulnerability scan of all fifteen shipped
-images. See the [changelog](CHANGELOG.md) for what changed.
+images. The current version is whatever
+[the latest release](https://github.com/freesdn/freesdn/releases/latest) says it
+is; see the [changelog](CHANGELOG.md) for what changed. A version is not written
+into this paragraph on purpose, because a hand-maintained one drifts: this file
+spent a release cycle calling a published version "unreleased".
 
 > **Support scope:** Linux **amd64** only; ARM64 appliance releases are not
 > qualified. FreeSDN is maintained by its sole owner and developer: there is no
