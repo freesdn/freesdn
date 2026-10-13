@@ -47,7 +47,7 @@ WORKDIR /build
 COPY ffmpeg-build/ ./
 RUN sh /build/build.sh
 
-FROM python:3.14.8-alpine3.24 AS python-base
+FROM python:3.15.0rc3-alpine3.24 AS python-base
 # Exact upstream security backports; unknown Python source fails the build.
 COPY python-security/ /usr/local/share/freesdn/python-security/
 RUN python -B /usr/local/share/freesdn/python-security/apply_backports.py \
