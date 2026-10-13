@@ -1,4 +1,4 @@
-FROM python:3.14.8-alpine3.24
+FROM python:3.15.0rc3-alpine3.24
 # Exact upstream security backports; unknown Python source fails the build.
 COPY python-security/ /usr/local/share/freesdn/python-security/
 RUN python -B /usr/local/share/freesdn/python-security/apply_backports.py \
