@@ -10,7 +10,7 @@ packages = [{include = "app"}]
 [tool.poetry.dependencies]
 python = "^3.13"
 # Hash-locked wheel installer for opt-in plugin dependency environments.
-uv = "0.12.23"
+uv = "0.13.4"
 # Web Framework
 # starlette 1.x: the old <0.137 hold is LIFTED. fastapi declares
 # starlette>=0.46 with no upper bound, and prometheus-fastapi-instrumentator 8.x
