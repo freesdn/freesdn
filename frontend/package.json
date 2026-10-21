@@ -123,7 +123,7 @@
     "source-map-js": ">=1.2.2 <2",
     "minimatch": ">=10.2.3",
     "rollup": ">=4.59.0",
-    "follow-redirects": ">=1.16.0",
+    "follow-redirects": ">=1.16.1",
     "ws": ">=8.20.1",
     "brace-expansion": ">=5.0.6",
     "js-yaml": ">=4.3.2 <5",
