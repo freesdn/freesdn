@@ -3,7 +3,7 @@
 # Node.js 24 LTS + Vite 8.x + React 19
 
 # Release policy: stay on Node 24 LTS; qualify LTS major migrations explicitly.
-FROM node:24.21.0-alpine3.24
+FROM node:24.22.1-alpine3.24
 
 RUN npm install -g npm@12.2.0
 
