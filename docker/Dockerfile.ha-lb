@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Stock nginx tags can lag Alpine security fixes. Patch the shipped OS layer.
-ARG NGINX_VERSION=1.30.5-alpine
+ARG NGINX_VERSION=1.30.6-alpine
 FROM nginx:${NGINX_VERSION}
 RUN apk upgrade --no-cache

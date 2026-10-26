@@ -48,12 +48,13 @@ def test_application_images_have_blocking_full_inventory_gates(workflow):
     }.items():
         assert by_component[name]["target"] == target
     # Keep the production image contract in the gate, including optional profiles.
+    # Every component is built from source in this repository; none is pulled.
+    # (redis-exporter used to be pulled as oliver006/redis_exporter, and this test
+    # kept asserting that long after it moved to docker/Dockerfile.redis-exporter.
+    # It went unnoticed because public CI's Backend job never reached the suite.)
     for name, entry in by_component.items():
-        if name == "redis-exporter":
-            assert entry["image"] == "oliver006/redis_exporter:v1.91.1"
-        else:
-            assert "context" in entry and "dockerfile" in entry
-            assert "image" not in entry
+        assert "context" in entry and "dockerfile" in entry, name
+        assert "image" not in entry, name
     exporter = next(entry for entry in matrix if entry["component"] == "backup-metrics")
     assert exporter["dockerfile"].endswith("docker/Dockerfile.backup-metrics")
     assert exporter["context"].endswith("docker")
@@ -73,12 +74,34 @@ def test_application_images_have_blocking_full_inventory_gates(workflow):
     assert rules["if"] == "matrix.component == 'backup-metrics'"
     assert "test rules backup-rules.test.yml" in rules["run"]
     assert not rules.get("continue-on-error")
-    scan = next(s for s in steps if s.get("with", {}).get("scan-type") == "image")
-    assert scan["with"]["exit-code"] == "1"
+    # The scan is the complete inventory: nothing suppressed, unfixed included.
+    scan_index, scan = next(
+        (i, s) for i, s in enumerate(steps) if s.get("with", {}).get("scan-type") == "image"
+    )
     assert not scan["with"]["ignore-unfixed"]
     assert scan["with"]["scanners"] == "vuln"
+    assert scan["with"]["severity"] == "HIGH,CRITICAL"
+    assert scan["with"]["format"] == "json"
     assert scan["env"]["TRIVY_IGNOREFILE"] == "/dev/null"
+    assert scan["env"]["TRIVY_IGNORE_UNFIXED"] == "false"
     assert not scan.get("continue-on-error")
+    # Since 26.10.3 the inventory is not the verdict: a separate gate step is.
+    # It must read that same inventory and the shipped review file, run for
+    # every component, sit after the scan (and after the native media check, so
+    # both always run), and be impossible to soften.
+    gate_index, gate = next(
+        (i, s) for i, s in enumerate(steps) if "check_image_findings.py" in s.get("run", "")
+    )
+    assert gate_index > scan_index
+    native = [i for i, s in enumerate(steps) if "check_native_media_security.py" in s.get("run", "")]
+    assert all(gate_index > i for i in native)
+    assert f"--findings {scan['with']['output']}" in gate["run"]
+    assert "--review security/image-cve-review.toml" in gate["run"]
+    assert '--component "$COMPONENT"' in gate["run"]
+    assert gate["env"]["COMPONENT"] == "${{ matrix.component }}"
+    assert "if" not in gate and not gate.get("continue-on-error")
+    assert (workflow.parents[2] / "scripts/check_image_findings.py").is_file()
+    assert (workflow.parents[2] / "security/image-cve-review.toml").is_file()
     artifact = next(s for s in steps if "upload-artifact@" in s.get("uses", ""))
     assert artifact["if"] == "always()"
     expected_paths = {scan["with"]["output"]}

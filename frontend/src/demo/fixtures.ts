@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
+import { APP_VERSION } from '@/lib/build-info';
 import { demoIds, demoUser } from './identity';
 export { demoIds, demoUser } from './identity';
 export { getDemoCameraSnapshotPath } from './cameraSnapshots';
 
-// One place for the release the demo claims to be. Three fixtures hardcoded
-// '26.06.1' independently, so the Modules page kept advertising a June build
-// long after the demo had moved on.
-export const DEMO_PLATFORM_VERSION = '26.10.0';
+// The release the demo claims to be -- derived, not written down. Three
+// fixtures first hardcoded '26.06.1' independently, so the Modules page kept
+// advertising a June build long after the demo had moved on; consolidating
+// them to one literal only reduced how many places had to be remembered, and
+// it still was not (this read '26.10.0' while 26.10.2 was published).
+// APP_VERSION comes from package.json, which the release bumps.
+export const DEMO_PLATFORM_VERSION = APP_VERSION;
 
 const now = new Date('2026-06-07T14:30:00Z');
 const iso = (minutesAgo = 0) => new Date(now.getTime() - minutesAgo * 60_000).toISOString();

@@ -26,9 +26,14 @@ overrides:
   'nanoid@<4': 3.3.19
   'postcss-selector-parser@>=7 <8': 7.1.6
   'browserslist@>=4 <5': 4.29.0
-  'sanitize-html@>=2 <3': 2.17.7
-  'vitest@>=3 <4': 4.1.11
-  '@vitest/mocker@>=3 <4': 4.1.11
+  'sanitize-html@>=2 <3': 2.18.1
+  'vitest@>=3 <4': 4.1.12
+  '@vitest/mocker@>=3 <4': 4.1.12
+  # vite 6.4.3 carried six HIGH advisories (CVE-2026-112942..112947), and
+  # sanitize-html <2.18.0 three more (CVE-2026-113654/113657/113661), so the
+  # pnpm audit in Dockerfile.prometheus failed and the metrics image could not
+  # be built from a published release. Same gate, same remedy as Handlebars.
+  'vite@>=6 <7': 6.4.5
   'baseline-browser-mapping@>=2 <3': 2.11.25
   'source-map-js@>=1 <2': 1.2.2
   # Jest 30 types remove the expect 29 -> micromatch -> braces build dependency.

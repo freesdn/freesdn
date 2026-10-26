@@ -9,6 +9,113 @@ FreeSDN is a Community Edition project maintained by its sole owner and
 developer. Releases may contain breaking changes between versions -
 **back up your data before upgrading.**
 
+## [26.10.3] - 2026-10-26 - Security maintenance
+
+The first of the monthly security releases. In the two weeks after 26.10.2,
+GitHub raised 108 dependency advisories against the published source, 9 of them
+critical, and every image check in CI turned red. They came down to 21 packages,
+one Go toolchain patch and one Go library. None was in FreeSDN's own code.
+
+This release also fixes two reasons the 26.10.2 commit showed a failing status
+that had nothing to do with vulnerabilities, and changes how image findings are
+gated so that a red mark means something can be done about it.
+
+### Security
+
+- **Python runtime dependencies.**
+  - `uv` 0.12.23 to 0.13.5 (GHSA-hq85-5cpj-mr62, critical). FreeSDN runs uv at
+    runtime to install plugin dependencies into isolated environments.
+  - `certifi` 2026.7.22 to 2026.10.23 (GHSA-6q48-6c7w-9gw2, critical). This is
+    the CA bundle behind every adapter's outbound TLS connection.
+  - `aiohttp` 3.14.3 to 3.14.5 (eight advisories, high). The HTTP client used by
+    the device adapters.
+  - `Pillow` 12.3.0 to 13.0.0 (41 advisories, five critical). Pulled in by
+    reportlab to render SLA report PDFs. FreeSDN does not decode untrusted images,
+    so this was not reachable in practice, but the dependency floor is now the
+    patched version. This is a major version; the SLA report path is covered by
+    the test suite.
+  - `opentelemetry-api` 1.44.0 to 1.45.1.
+- **Go.** Every Go component FreeSDN builds from source moves from Go 1.27.2 to
+  1.27.3 (CVE-2026-111943, standard library). That is ten binaries, including the
+  `gosu` helper inside the PostgreSQL and LogDB images. `golang.org/x/net` moves to
+  0.60.0 (CVE-2026-78669, HTTP/2) in Tailscale, go2rtc, postgres-exporter,
+  Prometheus and rclone, and `go-chi/chi` to 5.4.0 (CVE-2026-114437) in rclone
+  and the Caddy edge.
+- **nginx** 1.30.5 to 1.30.6 (CVE-2026-15176, CVE-2026-93479, CVE-2026-97205, all
+  high, in `ngx_http_core_module` and the `map` directive) for the optional nginx
+  frontend and the HA load balancer, including the HA compose default. It stays
+  on the stable branch; the 1.31 mainline update Dependabot proposes would be a
+  channel change, not a patch. These advisories appeared after the other images
+  had been fixed, and were caught by rescanning the images that had last passed.
+- **Web interface.** `zod` 4.6.7. `follow-redirects` 1.16.1 is used by
+  Node-side tooling only and is not in the browser bundle.
+- **Development tooling** (not shipped in any image): vite 8.3.5, storybook
+  10.6.3, happy-dom 21.0.4, pypdf 6.21.2, virtualenv 21.14.13, filelock 4.2.4.
+
+Every updated version had been public for at least three days before it was
+adopted.
+
+### Fixed
+
+- **The metrics profile could not be built from the 26.10.2 source.** The
+  Prometheus image compiles its web UI from a reviewed, pinned lockfile and audits
+  it during the build; new advisories against vite and sanitize-html made that
+  audit fail, so `docker compose --profile metrics build` stopped. The lock now
+  pins vite 6.4.5, sanitize-html 2.18.1 and vitest 4.1.12.
+- **The backend test job in public CI had not run a single test since 26.10.2.**
+  It invoked pytest in a way that could not import the project's own test plugin
+  and stopped before the first test. The product was unaffected; the published
+  red status was this, not a test failure.
+
+  Running the suite as a GitHub runner sees it then exposed tests that had never
+  run in public CI. None indicated a product defect, and none was caused by this
+  release's dependency updates (each was checked against the 26.10.2 versions):
+  - The credential network tests need an owned private network interface that the
+    runner's hostname resolves to. CI now sets that up explicitly instead of
+    relying on the runner's defaults.
+  - Two VoIP site-access rejection tests failed against mocks that no longer
+    matched how the lookup reads its result; worse, the matching acceptance tests
+    were passing without testing anything. They now check real values, and
+    disabling the access check makes exactly the rejection tests fail.
+  - The TrueNAS login fallback added in 26.10.2 (try the stored secret as an API
+    key, then as a password) had no test, and an older test still asserted the
+    previous order. It is now covered.
+  - A test pinning the CI image-scan layout still expected the redis exporter to
+    be pulled from upstream; it has been built from source for some time.
+- **The live demo reported an old version** in Settings > About. Its version is
+  now derived from the release instead of written into the demo by hand.
+
+### Changed
+
+- **Image vulnerability gate.** CI still scans every image with nothing
+  suppressed and keeps the complete list. What fails the build is now:
+  - any HIGH or CRITICAL finding that has a fix available, always; and
+  - any HIGH or CRITICAL finding with no fix available that is not listed in
+    `security/image-cve-review.toml` with a written reason and a review date at
+    most 62 days away.
+
+  Previously every finding failed the build, including ones the upstream
+  distribution has not fixed. The PostgreSQL and LogDB images run on Debian 13,
+  which currently carries 62 such findings, so those checks could never pass
+  however current the images were. Each of the 16 underlying advisories is now
+  reviewed against how FreeSDN runs the databases (no published ports,
+  `no-new-privileges` on every database service, no use of PostgreSQL's XML
+  functions). A finding becomes a failure again the moment a fix is published,
+  or when its review expires. Every finding is now printed in the CI log.
+
+### Known, not fixed
+
+- NetBird's `pion/dtls` (CVE-2026-26014) and `pion/stun` (CVE-2026-54909)
+  advisories have no upstream fix.
+- 62 HIGH/CRITICAL findings in the Debian base of the PostgreSQL and LogDB
+  images have no Debian fix; they are listed and reasoned in
+  `security/image-cve-review.toml`.
+
+### Upgrading
+
+Pull and rebuild every image (`docker compose build --pull`), then restart. There
+are no database migrations and no configuration changes.
+
 ## [26.10.2] - 2026-10-12 - A controller that imported nothing, quietly
 
 Every fix here was found by running v26.10.1 against real hardware - a TP-Link

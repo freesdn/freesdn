@@ -11,7 +11,7 @@
 # components and takes the release set to zero fixable HIGH/CRITICAL findings.
 # Only the compiled binary is replaced; the entrypoint, user and runtime
 # configuration all remain upstream's.
-FROM golang:1.27.2-alpine3.24 AS builder
+FROM golang:1.27.3-alpine3.24 AS builder
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /build
 COPY redis-exporter-build/go.mod redis-exporter-build/go.sum ./

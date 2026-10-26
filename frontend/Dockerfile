@@ -51,7 +51,7 @@ RUN npm run build
 # Rebuild the released Caddy source with a patched Go toolchain and dependency
 # graph. apk upgrade cannot replace libraries compiled into the upstream binary.
 # go.sum verifies downloaded modules; -mod=readonly forbids resolution at build.
-FROM golang:1.27.2-alpine3.24 AS caddy-builder
+FROM golang:1.27.3-alpine3.24 AS caddy-builder
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /build
 COPY caddy-build/go.mod caddy-build/go.sum ./
@@ -74,7 +74,7 @@ RUN go mod vendor && go run -mod=vendor ./prepare.go \
 # ============================================
 # The patched Alpine variant avoids Debian media/system packages that have
 # unresolved advisories. Preserve UID/GID 999 for existing Compose tmpfs mounts.
-FROM nginx:1.30.5-alpine AS production
+FROM nginx:1.30.6-alpine AS production
 RUN apk upgrade --no-cache && apk add --no-cache curl \
     && deluser nginx \
     && delgroup ping \

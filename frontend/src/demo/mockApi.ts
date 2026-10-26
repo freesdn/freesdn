@@ -6,13 +6,16 @@ import type {
   AxiosResponse,
   InternalAxiosRequestConfig,
 } from 'axios';
+import { APP_VERSION } from '@/lib/build-info';
 import { demoWriteMessage } from './mode';
 import { getDemoHypervisorDashboard, getDemoHypervisorFleetDashboard } from './hypervisorDashboard';
 
-// Single source for the version the demo reports. It was hardcoded to
-// '26.06.1-demo', which is why Settings > About read 26.06.1 long after the
-// demo had been rebuilt: the bundle was current, this string was not.
-const DEMO_VERSION = '26.10.0-demo';
+// The version the demo reports, derived -- never written down here. This was
+// hardcoded twice ('26.06.1-demo', then '26.10.0-demo') and both times Settings
+// > About showed a release months older than the bundle serving it: the demo was
+// current, this string was not. APP_VERSION comes from package.json via
+// build-info, which the release bumps, so it cannot drift again.
+const DEMO_VERSION = `${APP_VERSION}-demo`;
 import {
   alertInstances,
   alertRuleStats,

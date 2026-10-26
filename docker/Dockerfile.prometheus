@@ -1,5 +1,5 @@
 # FreeSDN rebuild of Prometheus 3.14.0, including its embedded web UI.
-FROM golang:1.27.2-alpine3.24 AS source
+FROM golang:1.27.3-alpine3.24 AS source
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /build
 COPY prometheus-build/go.mod prometheus-build/go.sum ./

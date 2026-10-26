@@ -116,11 +116,30 @@ jobs:
         # qualification remains explicit rather than an implicit Docker skip.
         run: poetry run pytest tests_integration/ --tb=short -q
 
+      # The credential network tests bind real HTTP/TLS servers to an owned private
+      # address and require the system hostname to resolve to exactly that address.
+      # They were qualified on an isolated runner that set this up; a hosted runner's
+      # hostname mapping is not guaranteed, so state it instead of relying on it.
+      - name: Give the credential tests an owned private interface
+        run: |
+          set -euo pipefail
+          ip=$(ip -4 route get 1.1.1.1 | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')
+          host=$(hostname)
+          sudo sed -i "/[[:space:]]${host}\([[:space:]]\|$\)/d" /etc/hosts
+          echo "${ip} ${host}" | sudo tee -a /etc/hosts
+          echo "QUALIFICATION_TARGET_IP=${ip}" >> "$GITHUB_ENV"
+          getent ahostsv4 "${host}"
+
       - name: Run tests
         working-directory: backend
         env:
           FREESDN_TEST_DIAGNOSTIC_DIR: ${{ runner.temp }}/backend-test-evidence
-        run: poetry run pytest -p tests.qualification_observer tests/ --tb=short -q --junitxml="${RUNNER_TEMP}/backend-test-evidence/junit.xml"
+        # `python -m pytest`, never the bare `pytest` script. `-p tests.qualification_observer`
+        # is imported before pytest adds any rootdir/conftest path, and only `python -m`
+        # puts the working directory (backend/) on sys.path. With the console script this
+        # step died on "No module named 'tests'" before running a single test, and
+        # 26.10.2 shipped with the Backend job red for exactly that reason.
+        run: poetry run python -m pytest -p tests.qualification_observer tests/ --tb=short -q --junitxml="${RUNNER_TEMP}/backend-test-evidence/junit.xml"
 
       - name: Retain backend test results and timing evidence
         if: always()
@@ -132,7 +151,7 @@ jobs:
 
       - name: Offline queue and report recovery safety guards
         working-directory: backend
-        run: poetry run pytest ../scripts/tests/test_queue_inventory.py ../scripts/tests/test_queue_backup_recovery.py ../scripts/tests/test_report_recovery.py ../scripts/tests/test_auth_recovery.py ../scripts/tests/test_install_config.py ../scripts/tests/test_install_acceptance.py ../scripts/tests/test_runtime_marker_parity.py ../scripts/tests/test_event_retention.py ../scripts/tests/test_postgres_pressure.py --tb=short -q
+        run: poetry run pytest ../scripts/tests/test_queue_inventory.py ../scripts/tests/test_queue_backup_recovery.py ../scripts/tests/test_report_recovery.py ../scripts/tests/test_auth_recovery.py ../scripts/tests/test_install_config.py ../scripts/tests/test_install_acceptance.py ../scripts/tests/test_runtime_marker_parity.py ../scripts/tests/test_event_retention.py ../scripts/tests/test_postgres_pressure.py ../scripts/tests/test_check_image_findings.py --tb=short -q
 
       - name: Offline database qualification evidence and interruption guards
         working-directory: backend
@@ -696,7 +715,11 @@ jobs:
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: false
-          exit-code: '1'
+          # The inventory is complete and is NOT the verdict: "Gate on the image
+          # inventory" below decides. Failing here on every finding, unfixed ones
+          # included, made a Debian image impossible to pass, so the gate stayed
+          # red for reasons no change in this repository could remove.
+          exit-code: '0'
           format: json
           output: image-findings.json
           timeout: 15m
@@ -729,6 +752,14 @@ jobs:
           image_id=$(docker image inspect --format '{{.Id}}' "freesdn-${COMPONENT}:security")
           python3 scripts/check_native_media_security.py \
             --image "$image_id" --work-dir "${RUNNER_TEMP}/native-media"
+      - name: Gate on the image inventory
+        env:
+          COMPONENT: ${{ matrix.component }}
+        # Fixable HIGH/CRITICAL fails, always. Unfixed HIGH/CRITICAL fails unless
+        # security/image-cve-review.toml carries a current review for it, and no
+        # review may run past the next monthly security train. Prints every finding.
+        run: |
+          python3 scripts/check_image_findings.py --findings image-findings.json --review security/image-cve-review.toml --component "$COMPONENT"
       - name: Preserve image inventory and findings even on failure
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

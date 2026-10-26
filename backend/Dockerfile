@@ -6,7 +6,7 @@
 # Stage 1: Base Python image with Poetry
 # ============================================
 # Tailscale source and its patched module graph are checksum-locked separately.
-FROM golang:1.27.2-alpine3.24 AS tailscale-builder
+FROM golang:1.27.3-alpine3.24 AS tailscale-builder
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /build
 COPY tailscale-build/go.mod tailscale-build/go.sum ./
@@ -24,7 +24,7 @@ RUN mkdir -p /var/lib/tailscale /tailscale \
     && ln -s /usr/local/bin/containerboot /tailscale/run.sh
 ENTRYPOINT ["/usr/local/bin/containerboot"]
 
-FROM golang:1.27.2-alpine3.24 AS netbird-builder
+FROM golang:1.27.3-alpine3.24 AS netbird-builder
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /build
 COPY netbird-build/go.mod netbird-build/go.sum ./

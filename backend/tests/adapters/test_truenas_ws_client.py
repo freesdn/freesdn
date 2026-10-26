@@ -127,21 +127,62 @@ class TestAuth:
             await c.connect()
         assert "expired" in str(ei.value).lower()
 
-    @pytest.mark.asyncio
-    async def test_password_mechanism_when_no_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        fake = FakeWS([_rpc(1, {"response_type": "SUCCESS"})])
+    # FreeSDN stores whatever the operator typed in `config.password`, and for
+    # TrueNAS that is usually an API key. With no explicit `api_key`, the client
+    # (since 4efed005) tries that secret as a key first and only on AUTH_ERR as a
+    # password. This test used to assert PASSWORD_PLAIN came first; it was not
+    # updated with that change, and no test covered the fallback at all.
+
+    @staticmethod
+    def _password_only(monkeypatch: pytest.MonkeyPatch, outbox: list[str]):
+        fake = FakeWS(outbox)
 
         async def fake_connect(*_a: Any, **_k: Any) -> FakeWS:
             return fake
 
-        monkeypatch.setattr(
-            "app.adapters.truenas.ws_client._NoRedirectConnect", fake_connect
-        )
-        c = TrueNASWSClient(host="nas.lab", username="truenas_admin", password="pw")
+        monkeypatch.setattr("app.adapters.truenas.ws_client._NoRedirectConnect", fake_connect)
+        return TrueNASWSClient(host="nas.lab", username="truenas_admin", password="pw"), fake
+
+    @pytest.mark.asyncio
+    async def test_password_only_secret_is_tried_as_a_key_first(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        c, fake = self._password_only(monkeypatch, [_rpc(1, {"response_type": "SUCCESS"})])
         await c.connect()
-        sent = json.loads(fake.sent[0])
-        assert sent["params"][0]["mechanism"] == "PASSWORD_PLAIN"
-        assert sent["params"][0]["password"] == "pw"
+        assert len(fake.sent) == 1, "an accepted key must not be followed by a password attempt"
+        assert json.loads(fake.sent[0])["params"][0] == {
+            "mechanism": "API_KEY_PLAIN",
+            "username": "truenas_admin",
+            "api_key": "pw",
+        }
+
+    @pytest.mark.asyncio
+    async def test_password_only_falls_back_to_password_when_key_is_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        c, fake = self._password_only(
+            monkeypatch,
+            [_rpc(1, {"response_type": "AUTH_ERR"}), _rpc(2, {"response_type": "SUCCESS"})],
+        )
+        await c.connect()
+        first, second = (json.loads(m)["params"][0] for m in fake.sent)
+        assert first["mechanism"] == "API_KEY_PLAIN"
+        assert second == {
+            "mechanism": "PASSWORD_PLAIN",
+            "username": "truenas_admin",
+            "password": "pw",
+        }
+
+    @pytest.mark.asyncio
+    async def test_password_only_does_not_retry_on_a_non_auth_outcome(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # EXPIRED / OTP_REQUIRED are not "wrong mechanism"; a second attempt
+        # would only burn another login against the appliance.
+        c, fake = self._password_only(monkeypatch, [_rpc(1, {"response_type": "EXPIRED"})])
+        with pytest.raises(AdapterAuthenticationError):
+            await c.connect()
+        assert len(fake.sent) == 1
 
 
 # ---------------------------------------------------------------------------

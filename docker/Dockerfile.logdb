@@ -12,7 +12,7 @@
 # 2.30.2 are installed so an exact logical restore of either is possible.
 # Published 26.09.0 resolves 2.30.2, which this image also selects for fresh
 # databases, so the extension version does not move on upgrade.
-FROM golang:1.27.2-alpine3.24 AS gosu-builder
+FROM golang:1.27.3-alpine3.24 AS gosu-builder
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /build
 COPY gosu-build/go.mod gosu-build/go.sum ./
