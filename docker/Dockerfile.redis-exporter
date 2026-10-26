@@ -20,6 +20,6 @@ RUN go build -mod=readonly -trimpath \
         -ldflags="-s -w -X main.BuildVersion=1.93.0-freesdn" \
         -o /out/redis_exporter github.com/oliver006/redis_exporter
 
-FROM oliver006/redis_exporter:v1.93.0
+FROM oliver006/redis_exporter:v1.94.0
 COPY --from=builder /out/redis_exporter /redis_exporter
 COPY redis-exporter-build/LICENSE redis-exporter-build/NOTICE /usr/share/licenses/redis-exporter/
