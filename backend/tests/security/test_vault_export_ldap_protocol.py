@@ -24,6 +24,7 @@ from pyasn1.codec.ber.encoder import encode
 
 from app.core import vault_ldap_reauthentication as module
 from app.core.vault_export_proof import VaultProofContext
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 
 @pytest.fixture(scope="module")
@@ -307,7 +308,7 @@ async def owned(monkeypatch, certificates):
             for writer in f.writers:
                 writer.close()
             if f.tasks:
-                await asyncio.wait_for(asyncio.gather(*list(f.tasks)), 3)
+                await asyncio.wait_for(asyncio.gather(*list(f.tasks)), HARNESS_WAIT_SECONDS)
             assert not f.tasks and not f.errors
             assert all(writer.is_closing() for writer in f.client_writers)
             assert module._ADMISSION.borrowed_tokens == 0
@@ -442,14 +443,14 @@ async def test_real_scaled_deadline_refuses_late_success(
     monkeypatch.setattr(module, "_OPERATION_SECONDS", 0.15)
     async with owned.server(protocol) as flow:
         task = asyncio.create_task(flow.confirm("synthetic secret only"))
-        await asyncio.wait_for(owned.entered.wait(), 2)
+        await asyncio.wait_for(owned.entered.wait(), HARNESS_WAIT_SECONDS)
         if mode == "pause-close":
-            await asyncio.wait_for(owned.close_entered.wait(), 2)
+            await asyncio.wait_for(owned.close_entered.wait(), HARNESS_WAIT_SECONDS)
             await asyncio.sleep(0.20)
             assert not task.done()
             owned.close_release.set()
         with pytest.raises(module.LDAPConfirmationError):
-            await asyncio.wait_for(task, 2)
+            await asyncio.wait_for(task, HARNESS_WAIT_SECONDS)
         assert len(owned.client_writers) == 1
 
 
@@ -471,7 +472,7 @@ async def test_repeated_cancellation_retains_connection_ownership(
 
         task = asyncio.create_task(run())
         event = owned.entered if phase == "pause-bind" else owned.close_entered
-        await asyncio.wait_for(event.wait(), 2)
+        await asyncio.wait_for(event.wait(), HARNESS_WAIT_SECONDS)
         if cancellation == "asyncio":
             task.cancel()
             await asyncio.sleep(0.02)
@@ -484,9 +485,9 @@ async def test_repeated_cancellation_retains_connection_ownership(
         owned.close_release.set()
         if cancellation == "asyncio":
             with pytest.raises(asyncio.CancelledError):
-                await asyncio.wait_for(task, 2)
+                await asyncio.wait_for(task, HARNESS_WAIT_SECONDS)
         else:
-            await asyncio.wait_for(task, 2)
+            await asyncio.wait_for(task, HARNESS_WAIT_SECONDS)
         assert not delivered and len(owned.client_writers) == 1
 
 
@@ -497,7 +498,7 @@ async def test_admission_refuses_third_then_recovers(owned):
         tasks = [
             asyncio.create_task(flow.confirm("synthetic secret only")) for _ in range(2)
         ]
-        async with asyncio.timeout(2):
+        async with asyncio.timeout(HARNESS_WAIT_SECONDS):
             while len(owned.passwords) < 2:
                 await asyncio.sleep(0.001)
         dns_count = len(owned.dns)

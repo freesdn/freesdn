@@ -19,6 +19,7 @@ from app.core.token_authority_lock import (
 )
 from app.db.session import create_test_engine
 from app.models.core import TokenRevocation
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 
 @pytest_asyncio.fixture
@@ -179,7 +180,7 @@ async def test_cancellation_releases_shared_transaction_and_waiting_writer(token
             await never.wait()
 
     holder = asyncio.create_task(reader())
-    await asyncio.wait_for(acquired.wait(), 3)
+    await asyncio.wait_for(acquired.wait(), HARNESS_WAIT_SECONDS)
     task = asyncio.create_task(tokens.blacklist_token(f.jti, datetime.now(UTC) + timedelta(minutes=1)))
     try:
         await real_token_wait(f, task, state["pid"])

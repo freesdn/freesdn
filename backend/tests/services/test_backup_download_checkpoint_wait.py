@@ -19,6 +19,7 @@ from app.db import session as sessions
 from app.models.api_keys import APIKey
 from app.models.core import User
 from app.services.vault_snapshot_response import LocalDownloadSource as VaultDownloadSource
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 from tests.services.test_backup_artifact_integrity_contract import (
     create_archive,
     owned_actor,
@@ -94,7 +95,7 @@ async def test_download_rechecks_after_real_checkpoint_database_wait(
                             await asyncio.sleep(.01)
                     release_copy.set()
                 await asyncio.wait_for(entered.wait(), 10)
-                async with asyncio.timeout(2):
+                async with asyncio.timeout(HARNESS_WAIT_SECONDS):
                     while not wait_proved:
                         async with AsyncSession(f.engine) as observer:
                             blocked_by = await observer.scalar(
@@ -110,7 +111,7 @@ async def test_download_rechecks_after_real_checkpoint_database_wait(
                     await holder.execute(update(APIKey).where(APIKey.user_id == f.actor_id)
                                          .values(expires_at=datetime.now(UTC) - timedelta(seconds=1)))
                 elif claims is not None:
-                    async with asyncio.timeout(2):
+                    async with asyncio.timeout(HARNESS_WAIT_SECONDS):
                         while datetime.now(UTC).timestamp() <= claims["exp"] + .05:
                             await asyncio.sleep(.01)
                 await holder.commit()

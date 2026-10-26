@@ -20,6 +20,7 @@ from app.api.v1.endpoints import data
 from app.core.fabric.artifact_broker import ArtifactBroker, ArtifactError
 from app.core.private_files import write_private
 from app.modules.cameras.service import HLSStreamService
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 
 def permission(path):
@@ -46,7 +47,7 @@ async def test_concurrent_preview_same_filename_keeps_separate_content(
         paths.append(Path(path))
         if len(paths) == 2:
             ready.set()
-        await asyncio.wait_for(ready.wait(), timeout=2)
+        await asyncio.wait_for(ready.wait(), timeout=HARNESS_WAIT_SECONDS)
         observed.append(Path(path).read_bytes())
         assert permission(path) == 0o600
         return {"valid": True, "source_format": source_format}
@@ -292,7 +293,7 @@ async def test_hls_process_has_private_files_and_does_not_copy_credentials_to_lo
     diagnostic = b"Failed URL rtsp://user:FIXTURE_SECRET@camera/stream"
     stderr.feed_data(diagnostic)
     stderr.feed_eof()
-    await asyncio.wait_for(asyncio.shield(meta["stderr_task"]), timeout=2)
+    await asyncio.wait_for(asyncio.shield(meta["stderr_task"]), timeout=HARNESS_WAIT_SECONDS)
     assert Path(meta["log_path"]).read_bytes() == diagnostic
     assert meta["log_file"].closed
     await service.stop_session(result["session_id"])

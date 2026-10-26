@@ -39,6 +39,7 @@ from app.services.agent_release_request import ReleasePublicationRequest, Releas
 from app.services.release_signing import build_release_manifest, canonical_manifest_bytes
 from app.services.release_signing_async import sign_manifest_async
 from tests.db.conftest import maintenance_engine as maintenance_engine
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 from tests.services import test_agent_release_upload_stream as stream
 from tests.services import test_agent_signing_consumers as consumer_probes
 from tests.services import test_agent_signing_lifecycle as lifecycle_probes
@@ -133,7 +134,7 @@ async def promote(f, rid, headers):
 
 
 async def wait_for_target(f, task, holder_pid, record_property):
-    async with AsyncSession(f.engine) as observer, asyncio.timeout(4):
+    async with AsyncSession(f.engine) as observer, asyncio.timeout(HARNESS_WAIT_SECONDS):
         while True:
             assert not task.done(), "Request did not reach its actual target-row wait"
             for pid in f.request_pids:
@@ -335,7 +336,7 @@ async def test_publisher_refuses_authority_changed_after_actual_crypto(promotion
     f.consumers = f.promoter
     task = asyncio.create_task(consumer_probes.publish(f, await lifecycle_probes.headers(f, kind), route))
     try:
-        await asyncio.wait_for(verified.wait(), 4)
+        await asyncio.wait_for(verified.wait(), HARNESS_WAIT_SECONDS)
         async with AsyncSession(f.engine) as db, db.begin():
             await db.execute(update(User).where(User.id == f.user).values(token_version=18))
         resume.set()

@@ -226,7 +226,7 @@ services:
     build: *valkey-build
     restart: unless-stopped
     # Keep the budget predictable; do not hide persistence pressure in swap.
-    memswap_limit: ${REDIS_MEM_LIMIT:-768M}
+    memswap_limit: ${REDIS_MEM_LIMIT:-1G}
     stop_grace_period: 30s
     init: true
     environment:
@@ -268,7 +268,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${REDIS_MEM_LIMIT:-768M}
+          memory: ${REDIS_MEM_LIMIT:-1G}
           cpus: '${REDIS_CPU_LIMIT:-1.0}'
         reservations:
           memory: ${REDIS_MEM_RESERVATION:-128M}

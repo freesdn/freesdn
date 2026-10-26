@@ -24,6 +24,7 @@ from app.models.security_audit import AuditLogRecord, SecurityAnomalyRecord, Sec
 from app.services.audit import _AUDIT_CHAIN_LOCK_KEY, AuditService
 from app.tasks import base
 from app.tasks import security_audit as tasks
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 
 class OwnedCase:
@@ -123,7 +124,7 @@ class OwnedCase:
                     await asyncio.sleep(0.02)
 
     async def waits(self, observer, worker_pids, locker_pid):
-        async with asyncio.timeout(4):
+        async with asyncio.timeout(HARNESS_WAIT_SECONDS):
             while True:
                 paths = {pid: await observer.scalar(text("SELECT pg_blocking_pids(:pid)"), {"pid": pid})
                          for pid in worker_pids}
@@ -198,7 +199,7 @@ async def test_actual_statement_timeout_rolls_back_late_cleanup(owned, target, r
     task = owned.start()
     pid = await owned.pid()
     async with owned.engine.connect() as observer:
-        async with asyncio.timeout(4):
+        async with asyncio.timeout(HARNESS_WAIT_SECONDS):
             while True:
                 wait = await observer.scalar(text("SELECT wait_event FROM pg_stat_activity WHERE pid=:pid"), {"pid": pid})
                 if wait == "PgSleep":
