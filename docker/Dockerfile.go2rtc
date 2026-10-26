@@ -15,7 +15,7 @@ RUN sh /build/build.sh
 # Recreate the upstream runtime toolset on a patched, supported Python/Alpine
 # base. No package installation is needed by go2rtc at runtime; operators with
 # custom Python exec sources should bake their dependencies into a derived image.
-FROM python:3.14.8-alpine3.24
+FROM python:3.15.0-alpine3.24
 # Exact upstream security backports; unknown Python source fails the build.
 COPY python-security/ /usr/local/share/freesdn/python-security/
 RUN python -B /usr/local/share/freesdn/python-security/apply_backports.py \
