@@ -6,7 +6,7 @@
 # Stage 1: Base Node image (Trixie)
 # ============================================
 # Release policy: stay on Node 24 LTS; qualify LTS major migrations explicitly.
-FROM node:24.21.0-trixie-slim AS base
+FROM node:24.22.1-trixie-slim AS base
 RUN npm install -g npm@12.2.0
 WORKDIR /app
 
