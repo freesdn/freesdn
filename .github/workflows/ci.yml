@@ -24,7 +24,11 @@ permissions:
 
 concurrency:
   # Each frozen qualification SHA keeps its own run and evidence.
-  group: ci-${{ github.ref }}-${{ startsWith(github.ref, 'refs/heads/qualification/') && github.sha || 'latest' }}
+  # The event is part of the group so the weekly scheduled run can never cancel
+  # a push run: on 2026-10-26 the Monday cron fired six hours late, landed in the
+  # same group as the 26.10.3 release run, and cancelled its Backend job at 149
+  # minutes, leaving the release commit without a test verdict.
+  group: ci-${{ github.ref }}-${{ github.event_name }}-${{ startsWith(github.ref, 'refs/heads/qualification/') && github.sha || 'latest' }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/heads/qualification/') }}
 
 jobs:
@@ -751,7 +755,8 @@ jobs:
           grype db status -o json
           image_id=$(docker image inspect --format '{{.Id}}' "freesdn-${COMPONENT}:security")
           python3 scripts/check_native_media_security.py \
-            --image "$image_id" --work-dir "${RUNNER_TEMP}/native-media"
+            --image "$image_id" --work-dir "${RUNNER_TEMP}/native-media" \
+            --review security/image-cve-review.toml --component "$COMPONENT"
       - name: Gate on the image inventory
         env:
           COMPONENT: ${{ matrix.component }}
