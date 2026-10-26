@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -231,7 +232,25 @@ def component_sbom(identity: dict, image_id: str) -> dict:
     }
 
 
-def validate_scan(result: object, *, control: bool, now: datetime | None = None) -> int:
+def _review_gate():
+    """The image gate's review loader and evaluation, reused rather than copied."""
+    path = Path(__file__).with_name("check_image_findings.py")
+    spec = importlib.util.spec_from_file_location("check_image_findings", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault(spec.name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+def validate_scan(
+    result: object,
+    *,
+    control: bool,
+    now: datetime | None = None,
+    reviews: list | None = None,
+    component: str | None = None,
+    accepted: list | None = None,
+) -> int:
     if not isinstance(result, dict) or not isinstance(result.get("matches"), list):
         raise QualificationError("Native scanner returned an incomplete result")
     descriptor = result.get("descriptor")
@@ -282,11 +301,44 @@ def validate_scan(result: object, *, control: bool, now: datetime | None = None)
         ):
             raise QualificationError("Known-vulnerable metadata control did not match")
     elif matches:
-        raise QualificationError("Native component has vulnerability matches requiring review")
+        if reviews is None or not component:
+            raise QualificationError("Native component has vulnerability matches requiring review")
+        # Same policy as the image gate (scripts/check_image_findings.py): a match
+        # with a fix available always fails; one with no upstream fix passes only
+        # under a current, reasoned review in security/image-cve-review.toml.
+        gate = _review_gate()
+        findings = []
+        for match in matches:
+            vulnerability, artifact = match["vulnerability"], match["artifact"]
+            fix = vulnerability.get("fix") if isinstance(vulnerability.get("fix"), dict) else {}
+            fixed = ", ".join(fix.get("versions") or []) or (
+                "a fixed release" if fix.get("state") == "fixed" else ""
+            )
+            findings.append(
+                gate.Finding(
+                    severity=str(vulnerability.get("severity", "")).upper(),
+                    vuln_id=str(vulnerability.get("id", "")),
+                    package=str(artifact.get("name", "")),
+                    installed=str(artifact.get("version", "")),
+                    fixed=fixed,
+                    kind="native",
+                )
+            )
+        today = (now or datetime.now(UTC)).date()
+        failures, passed = gate.evaluate(findings, reviews, component, today)
+        if accepted is not None:
+            accepted.extend(f.vuln_id for f, _ in passed)
+        if failures:
+            detail = ", ".join(f"{f.vuln_id} ({note})" for f, note in failures)
+            raise QualificationError(
+                "Native component has vulnerability matches requiring review: " + detail
+            )
     return len(matches)
 
 
-def scan_component(sbom: dict, work: Path) -> dict:
+def scan_component(
+    sbom: dict, work: Path, reviews: list | None = None, component: str | None = None
+) -> dict:
     grype = shutil.which("grype")
     if not grype:
         raise QualificationError("Grype is required for source-built native media")
@@ -328,8 +380,16 @@ def scan_component(sbom: dict, work: Path) -> dict:
         )
         (work / (name + "-findings.json")).write_bytes(raw)
         result = json.loads(raw)
+        accepted: list[str] = []
         rows[name] = {
-            "matches": validate_scan(result, control=name == "control"),
+            "matches": validate_scan(
+                result,
+                control=name == "control",
+                reviews=None if name == "control" else reviews,
+                component=component,
+                accepted=accepted,
+            ),
+            "accepted_under_review": accepted,
             "database": result["descriptor"]["db"]["status"],
             "scanner_version": result["descriptor"]["version"],
             "scan_sha256": hashlib.sha256(raw).hexdigest(),
@@ -338,7 +398,14 @@ def scan_component(sbom: dict, work: Path) -> dict:
     return rows
 
 
-def qualify(image: str, recipe: Path, work: Path, report: dict) -> None:
+def qualify(
+    image: str,
+    recipe: Path,
+    work: Path,
+    report: dict,
+    reviews: list | None = None,
+    component: str | None = None,
+) -> None:
     if not shutil.which("docker") or not shutil.which("grype"):
         raise QualificationError("Docker and Grype are both required")
     metadata = docker_json("image", "inspect", image)
@@ -399,7 +466,7 @@ def qualify(image: str, recipe: Path, work: Path, report: dict) -> None:
             raise QualificationError("Refusing to remove an unowned inspection container")
         run_bounded(["docker", "rm", container])
         report["owned_resources_removed"] = True
-    report["scans"] = scan_component(component_sbom(identity, image_id), work)
+    report["scans"] = scan_component(component_sbom(identity, image_id), work, reviews, component)
     report["passed"] = True
 
 
@@ -417,7 +484,15 @@ def main() -> int:
         required=True,
         help="New private directory for evidence; must not exist",
     )
+    parser.add_argument(
+        "--review",
+        type=Path,
+        help="security/image-cve-review.toml; without it every native match fails",
+    )
+    parser.add_argument("--component", help="Image component the review entries must name")
     args = parser.parse_args()
+    if bool(args.review) != bool(args.component):
+        parser.error("--review and --component must be given together")
     args.work_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
     report = {
         "passed": False,
@@ -427,7 +502,8 @@ def main() -> int:
         "not_signed_image_provenance": True,
     }
     try:
-        qualify(args.image, args.recipe, args.work_dir, report)
+        reviews = _review_gate().load_reviews(args.review) if args.review else None
+        qualify(args.image, args.recipe, args.work_dir, report, reviews, args.component)
     except Exception as error:
         report["error_type"] = type(error).__name__
         report["error"] = (

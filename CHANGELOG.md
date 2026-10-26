@@ -9,6 +9,55 @@ FreeSDN is a Community Edition project maintained by its sole owner and
 developer. Releases may contain breaking changes between versions -
 **back up your data before upgrading.**
 
+## [26.10.4] - 2026-10-26 - What 26.10.3's checks were still red on
+
+26.10.3 shipped with two checks failing and one that never finished, all on
+the release commit itself. This release exists to clear them, and it was
+proved green on GitHub's own runners, on the exact commit, before it was
+published.
+
+### Changed
+
+- **Source-built FFmpeg findings are now reviewed the same way as image
+  findings.** The backend and go2rtc images compile FFmpeg 9.0.2 from source,
+  and five advisories were published against it after 26.10.3 shipped
+  (CVE-2026-107696, high; CVE-2026-107675, -107676, -107677, -107678, medium).
+  FFmpeg has not released a fix. The check that scans this component accepted
+  no findings at all, so it could not pass until upstream did. It now follows
+  the policy introduced in 26.10.3: a finding with a fix always fails, and one
+  without a fix needs a written, expiring review in
+  `security/image-cve-review.toml`. Without that file the check is as strict as
+  before.
+
+  One of the five is reachable in practice, and its review says so:
+  **CVE-2026-107696** makes FFmpeg follow RTSP redirects without a limit. A
+  malicious camera, or anyone able to tamper with unencrypted RTSP traffic on
+  that network, can make one FFmpeg process loop. Short probes are stopped by
+  their timeouts; a live-view transcode keeps spinning until the viewing session
+  ends. The impact is CPU load, not code execution. It is accepted for 14 days
+  only, so it is reviewed again as soon as FFmpeg 9.0.3 is available. The other
+  four need inputs FreeSDN does not produce (an `sftp://` stream, a DASH
+  manifest, HDR10+ metadata output, or a crafted encrypted MP4).
+
+### Fixed
+
+- **The full backend test suite in public CI was cancelled, not failed.** A
+  weekly scheduled run started six hours late, shared a concurrency group with
+  the release run, and cancelled it after 149 minutes. Scheduled and push runs
+  no longer cancel each other.
+- **One more VoIP site-access test failed, and its counterpart passed without
+  testing anything,** for the same reason as the two fixed in 26.10.3. Every
+  test covering those lookups was found and corrected, rather than the next one
+  waiting to surface; disabling the access check now fails exactly the three
+  rejection tests.
+- The 26.10.3 notes said the database-image review covered 16 advisories; it is
+  17.
+
+### Upgrading
+
+No application code changed since 26.10.3. If you already run 26.10.3, nothing
+changes for you; this release only corrects the project's own checks.
+
 ## [26.10.3] - 2026-10-26 - Security maintenance
 
 The first of the monthly security releases. In the two weeks after 26.10.2,
@@ -97,7 +146,7 @@ adopted.
   Previously every finding failed the build, including ones the upstream
   distribution has not fixed. The PostgreSQL and LogDB images run on Debian 13,
   which currently carries 62 such findings, so those checks could never pass
-  however current the images were. Each of the 16 underlying advisories is now
+  however current the images were. Each of the 17 underlying advisories is now
   reviewed against how FreeSDN runs the databases (no published ports,
   `no-new-privileges` on every database service, no use of PostgreSQL's XML
   functions). A finding becomes a failure again the moment a fix is published,

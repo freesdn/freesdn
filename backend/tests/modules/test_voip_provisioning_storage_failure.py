@@ -49,6 +49,13 @@ def _service(provision_dir):
 # ---------------------------------------------------------------------------
 
 
+# VoIP site lookups read their row with `.scalar()` since 4efed005 (one subquery
+# plus LIMIT 1). Each mocked result answers the same value through `.scalar()`
+# and `.scalar_one_or_none()`; configuring only the latter left `.scalar()`
+# returning a truthy MagicMock, so rejections failed and acceptances passed
+# without testing anything.
+
+
 async def test_an_unwritable_provisioning_dir_raises_a_typed_error(tmp_path):
     """A FILE where the provisioning directory should be produces the same
     OSError shape as a wrong mount, and must not escape as a bare OSError."""
@@ -134,6 +141,7 @@ async def _get_config(svc, phone, raiser):
     """Drive get_config_for_mac with the phone lookup satisfied."""
     result = MagicMock()
     result.scalar_one_or_none.return_value = phone
+    result.scalar.return_value = phone
     svc.db.execute = AsyncMock(return_value=result)
     svc.generate_phone_config = raiser
     return await svc.get_config_for_mac(MAC)
