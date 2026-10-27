@@ -518,3 +518,25 @@ def test_missing_trivy_image_identity_refuses_native_scan(image_audit, monkeypat
     monkeypatch.setattr(audit, "run_cmd", run)
     assert not audit.scan_docker_images().passed
     assert len(calls) == 1
+
+
+def test_every_build_download_retries_a_reset_connection_or_dns_failure():
+    # curl's --retry covers timeouts and some HTTP statuses, not a reset connection or
+    # a failed DNS lookup: 5 of 55 CI backend image builds died fetching the FFmpeg
+    # source from ffmpeg.org. Every download is checksum-verified, so retrying is safe.
+    root = Path(__file__).resolve().parents[3]
+    if not (root / ".github/workflows/ci.yml").is_file():
+        pytest.skip(".github/workflows/ci.yml not in this checkout")
+    sources = [
+        *root.glob("*/ffmpeg-build/*.sh"),
+        *(root / ".github/workflows").glob("*.yml"),
+    ]
+    downloads = [
+        command
+        for path in sources
+        for command in path.read_text(encoding="utf-8").replace("\\\n", " ").splitlines()
+        if "curl " in command and "--output" in command
+    ]
+    assert len(downloads) >= 3
+    for command in downloads:
+        assert "--retry-all-errors" in command and "--connect-timeout" in command, command

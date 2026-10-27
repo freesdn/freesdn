@@ -50,6 +50,14 @@ published.
   happened to 4 of 2,400 transfers, and retrying succeeded. The control channel
   now runs on a single thread, as the TrueNAS adapter's already does. What is
   sent, checked and refused is unchanged.
+- **The backend and go2rtc images could fail to build when ffmpeg.org dropped
+  the connection.** Both build FFmpeg from source downloaded from ffmpeg.org,
+  and curl's `--retry` covers timeouts and some HTTP errors but not a reset
+  connection or a failed DNS lookup. 5 of 55 backend image builds in this
+  repository's CI failed that way, including the first run of this release on
+  main. The download, and the scanner download in CI, now retry any error, up
+  to 5 times 10 seconds apart. The archive is still checked against its recorded
+  SHA-256 and FFmpeg's signature before it is used.
 - **The full backend test suite in public CI was cancelled, not failed.** A
   weekly scheduled run started six hours late, shared a concurrency group with
   the release run, and cancelled it after 149 minutes. Scheduled and push runs

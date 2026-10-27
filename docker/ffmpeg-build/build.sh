@@ -16,7 +16,11 @@ case "$arch" in
 ' 'Only amd64 and arm64 media builds are supported' >&2; exit 92;;
 esac
 apk info -v > build-packages.txt
-curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --max-time 180 \
+# --retry alone does not retry a reset connection or a DNS failure, and ffmpeg.org
+# gave both: 5 of 55 CI image builds died here. The archive is checked against
+# verified-inputs.sha256 and its signature below, so retrying any error is safe.
+curl --fail --location --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors --retry-delay 10 \
+  --connect-timeout 30 --max-time 180 \
   --output ffmpeg-9.0.2.tar.xz https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
 sha256sum -c verified-inputs.sha256
 mkdir -m 700 /tmp/ffmpeg-gpg

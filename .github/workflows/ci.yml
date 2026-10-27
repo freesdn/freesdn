@@ -786,7 +786,9 @@ jobs:
           scan_tools="${RUNNER_TEMP}/freesdn-native-scanner"
           mkdir -p "$scan_tools"
           archive="$scan_tools/grype.tar.gz"
-          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --max-time 180 \
+          # Checksum-verified below, so a reset or DNS failure is retried too.
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors --retry-delay 10 \
+            --connect-timeout 30 --max-time 180 \
             https://github.com/anchore/grype/releases/download/v0.119.0/grype_0.119.0_linux_amd64.tar.gz \
             --output "$archive"
           printf '%s  %s\n' '3fa2dc4b924621ab65404cf08d0b8438d896d80ab949c9d5a4ca283c36004c9b' "$archive" | sha256sum -c -
