@@ -16,6 +16,7 @@ from app.core.backup_download_response import LocalDownloadSource as Configurati
 from app.core.backup_downloads import DownloadPool
 from app.db import session as sessions
 from app.services.vault_snapshot_response import LocalDownloadSource as VaultDownloadSource
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 from tests.services.test_backup_artifact_integrity_contract import (
     create_archive,
     owned_actor,
@@ -140,7 +141,7 @@ async def test_download_drains_independent_checkpoint_close_before_owner_ends(
             if entered.is_set():
                 await asyncio.wait_for(closed.wait(), 5)
             if selected:
-                async with asyncio.timeout(3):
+                async with asyncio.timeout(HARNESS_WAIT_SECONDS):
                     while await backend_alive(selected[0][1]):
                         await asyncio.sleep(.01)
         observations.update(

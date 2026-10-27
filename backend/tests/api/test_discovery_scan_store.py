@@ -33,6 +33,7 @@ import pytest_asyncio
 
 import app.api.v1.endpoints.discovery as disc
 from app.services.scanner import DiscoveredHost, ScanProgress, ScanStatus
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 # ---------------------------------------------------------------------------
 # A minimal async Redis that implements exactly the commands the store uses.
@@ -338,7 +339,7 @@ async def test_owning_worker_acts_on_the_remote_cancel_flag(
     assert not scanner.cancelled, "cancelled without anyone asking"
 
     await disc._request_remote_cancel(scan_id)
-    await asyncio.wait_for(watcher, timeout=2)
+    await asyncio.wait_for(watcher, timeout=HARNESS_WAIT_SECONDS)
 
     assert scanner.cancelled
     assert task.cancelled()

@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from dataclasses import replace
 from uuid import uuid4
 
@@ -27,6 +28,14 @@ def legacy(tmp_path):
     path = root / (str(expected.release_id) + "-" + expected.filename)
     path.write_bytes(data)
     path.chmod(0o644)
+    # A real release was written long before anyone reads it. The lease notices a
+    # change by timestamps, which the kernel advances once per tick (1 to 4 ms),
+    # so a change within the tick of the fixture's own writes is invisible: on
+    # Linux 6.8 a second write left the directory's state unchanged 1,975 times
+    # in 2,000.
+    written = time.time_ns() - 60 * 10**9
+    os.utime(path, ns=(written, written))
+    os.utime(root, ns=(written, written))
     return root, expected, path, data
 
 

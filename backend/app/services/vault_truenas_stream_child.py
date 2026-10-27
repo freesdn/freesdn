@@ -1,5 +1,6 @@
 """Fixed native TrueNAS archive reader; no application imports or credentials in argv."""
 
+import asyncio
 import contextlib
 import http.client
 import ipaddress
@@ -212,9 +213,14 @@ def main() -> int:
         limit(kind, size)
     value = _checked_input(sys.stdin.buffer.read(CONTROL + 1))
     context = _context(value)
-    from websockets.sync.client import reconnect
+    # One thread does every read and write of the control channel. The threaded
+    # websockets client read on its own thread while this one wrote, and OpenSSL
+    # does not allow both at once on one connection: when the appliance's TLS
+    # session tickets arrived during the upgrade request, the request was lost
+    # and the transfer failed at the 5 s open timeout (4 in 2,400 under load).
+    from websockets.asyncio.client import connect
 
-    class NoRedirect(reconnect):
+    class NoRedirect(connect):
         def process_redirect(self, exc: Exception) -> Exception:
             return exc
 
@@ -231,95 +237,106 @@ def main() -> int:
     authority = hostname + ":" + str(value["port"])
     deadline = time.monotonic() + 55
     serial = 0
-    with contextlib.ExitStack() as owned:
-        raw = _raw_socket(value, 5)
-        owned.callback(raw.close)
-        ws = owned.enter_context(
-            NoRedirect(
-                "wss://" + authority + "/api/current",
-                sock=raw,
-                ssl=context,
-                server_hostname=value["host"],
-                proxy=None,
-                compression=None,
-                open_timeout=5,
-                close_timeout=1,
-                ping_interval=None,
-                max_size=CONTROL,
-                max_queue=2,
-            )
-        )
 
-        def rpc(method: str, params: list[Any]) -> Any:
-            nonlocal serial
-            serial += 1
-            ws.send(
-                json.dumps({"jsonrpc": "2.0", "id": serial, "method": method, "params": params})
+    async def transfer() -> None:
+        nonlocal deadline
+        async with contextlib.AsyncExitStack() as owned:
+            raw = _raw_socket(value, 5)
+            owned.callback(raw.close)
+            ws = await owned.enter_async_context(
+                NoRedirect(
+                    "wss://" + authority + "/api/current",
+                    sock=raw,
+                    ssl=context,
+                    server_hostname=value["host"],
+                    proxy=None,
+                    compression=None,
+                    open_timeout=5,
+                    close_timeout=1,
+                    ping_interval=None,
+                    max_size=CONTROL,
+                    max_queue=2,
+                )
             )
-            total = 0
-            for _ in range(32):
-                remaining = min(5, deadline - time.monotonic())
-                if remaining <= 0:
-                    raise TimeoutError("Control deadline")
-                message = ws.recv(timeout=remaining)
-                if not isinstance(message, str):
-                    raise ValueError("Control frame")
-                total += len(message.encode())
-                if total > 4 * CONTROL:
-                    raise ValueError("Control events bound")
-                reply = json.loads(message, object_pairs_hook=_unique)
-                if not isinstance(reply, dict):
-                    raise ValueError("Control response")
-                if reply.get("id") == serial:
-                    if reply.get("jsonrpc") != "2.0" or "error" in reply or "result" not in reply:
-                        raise ValueError("Control refusal")
-                    return reply["result"]
-            raise ValueError("Control event count")
 
-        credentials = (
-            {
-                "mechanism": "API_KEY_PLAIN",
-                "username": value["username"],
-                "api_key": value["api_key"],
-            }
-            if value["api_key"]
-            else {"mechanism": "PASSWORD_PLAIN", "username": value["username"], "password": ""}
-        )
-        result = rpc("auth.login_ex", [credentials])
-        if not isinstance(result, dict) or result.get("response_type") != "SUCCESS":
-            raise ValueError("Authentication refused")
-        allocation = rpc(
-            "core.download", ["filesystem.get", [value["path"]], value["path"].rsplit("/", 1)[-1]]
-        )
-        if (
-            not isinstance(allocation, list)
-            or len(allocation) != 2
-            or type(allocation[0]) is not int
-            or allocation[0] < 1
-        ):
-            raise ValueError("Download allocation")
-        job_id = allocation[0]
-        try:
-            url = _url(allocation[1])
-            connection = PinnedHTTPS(value["host"], value["port"], timeout=5, context=context)
-            owned.callback(connection.close)
-            connection.request(
-                "GET",
-                url,
-                headers={"Host": authority, "Accept-Encoding": "identity", "Connection": "close"},
+            async def rpc(method: str, params: list[Any]) -> Any:
+                nonlocal serial
+                serial += 1
+                call = {"jsonrpc": "2.0", "id": serial, "method": method, "params": params}
+                await ws.send(json.dumps(call))
+                total = 0
+                for _ in range(32):
+                    remaining = min(5, deadline - time.monotonic())
+                    if remaining <= 0:
+                        raise TimeoutError("Control deadline")
+                    message = await asyncio.wait_for(ws.recv(), remaining)
+                    if not isinstance(message, str):
+                        raise ValueError("Control frame")
+                    total += len(message.encode())
+                    if total > 4 * CONTROL:
+                        raise ValueError("Control events bound")
+                    reply = json.loads(message, object_pairs_hook=_unique)
+                    if not isinstance(reply, dict):
+                        raise ValueError("Control response")
+                    if reply.get("id") == serial:
+                        if (
+                            reply.get("jsonrpc") != "2.0"
+                            or "error" in reply
+                            or "result" not in reply
+                        ):
+                            raise ValueError("Control refusal")
+                        return reply["result"]
+                raise ValueError("Control event count")
+
+            credentials = (
+                {
+                    "mechanism": "API_KEY_PLAIN",
+                    "username": value["username"],
+                    "api_key": value["api_key"],
+                }
+                if value["api_key"]
+                else {"mechanism": "PASSWORD_PLAIN", "username": value["username"], "password": ""}
             )
-            response = connection.getresponse()
-            owned.callback(response.close)
-            _copy_response(response, value["limit"])
-            if time.monotonic() >= deadline:
-                raise TimeoutError("Transfer deadline")
-        except BaseException:
-            # Best effort for this exact allocated job only. A refused abort,
-            # broken channel, parent SIGKILL or process loss is not remote cleanup.
-            deadline = min(deadline, time.monotonic() + 1)
-            with contextlib.suppress(Exception):
-                rpc("core.job_abort", [job_id])
-            raise
+            result = await rpc("auth.login_ex", [credentials])
+            if not isinstance(result, dict) or result.get("response_type") != "SUCCESS":
+                raise ValueError("Authentication refused")
+            name = value["path"].rsplit("/", 1)[-1]
+            allocation = await rpc("core.download", ["filesystem.get", [value["path"]], name])
+            if (
+                not isinstance(allocation, list)
+                or len(allocation) != 2
+                or type(allocation[0]) is not int
+                or allocation[0] < 1
+            ):
+                raise ValueError("Download allocation")
+            job_id = allocation[0]
+            try:
+                url = _url(allocation[1])
+                connection = PinnedHTTPS(value["host"], value["port"], timeout=5, context=context)
+                owned.callback(connection.close)
+                connection.request(
+                    "GET",
+                    url,
+                    headers={
+                        "Host": authority,
+                        "Accept-Encoding": "identity",
+                        "Connection": "close",
+                    },
+                )
+                response = connection.getresponse()
+                owned.callback(response.close)
+                _copy_response(response, value["limit"])
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Transfer deadline")
+            except BaseException:
+                # Best effort for this exact allocated job only. A refused abort,
+                # broken channel, parent SIGKILL or process loss is not remote cleanup.
+                deadline = min(deadline, time.monotonic() + 1)
+                with contextlib.suppress(Exception):
+                    await rpc("core.job_abort", [job_id])
+                raise
+
+    asyncio.run(transfer())
     return 0
 
 

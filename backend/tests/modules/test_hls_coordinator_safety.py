@@ -16,6 +16,7 @@ import pytest_asyncio
 from app.core.private_files import private_directory
 from app.modules.cameras import coordinator as c
 from app.modules.cameras.service import HLSStreamService
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 
 @pytest_asyncio.fixture
@@ -41,7 +42,7 @@ async def connect(root):
 async def close(writer):
     writer.close()
     try:
-        await asyncio.wait_for(writer.wait_closed(), timeout=1)
+        await asyncio.wait_for(writer.wait_closed(), timeout=HARNESS_WAIT_SECONDS)
     except OSError:
         pass
 
@@ -149,7 +150,7 @@ async def test_bad_control_messages_are_bounded_fixed_refusals(root, payload):
     try:
         writer.write(payload)
         await writer.drain()
-        response = json.loads(await asyncio.wait_for(reader.readline(), timeout=2))
+        response = json.loads(await asyncio.wait_for(reader.readline(), timeout=HARNESS_WAIT_SECONDS))
         assert response["ok"] is False and response["error"] in ["invalid_request", "unavailable"]
         assert set(response) == {"ok", "error"} and not HLSStreamService._sessions
     finally:
@@ -162,7 +163,7 @@ async def test_silent_connection_is_closed_at_deadline(root, monkeypatch):
     await c.ensure_coordinator()
     reader, writer = await connect(root)
     try:
-        assert await asyncio.wait_for(reader.read(), timeout=2) == b""
+        assert await asyncio.wait_for(reader.read(), timeout=HARNESS_WAIT_SECONDS) == b""
     finally:
         await close(writer)
     await asyncio.sleep(0.01)
@@ -237,18 +238,18 @@ async def test_connection_limit_refuses_additional_idle_peer(root, monkeypatch):
     await c.ensure_coordinator()
     reader, writer = await connect(root)
     try:
-        async with asyncio.timeout(2):
+        async with asyncio.timeout(HARNESS_WAIT_SECONDS):
             while len(c._owner.clients) != 1:
                 await asyncio.sleep(0.01)
         second_reader, second_writer = await connect(root)
         try:
-            assert await asyncio.wait_for(second_reader.read(), timeout=2) == b""
+            assert await asyncio.wait_for(second_reader.read(), timeout=HARNESS_WAIT_SECONDS) == b""
         finally:
             await close(second_writer)
         assert len(c._owner.clients) == 1 and not HLSStreamService._sessions
     finally:
         await close(writer)
-    async with asyncio.timeout(2):
+    async with asyncio.timeout(HARNESS_WAIT_SECONDS):
         while c._owner.clients:
             await asyncio.sleep(0.01)
 

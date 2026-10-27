@@ -18,6 +18,7 @@ import httpx
 import pytest
 
 from app.services import backup, vault_native_resolution
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 
 def configuration(protocol, host="8.8.8.8"):
@@ -124,7 +125,7 @@ async def test_cancelled_configuration_worker_remains_owned_until_release(monkey
     monkeypatch.setattr(cls, "_configure_endpoint", held)
     task = asyncio.create_task(cls.create_bounded(configuration(protocol)))
     try:
-        with anyio.fail_after(2):
+        with anyio.fail_after(HARNESS_WAIT_SECONDS):
             while not entered.is_set():
                 await anyio.sleep(.001)
         task.cancel()
@@ -133,7 +134,7 @@ async def test_cancelled_configuration_worker_remains_owned_until_release(monkey
         assert cls._PREPARATION_ADMISSION.borrowed_tokens == cls._CONFIG_THREADS.borrowed_tokens == 1
     finally:
         release.set()
-        result = await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 3)
+        result = await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), HARNESS_WAIT_SECONDS)
     assert isinstance(result[0], asyncio.CancelledError) and returned.is_set()
     assert cls._PREPARATION_ADMISSION.borrowed_tokens == cls._CONFIG_THREADS.borrowed_tokens == 0
     request.node.user_properties.extend({"protocol": protocol, "real_configuration_thread_held": True,

@@ -149,6 +149,101 @@ def test_known_vulnerable_control_and_clean_real_result_have_distinct_rules(nati
     assert native.validate_scan(valid_scan(), control=False) == 0
 
 
+# Since 26.10.4 the native FFmpeg scan applies the image gate's review policy
+# (security/image-cve-review.toml): a match with a fix always fails, an unfixed
+# match passes only under a current review naming it for this component. With
+# no review file the scan stays exactly as strict as before.
+
+REVIEW_REASON = "No fixed FFmpeg release exists; reviewed against how FreeSDN feeds FFmpeg its inputs."
+
+
+def native_match(vid="CVE-2026-0002", state="", versions=()):
+    return {
+        "artifact": {"name": "ffmpeg", "version": "9.0.2"},
+        "vulnerability": {
+            "id": vid,
+            "severity": "High",
+            "fix": {"state": state, "versions": list(versions)},
+        },
+    }
+
+
+@pytest.fixture
+def reviews(native, tmp_path):
+    def build(vid="CVE-2026-0002", component="backend", review_by="2026-11-30"):
+        path = tmp_path / "review.toml"
+        path.write_text(
+            "[[unfixed]]\n"
+            f'id = "{vid}"\npackages = ["ffmpeg"]\ncomponents = ["{component}"]\n'
+            f'reason = "{REVIEW_REASON}"\nreviewed = 2026-10-26\nreview_by = {review_by}\n',
+            encoding="utf-8",
+        )
+        return native._review_gate().load_reviews(path)
+
+    return build
+
+
+def scan_with(*matches):
+    data = valid_scan()
+    data["matches"] = list(matches)
+    return data
+
+
+NOW = datetime(2026, 10, 27, 12, tzinfo=UTC)
+
+
+def reviewed_scan(data):
+    # validate_scan checks database freshness against `now`; keep it current.
+    data["descriptor"]["db"]["status"]["built"] = NOW.isoformat()
+    return data
+
+
+def test_unfixed_match_without_a_review_file_still_fails(native):
+    with pytest.raises(native.QualificationError, match="requiring review"):
+        native.validate_scan(reviewed_scan(scan_with(native_match())), control=False, now=NOW)
+
+
+def test_unfixed_match_under_a_current_review_passes_and_is_reported(native, reviews):
+    accepted = []
+    count = native.validate_scan(
+        reviewed_scan(scan_with(native_match())),
+        control=False, now=NOW, reviews=reviews(), component="backend", accepted=accepted,
+    )
+    assert count == 1 and accepted == ["CVE-2026-0002"]
+
+
+@pytest.mark.parametrize("fix", [{"state": "fixed"}, {"versions": ["9.0.3"]}])
+def test_a_match_with_a_fix_fails_even_when_reviewed(native, reviews, fix):
+    with pytest.raises(native.QualificationError, match="fixable"):
+        native.validate_scan(
+            reviewed_scan(scan_with(native_match(**fix))),
+            control=False, now=NOW, reviews=reviews(), component="backend",
+        )
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [
+        {"component": "go2rtc"},  # review names another image
+        {"vid": "CVE-2026-9999"},  # review names another CVE
+        {"review_by": "2026-10-26"},  # review expired before NOW
+    ],
+)
+def test_review_must_name_this_cve_and_component_and_be_current(native, reviews, variant):
+    with pytest.raises(native.QualificationError, match="CVE-2026-0002"):
+        native.validate_scan(
+            reviewed_scan(scan_with(native_match())),
+            control=False, now=NOW, reviews=reviews(**variant), component="backend",
+        )
+
+
+def test_reviews_never_soften_the_scanner_integrity_checks(native, reviews):
+    data = reviewed_scan(scan_with(native_match()))
+    data["ignoredMatches"] = [{"reason": "suppressed"}]
+    with pytest.raises(native.QualificationError, match="suppressed"):
+        native.validate_scan(data, control=False, now=NOW, reviews=reviews(), component="backend")
+
+
 def test_bounded_command_rejects_excessive_output(native):
     with pytest.raises(native.QualificationError, match="limit"):
         native.run_bounded([sys.executable, "-c", "print('x' * 1000000)"], limit=1024)

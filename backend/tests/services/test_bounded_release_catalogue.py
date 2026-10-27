@@ -16,6 +16,7 @@ from app.models.agents import AgentRelease
 from app.models.api_keys import APIKey
 from app.models.core import User
 from tests.db.conftest import maintenance_engine as maintenance_engine
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 from tests.services import test_agent_signing_lifecycle as lifecycle
 from tests.services.test_public_release_binary import public_reader as public_reader
 
@@ -178,7 +179,7 @@ async def test_real_page_query_wait_is_bounded_and_releases_request_resources(pu
             try:
                 task = asyncio.create_task(f.public_client.get(PAGE, headers=headers))
                 genuine = False
-                async with asyncio.timeout(3):
+                async with asyncio.timeout(HARNESS_WAIT_SECONDS):
                     while not genuine:
                         assert not task.done(), 'Request completed before actual catalogue wait'
                         for pid in pids:
@@ -201,7 +202,7 @@ async def test_real_page_query_wait_is_bounded_and_releases_request_resources(pu
                     expected = {'timeout': 503, 'valid-wait': 200, 'revoked-after-wait': 401}[mode]
                     assert response.status_code == expected, response.text
                     assert ('items' in response.json()) is (mode == 'valid-wait')
-                async with asyncio.timeout(3):
+                async with asyncio.timeout(HARNESS_WAIT_SECONDS):
                     while True:
                         # pg_stat_activity is cached within this observer's
                         # transaction. Poll live state without changing the
@@ -241,7 +242,7 @@ async def test_observer_cached_activity_requires_fresh_snapshot(public_reader, r
         async with f.engine.connect() as independent:
             independent_pid = await independent.scalar(text('SELECT pg_backend_pid()'))
             assert independent_pid not in (observer_pid, target_pid)
-            async with asyncio.timeout(3):
+            async with asyncio.timeout(HARNESS_WAIT_SECONDS):
                 while True:
                     await independent.execute(text('SELECT pg_stat_clear_snapshot()'))
                     if not await independent.scalar(query, {'pid': target_pid}):

@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.services import agent_release_delivery as delivery
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 
 class OwnedClosure:
@@ -98,9 +99,9 @@ async def test_raw_cancellation_is_not_converted_to_completion(started):
 
     item = response(run, started)
     task = asyncio.create_task(item({"type": "http", "method": "GET"}, never_receive, no_send))
-    await asyncio.wait_for(entered.wait(), 2)
+    await asyncio.wait_for(entered.wait(), HARNESS_WAIT_SECONDS)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await asyncio.wait_for(task, 2)
+        await asyncio.wait_for(task, HARNESS_WAIT_SECONDS)
     assert item._storage.closed == 1 and not item._completed
     all_reader_slots_returned()
