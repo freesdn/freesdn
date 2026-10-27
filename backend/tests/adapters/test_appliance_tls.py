@@ -27,6 +27,7 @@ from app.adapters.truenas.client import TrueNASClient
 from app.adapters.truenas.ws_client import TrueNASWSClient
 from app.adapters.unifi_protect.adapter import UniFiProtectAdapter
 from app.schemas.core import ControllerCreate, ControllerProbe
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 
 @pytest.fixture
@@ -108,7 +109,7 @@ def certificates(tmp_path, monkeypatch):
 async def https_server(context, received, *, redirect=None):
     async def handle(reader, writer):
         try:
-            header = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 3)
+            header = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), HARNESS_WAIT_SECONDS)
             length = next(
                 (
                     int(line.split(b":", 1)[1])

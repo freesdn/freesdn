@@ -24,16 +24,30 @@ permissions:
 
 concurrency:
   # Each frozen qualification SHA keeps its own run and evidence.
-  group: ci-${{ github.ref }}-${{ startsWith(github.ref, 'refs/heads/qualification/') && github.sha || 'latest' }}
+  # The event is part of the group so the weekly scheduled run can never cancel
+  # a push run: on 2026-10-26 the Monday cron fired six hours late, landed in the
+  # same group as the 26.10.3 release run, and cancelled its Backend job at 149
+  # minutes, leaving the release commit without a test verdict.
+  group: ci-${{ github.ref }}-${{ github.event_name }}-${{ startsWith(github.ref, 'refs/heads/qualification/') && github.sha || 'latest' }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/heads/qualification/') }}
 
 jobs:
   # ==========================================================================
   # Backend - ruff, PEP 765 compile check, schema bootstrap, full test suite
   # ==========================================================================
-  backend:
-    name: Backend
+  # The suite runs as 8 contiguous parts of about equal recorded running time
+  # (backend/tests/part_durations.json), each in its own process. As one process
+  # it ran for almost five hours and its heap kept growing: by the end a full
+  # garbage collection took 3 s, long enough to break tests with short timing
+  # windows (26.10.4 candidates 2 and 3). The `backend` job below is the verdict.
+  backend-tests:
+    name: Backend tests (${{ matrix.part }}/8)
     runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3, 4, 5, 6, 7, 8]
 
     services:
       postgres:
@@ -86,14 +100,17 @@ jobs:
         run: poetry install --no-root
 
       - name: Ruff lint
+        if: matrix.part == 1
         working-directory: backend
         run: poetry run ruff check app tests
 
       - name: Typing debt gate (no new diagnostics)
+        if: matrix.part == 1
         working-directory: backend
         run: poetry run python scripts/check_typing_baseline.py
 
       - name: Ruff format check
+        if: matrix.part == 1
         working-directory: backend
         run: poetry run ruff format --check app
 
@@ -101,6 +118,7 @@ jobs:
       # in-flight exceptions. Promote the SyntaxWarning to an error and compile
       # the whole tree fresh so no cached .pyc hides it.
       - name: PEP 765 check (no return/break/continue in finally)
+        if: matrix.part == 1
         working-directory: backend
         run: poetry run python -W error::SyntaxWarning -m compileall -q app
 
@@ -109,6 +127,7 @@ jobs:
         run: poetry run python scripts/migrate.py
 
       - name: Real database and API integration tests
+        if: matrix.part == 1
         working-directory: backend
         env:
           CI_REUSE_SERVICES: '1'
@@ -139,24 +158,56 @@ jobs:
         # puts the working directory (backend/) on sys.path. With the console script this
         # step died on "No module named 'tests'" before running a single test, and
         # 26.10.2 shipped with the Backend job red for exactly that reason.
-        run: poetry run python -m pytest -p tests.qualification_observer tests/ --tb=short -q --junitxml="${RUNNER_TEMP}/backend-test-evidence/junit.xml"
+        # The script collects the suite, runs this part's files in that order, and
+        # records which tests the part owns so the verdict can account for all of them.
+        run: poetry run python scripts/backend_test_parts.py run --part ${{ matrix.part }} --parts 8 --evidence "${RUNNER_TEMP}/backend-test-evidence" -- python -m pytest -p tests.qualification_observer --tb=short -q
 
       - name: Retain backend test results and timing evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: backend-test-evidence
+          name: backend-test-evidence-${{ matrix.part }}
           path: ${{ runner.temp }}/backend-test-evidence/
           if-no-files-found: warn
 
       - name: Offline queue and report recovery safety guards
+        if: matrix.part == 1
         working-directory: backend
         run: poetry run pytest ../scripts/tests/test_queue_inventory.py ../scripts/tests/test_queue_backup_recovery.py ../scripts/tests/test_report_recovery.py ../scripts/tests/test_auth_recovery.py ../scripts/tests/test_install_config.py ../scripts/tests/test_install_acceptance.py ../scripts/tests/test_runtime_marker_parity.py ../scripts/tests/test_event_retention.py ../scripts/tests/test_postgres_pressure.py ../scripts/tests/test_check_image_findings.py --tb=short -q
 
       - name: Offline database qualification evidence and interruption guards
+        if: matrix.part == 1
         working-directory: backend
         timeout-minutes: 5
         run: poetry run pytest ../scripts/tests/database_runtime --tb=short -q
+
+  # One verdict for every part, under the check name the suite has always had. It
+  # fails unless all 8 parts ran one collection, every collected test exactly
+  # once, and none failed, so a dropped or cancelled part cannot pass as green.
+  backend:
+    name: Backend
+    needs: backend-tests
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Collect every part's results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          pattern: backend-test-evidence-*
+          path: ${{ runner.temp }}/backend-test-evidence
+
+      - name: Every collected test ran exactly once and none failed
+        working-directory: backend
+        env:
+          UPSTREAM: ${{ needs.backend-tests.result }}
+        run: python scripts/backend_test_parts.py verify --parts 8 --evidence "${RUNNER_TEMP}/backend-test-evidence" --upstream "$UPSTREAM"
 
   # ==========================================================================
   # Frontend - eslint, type-check, unit tests, production build
@@ -751,7 +802,8 @@ jobs:
           grype db status -o json
           image_id=$(docker image inspect --format '{{.Id}}' "freesdn-${COMPONENT}:security")
           python3 scripts/check_native_media_security.py \
-            --image "$image_id" --work-dir "${RUNNER_TEMP}/native-media"
+            --image "$image_id" --work-dir "${RUNNER_TEMP}/native-media" \
+            --review security/image-cve-review.toml --component "$COMPONENT"
       - name: Gate on the image inventory
         env:
           COMPONENT: ${{ matrix.component }}

@@ -11,6 +11,7 @@ import pytest
 import pytest_asyncio
 
 from app.adapters.proxmox import client as module
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 MARKER = "owned-private-authentication-diagnostic"
 TICKET = "owned-valid-ticket"
@@ -135,7 +136,7 @@ async def test_cancelled_login_closes_pool_and_does_not_authenticate(peer):
     f.wait = asyncio.Event()
     task = asyncio.create_task(f.client.connect())
     try:
-        await asyncio.wait_for(f.entered.wait(), 2)
+        await asyncio.wait_for(f.entered.wait(), HARNESS_WAIT_SECONDS)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task

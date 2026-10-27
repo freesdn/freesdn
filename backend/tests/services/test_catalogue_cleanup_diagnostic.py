@@ -16,6 +16,7 @@ from app.db.session import get_session
 from app.models.agents import AgentRelease
 from app.models.api_keys import APIKey
 from tests.db.conftest import maintenance_engine as maintenance_engine
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 from tests.services import test_agent_signing_lifecycle as lifecycle
 from tests.services.test_public_release_binary import public_reader as public_reader
 
@@ -94,7 +95,7 @@ async def test_diagnostic_catalogue_query_cleanup(public_reader, mode, record_pr
             try:
                 task = asyncio.create_task(f.public_client.get(PAGE, headers=headers))
                 genuine = False
-                async with asyncio.timeout(3):
+                async with asyncio.timeout(HARNESS_WAIT_SECONDS):
                     while not genuine:
                         assert not task.done(), 'Request completed before actual catalogue wait'
                         for pid in pids:
@@ -118,7 +119,7 @@ async def test_diagnostic_catalogue_query_cleanup(public_reader, mode, record_pr
                     assert response.status_code == expected, response.text
                     assert ('items' in response.json()) is (mode == 'valid-wait')
                 try:
-                    async with asyncio.timeout(3):
+                    async with asyncio.timeout(HARNESS_WAIT_SECONDS):
                         while True:
                             # pg_stat_activity is cached within this observer's
                             # transaction. Poll live state without changing the

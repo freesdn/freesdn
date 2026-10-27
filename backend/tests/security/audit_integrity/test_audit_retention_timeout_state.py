@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.audit import _AUDIT_CHAIN_LOCK_KEY
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 from tests.security.audit_integrity.test_audit_retention_contention import owned as owned
 
 
@@ -49,7 +50,7 @@ async def test_cancelled_cleanup_preserves_exact_signed_state_and_rows(owned, bo
         task = owned.start()
         pid = await owned.pid()
         async with owned.engine.connect() as observer:
-            async with asyncio.timeout(4):
+            async with asyncio.timeout(HARNESS_WAIT_SECONDS):
                 while True:
                     witness = await observer.scalar(text("SELECT wait_event FROM pg_stat_activity WHERE pid=:pid"), {"pid": pid})
                     if witness == "PgSleep":

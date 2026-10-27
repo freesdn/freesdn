@@ -14,6 +14,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from tests.harness_wait import HARNESS_WAIT_SECONDS
+
 
 def _flood_event(i: int):
     """A minimal bus-event stand-in the Fabric dispatcher accepts."""
@@ -391,10 +393,10 @@ class TestNegotiatorClusterGuards:
 
         await rt._dispatch_connections(_flood_event(0))
         # DETACHED: the dispatcher returned while the chain is still blocked.
-        await asyncio.wait_for(started.wait(), 2)
+        await asyncio.wait_for(started.wait(), HARNESS_WAIT_SECONDS)
         assert "called" not in seen
         release.set()
-        await asyncio.wait_for(rt._chain_queue.join(), 2)
+        await asyncio.wait_for(rt._chain_queue.join(), HARNESS_WAIT_SECONDS)
         assert seen.get("called") == "x.y"
         assert chain_pool.delta()["handled"] == 1
 
@@ -554,12 +556,12 @@ class TestChainDispatchIsAdmissionBounded:
         monkeypatch.setattr(negotiator, "would_handle", lambda _ev: True)
 
         await rt._dispatch_connections(_flood_event(0))  # crashes
-        await asyncio.wait_for(rt._chain_queue.join(), 2)
+        await asyncio.wait_for(rt._chain_queue.join(), HARNESS_WAIT_SECONDS)
         workers = set(rt._chain_workers)
         assert all(not w.done() for w in workers), "a crashed chain retired its worker"
 
         await rt._dispatch_connections(_flood_event(1))  # still served
-        await asyncio.wait_for(rt._chain_queue.join(), 2)
+        await asyncio.wait_for(rt._chain_queue.join(), HARNESS_WAIT_SECONDS)
         assert seen == ["0", "1"]
         assert set(rt._chain_workers) == workers  # same pool, not a rebuilt one
         assert chain_pool.delta()["handled"] == 2  # a crash counts as handled

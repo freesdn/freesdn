@@ -50,6 +50,17 @@ pytestmark = pytest.mark.skipif(
     reason="not a git checkout (backend-only mount)",
 )
 
+#: The site projects and registry/build.py exist only in the private monorepo;
+#: release.py does not ship them in the public repository. Keyed on the release
+#: tooling, which also exists only there -- NOT on the checked paths themselves,
+#: so a monorepo that loses one of them still fails here instead of skipping.
+_MONOREPO = _ROOT is not None and (_ROOT / "launch-kit" / "release" / "release.py").is_file()
+_monorepo_only = pytest.mark.skipif(
+    not _MONOREPO,
+    reason="checks monorepo-only paths (site projects, registry/build.py) that the "
+    "public flatten does not carry",
+)
+
 #: Directories whose wrangler project we ship. Listed explicitly rather than
 #: globbed, so a NEW site that forgets its config is a failure here instead of
 #: silently reducing coverage to zero.
@@ -71,6 +82,7 @@ def _declared_output_dir(project: str) -> tuple[pathlib.Path, str]:
     return toml.parent, match.group(1)
 
 
+@_monorepo_only
 @pytest.mark.parametrize("project", _WRANGLER_PROJECTS)
 def test_every_wrangler_build_output_dir_resolves(project: str) -> None:
     """The output dir's PARENT must exist; ``dist`` itself is a build artifact.
@@ -113,6 +125,7 @@ def test_no_shipped_config_or_doc_still_says_freesdn_slash() -> None:
     )
 
 
+@_monorepo_only
 def test_the_registry_seed_default_points_at_the_app() -> None:
     """``build.py``'s ``--seed-out`` default must resolve to the real seed file.
 

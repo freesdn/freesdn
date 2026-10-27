@@ -17,6 +17,7 @@ from app.db.session import get_session
 from app.models.api_keys import APIKey
 from app.models.core import User, UserSession
 from tests.db.conftest import maintenance_engine as maintenance_engine
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 from tests.services import test_agent_signing_lifecycle as lifecycle
 from tests.services import test_public_release_binary as binary
 from tests.services.test_public_release_binary import public_reader as public_reader
@@ -79,7 +80,7 @@ async def test_catalogue_refuses_authority_changed_during_real_query_wait(public
             await holder.execute(text('LOCK TABLE agents.agent_releases IN ACCESS EXCLUSIVE MODE'))
             try:
                 task = asyncio.create_task(f.public_client.get('/api/v1/agents/releases', headers=headers))
-                async with f.engine.connect() as observer, asyncio.timeout(3):
+                async with f.engine.connect() as observer, asyncio.timeout(HARNESS_WAIT_SECONDS):
                     while not genuine:
                         assert not task.done(), 'Request completed before the required catalogue wait'
                         for pid in pids:

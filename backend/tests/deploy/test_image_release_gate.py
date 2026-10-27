@@ -95,6 +95,11 @@ def test_application_images_have_blocking_full_inventory_gates(workflow):
     assert gate_index > scan_index
     native = [i for i, s in enumerate(steps) if "check_native_media_security.py" in s.get("run", "")]
     assert all(gate_index > i for i in native)
+    # The native FFmpeg scan applies the same review file to the same component.
+    for i in native:
+        assert "--review security/image-cve-review.toml" in steps[i]["run"]
+        assert '--component "$COMPONENT"' in steps[i]["run"]
+        assert steps[i]["env"]["COMPONENT"] == "${{ matrix.component }}"
     assert f"--findings {scan['with']['output']}" in gate["run"]
     assert "--review security/image-cve-review.toml" in gate["run"]
     assert '--component "$COMPONENT"' in gate["run"]

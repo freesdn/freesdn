@@ -9,6 +9,104 @@ FreeSDN is a Community Edition project maintained by its sole owner and
 developer. Releases may contain breaking changes between versions -
 **back up your data before upgrading.**
 
+## [26.10.4] - 2026-10-27 - What 26.10.3's checks were still red on
+
+26.10.3 shipped with two checks failing and one that never finished, all on
+the release commit itself. This release exists to clear them, and it was
+proved green on GitHub's own runners, on the exact commit, before it was
+published.
+
+### Changed
+
+- **Source-built FFmpeg findings are now reviewed the same way as image
+  findings.** The backend and go2rtc images compile FFmpeg 9.0.2 from source,
+  and five advisories were published against it after 26.10.3 shipped
+  (CVE-2026-107696, high; CVE-2026-107675, -107676, -107677, -107678, medium).
+  FFmpeg has not released a fix. The check that scans this component accepted
+  no findings at all, so it could not pass until upstream did. It now follows
+  the policy introduced in 26.10.3: a finding with a fix always fails, and one
+  without a fix needs a written, expiring review in
+  `security/image-cve-review.toml`. Without that file the check is as strict as
+  before.
+
+  One of the five is reachable in practice, and its review says so:
+  **CVE-2026-107696** makes FFmpeg follow RTSP redirects without a limit. A
+  malicious camera, or anyone able to tamper with unencrypted RTSP traffic on
+  that network, can make one FFmpeg process loop. Short probes are stopped by
+  their timeouts; a live-view transcode keeps spinning until the viewing session
+  ends. The impact is CPU load, not code execution. It is accepted for 14 days
+  only, so it is reviewed again as soon as FFmpeg 9.0.3 is available. The other
+  four need inputs FreeSDN does not produce (an `sftp://` stream, a DASH
+  manifest, HDR10+ metadata output, or a crafted encrypted MP4).
+
+### Fixed
+
+- **A TrueNAS backup download could fail after 5 seconds with "TrueNAS backup
+  transfer failed; verify the destination and retry".** The process that fetches
+  the archive used a WebSocket client that reads the appliance's control channel
+  on a background thread while the main thread writes to it, and OpenSSL does not
+  allow both at once on one connection. When the appliance's TLS session tickets
+  arrived during the first request, that request was lost. Under load this
+  happened to 4 of 2,400 transfers, and retrying succeeded. The control channel
+  now runs on a single thread, as the TrueNAS adapter's already does. What is
+  sent, checked and refused is unchanged.
+- **The full backend test suite in public CI was cancelled, not failed.** A
+  weekly scheduled run started six hours late, shared a concurrency group with
+  the release run, and cancelled it after 149 minutes. Scheduled and push runs
+  no longer cancel each other.
+- **The public backend test suite could not pass, whatever the code did.** Once
+  it ran to completion it finished with 572 failures, and 564 of them came from
+  seventeen plugin and marketplace test files that read the plugin registry's
+  published archives as fixtures. The registry is a separate project that is not
+  part of this repository, so here those tests could only fail. They are no
+  longer shipped in this repository and keep running in the project's own
+  release checks. Two tests that check development-only paths now run only where
+  those paths exist.
+- **One more VoIP site-access test failed, and its counterpart passed without
+  testing anything,** for the same reason as the two fixed in 26.10.3. Every
+  test covering those lookups was found and corrected, rather than the next one
+  waiting to surface; disabling the access check now fails exactly the three
+  rejection tests.
+- The 26.10.3 notes said the database-image review covered 16 advisories; it is
+  17.
+- **Valkey could be killed for running out of memory on the Lite and Pro
+  tiers.** A persistence fork under write pressure (an AOF rewrite or an RDB
+  snapshot) needs memory well beyond Valkey's own data budget: allocator
+  fragmentation roughly doubled its real footprint, and the fork's
+  copy-on-write and write cache came on top. The check that pressure-tests
+  these limits was OOM-killed in 8 of 28 recorded runs on Lite (256 MiB) and in
+  5 of about 20 on Pro (768 MiB). Max, with the same Valkey configuration and
+  1 GiB, never was. The Valkey container limit is now 384 MiB on Lite and 1 GiB
+  on Pro; the data budgets (64 MiB and 256 MiB) are unchanged. A container limit
+  is a ceiling, not a reservation, so this uses no extra memory in normal
+  operation. The documentation also still gave Lite's data budget as 96 MiB; it
+  is 64 MiB.
+- **Backend tests failed in public CI because the test process had been running
+  for hours.** The whole suite ran as one process for almost five hours, and its
+  heap kept growing: a full garbage collection took under 1.4 seconds early in the
+  run and about 3 seconds by the end. When one landed inside a test's short timing
+  window, that test failed: a different one or two tests, out of more than 20,000,
+  in each of two qualification runs of this release. The suite now runs as 8
+  parts of about equal running time, each a contiguous slice of the usual order
+  in its own process, and the Backend check passes only when the 8 parts together ran every collected test
+  exactly once with none failing. Garbage collection itself is unchanged. 47 waits
+  that only guard against a test hanging now allow 30 seconds, and one test sets
+  its own download deadline to 6 seconds instead of 2. Timing bounds that state a
+  product promise, such as refusing promptly instead of waiting on a lock, are
+  unchanged.
+- **A legacy release-storage test failed when the machine was fast enough.** It
+  changed a file within the same kernel clock tick as its own setup, and a change
+  check based on file timestamps cannot see that. Its fixture now dates the
+  release a minute back, as a real release would be.
+
+### Upgrading
+
+Apart from the TrueNAS download fix, no application code changed since 26.10.3,
+and that fix needs nothing from you. One setting does change, and merging
+the new env example does not update your saved env file: on **Lite**, set
+`REDIS_MEM_LIMIT=384M`; on **Pro**, set `REDIS_MEM_LIMIT=1G`. Then recreate the
+Valkey container with your usual `docker compose ... up -d`. Max is unchanged.
+
 ## [26.10.3] - 2026-10-26 - Security maintenance
 
 The first of the monthly security releases. In the two weeks after 26.10.2,
@@ -97,7 +195,7 @@ adopted.
   Previously every finding failed the build, including ones the upstream
   distribution has not fixed. The PostgreSQL and LogDB images run on Debian 13,
   which currently carries 62 such findings, so those checks could never pass
-  however current the images were. Each of the 16 underlying advisories is now
+  however current the images were. Each of the 17 underlying advisories is now
   reviewed against how FreeSDN runs the databases (no published ports,
   `no-new-privileges` on every database service, no use of PostgreSQL's XML
   functions). A finding becomes a failure again the moment a fix is published,

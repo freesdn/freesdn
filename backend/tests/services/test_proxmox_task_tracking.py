@@ -23,6 +23,7 @@ from app.schemas.gateway_vpn import PendingChangeResponse
 from app.services import proxmox_task_tracking as tracking
 from app.services.adapter_staging import AdapterStagingService
 from tests.adapters.test_proxmox_write_outcomes import UPID, connected
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 
 @pytest_asyncio.fixture
@@ -212,7 +213,7 @@ async def test_workers_skip_locked_task_and_resume_after_cancel(records, monkeyp
     adapter.get_task_status.side_effect = read
     worker = asyncio.create_task(tracking.poll_due_tasks())
     try:
-        await asyncio.wait_for(entered.wait(), 3)
+        await asyncio.wait_for(entered.wait(), HARNESS_WAIT_SECONDS)
         assert await asyncio.wait_for(tracking.poll_due_tasks(), 3) == {"polled": 0}
         worker.cancel()
         with pytest.raises(asyncio.CancelledError):

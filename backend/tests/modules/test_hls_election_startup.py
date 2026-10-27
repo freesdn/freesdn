@@ -16,6 +16,7 @@ import pytest
 
 from app.core.private_files import private_directory
 from app.modules.cameras import coordinator as coordinator
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 from tests.modules import test_hls_coordinator_safety as safety_helpers
 
 root = safety_helpers.root
@@ -187,7 +188,7 @@ async def test_interrupted_election_removes_only_its_socket_and_releases_lock(
 
     monkeypatch.setattr(coordinator.asyncio, "start_unix_server", fail_or_wait)
     task = asyncio.create_task(coordinator.ensure_coordinator())
-    await asyncio.wait_for(entered.wait(), 2)
+    await asyncio.wait_for(entered.wait(), HARNESS_WAIT_SECONDS)
     if failure == "cancel":
         task.cancel()
     with pytest.raises(asyncio.CancelledError if failure == "cancel" else OSError):

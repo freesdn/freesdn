@@ -137,7 +137,11 @@ async def test_small_outer_download_retains_admission_until_delivery_ends(
 async def test_small_outer_download_deadline_outlives_producer_completion(
     monkeypatch, tmp_path, webdav_peer, request, backend, credential, secrets,
 ):
-    async with subject(monkeypatch, tmp_path, webdav_peer, backend, credential, secrets, seconds=2) as f:
+    # Short enough to expire while the first chunk is held, long enough that the
+    # authentication and preparation inside it finish first. At 2 s, one full
+    # garbage collection during preparation (2.3 s in public CI) spent all of it.
+    deadline = 6
+    async with subject(monkeypatch, tmp_path, webdav_peer, backend, credential, secrets, seconds=deadline) as f:
         first_headers = await recorded_download_headers(f.actor, f.backup_id, secrets)
         retry_headers = await recorded_download_headers(f.actor, f.backup_id, secrets)
         sink = SlowBodySink()
@@ -148,7 +152,7 @@ async def test_small_outer_download_deadline_outlives_producer_completion(
             assert 0 < len(f.saved) == sink.held_chunk <= 65536 and sink.status == 200
             # Start at the actual held-body boundary, after authentication and preparation.
             started = time.monotonic()
-            while time.monotonic() - started < 2.4:
+            while time.monotonic() - started < deadline + .4:
                 await asyncio.sleep(.01)
             ended_before_sink_release = task.done()
             sink_held_until_deadline = not sink.release.is_set()
@@ -161,7 +165,7 @@ async def test_small_outer_download_deadline_outlives_producer_completion(
                 first_result_type=type(results[0]).__name__, first_status=sink.status,
                 first_bytes=sink.bytes, first_complete=sink.finished,
                 retry_status=retry.status_code, retry_exact_archive=retry.content == f.saved)
-            assert elapsed >= 2.4 and sink_held_until_deadline
+            assert elapsed >= deadline + .4 and sink_held_until_deadline
             assert observed["no_snapshot_descriptors"]
             assert observed["network_clients_open"] == observed["network_pool_connections"] == 0
             assert ended_before_sink_release, "Request deadline stopped with the producer before outer delivery ended"
