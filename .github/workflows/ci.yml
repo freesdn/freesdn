@@ -167,7 +167,7 @@ jobs:
 
       - name: Retain backend test results and timing evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: backend-test-evidence-${{ matrix.part }}
           path: ${{ runner.temp }}/backend-test-evidence/
@@ -553,7 +553,7 @@ jobs:
       # Only the sanitized receipt is public; private fixtures include credentials.
       - name: Preserve sanitized queue inventory qualification evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: queue-inventory-qualification
           path: ${{ runner.temp }}/queue-inventory-private/report.json
@@ -567,7 +567,7 @@ jobs:
       # Never upload backups, credentials, envelope manifests or private logs.
       - name: Preserve sanitized queue backup recovery evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: queue-backup-recovery-qualification
           path: ${{ runner.temp }}/queue-backup-private/report.json
@@ -582,7 +582,7 @@ jobs:
       # Never publish synthetic credentials, raw logs, certificates or snapshots.
       - name: Preserve sanitized report recovery evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: report-recovery-qualification
           path: ${{ runner.temp }}/report-recovery-private/report.json
@@ -597,7 +597,7 @@ jobs:
           --work-dir "${{ runner.temp }}/postgres-pressure-private"
       - name: Preserve sanitized PostgreSQL pressure evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: postgres-pressure-qualification
           path: ${{ runner.temp }}/postgres-pressure-private/report.json
@@ -615,7 +615,7 @@ jobs:
           --soak-seconds 60 --report-disk-pressure
       - name: Preserve sanitized installation acceptance evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: install-acceptance-qualification
           path: ${{ runner.temp }}/install-acceptance-private/report.json
@@ -628,25 +628,25 @@ jobs:
           --work-dir "${{ runner.temp }}/event-retention-private"
       - name: Preserve sanitized event retention evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: event-retention-qualification
           path: ${{ runner.temp }}/event-retention-private/report.json
       - name: Preserve Valkey memory qualification evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: valkey-memory-qualification
           path: valkey-memory.*
       - name: Preserve Valkey fault qualification evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: valkey-ha-qualification
           path: valkey-ha.*
       - name: Preserve database qualification reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: database-runtime-qualification
           path: database-*.json
@@ -817,7 +817,7 @@ jobs:
           python3 scripts/check_image_findings.py --findings image-findings.json --review security/image-cve-review.toml --component "$COMPONENT"
       - name: Preserve image inventory and findings even on failure
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-findings-${{ matrix.component }}
           path: |
@@ -872,7 +872,7 @@ jobs:
             '
       - name: Preserve source findings even when the gate fails
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: go-source-findings-${{ matrix.component }}
           path: go-source-findings/findings.txt
