@@ -22,7 +22,7 @@ uv = "0.13.7"                # >=0.13.4: GHSA-hq85-5cpj-mr62 (critical); runs at
 # upper-bound conflict, and the full suite gates the bump. The minor is still
 # pinned deliberately -- fastapi 0.137 changed the route type the OpenAPI export
 # walks, and that ripple is the reason this ceiling exists at all.
-fastapi = ">=0.141.1,<0.142"
+fastapi = ">=0.141.1,<0.163"
 uvicorn = {extras = ["standard"], version = ">=0.53.0"}
 gunicorn = ">=26.2.0"
 # Database
