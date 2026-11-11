@@ -40,7 +40,7 @@ x-valkey-build: &valkey-build
   context: ./docker
   dockerfile: Dockerfile.valkey
   args:
-    VALKEY_VERSION: ${VALKEY_VERSION:-9.1.2-alpine}
+    VALKEY_VERSION: ${VALKEY_VERSION:-9.1.3-alpine}
 
 services:
   # The public edge must use both replicas, not the base stack's single API.
@@ -187,6 +187,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
+    # Like the primary: the kernel then ignores SUID, which the database image
+    # reviews in security/image-cve-review.toml rely on. Privileges are dropped
+    # with gosu, which needs none.
+    security_opt: [no-new-privileges:true]
     networks: [default]
 
   # Persist Sentinel configuration, including epochs and elected master.

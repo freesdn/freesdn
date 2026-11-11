@@ -154,10 +154,7 @@ func (fixtureDiscovery) IFaces() (string, error) {
 	return "allowed0 77 1450 true true false false true | 192.0.2.1/24\nblocked0 78 1400 true true false false true | 198.51.100.1/24", nil
 }
 func TestFreeSDNProbeInterfaces(t *testing.T) {
-	custom, err := stdnet.NewNetWithDiscover(context.Background(), fixtureDiscovery{}, []string{"blocked0"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	custom := stdnet.NewNetWithDiscover(context.Background(), fixtureDiscovery{}, []string{"blocked0"}, nil)
 	bridge := &probeNet{custom}
 	ifaces, err := bridge.Interfaces()
 	if err != nil {
@@ -206,10 +203,7 @@ func TestFreeSDNProbeRoutingHooks(t *testing.T) {
 	t.Cleanup(hooks.RemoveWriteHooks)
 	hooks.AddCloseHook(func(_ hooks.ConnectionID) error { closes.Add(1); return nil })
 	t.Cleanup(hooks.RemoveCloseHooks)
-	custom, err := stdnet.NewNet(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	custom := stdnet.NewNet(context.Background(), nil, nil)
 	bridge := &probeNet{custom}
 	receiver, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	if err != nil {

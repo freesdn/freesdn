@@ -91,6 +91,9 @@ export default defineConfig({
     manifest: true,
     sourcemap: process.env.NODE_ENV === 'production' ? false : true,
     chunkSizeWarningLimit: 1500,
+    // Fonts always ship as files. A subset small enough to inline became a
+    // data: URI, which every deployment's CSP (font-src 'self') blocks.
+    assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined),
     rollupOptions: {
       output: {
         manualChunks(id) {

@@ -6,13 +6,13 @@
 # Stage 1: Base Python image with Poetry
 # ============================================
 # Tailscale source and its patched module graph are checksum-locked separately.
-FROM golang:1.27.3-alpine3.24 AS tailscale-builder
+FROM golang:1.27.4-alpine3.24 AS tailscale-builder
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /build
 COPY tailscale-build/go.mod tailscale-build/go.sum ./
 RUN go mod download all && go mod verify
 RUN go build -mod=readonly -trimpath \
-    -ldflags="-s -w -X tailscale.com/version.longStamp=1.102.4-freesdn -X tailscale.com/version.shortStamp=1.102.4" \
+    -ldflags="-s -w -X tailscale.com/version.longStamp=1.104.5-freesdn -X tailscale.com/version.shortStamp=1.104.5" \
     -o /out/ tailscale.com/cmd/tailscale tailscale.com/cmd/tailscaled tailscale.com/cmd/containerboot
 
 # Optional private-access image. No Python, media stack or app credentials.
@@ -24,7 +24,7 @@ RUN mkdir -p /var/lib/tailscale /tailscale \
     && ln -s /usr/local/bin/containerboot /tailscale/run.sh
 ENTRYPOINT ["/usr/local/bin/containerboot"]
 
-FROM golang:1.27.3-alpine3.24 AS netbird-builder
+FROM golang:1.27.4-alpine3.24 AS netbird-builder
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /build
 COPY netbird-build/go.mod netbird-build/go.sum ./
@@ -38,7 +38,7 @@ RUN apk add --no-cache build-base \
     && CGO_ENABLED=1 go test -mod=vendor -race -count=3 -timeout=120s \
        github.com/netbirdio/netbird/client/internal/relay
 RUN go build -mod=vendor -trimpath \
-    -ldflags="-s -w -X github.com/netbirdio/netbird/version.version=0.79.0-freesdn" \
+    -ldflags="-s -w -X github.com/netbirdio/netbird/version.version=0.82.0-freesdn" \
     -o /out/netbird github.com/netbirdio/netbird/client
 
 # Signed upstream stable media build; stable Alpine dependencies only.
@@ -47,7 +47,7 @@ WORKDIR /build
 COPY ffmpeg-build/ ./
 RUN sh /build/build.sh
 
-FROM python:3.14.8-alpine3.24 AS python-base
+FROM python:3.14.10-alpine3.24 AS python-base
 # Exact upstream security backports; unknown Python source fails the build.
 COPY python-security/ /usr/local/share/freesdn/python-security/
 RUN python -B /usr/local/share/freesdn/python-security/apply_backports.py \

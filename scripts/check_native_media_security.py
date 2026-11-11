@@ -36,6 +36,17 @@ RECIPE_FILES = (
     "source-lock.json",
     "verified-inputs.sha256",
     "posix-ioctl.patch",
+    "cve-2026-107675-libssh-hostkey.patch",
+    "cve-2026-107676-hdr10plus.patch",
+    "cve-2026-107677-dash.patch",
+    "cve-2026-107678-encryption-info.patch",
+    "cve-2026-107696-rtsp-redirects.patch",
+    "cve-2026-120243-g2m.patch",
+    "cve-2026-120244-pcx.patch",
+    "cve-2026-120245-sunrast-1.patch",
+    "cve-2026-120245-sunrast-2.patch",
+    "cve-2026-120246-cdxl.patch",
+    "cve-2026-120247-huffyuv.patch",
     "ffmpeg-devel.asc",
     "NOTICE",
 )
@@ -272,7 +283,11 @@ def validate_scan(
         age = (now or datetime.now(UTC)) - built
     except (KeyError, TypeError, ValueError):
         raise QualificationError("Native vulnerability database age is unknown") from None
-    if age < -timedelta(minutes=10) or age > timedelta(hours=24):
+    # Grype publishes one database a day and has skipped days: on 2026-11-09 the
+    # newest was 33 hours old, and a 24-hour limit failed every scan that day
+    # whatever the image held. 48 hours tolerates one missed publication and
+    # still refuses a database more than a day out of date.
+    if age < -timedelta(minutes=10) or age > timedelta(hours=48):
         raise QualificationError("Native vulnerability database is not current")
     if result.get("ignoredMatches"):
         raise QualificationError("Native scanner suppressed findings")

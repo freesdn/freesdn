@@ -12,7 +12,7 @@ import signal
 import socket
 import sys
 from collections.abc import Callable, Generator
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 if TYPE_CHECKING:
@@ -191,12 +191,13 @@ def main() -> int:
         proto: int = 0,
         flags: int = 0,
     ) -> list[
-        tuple[
-            socket.AddressFamily,
+        tuple[Literal[socket.AddressFamily.AF_INET], socket.SocketKind, int, str, tuple[str, int]]
+        | tuple[
+            Literal[socket.AddressFamily.AF_INET6],
             socket.SocketKind,
             int,
             str,
-            tuple[str, int] | tuple[str, int, int, int] | tuple[int, bytes],
+            tuple[str, int, int, int] | tuple[int, bytes],
         ]
     ]:
         name = host

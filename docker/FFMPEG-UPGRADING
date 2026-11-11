@@ -10,8 +10,8 @@ the signed stable repositories. No Alpine edge repository or opaque third-party
 runtime executable is used. Distribution FFmpeg packages must not coexist.
 
 The exact upstream source tarball, signature, public verification key, musl V4L2
-patch, build recipe, dependency versions and runtime hashes accompany the image
-under /usr/share/freesdn-sources/ffmpeg. License texts are under
+patch, upstream security backports, build recipe, dependency versions and runtime
+hashes accompany the image under /usr/share/freesdn-sources/ffmpeg. License texts are under
 /usr/share/licenses/ffmpeg. GPL/version3 and x264/x265 are enabled. This is an
 inspectable source bundle for this media build, not a declaration that every
 transitive dependency has undergone an independent license/security audit.
@@ -32,6 +32,13 @@ not arm64 release acceptance. No stable multi-architecture manifest is authorize
 by an amd64 test pass. Every produced image needs fresh SBOM/vulnerability scans,
 media/runtime tests, immutable digest binding and release provenance. Upstream
 compiler warnings are retained; successful compilation is not a security audit.
+
+Security backports: cve-*.patch are unmodified FFmpeg upstream commits applied
+on top of 9.0.2 for advisories no release carries yet. source-lock.json
+"backports" records each file, hash, upstream commit and advisory, and every one
+has an entry in security/image-cve-review.toml because the scanner matches by
+version and cannot see a patch. When upgrading, drop each patch the new release
+already contains (it would no longer apply) together with its review entry.
 
 The two ffmpeg-build recipe directories are intentionally byte-identical because
 backend and optional services use separate Docker build contexts. Change both

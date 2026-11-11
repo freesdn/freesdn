@@ -1,5 +1,5 @@
-gosu 1.19 (upstream commit 6456aaa0f3c8), Copyright Tianon Gravi and contributors. Apache-2.0; see LICENSE.
-FreeSDN rebuilds the released source with Go 1.27.1 and the dependency versions in go.mod/go.sum.
+gosu 1.20 (upstream commit 29b939aa5bd4), Copyright Tianon Gravi and contributors. Apache-2.0; see LICENSE.
+FreeSDN rebuilds the released source with Go 1.27.4 and the dependency versions in go.mod/go.sum.
 This is a FreeSDN build, not an upstream gosu release binary.
 
 Bundled dependency license texts
@@ -209,9 +209,8 @@ github.com/moby/sys/user v0.4.1 / LICENSE
    See the License for the specific language governing permissions and
    limitations under the License.
 
-
 ========================================================================
-github.com/tianon/gosu v0.0.0-20250923190938-6456aaa0f3c8 / LICENSE
+github.com/tianon/gosu v0.0.0-20261025094355-29b939aa5bd4 / LICENSE
 
                                  Apache License
                            Version 2.0, January 2004
@@ -415,9 +414,9 @@ github.com/tianon/gosu v0.0.0-20250923190938-6456aaa0f3c8 / LICENSE
    See the License for the specific language governing permissions and
    limitations under the License.
 
-
 ========================================================================
 golang.org/x/sys v0.48.0 / LICENSE
+
 Copyright 2009 The Go Authors.
 
 Redistribution and use in source and binary forms, with or without
@@ -446,3 +445,28 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+========================================================================
+golang.org/x/sys v0.48.0 / PATENTS
+
+Additional IP Rights Grant (Patents)
+
+"This implementation" means the copyrightable works distributed by
+Google as part of the Go project.
+
+Google hereby grants to You a perpetual, worldwide, non-exclusive,
+no-charge, royalty-free, irrevocable (except as stated in this section)
+patent license to make, have made, use, offer to sell, sell, import,
+transfer and otherwise run, modify and propagate the contents of this
+implementation of Go, where such license applies only to those patent
+claims, both currently owned or controlled by Google and acquired in
+the future, licensable by Google that are necessarily infringed by this
+implementation of Go.  This grant does not include claims that would be
+infringed only as a consequence of further modification of this
+implementation.  If you or your agent or exclusive licensee institute or
+order or agree to the institution of patent litigation against any
+entity (including a cross-claim or counterclaim in a lawsuit) alleging
+that this implementation of Go or any code incorporated within this
+implementation of Go constitutes direct or contributory patent
+infringement, or inducement of patent infringement, then any patent
+rights granted to you under this License for this implementation of Go
+shall terminate as of the date such litigation is filed.

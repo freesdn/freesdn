@@ -2,7 +2,7 @@ Copyright 2018 William Rouesnel
 Copyright 2021 The Prometheus Authors
 
 github.com/prometheus-community/postgres_exporter v0.20.1; FreeSDN rebuild of the released source.
-Go 1.27.1 and the security dependency graph in go.mod/go.sum are used.
+Go 1.27.4 and the security dependency graph in go.mod/go.sum are used.
 The original entrypoint, configuration paths and runtime user are retained.
 This is a FreeSDN build, not an upstream release binary.
 
@@ -10,6 +10,7 @@ Bundled dependency license texts
 
 ========================================================================
 github.com/alecthomas/kingpin/v2 v2.4.0 / COPYING
+
 Copyright (C) 2014 Alec Thomas
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -29,10 +30,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
 
 ========================================================================
 github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b / COPYING
+
 Copyright (C) 2014 Alec Thomas
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -53,9 +54,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-
 ========================================================================
 github.com/beorn7/perks v1.0.1 / LICENSE
+
 Copyright (C) 2013 Blake Mizerany
 
 Permission is hereby granted, free of charge, to any person obtaining
@@ -77,9 +78,9 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
 ========================================================================
 github.com/blang/semver/v4 v4.0.0 / LICENSE
+
 The MIT License
 
 Copyright (c) 2014 Benedikt Lang <github at benediktlang.de>
@@ -102,10 +103,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-
-
 ========================================================================
 github.com/cespare/xxhash/v2 v2.3.0 / LICENSE.txt
+
 Copyright (c) 2016 Caleb Spare
 
 MIT License
@@ -129,9 +129,9 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
 ========================================================================
 github.com/coreos/go-systemd/v22 v22.7.0 / LICENSE
+
 Apache License
 Version 2.0, January 2004
 http://www.apache.org/licenses/
@@ -324,18 +324,18 @@ third-party archives.
    See the License for the specific language governing permissions and
    limitations under the License.
 
-
 ========================================================================
 github.com/coreos/go-systemd/v22 v22.7.0 / NOTICE
+
 CoreOS Project
 Copyright 2018 CoreOS, Inc
 
 This product includes software developed at CoreOS, Inc.
 (http://www.coreos.com/).
 
-
 ========================================================================
 github.com/golang-jwt/jwt/v5 v5.3.1 / LICENSE
+
 Copyright (c) 2012 Dave Grijalva
 Copyright (c) 2021 golang-jwt maintainers
 
@@ -345,10 +345,9 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
-
 ========================================================================
 github.com/google/uuid v1.6.0 / LICENSE
+
 Copyright (c) 2009,2014 Google Inc. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -377,9 +376,9 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 ========================================================================
 github.com/jpillora/backoff v1.0.0 / LICENSE
+
 The MIT License (MIT)
 
 Copyright (c) 2017 Jaime Pillora
@@ -402,9 +401,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-
 ========================================================================
 github.com/lib/pq v1.10.9 / LICENSE.md
+
 Copyright (c) 2011-2013, 'pq' Contributors
 Portions Copyright (C) 2011 Blake Mizerany
 
@@ -414,177 +413,9 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
-========================================================================
-github.com/lib/pq v1.10.9 / notice.go
-//go:build go1.10
-// +build go1.10
-
-package pq
-
-import (
-	"context"
-	"database/sql/driver"
-)
-
-// NoticeHandler returns the notice handler on the given connection, if any. A
-// runtime panic occurs if c is not a pq connection. This is rarely used
-// directly, use ConnectorNoticeHandler and ConnectorWithNoticeHandler instead.
-func NoticeHandler(c driver.Conn) func(*Error) {
-	return c.(*conn).noticeHandler
-}
-
-// SetNoticeHandler sets the given notice handler on the given connection. A
-// runtime panic occurs if c is not a pq connection. A nil handler may be used
-// to unset it. This is rarely used directly, use ConnectorNoticeHandler and
-// ConnectorWithNoticeHandler instead.
-//
-// Note: Notice handlers are executed synchronously by pq meaning commands
-// won't continue to be processed until the handler returns.
-func SetNoticeHandler(c driver.Conn, handler func(*Error)) {
-	c.(*conn).noticeHandler = handler
-}
-
-// NoticeHandlerConnector wraps a regular connector and sets a notice handler
-// on it.
-type NoticeHandlerConnector struct {
-	driver.Connector
-	noticeHandler func(*Error)
-}
-
-// Connect calls the underlying connector's connect method and then sets the
-// notice handler.
-func (n *NoticeHandlerConnector) Connect(ctx context.Context) (driver.Conn, error) {
-	c, err := n.Connector.Connect(ctx)
-	if err == nil {
-		SetNoticeHandler(c, n.noticeHandler)
-	}
-	return c, err
-}
-
-// ConnectorNoticeHandler returns the currently set notice handler, if any. If
-// the given connector is not a result of ConnectorWithNoticeHandler, nil is
-// returned.
-func ConnectorNoticeHandler(c driver.Connector) func(*Error) {
-	if c, ok := c.(*NoticeHandlerConnector); ok {
-		return c.noticeHandler
-	}
-	return nil
-}
-
-// ConnectorWithNoticeHandler creates or sets the given handler for the given
-// connector. If the given connector is a result of calling this function
-// previously, it is simply set on the given connector and returned. Otherwise,
-// this returns a new connector wrapping the given one and setting the notice
-// handler. A nil notice handler may be used to unset it.
-//
-// The returned connector is intended to be used with database/sql.OpenDB.
-//
-// Note: Notice handlers are executed synchronously by pq meaning commands
-// won't continue to be processed until the handler returns.
-func ConnectorWithNoticeHandler(c driver.Connector, handler func(*Error)) *NoticeHandlerConnector {
-	if c, ok := c.(*NoticeHandlerConnector); ok {
-		c.noticeHandler = handler
-		return c
-	}
-	return &NoticeHandlerConnector{Connector: c, noticeHandler: handler}
-}
-
-
-========================================================================
-github.com/lib/pq v1.10.9 / notice_example_test.go
-//go:build go1.10
-// +build go1.10
-
-package pq_test
-
-import (
-	"database/sql"
-	"fmt"
-	"log"
-
-	"github.com/lib/pq"
-)
-
-func ExampleConnectorWithNoticeHandler() {
-	name := ""
-	// Base connector to wrap
-	base, err := pq.NewConnector(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Wrap the connector to simply print out the message
-	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
-		fmt.Println("Notice sent: " + notice.Message)
-	})
-	db := sql.OpenDB(connector)
-	defer db.Close()
-	// Raise a notice
-	sql := "DO language plpgsql $$ BEGIN RAISE NOTICE 'test notice'; END $$"
-	if _, err := db.Exec(sql); err != nil {
-		log.Fatal(err)
-	}
-	// Output:
-	// Notice sent: test notice
-}
-
-
-========================================================================
-github.com/lib/pq v1.10.9 / notice_test.go
-//go:build go1.10
-// +build go1.10
-
-package pq
-
-import (
-	"database/sql"
-	"database/sql/driver"
-	"testing"
-)
-
-func TestConnectorWithNoticeHandler_Simple(t *testing.T) {
-	b, err := NewConnector("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var notice *Error
-	// Make connector w/ handler to set the local var
-	c := ConnectorWithNoticeHandler(b, func(n *Error) { notice = n })
-	raiseNotice(c, t, "Test notice #1")
-	if notice == nil || notice.Message != "Test notice #1" {
-		t.Fatalf("Expected notice w/ message, got %v", notice)
-	}
-	// Unset the handler on the same connector
-	prevC := c
-	if c = ConnectorWithNoticeHandler(c, nil); c != prevC {
-		t.Fatalf("Expected to not create new connector but did")
-	}
-	raiseNotice(c, t, "Test notice #2")
-	if notice == nil || notice.Message != "Test notice #1" {
-		t.Fatalf("Expected notice to not change, got %v", notice)
-	}
-	// Set it back on the same connector
-	if c = ConnectorWithNoticeHandler(c, func(n *Error) { notice = n }); c != prevC {
-		t.Fatal("Expected to not create new connector but did")
-	}
-	raiseNotice(c, t, "Test notice #3")
-	if notice == nil || notice.Message != "Test notice #3" {
-		t.Fatalf("Expected notice w/ message, got %v", notice)
-	}
-}
-
-func raiseNotice(c driver.Connector, t *testing.T, escapedNotice string) {
-	db := sql.OpenDB(c)
-	defer db.Close()
-	sql := "DO language plpgsql $$ BEGIN RAISE NOTICE '" + escapedNotice + "'; END $$"
-	if _, err := db.Exec(sql); err != nil {
-		t.Fatal(err)
-	}
-}
-
-
 ========================================================================
 github.com/mdlayher/socket v0.6.0 / LICENSE.md
+
 # MIT License
 
 Copyright (C) 2021 Matt Layher
@@ -595,9 +426,9 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
 ========================================================================
 github.com/mdlayher/vsock v1.3.0 / LICENSE.md
+
 # MIT License
 
 Copyright (C) 2017-2022 Matt Layher
@@ -608,9 +439,9 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
 ========================================================================
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 / LICENSE
+
 Copyright (c) 2011, Open Knowledge Foundation Ltd.
 All rights reserved.
 
@@ -643,9 +474,9 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 ========================================================================
 github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f / LICENSE
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -848,9 +679,9 @@ github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f / LICENSE
    See the License for the specific language governing permissions and
    limitations under the License.
 
-
 ========================================================================
 github.com/prometheus-community/postgres_exporter v0.20.1 / LICENSE
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -1052,16 +883,16 @@ github.com/prometheus-community/postgres_exporter v0.20.1 / LICENSE
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-
 
 ========================================================================
 github.com/prometheus-community/postgres_exporter v0.20.1 / NOTICE
+
 Copyright 2018 William Rouesnel
 Copyright 2021 The Prometheus Authors
 
-
 ========================================================================
 github.com/prometheus/client_golang v1.23.2 / LICENSE
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -1264,9 +1095,9 @@ github.com/prometheus/client_golang v1.23.2 / LICENSE
    See the License for the specific language governing permissions and
    limitations under the License.
 
-
 ========================================================================
 github.com/prometheus/client_golang v1.23.2 / NOTICE
+
 Prometheus instrumentation library for Go applications
 Copyright 2012-2015 The Prometheus Authors
 
@@ -1286,9 +1117,40 @@ http://github.com/golang/protobuf/
 Copyright 2010 The Go Authors
 See source code for license details.
 
+========================================================================
+github.com/prometheus/client_golang v1.23.2 / internal/github.com/golang/gddo/LICENSE
+
+Copyright (c) 2013 The Go Authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ========================================================================
 github.com/prometheus/client_model v0.6.2 / LICENSE
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -1491,18 +1353,18 @@ github.com/prometheus/client_model v0.6.2 / LICENSE
    See the License for the specific language governing permissions and
    limitations under the License.
 
-
 ========================================================================
 github.com/prometheus/client_model v0.6.2 / NOTICE
+
 Data model artifacts for Prometheus.
 Copyright 2012-2015 The Prometheus Authors
 
 This product includes software developed at
 SoundCloud Ltd. (http://soundcloud.com/).
 
-
 ========================================================================
 github.com/prometheus/common v0.69.0 / LICENSE
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -1705,18 +1567,18 @@ github.com/prometheus/common v0.69.0 / LICENSE
    See the License for the specific language governing permissions and
    limitations under the License.
 
-
 ========================================================================
 github.com/prometheus/common v0.69.0 / NOTICE
+
 Common libraries shared by Prometheus Go components.
 Copyright 2015 The Prometheus Authors
 
 This product includes software developed at
 SoundCloud Ltd. (http://soundcloud.com/).
 
-
 ========================================================================
 github.com/prometheus/exporter-toolkit v0.17.1 / LICENSE
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -1918,10 +1780,10 @@ github.com/prometheus/exporter-toolkit v0.17.1 / LICENSE
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-
 
 ========================================================================
 github.com/prometheus/procfs v0.16.1 / LICENSE
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -2124,9 +1986,9 @@ github.com/prometheus/procfs v0.16.1 / LICENSE
    See the License for the specific language governing permissions and
    limitations under the License.
 
-
 ========================================================================
 github.com/prometheus/procfs v0.16.1 / NOTICE
+
 procfs provides functions to retrieve system, kernel and process
 metrics from the pseudo-filesystem proc.
 
@@ -2135,9 +1997,9 @@ Copyright 2014-2015 The Prometheus Authors
 This product includes software developed at
 SoundCloud Ltd. (http://soundcloud.com/).
 
-
 ========================================================================
 github.com/xhit/go-str2duration/v2 v2.1.0 / LICENSE
+
 Copyright (c) 2009 The Go Authors. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -2168,6 +2030,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ========================================================================
 go.yaml.in/yaml/v2 v2.4.4 / LICENSE
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -2370,9 +2233,9 @@ go.yaml.in/yaml/v2 v2.4.4 / LICENSE
    See the License for the specific language governing permissions and
    limitations under the License.
 
-
 ========================================================================
 go.yaml.in/yaml/v2 v2.4.4 / LICENSE.libyaml
+
 The following files were ported to Go from C files of libyaml, and thus
 are still covered by their original copyright and license:
 
@@ -2405,9 +2268,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-
 ========================================================================
 go.yaml.in/yaml/v2 v2.4.4 / NOTICE
+
 Copyright 2011-2016 Canonical Ltd.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -2422,9 +2285,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
 ========================================================================
-golang.org/x/crypto v0.57.0 / LICENSE
+golang.org/x/crypto v0.58.0 / LICENSE
+
 Copyright 2009 The Go Authors.
 
 Redistribution and use in source and binary forms, with or without
@@ -2453,9 +2316,35 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+========================================================================
+golang.org/x/crypto v0.58.0 / PATENTS
+
+Additional IP Rights Grant (Patents)
+
+"This implementation" means the copyrightable works distributed by
+Google as part of the Go project.
+
+Google hereby grants to You a perpetual, worldwide, non-exclusive,
+no-charge, royalty-free, irrevocable (except as stated in this section)
+patent license to make, have made, use, offer to sell, sell, import,
+transfer and otherwise run, modify and propagate the contents of this
+implementation of Go, where such license applies only to those patent
+claims, both currently owned or controlled by Google and acquired in
+the future, licensable by Google that are necessarily infringed by this
+implementation of Go.  This grant does not include claims that would be
+infringed only as a consequence of further modification of this
+implementation.  If you or your agent or exclusive licensee institute or
+order or agree to the institution of patent litigation against any
+entity (including a cross-claim or counterclaim in a lawsuit) alleging
+that this implementation of Go or any code incorporated within this
+implementation of Go constitutes direct or contributory patent
+infringement, or inducement of patent infringement, then any patent
+rights granted to you under this License for this implementation of Go
+shall terminate as of the date such litigation is filed.
 
 ========================================================================
-golang.org/x/net v0.59.0 / LICENSE
+golang.org/x/net v0.62.0 / LICENSE
+
 Copyright 2009 The Go Authors.
 
 Redistribution and use in source and binary forms, with or without
@@ -2484,9 +2373,35 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+========================================================================
+golang.org/x/net v0.62.0 / PATENTS
+
+Additional IP Rights Grant (Patents)
+
+"This implementation" means the copyrightable works distributed by
+Google as part of the Go project.
+
+Google hereby grants to You a perpetual, worldwide, non-exclusive,
+no-charge, royalty-free, irrevocable (except as stated in this section)
+patent license to make, have made, use, offer to sell, sell, import,
+transfer and otherwise run, modify and propagate the contents of this
+implementation of Go, where such license applies only to those patent
+claims, both currently owned or controlled by Google and acquired in
+the future, licensable by Google that are necessarily infringed by this
+implementation of Go.  This grant does not include claims that would be
+infringed only as a consequence of further modification of this
+implementation.  If you or your agent or exclusive licensee institute or
+order or agree to the institution of patent litigation against any
+entity (including a cross-claim or counterclaim in a lawsuit) alleging
+that this implementation of Go or any code incorporated within this
+implementation of Go constitutes direct or contributory patent
+infringement, or inducement of patent infringement, then any patent
+rights granted to you under this License for this implementation of Go
+shall terminate as of the date such litigation is filed.
 
 ========================================================================
 golang.org/x/oauth2 v0.36.0 / LICENSE
+
 Copyright 2009 The Go Authors.
 
 Redistribution and use in source and binary forms, with or without
@@ -2514,10 +2429,10 @@ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 
 ========================================================================
-golang.org/x/sync v0.23.0 / LICENSE
+golang.org/x/sync v0.24.0 / LICENSE
+
 Copyright 2009 The Go Authors.
 
 Redistribution and use in source and binary forms, with or without
@@ -2545,41 +2460,36 @@ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 
 ========================================================================
-golang.org/x/sys v0.48.0 / LICENSE
-Copyright 2009 The Go Authors.
+golang.org/x/sync v0.24.0 / PATENTS
 
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are
-met:
+Additional IP Rights Grant (Patents)
 
-   * Redistributions of source code must retain the above copyright
-notice, this list of conditions and the following disclaimer.
-   * Redistributions in binary form must reproduce the above
-copyright notice, this list of conditions and the following disclaimer
-in the documentation and/or other materials provided with the
-distribution.
-   * Neither the name of Google LLC nor the names of its
-contributors may be used to endorse or promote products derived from
-this software without specific prior written permission.
+"This implementation" means the copyrightable works distributed by
+Google as part of the Go project.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+Google hereby grants to You a perpetual, worldwide, non-exclusive,
+no-charge, royalty-free, irrevocable (except as stated in this section)
+patent license to make, have made, use, offer to sell, sell, import,
+transfer and otherwise run, modify and propagate the contents of this
+implementation of Go, where such license applies only to those patent
+claims, both currently owned or controlled by Google and acquired in
+the future, licensable by Google that are necessarily infringed by this
+implementation of Go.  This grant does not include claims that would be
+infringed only as a consequence of further modification of this
+implementation.  If you or your agent or exclusive licensee institute or
+order or agree to the institution of patent litigation against any
+entity (including a cross-claim or counterclaim in a lawsuit) alleging
+that this implementation of Go or any code incorporated within this
+implementation of Go constitutes direct or contributory patent
+infringement, or inducement of patent infringement, then any patent
+rights granted to you under this License for this implementation of Go
+shall terminate as of the date such litigation is filed.
 
 ========================================================================
-golang.org/x/text v0.42.0 / LICENSE
+golang.org/x/sys v0.49.0 / LICENSE
+
 Copyright 2009 The Go Authors.
 
 Redistribution and use in source and binary forms, with or without
@@ -2608,9 +2518,92 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+========================================================================
+golang.org/x/sys v0.49.0 / PATENTS
+
+Additional IP Rights Grant (Patents)
+
+"This implementation" means the copyrightable works distributed by
+Google as part of the Go project.
+
+Google hereby grants to You a perpetual, worldwide, non-exclusive,
+no-charge, royalty-free, irrevocable (except as stated in this section)
+patent license to make, have made, use, offer to sell, sell, import,
+transfer and otherwise run, modify and propagate the contents of this
+implementation of Go, where such license applies only to those patent
+claims, both currently owned or controlled by Google and acquired in
+the future, licensable by Google that are necessarily infringed by this
+implementation of Go.  This grant does not include claims that would be
+infringed only as a consequence of further modification of this
+implementation.  If you or your agent or exclusive licensee institute or
+order or agree to the institution of patent litigation against any
+entity (including a cross-claim or counterclaim in a lawsuit) alleging
+that this implementation of Go or any code incorporated within this
+implementation of Go constitutes direct or contributory patent
+infringement, or inducement of patent infringement, then any patent
+rights granted to you under this License for this implementation of Go
+shall terminate as of the date such litigation is filed.
+
+========================================================================
+golang.org/x/text v0.43.0 / LICENSE
+
+Copyright 2009 The Go Authors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google LLC nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+========================================================================
+golang.org/x/text v0.43.0 / PATENTS
+
+Additional IP Rights Grant (Patents)
+
+"This implementation" means the copyrightable works distributed by
+Google as part of the Go project.
+
+Google hereby grants to You a perpetual, worldwide, non-exclusive,
+no-charge, royalty-free, irrevocable (except as stated in this section)
+patent license to make, have made, use, offer to sell, sell, import,
+transfer and otherwise run, modify and propagate the contents of this
+implementation of Go, where such license applies only to those patent
+claims, both currently owned or controlled by Google and acquired in
+the future, licensable by Google that are necessarily infringed by this
+implementation of Go.  This grant does not include claims that would be
+infringed only as a consequence of further modification of this
+implementation.  If you or your agent or exclusive licensee institute or
+order or agree to the institution of patent litigation against any
+entity (including a cross-claim or counterclaim in a lawsuit) alleging
+that this implementation of Go or any code incorporated within this
+implementation of Go constitutes direct or contributory patent
+infringement, or inducement of patent infringement, then any patent
+rights granted to you under this License for this implementation of Go
+shall terminate as of the date such litigation is filed.
 
 ========================================================================
 golang.org/x/time v0.15.0 / LICENSE
+
 Copyright 2009 The Go Authors.
 
 Redistribution and use in source and binary forms, with or without
@@ -2639,9 +2632,35 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+========================================================================
+golang.org/x/time v0.15.0 / PATENTS
+
+Additional IP Rights Grant (Patents)
+
+"This implementation" means the copyrightable works distributed by
+Google as part of the Go project.
+
+Google hereby grants to You a perpetual, worldwide, non-exclusive,
+no-charge, royalty-free, irrevocable (except as stated in this section)
+patent license to make, have made, use, offer to sell, sell, import,
+transfer and otherwise run, modify and propagate the contents of this
+implementation of Go, where such license applies only to those patent
+claims, both currently owned or controlled by Google and acquired in
+the future, licensable by Google that are necessarily infringed by this
+implementation of Go.  This grant does not include claims that would be
+infringed only as a consequence of further modification of this
+implementation.  If you or your agent or exclusive licensee institute or
+order or agree to the institution of patent litigation against any
+entity (including a cross-claim or counterclaim in a lawsuit) alleging
+that this implementation of Go or any code incorporated within this
+implementation of Go constitutes direct or contributory patent
+infringement, or inducement of patent infringement, then any patent
+rights granted to you under this License for this implementation of Go
+shall terminate as of the date such litigation is filed.
 
 ========================================================================
 google.golang.org/protobuf v1.36.11 / LICENSE
+
 Copyright (c) 2018 The Go Authors. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -2670,9 +2689,35 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+========================================================================
+google.golang.org/protobuf v1.36.11 / PATENTS
+
+Additional IP Rights Grant (Patents)
+
+"This implementation" means the copyrightable works distributed by
+Google as part of the Go project.
+
+Google hereby grants to You a perpetual, worldwide, non-exclusive,
+no-charge, royalty-free, irrevocable (except as stated in this section)
+patent license to make, have made, use, offer to sell, sell, import,
+transfer and otherwise run, modify and propagate the contents of this
+implementation of Go, where such license applies only to those patent
+claims, both currently owned or controlled by Google and acquired in
+the future, licensable by Google that are necessarily infringed by this
+implementation of Go.  This grant does not include claims that would be
+infringed only as a consequence of further modification of this
+implementation.  If you or your agent or exclusive licensee institute or
+order or agree to the institution of patent litigation against any
+entity (including a cross-claim or counterclaim in a lawsuit) alleging
+that this implementation of Go or any code incorporated within this
+implementation of Go constitutes direct or contributory patent
+infringement, or inducement of patent infringement, then any patent
+rights granted to you under this License for this implementation of Go
+shall terminate as of the date such litigation is filed.
 
 ========================================================================
 gopkg.in/yaml.v2 v2.4.0 / LICENSE
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -2875,9 +2920,9 @@ gopkg.in/yaml.v2 v2.4.0 / LICENSE
    See the License for the specific language governing permissions and
    limitations under the License.
 
-
 ========================================================================
 gopkg.in/yaml.v2 v2.4.0 / LICENSE.libyaml
+
 The following files were ported to Go from C files of libyaml, and thus
 are still covered by their original copyright and license:
 
@@ -2910,9 +2955,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-
 ========================================================================
 gopkg.in/yaml.v2 v2.4.0 / NOTICE
+
 Copyright 2011-2016 Canonical Ltd.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -2926,7 +2971,6 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
 
 ========================================================================
 gopkg.in/yaml.v3 v3.0.1 / LICENSE
@@ -2981,9 +3025,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
 ========================================================================
 gopkg.in/yaml.v3 v3.0.1 / NOTICE
+
 Copyright 2011-2016 Canonical Ltd.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -2997,4 +3041,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-

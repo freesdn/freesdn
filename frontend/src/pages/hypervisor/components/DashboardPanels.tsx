@@ -31,7 +31,7 @@ export function DashboardMetrics({ data }: { data: HypervisorDashboard | FleetDa
     { title: t('HypervisorPage.stats.nodes'), value: ratio(data.online_nodes, data.total_nodes), icon: Server },
     { title: t('HypervisorPage.stats.vms'), value: ratio(data.running_vms, data.total_vms), icon: Monitor },
     { title: t('HypervisorPage.stats.containers'), value: ratio(data.running_containers, data.total_containers), icon: Box },
-    ...specs.map(item => ({ title: t(`DashboardObservation.metrics.${item.key}`), value: valid(item) ? `${item.value}%` : unknown, icon: item.icon,
+    ...specs.map(item => ({ title: t(`DashboardObservation.metrics.${item.key}`), value: valid(item) ? `${item.value!.toFixed(1)}%` : unknown, icon: item.icon,
       description: valid(item) && item.capacity != null ? item.key === 'cpu' ? t('HypervisorPage.stats.coresCount', { count: item.capacity }) : formatBytes(item.capacity) : t('DashboardObservation.incompleteMetric'),
       variant: !valid(item) ? 'warning' as const : item.value! > 85 ? 'destructive' as const : 'default' as const,
     })),

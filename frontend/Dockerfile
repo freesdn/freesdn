@@ -6,8 +6,8 @@
 # Stage 1: Base Node image (Trixie)
 # ============================================
 # Release policy: stay on Node 24 LTS; qualify LTS major migrations explicitly.
-FROM node:24.21.0-trixie-slim AS base
-RUN npm install -g npm@12.2.0
+FROM node:24.22.2-trixie-slim AS base
+RUN npm install -g npm@12.2.2
 WORKDIR /app
 
 # ============================================
@@ -51,18 +51,18 @@ RUN npm run build
 # Rebuild the released Caddy source with a patched Go toolchain and dependency
 # graph. apk upgrade cannot replace libraries compiled into the upstream binary.
 # go.sum verifies downloaded modules; -mod=readonly forbids resolution at build.
-FROM golang:1.27.3-alpine3.24 AS caddy-builder
+FROM golang:1.27.4-alpine3.24 AS caddy-builder
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /build
 COPY caddy-build/go.mod caddy-build/go.sum ./
 RUN go mod download && go mod verify
 COPY caddy-build/ ./
-# Patch a private, checksum-verified vendor tree. Module versions remain in the
-# binary inventory; no shared module-cache files or upstream imports are changed.
-RUN go mod vendor && go run -mod=vendor ./prepare.go \
-    && go test -mod=vendor . \
-    && go build -mod=vendor -trimpath \
-       -ldflags="-s -w -X github.com/caddyserver/caddy/v2.CustomVersion=v2.11.4-freesdn" \
+# Caddy 2.11.9 builds against its own CEL release (cel.dev/cel-go), so the
+# 2.11.4 celmatcher.go compatibility patch and its private vendor tree are gone:
+# the shipped source is the released, checksum-verified module graph unmodified.
+RUN go test -mod=readonly . \
+    && go build -mod=readonly -trimpath \
+       -ldflags="-s -w -X github.com/caddyserver/caddy/v2.CustomVersion=v2.11.9-freesdn" \
        -o /usr/bin/caddy .
 
 # ============================================
@@ -125,7 +125,7 @@ CMD ["nginx", "-g", "daemon off;"]
 # `production` stage + the certbot container + the cert scripts. The nginx
 # stage above is retained as an opt-in escape hatch (`nginx` compose profile)
 # for shops that standardize on nginx / terminate TLS upstream.
-FROM caddy:2.11.4-alpine AS caddy
+FROM caddy:2.11.9-alpine AS caddy
 
 # Apply the latest Alpine security patches (openssl libcrypto3/libssl3, etc.) on
 # top of the pinned caddy base, so a freshly built edge image picks up CVE fixes

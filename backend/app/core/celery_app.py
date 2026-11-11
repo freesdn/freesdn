@@ -17,7 +17,7 @@ from datetime import UTC
 
 from celery import Celery
 from celery.schedules import crontab
-from kombu import Exchange, Queue
+from kombu.entity import Exchange, Queue
 
 from app.core.config import settings
 

@@ -9,6 +9,194 @@ FreeSDN is a Community Edition project maintained by its sole owner and
 developer. Releases may contain breaking changes between versions -
 **back up your data before upgrading.**
 
+## [26.11.0] - 2026-11-11 - Security maintenance
+
+The November security release. In the two weeks after 26.10.4, advisories were
+published against Caddy, two Go libraries, the Go standard library and
+toolchain, CPython, three Python packages, FFmpeg, Valkey, PgBouncer, and
+Kerberos and SQLite in the database images' Debian base. The weekly scheduled
+run of the public checks on 9 November failed in fourteen jobs.
+
+Four of these were reachable in FreeSDN as shipped:
+
+- Caddy, the default web edge, forwarded hop-by-hop headers to the backend
+  when it proxied `/api` (CVE-2026-55458).
+- Any client could crash Caddy by sending a request body over the 50 MB limit
+  while the response was being written (CVE-2026-97054, fixed in Go 1.27.4).
+- A crafted compressed frame could crash Caddy and the NetBird client through
+  `klauspost/compress` (CVE-2026-116591).
+- FFmpeg 9.0.2 followed RTSP redirects without a limit (CVE-2026-107696). It
+  was accepted in 26.10.4 for 14 days, waiting for an FFmpeg release that has
+  still not appeared. It is now fixed in FreeSDN's own build.
+
+PgBouncer, in the optional `pooling` profile, also had two flaws an
+unauthenticated client could use to crash it or stall it.
+
+### Security
+
+- **Caddy edge** (the frontend image) 2.11.4 to 2.11.9.
+  - CVE-2026-55458 (GHSA-8qx7-j2v2-x6q5): headers named in `Connection` were
+    passed through instead of being removed, so a client could send hop-by-hop
+    headers to the backend. Caddy proxies `/api` and WebSockets to the API
+    container, so this was reachable.
+  - `klauspost/compress` 1.20.0 to 1.20.3 (CVE-2026-116591, a panic on
+    two-block frames). govulncheck found it called in Caddy and in the NetBird
+    client. It is also updated in Tailscale, rclone and the redis exporter.
+  - `go-jose` v4 4.1.4 to 4.1.9 (CVE-2026-116587, CPU exhaustion on crafted RSA
+    keys in a JWK). Caddy's `caddypki` module also links go-jose **v3**, through
+    smallstep, and no v3 release carries the fix. govulncheck finds no call to
+    the affected code, and FreeSDN's Caddyfile runs with `admin off` and
+    without the ACME server or PKI app, so it is reviewed rather than fixed. The
+    review is in `security/image-cve-review.toml` and expires on 31 December.
+    The repository scan, which reads `.trivyignore`, carries the same entry
+    with the same expiry; it is that file's only suppression.
+- **Go 1.27.4** for every Go component, from 1.27.3.
+  - CVE-2026-97054 (GO-2026-6859): when a request body passed the limit set
+    with `MaxBytesReader`, the HTTP/1 server set `Connection: close` without
+    locking, racing the handler writing its own headers, and the process could
+    crash. FreeSDN's Caddyfile caps request bodies at 50 MB through
+    `request_body`, and `reverse_proxy` reads the body while it writes the
+    response, so any client could crash the web edge.
+  - Eleven toolchain fixes (CVE-2026-97033 to -97043) for flag and directive
+    injection through cgo, `.syso` files and linker input, each of which could
+    run code while untrusted source was being built. Every FreeSDN Go build
+    runs with `CGO_ENABLED=0` from checksum-pinned sources, so these are
+    defence in depth.
+
+  Go 1.27.4 and its official `golang:1.27.4-alpine3.24` image were adopted
+  about a day after release, inside the 72-hour waiting period the project
+  applies to everything else. That waiting period guards against hijacked
+  packages in public registries; the Go toolchain comes from the Go team, and
+  this crash is reachable by any client.
+- **Go libraries.** `golang.org/x/net` moves to 0.62.0 (CVE-2026-78661 and
+  CVE-2026-97045, both in `x/net/html`) in every Go component that links it.
+  govulncheck shows that none of them calls the affected code.
+- **CPython 3.14.10** for the backend, go2rtc and backup-metrics images.
+  - CVE-2026-115557: `ssl` now rejects certificate chains signed with
+    compromised eMudhra intermediate keys. Every adapter connection uses `ssl`.
+  - CVE-2026-114583: the tarfile `tar` filter now rejects a link that resolves
+    to the extraction directory.
+  - A cookiejar fix for cookies with a negative version.
+
+  The tarfile, tempfile and shutil fixes FreeSDN had backported to 3.14.8 are in
+  3.14.10 itself, byte for byte, so they were removed. The POP3 control-character
+  fix (CVE-2025-15367) is still not in any 3.14 release and is still applied at
+  build time.
+- **FFmpeg 9.0.2** now carries FFmpeg's own fixes for ten of the eleven
+  advisories published against it. No FFmpeg release contains them yet.
+  - The five known at 26.10.4: CVE-2026-107696 (RTSP redirect loop), -107675
+    (libssh host key not verified), -107676 (HDR10+ metadata), -107677 (DASH
+    infinite loop) and -107678 (encryption-info stack exhaustion).
+  - Five published since, in which a crafted file could leak memory into the
+    decoded picture: the G2M, PCX, Sun Raster, CDXL and Huffyuv decoders
+    (CVE-2026-120243 to -120247).
+
+  Each patch is the unmodified upstream commit, pinned by SHA-256 and listed in
+  `source-lock.json`. The scanner matches by version and cannot see a patch, so
+  it still reports all eleven. Each review entry records the commit that fixes
+  it. The eleventh, CVE-2026-120210, is a path traversal in the IMF demuxer.
+  Its fix is not merged upstream yet. It is reviewed as unreachable: FreeSDN
+  only ever gives FFmpeg `rtsp://` and `rtsps://` URLs, and those are opened by
+  the RTSP demuxer.
+- **Python runtime dependencies.**
+  - `tornado` 6.5.10 to 6.6 (CVE-2026-115927, CVE-2026-116577: a chunked body
+    or folded headers could block the server; CVE-2026-116578: an open redirect
+    in `RedirectHandler`). Tornado serves the Flower task monitor, which runs
+    only in the optional `monitoring` profile and publishes no port.
+  - `pyasn1` 0.6.4 to 0.6.5 (CVE-2026-119194 to -119197, CPU exhaustion
+    decoding crafted ASN.1).
+  - `dnspython` 2.8.0 to 2.9.2 (CVE-2026-114605, CPU exhaustion decompressing a
+    crafted DNS name).
+  - pip-audit reports no known vulnerabilities in the new lock. It reported 16
+    in the old one, 8 of them in development-only packages.
+- **Valkey** 9.1.2 to 9.1.3 (GHSA-f4q9-j22m-xqq9, a heap overflow in
+  cluster-mode Pub/Sub). FreeSDN does not run Valkey in cluster mode; the update
+  is taken anyway.
+- **PgBouncer** 1.25.2 to 1.26.1, in the optional `pooling` profile.
+  - CVE-2026-19888: an unauthenticated client could crash PgBouncer by leaving
+    the nonce out of the SCRAM client-final message.
+  - CVE-2026-107349: an unauthenticated client could make it spin on one CPU
+    core and stop serving.
+  - CVE-2026-107348 and CVE-2026-6668: integer overflows in buffer growth.
+  - CVE-2026-107350: a second StartupMessage during SCRAM authentication.
+  - CVE-2026-6669: an unbounded SCRAM iteration count from the server.
+
+  FreeSDN uses SCRAM through PgBouncer, so the first two were reachable from
+  any container on the compose network. 1.26.0 removed online restart (`-R`)
+  and `SUSPEND`, which FreeSDN never used. Migrations were run through 1.26.1 to
+  check that the backend still connects.
+- **Database images.** 14 Kerberos and 3 SQLite advisories have no fixed Debian
+  package. Each is reviewed in `security/image-cve-review.toml` as unreachable,
+  and the reviews were checked inside the built images. The Kerberos flaws are
+  in the KDC and kadmind servers. Neither is installed; the images carry only the
+  client libraries, which PostgreSQL links but never uses, because
+  authentication is scram-sha-256. The 17 Debian reviews from 26.10.3, due to
+  expire on 30 November, were checked against the new images and renewed to
+  31 December.
+- **Other component updates:** Tailscale 1.104.5, NetBird 0.82.0, go2rtc 1.9.15,
+  gosu 1.20, Prometheus 3.16.0, rclone 1.76.0 and redis_exporter 1.97.0.
+- **Build tooling** (none of it runs in a shipped image):
+  - Node 24.21.0 to 24.22.2, which includes the 24.22.1 security release (seven
+    CVEs, among them TLS IP normalisation and brotli). npm is 12.2.2 in every
+    build and CI job; it had been pinned to four different versions.
+  - In the web interface's build and test tooling: `follow-redirects` 1.16.2
+    (CVE-2026-116689), `glob`, `minimatch` and `qs`. None of them is in the
+    browser bundle.
+  - Development only: `pypdf` 6.21.4 (seven advisories) and `msgpack` 1.2.4.
+  - CI scanners: Trivy 0.76.2, Grype 0.121.2 and govulncheck 1.9.0.
+
+Apart from Go 1.27.4, every updated version had been public for at least 72
+hours before it was adopted.
+
+### Fixed
+
+- **The hypervisor dashboard printed usage with every decimal digit**, for
+  example "41.27272727272727%" for CPU. The stat cards now round to one decimal,
+  as the usage bars beneath them already did.
+- **The browser blocked one of the console's fonts.** The build inlined a small
+  JetBrains Mono subset as a `data:` URI, which the console's own
+  Content-Security-Policy (`font-src 'self'`) refuses, so those characters fell
+  back to another font and the browser logged a policy violation. Fonts now
+  always ship as files.
+- **Demo build only: camera tiles showed no snapshot.** The demo's placeholder
+  image URL had no query string, so the cache-buster the camera pages append
+  produced a path that does not exist. Installed systems were not affected:
+  their snapshot URLs always carry a token query.
+- **The FFmpeg check failed every scan on 9 November, whatever the images
+  contained.** It refused a Grype vulnerability database older than 24 hours.
+  Grype publishes one a day and had skipped a day, so the newest database
+  available was 33 hours old. The limit is now 48 hours, which tolerates one
+  missed day and still refuses a database more than a day out of date.
+- **The HA standby database ran without `no-new-privileges`.** The image
+  reviews for the database images rely on that option, under which the kernel
+  ignores SUID, and the primary had it. The standby now has it too.
+- **License notices for the compiled Go components were out of date.** The
+  `NOTICE` shipped with each of the nine Go binaries listed the dependency
+  versions of an earlier build, and redis_exporter's listed none. Each is now
+  generated from the binary's own build information, with every module's
+  checksum checked against it. Each covers the license and notice files of
+  every compiled module, including those in subdirectories.
+- **The third-party license lists for the backend and the web interface were
+  out of date.** They still described the 22 September locks: the backend list
+  gave versions from before 26.10.3 and omitted `ldap3`. Both now match the
+  current locks. Rows for packages whose version did not change are unchanged.
+
+### Changed
+
+- Frontend dependencies updated within their current major versions, among them
+  React 19.3.1, Radix UI, TanStack Query and Table, i18next, react-hook-form and
+  `@hookform/resolvers` 6. Every new version was published at least 72 hours
+  before it was adopted. TypeScript stays on 6.0 until typescript-eslint
+  supports 7.
+
+### Upgrading
+
+Rebuild the images and recreate the containers. No configuration changes are
+needed. PgBouncer 1.26 removed online restart (`-R`) and the `SUSPEND` command;
+FreeSDN never used either. From a version older than 26.10.4, follow the
+26.10.4 notes first: Lite and Pro need a higher Valkey memory limit in the saved
+env file.
+
 ## [26.10.4] - 2026-10-27 - What 26.10.3's checks were still red on
 
 26.10.3 shipped with two checks failing and one that never finished, all on

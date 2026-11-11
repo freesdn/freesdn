@@ -12,10 +12,17 @@ const base = { controllerId: 'controller', dashLoading: false, dashError: false,
 describe('cluster and fleet dashboard presentation', () => {
   it('shows observed zero as zero and labels node filesystem capacity', () => {
     renderWithProviders(<DashboardTab {...base} dash={dashboard({ cpu_usage_percent: 0 })} />);
-    expect(screen.getByText('0.0%')).toBeInTheDocument();
+    // The stat card and the usage bar both carry it.
+    expect(screen.getAllByText('0.0%')).toHaveLength(2);
     expect(screen.getAllByText('Node filesystem usage').length).toBeGreaterThan(0);
     expect(screen.getByText('Visible HA services')).toBeInTheDocument();
     expect(screen.queryByText('Active')).not.toBeInTheDocument();
+  });
+  it('rounds an observed percentage in the stat card as it does in the usage bar', () => {
+    // A cluster average is rarely a round number: the card printed every digit.
+    renderWithProviders(<DashboardTab {...base} dash={dashboard({ cpu_usage_percent: 41.27272727272727 })} />);
+    expect(screen.getAllByText('41.3%')).toHaveLength(2);
+    expect(screen.queryByText(/41\.27/)).not.toBeInTheDocument();
   });
   it('does not render a partial metric as a subset percentage', () => {
     const data = dashboard({ coverage: 'partial', cpu_usage_percent: null, total_cpu_cores: null });
@@ -37,7 +44,7 @@ describe('cluster and fleet dashboard presentation', () => {
   it('hides data when it ages beyond the freshness limit', () => {
     vi.useFakeTimers();
     renderWithProviders(<DashboardTab {...base} dash={dashboard()} />);
-    expect(screen.getByText('25.0%')).toBeInTheDocument();
+    expect(screen.getAllByText('25.0%')).toHaveLength(2);
     act(() => vi.advanceTimersByTime(90000));
     expect(screen.queryByText('25.0%')).not.toBeInTheDocument();
     expect(screen.getByText(/Current values are hidden/)).toBeInTheDocument();
@@ -52,6 +59,7 @@ describe('cluster and fleet dashboard presentation', () => {
     expect(screen.getByText(/1 of 2 controllers observed; 1 failed/)).toBeInTheDocument();
     expect(screen.getByText('Failed registration')).toBeInTheDocument();
     expect(screen.getByText('Failed to observe cluster')).toBeInTheDocument();
-    expect(screen.getAllByText('25.0%')).toHaveLength(1);
+    // Only the working registration's own card and bar: the fleet CPU total stays unknown.
+    expect(screen.getAllByText('25.0%')).toHaveLength(2);
   });
 });

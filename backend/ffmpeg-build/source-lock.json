@@ -5,5 +5,84 @@
   "signing_fingerprint": "FCF986EA15E6E293A5644F10B4322F04D67658D8",
   "public_key_sha256": "397b3becedcd5a98769967ff1ff8501ddc89f8368b8f766e4701377d7dbaabe5",
   "signature_sha256": "d617fd94ea354dadd2a8bb16243d37c44e1e9729b06b6ad58fe30bfb0fa943f2",
-  "patch_sha256": "e2dce9ea258e10032ff2ca303fe93414f3e4c5bdf230c011d9c09ad36d11c02f"
+  "patch_sha256": "e2dce9ea258e10032ff2ca303fe93414f3e4c5bdf230c011d9c09ad36d11c02f",
+  "backports": [
+    {
+      "file": "cve-2026-107675-libssh-hostkey.patch",
+      "sha256": "92d78789dd2065cf6c4df3af40d95afa0f03eb4604ef93dd8b9d9524b0ef615d",
+      "upstream_commit": "2b822b7fb6ed195546bc9fd9bdb794e98222bdce",
+      "fixes": "CVE-2026-107675",
+      "summary": "verify the SSH server host key for sftp:// inputs"
+    },
+    {
+      "file": "cve-2026-107676-hdr10plus.patch",
+      "sha256": "fb9d5c7625495040858ef316396d10d8be62c514187d0e19cc455410dbce79a9",
+      "upstream_commit": "2c2f6e96e31795ae95a8f8323a493ffbc493111f",
+      "fixes": "CVE-2026-107676",
+      "summary": "no uninitialised bytes in HDR10+ T.35 metadata"
+    },
+    {
+      "file": "cve-2026-107677-dash.patch",
+      "sha256": "6ca7762b7d5e5730848e75ca48a8cbcae2c8acfe6e5db1cbbe7427a5a84b2ed3",
+      "upstream_commit": "ed27bfcbbbc0872c0195eaf4dd2c0c93b9f1778e",
+      "fixes": "CVE-2026-107677",
+      "summary": "no infinite loop in av_strireplace (DASH SegmentTemplate)"
+    },
+    {
+      "file": "cve-2026-107678-encryption-info.patch",
+      "sha256": "594a0cbca9527bc1edab7f76679af5a73cee23aadc878e2cc6a9001e22742c45",
+      "upstream_commit": "969c7eb091989a664cb7bf66a1f02051cc46cb52",
+      "fixes": "CVE-2026-107678",
+      "summary": "no stack exhaustion freeing an encryption init info list"
+    },
+    {
+      "file": "cve-2026-107696-rtsp-redirects.patch",
+      "sha256": "7518b281a719aa41c5cdd1f259eaf38f6b1e3fb28c09ec254c441abbaad69095",
+      "upstream_commit": "f5d4fd186c68913240c4f6e9cda98443e1518b34",
+      "fixes": "CVE-2026-107696",
+      "summary": "stop after 8 RTSP redirects"
+    },
+    {
+      "file": "cve-2026-120243-g2m.patch",
+      "sha256": "ece64d34695b1c507b4b3f464291d36f1b68b25a06ec58f70529205af7a049ee",
+      "upstream_commit": "edad2d0dafcf44fa315eab716fd0183ce808053b",
+      "fixes": "CVE-2026-120243",
+      "summary": "reject out-of-range Kempf palette indices in the G2M decoder"
+    },
+    {
+      "file": "cve-2026-120244-pcx.patch",
+      "sha256": "e64b48f47e4e4264ce090e1e6448ccfea5cfbdf50f4304ea7979aa2735d98082",
+      "upstream_commit": "ecd5dfc308a164757e7f25b1afefd8db21b43cf9",
+      "fixes": "CVE-2026-120244",
+      "summary": "zero the rest of a PCX scanline when the input ends"
+    },
+    {
+      "file": "cve-2026-120245-sunrast-1.patch",
+      "sha256": "3e27232d4c055757fae429eee17db070284e0a4cde25c8b3cd3243031cb2db97",
+      "upstream_commit": "356a391bf57df2fb80fd61f2821c8c83d15ce180",
+      "fixes": "CVE-2026-120245",
+      "summary": "zero the rest of a Sun Raster image when the input ends"
+    },
+    {
+      "file": "cve-2026-120245-sunrast-2.patch",
+      "sha256": "cf86b5e26b44970dea776ab2d1542c9b8cb190266989058101d0a1f1188e063b",
+      "upstream_commit": "66b6ca270b33fd74367d7d371f6de16ec664446e",
+      "fixes": "CVE-2026-120245",
+      "summary": "expand only the decoded bytes of a packed Sun Raster line"
+    },
+    {
+      "file": "cve-2026-120246-cdxl.patch",
+      "sha256": "efe4cc36b809e0bddb9012d4572897c655cc7735161a67acf812e7e157dad2bb",
+      "upstream_commit": "47313ad3f9f33b892384b976fb7c09b3c85fd74e",
+      "fixes": "CVE-2026-120246",
+      "summary": "reject unfilled HAM palette entries in the CDXL decoder"
+    },
+    {
+      "file": "cve-2026-120247-huffyuv.patch",
+      "sha256": "ed7b2b06cbb1978afb49d566ed713de114d13ff081b5c9ec0037945c3aca740b",
+      "upstream_commit": "7c73707355708c846f718cca90096bc1a33c8989",
+      "fixes": "CVE-2026-120247",
+      "summary": "zero the rest of a Huffyuv row when the input ends"
+    }
+  ]
 }

@@ -23,14 +23,14 @@ func prepare() error {
 	if err != nil {
 		return err
 	}
-	if !bytes.Contains(modules, []byte("# github.com/netbirdio/netbird v0.79.0\n")) || bytes.Contains(modules, []byte("github.com/netbirdio/netbird =>")) {
+	if !bytes.Contains(modules, []byte("# github.com/netbirdio/netbird v0.82.0\n")) || bytes.Contains(modules, []byte("github.com/netbirdio/netbird =>")) {
 		return fmt.Errorf("review the transport changes before updating the released NetBird source")
 	}
 	data, err := os.ReadFile(target + "relay.go")
 	if err != nil {
 		return err
 	}
-	if fmt.Sprintf("%x", sha256.Sum256(data)) != "cefe41cf1d00b15103d93cabe3e2139ef89eb9c09af83b0259aacb191f0fc4fe" {
+	if fmt.Sprintf("%x", sha256.Sum256(data)) != "5378f30a6fc926757d41f1a09e42b3e3575061e4090d7df3a0914974c6358fb4" {
 		return fmt.Errorf("NetBird relay source differs from the reviewed release; refusing to patch")
 	}
 	start := bytes.Index(data, []byte("func (p *StunTurnProbe) probeSTUN"))

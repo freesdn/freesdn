@@ -8,8 +8,8 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
-	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/ext"
+	"cel.dev/cel-go/cel"
+	"cel.dev/cel-go/ext"
 )
 
 type CELSecurityRecord struct {
@@ -17,8 +17,8 @@ type CELSecurityRecord struct {
 	Secret string `json:"-"`
 }
 
-// Exercise constant matchers (the patched calls), dynamic arguments and errors
-// through Caddy's public API, using the same vendored sources as the binary.
+// Exercise constant matchers, dynamic arguments and errors through Caddy's
+// public API, using the same checksum-locked module sources as the binary.
 func TestCaddyCELMatchers(t *testing.T) {
 	for _, tc := range []struct {
 		expression string

@@ -1,8 +1,8 @@
 {
-  "recorded_at": "2026-09-26",
-  "mypy_version": "2.3.1",
+  "recorded_at": "2026-11-11",
+  "mypy_version": "2.4.1",
   "scope": "app; existing pyproject exclusions retained, no new exclusions added",
-  "total_errors": 788,
+  "total_errors": 787,
   "diagnostics": {
     "[\"app/adapters/hikvision/adapter.py\", \"no-any-return\", \"Returning Any from function declared to return \\\"str\\\"\"]": 1,
     "[\"app/adapters/onvif/adapter.py\", \"no-untyped-call\", \"Call to untyped function \\\"Transport\\\" in typed context\"]": 1,
@@ -550,7 +550,6 @@
     "[\"app/modules/voip/module.py\", \"no-untyped-call\", \"Call to untyped function \\\"_ev\\\" in typed context\"]": 12,
     "[\"app/modules/voip/module.py\", \"no-untyped-def\", \"Function is missing a return type annotation\"]": 1,
     "[\"app/modules/voip/module.py\", \"no-untyped-def\", \"Function is missing a type annotation\"]": 1,
-    "[\"app/plugins/loader.py\", \"arg-type\", \"Argument 1 to \\\"__call__\\\" of \\\"_Wrapper\\\" has incompatible type \\\"def supervised(*args: Any, Any = ..., **kwargs: Any) -> Coroutine[Any, Any, Any]\\\"; expected \\\"def (*args: Any, Any = ..., **kwargs: Any) -> Coroutine[Any, Any, Any]\\\"\"]": 1,
     "[\"app/plugins/loader.py\", \"attr-defined\", \"\\\"type\\\" has no attribute \\\"get_router\\\"\"]": 1,
     "[\"app/plugins/scheduler.py\", \"type-arg\", \"Missing type arguments for generic type \\\"dict\\\"\"]": 1,
     "[\"app/plugins/schema.py\", \"unused-ignore\", \"Unused \\\"type: ignore\\\" comment\"]": 1,
@@ -640,5 +639,6 @@
     "[\"app/tasks/storage.py\", \"no-untyped-def\", \"Function is missing a type annotation for one or more parameters\"]": 1,
     "[\"app/tasks/storage.py\", \"untyped-decorator\", \"Untyped decorator makes function \\\"poll_health\\\" untyped\"]": 1
   },
-  "last_reduction": "2026-10-06: 14 resolved diagnostics removed; no new signatures or exclusions admitted."
+  "last_reduction": "2026-10-06: 14 resolved diagnostics removed; no new signatures or exclusions admitted.",
+  "last_change": "2026-11-11: mypy 2.3.1 to 2.4.1; 1 resolved diagnostic removed. kombu stays on 5.6.2 (pyproject.toml explains why), so the 9 no-untyped-call diagnostics that kombu 5.7.0's py.typed marker would add in app/core/celery_app.py are not admitted. No exclusions added."
 }

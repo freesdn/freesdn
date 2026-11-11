@@ -1,7 +1,7 @@
 Optional development and Prometheus image qualification
 ======================================================
 
-The development frontend uses Node 24.21.0 LTS on Alpine 3.24. This is a
+The development frontend uses Node 24.22.2 LTS on Alpine 3.24. This is a
 development-only platform change from Debian/glibc to Alpine/musl. The production
 frontend still serves compiled static assets through Caddy (or optional NGINX).
 Do not infer production readiness, a supported architecture matrix or a zero-risk

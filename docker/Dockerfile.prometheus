@@ -1,15 +1,15 @@
-# FreeSDN rebuild of Prometheus 3.14.0, including its embedded web UI.
-FROM golang:1.27.3-alpine3.24 AS source
+# FreeSDN rebuild of Prometheus 3.16.0, including its embedded web UI.
+FROM golang:1.27.4-alpine3.24 AS source
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /build
 COPY prometheus-build/go.mod prometheus-build/go.sum ./
 RUN go mod download all && go mod verify \
-    && cp -R /go/pkg/mod/github.com/prometheus/prometheus@v0.314.0 /source \
+    && cp -R /go/pkg/mod/github.com/prometheus/prometheus@v0.316.0 /source \
     && chmod -R u+w /source
 
 # Overlay the reviewed security lock onto the checksum-verified upstream UI.
-FROM node:24.21.0-trixie-slim AS ui
-RUN npm install -g npm@12.1.0 pnpm@12.6.0
+FROM node:24.22.2-trixie-slim AS ui
+RUN npm install -g npm@12.2.2 pnpm@12.6.0
 COPY --from=source /source /source
 WORKDIR /source/web/ui
 COPY prometheus-build/ui/pnpm-lock.yaml prometheus-build/ui/pnpm-workspace.yaml ./
@@ -27,10 +27,10 @@ COPY --from=ui /source/web/ui/embed.go /source/web/ui/embed.go
 # assets. The external dependency graph remains locked and readonly at build.
 RUN go mod edit -replace=github.com/prometheus/prometheus=/source \
     && go build -mod=readonly -trimpath -tags=netgo,builtinassets \
-       -ldflags="-s -w -X github.com/prometheus/common/version.Version=3.14.0-freesdn -X github.com/prometheus/common/version.Revision=d7598b7141418fa35be2b5ec5d0fefb634199610" \
+       -ldflags="-s -w -X github.com/prometheus/common/version.Version=3.16.0-freesdn -X github.com/prometheus/common/version.Revision=e2e28adeee2c5883d000fc82aca6008cfbf7e96d" \
        -o /out/ github.com/prometheus/prometheus/cmd/prometheus github.com/prometheus/prometheus/cmd/promtool
 
-FROM prom/prometheus:v3.14.0
+FROM prom/prometheus:v3.16.0
 COPY --from=builder /out/prometheus /bin/prometheus
 COPY --from=builder /out/promtool /bin/promtool
 COPY prometheus-build/LICENSE prometheus-build/NOTICE /usr/share/licenses/prometheus/

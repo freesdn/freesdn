@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "freesdn-backend"
-version = "26.10.4"
+version = "26.11.0"
 description = "FreeSDN - Unified Network Management Platform"
 license = "AGPL-3.0-only"
 authors = ["PyPV - Python Platform Ventures <contact@freesdn.org>"]
@@ -10,7 +10,7 @@ packages = [{include = "app"}]
 [tool.poetry.dependencies]
 python = "^3.13"
 # Hash-locked wheel installer for opt-in plugin dependency environments.
-uv = "0.13.5"                # >=0.13.4: GHSA-hq85-5cpj-mr62 (critical); runs at runtime as the plugin installer
+uv = "0.13.7"                # >=0.13.4: GHSA-hq85-5cpj-mr62 (critical); runs at runtime as the plugin installer
 # Web Framework
 # starlette 1.x: the old <0.137 hold is LIFTED. fastapi declares
 # starlette>=0.46 with no upper bound, and prometheus-fastapi-instrumentator 8.x
@@ -39,7 +39,15 @@ alembic = ">=1.20.0"
 # Redis extra or replace the task queue as part of a routine dependency refresh.
 redis = {extras = ["hiredis"], version = ">=6.4.0,<6.5"}
 # Task Queue
-celery = {extras = ["redis"], version = ">=5.6.3"}
+# Held below 5.7 (both). kombu 5.7.0 stores two new kinds of broker key in
+# Valkey (`_kombu.binding_deadlines`, `_kombu.binding_permanent.<exchange>`) and
+# sweeps binding tables on a deadline. The offline legacy queue inventory
+# (scripts/qualification/queue_inventory_probe.py) refuses keys it does not
+# know, by design, so every inventory of a 5.7 broker reports incomplete; the
+# 26.11.0 qualification caught it. Adopt 5.7 together with a probe that knows
+# those keys and a qualification of the binding sweep, not in a security refresh.
+celery = {extras = ["redis"], version = ">=5.6.3,<5.7"}
+kombu = ">=5.6.2,<5.7"
 flower = ">=2.1.0"
 # Validation & Serialization
 pydantic = ">=2.13.5"
@@ -62,7 +70,7 @@ pyotp = ">=2.10.0"
 # LDAP login and fresh identity confirmation require the stable runtime client.
 ldap3 = "2.9.1"
 # Bounded asynchronous DNS for directory confirmation, already locked via email validation.
-dnspython = ">=2.8.0"
+dnspython = ">=2.9.0"        # floor is the PATCHED version: 2.8.0 is CVE-2026-114605
 # SECURITY: cryptography 49.x is the current supported line (at the time); 48.0.1+
 # rebuilt the wheels against a patched OpenSSL (GHSA-537c-gmf6-5ccf). The full
 # test suite (Fernet encrypt/decrypt round-trips) gates the major bump.
@@ -70,12 +78,12 @@ cryptography = ">=50.0.1"   # floor is the PATCHED version: 49.0.0 is PYSEC-2026
 # HTTP Client
 httpx = ">=0.28.1"
 # SFTP backup transport is a supported runtime feature, not a dev-only extra.
-paramiko = "5.0.0"
+paramiko = "5.1.0"
 # SDKs used by the advertised backup destinations and custom backup schedules.
-boto3 = "1.43.99"
-google-api-python-client = "2.200.0"
-google-auth = "2.58.0"
-dropbox = "12.2.1"
+boto3 = "1.43.126"
+google-api-python-client = "2.201.0"
+google-auth = "2.62.1"
+dropbox = "12.2.4"
 croniter = "6.2.4"
 # aiohttp 3.14.1: parser/limit and connection-reuse hardening batch
 # (GHSA-4m7w-qmgq-4wj5 TLS hostname reuse, GHSA-63hw-fmq6-xxg2 max_line_size,
@@ -101,7 +109,9 @@ pywebpush = ">=2.5.0"
 # Security pins for transitive dependencies (CVE fixes)
 # tornado: pulled by celery/flower. 6.5.7 fixes cross-origin credential leaks
 # (GHSA-3x9g-8vmp-wqvf, GHSA-pw6j-qg29-8w7f) + a gzip-bomb DoS (GHSA-mgf9-4vpg-hj56).
-tornado = ">=6.5.10"
+tornado = ">=6.6"            # floor is the PATCHED version: <=6.5.10 is CVE-2026-115927, -116577, -116578
+# pyasn1: pulled by ldap3 / pyasn1-modules (google-auth). 0.6.4 is CVE-2026-119194..119197.
+pyasn1 = ">=0.6.5"
 # pygments: pulled by various, CVE-2026-4539
 pygments = ">=2.21.0"
 # requests: pulled by various, CVE-2026-25645 (fixed in 2.34.1).
@@ -122,11 +132,11 @@ prometheus-client = ">=0.26.0"
 prometheus-fastapi-instrumentator = ">=8.1.0,<9"
 
 # PDF reports are rendered as real documents, never text under a PDF label.
-reportlab = "5.0.1"
+reportlab = "5.1.0"
 
 [tool.poetry.group.dev.dependencies]
-pypdf = "6.21.2"             # dev only; >=6.21.2 fixes CVE-2026-113786..113795, -115572/115580/115585
-types-reportlab = "5.0.0.20260911"
+pypdf = "6.21.4"             # dev only; >=6.21.4 fixes CVE-2026-119203..119209 (6.21.2 fixed CVE-2026-113786..113795, -115572/115580/115585)
+types-reportlab = "5.1.0.20261104"
 pytest = ">=9.1.1"
 pytest-asyncio = ">=1.4.0"
 pytest-cov = ">=7.1.0"

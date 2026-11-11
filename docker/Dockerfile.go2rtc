@@ -1,5 +1,5 @@
 # FreeSDN security rebuild; upstream runtime contract is preserved.
-FROM golang:1.27.3-alpine3.24 AS builder
+FROM golang:1.27.4-alpine3.24 AS builder
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /build
 COPY go2rtc-build/go.mod go2rtc-build/go.sum ./
@@ -15,7 +15,7 @@ RUN sh /build/build.sh
 # Recreate the upstream runtime toolset on a patched, supported Python/Alpine
 # base. No package installation is needed by go2rtc at runtime; operators with
 # custom Python exec sources should bake their dependencies into a derived image.
-FROM python:3.14.8-alpine3.24
+FROM python:3.14.10-alpine3.24
 # Exact upstream security backports; unknown Python source fails the build.
 COPY python-security/ /usr/local/share/freesdn/python-security/
 RUN python -B /usr/local/share/freesdn/python-security/apply_backports.py \

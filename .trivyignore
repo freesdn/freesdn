@@ -1,3 +1,11 @@
-# No active vulnerability suppressions.
-# Scan final release images with --ignorefile /dev/null and include unfixed findings.
-# The former Caddy Go waiver was resolved by the pinned source build.
+# Suppressions for the repository filesystem scan (CI "Security Scan").
+# Release images are scanned with --ignorefile /dev/null and include unfixed
+# findings; their accepted findings live in security/image-cve-review.toml,
+# with a written reason and an expiry. An entry here must mirror one of those
+# reviews, for a finding with no fixed version, and expire with it.
+
+# go-jose v3 in frontend/caddy-build/go.mod (via smallstep, caddypki). No v3
+# release carries the fix. govulncheck finds no call path to the affected code,
+# and the shipped Caddyfile runs with admin off and no acme_server or pki app.
+# Review: security/image-cve-review.toml, CVE-2026-116587 (review_by 2026-12-31).
+CVE-2026-116587 exp:2026-12-31

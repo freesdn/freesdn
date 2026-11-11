@@ -47,7 +47,7 @@ x-valkey-build: &valkey-build
   context: ./docker
   dockerfile: Dockerfile.valkey
   args:
-    VALKEY_VERSION: ${VALKEY_VERSION:-9.1.2-alpine}
+    VALKEY_VERSION: ${VALKEY_VERSION:-9.1.3-alpine}
 
 x-backend-env: &backend-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-freesdn}:${POSTGRES_PASSWORD}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${POSTGRES_DB:-freesdn}
@@ -818,7 +818,7 @@ services:
       # `curl -fsS` without -L accepts the 308 as the correct answer for a
       # TLS-terminating Caddy and still fails on 4xx/5xx or connection refused
       # (verified in all three CADDY_SITE_ADDRESS modes against
-      # caddy:2.11.4-alpine, the pinned edge base). install.sh:238 already
+      # caddy:2.11.9-alpine, the pinned edge base). install.sh:238 already
       # probes this way, which is why the installer never surfaced the bug.
       test: ["CMD", "curl", "-fsS", "--max-time", "5", "-o", "/dev/null", "http://127.0.0.1/healthz"]
       interval: 30s
@@ -881,7 +881,7 @@ services:
       context: ./docker
       dockerfile: Dockerfile.pgbouncer
       args:
-        PGBOUNCER_VERSION: ${PGBOUNCER_VERSION:-v1.25.2-p0}
+        PGBOUNCER_VERSION: ${PGBOUNCER_VERSION:-v1.26.1-p0}
     image: ${PGBOUNCER_IMAGE:-freesdn-pgbouncer:local}
     restart: unless-stopped
     stop_grace_period: 15s
@@ -925,7 +925,7 @@ services:
       context: ./docker
       dockerfile: Dockerfile.pgbouncer
       args:
-        PGBOUNCER_VERSION: ${PGBOUNCER_VERSION:-v1.25.2-p0}
+        PGBOUNCER_VERSION: ${PGBOUNCER_VERSION:-v1.26.1-p0}
     image: ${PGBOUNCER_IMAGE:-freesdn-pgbouncer:local}
     restart: unless-stopped
     stop_grace_period: 15s

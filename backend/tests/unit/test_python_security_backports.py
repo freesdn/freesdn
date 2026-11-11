@@ -18,10 +18,13 @@ SPEC.loader.exec_module(MODULE)
 
 
 @pytest.fixture
-def inputs(tmp_path):
+def inputs(tmp_path, monkeypatch):
+    # Four synthetic modules keep the all-or-nothing behaviour across modules under
+    # test; the shipped manifest needs only one today.
+    monkeypatch.setattr(MODULE, "REVIEWED_MODULES", frozenset({"poplib.py", "tarfile.py", "tempfile.py", "shutil.py"}))
     stdlib = tmp_path / "stdlib"
     stdlib.mkdir()
-    manifest = {"format": 2, "python_version": "3.14.8", "files": []}
+    manifest = {"format": 2, "python_version": MODULE.PYTHON_VERSION, "files": []}
     for name in ("poplib.py", "tarfile.py", "tempfile.py", "shutil.py"):
         before, after = b"value = 1\n", b"value = 2\n"
         target = stdlib / name
@@ -94,7 +97,7 @@ def test_invalid_manifest_refused_before_writes(inputs, fault):
     stdlib, manifest = inputs
     bad = copy.deepcopy(manifest)
     if fault == "version":
-        bad["python_version"] = "3.14.9"
+        bad["python_version"] = "3.14.8"
     elif fault == "duplicate":
         bad["files"][1] = copy.deepcopy(bad["files"][0])
     elif fault == "traversal":
@@ -147,15 +150,11 @@ def test_symlink_bytecode_refused_before_module_changes(inputs, tmp_path):
 
 def test_manifest_records_exact_reviewed_modules():
     manifest = json.loads((DIRECTORY / "manifest.json").read_text())
-    assert manifest["python_version"] == "3.14.8"
+    assert manifest["python_version"] == MODULE.PYTHON_VERSION == "3.14.10"
     assert manifest["format"] == 2
-    assert {row["name"] for row in manifest["files"]} == {"poplib.py", "tarfile.py", "tempfile.py", "shutil.py"}
-    assert {row["upstream_commit"] for row in manifest["files"]} == {
-        "b234a2b67539f787e191d2ef19a7cbdce32874e7", "a4919937a4e1e69a0d178909c6f20557eca5d1d0",
-        "5c20517a4fc56683efe63a7751020db9573f538d"}
-    cleanup = [row for row in manifest["files"] if row["name"] in {"tempfile.py", "shutil.py"}]
-    assert all(row["backport_head"] == "fb187f1eaace3d4f47397b754cf928a73c5b0d9f" for row in cleanup)
-    assert all(row["backport_status_at_review"] == "open_unmerged" for row in cleanup)
+    assert {row["name"] for row in manifest["files"]} == MODULE.REVIEWED_MODULES == {"poplib.py"}
+    assert {row["upstream_commit"] for row in manifest["files"]} == {"b234a2b67539f787e191d2ef19a7cbdce32874e7"}
+    assert {row["advisory"] for row in manifest["files"]} == {"CVE-2025-15367"}
 
 
 def test_last_module_failure_preserves_all_sources_and_bytecode(inputs):
@@ -243,7 +242,7 @@ def test_mixed_reviewed_before_and_after_sources(inputs):
 
 
 @pytest.mark.parametrize("fault", ["old_format", "missing_cleanup", "row_type", "name_type"])
-def test_four_module_contract_cannot_be_downgraded(inputs, fault):
+def test_reviewed_module_contract_cannot_be_downgraded(inputs, fault):
     stdlib, manifest = inputs
     if fault == "old_format":
         manifest["format"] = 1

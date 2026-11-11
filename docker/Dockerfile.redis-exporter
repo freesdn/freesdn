@@ -11,15 +11,15 @@
 # components and takes the release set to zero fixable HIGH/CRITICAL findings.
 # Only the compiled binary is replaced; the entrypoint, user and runtime
 # configuration all remain upstream's.
-FROM golang:1.27.3-alpine3.24 AS builder
+FROM golang:1.27.4-alpine3.24 AS builder
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /build
 COPY redis-exporter-build/go.mod redis-exporter-build/go.sum ./
 RUN go mod download all && go mod verify
 RUN go build -mod=readonly -trimpath \
-        -ldflags="-s -w -X main.BuildVersion=1.93.0-freesdn" \
+        -ldflags="-s -w -X main.BuildVersion=1.97.0-freesdn" \
         -o /out/redis_exporter github.com/oliver006/redis_exporter
 
-FROM oliver006/redis_exporter:v1.93.0
+FROM oliver006/redis_exporter:v1.97.0
 COPY --from=builder /out/redis_exporter /redis_exporter
 COPY redis-exporter-build/LICENSE redis-exporter-build/NOTICE /usr/share/licenses/redis-exporter/

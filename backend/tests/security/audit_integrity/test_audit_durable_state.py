@@ -22,6 +22,7 @@ from app.models.security_audit import AuditChainState, AuditLogRecord
 from app.services.audit import AuditService
 from app.services.audit_chain import prune_prefix
 from app.services.security_audit import PersistentSecurityAuditService
+from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 
 def engine():
@@ -261,10 +262,23 @@ async def test_concurrent_appends_do_not_split_verification_snapshot(record_prop
             async with AsyncSession(db) as session:
                 pid = await session.scalar(text("SELECT pg_backend_pid()"))
                 ready.set()
-                for _ in range(80):
+                # At least 80 verifications, and on until two different retained
+                # counts have been seen: the second is what proves these reads
+                # overlapped committed appends. A fixed 80 assumed the writer's
+                # first commit lands within 80 reads. A commit waits for a WAL
+                # flush and a read does not, so on the VM the 80 reads end after
+                # 6-7 of the 20 commits, and on a GitHub runner with a slower
+                # flush all 80 ended before the first one: the 26.11.0
+                # qualification failed this test with every verdict valid.
+                # The bound only stops a stuck writer from hanging the suite.
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + HARNESS_WAIT_SECONDS
+                reads = 0
+                while reads < 80 or (len(counts) < 2 and loop.time() < deadline):
                     verdict = await AuditService(session).validate_audit_chain()
                     assert verdict["valid"] and verdict["retained_history_authenticated"]
                     counts.add(verdict["checked"])
+                    reads += 1
                     await asyncio.sleep(0)
                 return pid, counts
         tasks = [asyncio.create_task(write()), asyncio.create_task(read())]

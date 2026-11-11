@@ -82,7 +82,9 @@ export const camerasApi = {
   },
 
   getSnapshotUrlAsync: async (id: string): Promise<string> => {
-    if (isDemoMode) return getDemoCameraSnapshotPath(id);
+    // The real URL always carries a query (?token=), and callers append their
+    // cache-buster with `&`; the demo asset must carry one too or it 404s.
+    if (isDemoMode) return `${getDemoCameraSnapshotPath(id)}?demo=1`;
     const token = await camerasApi.getStreamToken(id);
     const safeId = e(id);
     return `${API_URL}/api/v1/cameras/${safeId}/snapshot?token=${e(token)}`;
@@ -91,7 +93,7 @@ export const camerasApi = {
   // Recorded frame at an absolute playback time (NVR recording, not live).
   // Backed by GET /cameras/{id}/playback-frame?time=<ISO>.
   getPlaybackFrameUrlAsync: async (id: string, time: string): Promise<string> => {
-    if (isDemoMode) return getDemoCameraSnapshotPath(id);
+    if (isDemoMode) return `${getDemoCameraSnapshotPath(id)}?demo=1`;
     const token = await camerasApi.getStreamToken(id);
     const safeId = e(id);
     return `${API_URL}/api/v1/cameras/${safeId}/playback-frame?time=${e(time)}&token=${e(token)}`;

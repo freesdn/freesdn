@@ -32,6 +32,19 @@ grep -q '^\[GNUPG:\] VALIDSIG FCF986EA15E6E293A5644F10B4322F04D67658D8 ' signatu
 tar --no-same-owner -xJf ffmpeg-9.0.2.tar.xz
 cd ffmpeg-9.0.2
 patch -p1 --batch --fuzz=0 < ../posix-ioctl.patch
+# Upstream FFmpeg fixes for advisories against 9.0.2, which no release carries
+# yet: each file is the unmodified upstream commit (source-lock.json "backports").
+patch -p1 --batch --fuzz=0 < ../cve-2026-107675-libssh-hostkey.patch
+patch -p1 --batch --fuzz=0 < ../cve-2026-107676-hdr10plus.patch
+patch -p1 --batch --fuzz=0 < ../cve-2026-107677-dash.patch
+patch -p1 --batch --fuzz=0 < ../cve-2026-107678-encryption-info.patch
+patch -p1 --batch --fuzz=0 < ../cve-2026-107696-rtsp-redirects.patch
+patch -p1 --batch --fuzz=0 < ../cve-2026-120243-g2m.patch
+patch -p1 --batch --fuzz=0 < ../cve-2026-120244-pcx.patch
+patch -p1 --batch --fuzz=0 < ../cve-2026-120245-sunrast-1.patch
+patch -p1 --batch --fuzz=0 < ../cve-2026-120245-sunrast-2.patch
+patch -p1 --batch --fuzz=0 < ../cve-2026-120246-cdxl.patch
+patch -p1 --batch --fuzz=0 < ../cve-2026-120247-huffyuv.patch
 ./configure --disable-librtmp \
   --disable-lzma \
   --disable-static \

@@ -27,16 +27,23 @@ def identity(info: os.stat_result) -> tuple:
             info.st_gid, info.st_mtime_ns, info.st_ctime_ns, info.st_nlink)
 
 
+#: The reviewed CPython release and the modules it still needs fixed. 3.14.10 carries
+#: the tarfile (CVE-2026-87910), tempfile and shutil (issue 157579) fixes upstream,
+#: byte for byte, so only poplib (CVE-2025-15367, unfixed upstream) remains.
+PYTHON_VERSION = "3.14.10"
+REVIEWED_MODULES = frozenset({"poplib.py"})
+
+
 def apply(stdlib: Path, manifest: dict, *, verify_only: bool = False) -> list[dict]:
     """Validate every input before replacing any module or its bytecode."""
-    if not isinstance(manifest, dict) or manifest.get("format") != 2 or manifest.get("python_version") != "3.14.8":
+    if not isinstance(manifest, dict) or manifest.get("format") != 2 or manifest.get("python_version") != PYTHON_VERSION:
         raise ValueError("Unsupported backport manifest")
     files = manifest.get("files")
-    if not isinstance(files, list) or len(files) != 4:
-        raise ValueError("Expected exactly four reviewed modules")
+    if not isinstance(files, list) or len(files) != len(REVIEWED_MODULES):
+        raise ValueError("Expected exactly the reviewed modules")
     if not all(isinstance(row, dict) and isinstance(row.get("name"), str) for row in files):
         raise ValueError("Invalid module record")
-    if {row["name"] for row in files} != {"poplib.py", "tarfile.py", "tempfile.py", "shutil.py"}:
+    if {row["name"] for row in files} != REVIEWED_MODULES:
         raise ValueError("Unexpected module names")
     if not stdlib.is_absolute() or stdlib.resolve() != stdlib or not stdlib.is_dir():
         raise ValueError("Expected a real absolute standard-library directory")
@@ -124,8 +131,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verify", action="store_true", help="Require patched files without changing them")
     args = parser.parse_args()
-    if platform.python_implementation() != "CPython" or platform.python_version() != "3.14.8":
-        raise SystemExit("Reviewed CPython 3.14.8 is required; review newer sources before updating")
+    if platform.python_implementation() != "CPython" or platform.python_version() != PYTHON_VERSION:
+        raise SystemExit(f"Reviewed CPython {PYTHON_VERSION} is required; review newer sources before updating")
     manifest = json.loads(Path(__file__).with_name("manifest.json").read_bytes())
     result = apply(Path(sysconfig.get_path("stdlib")), manifest, verify_only=args.verify)
     print(json.dumps({"python": platform.python_version(), "modules": result}, sort_keys=True))

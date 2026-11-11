@@ -1,8 +1,11 @@
 """Native media security coverage must reject missing evidence and clean-looking failures."""
 
+import hashlib
 import importlib.util
 import io
+import json
 import os
+import re
 import sys
 import tarfile
 from datetime import UTC, datetime, timedelta
@@ -119,7 +122,7 @@ def valid_scan():
         lambda d: d["descriptor"]["db"]["status"].update(valid=False),
         lambda d: d["descriptor"]["db"]["status"].update(built="invalid"),
         lambda d: d["descriptor"]["db"]["status"].update(
-            built=(datetime.now(UTC) - timedelta(days=2)).isoformat()
+            built=(datetime.now(UTC) - timedelta(hours=49)).isoformat()
         ),
         lambda d: d["descriptor"]["db"]["status"].update(
             built=(datetime.now(UTC) + timedelta(days=2)).isoformat()
@@ -131,6 +134,14 @@ def test_clean_looking_incomplete_or_suppressed_scan_never_passes(native, mutate
     mutate(data)
     with pytest.raises(native.QualificationError):
         native.validate_scan(data, control=False)
+
+
+def test_a_database_from_a_skipped_publication_day_is_still_current(native):
+    # Grype skipped 2026-11-09: the newest database was 33 hours old, and the old
+    # 24-hour limit failed every scan that day whatever the image contained.
+    data = valid_scan()
+    data["descriptor"]["db"]["status"]["built"] = (datetime.now(UTC) - timedelta(hours=33)).isoformat()
+    native.validate_scan(data, control=False)
 
 
 def test_empty_positive_control_does_not_prove_scanner_coverage(native):
@@ -540,3 +551,30 @@ def test_every_build_download_retries_a_reset_connection_or_dns_failure():
     assert len(downloads) >= 3
     for command in downloads:
         assert "--retry-all-errors" in command and "--connect-timeout" in command, command
+
+
+def test_every_ffmpeg_patch_is_applied_shipped_pinned_and_checked(native):
+    # A patch the build applies but the image does not carry, or that is not
+    # hash-pinned, would make the source bundle claim a build it cannot reproduce.
+    root = Path(__file__).resolve().parents[3]
+    recipes = sorted(root.glob("*/ffmpeg-build"))
+    if not recipes:
+        pytest.skip("ffmpeg-build recipes not in this checkout")
+    for recipe in recipes:
+        patches = sorted(p.name for p in recipe.glob("*.patch"))
+        assert "posix-ioctl.patch" in patches and len(patches) > 1, recipe
+        build = (recipe / "build.sh").read_text(encoding="utf-8")
+        package = (recipe / "package.sh").read_text(encoding="utf-8")
+        pinned = (recipe / "verified-inputs.sha256").read_text(encoding="utf-8").split()
+        lock = json.loads((recipe / "source-lock.json").read_text(encoding="utf-8"))
+        backports = {b["file"]: b for b in lock["backports"]}
+        for name in patches:
+            assert f"patch -p1 --batch --fuzz=0 < ../{name}" in build, (recipe, name)
+            assert f"/build/{name}" in package, (recipe, name)
+            assert name in pinned, (recipe, name)
+            assert name in native.RECIPE_FILES, name
+            if name != "posix-ioctl.patch":
+                digest = hashlib.sha256((recipe / name).read_bytes()).hexdigest()
+                assert backports[name]["sha256"] == digest, (recipe, name)
+                assert re.fullmatch(r"[0-9a-f]{40}", backports[name]["upstream_commit"]), name
+        assert sorted(backports) == [p for p in patches if p != "posix-ioctl.patch"], recipe
