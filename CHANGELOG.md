@@ -9,6 +9,1051 @@ FreeSDN is a Community Edition project maintained by its sole owner and
 developer. Releases may contain breaking changes between versions -
 **back up your data before upgrading.**
 
+## [26.11.1] - 2026-11-14 - Safety and reliability
+
+A release of fixes found by running FreeSDN against a real multi-site fleet
+(Omada, Proxmox, OPNsense, TrueNAS, Hikvision recorders and Grandstream phones)
+and by a broad review of the code. Several affect every current install:
+read-only mode could be bypassed, webhooks never delivered a real event, users
+of a deleted organization kept their access, Omada controllers were logged
+into about 1,500 extra times a day, and FreeSDN polled struggling devices
+harder instead of backing off. Read **Upgrading** before you start: the
+containers must be recreated, four database migrations run, and a few
+operator steps apply.
+
+### Security
+
+- **OpenVPN configs are now checked against an allowlist.** With the optional
+  VPN container (`docker-compose.vpn.yml`), FreeSDN runs OpenVPN as root using
+  a config supplied by a user with VPN write permission. That config was
+  checked against a list of dangerous directives. A review found the list could
+  be worked around (through `setenv opt`, a quoted directive name, or a
+  `<connection>` block), which would let such a user run commands in that
+  container. Now every directive must be on a list of standard client
+  directives, checked when the config is saved, when it is imported, and again
+  inside the container just before OpenVPN starts. Installs without the VPN
+  container were not affected.
+
+  **Upgrading:** a saved OpenVPN config that uses a directive outside the list
+  is refused the next time it connects, and the error names the directive.
+  Configs exported by pfSense, OPNsense, OpenVPN Access Server and common VPN
+  providers pass unchanged; scripts (`up`, `down`, `script-security`) and file
+  paths for keys or credentials were already refused and still are.
+- **The phone connection test no longer returns the SIP account password.** The
+  VoIP phone connection test (for a saved phone or an ad-hoc address) logged
+  into the phone, read its configuration and returned every value it read,
+  including P34, the SIP account's authentication password, in clear text. That
+  put the password in the browser, in HAR captures and in any proxy that
+  records responses. The test no longer asks for it, and any password value a
+  phone returns anyway (admin, user, SIP and XML-config passwords) is dropped
+  before the result is sent. Reached by users with `voip.manage_phones`.
+- **A camera or NVR host must be a plain hostname or IP address.** The check
+  that keeps camera and NVR hosts off internal and metadata addresses passed
+  any value it could not resolve. A host carrying URL syntax (a port, path,
+  user info or fragment) never resolves, so it passed, and once placed into the
+  RTSP or HTTP URL it pointed the request somewhere the check had not looked. A
+  bracketed IPv6 address got past the loopback block the same way. A name that
+  is not an IP address must now look like a DNS name, and a bracketed address
+  is checked as the address inside. Reached by users with `cameras.manage` or
+  `cameras.nvr` when creating, importing, testing or editing a camera or NVR.
+  Real hostnames and addresses work as before.
+- **Email password reset can no longer give an SSO-only account a local
+  password.** An account created by single sign-on has no local password and
+  can sign in only through its identity provider. The reset endpoints did not
+  check for that, so anyone who controlled the account's mailbox could set a
+  local password and from then on sign in without the identity provider's MFA
+  or conditional access, even after the provider disabled the user. No reset
+  link is issued for such an account (the response looks the same as for an
+  unknown address), and a link issued earlier is refused. Local accounts reset
+  as before.
+- **Local backup storage stays inside the backup directory.** A local or NFS
+  storage location used whatever path an organization admin typed, so every
+  backup and connection test could write files into any directory the
+  application can write, including its own code and the VPN container's
+  configuration. The path must now resolve, after symlinks and `..`, inside
+  `/data/backups` or inside a directory listed in the new
+  `BACKUP_LOCAL_EXTRA_ROOTS` setting, which only the server's environment can
+  set. See Upgrading for locations created before this change.
+- **Configuring camera PTZ and two-way audio needs its own permission.**
+  `cameras.ptz`, which the operator role holds, also allowed saving,
+  overwriting and deleting presets and patrol tours, changing auto-tracking,
+  and starting two-way audio into the monitored space. Those six actions now
+  need the new `cameras.manage_ptz` permission. Site admins, org admins and
+  admins have it through their `cameras.*` grant; operators do not. Moving a
+  camera, going to a preset and running or stopping a patrol stay on
+  `cameras.ptz`.
+- **Tornado 6.6.1**, from 6.6. Tornado is the web server under Flower, the
+  internal task monitor in the pro and max tiers. Upstream marks 6.6.1 a
+  security release: quadratic percent-decoding of URL data (a denial of
+  service), more open redirects in `RedirectHandler` and the
+  `@addslash`/`@removeslash` decorators, a hang and leak on a redirect to a
+  non-HTTP scheme, and NTFS alternate data streams served on Windows. None has
+  an advisory ID yet, so no scanner reports 6.6.
+- **NetBird client 0.82.1**, from 0.82.0, adopted after the 72-hour waiting
+  period. The fixes that reach the client FreeSDN builds include peer rules in
+  nftables that now match protocols behind IPv6 extension headers, a userspace
+  firewall that treats `0.0.0.0` and `::` as local and drops forwarded traffic
+  that would leave through the interface it arrived on, and removal of a peer
+  that left the network map while its connection was idle. None has an advisory
+  ID yet. No other dependency version changes, and FreeSDN's patches apply
+  unchanged. Like 0.82.0, this version has not yet been tested against a live
+  NetBird network.
+- **Release and check builds install reviewed package versions.** The
+  agent release build upgraded pip to whatever PyPI offered before it checked
+  any hash, and the dependency audit installed `pip-audit` and its dependencies
+  unpinned, both without the 72-hour waiting period. The release build now uses
+  the pip that ships with its pinned Python, and the audit installs `pip-audit`
+  at the versions in the lock file. The frontend image's development stage now
+  installs the lock file with `npm ci` like every other install path, and the
+  redis exporter's Go build is now watched for advisories like the other Go
+  builds. Not yet covered: the build tool itself (Poetry's own dependencies in
+  the backend image build and in CI) is pinned by version but not hash-locked.
+
+- **Camera and NVR background checks no longer contact an address the
+  camera pages would refuse.** The pages check that a camera or NVR host is a
+  plain hostname or IP on a reachable network, but the background tasks
+  (snapshot, health poll, alert ingest, evidence archive, NVR sync) sent the
+  stored host its login without that check, so a host stored before the check
+  existed, or written another way, was used as is. They now apply the same
+  check, so an NVR stored with a public address is no longer polled.
+- **Gateway settings reach the adapter only through a per-vendor list.** A
+  gateway's saved settings were passed whole into the adapter, so an
+  organization admin could set connection options the form never offers,
+  such as switching off certificate checks. Each vendor now accepts only the
+  options its adapter reads, with checked values; anything else is dropped
+  and logged by name.
+- **The edge agent's HTTP proxy is locked down before anything uses it.** It
+  reaches only hosts on an explicit list (none by default), never loopback,
+  link-local or cloud metadata addresses, carries none of FreeSDN's own
+  credentials, and checks the caller's site access. No feature calls it yet.
+
+- **Users of a deleted or deactivated organization are signed out.** Deleting
+  or deactivating an organization only marked it: its users kept their
+  sessions, refresh tokens, API keys and live connections, and could still
+  sign in by password, SSO or LDAP. They are now refused everywhere a session
+  is established, with the same answer as a wrong password, and their sessions
+  are revoked at once. The organization's edge agents, Fabric Connections,
+  SLA report schedules and queued bulk jobs stop as well. Super admins keep
+  their access, the organization holding the last active super admin cannot
+  be deleted, and only a super admin can deactivate or reactivate an
+  organization.
+- **Live camera video checks that the viewer is still signed in.** The live
+  relay checked only the token's signature, so a signed-out or disabled user
+  could open a feed, and an open feed never closed. It now checks when the
+  feed opens and every five minutes while it runs.
+
+- **The configuration backup viewer shows only configuration files.** An
+  OpenWrt backup is a whole archive, and every text file in it was shown with
+  only configuration-style secrets masked, so a VPN password file or PPP
+  secrets in the archive could be read by anyone allowed to view backups. The
+  viewer now shows only the configuration files (`etc/config/*`), read the
+  way OpenWrt reads them (multi-line values, several settings on one line,
+  short keywords), with comments left out; every other file, and any file it
+  cannot read with confidence, appears as its name, size and fingerprint.
+  Passwords and tokens inside URLs, in the address or its parameters, are
+  masked in OpenWrt and OPNsense configurations. Downloading the original
+  still needs a super admin.
+- **The raw Omada call is read-only.** This escape hatch for controller calls
+  the pages do not cover checked the FreeSDN site of the controller but not
+  the controller-side site in the request, wrote outside the change ledger,
+  and returned vendor data unmasked. It now refuses changes (make them on the
+  Omada pages), refuses users limited to some sites, and masks secrets in what
+  it returns.
+- **Cameras and NVRs are contacted at the address that was checked.** The
+  address check resolved a camera's hostname, then the connection resolved it
+  again, so a name that changed its answer in between could reach an address
+  the check would refuse, with the stored credentials. Every connection that
+  carries a stored camera or NVR login (Hikvision, ONVIF, UniFi Protect, the
+  NVR pages, PTZ, snapshots and the RTSP addresses built for playback) now
+  goes to the checked address; UniFi Protect still verifies its certificate
+  against the camera's name. A name that resolves only to IPv6 addresses is
+  refused, and the ONVIF snapshot sends its stored password on a retry only to
+  a checked address. A full RTSP address saved on a camera keeps its own host.
+- **Reactivating an organization signs its members out too**, so sessions
+  from before an organization was retired, including under earlier releases,
+  never come back.
+
+- **A restarted FreeSDN makes no configuration change until it has read its
+  write-safety setting.** A freshly started worker could go by a stale
+  "writes allowed" value in Valkey before it had read the read-only switch
+  from the database, for example right after an upgrade that had saved
+  read-only. Now every process reads the database first; until it has, a
+  cached read-only is honoured and a cached read-write allows nothing, and if
+  the database cannot be read the process stays read-only. (Live operator
+  controls such as camera PTZ are not configuration changes and are not held
+  back by this.)
+
+- **Operators can no longer grant camera permissions or read a camera's
+  login.** The operator role held the camera-access permission, which manages
+  per-camera user grants and hands out a camera's RTSP address with the
+  camera's own login inside it, so an operator could give camera rights to
+  others (or themselves) and, on cameras with a single admin account, learn
+  that account's password. It now belongs to site admins and above. Every RTSP
+  address issued is recorded in the audit log (who, which camera and stream,
+  never the address or password). Live view, playback and PTZ inside FreeSDN
+  are unchanged for operators.
+- **A saved camera or NVR login goes only to that device.** A camera's saved
+  RTSP address could point anywhere, and FreeSDN added the stored login to it
+  when it started playback; the login is now added only when the address is
+  the device's own, and the connection then goes to the checked address.
+  Percent-encoded password parameter names in backed-up configurations are
+  decoded before masking.
+
+### Fixed
+
+- **Read-only mode now holds for every adapter.** With `ADAPTER_READ_ONLY=true`,
+  Hikvision, ONVIF, MikroTik, OPNsense, pfSense, Proxmox, FreePBX and
+  Grandstream still accepted a change when the caller sent `force=true`, and
+  several callers always send it: the camera controls, the Proxmox power,
+  clone, migrate and delete buttons, and the VLAN distribution engine. So a
+  read-only install could still reboot a camera or stop a VM. Now, while
+  read-only mode is on, nothing changes a device except an approved apply from
+  Pending Changes (which itself refuses while read-only is on). Omada, UniFi
+  and OpenWrt already worked this way. Read-write installs, the shipped
+  default, behave exactly as before.
+
+  Two kinds of action still work in read-only mode, because they change no
+  stored configuration: live operator controls (camera PTZ moves, go-to-preset,
+  patrols and two-way audio; FreePBX call originate, hangup, transfer and queue
+  member state), and diagnostics that the vendor API runs as POST requests
+  (MikroTik and pfSense ping, traceroute and DNS lookup). A refused request that
+  carried `force=true` now says that `force` alone does not lift read-only
+  mode.
+
+- **Site-to-site tunnels are shown active only after their config reached the
+  gateways.** Four paths reported a tunnel active with nothing on either
+  gateway. **Enable** set the status directly, **Reprovision** ignored the
+  gateway's answer (only OPNsense can receive a tunnel, so every other gateway
+  "succeeded"), a gateway whose controller had been removed was skipped and
+  counted as done, and the health check promoted a never-pushed tunnel when the
+  far gateway answered a ping. OPNsense also answered "configured" for a
+  WireGuard tunnel whose template had no server or peer section. Now Enable
+  pushes the tunnel if it was never pushed, and a refused push shows the
+  gateway's reason in a red message. **Disable** still changes only FreeSDN's
+  record, so its confirmation no longer says that traffic stops: the gateways
+  keep the tunnel until you tear it down.
+- **Device adoption no longer lists steps it did not do.** No adapter can push
+  a provisioning profile's full configuration yet, and a firmware upgrade can
+  be refused. Both used to appear under the completed steps, so an adoption
+  with a profile read as if the profile had been applied. They now appear as
+  skipped steps with the reason, and the adoption events use the names the
+  Integrations page lists (`adoption.completed`, not
+  `adoption.adoption.completed`).
+- **Distribute VLAN reports what each controller did.** The toast said
+  "distributed successfully" even when every controller refused. It now names
+  each controller that refused and why. Only Omada receives the subnet, gateway
+  and DHCP settings. Other controllers (MikroTik, OPNsense, OpenWrt) used to be
+  passed the whole settings object where they expect a VLAN number; they now
+  get a layer-2 VLAN, and the result and the stored record say so.
+- **Proxmox writes are labelled as what they are.** The adapter badge said
+  "Writes are intentionally disabled", but the Proxmox pages stage and apply VM
+  and container power, clone, migrate, snapshot, backup and configuration
+  changes whenever read-only mode is off. The badge now says those writes are
+  implemented and unit-tested but not yet proven on real hardware.
+- **The automation rule editor offers only actions the engine can run.** Nine
+  of the fifteen listed actions (the device, network, script and API-call
+  actions) have no handler, so a rule using one was refused when saved. The
+  list now comes from the engine.
+- **The OAuth2 Apps page says the token endpoint is not active.** Apps can be
+  registered, but no token can be issued yet; the page now says so and points
+  to API keys.
+- **Bulk firmware for phones says what it does.** It records a target version
+  that firmware compliance reports against; nothing pushes firmware to a phone
+  yet. The API answer, the README and the Grandstream docs page called it a
+  firmware push or a scheduled upgrade.
+- **The FreePBX write note no longer contradicts itself.** The capability badge
+  said the FreePBX write transport was stubbed, while the adapter badge said
+  extension, ring-group and inbound-route creation had been proven live. Both
+  now say the latter; the grade stays experimental until that proof is
+  recorded.
+- **A reachable phone that is not SIP-registered shows as online.** The health
+  check wrote a status the phone pages do not know, so such a phone was counted
+  as neither online nor offline. Its SIP registration state is shown
+  separately, as before.
+- **HTTPS on an IP address works.** Opening `https://<ip>/` failed the TLS
+  handshake in every browser, because a client sends no server name for an IP
+  and the edge then had no certificate to offer. That covered `127.0.0.1` and
+  any install made with `install.sh --domain <ip>`. The edge now answers those
+  clients with the site's own certificate. Installs that use a hostname are
+  unaffected.
+- **Phone health checks reach your phones.** The five-minute check covered only
+  phones in the managed state, and nothing moved a phone there: onboarding
+  stops at "onboarding". So no phone was ever checked, and status, SIP
+  registration and uptime stayed at whatever the discovery scan saw. It now
+  checks every phone you have onboarded. It also used the wrong login: it read
+  credentials that nothing saves and fell back to the factory default
+  `admin`/`admin`. It now uses the credentials you saved for the phone, and
+  skips a phone with none instead of guessing.
+- **Gateways keep syncing after you add them.** The five-minute gateway sync
+  covered only a site's brain gateway, so a firewall added without that role
+  was read once, when it was added, and never again, although it showed sync
+  enabled every 300 seconds. Its rules, NAT, tunnels, interfaces and DHCP
+  leases stayed as they were on day one. Every gateway with sync enabled is
+  now read on its own interval. The sync only reads from the gateway. Two
+  more faults in the same sync, both found once it ran against a real
+  OPNsense: every run ended as failed after doing its work, because it
+  recorded itself with field names the sync log does not have; and an
+  OPNsense DHCP lease time (`2026/11/12 22:18:13`) was rejected by the
+  database, which threw away everything else that run had read. Lease times
+  are now read in the formats gateways send, and a section that fails no
+  longer takes the others with it.
+- **Webhooks and integrations receive real events.** Nothing turned a platform
+  event into a webhook delivery, so every webhook, n8n trigger and integration
+  received only the deliveries sent with **Test**. Events now reach every
+  enabled webhook of the organization they belong to, signed, once per event,
+  with the existing retries and dead-letter queue. `device.*` matches every
+  device event, and an empty event list matches every event except progress
+  updates. Each delivery carries an `X-Webhook-Event-Id` header that stays the
+  same across retries and replays and matches the body's `id`, so a receiver
+  can drop duplicates; test sends now carry the id too. A receiver that failed
+  its last five deliveries within five minutes is paused for a while, and the
+  events meant for it are recorded as failed and can be replayed. A database
+  hiccup while the API starts no longer leaves webhooks switched off until the
+  next restart. Delivering to a host on a private network needs the new
+  `WEBHOOK_ALLOWED_HOSTS` setting (see Upgrading).
+- **Webhook templates subscribe to events that exist.** Eleven of the event
+  names the six templates used are published by nothing (for example
+  `device.offline`, `alert.created`, `backup.complete`, `camera.motion`), so a
+  webhook made from a template mostly could never fire. The templates now use
+  published names (`device.status.changed`, `alert.fired`, `alert.resolved`,
+  `camera.alert.*` and others), say which events FreeSDN does not publish
+  (failed logins, IP blocks, backup start and completion), and show the real
+  delivery body.
+- **Read-only mode holds while Valkey is unavailable.** The read-only switch
+  set from Settings is stored in Valkey. When it could not be read, the gate
+  used the environment default, and the shipped compose file defaults to
+  read-write, so a read-only install got device writes back for as long as
+  Valkey was down. A failed read now keeps the last value read, and a process
+  that has never read it refuses writes until it does.
+- **Read-only mode also stops live call placement from Fabric and the AI
+  assistant.** Placing a call is neither a read nor a staged change, and the
+  PBX call controls deliberately keep working in read-only mode. The Fabric
+  "originate call" operation went through that same path, so on a read-only
+  install a Connection, the Fabric invoke endpoint or the AI assistant could
+  place calls, and the assistant ran it without asking anyone to confirm.
+  Fabric operations that act immediately are now refused while read-only mode
+  is on, and they are never offered to the AI assistant. The PBX page's own
+  call controls behave as before.
+- **PBX call control is audited.** Originate, hang up and transfer are the PBX
+  actions that keep working in read-only mode, and they left no record of who
+  used them. Each now writes an audit record (user, PBX, channel, destination)
+  once the PBX accepts it.
+- **OPNsense ping and traceroute work in read-only mode.** They are sent as
+  POST requests, so read-only mode refused them, while MikroTik and pfSense
+  probes kept working. They are now treated as reads. Diagnostics that change
+  something, such as flushing the ARP table, are still refused. TrueNAS
+  dataset, snapshot, scrub and upload writes now also check read-only mode
+  directly instead of relying on every caller being an approved staged change;
+  no caller bypassed it today.
+- **A gateway that stops answering is backed off instead of polled harder.** A
+  firewall that timed out on every request still got a full sync every five
+  minutes and a health poll every two, each holding a database connection open
+  while it waited, and each timeout was sent up to three times. Now:
+  - the sync and the health poll share a per-gateway circuit breaker, stored in
+    Valkey so every worker sees it: after repeated failures the gateway is left
+    alone and one probe checks it at growing intervals (about 2, 4, 8 and then
+    15 minutes), and a failed or partial full sync backs the full sync off for
+    15 minutes, then 30, 60 and up to 2 hours, even while the light health poll
+    gets answers;
+  - the reason is shown on the gateway (for example "Full sync backed off ...
+    next probe in ~880s");
+  - a sync stops at the first sign the device is in trouble (connect failed, a
+    read timed out, the connection dropped) instead of sending every remaining
+    section, and no database transaction stays open while it waits on the
+    device;
+  - a sync the device did not answer is recorded as failed, with the reason,
+    and the gateway is marked offline when it could not connect. It used to end
+    as a success, online and freshly synced;
+  - the 15-minute drift check no longer contacts a gateway whose sync is
+    switched off, that was deleted, or whose breaker is open.
+- **Imported gateway data is complete for MikroTik and OPNsense.** RouterOS
+  sends every value as text, which the database refused, so a MikroTik
+  gateway's interfaces were never stored and its rules failed to import.
+  OPNsense interfaces were stored without MAC, address, subnet, VLAN tag or
+  type, because the import read only pfSense's field names, and OPNsense NAT
+  rules were never imported. Values are now parsed before they are stored, each
+  field is read under the normalized, pfSense and RouterOS names, and a value
+  that cannot be parsed is left empty instead of failing the section.
+- **A controller that answers again shows as connected on the next health
+  check.** After a short network outage a controller could stay "unreachable"
+  for about ten minutes after it answered again. The two-minute health check
+  ran a full device listing of every controller, one after another, with no
+  time limit, in a queue shared with long syncs. It now just connects to each
+  controller (five at a time, 30 seconds each) in the quick queue. It no longer
+  overwrites an error or syncing status set by discovery, and it no longer
+  marks a controller as synced, which made a never-synced controller look
+  freshly synced.
+- **Periodic tasks use a Proxmox controller's saved API token.** The device
+  status, controller health, device config and metrics tasks built their own
+  login and left out the API token, so a token-only Proxmox controller was sent
+  an empty username and password and flipped between unreachable and connected
+  every few minutes. They now build the connection the same way as discovery
+  and the controller page.
+- **Device status polls ask each system for the identifier it understands.**
+  The status poll asked every controller for a device by its MAC address. A
+  Proxmox node has no MAC, so every poll requested a node called "None" and
+  failed. The poll of OPNsense, pfSense, MikroTik and OpenWrt failed on every
+  run because it misread the answer. Each controller type is now asked by MAC,
+  node name or not at all, as it expects, and a device with nothing to ask by
+  is skipped.
+- **The scheduled discovery follows each controller's Auto sync and interval.**
+  The five-minute discovery ran on every controller, whatever its **Auto sync**
+  and **Sync interval** said, so switching auto sync off or raising the
+  interval to spare a struggling device changed nothing. It now runs only on
+  controllers with auto sync on, when their own interval is up. **Discover
+  all** and **Sync now** still run when you ask.
+- **The Discovery page's Discover buttons create devices.** **Discover** and
+  **Discover all** answered "running" and added nothing: they ran an older copy
+  of discovery that failed on every new device and also scanned disabled and
+  deleted controllers. They now run the same discovery as the scheduled task
+  and the controller page's **Sync now**.
+- **A slow periodic task no longer gets a second copy running beside it.**
+  Twelve scheduled tasks guarded themselves with a lock that expired before the
+  task's own time limit, so a run slowed by one struggling device got a twin at
+  the next tick, doubling the load on that device. Every lock now lasts at
+  least as long as its task can run.
+- **Device health, metrics views and metric alert rules have data.** The health
+  score, the device metrics view and the anomaly rules read CPU, memory and
+  uptime series that nothing recorded. They are now recorded every five
+  minutes, from the values controller sync and discovery already keep for each
+  device, together with temperature and the number of connected clients; no
+  device is contacted for this. A metric threshold rule (for example "CPU above
+  90%") could never fire, because it looked for an event named after the
+  metric; it now reads the recorded metrics and alerts once per device in
+  breach. Per-device and per-site traffic rates are still not recorded, so the
+  traffic views stay empty, and the AI assistant's bandwidth answer now says no
+  data is collected yet instead of reporting zero.
+- **Several pages and tools no longer fail on fields that do not exist.**
+  Filtering device health by type in Analytics answered with an error, the site
+  comparison showed no firmware data for any site, the switch LLDP view failed
+  for every switch with a neighbour, and the AI assistant's VLAN and device
+  health tools failed on every call. Each read a field under a name the data
+  does not have; they now read the right ones.
+- **The bundled Prometheus can scrape FreeSDN.** In production the API serves
+  `/metrics` only with `METRICS_AUTH_TOKEN`, which no install generated and the
+  bundled Prometheus never sent, so on every pro and max install the API target
+  was down and every API alert rule was dead. New installs generate the token,
+  re-running `install.sh` adds it to an existing env file without changing any
+  other secret, and Prometheus reads it from a private file. The Celery queue
+  backlog alert is switched back on and now has data, and the Tasks page, which
+  read queue lengths from the wrong Valkey database and always showed zero
+  pending tasks, shows the real counts.
+- **Database backups no longer crash-loop on a key with another user ID.**
+  `pg-backup` encrypted only to `BACKUP_GPG_RECIPIENT`, and the pro and max
+  templates set it to `backup@example.com`. A key with any other user ID
+  imported fine, then every backup failed and the container restarted forever.
+  An empty recipient now means the single key in the key file, and a test
+  encryption at startup leaves backups off with a stated reason instead of
+  crash-looping. Adding a key no longer needs a container restart: it is picked
+  up within a minute. Backups are still never written unencrypted unless
+  `BACKUP_ALLOW_PLAINTEXT=1` is set.
+- **Tailscale keeps running, in its own container.** In the default
+  (capless) VPN mode, `tailscaled` ran as a child of the API worker that
+  handled the click, and died whenever that worker was recycled, which happens
+  routinely; nothing restarted it, not even an API restart. It now runs in a
+  new `tailscale` container on every tier, as a non-root user with no
+  capabilities and a read-only filesystem, in about 30 to 50 MB of memory. It
+  stays idle and contacts no Tailscale server until you use Tailscale; from
+  then on it starts on its own, and Docker restarts it if it stops. The API
+  and workers drive it over a shared socket, keep working while it is
+  stopped (Tailscale then shows as not running, at once), and no longer hold
+  the node's keys. With `VPN_MODE=userspace` the workers now reach tailnet
+  addresses too. Separately, after a short upstream outage Tailscale stayed
+  offline for about 15 minutes, waiting out the kernel's retransmission
+  timeout on a dead connection; it now gives up on a dead connection after
+  about 100 seconds, and the API and VPN containers do the same for their
+  database and Valkey connections during a failover.
+- **Two spellings of one MAC can no longer share a phone's provisioning file.**
+  The phone's config file is named after its MAC in one canonical form, but
+  MACs were stored as typed, so the same MAC in different case or separators
+  could be saved twice, in different sites. Provisioning either one wrote the
+  same file, so a user who manages phones on one site could replace the SIP
+  server, account and admin password a phone on another site receives. MACs are
+  now stored as `aa:bb:cc:dd:ee:ff`, existing ones are rewritten (see
+  Upgrading), and adding or changing a phone onto a MAC another live phone
+  holds is refused.
+- **PBX background tasks log in.** The call history, extension sync and
+  extension state tasks sent an empty password and no AMI login, so they could
+  not connect to any PBX. They now build the PBX connection the same way as the
+  PBX pages.
+- **Recorder health and alert polls contact only Hikvision recorders.** Every
+  NVR, including ONVIF and other vendors' recorders, was sent Hikvision
+  requests with its stored login twice a minute, failing every time.
+- **An unreachable Proxmox cluster no longer reports healthy storage.** A
+  cluster that did not answer read as "no pools", which the storage health
+  check and the storage monitor reported as healthy. It is now reported as not
+  answering, and a node whose storage cannot be read shows an unavailable pool.
+- **Fabric: a notify step that reaches no one fails.** A notify step with no
+  channels, only unknown channel names or no recipients reported success while
+  alerting no one. It now fails with `NOTIFY_NO_TARGET`. Quiet hours and muted
+  categories still count as success.
+- **Fabric triggers that could never fire.** VLAN and WiFi created, updated and
+  deleted events, `gateway.sync.completed` and `gateway.brain.offline` were
+  published without their organization, so no Connection could fire on them and
+  the live view could not show them. They now carry it. Of the seven
+  `access.door.*` triggers, none was ever published: remote lock and unlock now
+  publish `access.door.locked` and `access.door.unlocked`, and the other five
+  are no longer offered.
+- **Tabs no longer reload the whole page.** Switching a tab that is part of the
+  address (site, switch, firewall, VPN, device list and others) rebuilt the
+  page: a fade, a refetch, and lost filters, search, selection and scroll
+  position. Switch, access point, PoE, VPN, VLAN and WiFi tabs also flashed a
+  full-page "Loading module..." spinner. Tabs now switch in place, and a page
+  that is still loading shows a page-shaped placeholder.
+- **Refresh buttons show that they are refreshing.** A refresh of data that was
+  already on screen gave no sign it had started, so the button looked broken.
+  It now spins and is disabled until the new data arrives, on page headers and
+  on the access point detail page.
+- **Discovery and Topology ask for a site.** In the All Sites view they sent
+  you to the dashboard without a word, including from the sidebar, bookmarks,
+  the command palette and **Add device**. They now show a short explanation and
+  the list of sites to choose from.
+- **Clearing a selection unticks the rows.** On Devices, Controllers, Sites,
+  VLANs, WiFi and Clients, clearing a bulk selection hid the action bar but
+  left every box ticked, and the next tick brought the old selection back. The
+  device bulk reboot and delete confirmations now say how many devices, what
+  happens to them, and that a deleted device a controller still reports comes
+  back on the next sync. Right-aligned and fixed-width table columns now get
+  their alignment and width.
+- **Settings > Access no longer shows "Write access is ON" when it does not
+  know.** The read-only switch showed a stored default (read-write) until the
+  real mode loaded, and kept showing it if loading failed. It now shows only
+  what the server reports, says the mode is unknown while loading or after an
+  error (with **Retry**), asks for confirmation before turning writes on, and
+  says so when the server applied a different mode from the one requested.
+- **Controller pages show real values.** Hosts read `host:undefined`, a missing
+  interval read `undefineds`, an unreachable controller showed as "Unknown" or
+  "Error", and unmapped statuses read "Neutral". Discovery's controller table
+  showed an empty type and grey status for every controller, and its search
+  could crash the page; the scan wizard printed a stray separator. All now show
+  the controller's real type and status.
+- **Vendor configuration values are readable.** Switch DHCP, gateway IPsec
+  status and gateway health cards printed `[object Object]` or raw JSON. They
+  now show Yes/No, short lists, key-value pairs, or a count for anything
+  larger.
+- **Call History works as a list.** Every column offered sorting that did
+  nothing; each now sorts by what it shows. The page had two search boxes; it
+  has one. Counts computed from the newest 500 records now say "500+" instead
+  of presenting a total. See Added for the import itself. Voicemail still lists
+  no messages: nothing imports them yet, and the page says so.
+- **The Alerts console shows readable labels.** Status, severity and security
+  event codes (`firing`, `permission_change`) were printed raw and in English
+  only; they are now translated or made readable, and the five summary cards no
+  longer leave one alone on a second row.
+- **Nothing is cut off at phone width.** Header buttons on device and gateway
+  detail pages, Alerts and Cameras, the Backups action bar and rows, the Logs
+  activity card and the Security event lists ran past the screen edge, where
+  they could not be reached. They now wrap or stack. Security event rows can be
+  opened from the keyboard, and a row with an invalid timestamp no longer
+  crashes the page.
+- **The SLA page no longer crashes from its Reports tab.** An unexpected answer
+  for reports or schedules replaced the whole SLA page, policies and breaches
+  included, with an error.
+- **The dashboard traffic widget shows its totals.** It drew one cumulative
+  counter reading as a chart (a single dot), clipped its axis labels, and its
+  time range buttons changed nothing. It now shows Received and Sent totals
+  until there is a real time series to chart.
+- **Bulk user delete says how many.** It asked 'Delete user "users"?' whatever
+  was selected. It now asks "Delete N users?" and lists the accounts, in the
+  app's own dialog instead of the browser's.
+- **Smaller interface fixes.** The WiFi table no longer nests a button inside a
+  button, the Log Explorer keeps a row's expanded state on the right record,
+  the permission matrix tells screen readers whether each permission is
+  granted, the Ceph tables no longer log rendering errors, and the camera
+  detail page no longer requests the current page again while its stream is
+  starting.
+- **The online demo.** Controller, camera, user, SLA report and capability data
+  now match what the API returns, so the Controllers, camera detail, Users and
+  SLA pages and the capability badges show what a real install shows, and
+  Settings > Access reports the demo's read-only mode.
+- **The read-only switch survives a cache loss and cannot override the
+  environment.** The switch in Settings > Access was kept only in Valkey, so
+  flushing or losing Valkey could turn writes back on. It is now stored in the
+  database with Valkey as a cache, and `ADAPTER_READ_ONLY=true` always wins:
+  Settings > Access shows both sources and refuses to turn writes on while the
+  environment enforces read-only, saying where to change it. A process that
+  can read neither store refuses writes.
+- **Zero-touch provisioning applies a profile's configuration template.** The
+  template merge read a field that does not exist, so applying any profile
+  with a template failed before anything was sent, and adoption ignored the
+  template entirely. Both now push the profile merged over its template.
+  **Apply profile** now needs `force=true` and no longer reports a push the
+  device cannot do.
+- **Cameras page tabs switch in place.** Dashboard and List remounted the page,
+  losing the search and selection; the list's **Clear** now unticks its rows.
+  PTZ tour editing and deleting need the `cameras.manage_ptz` permission and
+  are shown disabled with the reason, and the live view lists the camera's own
+  presets instead of four made-up ones.
+- **Gateway pages say when the gateway was busy.** A panel showing the last
+  answer read is marked "As of 14:02, device busy"; a read that has to wait
+  says "Device busy, retrying" and retries on its own instead of showing an
+  error; a sync skipped for a busy gateway is labelled as a skip, not a
+  failure.
+- **Every port of a large switch is listed.** A switch's port table only ever
+  drew about 22 rows, so the remaining ports of a 48-port switch could not be
+  reached from it. The port table and the access-point list are now compact,
+  sortable tables, and a table row opens only from its own content, so
+  choosing an item in a row's menu no longer also opens the row.
+- **VLAN and WiFi deletes say when the controller did not confirm.** FreeSDN
+  showed a delete as done even when the controller had not confirmed it; it
+  now says the network may still exist on the controller.
+- **Phones and PBX deletes ask first and report what happened.** Deleting a
+  single phone or PBX now asks, a bulk delete says how many were deleted and
+  why any were not, and failed reboots, schedule changes, PBX deletes and
+  evidence-hold releases show the server's reason. The camera live view's
+  centre PTZ button is labelled "Go to preset 1", which is what it does.
+- **Network pages tidied at desktop and phone width.** Discovery topology is
+  readable in dark mode, stat cards no longer cut long values or labels,
+  header buttons share one height, table headers read at one size, the
+  switch list stacks on a phone, and no network page scrolls sideways at
+  390 px.
+- **Confirmations say what will happen.** About 70 delete, reboot, block and
+  similar actions asked through the browser's own prompt; they now ask in
+  FreeSDN's dialog, naming what is affected and what happens. Bulk **Block** on
+  the Clients page now asks first.
+- **More of the interface works on a phone.** The AI Assistant chat, Health
+  alerts, Hypervisor nodes and storage, camera recordings, detection and
+  holiday settings no longer run off the screen.
+- **Translations and honest copy.** The Storage pages and SLA reports are
+  translated into Spanish and Chinese; the Add TrueNAS dialog no longer says
+  FreeSDN never writes to the appliance; the Access Control page says exactly
+  what its capability record says (experimental, API only, door control
+  refused); Collector severity colours meet WCAG AA contrast in both themes.
+- **Deleting one edge agent no longer switches off the site's WireGuard
+  connection.** It disabled the site's whole WireGuard configuration, cutting
+  off every other agent there. Only the deleted agent loses access now, and
+  its open connection is dropped.
+- **The 802.1X push and authentication-event sync use the controller's
+  HTTP/HTTPS setting.** They passed it under a name no adapter reads, so a
+  controller reached over plain HTTP was spoken to over HTTPS.
+- **Switching a module off stops its background polling.** The module's
+  pages disappeared, but its scheduled tasks kept contacting its devices.
+- **Disabling a module also closes its vendor pages' API.** The Proxmox,
+  FreePBX, TrueNAS, OPNsense and pfSense routes stayed callable after their
+  module was switched off. They now answer 403 with `module_disabled`. Omada,
+  UniFi, MikroTik and OpenWrt serve several modules and stay open.
+- **The PBX connection test uses the saved PBX's login.** With a blank
+  username the test logged in as `admin` while the saved PBX used an empty
+  name, and the test dropped the OAuth2 credentials, so a PBX connected
+  through the Admin API failed the test while its syncs worked. Both now use
+  the same login, and a failed test says which login it tried.
+- **Recorded webhook deliveries are no longer lost.** A crash between sending
+  and recording, a lost task, or a retry that never ran could drop a delivery
+  for good. Each delivery is recorded before it is sent and swept up again if
+  it is stuck, so a receiver may get a duplicate (with the same
+  `X-Webhook-Event-Id`) but not a gap. One window remains: an API worker that
+  stops in the instant between taking an event and recording its delivery
+  loses that event; a durable outbox for it is planned.
+- **Event history and webhook delivery records are kept 30 days.** Events
+  were kept 90 days and webhook deliveries forever. `EVENT_RETENTION_DAYS`
+  (default 30) sets both; a delivery whose dead-letter entry is still within
+  the window is kept with it.
+- **Error messages say what the server said.** About 230 places in the
+  interface read the error text from a field the server does not send, so an
+  operator saw a generic "Operation failed" instead of which field was
+  invalid, why a device refused a change, or that read-only mode was on. They
+  now show the server's own message and field errors, a readable message for
+  a network failure or timeout, and the request ID for an internal error.
+- **Dark theme and tables are cleaner.** In the dark theme, checkboxes, date
+  pickers and scrollbars are dark too, and every focusable control shows the
+  same keyboard focus ring. Tables no longer offer sort arrows on columns that
+  cannot be sorted, show an error with **Retry** when loading fails, and line
+  numbers up. Copy buttons say "Copied" only when the text reached the
+  clipboard, and copying works when FreeSDN is opened over plain HTTP.
+  Maturity badges are translated into Spanish and Chinese.
+- **Omada: FreeSDN no longer logs in to the controller again on every
+  sync.** The controller answers a list request sent without paging with
+  "Invalid request parameters", and FreeSDN read that code as an expired
+  session: it logged in again and retried, about six extra logins per sync
+  cycle (around 1,500 a day), each leaving the previous session open on the
+  controller. Codes are now read as the controller means them, and FreeSDN
+  logs in again only when the controller really ends the session (it
+  redirects to its login page), once however many reads are in flight. On
+  6.x controllers, VLANs, connected clients with their Wi-Fi details, switch
+  port profiles and controller status are read in the forms the firmware
+  serves, so they sync again, and endpoints the firmware does not offer stop
+  logging errors every cycle. Switch port reads no longer fail when a session
+  expires mid-sync. Writes to port profiles on 6.x are unchanged and not yet
+  verified against a real controller.
+- **Tailscale reconnects after Disconnect.** After Disconnect, setup offered
+  "Start daemon", which waited and then failed. It now shows "Disconnected"
+  with a Reconnect button (also on the VPN overview) that keeps the node's
+  name, routes and settings; a daemon that is not running reads "Not running".
+- **One device lock per recorder.** A recorder saved by hostname is locked
+  under that one identity by the camera pages and its health poll alike, so
+  camera writes and patrols no longer overlap a poll of the same NVR.
+- **Retired organizations and deleted agents lose their live connections at
+  once.** Deleting or deactivating an organization takes its members' live
+  connections off every API process straight away (they stop receiving
+  updates first, then are closed together), not only at the next five-minute
+  recheck (other API processes are told through Valkey; while Valkey is
+  unreachable they close those connections at that recheck instead),
+  and a database error during that recheck now closes the connection rather
+  than keeping it. Deleting an edge agent drops its connection everywhere too.
+- **Smaller fixes.** Decommissioning a phone asks first and says what it does;
+  checkboxes in the phone, PBX and extension tables name their row; a
+  gateway's Version card shows the stored version, marked "(stored)", when the
+  live read fails; the organization status switch is disabled, with the
+  reason, for org admins; `/gateway` opens the firewall gateways page.
+- **Tailscale reconnect keeps the node's settings, and a hung daemon is
+  restarted.** Disconnect then Reconnect reset the node's name, advertised
+  routes, exit node, shields-up and DNS settings; they are now kept, and a
+  logged-out node is asked to log in again instead. The `tailscale` container
+  stops a daemon that runs but has not answered for about two minutes, so
+  Docker brings it back; a node waiting for its login is never restarted.
+  `/vpn/runtime` reports the daemon reachable only when it answers, and
+  auto-reconnect no longer runs Tailscale commands while the daemon is down
+  or logged out. `TAILSCALE_NO_LOGS_NO_SUPPORT` also covers the optional
+  access addon (`docker-compose.tailscale.yml`; rebuild its image).
+- **`VPN_MODE=userspace` no longer makes every device unreachable.** In that
+  mode every HTTP client is sent through the overlay's SOCKS5 proxy, but the
+  package that lets the clients speak SOCKS is not in the image, so building
+  any client failed and every device, local ones too, became unreachable. The
+  SOCKS support (`socksio`, `aiohttp-socks`) is now part of the image, so
+  device clients reach tailnet addresses and MagicDNS names through the proxy;
+  if it is ever missing, clients connect directly as with the default
+  `VPN_MODE=off` and the gap is logged once. The default mode was never
+  affected.
+- **A NetBird daemon nobody set up no longer costs five seconds per check.**
+  The compose file points every install at the VPN sidecar's NetBird daemon,
+  but only installs that run the optional VPN container have one. Without it,
+  every VPN status check waited out a five-second timeout and logged "Failed to
+  get Netbird status:" at error level with nothing after it, about 150 times a
+  day. A port nothing listens on is now recognised at once and reported as not
+  running, and a real timeout says what timed out.
+
+### Added
+
+- **Configuration backup schedules from the Backups page.** Each device's
+  scheduled configuration backup can be switched on or off and set to run
+  every 6 to 168 hours; **Schedule** and **Back up now** are shown disabled,
+  with the reason, to users who cannot manage them.
+
+- **A stalled worker queue shows up.** `/health/detail` (component
+  `celery_queues`) and Prometheus report each Celery queue with its last
+  heartbeat, and a new alert fires when a queue stops being consumed, so a
+  stopped I/O worker no longer hides behind a healthy default queue. A queue
+  this install does not run is shown as not consumed, not as stalled.
+
+- **Device configuration backup for OPNsense and OpenWrt.** Every OPNsense and
+  OpenWrt gateway now gets a versioned, encrypted history of its running
+  configuration, on the Backups page. It is read-only and gentle on the device:
+  once a day by default (6 to 168 hours per device), a new device's first
+  export spread 10 to 70 minutes out, one export per device at a time, a
+  two-minute limit, growing back-off after failures, and never as part of a
+  sync. A gateway whose sync is switched off, or that belongs to a deleted or
+  deactivated organization, is not contacted. A new version is kept only when
+  the configuration changed, and the newest 30 are kept. Versions and diffs are
+  shown with every password, key and secret replaced by a fingerprint, so a
+  diff shows that a secret changed but never its value; viewing them needs
+  `firewall.view`. **Back up now** (`firewall.manage_rules`) takes one export
+  and is refused while one runs or within ten minutes of the last. Downloading
+  the original file, to restore it through the device's own interface, needs
+  `controller:write` and the super admin role and is audit-logged first.
+  FreeSDN does not restore configurations. Other vendors are not covered yet.
+- **Database backup status in the app.** The Backups page tells admins whether
+  this install has database backups at all, and why not: on a fresh install it
+  says plainly that there are none, gives the reason `pg-backup` reported (no
+  key, a directory where the key file should be, an unusable recipient) and the
+  command to fix it. `/health/detail` gains a `database_backups` component that
+  is degraded while there is no recent restorable backup (the public `/health`
+  is unchanged), and super admins get a notification once a day while backups
+  are failing, stale or off, and once when they work again.
+- **Guided database backup key setup.** `scripts/backup-keygen.sh` creates the
+  backup key pair in a throwaway container with no network, installs the public
+  key, and hands the private key over once (on screen or to a file you name),
+  passphrase-protected by default. FreeSDN never keeps the private key, and it
+  hands it over before installing the public key, so backups are never
+  encrypted to a key nobody holds. The installer creates an empty key file so
+  Docker does not turn the path into a directory, and ends with the command to
+  run when no key is present.
+- **Call history import from FreePBX.** Call records are imported from each PBX
+  every 15 minutes, from the newest stored call onward (the first run reads up
+  to seven days back), without duplicates. It needs a PBX connected with a
+  FreePBX Admin API (OAuth2) application; a PBX without one is marked
+  unsupported and not contacted, and asking it for call records returns "not
+  supported" instead of an empty list. It skips organizations that switched the
+  VoIP module off. The import has not yet been tested against a real PBX; if
+  the PBX's API does not offer the expected fields, the import reports an error
+  and writes nothing.
+- **Events for state changes.** Discovery now publishes `device.status.changed`
+  when a controller reports a device going offline or coming back, once per
+  change. Controllers publish `controller.unreachable` and
+  `controller.recovered`, and a failed gateway sync publishes
+  `gateway.sync.failed`; `gateway.sync.completed` now carries its organization
+  so it reaches webhooks and the live view. The controller and gateway failure
+  events carry the error type only, never the device's message. All four are
+  offered on the Integrations page under Controller Events and the new Gateway
+  Events. `discovery.started`, `discovery.completed` and `discovery.failed` now
+  come from every discovery run, scheduled or manual, not only from the
+  Discovery page's buttons.
+- **Choose table columns.** Tables can offer a column picker, remembered per
+  browser, with a reset; the device table uses it and hides Memory by default
+  so Ports and Last seen fit. Clickable rows open with Enter or Space, and
+  sortable headers announce their sort order.
+- **Capability badges on more pages.** The capability grade now also shows on
+  Collector, Log Explorer, Storage, Marketplace, Plugins, Security, Backups and
+  PBX Systems.
+
+- **Tailscale sends no logs to Tailscale Inc. by default.** `tailscaled` now
+  starts with `--no-logs-no-support`, so it no longer uploads its diagnostic
+  logs to Tailscale Inc.; Tailscale's support then cannot see this node's
+  logs. Set `TAILSCALE_NO_LOGS_NO_SUPPORT=false` to allow the upload. This
+  covers the `tailscale` container, the optional VPN container and the
+  optional access addon.
+- **Omada controllers on firmware 6.3** are listed as supported, after the
+  reads were checked against a real 6.3 controller. Writes to switch port
+  profiles on 6.x are not yet verified on a real controller.
+
+### Changed
+
+- **Configuration writes are recorded in the staging ledger.** Writes made
+  from the network, switch, PoE, access point, device, controller, UniFi,
+  camera, ZTP and VPN pages, and scheduled PoE changes, are now staged and
+  applied in the same request, so the ledger shows who changed what, when, and
+  the result; the pages behave as before, and read-only mode refuses every one
+  before the device is contacted. Reboots, PoE cycles, patrol start and stop,
+  backups and service restarts leave an audit record (user, device, action,
+  result) once the device accepts them. Every firewall gateway change (rules,
+  NAT, DNS, DHCP, VPN, shaper, IDS, backups, firmware), PBX extension and
+  ring-group changes, phone provisioning, cloud-init changes, configuration
+  rollback, drift remediation, 802.1X and roaming pushes and bulk operations
+  are recorded the same way, so no device write is left outside the ledger.
+  In read-only mode these now answer 403 before FreeSDN contacts anything
+  (some answered 502, 500 or 200 with every item failed before).
+- **A change to a busy device waits its turn.** A write to a device another
+  poller is talking to waits up to 5 seconds, then reports "device busy"
+  without sending anything (`DEVICE_WRITE_SLOT_WAIT_SECONDS`).
+- **A delete the device refuses keeps FreeSDN's record.** Deleting a VLAN,
+  WiFi network or site-to-site tunnel that the controller or gateway refused
+  to remove used to delete FreeSDN's record anyway; it is now kept and the
+  reason shown, and `local_only=true` removes only FreeSDN's record when that
+  is what you want. A site with two or more controllers no longer fails with
+  an error on VLAN delete.
+- **Distributing VLANs to limbs and through the distribution engine checks
+  every device first** and stops at the first refusal, and no write reaches a
+  removed (soft-deleted) gateway.
+- **Roaming and cloud 802.1X settings reach the controller.** Roaming
+  (802.11r/k/v) settings were sent with FreeSDN's own id, which the controller
+  did not recognise, and 802.1X pushes to cloud-connected Omada controllers
+  could not authenticate. Both now use the controller's own id and connection.
+- **VLAN distribution to limbs works beyond Omada.** Every limb was called the
+  way only Omada accepts; each vendor now gets its own call.
+- **Full-configuration pushes say plainly that they cannot apply.** No adapter
+  can apply a whole configuration yet, so configuration rollback, drift
+  auto-fix and bulk configuration push now refuse with that reason before
+  staging or contacting anything (rollback answers 501), instead of failing
+  part-way.
+- **Gateway diagnostics respect read-only mode.** Diagnostics backup and
+  service restart are refused before the gateway is contacted while read-only
+  mode is on. Camera and device writes and actions now take the device's turn
+  like every poller (camera PTZ movement, a live control, excepted), and a live MJPEG camera feed ends within five minutes of
+  its viewer being signed out or disabled.
+- **Outbound connections share one builder.** Fourteen clients that talked to
+  devices, controllers and configurable AI providers built their own HTTP
+  connection, without the 8-second connect limit or the VPN proxy; they now
+  use the shared builder, and a check stops new ones.
+- **Configuration versions are recorded again.** Recording a device's
+  configuration version failed on PostgreSQL every time (a locking query the
+  database refuses), so config pushes, rollbacks and drift remediation kept no
+  version history, and the failure also undid the rest of the request.
+- **Configuration rollback and the 802.1X push report what really happened.**
+  Rollback called a method no adapter has, so every rollback failed; it now
+  calls the full-config push and says when a device type cannot take one. The
+  802.1X push recorded a refusal as "pushed"; it is now recorded as failed.
+- **Site-to-site tunnels and Distribute VLAN change every device or none.**
+  Every device is checked before anything is applied; if any one cannot take
+  the change, nothing changes, a device that refuses after others accepted
+  has those changes undone where possible, and the result is reported per
+  device.
+
+- **Pollers take turns at each device.** Discovery,
+  status sync, health checks, gateway sync, drift checks, configuration
+  backups, and the camera, phone, Proxmox, storage and Omada monitors now take
+  turns at each device, shared across every worker, and skip a cycle while
+  another one is talking to it, saying why on the device ("Device busy:
+  gateway full sync since 12:03 UTC"). A device that stops answering is left
+  alone and probed by one poller until it answers. A typical OPNsense gateway
+  now gets about 70 requests an hour from FreeSDN, down from about 276. The
+  turns are kept in Valkey: while Valkey cannot be reached, pollers go ahead
+  rather than stop, and a device added once by hostname and once by address is
+  treated as two devices. Camera PTZ movement is a live control and does not
+  wait its turn, so it can overlap a poll of the same camera; saving a preset
+  does wait.
+- **Every page that reads a device live waits its turn.** Omada, UniFi,
+  MikroTik, Proxmox, TrueNAS, camera and NVR, phone and PBX pages, like the
+  gateway pages, wait up to 2 seconds for a device another poller is talking
+  to, then show the last data read from it with its time (secrets are masked
+  in the kept copy, and it is only served to callers with the same access).
+  With nothing to show they answer "device busy" with a retry time, and the
+  interface retries on its own. The Proxmox task tracker, call-record import,
+  VPN and tunnel pings, RADIUS checks and the overlay monitor take turns too.
+- **Omada controllers are no longer logged into every 2 minutes.** The health
+  check keeps its session and asks whether it is still logged in; controllers
+  that need a fresh login to be checked are checked every 5 minutes
+  (`CONTROLLER_LOGIN_PROBE_INTERVAL_SECONDS`).
+- **Slow devices no longer hold database connections.** The Proxmox, storage,
+  camera, phone and drift checks read the database, talk to the device, then
+  write, so a setting saved during a poll is no longer overwritten.
+- **A crashed worker frees its device within 90 seconds,** instead of leaving
+  it "busy" for up to 16 minutes.
+- **Gentler default polling, and every interval is a setting.** Firewall
+  health every 5 minutes (was 2), device status every 5 (was 1), NVR health
+  every 5 (was 1), Omada alerts every 5 (was 2), controller discovery at most
+  every 10 minutes. NVR alert ingest stays at 30 seconds, because a recorder
+  only returns the events it currently holds.
+- **Gateway pages show data "as of" a time when the firewall is busy.** A live
+  read waits up to 2 seconds for the gateway, then shows the last data read
+  from it with that time, instead of adding another request to a busy box.
+- **Discovery holds no database transaction while a controller answers.** It
+  reads first and writes in a short transaction afterwards, so a slow
+  controller no longer ties up a database connection.
+
+- **Requests to devices are never repeated after a timeout.** Every adapter
+  that retries now follows one rule: a timeout or refused connection is not
+  sent again, a dropped connection or a 502, 503 or 504 is retried only for a
+  read, and a write is sent once. Before, several adapters (OPNsense, Omada,
+  Proxmox, Hikvision, Grandstream, FreePBX) sent a timed-out request up to
+  three times, so one slow read could hold a sync for minutes and add load to a
+  device that was already struggling. OPNsense reads now time out after 30
+  seconds instead of 60; writes keep 60.
+- **Gateway full syncs run at most every 30 minutes by default, spread out.**
+  Full syncs ran every 5 minutes: a site's main gateway on every cycle whatever
+  its interval, and other gateways at their default 300-second interval. Now a
+  gateway's own sync interval is used when it is longer than 30 minutes, each
+  gateway gets a fixed offset so gateways added together do not sync together,
+  and the main gateway follows the same rule. On an OPNsense whose rules exist
+  only in its configuration file, the whole configuration was downloaded on
+  every sync; it is now downloaded at most every six hours, and the last
+  imported rules are kept in between. The health poll and drift checks keep
+  their own schedules. `GATEWAY_SYNC_MIN_INTERVAL_SECONDS` (300 to 86400)
+  changes the 30-minute floor for a gateway that can take more.
+- **Phone discovery scans never guess passwords unless you ask.** A scan
+  without credentials logged into every phone it found as `admin`/`admin`, and
+  with your credentials it still tried `admin`/`admin` as well. Grandstream
+  phones lock their admin account after failed logins. A scan without
+  credentials now only identifies phones (vendor, model, MAC, IP) without
+  logging in, and a scan with credentials tries only yours. Trying the factory
+  default is a per-scan choice, **Try factory default login**, off by default
+  and shown with a lockout warning.
+- **Database transactions cannot sit idle forever.** PgBouncer now closes a
+  client that stays idle inside a transaction for 5 minutes, and PostgreSQL
+  does the same after 10 minutes for direct connections. A few stuck
+  transactions could otherwise use up the connection pool and stall every
+  request. The startup migration lock keeps itself alive, so a long migration
+  is not cut off.
+- **Device metrics are no longer fetched from each device.** The task that
+  logged into each online device's controller every five minutes to fetch
+  metrics, which were then discarded, no longer runs; the recorded metrics come
+  from data FreeSDN already has (see Fixed).
+
+### Upgrading
+
+Rebuild the images and recreate every container: the API container now runs
+with an init process, the API and VPN containers use a shorter TCP
+retransmission limit, the API and worker mount the database backup volume
+read-only, Prometheus starts through a new entrypoint, and PgBouncer and
+PostgreSQL pick up their new idle limits when they restart.
+
+- **Migrations.** Four migrations run when the API starts.
+  `031_device_config_backups` adds the configuration backup tables; going back
+  below it is refused while any configuration snapshot exists.
+  `032_phone_mac_canonical` rewrites every phone MAC to `aa:bb:cc:dd:ee:ff`
+  form. Where two live phones turn out to share one MAC, nothing is merged:
+  both are kept and flagged, provisioning either is refused until you delete or
+  re-address one, and the unauthenticated config pull answers "no config" for
+  them. A MAC that does not parse is left as it is. Going back below 032 is
+  refused while two phones share a MAC.
+  `033_platform_settings` stores the read-only switch in the database,
+  copying the value Valkey held. `034_change_groups` lets staged changes be
+  grouped.
+- **If Valkey is down during the upgrade, read-only mode is switched on.** The
+  read-only switch moves from Valkey into the database. When the upgrade cannot
+  read the old value, it saves read-only, the safe choice; if this installation
+  should write to devices, switch it off in Settings > Access afterwards.
+- **Tailscale access addon.** `docker-compose.tailscale.yml` now drops all
+  capabilities and runs with a read-only root filesystem; rebuild its image.
+- **Read-only switch.** With `ADAPTER_READ_ONLY=true` in the environment, the
+  Settings switch can no longer turn writes on; change the environment
+  instead. The development compose file sets it, so a development install
+  stays read-only until the variable is changed.
+- **Tailscale.** `up -d` (or re-running `install.sh` with your tier) builds
+  and starts the new `tailscale` container. An enrolled node comes up in it
+  from the existing `tailscale_state` volume without enrolling again. If its
+  log says the node state is not readable by uid 1001 (state written as root
+  by the optional VPN container or the development image), run the `chown`
+  command it prints, once. With `docker-compose.vpn.yml` the new container
+  stands by and the VPN container keeps running Tailscale. `VPN_MODE` from
+  your env file now applies to the workers as well as the API.
+- **Known issue: LogDB maintenance jobs show as failed.** A LogDB built since
+  2026-11-12 runs PostgreSQL 18.7, and TimescaleDB 2.30.2 then records every
+  background maintenance run (retention, compression, aggregate refresh) as
+  failed with `cannot drop portal "" while it is being set up`, although the
+  work completes. This is an upstream TimescaleDB defect, fixed from 2.32.1;
+  FreeSDN will move to that release when it is out. Do not downgrade the LogDB
+  to PostgreSQL 18.6: a LogDB that ran 18.7 refuses writes after a downgrade.
+- **Tailscale log upload.** Tailscale's diagnostic log upload to Tailscale
+  Inc. is now off unless `TAILSCALE_NO_LOGS_NO_SUPPORT=false` is set; the
+  daemon picks this up when its container is recreated.
+- **Phones without a saved web login are no longer polled.** The phone health
+  check used to try `admin`/`admin` on them. Save each phone's web login to
+  have it checked.
+- **Phone scans and connection tests need explicit credentials.** API callers
+  of the phone scan, connection test and bulk connect must now send a username
+  and password; they are no longer filled in as `admin`/`admin`. To let a scan
+  try the factory default, send `try_default_credentials: true`.
+- **Call history** is imported only from a PBX connected with a FreePBX Admin
+  API (OAuth2) application. A PBX connected with a web session login keeps an
+  empty call history.
+- **Metrics token.** Re-run `install.sh` with your tier (it keeps your existing
+  secrets) to add `METRICS_AUTH_TOKEN` to an existing env file, or add it
+  yourself. Until then the bundled Prometheus cannot scrape the API.
+- **Database backups.** Run `./scripts/backup-keygen.sh --env-file <your env
+  file>` once the stack is up if the installer or the Backups page says backups
+  are off, and keep the private key it hands over. If Docker already created
+  the key path as a directory, remove it first (`sudo rmdir <path>`). An
+  existing env file that still sets `BACKUP_GPG_RECIPIENT` to
+  `backup@example.com` should set it empty unless your key carries that user
+  ID; otherwise backups stay off with the reason "recipient unusable".
+  `/health/detail` reports degraded until a recent backup exists, so adjust any
+  monitor that watches it.
+- **Local backup storage.** A local or NFS storage location outside
+  `/data/backups` is kept but marked as needing attention, and every backup,
+  test, download or restore through it is refused (the backup is marked failed
+  with the reason and a high-severity event is published). Move it under
+  `/data/backups`, or list its directory in `BACKUP_LOCAL_EXTRA_ROOTS`
+  (comma-separated absolute paths) in the server environment.
+- **Webhooks start delivering.** Webhooks and integrations you enabled before
+  will now receive real events; review them. A receiver on your own network
+  (for example n8n, Node-RED or Home Assistant) must be listed in
+  `WEBHOOK_ALLOWED_HOSTS` (comma-separated host names or addresses); loopback,
+  link-local and cloud metadata addresses stay unreachable whatever is listed.
+  A webhook created from a template earlier keeps the old event names, most of
+  which nothing publishes: edit its events or apply the template again.
+- **Retired organizations.** Members of an organization that was deleted or
+  deactivated before this release are refused from their next request. After
+  an organization is reactivated its users sign in again; sessions from before
+  stay revoked, and API keys work again.
+- **Operators and camera access.** Operators lose the camera-access
+  permission: they can no longer manage per-camera grants or fetch RTSP
+  addresses that carry the camera's login (use live view in FreeSDN, or give
+  the user site admin rights). A custom role that needs either keeps it by
+  holding `cameras.access`. A saved RTSP address that points at a different
+  host from the device whose login it would carry now opens without the login.
+- **Camera permissions.** A custom role that should configure PTZ presets,
+  tours or auto-tracking, or use two-way audio, needs `cameras.manage_ptz`.
+- **Configuration backups start on their own.** After the upgrade, every
+  OPNsense and OpenWrt gateway gets its first configuration export 10 to 70
+  minutes later, then one a day. A gateway whose sync is switched off is not
+  contacted. Turn a device's backups off, or change how often they run, from
+  its **Schedule** button on the Backups page.
+- **Fabric.** A Connection whose notify step reaches no one now fails with
+  `NOTIFY_NO_TARGET` instead of succeeding. The `access.door.granted`,
+  `denied`, `forced`, `held_open` and `alarm` triggers are no longer offered;
+  they never fired.
+- **Controllers with Auto sync off** are no longer discovered on schedule. Use
+  **Sync now** or **Discover all**, or switch Auto sync on.
+
 ## [26.11.0] - 2026-11-11 - Security maintenance
 
 The November security release. In the two weeks after 26.10.4, advisories were

@@ -97,6 +97,16 @@ async def _notify_handler(ctx: OperationContext) -> OperationResult:
     # A returned attempt is not necessarily a send: failed attempts and policy
     # skips must not inflate the count exposed to later Fabric steps.
     outcomes = results or []
+    if not outcomes:
+        # Nothing was even attempted: no channels, only unknown channel names
+        # (a typo such as "slak"), or channels that resolved no recipient. This
+        # used to return ok({"dispatched": 0}), so a Connection whose only job
+        # is to alert someone reported success on every run while alerting no
+        # one.
+        return OperationResult.fail(
+            "no notification was attempted: no known channel with a recipient",
+            "NOTIFY_NO_TARGET",
+        )
     skipped = sum(result.status == DeliveryStatus.SKIPPED for result in outcomes)
     failed = sum(
         not result.success and result.status != DeliveryStatus.SKIPPED for result in outcomes

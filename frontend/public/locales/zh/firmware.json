@@ -225,6 +225,13 @@
       "upgradeFailed": "升级失败",
       "unknownError": "未知错误"
     },
-    "catalogExecutionUnavailable": "此目录存储固件镜像和任务历史记录。目录部署、自动备份和回滚尚不可用。请使用相应控制器的分阶段固件工作流程执行受支持的升级。历史目录任务的完成状态未经硬件验证。"
+    "catalogExecutionUnavailable": "此目录存储固件镜像和任务历史记录。目录部署、自动备份和回滚尚不可用。请使用相应控制器的分阶段固件工作流程执行受支持的升级。历史目录任务的完成状态未经硬件验证。",
+    "confirm": {
+      "deleteSchedule": {
+        "title": "删除计划“{{name}}”？",
+        "description": "仅删除该计划。设备保留其当前固件。",
+        "confirmLabel": "删除计划"
+      }
+    }
   }
 }

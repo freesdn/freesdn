@@ -31,8 +31,9 @@ Gold-standard hardening contract
 This adapter participates in the dual-gate contract shared with
 Omada / Proxmox / OPNsense / pfSense / MikroTik:
 
-  1. ``ADAPTER_READ_ONLY`` (default True) refuses every write method
-     unless the caller explicitly passes ``force=True``.
+  1. ``ADAPTER_READ_ONLY`` (default True) refuses every write method.
+     ``force=True`` does not override it; only an approved staged apply
+     runs while it is set (``apply_context.read_only_refuses_write``).
   2. All channel-bearing methods validate ``1 <= channel <= 256``
      before interpolating into ISAPI URLs (path-traversal guard).
   3. Host/callback URLs are SSRF-checked against loopback/metadata.
@@ -54,6 +55,8 @@ from xml.etree import ElementTree as ET
 
 import httpx
 
+from app.adapters import io_policy
+from app.adapters.apply_context import FORCE_DOES_NOT_LIFT_READ_ONLY, read_only_refuses_write
 from app.adapters.base import (
     AdapterDevice,
     AdapterManifest,
@@ -106,17 +109,38 @@ def _is_adapter_read_only() -> bool:
     return is_adapter_read_only()
 
 
+# Live operator controls that change no stored device configuration. Like
+# FreePBX call control, they keep working in read-only mode when the caller
+# passes force=True (the cameras API does, for operator actions). Everything
+# else on this adapter (reboot, presets/patrols saved, detection, schedules,
+# image, privacy masks, thermal, event subscriptions) changes the device and is
+# refused while read-only is on. Must match the ``action`` strings exactly.
+_OPERATIONAL_ACTIONS: frozenset[str] = frozenset(
+    {
+        "PTZ control",
+        "goto preset",
+        "start patrol",
+        "stop patrol",
+        "open two-way audio",
+        "close two-way audio",
+        "send audio data",
+    }
+)
+
+
 def _enforce_read_only(*, force: bool, action: str) -> None:
     """Raise ``AdapterReadOnlyError`` when the write would mutate device state.
 
     Centralised so the message + behaviour stay in sync across the
     20 write methods on this adapter.
     """
-    if _is_adapter_read_only() and not force:
+    if force and action in _OPERATIONAL_ACTIONS:
+        return
+    if read_only_refuses_write(_is_adapter_read_only()):
         raise AdapterReadOnlyError(
             f"ADAPTER_READ_ONLY is set — Hikvision {action} refused. "
             "Set ADAPTER_READ_ONLY=false in the environment AND pass "
-            "force=true to override.",
+            "force=true to override." + (FORCE_DOES_NOT_LIFT_READ_ONLY if force else ""),
             adapter_id="hikvision",
         )
 
@@ -614,20 +638,23 @@ class HikvisionAdapter(BaseAdapter):
 
     # ── Retry-on-transient helper ───────────────────────────────────────
 
+    #: Transport failures this helper turns into ``AdapterConnectionError``.
+    #: Whether one is REPLAYED is io_policy's call: only a dropped connection on
+    #: a GET/HEAD. A timeout or a refused connection is never retried -- an NVR
+    #: that did not answer in time is not helped by being asked twice more.
     _RETRYABLE_EXCEPTIONS = (
         httpx.ConnectError,
         httpx.ConnectTimeout,
         httpx.ReadTimeout,
         httpx.PoolTimeout,
+        httpx.RemoteProtocolError,
+        httpx.ReadError,
     )
 
-    #: Connect-phase failures mean the request never left us, so replaying one is
-    #: always safe regardless of method.
-    _NEVER_SENT_EXCEPTIONS = (
-        httpx.ConnectError,
-        httpx.ConnectTimeout,
-        httpx.PoolTimeout,
-    )
+    #: A dropped connection on a mutation is ambiguous (the camera may have
+    #: acted); it propagates untouched, exactly as before, so the staged-write
+    #: path can classify the outcome as unknown.
+    _AMBIGUOUS_WRITE_EXCEPTIONS = (httpx.RemoteProtocolError, httpx.ReadError)
 
     #: Methods whose replay is harmless even when the request MAY have reached
     #: the camera (i.e. after a ReadTimeout).
@@ -679,13 +706,16 @@ class HikvisionAdapter(BaseAdapter):
             except self._RETRYABLE_EXCEPTIONS as exc:
                 last_exc = exc
                 self._breaker.record_failure()
+                _is_read = method.upper() in self._IDEMPOTENT_METHODS
+                if not _is_read and isinstance(exc, self._AMBIGUOUS_WRITE_EXCEPTIONS):
+                    raise
                 # A ReadTimeout on a MUTATION is ambiguous: the request is
                 # already on the wire, so the camera may have applied it and only
                 # the response was lost. Replaying it can reboot a camera twice
-                # or re-apply a config write. Connect-phase failures never left
-                # us, so those still retry for any method.
-                _never_sent = isinstance(exc, self._NEVER_SENT_EXCEPTIONS)
-                _replay_safe = _never_sent or method.upper() in self._IDEMPOTENT_METHODS
+                # or re-apply a config write. And per io_policy nothing that
+                # timed out or failed to connect is replayed at all, whatever
+                # the method: only a dropped connection on a read.
+                _replay_safe = io_policy.may_retry_exception(exc, idempotent=_is_read)
                 if not _replay_safe:
                     # STOP. Not merely "skip the backoff" -- the earlier version of
                     # this guard only wrapped the log and the sleep, so the `for`

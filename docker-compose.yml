@@ -19,8 +19,9 @@
 #   dr         → off-site encrypted-backup sync (pro-optional/max)
 #
 # Core services (always on): postgres, logdb, redis, api, worker, scheduler,
-# pg-backup. The data tier is INTERNAL ONLY - only the edge publishes host
-# ports. (The dev overlay exposes DB/Redis/API ports for debugging.)
+# pg-backup, tailscale (stands by until Tailscale is used). The data tier is
+# INTERNAL ONLY - only the edge publishes host ports. (The dev overlay exposes
+# DB/Redis/API ports for debugging.)
 
 # ── Reusable fragments (YAML anchors) - kill per-service duplication ─────────
 x-backend-build: &backend-build
@@ -73,6 +74,10 @@ x-backend-env: &backend-env
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
   LOGDB_PASSWORD: ${LOGDB_PASSWORD}
   ENVIRONMENT: ${ENVIRONMENT:-production}
+  # pg-backup's cadence, so the app judges backup freshness the way the
+  # container's own healthcheck does (Backups page, /health/detail, alerts).
+  BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+  BACKUP_FRESHNESS_GRACE_SECONDS: ${BACKUP_FRESHNESS_GRACE_SECONDS:-7200}
   # TrueNAS/UniFi Protect: optional additional private CA, mounted read-only
   # into every connecting backend service. See docker/DEVICE-TLS.
   FREESDN_DEVICE_CA_BUNDLE: ${FREESDN_DEVICE_CA_BUNDLE:-}
@@ -97,6 +102,8 @@ x-backend-env: &backend-env
   FREESDN_AGENT_RELEASE_GLOBAL_BYTE_LIMIT: ${FREESDN_AGENT_RELEASE_GLOBAL_BYTE_LIMIT:-53687091200}
   FREESDN_AGENT_RELEASE_ORG_BYTE_LIMIT: ${FREESDN_AGENT_RELEASE_ORG_BYTE_LIMIT:-10737418240}
   PROXMOX_UPLOAD_DIR: ${PROXMOX_UPLOAD_DIR:-/data/proxmox-uploads}
+  # Extra local backup roots beyond /data/backups (server config only).
+  BACKUP_LOCAL_EXTRA_ROOTS: ${BACKUP_LOCAL_EXTRA_ROOTS:-}
   # Metrics gate: set METRICS_AUTH_TOKEN to enable authenticated
   # /metrics scraping in prod/staging; unset → the endpoint is not served.
   ENABLE_METRICS: ${ENABLE_METRICS:-true}
@@ -126,12 +133,74 @@ x-backend-env: &backend-env
   # TLS-verified, cloud metadata never reachable.
   # Example: PLUGIN_HTTP_ALLOWED_HOSTS=netbox.lan,10.0.0.50
   PLUGIN_HTTP_ALLOWED_HOSTS: ${PLUGIN_HTTP_ALLOWED_HOSTS:-}
+  # Hosts a WEBHOOK may be delivered to even when they are private/LAN: the
+  # n8n, Node-RED or Home Assistant next to FreeSDN. Same contract as above.
+  # Example: WEBHOOK_ALLOWED_HOSTS=n8n.lan,10.0.0.50
+  WEBHOOK_ALLOWED_HOSTS: ${WEBHOOK_ALLOWED_HOSTS:-}
+  # Days of event history and webhook delivery records kept; the app default
+  # (30) applies when unset.
+  EVENT_RETENTION_DAYS: ${EVENT_RETENTION_DAYS:-30}
   # NetBird daemon address. In the sidecar topology the daemon runs in the `vpn`
   # container and the api/worker drive it via the `netbird` CLI over the SHARED
   # network namespace — so a tcp address (not the default unix socket, which the
   # app containers can't see) lets the CLI reach the daemon. The sidecar LISTENS
   # here, the app CLIs CONNECT here. Loopback inside the shared netns ⇒ private.
   NETBIRD_DAEMON_ADDR: ${NETBIRD_DAEMON_ADDR:-tcp://127.0.0.1:41731}
+  # ── Tailscale ──────────────────────────────────────────────────────────────
+  # tailscaled runs in the `tailscale` runtime container (below), never in an
+  # app container. The api and the workers drive it with the `tailscale` CLI
+  # over the tailscale_run socket volume, and reach tailnet addresses through
+  # its SOCKS5 server when VPN_MODE=userspace (app/core/http_client.py).
+  TAILSCALE_RUNTIME: container
+  FREESDN_OVERLAY_SOCKS5: ${FREESDN_OVERLAY_SOCKS5:-socks5://tailscale:1055}
+  # true (the default): tailscaled sends no logs to Tailscale Inc., and
+  # Tailscale support cannot see this node's logs (--no-logs-no-support). Set
+  # false to allow the upload. The runtime container (and the opt-in vpn
+  # sidecar's tailscaled) read it; keep the two lines equal.
+  # The optional access addon (docker-compose.tailscale.yml) reads it too.
+  TAILSCALE_NO_LOGS_NO_SUPPORT: ${TAILSCALE_NO_LOGS_NO_SUPPORT:-true}
+  # VPN is OFF by default (capless, no privileged sidecar). To enable the
+  # privileged VPN sidecar, layer `-f docker-compose.vpn.yml` + set
+  # COMPOSE_PROFILES=vpn: that overlay sets VPN_MODE=sidecar and rejoins the api
+  # and workers to the vpn netns. See docs.freesdn.org. Set here, not on the api
+  # alone: the workers run the adapter, discovery and overlay tasks, and with the
+  # api-only setting they ignored VPN_MODE=userspace (no SOCKS5 route, overlay
+  # polling skipped as "off").
+  VPN_MODE: ${VPN_MODE:-off}
+  # Gentle polling of gateways: the floor between full syncs, and how often a
+  # full sync may download an OPNsense config.xml for legacy rules. The app's
+  # defaults apply when unset; without these lines neither could be changed.
+  GATEWAY_SYNC_MIN_INTERVAL_SECONDS: ${GATEWAY_SYNC_MIN_INTERVAL_SECONDS:-1800}
+  GATEWAY_CONFIG_XML_REFRESH_SECONDS: ${GATEWAY_CONFIG_XML_REFRESH_SECONDS:-21600}
+  # Polling budgets: how often each scheduled poller contacts a device (the
+  # api, workers and the scheduler all read them; beat intervals come from
+  # here). Every poller also takes the device's slot, so two never talk to one
+  # box at once. See backend/app/core/config.py "Polling budgets".
+  FIREWALL_HEALTH_INTERVAL_SECONDS: ${FIREWALL_HEALTH_INTERVAL_SECONDS:-300}
+  CONTROLLER_SYNC_MIN_INTERVAL_SECONDS: ${CONTROLLER_SYNC_MIN_INTERVAL_SECONDS:-600}
+  DEVICE_STATUS_INTERVAL_SECONDS: ${DEVICE_STATUS_INTERVAL_SECONDS:-300}
+  CONTROLLER_HEALTH_INTERVAL_SECONDS: ${CONTROLLER_HEALTH_INTERVAL_SECONDS:-120}
+  CONTROLLER_LOGIN_PROBE_INTERVAL_SECONDS: ${CONTROLLER_LOGIN_PROBE_INTERVAL_SECONDS:-300}
+  OMADA_MONITOR_INTERVAL_SECONDS: ${OMADA_MONITOR_INTERVAL_SECONDS:-300}
+  CAMERA_HEALTH_INTERVAL_SECONDS: ${CAMERA_HEALTH_INTERVAL_SECONDS:-300}
+  CAMERA_ALERT_POLL_INTERVAL_SECONDS: ${CAMERA_ALERT_POLL_INTERVAL_SECONDS:-30}
+  VOIP_HEALTH_INTERVAL_SECONDS: ${VOIP_HEALTH_INTERVAL_SECONDS:-300}
+  HYPERVISOR_HEALTH_INTERVAL_SECONDS: ${HYPERVISOR_HEALTH_INTERVAL_SECONDS:-120}
+  STORAGE_HEALTH_INTERVAL_SECONDS: ${STORAGE_HEALTH_INTERVAL_SECONDS:-120}
+  CONFIG_BACKUP_INTERVAL_HOURS: ${CONFIG_BACKUP_INTERVAL_HOURS:-24}
+  RECONCILE_INTERVAL_SECONDS: ${RECONCILE_INTERVAL_SECONDS:-900}
+  # Interactive reads of a device: wait this long for its slot, then serve the
+  # last answer with its "as of" time; with nothing cached, wait up to the max
+  # before answering 503 "device busy".
+  DEVICE_UI_READ_WAIT_SECONDS: ${DEVICE_UI_READ_WAIT_SECONDS:-2}
+  DEVICE_UI_READ_MAX_WAIT_SECONDS: ${DEVICE_UI_READ_MAX_WAIT_SECONDS:-15}
+  DEVICE_UI_READ_CONCURRENCY: ${DEVICE_UI_READ_CONCURRENCY:-2}
+  DEVICE_UI_READ_CACHE_SECONDS: ${DEVICE_UI_READ_CACHE_SECONDS:-86400}
+  # A device write waits this long for the device's slot (a poll or another
+  # write in progress), then is refused with "device busy" and nothing is sent.
+  DEVICE_WRITE_SLOT_WAIT_SECONDS: ${DEVICE_WRITE_SLOT_WAIT_SECONDS:-5}
+  # A Celery queue whose heartbeat has not run for this long reads "stalled".
+  CELERY_QUEUE_STALE_SECONDS: ${CELERY_QUEUE_STALE_SECONDS:-180}
 
 x-logging: &default-logging
   driver: "json-file"
@@ -309,6 +378,9 @@ services:
     devices: ["/dev/net/tun:/dev/net/tun"]
     sysctls:
       net.ipv4.ip_forward: "1"
+      # Same bound as the api (see there): this container owns the network
+      # namespace the api and workers join in sidecar mode, and runs tailscaled.
+      net.ipv4.tcp_retries2: "8"
     environment:
       <<: *backend-env
     volumes:
@@ -334,6 +406,88 @@ services:
     logging: *default-logging
     networks: [default]
 
+  # ── Tailscale runtime - capless tailscaled, every tier ─────────────────────
+  # tailscaled with userspace networking (netstack): no TUN device, no
+  # capability, uid 1001, read-only root filesystem, and nothing in the image
+  # but the pinned tailscale binaries (backend/Dockerfile, tailscale-runtime).
+  # Until 26.12 it ran inside the api container, where a gunicorn worker
+  # recycle or an api restart took it down with it.
+  #
+  # FreeSDN uses it over two channels, without sharing a network namespace:
+  #   control  the api and the workers run the `tailscale` CLI against its
+  #            LocalAPI socket on the tailscale_run volume (Connect, status,
+  #            peers, ping). They run as the same uid 1001, so they may write.
+  #   data     userspace networking installs no routes, so a tailnet address
+  #            is reachable only through tailscaled's SOCKS5 server:
+  #            socks5://tailscale:1055 on the compose network
+  #            (FREESDN_OVERLAY_SOCKS5), which every HTTP client built by
+  #            app/core/http_client.py uses in VPN_MODE=userspace.
+  # A shared network namespace (network_mode: service:tailscale) is the other
+  # way, and the wrong one here: a container that joins another's namespace
+  # cannot start while that one is stopped and loses its network whenever it
+  # restarts, so the api and workers would stand and fall with Tailscale. It
+  # would also take the api's name off the compose network, and the opt-in VPN
+  # overlay already moves those same services into the vpn container's
+  # namespace. The cost of the SOCKS5 channel: any container on this internal
+  # network can reach the tailnet through it, not only the api and workers.
+  #
+  # It stands by (no daemon, no traffic to Tailscale) until Tailscale is in
+  # use: a node on the tailscale_state volume, or a Connect click. From then on
+  # it starts on its own. When tailscaled exits the container exits and the
+  # restart policy brings it back; the healthcheck asks the daemon itself, and
+  # the entrypoint's watchdog stops a tailscaled that runs but has not answered
+  # for about two minutes, so a hung daemon is restarted too (Docker never
+  # restarts a container for being unhealthy). The api and workers start and
+  # work without this container.
+  tailscale:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: tailscale-runtime
+    image: ${TAILSCALE_RUNTIME_IMAGE:-freesdn-tailscale:local}
+    # The node's name when no --hostname pref is set (`tailscale up --reset`
+    # clears it): stable, unlike the container ID the api container lent it.
+    hostname: freesdn-controller
+    restart: unless-stopped
+    stop_grace_period: 15s
+    init: true
+    user: "1001:1001"
+    environment:
+      # Keep equal to the line in x-backend-env. Default true: no log upload.
+      TAILSCALE_NO_LOGS_NO_SUPPORT: ${TAILSCALE_NO_LOGS_NO_SUPPORT:-true}
+    volumes:
+      # The node identity. Only this container mounts it (and, in sidecar mode,
+      # the vpn container); the app containers never see the node key.
+      - tailscale_state:/var/lib/tailscale
+      # LocalAPI socket and the api's start request, shared with api/workers.
+      - tailscale_run:/var/run/tailscale
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/freesdn-tailscale-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: ${TAILSCALE_MEM_LIMIT:-256M}
+          cpus: '${TAILSCALE_CPU_LIMIT:-0.5}'
+          pids: 128
+        reservations:
+          memory: ${TAILSCALE_MEM_RESERVATION:-32M}
+    pids_limit: 128
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # The api's dead-connection bound (see there) moved here with tailscaled:
+    # after an upstream outage it abandons a dead control connection in
+    # ~100 s instead of waiting out ~15 min of retransmissions.
+    sysctls:
+      net.ipv4.tcp_retries2: "8"
+    logging: *default-logging
+    networks: [default]
+
   # ── API - FastAPI under gunicorn (internal; reached via the edge) ──────────
   api:
     build: *backend-build
@@ -342,11 +496,7 @@ services:
     stop_grace_period: ${API_STOP_GRACE_PERIOD:-40s}
     environment:
       <<: *backend-env
-      # VPN is OFF by default (capless, no privileged sidecar). To enable the
-      # privileged VPN sidecar, layer `-f docker-compose.vpn.yml` + set
-      # COMPOSE_PROFILES=vpn — that overlay sets FREESDN_VPN_MODE=sidecar and
-      # rejoins the api to the vpn netns. See docs.freesdn.org.
-      VPN_MODE: ${VPN_MODE:-off}
+      # VPN_MODE moved to x-backend-env, so the workers see it too.
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://localhost}
       STRICT_STARTUP: ${STRICT_STARTUP:-true}
       CORS_ORIGINS: ${CORS_ORIGINS:-["https://localhost"]}
@@ -367,16 +517,14 @@ services:
       DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-30}
       DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
     volumes:
-      # Tailscale, capless. `--tun=userspace-networking` runs in netstack,
-      # so it needs NO NET_ADMIN and NO /dev/net/tun -- only somewhere to
-      # write. Without these two the daemon dies in safesocket.Listen on
-      # the read-only rootfs and the UI's Connect button can never work.
-      # Same named volumes the privileged sidecar uses, so the node
-      # identity is shared (and survives) if that overlay is enabled later.
-      - tailscale_state:/var/lib/tailscale
+      # tailscaled's LocalAPI socket, served by the `tailscale` runtime
+      # container: the UI's Connect, status and peer views drive it with the
+      # `tailscale` CLI. Read-write, because Connect leaves the runtime its start
+      # request here. The node state (tailscale_state) is deliberately NOT
+      # mounted: it holds the node's private keys, and only tailscaled needs it.
       - tailscale_run:/var/run/tailscale
-      # NOTE: the VPN control volumes (tailscale_run / openvpn_config / vpn_run /
-      # wireguard_config / wireguard_run) are added back by docker-compose.vpn.yml
+      # NOTE: the other VPN control volumes (openvpn_config / vpn_run /
+      # wireguard_config / wireguard_run) are added by docker-compose.vpn.yml
       # only when the privileged VPN sidecar is enabled. Default api is capless.
       - fabric_artifacts:/data/fabric_artifacts
       - evidence_data:/data/evidence
@@ -436,6 +584,11 @@ services:
       # somewhere tidier, and a nested named volume takes precedence over the
       # tmpfs beneath it.
       - import_export_data:/tmp/freesdn_data
+      # pg-backup's status files (.metrics/), READ-ONLY, so the Backups page and
+      # /health/detail can say when database backups are off or stale instead of
+      # leaving it to `docker compose ps`. The dumps in the same volume are
+      # GPG-encrypted, and this service already holds both database passwords.
+      - pg_backups:/var/lib/freesdn/pg-backups:ro
       # Shared local media and private coordinator socket for API workers and
       # the api-2 service inherited by the single-host HA overlay.
       - hls_media:/tmp/freesdn-hls
@@ -459,6 +612,22 @@ services:
     read_only: true
     tmpfs: [/tmp]
     security_opt: [no-new-privileges:true]
+    # A real init as PID 1 (tini): it reaps anything orphaned, such as an
+    # interactive `tailscale up` that outlived its request. Without it gunicorn's
+    # master is PID 1, reaps strangers itself, and HALTS the whole server if one
+    # exits with code 3 or 4.
+    init: true
+    # A TCP connection whose peer goes silent with data in flight (a firewall
+    # rebooting on the path) is aborted after ~100 s instead of the kernel
+    # default 15 retries, ~15.4 min. Seen on the 2026-11 soak: after a 2-minute
+    # upstream outage capless tailscaled (then in this container; the tailscale
+    # runtime container has the same bound now) stayed offline ~15 minutes on its
+    # dead control connection. 8 is RFC 1122's 100 s minimum; measured on Linux 6.8:
+    # aborted 105 s after the peer went silent. Namespaced to this container's
+    # network namespace (no capability needed; the host keeps its own value),
+    # and it equally bounds a dead PgBouncer/Valkey connection in a failover.
+    sysctls:
+      net.ipv4.tcp_retries2: "8"
     logging: *default-logging
     # api has NO networks/network_mode key -> it joins the project default network
     # (freesdn-network) and is reachable as `api:8000`. The optional VPN overlay
@@ -477,6 +646,11 @@ services:
     # that touches them never hits the read-only rootfs (the env anchor points
     # every backend service at these paths).
     volumes:
+      # tailscaled's LocalAPI socket (the `tailscale` runtime container): the
+      # VPN sync/health/reconnect tasks and overlay.poll_health run here, not in
+      # the api. Read-only is enough to connect to a socket; only the api leaves
+      # the runtime a start request.
+      - tailscale_run:/var/run/tailscale:ro
       - agent_releases:/data/agent-releases
       - proxmox_uploads:/data/proxmox-uploads
       - plugin_data:/data/plugins
@@ -506,6 +680,9 @@ services:
       - sla_reports:/data/sla_reports
       - voip_provisioning:/data/provisioning/voip
       - import_export_data:/tmp/freesdn_data
+      # Read-only pg-backup status for backup.check_database_backups ("default"
+      # queue); see the api service.
+      - pg_backups:/var/lib/freesdn/pg-backups:ro
     depends_on:
       postgres: {condition: service_healthy}
       logdb: {condition: service_healthy}
@@ -557,6 +734,8 @@ services:
     environment:
       <<: *backend-env
     volumes:
+      # tailscaled's LocalAPI socket; see `worker`.
+      - tailscale_run:/var/run/tailscale:ro
       - agent_releases:/data/agent-releases
       - proxmox_uploads:/data/proxmox-uploads
       - plugin_data:/data/plugins
@@ -1009,25 +1188,68 @@ services:
       chmod 600 ~/.pgpass;
       unset PG_PASSWORD LOGDB_PASS;
       export GNUPGHOME=/tmp/gnupg;
-      mkdir -p $$GNUPGHOME; chmod 700 $$GNUPGHOME;
       GPG_KEY=/etc/freesdn/gpg/backup-public.asc;
-      GPG_ENABLED=0;
-      if [ -n "$$BACKUP_GPG_RECIPIENT" ] && [ -s "$$GPG_KEY" ] && gpg --batch --import "$$GPG_KEY" >/tmp/gpg-import.log 2>&1; then
-        GPG_ENABLED=1;
-        echo "GPG backup encryption ENABLED - recipient: $$BACKUP_GPG_RECIPIENT";
-      elif [ -n "$$BACKUP_GPG_RECIPIENT" ]; then
-        echo "WARNING: GPG requested but key import FAILED; see /tmp/gpg-import.log. Backups would be UNENCRYPTED.";
+      GPG_ENABLED=0; GPG_TARGET=""; GPG_REASON=no_key; GPG_ATTEMPT=0;
+      write_reason() {
+        printf "%s\n" "$$1" > /backups/.metrics/pg_backup.reason.tmp;
+        mv /backups/.metrics/pg_backup.reason.tmp /backups/.metrics/pg_backup.reason;
+      };
+      setup_gpg() {
+        GPG_ENABLED=0; GPG_TARGET="";
+        if [ -d "$$GPG_KEY" ]; then GPG_REASON=key_path_is_directory; return 1; fi;
+        if [ ! -f "$$GPG_KEY" ] || [ ! -s "$$GPG_KEY" ]; then GPG_REASON=no_key; return 1; fi;
+        GPG_ATTEMPT=$$((GPG_ATTEMPT + 1));
+        mkdir -p /tmp/gnupg; chmod 700 /tmp/gnupg;
+        export GNUPGHOME=/tmp/gnupg/$$GPG_ATTEMPT;
+        mkdir -p "$$GNUPGHOME"; chmod 700 "$$GNUPGHOME";
+        KEYS=$$(gpg --batch --with-colons --show-keys "$$GPG_KEY" 2>/dev/null | awk -F: "\$$1 == \"pub\" {n++} END {print n+0}" || true);
+        case "$$KEYS" in ""|*[!0-9]*|0) GPG_REASON=no_public_key; return 1;; esac;
+        if ! gpg --batch --import "$$GPG_KEY" >/tmp/gpg-import.log 2>&1; then GPG_REASON=import_failed; return 1; fi;
+        GPG_TARGET=$${BACKUP_GPG_RECIPIENT:-};
+        if [ -z "$$GPG_TARGET" ]; then
+          if [ "$$KEYS" != 1 ]; then GPG_REASON=ambiguous_key; return 1; fi;
+          GPG_TARGET=$$(gpg --batch --with-colons --list-keys 2>/dev/null | awk -F: "\$$1 == \"fpr\" {print \$$10; exit}" || true);
+          if [ -z "$$GPG_TARGET" ]; then GPG_REASON=import_failed; return 1; fi;
+        fi;
+        if ! printf "freesdn-encryption-probe" | gpg --batch --yes --trust-model always --encrypt --recipient "$$GPG_TARGET" --output /dev/null >/tmp/gpg-probe.log 2>&1; then
+          GPG_REASON=recipient_unusable; return 1;
+        fi;
+        GPG_ENABLED=1; GPG_REASON=encrypted; return 0;
+      };
+      explain_gpg() {
+        case "$$GPG_REASON" in
+          key_path_is_directory) echo "  The key path is a DIRECTORY: Docker created it because the file did not exist when the stack started. On the host remove that empty directory (sudo rmdir BACKUP_GPG_PUBLIC_KEY_PATH), put the key file there, then recreate this container.";;
+          no_key) echo "  No public key at BACKUP_GPG_PUBLIC_KEY_PATH. Run ./scripts/backup-keygen.sh on the host (or export your own public key there).";;
+          no_public_key) echo "  The file at BACKUP_GPG_PUBLIC_KEY_PATH holds no OpenPGP public key.";;
+          import_failed) echo "  The public key could not be imported; see /tmp/gpg-import.log in this container.";;
+          ambiguous_key) echo "  The key file holds more than one key: set BACKUP_GPG_RECIPIENT to the fingerprint to encrypt to.";;
+          recipient_unusable) echo "  Cannot encrypt to recipient $$GPG_TARGET (no matching key, expired, revoked or no encryption subkey); see /tmp/gpg-probe.log. Leave BACKUP_GPG_RECIPIENT empty to use the single key in the file.";;
+        esac;
+      };
+      if setup_gpg; then
+        echo "GPG backup encryption ENABLED - recipient: $$GPG_TARGET";
+      elif [ "$${BACKUP_ALLOW_PLAINTEXT:-0}" = "1" ]; then
+        echo "WARNING: no usable GPG key ($$GPG_REASON) and BACKUP_ALLOW_PLAINTEXT=1: dumps are UNENCRYPTED.";
+        GPG_REASON=plaintext_opt_in;
       else
-        echo "GPG not configured (set BACKUP_GPG_RECIPIENT + BACKUP_GPG_PUBLIC_KEY_PATH to enable).";
-      fi;
-      if [ "$$GPG_ENABLED" != "1" ] && [ "$${BACKUP_ALLOW_PLAINTEXT:-0}" != "1" ]; then
-        echo "Backups DISABLED: no encryption configured and BACKUP_ALLOW_PLAINTEXT is not set. Refusing to write plaintext dumps (secure by default).";
-        echo "  Enable: set BACKUP_GPG_RECIPIENT + a valid BACKUP_GPG_PUBLIC_KEY_PATH, or set BACKUP_ALLOW_PLAINTEXT=1 (not recommended), then re-up.";
+        echo "Backups DISABLED ($$GPG_REASON): no usable encryption key and BACKUP_ALLOW_PLAINTEXT is not set. Refusing to write plaintext dumps (secure by default).";
+        explain_gpg;
         BACKUP_ENABLED=0;
         write_metrics 0;
-        echo "Idling - container stays up but writes no backups until reconfigured (no crash-loop).";
-        while true; do sleep 3600; done;
+        write_reason "$$GPG_REASON";
+        echo "Idling - the key file is re-checked every 60s and backups start on their own once it is usable (no restart needed unless the path is a directory).";
+        LAST_SUM=$$(cksum "$$GPG_KEY" 2>/dev/null || true);
+        while true; do
+          sleep 60;
+          SUM=$$(cksum "$$GPG_KEY" 2>/dev/null || true);
+          if [ "$$SUM" = "$$LAST_SUM" ]; then continue; fi;
+          LAST_SUM=$$SUM;
+          if setup_gpg; then echo "Public key detected - GPG backup encryption ENABLED - recipient: $$GPG_TARGET"; break; fi;
+          echo "Backups still DISABLED ($$GPG_REASON)."; explain_gpg; write_reason "$$GPG_REASON";
+        done;
+        BACKUP_ENABLED=1;
       fi;
+      write_reason "$$GPG_REASON";
       echo "FreeSDN DB Backup service started (interval $${BACKUP_INTERVAL_SECONDS}s, retention $${BACKUP_RETENTION_DAYS}d)";
       while true; do
         STAMP=$$(date +%Y%m%d_%H%M%S);
@@ -1035,8 +1257,8 @@ services:
         backup_exit() { result=$$?; cleanup_partial; if [ "$$result" != 0 ]; then write_metrics 1; fi; exit "$$result"; };
         trap backup_exit EXIT;
         if [ "$$GPG_ENABLED" = "1" ]; then
-          pg_dump -h postgres -U $$PGUSER -d $${POSTGRES_DB:-freesdn} --no-owner --no-privileges | gzip | gpg --batch --yes --trust-model always --encrypt --recipient "$$BACKUP_GPG_RECIPIENT" --output /backups/freesdn_$$STAMP.sql.gz.gpg.partial;
-          pg_dump -h logdb -U $$LOGDB_USER -d $$LOGDB_DB --no-owner --no-privileges | gzip | gpg --batch --yes --trust-model always --encrypt --recipient "$$BACKUP_GPG_RECIPIENT" --output /backups/logdb_$$STAMP.sql.gz.gpg.partial;
+          pg_dump -h postgres -U $$PGUSER -d $${POSTGRES_DB:-freesdn} --no-owner --no-privileges | gzip | gpg --batch --yes --trust-model always --encrypt --recipient "$$GPG_TARGET" --output /backups/freesdn_$$STAMP.sql.gz.gpg.partial;
+          pg_dump -h logdb -U $$LOGDB_USER -d $$LOGDB_DB --no-owner --no-privileges | gzip | gpg --batch --yes --trust-model always --encrypt --recipient "$$GPG_TARGET" --output /backups/logdb_$$STAMP.sql.gz.gpg.partial;
           mv /backups/freesdn_$$STAMP.sql.gz.gpg.partial /backups/freesdn_$$STAMP.sql.gz.gpg;
           mv /backups/logdb_$$STAMP.sql.gz.gpg.partial /backups/logdb_$$STAMP.sql.gz.gpg;
         else
@@ -1144,6 +1366,20 @@ services:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus/alerts.yml:/etc/prometheus/freesdn-alerts.yml:ro
       - prometheus_data:/prometheus
+    # The api serves /metrics in production only with a bearer token
+    # (METRICS_AUTH_TOKEN). Without one here, FreeSDN's own target was DOWN
+    # (404) on every install and none of the API alert rules could fire. The
+    # entrypoint writes the token to a 0600 file in the container's /tmp (not
+    # the data volume, not the image, not prometheus.yml), drops it from the
+    # process environment and starts Prometheus; the freesdn-api job reads it
+    # as credentials_file. An empty token leaves the target honestly DOWN.
+    environment:
+      METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:-}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - umask 077 && printf %s "$$METRICS_AUTH_TOKEN" > /tmp/metrics_auth_token && unset METRICS_AUTH_TOKEN && exec /bin/prometheus "$$@"
+      - prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -1293,8 +1529,8 @@ volumes:
   sla_reports:          # rendered SLA CSV/PDF (SLA_REPORTS_DIR)
   voip_provisioning:    # generated handset config XML
   import_export_data:   # shared /tmp/freesdn_data - api writes, worker reads (and back)
-  tailscale_state:
-  tailscale_run:      # tailscaled control socket, shared vpn <-> api/worker
+  tailscale_state:    # tailscaled node state: the tailscale runtime (or vpn sidecar) only
+  tailscale_run:      # tailscaled LocalAPI socket, shared tailscale/vpn <-> api/workers
   netbird_state:      # netbird daemon state
   netbird_config:     # netbird config
   openvpn_config:     # .ovpn client configs the api writes, the sidecar runs

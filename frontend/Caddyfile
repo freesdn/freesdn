@@ -3,13 +3,22 @@
 # by CADDY_SITE_ADDRESS:
 #
 #   :80                      → plain HTTP  (default; behind an upstream LB, or local)
-#   localhost / 127.0.0.1    → HTTPS via Caddy's INTERNAL CA  (homelab, no domain)
+#   localhost / an IP        → HTTPS via Caddy's INTERNAL CA  (homelab, no domain)
 #   freesdn.example.com      → HTTPS via Let's Encrypt, auto-obtained + renewed (SMB/pro)
 #
 # No other change is needed to switch modes - Caddy provisions/renews certs itself.
 
 {
 	admin off
+	# A client that connects to an IP address sends no TLS server name (SNI),
+	# and behind Docker's port mapping Caddy cannot fall back to the address
+	# the client dialled, so it has no certificate to offer and aborts the
+	# handshake ("tlsv1 alert internal error"). That broke every browser on
+	# https://<ip>/ and https://127.0.0.1/ -- including an install made with
+	# `install.sh --domain <ip>`, which the installer accepts. default_sni
+	# answers those clients with the site's own certificate. A hostname site is
+	# unaffected: browsers always send SNI for a name.
+	default_sni {$CADDY_SITE_ADDRESS:localhost}
 	email {$CADDY_ACME_EMAIL:admin@example.com}
 }
 

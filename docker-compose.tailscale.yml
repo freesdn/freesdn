@@ -53,10 +53,26 @@ services:
       TS_SERVE_CONFIG: /config/serve.json
       # e.g. --login-server=https://your-headscale.example for self-hosted Headscale
       TS_EXTRA_ARGS: ${TS_EXTRA_ARGS:-}
+      # The base stack's setting (x-backend-env and the tailscale runtime
+      # container): true stops this node's log uploads to Tailscale Inc. The
+      # image's entrypoint turns it into tailscaled --no-logs-no-support.
+      TAILSCALE_NO_LOGS_NO_SUPPORT: ${TAILSCALE_NO_LOGS_NO_SUPPORT:-true}
     volumes:
       - tailscale_access_state:/var/lib/tailscale
       - ./docker/tailscale/serve.json:/config/serve.json:ro
-    # capless by design — intentionally NO `cap_add` and NO `devices`.
+    # Capless by design: NO `cap_add`, NO `devices`, and every default Docker
+    # capability dropped. Userspace tailscaled needs none of them. The root
+    # filesystem is read-only; tailscaled writes only its state volume, /tmp
+    # (containerboot's LocalAPI socket, /tmp/tailscaled.sock) and
+    # /var/run/tailscale (the socket link that lets `docker exec ... tailscale`
+    # work without --socket). It still runs as uid 0 inside the container: the
+    # image has no USER, and existing installs' state volume is owned by root.
+    # With no capabilities that uid cannot bypass file permissions or raise
+    # privileges.
+    read_only: true
+    tmpfs: [/tmp, /var/run/tailscale]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     networks: [default]
     depends_on:
       edge:

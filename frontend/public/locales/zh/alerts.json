@@ -129,6 +129,34 @@
       "errorTitle": "错误",
       "operationFailed": "操作失败",
       "securityReviewUnavailable": "安全事件审核功能尚未提供"
+    },
+    "status": {
+      "firing": "触发中",
+      "acknowledged": "已确认",
+      "resolved": "已解决",
+      "suppressed": "已抑制",
+      "open": "未处理",
+      "investigating": "调查中",
+      "mitigating": "缓解中",
+      "closed": "已关闭",
+      "failed": "失败",
+      "success": "成功"
+    },
+    "securityRow": {
+      "description": "{{user}}，来自 {{ip}} · 风险 {{risk}}",
+      "unknownUser": "未知用户",
+      "unknownIp": "未知 IP"
+    },
+    "incidentRow": {
+      "fallbackDescription": "包含 {{count}} 个关联事件的事件"
+    },
+    "severity": {
+      "critical": "严重",
+      "high": "高",
+      "warning": "警告",
+      "medium": "中",
+      "low": "低",
+      "info": "信息"
     }
   }
 }

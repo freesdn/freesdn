@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.core.organization_access import organization_state_admits
 from app.core.security import verify_token
 from app.db import get_session
 from app.models import User
@@ -475,8 +476,14 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         # Module permissions
         "cameras.view",
         "cameras.playback",
+        # Moving cameras only. Saving/deleting presets and tours, auto-tracking
+        # and two-way audio are cameras.manage_ptz: site_admin and above (their
+        # cameras.*), like cameras.manage, because they change the device for
+        # every later viewer, and talk-back speaks into the monitored space.
         "cameras.ptz",
-        "cameras.access",
+        # No cameras.access: it grants and revokes per-camera permissions and
+        # returns the camera's own login inside the RTSP stream URL. Site
+        # admins and above hold it through cameras.*.
         "firewall.view",
         "firewall.view_logs",
         "gateway.view",
@@ -890,7 +897,14 @@ async def _get_user_by_id(
     session: AsyncSession,
     user_id: str,
 ) -> User | None:
-    """Load user by ID from database."""
+    """Load a user who may act right now, by ID.
+
+    Returns ``None`` for a soft-deleted user, and for a user whose organization
+    has been deleted or deactivated (super admins excepted, see
+    ``app.core.organization_access``). Every caller is establishing a
+    principal: the JWT and API-key paths below, the camera media handler, and
+    the stored authors of Fabric camera snapshots and automation rules.
+    """
     try:
         user_uuid = uuid.UUID(user_id)
     except (ValueError, TypeError):
@@ -904,7 +918,10 @@ async def _get_user_by_id(
         )
         .where(User.id == user_uuid, User.deleted_at.is_(None))
     )
-    return result.scalar_one_or_none()
+    user = result.scalar_one_or_none()
+    if user is None or not organization_state_admits(user, user.organization):
+        return None
+    return user
 
 
 # ===========================================
@@ -1032,8 +1049,9 @@ async def get_current_user_optional(
                     # Load the key owner
                     user = await _get_user_by_id(session, str(db_key.user_id))
                     # SECURITY: apply the same gates as JWT auth.
-                    # _get_user_by_id already filters deleted_at IS NULL, but
-                    # we re-check defensively in case that helper changes.
+                    # _get_user_by_id already filters deleted_at IS NULL (and
+                    # refuses a member of a deleted or deactivated organization),
+                    # but we re-check defensively in case that helper changes.
                     if user is None:
                         return None
                     if getattr(user, "deleted_at", None) is not None:

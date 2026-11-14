@@ -11,6 +11,7 @@ plugin bridge, and AI tool registry, with lazy imports. We exercise:
 - per-module fault isolation (a buggy module never breaks the catalog),
 - AI-tool projection + the catalog() shape/counts.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -27,6 +28,7 @@ def _reset_fabric_catalog_cache():
     fabric_registry.invalidate()
     yield
     fabric_registry.invalidate()
+
 
 # ---------------------------------------------------------------------------
 # Operation / EventSpec validation
@@ -56,11 +58,18 @@ class TestOperationValidation:
 
     def test_write_requires_feature_and_permission(self) -> None:
         with pytest.raises(ValueError):  # missing feature
-            Operation(id="storage.dataset.create", title="x", write=True, permission="storage.write")
+            Operation(
+                id="storage.dataset.create", title="x", write=True, permission="storage.write"
+            )
         with pytest.raises(ValueError):  # missing permission (would run ungated)
             Operation(id="storage.dataset.create", title="x", write=True, feature="storage.dataset")
-        op = Operation(id="storage.dataset.create", title="x", write=True,
-                       feature="storage.dataset", permission="storage.write")
+        op = Operation(
+            id="storage.dataset.create",
+            title="x",
+            write=True,
+            feature="storage.dataset",
+            permission="storage.write",
+        )
         assert op.feature == "storage.dataset" and op.permission == "storage.write"
 
     def test_tier_namespace_rules(self) -> None:
@@ -71,13 +80,21 @@ class TestOperationValidation:
         with pytest.raises(ValueError):
             Operation(id="acme.sync", title="x", tier=OperationTier.PLUGIN)
         # hyphenated plugin id is allowed
-        op = Operation(id="plugin.acme-monitoring.sync", title="x", tier=OperationTier.PLUGIN,
-                       provider_id="acme-monitoring")
+        op = Operation(
+            id="plugin.acme-monitoring.sync",
+            title="x",
+            tier=OperationTier.PLUGIN,
+            provider_id="acme-monitoring",
+        )
         assert op.id == "plugin.acme-monitoring.sync"
 
     def test_event_spec_validation(self) -> None:
-        ev = EventSpec(event_type="cameras.event.motion", title="Motion",
-                       produces=("image/jpeg",), provider_id="cameras")
+        ev = EventSpec(
+            event_type="cameras.event.motion",
+            title="Motion",
+            produces=("image/jpeg",),
+            provider_id="cameras",
+        )
         assert ev.to_catalog_dict()["produces"] == ["image/jpeg"]
         with pytest.raises(ValueError):
             EventSpec(event_type="plugin.x.evt", title="x", tier=OperationTier.NATIVE)
@@ -127,7 +144,9 @@ class TestRegistryDiscovery:
     def test_native_discovery(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from app.core.fabric.registry import fabric_registry
 
-        op = Operation(id="storage.pool.read", title="pools", tier=OperationTier.NATIVE, provider_id="storage")
+        op = Operation(
+            id="storage.pool.read", title="pools", tier=OperationTier.NATIVE, provider_id="storage"
+        )
         ev = EventSpec(event_type="storage.pool.degraded", title="degraded", provider_id="storage")
         _patch_modules(monkeypatch, {"storage": _FakeModule("storage", [op], [ev])})
         _patch_plugin_bridge(monkeypatch)
@@ -143,30 +162,45 @@ class TestRegistryDiscovery:
         _patch_modules(monkeypatch, {})
         _patch_plugin_bridge(
             monkeypatch,
-            actions=[{
-                "type": "plugin.acme.sync", "short_type": "sync",
-                "description": "Sync", "params_schema": {"type": "object"},
-                "plugin_id": "acme",
-            }],
-            triggers=[{
-                "type": "plugin.acme.threshold", "short_type": "threshold",
-                "description": "Threshold", "schema": {}, "plugin_id": "acme",
-            }],
+            actions=[
+                {
+                    "type": "plugin.acme.sync",
+                    "short_type": "sync",
+                    "description": "Sync",
+                    "params_schema": {"type": "object"},
+                    "plugin_id": "acme",
+                }
+            ],
+            triggers=[
+                {
+                    "type": "plugin.acme.threshold",
+                    "short_type": "threshold",
+                    "description": "Threshold",
+                    "schema": {},
+                    "plugin_id": "acme",
+                }
+            ],
         )
         ops = fabric_registry.list_operations()
         events = fabric_registry.list_events()
         plugin_op = next(o for o in ops if o.id == "plugin.acme.sync")
         assert plugin_op.tier is OperationTier.PLUGIN and plugin_op.provider_id == "acme"
-        assert any(e.event_type == "plugin.acme.threshold" and e.tier is OperationTier.PLUGIN for e in events)
+        assert any(
+            e.event_type == "plugin.acme.threshold" and e.tier is OperationTier.PLUGIN
+            for e in events
+        )
 
     def test_buggy_module_does_not_break_catalog(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from app.core.fabric.registry import fabric_registry
 
         good = Operation(id="net.vlan.read", title="vlans", provider_id="network")
-        _patch_modules(monkeypatch, {
-            "bad": _FakeModule("bad", raises=True),
-            "network": _FakeModule("network", [good]),
-        })
+        _patch_modules(
+            monkeypatch,
+            {
+                "bad": _FakeModule("bad", raises=True),
+                "network": _FakeModule("network", [good]),
+            },
+        )
         _patch_plugin_bridge(monkeypatch)
         ids = {o.id for o in fabric_registry.list_operations()}
         assert "net.vlan.read" in ids  # the good module still surfaces
@@ -177,14 +211,29 @@ class TestRegistryDiscovery:
 
         nat = Operation(id="storage.pool.read", title="pools", provider_id="storage")
         _patch_modules(monkeypatch, {"storage": _FakeModule("storage", [nat])})
-        _patch_plugin_bridge(monkeypatch, actions=[{
-            "type": "plugin.acme.sync", "short_type": "sync", "description": "",
-            "params_schema": {}, "plugin_id": "acme",
-        }])
-        _patch_ai_tools(monkeypatch, {
-            "list_devices": AITool(name="list_devices", description="d", parameters={}, handler=lambda: None),
-            "plugin_acme_foo": AITool(name="plugin_acme_foo", description="p", parameters={}, handler=lambda: None),
-        })
+        _patch_plugin_bridge(
+            monkeypatch,
+            actions=[
+                {
+                    "type": "plugin.acme.sync",
+                    "short_type": "sync",
+                    "description": "",
+                    "params_schema": {},
+                    "plugin_id": "acme",
+                }
+            ],
+        )
+        _patch_ai_tools(
+            monkeypatch,
+            {
+                "list_devices": AITool(
+                    name="list_devices", description="d", parameters={}, handler=lambda: None
+                ),
+                "plugin_acme_foo": AITool(
+                    name="plugin_acme_foo", description="p", parameters={}, handler=lambda: None
+                ),
+            },
+        )
 
         cat = fabric_registry.catalog()
         assert set(cat) >= {"operations", "events", "ai_tools", "counts"}
@@ -218,9 +267,12 @@ class TestCamerasReferenceDeclarations:
         # ``camera.alert.*`` triggers (matching what _dispatch_alerts publishes),
         # plus the status transitions.
         assert types >= {
-            "camera.alert.line_cross", "camera.alert.intrusion",
-            "camera.alert.tamper", "camera.alert.face",
-            "camera.status.online", "camera.status.offline",
+            "camera.alert.line_cross",
+            "camera.alert.intrusion",
+            "camera.alert.tamper",
+            "camera.alert.face",
+            "camera.status.online",
+            "camera.status.offline",
         }
         # The old declarations advertised events that NEVER fired — they must be gone.
         assert "cameras.event.motion" not in types
@@ -242,9 +294,14 @@ class TestPlatformEventSources:
         from app.core.fabric.builtin_ops import builtin_events
 
         evs = {e.event_type: e for e in builtin_events()}
-        assert {"controller.change.applied", "controller.change.staged",
-                "controller.change.failed",
-                "device.status.changed", "device.discovered", "device.updated"} <= set(evs)
+        assert {
+            "controller.change.applied",
+            "controller.change.staged",
+            "controller.change.failed",
+            "device.status.changed",
+            "device.discovered",
+            "device.updated",
+        } <= set(evs)
         for e in evs.values():
             assert e.tier is OperationTier.NATIVE and e.provider_id == "fabric"
         # the staged-change stream carries the cross-app vendor discriminator
@@ -266,12 +323,20 @@ class TestHypervisorWriteTargets:
         from app.modules.hypervisor.module import HypervisorModule
 
         ops = {o.id: o for o in HypervisorModule().get_operations()}
-        assert {"hypervisor.vm.snapshot", "hypervisor.vm.start", "hypervisor.vm.stop",
-                "hypervisor.vm.shutdown", "hypervisor.vm.reboot",
-                # expanded surface: full VM lifecycle + node maintenance as ops
-                "hypervisor.vm.suspend", "hypervisor.vm.resume",
-                "hypervisor.vm.migrate", "hypervisor.vm.clone",
-                "hypervisor.node.reboot", "hypervisor.node.shutdown"} <= set(ops)
+        assert {
+            "hypervisor.vm.snapshot",
+            "hypervisor.vm.start",
+            "hypervisor.vm.stop",
+            "hypervisor.vm.shutdown",
+            "hypervisor.vm.reboot",
+            # expanded surface: full VM lifecycle + node maintenance as ops
+            "hypervisor.vm.suspend",
+            "hypervisor.vm.resume",
+            "hypervisor.vm.migrate",
+            "hypervisor.vm.clone",
+            "hypervisor.node.reboot",
+            "hypervisor.node.shutdown",
+        } <= set(ops)
         for o in ops.values():
             # device writes: must route through staging (feature) + be permissioned
             assert o.write is True and o.feature and o.permission
@@ -312,9 +377,14 @@ class TestStorageParticipant:
         from app.modules.storage.module import StorageModule
 
         evs = {e.event_type for e in StorageModule().get_emitted_events()}
-        assert {"storage.pool.degraded", "storage.pool.healthy", "storage.capacity.warning",
-                "storage.alert.critical", "storage.appliance.unreachable",
-                "storage.appliance.online"} <= evs
+        assert {
+            "storage.pool.degraded",
+            "storage.pool.healthy",
+            "storage.capacity.warning",
+            "storage.alert.critical",
+            "storage.appliance.unreachable",
+            "storage.appliance.online",
+        } <= evs
 
     def test_dispatcher_routes_store_blob_to_truenas(self) -> None:
         from app.api.v1.endpoints.adapter_omada_vpn import _service_for_feature
@@ -352,13 +422,24 @@ class TestModuleMeshSources:
             FirewallModule: {"gateway.sync.completed", "gateway.brain.offline"},
             BackupModule: {"backup.validation.failed"},
             AIModule: {"ai.budget.warning"},
-            AccessControlModule: {"access.door.forced", "access.door.granted", "access.door.alarm"},
+            AccessControlModule: {"access.door.locked", "access.door.unlocked"},
         }
         for cls, expected in cases.items():
             evs = cls().get_emitted_events()
             ids = {e.event_type for e in evs}
             assert expected <= ids, f"{cls.__name__} missing {expected - ids}"
             assert all(e.tier is OperationTier.NATIVE and e.provider_id for e in evs)
+        # Nothing publishes these yet; offering them as triggers was a lie.
+        access = {e.event_type for e in AccessControlModule().get_emitted_events()}
+        assert access.isdisjoint(
+            {
+                "access.door.granted",
+                "access.door.denied",
+                "access.door.forced",
+                "access.door.held_open",
+                "access.door.alarm",
+            }
+        )
 
     def test_modules_declare_read_op_handlers(self) -> None:
         # mid-chain read targets — each must have a real handler + permission

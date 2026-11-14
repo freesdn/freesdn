@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
 /**
- * Storage write actions — snapshot, dataset create, scrub, snapshot delete.
+ * Storage write actions: snapshot, dataset create, scrub, snapshot delete.
  *
  * Every one STAGES a change (never touches the appliance directly) via
  * ``POST /gateway-storage/{id}/changes/{feature}``, and the operator applies it
@@ -13,8 +13,11 @@
  * disabled with an explanation rather than hidden, so an operator understands
  * WHY they cannot act rather than wondering where the buttons went.
  */
+import { useMemo } from 'react';
 import { z } from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
+import { Trans, useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Camera, Database, Play, Trash2 } from 'lucide-react';
 import { FormDialog } from '@/components/ui/form-dialog';
 import {
@@ -26,6 +29,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,16 +44,17 @@ import { useToast } from '@/hooks/use-toast';
 import { stageStorageChange } from '@/lib/api';
 import { pendingChangesQueryKey } from '@/components/gateways/PendingChangesDrawer';
 import type { StorageDataset, StoragePool, StorageSnapshot } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // A ZFS snapshot/dataset name segment: TrueNAS accepts a conservative set, and
 // the backend re-validates -- this catches the obvious typo before a round trip.
 const ZFS_NAME = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
-const zfsName = (label: string) =>
+const zfsName = (t: TFunction, label: string) =>
   z
     .string()
-    .min(1, `${label} is required`)
+    .min(1, t('validation.required', { label }))
     .max(200)
-    .regex(ZFS_NAME, `${label} may use letters, numbers, and . _ - :`);
+    .regex(ZFS_NAME, t('validation.zfsName', { label }));
 
 /** Suggest a sortable, human snapshot name. Local time is fine for a label. */
 function suggestSnapshotName(): string {
@@ -59,6 +64,7 @@ function suggestSnapshotName(): string {
 }
 
 function useStageStorage(controllerId: string, onStaged: () => void) {
+  const { t } = useTranslation('storage');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -68,16 +74,13 @@ function useStageStorage(controllerId: string, onStaged: () => void) {
   ) => {
     try {
       await stageStorageChange({ ...params, controllerId });
-      toast({ title: 'Change staged', description: successMessage });
+      toast({ title: t('stage.staged'), description: successMessage });
       // The drawer/badge share this key; nudge both to show the new row.
       queryClient.invalidateQueries({ queryKey: pendingChangesQueryKey('storage', controllerId) });
       onStaged();
     } catch (err) {
-      const detail =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        (err as { message?: string })?.message ||
-        'Could not stage the change.';
-      toast({ title: 'Could not stage the change', description: detail, variant: 'destructive' });
+      const detail = getApiErrorMessage(err, t('stage.failedDetail'));
+      toast({ title: t('stage.failed'), description: detail, variant: 'destructive' });
       throw err; // keep the FormDialog open on failure
     }
   };
@@ -85,10 +88,12 @@ function useStageStorage(controllerId: string, onStaged: () => void) {
 
 // ── snapshot a dataset ──────────────────────────────────────────────────
 
-const snapshotSchema = z.object({
-  name: zfsName('Snapshot name'),
-  recursive: z.boolean(),
-});
+const snapshotSchema = (t: TFunction) =>
+  z.object({
+    name: zfsName(t, t('snapshotDialog.nameLabel')),
+    recursive: z.boolean(),
+  });
+type SnapshotValues = z.infer<ReturnType<typeof snapshotSchema>>;
 
 export function SnapshotDatasetDialog({
   controllerId,
@@ -103,18 +108,20 @@ export function SnapshotDatasetDialog({
   onOpenChange: (o: boolean) => void;
   onStaged: () => void;
 }) {
+  const { t } = useTranslation('storage');
+  const schema = useMemo(() => snapshotSchema(t), [t]);
   const stage = useStageStorage(controllerId, onStaged);
   if (!dataset) return null;
 
   return (
-    <FormDialog<z.infer<typeof snapshotSchema>>
+    <FormDialog<SnapshotValues>
       open={open}
       onOpenChange={onOpenChange}
-      title="Take a snapshot"
-      description={`A point-in-time snapshot of ${dataset.name}. Additive — it creates a restore point and changes nothing on disk.`}
-      schema={snapshotSchema}
+      title={t('snapshotDialog.title')}
+      description={t('snapshotDialog.description', { dataset: dataset.name })}
+      schema={schema}
       defaultValues={{ name: suggestSnapshotName(), recursive: false }}
-      submitLabel="Stage snapshot"
+      submitLabel={t('snapshotDialog.submit')}
       onSubmit={async (values) => {
         await stage(
           {
@@ -122,7 +129,7 @@ export function SnapshotDatasetDialog({
             operation: 'create',
             payload: { dataset: dataset.name, name: values.name, recursive: values.recursive },
           },
-          `Snapshot ${dataset.name}@${values.name} staged for review.`,
+          t('snapshotDialog.staged', { snapshot: `${dataset.name}@${values.name}` }),
         );
       }}
     >
@@ -133,12 +140,17 @@ export function SnapshotDatasetDialog({
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Snapshot name</FormLabel>
+                <FormLabel>{t('snapshotDialog.nameLabel')}</FormLabel>
                 <FormControl>
                   <Input placeholder="freesdn-20260824-1830" {...field} />
                 </FormControl>
                 <FormDescription>
-                  Stored as <span className="font-mono">{dataset.name}@{field.value || 'name'}</span>
+                  <Trans
+                    i18nKey="snapshotDialog.storedAs"
+                    t={t}
+                    values={{ snapshot: `${dataset.name}@${field.value || t('snapshotDialog.namePlaceholder')}` }}
+                    components={{ mono: <span className="font-mono" /> }}
+                  />
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -150,18 +162,16 @@ export function SnapshotDatasetDialog({
             render={({ field }) => (
               <FormItem className="flex flex-row items-start gap-3 rounded-lg border p-3">
                 <FormControl>
-                  <input
-                    type="checkbox"
+                  {/* The shared Checkbox: a native box is a bright white square in the dark theme. */}
+                  <Checkbox
                     checked={field.value}
-                    onChange={(e) => field.onChange(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-input"
+                    onCheckedChange={(checked) => field.onChange(checked === true)}
+                    className="mt-0.5"
                   />
                 </FormControl>
                 <div className="space-y-0.5">
-                  <FormLabel className="cursor-pointer">Include child datasets</FormLabel>
-                  <FormDescription>
-                    Snapshot every dataset nested under this one, atomically.
-                  </FormDescription>
+                  <FormLabel className="cursor-pointer">{t('snapshotDialog.recursiveLabel')}</FormLabel>
+                  <FormDescription>{t('snapshotDialog.recursiveDescription')}</FormDescription>
                 </div>
               </FormItem>
             )}
@@ -174,10 +184,12 @@ export function SnapshotDatasetDialog({
 
 // ── create a dataset ────────────────────────────────────────────────────
 
-const datasetSchema = z.object({
-  name: zfsName('Dataset name'),
-  comments: z.string().max(1024),
-});
+const datasetSchema = (t: TFunction) =>
+  z.object({
+    name: zfsName(t, t('datasetDialog.nameLabel')),
+    comments: z.string().max(1024),
+  });
+type DatasetValues = z.infer<ReturnType<typeof datasetSchema>>;
 
 export function CreateDatasetDialog({
   controllerId,
@@ -192,17 +204,19 @@ export function CreateDatasetDialog({
   onOpenChange: (o: boolean) => void;
   onStaged: () => void;
 }) {
+  const { t } = useTranslation('storage');
+  const schema = useMemo(() => datasetSchema(t), [t]);
   const stage = useStageStorage(controllerId, onStaged);
 
   return (
-    <FormDialog<z.infer<typeof datasetSchema>>
+    <FormDialog<DatasetValues>
       open={open}
       onOpenChange={onOpenChange}
-      title="Create a dataset"
-      description="A new ZFS dataset. Give it as a pool-relative path, e.g. backups or media/photos — not a /mnt path."
-      schema={datasetSchema}
+      title={t('datasetDialog.title')}
+      description={t('datasetDialog.description')}
+      schema={schema}
       defaultValues={{ name: '', comments: '' }}
-      submitLabel="Stage dataset"
+      submitLabel={t('datasetDialog.submit')}
       onSubmit={async (values) => {
         // The pool prefixes a bare name so the operator does not have to repeat
         // it; a name that already starts with the pool is left as-is.
@@ -213,7 +227,7 @@ export function CreateDatasetDialog({
             operation: 'create',
             payload: { name: full, comments: values.comments || undefined },
           },
-          `Dataset ${full} staged for review.`,
+          t('datasetDialog.staged', { dataset: full }),
         );
       }}
     >
@@ -224,15 +238,21 @@ export function CreateDatasetDialog({
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Dataset path</FormLabel>
+                <FormLabel>{t('datasetDialog.pathLabel')}</FormLabel>
                 <FormControl>
                   <Input placeholder="backups" {...field} />
                 </FormControl>
                 <FormDescription>
-                  Created as{' '}
-                  <span className="font-mono">
-                    {field.value?.startsWith(`${poolName}/`) ? field.value : `${poolName}/${field.value || 'name'}`}
-                  </span>
+                  <Trans
+                    i18nKey="datasetDialog.createdAs"
+                    t={t}
+                    values={{
+                      dataset: field.value?.startsWith(`${poolName}/`)
+                        ? field.value
+                        : `${poolName}/${field.value || t('datasetDialog.namePlaceholder')}`,
+                    }}
+                    components={{ mono: <span className="font-mono" /> }}
+                  />
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -243,9 +263,9 @@ export function CreateDatasetDialog({
             name="comments"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Comment (optional)</FormLabel>
+                <FormLabel>{t('datasetDialog.commentLabel')}</FormLabel>
                 <FormControl>
-                  <Input placeholder="What this dataset is for" {...field} />
+                  <Input placeholder={t('datasetDialog.commentPlaceholder')} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -272,6 +292,7 @@ export function ScrubPoolDialog({
   onOpenChange: (o: boolean) => void;
   onStaged: () => void;
 }) {
+  const { t } = useTranslation('storage');
   const stage = useStageStorage(controllerId, onStaged);
   if (!pool) return null;
 
@@ -279,24 +300,20 @@ export function ScrubPoolDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Start a scrub on {pool.name}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            A scrub verifies every block in the pool against its checksums and repairs what it
-            can. It is safe and read-heavy — it runs in the background for a while and the
-            dashboard shows its progress. This stages the request for you to apply.
-          </AlertDialogDescription>
+          <AlertDialogTitle>{t('scrubDialog.title', { pool: pool.name })}</AlertDialogTitle>
+          <AlertDialogDescription>{t('scrubDialog.description')}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t('dialog.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             onClick={async () => {
               await stage(
                 { feature: 'storage.scrub', operation: 'start', payload: { pool: pool.name } },
-                `Scrub of ${pool.name} staged for review.`,
+                t('scrubDialog.staged', { pool: pool.name }),
               );
             }}
           >
-            <Play className="mr-2 h-4 w-4" /> Stage scrub
+            <Play className="mr-2 h-4 w-4" /> {t('scrubDialog.submit')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -319,6 +336,7 @@ export function DeleteSnapshotDialog({
   onOpenChange: (o: boolean) => void;
   onStaged: () => void;
 }) {
+  const { t } = useTranslation('storage');
   const stage = useStageStorage(controllerId, onStaged);
   if (!snapshot) return null;
 
@@ -326,15 +344,18 @@ export function DeleteSnapshotDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete this snapshot?</AlertDialogTitle>
+          <AlertDialogTitle>{t('deleteSnapshotDialog.title')}</AlertDialogTitle>
           <AlertDialogDescription>
-            <span className="font-mono">{snapshot.id}</span> will be destroyed when you apply the
-            change. The dataset and its live data are untouched — only this restore point is
-            removed, and only after you apply.
+            <Trans
+              i18nKey="deleteSnapshotDialog.description"
+              t={t}
+              values={{ snapshot: snapshot.id }}
+              components={{ mono: <span className="font-mono" /> }}
+            />
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t('dialog.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={async () => {
@@ -344,11 +365,11 @@ export function DeleteSnapshotDialog({
                   operation: 'delete',
                   payload: { snapshot_id: snapshot.id },
                 },
-                `Deletion of ${snapshot.id} staged for review.`,
+                t('deleteSnapshotDialog.staged', { snapshot: snapshot.id }),
               );
             }}
           >
-            <Trash2 className="mr-2 h-4 w-4" /> Stage delete
+            <Trash2 className="mr-2 h-4 w-4" /> {t('deleteSnapshotDialog.submit')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -398,8 +398,6 @@ async def safe_http_request(
     """
     from urllib.parse import urlparse, urlunparse
 
-    import httpx  # local import — keeps module importable without httpx
-
     if not url or not isinstance(url, str):
         raise ValueError("URL must be a non-empty string")
 
@@ -478,7 +476,10 @@ async def safe_http_request(
     if parsed.scheme == "https" and verify_tls:
         request_extensions.setdefault("sni_hostname", parsed.hostname)
 
-    async with httpx.AsyncClient(
+    # Imported here, as httpx was, so importing this module stays light.
+    from app.core.http_client import build_async_client
+
+    async with build_async_client(
         timeout=timeout,
         verify=verify_tls,
         follow_redirects=follow_redirects,

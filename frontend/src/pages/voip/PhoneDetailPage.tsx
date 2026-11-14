@@ -17,7 +17,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, RefreshCw, Settings, Upload,
-  Wrench, XCircle, CheckCircle, Copy, AlertTriangle,
+  Wrench, XCircle, CheckCircle, AlertTriangle,
   Activity, HardDrive, Cpu, Clock, FileText,
   Shield, Code, Link2, Unlock, Eye, EyeOff,
   Phone as PhoneIcon,
@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout';
 import { Button } from '@/components/ui/button';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -43,11 +44,13 @@ import { Switch } from '@/components/ui/switch';
 import { voipApi, sitesApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import {
   PhoneStatusBadge, LifecycleBadge, ProvisionBadge, SIPIndicator,
   formatTimeAgo, formatUptime,
 } from './components';
 import type { VoIPPhone, PhoneConnectionTestResult } from './types';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 function InfoRow({ label, value, mono }: { label: string; value?: string | number | null; mono?: boolean }) {
   return (
@@ -66,6 +69,7 @@ export default function PhoneDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
 
   const activeTab = tab && VALID_PHONE_TABS.has(tab) ? tab : 'overview';
   const setActiveTab = useCallback((value: string) => {
@@ -124,25 +128,25 @@ export default function PhoneDetailPage() {
   const onboardMutation = useMutation({
     mutationFn: (data: any) => voipApi.onboardPhone(id!, data),
     onSuccess: () => { invalidatePhone(); setShowOnboardDialog(false); },
-    onError: (err: any) => console.error('Onboard failed:', err?.response?.data?.detail || err.message),
+    onError: (err: any) => console.error('Onboard failed:', getApiErrorMessage(err)),
   });
 
   const decommissionMutation = useMutation({
     mutationFn: () => voipApi.decommissionPhone(id!),
     onSuccess: invalidatePhone,
-    onError: (err: any) => console.error('Decommission failed:', err?.response?.data?.detail || err.message),
+    onError: (err: any) => console.error('Decommission failed:', getApiErrorMessage(err)),
   });
 
   const maintenanceMutation = useMutation({
     mutationFn: (enabled: boolean) => voipApi.toggleMaintenance(id!, enabled),
     onSuccess: invalidatePhone,
-    onError: (err: any) => console.error('Maintenance toggle failed:', err?.response?.data?.detail || err.message),
+    onError: (err: any) => console.error('Maintenance toggle failed:', getApiErrorMessage(err)),
   });
 
   const provisionMutation = useMutation({
     mutationFn: () => voipApi.provisionPhone(id!, { force: true }),
     onSuccess: invalidatePhone,
-    onError: (err: any) => console.error('Provision failed:', err?.response?.data?.detail || err.message),
+    onError: (err: any) => console.error('Provision failed:', getApiErrorMessage(err)),
   });
 
   const connTestMutation = useMutation({
@@ -161,7 +165,7 @@ export default function PhoneDetailPage() {
         ip_address: phone?.ip_address || '',
         authenticated: false,
         sip_registered: false,
-        error: err?.response?.data?.detail || err.message || t('PhoneDetailPage.connTest.testFailed'),
+        error: getApiErrorMessage(err, t('PhoneDetailPage.connTest.testFailed')),
       });
     },
   });
@@ -179,7 +183,7 @@ export default function PhoneDetailPage() {
     onSuccess: (res) => setPushSipPreview(res.data),
     onError: (err: any) => toast({
       title: t('PhoneDetailPage.toasts.previewFailed'),
-      description: err?.response?.data?.detail || err.message,
+      description: getApiErrorMessage(err),
       variant: 'destructive',
     }),
   });
@@ -203,7 +207,7 @@ export default function PhoneDetailPage() {
     },
     onError: (err: any) => toast({
       title: t('PhoneDetailPage.toasts.pushFailed'),
-      description: err?.response?.data?.detail || err.message,
+      description: getApiErrorMessage(err),
       variant: 'destructive',
     }),
   });
@@ -238,7 +242,7 @@ export default function PhoneDetailPage() {
     onSuccess: (res) => setMigratePreview(res.data),
     onError: (err: any) => toast({
       title: t('PhoneDetailPage.toasts.migrationPreviewFailed'),
-      description: err?.response?.data?.detail || err.message,
+      description: getApiErrorMessage(err),
       variant: 'destructive',
     }),
   });
@@ -262,7 +266,7 @@ export default function PhoneDetailPage() {
     },
     onError: (err: any) => toast({
       title: t('PhoneDetailPage.toasts.migrationFailed'),
-      description: err?.response?.data?.detail || err.message,
+      description: getApiErrorMessage(err),
       variant: 'destructive',
     }),
   });
@@ -280,7 +284,7 @@ export default function PhoneDetailPage() {
     },
     onError: (err: any) => toast({
       title: t('PhoneDetailPage.toasts.rebootFailed'),
-      description: err?.response?.data?.detail || err.message,
+      description: getApiErrorMessage(err),
       variant: 'destructive',
     }),
   });
@@ -293,7 +297,7 @@ export default function PhoneDetailPage() {
     },
     onError: (err: any) => toast({
       title: t('PhoneDetailPage.toasts.factoryResetFailed'),
-      description: err?.response?.data?.detail || err.message,
+      description: getApiErrorMessage(err),
       variant: 'destructive',
     }),
   });
@@ -579,9 +583,13 @@ export default function PhoneDetailPage() {
                     <Button variant="outline" size="sm" onClick={() => refetchPreview()}>
                       <RefreshCw className="h-3.5 w-3.5 mr-1" /> {t('PhoneDetailPage.actions.refresh')}
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(configPreview)}>
-                      <Copy className="h-3.5 w-3.5 mr-1" /> {t('PhoneDetailPage.actions.copy')}
-                    </Button>
+                    <CopyButton
+                      value={configPreview}
+                      label={t('PhoneDetailPage.actions.copy')}
+                      variant="outline"
+                      size="sm"
+                      disabled={!configPreview}
+                    />
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -958,7 +966,16 @@ export default function PhoneDetailPage() {
                 )}
                 {phone.lifecycle_state !== 'decommissioned' && (
                   <Button variant="destructive" className="w-full justify-start"
-                    onClick={() => decommissionMutation.mutate()}>
+                    onClick={async () => {
+                      const name = phone.name || phone.mac_address || phone.id;
+                      const ok = await confirm({
+                        title: t('PhonesListPage.confirm.decommission.title', { name }),
+                        description: t('PhonesListPage.confirm.decommission.body'),
+                        confirmLabel: t('PhonesListPage.confirm.decommission.action'),
+                        destructive: true,
+                      });
+                      if (ok) decommissionMutation.mutate();
+                    }}>
                     <XCircle className="h-4 w-4 mr-2" /> {t('PhoneDetailPage.lifecycle.decommissionDevice')}
                   </Button>
                 )}

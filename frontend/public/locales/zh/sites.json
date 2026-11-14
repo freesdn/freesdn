@@ -161,7 +161,9 @@
         "namePlaceholder": "管理",
         "vlanId": "VLAN ID",
         "descriptionPlaceholder": "可选描述"
-      }
+      },
+      "removeSubnetBody": "它将从 FreeSDN 中此站点的设置里移除。您的网络设备不会有任何更改。",
+      "removeSubnetAction": "移除子网"
     },
     "vpn": {
       "provider": "提供商",
@@ -284,7 +286,9 @@
         "removeConfigFailed": "移除 VPN 配置失败",
         "primaryUpdated": "主用 VPN 已更新",
         "setPrimaryFailed": "设置主用配置失败"
-      }
+      },
+      "removeConfigBody": "这将删除 FreeSDN 中此配置的记录。VPN 服务器和任何设备都不会有任何更改。",
+      "removeConfigAction": "移除配置"
     },
     "reachability": {
       "title": "设备可达性",
@@ -329,7 +333,8 @@
         "wgAgentConfig": "WireGuard 代理配置",
         "configCopied": "配置已复制",
         "addToServerConf": "添加到服务器 wg0.conf",
-        "peerBlockCopied": "对等体配置块已复制"
+        "peerBlockCopied": "对等体配置块已复制",
+        "copyField": "复制{{label}}"
       },
       "guide": {
         "title": "代理部署指南",

@@ -323,6 +323,12 @@ async def _authenticate_release_download(
     # so lifecycle revocation is consistent across both artifact paths.
     if not agent or not agent.is_approved or not getattr(agent, "is_enabled", True):
         raise generic
+    # An agent of a deleted or deactivated organization is refused like any
+    # other dead credential (app.core.organization_access).
+    from app.core.organization_access import organization_admits
+
+    if not await organization_admits(session, agent):
+        raise generic
     return agent
 
 

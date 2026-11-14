@@ -40,9 +40,12 @@ import { StatsGrid } from '@/components/ui/stats-grid';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { DisabledReason } from '@/components/ui/disabled-reason';
+import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 /* ============================================================
    Types
@@ -255,7 +258,7 @@ function OverviewTab({ dashboard }: { dashboard: OrgDashboard }) {
     <div className="space-y-6">
       {/* Stat cards */}
       <StatsGrid
-        columns={4}
+        columns={5}
         stats={[
           { title: t('OrganizationDetailPage.stats.sites'), value: dashboard.site_count, icon: MapPin, variant: 'primary' },
           { title: t('OrganizationDetailPage.stats.users'), value: dashboard.user_count, icon: Users, variant: 'primary' },
@@ -387,6 +390,10 @@ function SettingsTab({ dashboard }: { dashboard: OrgDashboard }) {
   const [contactEmail, setContactEmail] = useState(dashboard.contact_email ?? '');
   const [contactPhone, setContactPhone] = useState(dashboard.contact_phone ?? '');
   const [isActive, setIsActive] = useState(dashboard.is_active);
+  // The API refuses an organization status change from anyone but a super
+  // admin (deactivating signs every member out), so an org admin gets a
+  // disabled switch with the reason instead of a 403 on Save.
+  const canChangeStatus = useAuthStore((s) => Boolean(s.user?.is_superuser));
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -404,11 +411,10 @@ function SettingsTab({ dashboard }: { dashboard: OrgDashboard }) {
       toast({ title: tc('common.success'), description: dashboard.name });
     },
     onError: (err: unknown) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const detail = (err as any)?.response?.data?.detail;
+      const detail = getApiErrorMessage(err, tc('common.error'));
       toast({
         title: tc('common.error'),
-        description: typeof detail === 'string' ? detail : tc('common.error'),
+        description: detail,
         variant: 'destructive',
       });
     },
@@ -448,7 +454,16 @@ function SettingsTab({ dashboard }: { dashboard: OrgDashboard }) {
         <div className="flex items-center justify-between rounded-lg border p-3">
           <span className="text-sm font-medium">{t('OrganizationDetailPage.info.status')}</span>
           <div className="flex items-center gap-2">
-            <Switch checked={isActive} onCheckedChange={setIsActive} />
+            <DisabledReason
+              reason={canChangeStatus ? undefined : t('OrganizationDetailPage.settingsTab.statusSuperAdminOnly')}
+            >
+              <Switch
+                checked={isActive}
+                onCheckedChange={setIsActive}
+                disabled={!canChangeStatus}
+                aria-label={t('OrganizationDetailPage.info.status')}
+              />
+            </DisabledReason>
             <span className="text-sm text-muted-foreground">
               {isActive
                 ? t('OrganizationDetailPage.status.active')

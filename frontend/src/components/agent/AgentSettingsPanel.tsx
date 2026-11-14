@@ -31,6 +31,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { agentsApi } from '@/lib/api/agents';
 import type { AgentDetail } from '@/lib/api/types';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface Props {
   agent: AgentDetail;
@@ -98,7 +99,7 @@ export function AgentSettingsPanel({ agent }: Props) {
     onError: (err: any) => {
       toast({
         title: t('AgentSettingsPanel.toasts.saveFailed.title'),
-        description: err?.response?.data?.detail || String(err),
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },

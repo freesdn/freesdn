@@ -43,6 +43,7 @@ import {
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useSiteStore } from '@/stores/siteStore';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -145,7 +146,7 @@ export default function AddGatewayPage() {
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
-      setTestResult({ success: false, message: err?.response?.data?.detail || t('AddGatewayPage.test.failedFallback') });
+      setTestResult({ success: false, message: getApiErrorMessage(err, t('AddGatewayPage.test.failedFallback')) });
     },
   });
 
@@ -158,7 +159,7 @@ export default function AddGatewayPage() {
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
-      toast({ title: t('AddGatewayPage.toast.error.title'), description: err?.response?.data?.detail || t('AddGatewayPage.toast.error.fallback'), variant: 'destructive' });
+      toast({ title: t('AddGatewayPage.toast.error.title'), description: getApiErrorMessage(err, t('AddGatewayPage.toast.error.fallback')), variant: 'destructive' });
     },
   });
 

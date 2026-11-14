@@ -14,6 +14,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CheckSquare, X, LucideIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
+// The pill uses the inverted surface (bg-foreground), so its focus ring uses
+// the inverted ring colour to stay visible against it.
+const PILL_FOCUS =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background focus-visible:ring-offset-2 focus-visible:ring-offset-foreground';
+
 interface BulkAction {
   label: string;
   icon?: LucideIcon;
@@ -90,8 +95,9 @@ export function BulkActionsBar({
             <>
               <span className="opacity-50">·</span>
               <button
+                type="button"
                 onClick={onSelectAll}
-                className="text-sm font-medium underline-offset-2 hover:underline"
+                className={cn('rounded-sm text-sm font-medium underline-offset-2 hover:underline', PILL_FOCUS)}
               >
                 {t('BulkActionsBar.selectAll', { count: totalCount, item: itemName })}
               </button>
@@ -111,12 +117,18 @@ export function BulkActionsBar({
             return (
               <button
                 key={index}
+                type="button"
                 onClick={action.onClick}
                 disabled={action.disabled}
                 className={cn(
                   'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium',
                   'transition-colors hover:bg-background/10 disabled:opacity-50',
-                  isDestructive && 'text-red-400 hover:bg-red-400/10 hover:text-red-300',
+                  PILL_FOCUS,
+                  // The pill is inverted: dark in the light theme, light in
+                  // the dark theme. red-400 alone read at under 3:1 on the
+                  // light pill, i.e. in the default theme.
+                  isDestructive &&
+                    'text-red-400 hover:bg-red-400/10 hover:text-red-300 dark:text-red-700 dark:hover:bg-red-700/10 dark:hover:text-red-800',
                 )}
               >
                 {Icon && <Icon className="h-4 w-4" />}
@@ -126,10 +138,12 @@ export function BulkActionsBar({
           })}
           {children}
           <button
+            type="button"
             onClick={onClear}
             className={cn(
               'inline-flex items-center justify-center rounded-full p-1.5',
               'transition-colors hover:bg-background/10',
+              PILL_FOCUS,
             )}
             aria-label={t('BulkActionsBar.clearSelection')}
           >

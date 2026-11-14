@@ -364,7 +364,8 @@
     "empty": {
       "noOpenPorts": "No se detectaron puertos abiertos",
       "noDriverMatch": "No se encontró coincidencia de controlador"
-    }
+    },
+    "copyValue": "Copiar {{label}}"
   },
   "CameraHealthPanel": {
     "chart": {
@@ -448,7 +449,9 @@
     "searchPlaceholder": "Buscar...",
     "selectAllRows": "Seleccionar todas las filas",
     "selectRow": "Seleccionar fila",
+    "selectRowNamed": "Seleccionar {{name}}",
     "tableAriaLabel": "Tabla de datos de {{itemName}}",
+    "loading": "Cargando {{itemName}}",
     "empty": {
       "title": "No se encontraron {{itemName}}",
       "description": "No hay {{itemName}} disponibles. Los elementos aparecerán aquí una vez agregados.",
@@ -462,6 +465,11 @@
       "previousPage": "Página anterior",
       "nextPage": "Página siguiente",
       "lastPage": "Última página"
+    },
+    "columns": {
+      "button": "Elegir columnas",
+      "title": "Columnas",
+      "reset": "Restablecer valores predeterminados"
     }
   },
   "ModuleGuard": {
@@ -764,7 +772,8 @@
       "statusEnabledDescription": "Tu cuenta está protegida con autenticación de dos factores",
       "statusDisabledDescription": "Agrega una capa adicional de seguridad a tu cuenta",
       "disable": "Desactivar MFA",
-      "enable": "Activar MFA"
+      "enable": "Activar MFA",
+      "copyKey": "Copiar la clave de entrada manual"
     },
     "messages": {
       "profileUpdated": "Perfil actualizado correctamente",
@@ -805,7 +814,10 @@
     "morePorts": "+{{count}} más",
     "driverLabel": "Controlador:",
     "manageable": "Administrable",
-    "deviceAdopted": "Dispositivo adoptado"
+    "deviceAdopted": "Dispositivo adoptado",
+    "toast": {
+      "ipCopied": "Dirección IP copiada"
+    }
   },
   "RecordingTimeline": {
     "zoomIn": "Acercar",
@@ -923,6 +935,58 @@
       "link": "Desactívelo en Ajustes"
     }
   },
+  "ConfirmDialog": {
+    "confirm": "Confirmar",
+    "cancel": "Cancelar",
+    "affects_one": "Esto afecta a {{count}} elemento.",
+    "affects_other": "Esto afecta a {{count}} elementos.",
+    "moreItems": "y {{count}} más",
+    "itemsLabel": "Elementos afectados",
+    "typePrompt": "Escriba {{text}} para confirmar"
+  },
+  "CopyButton": {
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "failed": "Error al copiar",
+    "failedHint": "No se pudo copiar al portapapeles. Seleccione el texto y cópielo manualmente."
+  },
+  "CapabilityMaturityBadge": {
+    "stable": "Estable",
+    "beta": "Beta",
+    "experimental": "Experimental",
+    "experimentalNote": "Implementado pero aún no verificado de extremo a extremo con infraestructura real. Trátelo como experimental."
+  },
+  "MaturityBadge": {
+    "readsVerified": "Lecturas: verificadas",
+    "experimental": "Experimental",
+    "experimentalNote": "Implementado pero aún no verificado en hardware real. Informe de los resultados.",
+    "write": {
+      "live_validated": {
+        "label": "Escrituras: en vivo",
+        "note": "Rutas de escritura probadas en hardware real con evidencia guardada."
+      },
+      "partial": {
+        "label": "Escrituras: parciales",
+        "note": "Algunas rutas de escritura probadas en vivo; otras solo con pruebas unitarias simuladas."
+      },
+      "mock_tested": {
+        "label": "Escrituras: probadas con simulaciones",
+        "note": "El código de escritura está protegido y tiene pruebas unitarias, pero aún no se ha probado en hardware real."
+      },
+      "disabled": {
+        "label": "Escrituras: desactivadas por diseño",
+        "note": "Las escrituras están desactivadas a propósito; esta integración funciona en solo lectura."
+      },
+      "not_implemented": {
+        "label": "Escrituras: no implementadas",
+        "note": "El transporte de escritura aún no está construido."
+      },
+      "experimental": {
+        "label": "Escrituras: experimentales",
+        "note": "Adaptador experimental: las escrituras no están verificadas."
+      }
+    }
+  },
   "Sheet": {
     "close": {
       "ariaLabel": "Cerrar panel",
@@ -931,6 +995,21 @@
   },
   "MainLayout": {
     "skipToMainContent": "Saltar al contenido principal"
+  },
+  "SiteRequiredGate": {
+    "title": "Elija un sitio",
+    "description": "Esta página trabaja con un sitio a la vez. Elija el sitio que desea ver; puede volver a Todos los sitios desde el menú de sitios en cualquier momento.",
+    "noSites": "Todavía no hay sitios.",
+    "manageSites": "Crear un sitio",
+    "listLabel": "Sitios"
+  },
+  "FormatValue": {
+    "yes": "Sí",
+    "no": "No",
+    "entries_one": "{{count}} entrada",
+    "entries_other": "{{count}} entradas",
+    "fields_one": "{{count}} campo",
+    "fields_other": "{{count}} campos"
   },
   "PendingChangesDrawer": {
     "title": "Cambios pendientes",
@@ -1055,11 +1134,11 @@
       "checked": "Última comprobación: {{when}}",
       "verify": "Revise la tarea en Proxmox antes de continuar. Una tarea fallida o no observada puede haber realizado cambios parciales; no la repita sin verificarla.",
       "status": {
-        "pending": "Aceptada — pendiente de supervisión",
+        "pending": "Aceptada, pendiente de supervisión",
         "running": "En ejecución en Proxmox",
         "succeeded": "Tarea del proveedor completada",
         "warnings": "Completada con advertencias",
-        "failed": "Tarea fallida — verifique los cambios",
+        "failed": "Tarea fallida. Verifique los cambios.",
         "unknown": "Resultado no verificado"
       },
       "pendingRestart": "La configuración está guardada, pero los ajustes actuales aún difieren. Programe un reinicio; FreeSDN volverá a comprobar sin repetir la escritura.",
@@ -1139,7 +1218,8 @@
       "updateFailed": "No se pudo actualizar la concesión",
       "granted": "Acceso concedido",
       "grantFailed": "No se pudo conceder el acceso (puede que ya exista)"
-    }
+    },
+    "confirmRevokeBody": "Su acceso a esta cámara vuelve a lo que permitan su rol o una concesión de grupo de cámaras."
   },
   "AgentDiscoveriesTab": {
     "title": "Descubrimientos del agente",
@@ -1413,7 +1493,10 @@
     "toasts": {
       "created": "Programación creada",
       "createFailed": "Error al crear",
-      "deleted": "Programación eliminada"
+      "deleted": "Programación eliminada",
+      "deleteFailed": "No se pudo eliminar la programación",
+      "enableFailed": "No se pudo activar {{name}}",
+      "disableFailed": "No se pudo desactivar {{name}}"
     },
     "actions": {
       "newSchedule": "Nueva programación",
@@ -1421,7 +1504,8 @@
       "create": "Crear",
       "viewHistory": "Ver historial de ejecuciones",
       "disable": "Desactivar",
-      "enable": "Activar"
+      "enable": "Activar",
+      "delete": "Eliminar programación"
     },
     "dialog": {
       "title": "Nueva programación de escaneo"
@@ -1458,7 +1542,8 @@
         "devices": "Dispositivos",
         "error": "Error"
       }
-    }
+    },
+    "confirmDeleteDescription": "Se indica a los agentes del sitio que dejen de ejecutar este escaneo. Los dispositivos que ya encontró siguen en el inventario."
   },
   "CameraLiveViewModal": {
     "rec": "REC",
@@ -1469,17 +1554,18 @@
       "panDown": "Mover hacia abajo",
       "panLeft": "Mover hacia la izquierda",
       "panRight": "Mover hacia la derecha",
-      "home": "Volver a la posición inicial",
       "zoom": "Zoom",
       "zoomIn": "Acercar",
-      "zoomOut": "Alejar"
+      "zoomOut": "Alejar",
+      "gotoPreset1": "Ir al preajuste 1",
+      "gotoPreset1Named": "Ir al preajuste 1 ({{name}})",
+      "noPreset1": "Esta cámara no tiene preajuste 1, así que no hay adónde ir.",
+      "failed": "La cámara no se movió: {{reason}}"
     },
     "presets": {
       "title": "Preajustes",
-      "entrance": "Entrada",
-      "parking": "Estacionamiento",
-      "wideView": "Vista amplia",
-      "zoom": "Zoom"
+      "none": "No hay preajustes guardados en esta cámara.",
+      "presetName": "Preajuste {{id}}"
     },
     "stream": {
       "connecting": "Conectando al flujo...",
@@ -2009,8 +2095,11 @@
     "actions": {
       "start": "Iniciar",
       "stop": "Detener",
-      "saveTour": "Guardar recorrido"
-    }
+      "saveTour": "Guardar recorrido",
+      "edit": "Editar recorrido",
+      "delete": "Eliminar recorrido"
+    },
+    "confirmDeleteDescription": "\"{{name}}\" se elimina de la cámara, para todas las personas que la usan."
   },
   "ErrorBoundary": {
     "root": {
@@ -2209,7 +2298,8 @@
       "active": "Activo",
       "created": "Creado",
       "updated": "Actualizado"
-    }
+    },
+    "copyValue": "Copiar {{label}}"
   },
   "RegisterPage": {
     "tagline": "Gestión de red independiente del proveedor",
@@ -2609,6 +2699,17 @@
       "loadGeneric": "Error al cargar las organizaciones",
       "create": "Error al crear la organización ({{status}})",
       "createGeneric": "Error al crear la organización"
+    },
+    "confirm": {
+      "delete": {
+        "title": "¿Eliminar la organización \"{{name}}\"?",
+        "description": "Se elimina de FreeSDN y no se puede restaurar desde la interfaz. Se detienen las tareas programadas de sus sitios, como las copias de seguridad de configuración."
+      },
+      "deleteMany": {
+        "title": "¿Eliminar las organizaciones seleccionadas?",
+        "description": "Se eliminan de FreeSDN y no se pueden restaurar desde la interfaz. Se detienen las tareas programadas de sus sitios, como las copias de seguridad de configuración.",
+        "confirmLabel": "Eliminar organizaciones"
+      }
     }
   },
   "changeLanguage": "Cambiar idioma",
@@ -2620,5 +2721,26 @@
     "minutesAgo": "hace {{n}} min",
     "hoursAgo": "hace {{n}} h",
     "daysAgo": "hace {{n}} d"
+  },
+  "CameraPermissions": {
+    "needsPtz": "Mover esta cámara e ir a un preajuste requieren el permiso cameras.ptz, que tienen los operadores y los roles superiores.",
+    "needsPtzTour": "Iniciar y detener recorridos de patrulla requiere el permiso cameras.ptz, que tienen los operadores y los roles superiores.",
+    "needsManagePtzTour": "Editar y eliminar recorridos de patrulla requiere el permiso cameras.manage_ptz, que tienen los administradores de sitio y los roles superiores."
+  },
+  "LiveRead": {
+    "asOf": "Datos de las {{time}}",
+    "asOfBusy": "Datos de las {{time}}, dispositivo ocupado",
+    "asOfTitle": "Última respuesta leída del dispositivo, a las {{when}}.",
+    "asOfBusyTitle": "Última respuesta leída del dispositivo, a las {{when}}. El dispositivo estaba ocupado, así que no se le pidió nada nuevo. Se actualiza solo.",
+    "busyRetrying": "Dispositivo ocupado, reintentando",
+    "stillBusy": "El dispositivo sigue ocupado",
+    "retry": "Reintentar"
+  },
+  "BulkDelete": {
+    "allDeleted_one": "{{count}} eliminado.",
+    "allDeleted_other": "{{count}} eliminados.",
+    "noneDeleted_one": "No se eliminó nada: {{reason}}",
+    "noneDeleted_other": "No se eliminó nada ({{count}} fallaron): {{reason}}",
+    "someFailed": "{{deleted}} eliminados, {{failed}} sin eliminar: {{reason}}"
   }
 }

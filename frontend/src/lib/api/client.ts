@@ -202,62 +202,13 @@ api.interceptors.response.use(
 );
 
 /**
- * Extract a human-readable error message from an API error response.
- * Handles both the standard backend format { error: { message } }
- * and the legacy FastAPI format { detail }.
+ * Error reading lives in ./errors so every shape the backend sends (the
+ * { error: { message } } envelope, 422 field lists, bare { detail }, network
+ * failures) is handled in one place. Re-exported here because ~40 modules
+ * import it from this path.
  */
-export function getApiErrorMessage(error: unknown, fallback = 'An error occurred'): string {
-  const err = error as { response?: { data?: Record<string, unknown>; status?: number }; message?: string } | null;
-  const data = err?.response?.data;
-  if (!data) return err?.message || fallback;
-
-  // Standard backend format: { error: { message: "...", details: [...] } }
-  //
-  // For 422 validation errors the ``details`` array carries the
-  // load-bearing information ({ field, message, type } per field).
-  // The legacy code returned just ``error.message`` (always
-  // "Validation error" for 422s) and threw the field info away,
-  // operators saw a useless "Request failed with status code 422"
-  // toast even when the backend told them exactly which field was
-  // missing.
-  const errorObj = data.error as {
-    message?: string;
-    details?: Array<{ field?: string; message?: string; type?: string }> | unknown;
-  } | undefined;
-  if (errorObj) {
-    if (Array.isArray(errorObj.details) && errorObj.details.length > 0) {
-      const fieldMsgs = errorObj.details
-        .map((d) => {
-          const field = d.field ? d.field.replace(/^body\./, '') : '';
-          const msg = d.message || d.type || 'invalid';
-          return field ? `${field}: ${msg}` : msg;
-        })
-        .filter(Boolean);
-      if (fieldMsgs.length > 0) {
-        const prefix = errorObj.message && errorObj.message !== 'Validation error'
-          ? `${errorObj.message}, `
-          : '';
-        return `${prefix}${fieldMsgs.join('; ')}`;
-      }
-    }
-    if (errorObj.message) return errorObj.message;
-  }
-
-  // Legacy/FastAPI format: { detail: "..." } or { detail: [...] }
-  if (typeof data.detail === 'string') return data.detail;
-  if (Array.isArray(data.detail)) {
-    return data.detail.map((e: { msg?: string; message?: string }) => e.msg || e.message || String(e)).join(', ');
-  }
-  if (data.detail && typeof data.detail === 'object') {
-    const detail = data.detail as { msg?: string; message?: string };
-    return detail.msg || detail.message || JSON.stringify(data.detail);
-  }
-
-  // Direct message field
-  if (typeof data.message === 'string') return data.message;
-
-  return err?.message || fallback;
-}
+export { getApiErrorMessage, parseApiError, getApiFieldErrors, isReadOnlyRefusal } from './errors';
+export type { ApiErrorInfo, ApiErrorKind, ApiFieldError } from './errors';
 
 /**
  * True when an API error means the upstream controller / device could not be

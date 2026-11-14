@@ -100,7 +100,7 @@ async def test_gateway_write_status_reflects_actual_vendor_outcome(
 
 @pytest.mark.parametrize("operation", ["delete", "revert"])
 @pytest.mark.parametrize(
-    "denial, expected", [("permission", 403), ("site", 404), ("deleted", 404), ("read-only", 502)]
+    "denial, expected", [("permission", 403), ("site", 404), ("deleted", 404), ("read-only", 403)]
 )
 async def test_permission_scope_and_read_only_do_not_dispatch_backup_writes(
     mutation, operation, denial, expected, monkeypatch
@@ -119,6 +119,8 @@ async def test_permission_scope_and_read_only_do_not_dispatch_backup_writes(
     before = await snapshot(f)
     response = await request(f, operation)
     assert response.status_code == expected and not f.requests
-    if denial != "read-only":
-        assert not f.calls
+    # Read-only mode used to be refused by the OPNsense client after the
+    # adapter was built and connected (502); the chokepoint now refuses first
+    # (403) and nothing is built.
+    assert not f.calls
     assert await snapshot(f) == before

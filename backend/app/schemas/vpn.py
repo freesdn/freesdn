@@ -8,6 +8,7 @@ Pydantic schemas for VPN API endpoints.
 Matches frontend types in api.ts (VPNConnection, TailscaleNode, etc.)
 """
 
+import re
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -21,18 +22,14 @@ from app.models.vpn import VPNType
 # open a control socket. The daemon runs as ROOT in the privileged vpn sidecar
 # off a config the app materializes, so an authenticated vpn:write user — trusted
 # to configure VPNs but NOT to run code on the appliance — must not be able to
-# smuggle any of these in. This is the SINGLE source of truth: brain_vpn imports
-# it so the two config-ingest paths can't drift (the connection path used to ship
-# a strict subset, dropping the file-write/management directives — a real gap).
+# smuggle any of these in. Since 26.12.0 this is no longer the enforcement list
+# (see _OPENVPN_ALLOWED_DIRECTIVES below); it is kept so a refusal can say
+# "dangerous" rather than "unsupported", and so tests can prove none of these is
+# ever allowlisted.
 _DANGEROUS_OPENVPN_DIRECTIVES = frozenset(
     {
-        # config INCLUSION — the keystone. ``config <file>`` (alias ``--config``)
-        # inlines another file's directives at parse time. Left unblocked, a config
-        # that itself looks clean can ``config pwn.inc`` and have the INCLUDED file
-        # carry any directive below (e.g. ``script-security 2`` + ``up /bin/sh …``)
-        # — which the scanner never sees, executing as ROOT in the privileged
-        # sidecar. Blocking it means the scanned file is always the COMPLETE config,
-        # so the rest of this blocklist is authoritative (no smuggling via includes).
+        # config INCLUSION: ``config <file>`` inlines another file's directives
+        # at parse time, which no scanner of this file would ever see.
         "config",
         # script / plugin execution
         "up",
@@ -63,6 +60,170 @@ _DANGEROUS_OPENVPN_DIRECTIVES = frozenset(
         "writepid",
         "http-proxy-user-pass",
         "ifconfig-pool-persist",
+        # code loading through OpenSSL
+        "engine",
+        "providers",
+    }
+)
+
+# Every directive FreeSDN accepts in an OpenVPN client config. An ALLOWLIST
+# since 26.12.0: the previous blocklist named the dangerous directives and so
+# could be routed around (``setenv opt <directive>`` runs the inner directive;
+# OpenVPN unquotes a quoted directive name; ``<connection>`` block lines were
+# skipped unread). Anything not listed is refused. The sidecar's pre-exec
+# scanner (``vpn-sidecar-entrypoint.sh``, ``_ovpn_cfg_safe``) carries the same
+# list, and tests/services/test_vpn_sidecar_scanner.py fails if the two drift.
+_OPENVPN_ALLOWED_DIRECTIVES = frozenset(
+    {
+        # role, transport, reconnection
+        "client",
+        "tls-client",
+        "pull",
+        "dev",
+        "dev-type",
+        "topology",
+        "proto",
+        "proto-force",
+        "remote",
+        "remote-random",
+        "remote-random-hostname",
+        "resolv-retry",
+        "port",
+        "lport",
+        "rport",
+        "local",
+        "bind",
+        "nobind",
+        "float",
+        "connect-retry",
+        "connect-retry-max",
+        "connect-timeout",
+        "server-poll-timeout",
+        "explicit-exit-notify",
+        "persist-key",
+        "persist-tun",
+        "persist-local-ip",
+        "persist-remote-ip",
+        "inactive",
+        "session-timeout",
+        "ping",
+        "ping-exit",
+        "ping-restart",
+        "ping-timer-rem",
+        "keepalive",
+        "hand-window",
+        "tran-window",
+        "single-session",
+        "tls-exit",
+        # MTU and performance
+        "tun-mtu",
+        "tun-mtu-extra",
+        "tun-mtu-max",
+        "link-mtu",
+        "mtu-disc",
+        "mssfix",
+        "fragment",
+        "sndbuf",
+        "rcvbuf",
+        "txqueuelen",
+        "fast-io",
+        "socket-flags",
+        "tcp-nodelay",
+        "passtos",
+        "disable-dco",
+        # routes, addresses, DNS
+        "route",
+        "route-ipv6",
+        "route-gateway",
+        "route-metric",
+        "route-delay",
+        "route-nopull",
+        "route-noexec",
+        "ifconfig",
+        "ifconfig-ipv6",
+        "ifconfig-noexec",
+        "redirect-gateway",
+        "redirect-private",
+        "block-outside-dns",
+        "block-ipv6",
+        "dhcp-option",
+        "tun-ipv6",
+        "pull-filter",
+        "allow-pull-fqdn",
+        "max-routes",
+        # crypto and peer verification
+        "cipher",
+        "data-ciphers",
+        "data-ciphers-fallback",
+        "ncp-ciphers",
+        "ncp-disable",
+        "auth",
+        "tls-version-min",
+        "tls-version-max",
+        "tls-cipher",
+        "tls-ciphersuites",
+        "tls-groups",
+        "tls-cert-profile",
+        "ecdh-curve",
+        "key-direction",
+        "key-method",
+        "tls-timeout",
+        "reneg-sec",
+        "reneg-bytes",
+        "reneg-pkts",
+        "replay-window",
+        "mute-replay-warnings",
+        "no-replay",
+        "remote-cert-tls",
+        "remote-cert-ku",
+        "remote-cert-eku",
+        "ns-cert-type",
+        "verify-x509-name",
+        "verify-hash",
+        "peer-fingerprint",
+        "opt-verify",
+        # key and cert material: inline only (see _OPENVPN_FILE_REF_DIRECTIVES)
+        "ca",
+        "cert",
+        "key",
+        "dh",
+        "secret",
+        "tls-auth",
+        "tls-crypt",
+        "tls-crypt-v2",
+        "pkcs12",
+        "extra-certs",
+        "crl-verify",
+        "auth-user-pass",
+        # authentication behaviour
+        "auth-nocache",
+        "auth-retry",
+        "static-challenge",
+        "push-peer-info",
+        # compression
+        "comp-lzo",
+        "compress",
+        "allow-compression",
+        "comp-noadapt",
+        # proxies (credentials inline only, see _OPENVPN_PROXY_SAFE_THIRD_ARGS)
+        "http-proxy",
+        "http-proxy-option",
+        "http-proxy-retry",
+        "socks-proxy",
+        "socks-proxy-retry",
+        # logging verbosity, process, provider-profile metadata
+        "verb",
+        "mute",
+        "suppress-timestamps",
+        "mlock",
+        "nice",
+        "user",
+        "group",
+        "remap-usr1",
+        "ignore-unknown-option",
+        # ``setenv NAME value`` only sets a variable for scripts (none can run);
+        # ``setenv opt <directive …>`` is checked as that directive.
+        "setenv",
     }
 )
 
@@ -73,8 +234,7 @@ _DANGEROUS_OPENVPN_DIRECTIVES = frozenset(
 # runs as ROOT in the sidecar (with DAC_OVERRIDE), so this is an arbitrary-file
 # read/exfiltration primitive for a vpn:write user. All such material MUST be
 # supplied INLINE (`<ca>…</ca>`), which FreeSDN materializes into the one .conf —
-# so the path/file form of these is rejected (the inline-block form is unaffected:
-# `<ca>` is a block marker, not a directive line). Safe non-path args are allowed.
+# so the path/file form of these is rejected. Safe non-path args are allowed.
 _OPENVPN_FILE_REF_DIRECTIVES = frozenset(
     {
         "auth-user-pass",
@@ -97,40 +257,127 @@ _OPENVPN_FILE_REF_DIRECTIVES = frozenset(
 )
 _OPENVPN_SAFE_FILE_REF_ARGS = frozenset({"none", "[inline]"})
 
+# Inline material blocks (``<ca>…</ca>``) whose contents are key/cert payloads,
+# not directives, and are skipped. Any other block name is refused, except
+# ``<connection>``, whose lines are directives and are checked like the rest.
+_OPENVPN_MATERIAL_BLOCKS = frozenset(
+    {
+        "ca",
+        "cert",
+        "key",
+        "dh",
+        "secret",
+        "tls-auth",
+        "tls-crypt",
+        "tls-crypt-v2",
+        "pkcs12",
+        "extra-certs",
+        "crl-verify",
+        "auth-user-pass",
+        "http-proxy-user-pass",
+        "peer-fingerprint",
+    }
+)
+
+# ``http-proxy host port [authfile|auto|auto-nct] [method]`` and ``socks-proxy
+# host port [authfile]``: a third argument that is a path is the same
+# read-and-send primitive as ``auth-user-pass /path``. Only keywords are allowed.
+_OPENVPN_PROXY_SAFE_THIRD_ARGS = {
+    "http-proxy": frozenset({"auto", "auto-nct"}),
+    "socks-proxy": frozenset(),
+}
+
+# A directive name is a plain lowercase word. Refusing quotes and backslashes
+# here matters: OpenVPN unquotes ``"up"`` to ``up``, so comparing raw text
+# against a list is only sound when the raw text cannot be quoted.
+_OPENVPN_DIRECTIVE_RE = re.compile(r"(?:--)?([a-z0-9][a-z0-9-]*)")
+_OPENVPN_SETENV_NAME_RE = re.compile(r"[A-Za-z0-9_]+")
+_OPENVPN_BLOCK_TAG_RE = re.compile(r"<(/?)([a-z0-9-]+)>")
+# OpenVPN, like the sidecar's awk scanner, splits on spaces and tabs only.
+_OPENVPN_TOKEN_SPLIT_RE = re.compile(r"[ \t]+")
+_OPENVPN_LINE_STRIP = " \t\r\n\f\v"
+
+
+def _check_openvpn_directive(tokens: list[str], depth: int = 0) -> None:
+    """Refuse one directive line (already split on whitespace) unless allowed."""
+    raw = tokens[0]
+    match = _OPENVPN_DIRECTIVE_RE.fullmatch(raw)
+    if match is None:
+        raise ValueError(
+            f"OpenVPN directive not allowed: {raw[:40]!r} "
+            "(directive names must be plain lowercase words)"
+        )
+    directive = match.group(1)
+    if directive not in _OPENVPN_ALLOWED_DIRECTIVES:
+        kind = "Dangerous" if directive in _DANGEROUS_OPENVPN_DIRECTIVES else "Unsupported"
+        raise ValueError(f"{kind} OpenVPN directive not allowed: {directive}")
+    args = tokens[1:]
+    if directive == "setenv":
+        if not args or _OPENVPN_SETENV_NAME_RE.fullmatch(args[0]) is None:
+            raise ValueError("OpenVPN 'setenv' needs a plain variable name")
+        if args[0].lower() == "opt":
+            # ``setenv opt <directive …>`` makes OpenVPN process the rest of the
+            # line as a directive (ignored if unknown), so check it as one.
+            if len(args) < 2 or depth >= 2:
+                raise ValueError("OpenVPN 'setenv opt' must name one allowed directive")
+            _check_openvpn_directive(args[1:], depth + 1)
+        return
+    if directive in _OPENVPN_FILE_REF_DIRECTIVES and args:
+        if "'" in args[0] or args[0].replace('"', "").lower() not in _OPENVPN_SAFE_FILE_REF_ARGS:
+            raise ValueError(
+                f"OpenVPN '{directive}' must be supplied inline "
+                f"(<{directive}>…</{directive}>), not as a file path"
+            )
+    safe_third = _OPENVPN_PROXY_SAFE_THIRD_ARGS.get(directive)
+    if safe_third is not None and len(args) > 2:
+        third = args[2]
+        if "'" in third or third.replace('"', "").lower() not in safe_third:
+            raise ValueError(
+                f"OpenVPN '{directive}' credentials must be supplied inline "
+                "(<http-proxy-user-pass>), not as a file path"
+            )
+
 
 def _assert_openvpn_config_safe(v: str | None) -> str | None:
-    """Reject OpenVPN config text containing a command/file-write directive OR a
-    file-PATH reference to credential/cert material (arbitrary-file-read exfil).
+    """Refuse OpenVPN config text unless every directive is on the allowlist.
 
-    Inline-block aware: the contents of ``<ca>``/``<cert>``/``<key>``/``<tls-auth>``
-    /``<secret>`` blocks are cert/key payloads, not directives, and are skipped
-    (so a base64 line that happens to start with a directive word can't false-
-    positive, and a directive hidden after a block close is still caught). Handles
-    ``;`` comments and a stray leading ``--``.
+    Inline material blocks (``<ca>``, ``<cert>``, ``<key>``, ``<tls-auth>``, …)
+    are key/cert payloads and are skipped; ``<connection>`` blocks are checked
+    line by line; any other, nested, stray or unterminated block is refused.
+    Comment lines start with ``#`` or ``;``. A trailing comment on a directive
+    line is NOT stripped, so a ``#`` can never hide an argument from the checks.
     """
     if not v:
         return v
-    in_inline = False
-    for raw in v.splitlines():
-        stripped = raw.strip()
-        if not stripped or stripped.startswith("#") or stripped.startswith(";"):
+    material: str | None = None
+    in_connection = False
+    for raw in v.split("\n"):
+        line = raw.strip(_OPENVPN_LINE_STRIP)
+        if material is not None:
+            if line == f"</{material}>":
+                material = None
             continue
-        if stripped.startswith("<"):
-            in_inline = not stripped.startswith("</")
+        if not line or line[0] in "#;":
             continue
-        if in_inline:
+        if any(c == "\x7f" or (c < " " and c != "\t") for c in line):
+            raise ValueError("OpenVPN config contains a control character")
+        if line.startswith("<"):
+            tag = _OPENVPN_BLOCK_TAG_RE.fullmatch(line)
+            if tag is None:
+                raise ValueError(f"Malformed OpenVPN block tag: {line[:40]!r}")
+            closing, name = tag.group(1) == "/", tag.group(2)
+            if name == "connection":
+                if closing == in_connection:
+                    in_connection = not closing
+                    continue
+                raise ValueError("Nested or stray OpenVPN <connection> block")
+            if closing or in_connection or name not in _OPENVPN_MATERIAL_BLOCKS:
+                raise ValueError(f"Unsupported OpenVPN block: {line[:40]}")
+            material = name
             continue
-        parts = stripped.split()
-        directive = parts[0].lstrip("-").lower()
-        if directive in _DANGEROUS_OPENVPN_DIRECTIVES:
-            raise ValueError(f"Dangerous OpenVPN directive not allowed: {directive}")
-        if directive in _OPENVPN_FILE_REF_DIRECTIVES:
-            arg = parts[1].strip("\"'").lower() if len(parts) > 1 else ""
-            if arg and arg not in _OPENVPN_SAFE_FILE_REF_ARGS:
-                raise ValueError(
-                    f"OpenVPN '{directive}' must be supplied inline "
-                    f"(<{directive}>…</{directive}>), not as a file path"
-                )
+        _check_openvpn_directive(_OPENVPN_TOKEN_SPLIT_RE.split(line))
+    if material is not None or in_connection:
+        raise ValueError("Unterminated OpenVPN block")
     return v
 
 
@@ -357,7 +604,7 @@ class TailscaleStatusResponse(BaseSchema):
 class TailscaleSetupStatusResponse(BaseSchema):
     """Full Tailscale agent setup status."""
 
-    state: str = "not_installed"  # not_installed | daemon_stopped | needs_login | awaiting_auth | connected | error
+    state: str = "not_installed"  # not_installed | daemon_stopped | needs_login | awaiting_auth | disconnected | connected | error
     installed: bool = False
     daemon_running: bool = False
     authenticated: bool = False

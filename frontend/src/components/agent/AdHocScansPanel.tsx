@@ -34,6 +34,7 @@ import { useTranslation } from 'react-i18next';
 import { useToast } from '@/hooks/use-toast';
 import { agentsApi } from '@/lib/api/agents';
 import type { AgentTask } from '@/lib/api/types';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
@@ -73,7 +74,7 @@ export function AdHocScansPanel({ agentId }: Props) {
     onError: (err: any) => {
       toast({
         title: t('AdHocScansPanel.toasts.cancelFailed'),
-        description: err?.response?.data?.detail || String(err),
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },

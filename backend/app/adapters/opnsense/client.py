@@ -30,12 +30,15 @@ Covers:
 
 import asyncio
 import logging
+import random
 import re
 import time
 from typing import Any, ClassVar
 
 import httpx
 
+from app.adapters import io_policy
+from app.adapters.apply_context import FORCE_DOES_NOT_LIFT_READ_ONLY, read_only_refuses_write
 from app.adapters.exceptions import (
     AdapterAuthenticationError,
     AdapterConnectionError,
@@ -43,7 +46,7 @@ from app.adapters.exceptions import (
     CapabilityNotSupportedError,
 )
 from app.adapters.http_utils import CircuitBreaker
-from app.core.http_client import build_async_client
+from app.core.http_client import _cap_connect_timeout, build_async_client
 from app.core.xml_utils import UnsafeXML, parse_untrusted_xml
 
 logger = logging.getLogger(__name__)
@@ -164,8 +167,24 @@ _READ_POST_VERBS: tuple[str, ...] = (
 )
 
 
+# One-shot network probes: POSTs that run a ping/traceroute from the firewall
+# and return its output, changing no configuration. Exact paths only, like the
+# log reads below. Without this, read-only mode refused them (their last
+# segment is not a read verb) and, since force no longer lifts the lock, a
+# monitor-only install could not ping from OPNsense at all, while the MikroTik
+# and pfSense clients already classify their probes as reads.
+_READ_ONLY_PROBE_POSTS: frozenset[str] = frozenset(
+    {
+        "/api/diagnostics/interface/ping",
+        "/api/diagnostics/interface/traceroute",
+    }
+)
+
+
 def _is_read_only_post(path: str) -> bool:
     """True if a POST to ``path`` is an OPNsense READ (search/get/list/…)."""
+    if path in _READ_ONLY_PROBE_POSTS:
+        return True
     # LogController reads are POSTs to exactly these resource paths. Never
     # allow /clear or arbitrary suffixes via this exception.
     if path.startswith("/api/diagnostics/log/"):
@@ -271,6 +290,7 @@ class OPNsenseClient:
         verify_ssl: bool = False,
         timeout: int = 60,
         max_retries: int = 3,
+        read_timeout: float = 30.0,
     ):
         self.host = host
         self.port = port
@@ -279,6 +299,11 @@ class OPNsenseClient:
         self.verify_ssl = verify_ssl
         self.timeout = timeout
         self.max_retries = max_retries
+        # A READ gets at most this long to answer (writes keep ``timeout``: an
+        # apply/reconfigure legitimately runs long, and a write that times out
+        # is ambiguous). On the 2026-11 soak a wedged OPNsense PHP backend held
+        # each read the full 60 s, and three retries made that 3 min per read.
+        self.read_timeout = min(float(timeout), float(read_timeout))
         self.base_url = f"https://{host}:{port}"
         self._client: httpx.AsyncClient | None = None
         # Tagged breaker: state transitions land in the shared
@@ -374,13 +399,14 @@ class OPNsenseClient:
         is_write = method_upper in _WRITE_METHODS and not (
             method_upper == "POST" and _is_read_only_post(path)
         )
-        if is_write and _is_adapter_read_only() and not force:
+        if is_write and read_only_refuses_write(_is_adapter_read_only()):
             _record_request_metric(method_upper, "read_only_blocked")
             raise AdapterError(
                 "ADAPTER_READ_ONLY is set — write refused. Set "
                 "ADAPTER_READ_ONLY=false in the environment AND pass "
                 "force=true on the call to override. Both safeties "
-                "must be down before a write reaches the controller.",
+                "must be down before a write reaches the controller."
+                + (FORCE_DOES_NOT_LIFT_READ_ONLY if force else ""),
                 adapter_id="opnsense",
             )
 
@@ -413,10 +439,15 @@ class OPNsenseClient:
         # never update or delete. Same exposure on addAlias, add_source_nat_rule,
         # add_port_forward_rule, add_dns_override, add_dhcp_static_mapping.
         max_attempts = 1 if is_write else self.max_retries
+        # Retries never outlive one read timeout of slack on top of the first
+        # attempt (io_policy: a retry must not turn one slow answer into minutes).
+        deadline = io_policy.Deadline(self.read_timeout * 2)
 
         for attempt in range(1, max_attempts + 1):
             try:
                 kw: dict[str, Any] = {"params": params}
+                if not is_write:
+                    kw["timeout"] = _cap_connect_timeout(self.read_timeout)
                 if method_upper in ("POST", "PUT", "PATCH"):
                     # OPNsense action endpoints (delItem, apply, reboot, toggle…)
                     # are body-less POSTs. Declaring Content-Type: application/json
@@ -528,15 +559,19 @@ class OPNsenseClient:
                     ) from exc
 
             except (httpx.RequestError, httpx.TimeoutException) as exc:
-                # A connect failure (host down / unreachable) won't recover on a
-                # 1-2s retry — fail fast rather than burning the whole retry budget
-                # (3x the connect timeout + backoff ≈ a 27s hung page). Read / other
-                # transient request errors still retry as before.
-                connect_failure = isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout))
-                if attempt < max_attempts and not connect_failure:
-                    delay = min(2 ** (attempt - 1), 8)  # 1s, 2s, 4s, 8s cap
+                # io_policy: a timeout or a connect failure is never retried --
+                # the device is slow, wedged or down, and asking again only adds
+                # load and multiplies the wait (3 x 60 s ReadTimeout per read was
+                # observed against a struggling firewall). Only a dropped
+                # connection on a read is worth a second attempt.
+                delay = io_policy.backoff_delay(attempt, base=1.0, cap=8.0)
+                if (
+                    attempt < max_attempts
+                    and io_policy.may_retry_exception(exc, idempotent=not is_write)
+                    and deadline.allows(delay)
+                ):
                     logger.warning(
-                        "OPNsense request %s %s attempt %d/%d failed: %s — retrying in %ss",
+                        "OPNsense request %s %s attempt %d/%d failed: %s — retrying in %.1fs",
                         method,
                         path,
                         attempt,
@@ -556,23 +591,20 @@ class OPNsenseClient:
                 ) from exc
 
             except OPNsenseAPIError as exc:
-                if exc.status_code and exc.status_code >= 500 and attempt < max_attempts:
-                    # 502/503/504 are emitted transiently for ~3s
-                    # while OPNsense reloads pf after a
-                    # ``reconfigure`` call. The default 1s/2s/4s
-                    # backoff is too short — by attempt 3 pf is
-                    # often still rebuilding state. Use longer
-                    # waits (5s, 10s) for these gateway-style
-                    # codes; keep the standard exponential backoff
-                    # for 500/501 (which usually mean the API
-                    # itself is broken and won't recover quickly
-                    # anyway).
-                    if exc.status_code in (502, 503, 504):
-                        delay = 5 * attempt  # 5s, 10s, 15s
-                    else:
-                        delay = min(2 ** (attempt - 1), 8)
+                # 502/503/504 are emitted transiently for ~3s while OPNsense
+                # reloads pf after a ``reconfigure`` call, so they get longer
+                # waits (~5s, ~10s, jittered). 500/501 mean the API itself
+                # failed and will fail the same way again: not retried
+                # (io_policy), nor is anything once the deadline is near.
+                delay = 5 * attempt * random.uniform(0.8, 1.2)
+                if (
+                    exc.status_code
+                    and attempt < max_attempts
+                    and io_policy.may_retry_status(exc.status_code, idempotent=not is_write)
+                    and deadline.allows(delay)
+                ):
                     logger.warning(
-                        "OPNsense server error %s on %s attempt %d/%d — retrying in %ss",
+                        "OPNsense server error %s on %s attempt %d/%d — retrying in %.1fs",
                         exc.status_code,
                         path,
                         attempt,
@@ -653,7 +685,9 @@ class OPNsenseClient:
 
         request_start = time.monotonic()
         try:
-            response = await self._client.get(path, params=params)
+            response = await self._client.get(
+                path, params=params, timeout=_cap_connect_timeout(self.read_timeout)
+            )
             # bound the raw device body BEFORE materializing
             # response.text — same guard the JSON path (_request) already applies.
             # get_raw was the only unguarded raw-text reader; the config.xml

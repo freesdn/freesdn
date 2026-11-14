@@ -105,9 +105,7 @@ async def trigger(db_session, monkeypatch):
     def identity():
         if f.anonymous:
             raise HTTPException(401, "Not authenticated")
-        return CurrentUser(
-            f.user, f.permissions, scoped=f.scoped, accessible_site_ids=f.site_ids
-        )
+        return CurrentUser(f.user, f.permissions, scoped=f.scoped, accessible_site_ids=f.site_ids)
 
     async def session():
         yield db_session
@@ -130,11 +128,7 @@ async def trigger(db_session, monkeypatch):
 async def snapshot(f):
     await f.db.flush()
     rows = (
-        (
-            await f.db.execute(
-                select(GatewayConnection.__table__).order_by(GatewayConnection.id)
-            )
-        )
+        (await f.db.execute(select(GatewayConnection.__table__).order_by(GatewayConnection.id)))
         .mappings()
         .all()
     )
@@ -142,16 +136,12 @@ async def snapshot(f):
 
 
 async def request(f, gateway_id=None):
-    return await f.client.post(
-        f"/firewall/gateways/{gateway_id or f.gateway.id}/backup/trigger"
-    )
+    return await f.client.post(f"/firewall/gateways/{gateway_id or f.gateway.id}/backup/trigger")
 
 
 @pytest.mark.parametrize("vendor", ["opnsense", "pfsense", "mikrotik", "openwrt"])
 @pytest.mark.parametrize("result", ["xml", "empty", "archive", "failure", "exception"])
-async def test_no_saved_artifact_must_never_report_backup_success(
-    trigger, vendor, result, caplog
-):
+async def test_no_saved_artifact_must_never_report_backup_success(trigger, vendor, result, caplog):
     f = trigger
     f.gateway.vendor = vendor
     f.result = {
@@ -172,9 +162,7 @@ async def test_no_saved_artifact_must_never_report_backup_success(
 
 
 @pytest.mark.parametrize("failure", ["construct", "connect"])
-async def test_unavailable_storage_does_not_attempt_adapter_lifecycle(
-    trigger, failure, caplog
-):
+async def test_unavailable_storage_does_not_attempt_adapter_lifecycle(trigger, failure, caplog):
     f = trigger
     f.failure = failure
     before = await snapshot(f)
@@ -232,14 +220,17 @@ async def test_protected_config_export_remains_available(trigger):
     f = trigger
     before = await snapshot(f)
     response = await f.client.get(f"/firewall/gateways/{f.gateway.id}/config/download")
-    assert response.status_code == 200 and response.json()["config"] == {
-        "config_xml": XML
-    }
+    assert response.status_code == 200 and response.json()["config"] == {"config_xml": XML}
     assert f.calls == ["construct", "connect", "download", "disconnect"]
     assert await snapshot(f) == before
 
 
-async def test_separate_vendor_backup_route_remains_separate(trigger):
+async def test_separate_vendor_backup_route_remains_separate(trigger, monkeypatch):
+    from app.core.config import settings
+
+    # A vendor backup is a gateway action: read-only mode (the code default)
+    # now refuses it before the gateway is contacted, so ask in read-write mode.
+    monkeypatch.setattr(settings, "ADAPTER_READ_ONLY", False)
     f = trigger
     before = await snapshot(f)
     response = await f.client.post(f"/firewall/gateways/{f.gateway.id}/backups")

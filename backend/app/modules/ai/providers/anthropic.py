@@ -14,8 +14,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
-import httpx
-
+from app.core.http_client import build_async_client
 from app.modules.ai.providers.base import (
     BaseLLMProvider,
     LLMResponse,
@@ -49,7 +48,7 @@ class AnthropicProvider(BaseLLMProvider):
     def __init__(self, api_key: str, base_url: str = ANTHROPIC_API_BASE):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
-        self._client = httpx.AsyncClient(
+        self._client = build_async_client(
             base_url=self.base_url,
             headers={
                 "x-api-key": self.api_key,

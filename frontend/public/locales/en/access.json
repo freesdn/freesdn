@@ -1,25 +1,21 @@
 {
   "AccessControlPage": {
     "title": "Access Control",
-    "description": "Physical access control management",
-    "comingSoon": "Coming Soon",
-    "comingSoonDescription": "Physical access control integration is planned for a future release. Door controllers, cardholders, and event management will be available here.",
-    "features": {
-      "doorManagement": {
-        "title": "Door Management",
-        "desc": "Monitor and control doors, gates, and barriers in real time."
+    "description": "Physical access control: doors and credentials.",
+    "status": {
+      "title": "What this module does today",
+      "records": {
+        "title": "Door and credential records work",
+        "body": "FreeSDN can keep door and credential records: create, edit and remove them, with PINs stored only as one-way hashes. This page has no screens for them yet.",
+        "where": "They are managed through the API under"
       },
-      "cardholders": {
-        "title": "Cardholders & Credentials",
-        "desc": "Manage access cards, PINs, and biometric credentials."
+      "doorControl": {
+        "title": "Physical door control is not available",
+        "body": "Locking or unlocking a door is refused (the API answers 501) until a real door-controller adapter is added, and none exists yet. FreeSDN cannot open or lock a door."
       },
-      "eventHistory": {
-        "title": "Event History",
-        "desc": "Full audit trail of access events with search and export."
-      },
-      "accessPolicies": {
-        "title": "Access Policies",
-        "desc": "Time-based schedules, anti-passback, and multi-factor rules."
+      "module": {
+        "title": "Ships disabled",
+        "body": "The Access Control module ships disabled and is a preview: it cannot be turned on for an organization until a door-controller adapter exists. It is graded Experimental: built, but not proven against real door hardware."
       }
     }
   }

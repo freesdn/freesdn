@@ -75,6 +75,7 @@ class AdapterPendingChange(Base, UUIDMixin, AuditMixin):
         Index("ix_adapter_pending_controller", "controller_id", "status"),
         Index("ix_adapter_pending_feature", "feature", "status"),
         Index("ix_adapter_pending_task_poll", "provider_task_next_poll_at"),
+        Index("ix_adapter_pending_group", "group_id"),
         {"schema": "core"},
     )
 
@@ -148,6 +149,11 @@ class AdapterPendingChange(Base, UUIDMixin, AuditMixin):
     )
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A change to several devices at once (a site-to-site tunnel's two
+    # gateways, a VLAN distributed to several controllers) is one group: a row
+    # per device, all preflighted before any is applied. NULL for a change to
+    # one device. Migration 034.
+    group_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
 
     def __repr__(self) -> str:
         return f"<AdapterPendingChange {self.feature} {self.operation} status={self.status}>"

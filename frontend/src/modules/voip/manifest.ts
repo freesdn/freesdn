@@ -21,6 +21,14 @@ import {
 } from 'lucide-react';
 import type { FrontendModuleManifest } from '../types';
 
+// One lazy component per page, shared by every route that renders it. A
+// separate `lazy()` per route gave sibling routes (/voip/phones/:id and
+// /voip/phones/:id/:tab, /voip/extensions and /voip/extensions/:tab) different
+// component types, so React remounted the whole page on a tab click.
+const PhoneDetailPage = lazy(() => import('@/pages/voip/PhoneDetailPage'));
+const PBXDetailPage = lazy(() => import('@/pages/voip/PBXDetailPage'));
+const ExtensionsPage = lazy(() => import('@/pages/voip/ExtensionsPage'));
+
 export const voipModule: FrontendModuleManifest = {
   id: 'voip',
   name: 'VoIP',
@@ -42,12 +50,12 @@ export const voipModule: FrontendModuleManifest = {
     },
     {
       path: '/voip/phones/:id',
-      component: lazy(() => import('@/pages/voip/PhoneDetailPage')),
+      component: PhoneDetailPage,
       title: 'VoIP · Phone Detail',
     },
     {
       path: '/voip/phones/:id/:tab',
-      component: lazy(() => import('@/pages/voip/PhoneDetailPage')),
+      component: PhoneDetailPage,
       title: 'VoIP · Phone Detail',
     },
     // Network discovery
@@ -71,12 +79,12 @@ export const voipModule: FrontendModuleManifest = {
     // PBX systems
     {
       path: '/voip/pbx/:id/:tab',
-      component: lazy(() => import('@/pages/voip/PBXDetailPage')),
+      component: PBXDetailPage,
       title: 'VoIP · PBX Detail',
     },
     {
       path: '/voip/pbx/:id',
-      component: lazy(() => import('@/pages/voip/PBXDetailPage')),
+      component: PBXDetailPage,
       title: 'VoIP · PBX Detail',
     },
     {
@@ -87,12 +95,12 @@ export const voipModule: FrontendModuleManifest = {
     // Extensions & Ring Groups
     {
       path: '/voip/extensions',
-      component: lazy(() => import('@/pages/voip/ExtensionsPage')),
+      component: ExtensionsPage,
       title: 'VoIP · Extensions',
     },
     {
       path: '/voip/extensions/:tab',
-      component: lazy(() => import('@/pages/voip/ExtensionsPage')),
+      component: ExtensionsPage,
       title: 'VoIP · Extensions',
     },
     // Call Logs / CDR

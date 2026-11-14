@@ -77,16 +77,32 @@ class TokenBucketRateLimiter:
         self._last_refill = now
 
     async def acquire(self, timeout: float = 30.0) -> bool:
-        """Wait for one token. Returns False on timeout."""
+        """Wait for one token, first come first served. Returns False on timeout.
+
+        Waiters queue on the lock (asyncio locks wake waiters in FIFO order) and
+        only the head of the queue sleeps for the next token. The old loop let
+        every waiter poll every 50 ms and take whichever token appeared, so under
+        a fan-out (per-client detail reads, per-switch port reads) a waiter could
+        lose every race for the whole timeout and fail with "rate limit wait timed
+        out" while later arrivals went through.
+        """
         deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            async with self._lock:
+        try:
+            await asyncio.wait_for(self._lock.acquire(), timeout=max(timeout, 0.0))
+        except TimeoutError:
+            return False
+        try:
+            while True:
                 self._refill_unlocked()
                 if self._tokens >= 1:
                     self._tokens -= 1
                     return True
-            await asyncio.sleep(0.05)
-        return False
+                wait = (1.0 - self._tokens) / self.tokens_per_second
+                if time.monotonic() + wait > deadline:
+                    return False
+                await asyncio.sleep(wait)
+        finally:
+            self._lock.release()
 
     @property
     def available_tokens(self) -> int:

@@ -126,6 +126,7 @@ import { camerasApi, nvrApi, getApiErrorMessage } from '@/lib/api';
 import type { HolidayEntry } from '@/lib/api/types';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { RecordedHlsPlayer } from '@/components/cameras/RecordedHlsPlayer';
 import { RecordingTimeline } from '@/components/cameras/RecordingTimeline';
 import { RecordingCalendar } from '@/components/cameras/RecordingCalendar';
@@ -440,6 +441,7 @@ export default function NVRDetailPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { copy: copyToClipboard } = useCopyToClipboard();
 
   // ── Path-based tab state ──
   const activeTab = tab && VALID_NVR_TABS.has(tab) ? tab : 'overview';
@@ -472,14 +474,23 @@ export default function NVRDetailPage() {
 
   // Copy a short-lived snapshot URL for a channel to the clipboard.
   const copySnapshotUrl = useCallback(async (cameraId: string) => {
+    let url: string;
     try {
-      const url = await camerasApi.getSnapshotUrlAsync(cameraId);
-      await navigator.clipboard.writeText(url);
-      toast({ title: t('NVRDetailPage.channels.snapshotUrlCopied') });
+      url = await camerasApi.getSnapshotUrlAsync(cameraId);
     } catch (err: unknown) {
-      toast({ title: getApiErrorMessage(err, t('NVRDetailPage.channels.snapshotUrlFailed')), variant: 'destructive' as any });
+      toast({ title: getApiErrorMessage(err, t('NVRDetailPage.channels.snapshotUrlFailed')), variant: 'destructive' });
+      return;
     }
-  }, [t, toast]);
+    if (await copyToClipboard(url)) {
+      toast({ title: t('NVRDetailPage.channels.snapshotUrlCopied') });
+    } else {
+      toast({
+        title: t('NVRDetailPage.channels.snapshotUrlFailed'),
+        description: t('CopyButton.failedHint', { ns: 'common' }),
+        variant: 'destructive',
+      });
+    }
+  }, [copyToClipboard, t, toast]);
 
   // ── Core Data ──
 
@@ -1079,13 +1090,14 @@ export default function NVRDetailPage() {
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/cameras/${ch.id}`); } }}>
                     <ChannelThumb cameraId={ch.id} name={ch.name} status={ch.status} />
                     <CardContent noOffset className="p-2.5">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium truncate">{ch.name}</span>
-                        <StatusBadge status={ch.status} />
+                      <div className="flex items-center justify-between gap-2 mb-1 min-w-0">
+                        <span className="text-sm font-medium truncate min-w-0" title={ch.name}>{ch.name}</span>
+                        <span className="shrink-0"><StatusBadge status={ch.status} /></span>
                       </div>
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                        {ch.channel_id != null && <span>{t('NVRDetailPage.channels.chShort', { n: ch.channel_id })}</span>}
-                        {ch.ip_address && <span className="font-mono">{ch.ip_address}</span>}
+                      {/* Wraps rather than clips: the card hides overflow. */}
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 text-[11px] text-muted-foreground" data-testid="nvr-channel-meta">
+                        {ch.channel_id != null && <span className="whitespace-nowrap">{t('NVRDetailPage.channels.chShort', { n: ch.channel_id })}</span>}
+                        {ch.ip_address && <span className="font-mono truncate max-w-full" title={ch.ip_address}>{ch.ip_address}</span>}
                         {ch.has_ptz && <Badge variant="secondary" className="text-[9px] px-1 py-0">PTZ</Badge>}
                         {ch.has_audio && <Badge variant="secondary" className="text-[9px] px-1 py-0">{t('NVRDetailPage.channels.audio')}</Badge>}
                         {ch.is_recording && (
@@ -1820,6 +1832,19 @@ function PlaybackPanel({ nvrId, nvrName, nvrVendor, channels, isOnline, preselec
 }) {
   const { t } = useTranslation('cameras');
   const { toast } = useToast();
+  const { copy: copyToClipboard } = useCopyToClipboard();
+  // Playback URLs carry the NVR login; only the redacted form is copied.
+  const copyRedactedUrl = async (uri: string, successTitle: string) => {
+    if (await copyToClipboard(uri.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'))) {
+      toast({ title: successTitle });
+    } else {
+      toast({
+        title: t('CopyButton.failed', { ns: 'common' }),
+        description: t('CopyButton.failedHint', { ns: 'common' }),
+        variant: 'destructive',
+      });
+    }
+  };
   const [selectedChannel, setSelectedChannel] = useState<string>('');
   const [selectedChannelNum, setSelectedChannelNum] = useState<number>(1);
   const [startDate, setStartDate] = useState(() => {
@@ -2109,8 +2134,7 @@ function PlaybackPanel({ nvrId, nvrName, nvrVendor, channels, isOnline, preselec
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">{t('NVRDetailPage.playback.rtspUrl')}</span>
                 <Button variant="outline" size="sm" onClick={() => {
-                  navigator.clipboard.writeText(playbackUrl.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'));
-                  toast({ title: t('NVRDetailPage.toasts.redactedUrlCopied') });
+                  void copyRedactedUrl(playbackUrl, t('NVRDetailPage.toasts.redactedUrlCopied'));
                 }}>
                   {t('NVRDetailPage.playback.copyUrl')}
                 </Button>
@@ -2194,8 +2218,7 @@ function PlaybackPanel({ nvrId, nvrName, nvrVendor, channels, isOnline, preselec
                           )}
                           {rec.playback_uri && (
                             <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => {
-                              navigator.clipboard.writeText(rec.playback_uri!.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'));
-                              toast({ title: t('NVRDetailPage.toasts.redactedUrlCopiedShort') });
+                              void copyRedactedUrl(rec.playback_uri!, t('NVRDetailPage.toasts.redactedUrlCopiedShort'));
                             }}>
                               <Link2 className="h-3 w-3 mr-1" /> {t('NVRDetailPage.playback.copyUrl')}
                             </Button>

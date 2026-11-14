@@ -85,6 +85,29 @@ def _device():
     )
 
 
+@pytest.fixture(autouse=True)
+def _chokepoint_passes_through(monkeypatch):
+    """These tests are about call shapes, with a fake device and no database.
+
+    The executors now write through the staging chokepoint (a ledger row per
+    push or firmware upgrade, an audit record per reboot), which needs a real
+    session; tests/services/test_service_writes_staged.py covers that. Here the
+    chokepoint hands straight to the device call, in read-write mode.
+    """
+    import app.core.runtime_flags as rf
+    import app.services.device_writes as device_writes
+
+    async def _write(_db, _device, *, perform, **_kwargs):
+        return await perform()
+
+    async def _action(_db, _device, *, perform, **_kwargs):
+        return await perform()
+
+    monkeypatch.setattr(device_writes, "write_device_config", _write)
+    monkeypatch.setattr(device_writes, "device_action", _action)
+    monkeypatch.setattr(rf, "is_adapter_read_only", lambda: False)
+
+
 @pytest.fixture()
 def adapter(monkeypatch):
     ad = _ContractAdapter()
@@ -97,7 +120,7 @@ async def test_reboot_calls_reboot_device_with_the_device_id(adapter) -> None:
     """Fails before the fix: it probed for a bare ``reboot()`` and raised
     NotImplementedError for every adapter the factory returns."""
     device = _device()
-    await bulk._reboot_device(device)
+    await bulk._reboot_device(AsyncMock(), device)
 
     names = [c[0] for c in adapter.calls]
     assert names == ["reboot_device"], f"unexpected calls: {adapter.calls}"
@@ -109,7 +132,7 @@ async def test_firmware_calls_upgrade_firmware_with_the_device_id(adapter) -> No
     """Fails before the fix: ``firmware_update(url, version)`` is not the
     interface, and where the name exists it takes no positional arguments."""
     device = _device()
-    await bulk._firmware_update_device(device, {"firmware_url": "https://x/fw.bin"})
+    await bulk._firmware_update_device(AsyncMock(), device, {"firmware_url": "https://x/fw.bin"})
 
     names = [c[0] for c in adapter.calls]
     assert names == ["upgrade_firmware"], f"unexpected calls: {adapter.calls}"
@@ -122,8 +145,7 @@ async def test_config_push_uses_the_documented_signatures(monkeypatch, adapter) 
     device = _device()
 
     class _Resolver:
-        def __init__(self, _db):
-            ...
+        def __init__(self, _db): ...
 
         async def resolve(self, _device):
             return {"desired": True}
@@ -148,13 +170,14 @@ async def test_config_push_uses_the_documented_signatures(monkeypatch, adapter) 
 @pytest.mark.parametrize(
     "operation,call",
     [
-        ("reboot", lambda d: bulk._reboot_device(d)),
-        ("firmware", lambda d: bulk._firmware_update_device(d, {"firmware_url": "https://x"})),
+        ("reboot", lambda d: bulk._reboot_device(AsyncMock(), d)),
+        (
+            "firmware",
+            lambda d: bulk._firmware_update_device(AsyncMock(), d, {"firmware_url": "https://x"}),
+        ),
     ],
 )
-async def test_a_refused_operation_is_not_reported_as_success(
-    monkeypatch, operation, call
-) -> None:
+async def test_a_refused_operation_is_not_reported_as_success(monkeypatch, operation, call) -> None:
     """An adapter reports failure two ways; a non-throwing
     ``AdapterResult(success=False)`` must not pass silently."""
     refusing = _ContractAdapter(success=False)
@@ -179,7 +202,7 @@ async def test_an_adapter_missing_the_capability_says_so_clearly(monkeypatch) ->
     monkeypatch.setattr(bulk, "_adapter_for_device", lambda _d: _Bare())
 
     with pytest.raises(NotImplementedError, match="does not support"):
-        await bulk._reboot_device(_device())
+        await bulk._reboot_device(AsyncMock(), _device())
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +281,7 @@ async def test_a_firmware_job_from_the_UI_reaches_the_adapter(adapter) -> None:
 
     Fails before the fix with ValueError: firmware_url is required.
     """
-    await bulk._firmware_update_device(_device(), None)
+    await bulk._firmware_update_device(AsyncMock(), _device(), None)
 
     assert [c[0] for c in adapter.calls] == ["upgrade_firmware"], (
         f"a UI-created firmware job must reach the adapter; got {adapter.calls}"

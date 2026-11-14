@@ -323,10 +323,19 @@ class GrandstreamAdapter(BaseAdapter):
             effective_ro = is_adapter_read_only()
         else:
             effective_ro = self._read_only
-        if effective_ro and not force:
+        from app.adapters.apply_context import (
+            FORCE_DOES_NOT_LIFT_READ_ONLY,
+            read_only_refuses_write,
+        )
+
+        # Every gated op here changes the phone (config, provisioning, reboot,
+        # factory reset, firmware, SIP/BLF keys), so force=True does not lift
+        # read-only mode; only an approved staged apply runs under it.
+        if read_only_refuses_write(effective_ro):
             raise GrandstreamReadOnlyError(
                 f"Refusing {op}: adapter is in read-only mode "
                 "(set ADAPTER_READ_ONLY=false and pass force=True to override)"
+                + (FORCE_DOES_NOT_LIFT_READ_ONLY if force else "")
             )
 
     # ── properties ─────────────────────────────────────────────────────

@@ -35,6 +35,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow, format, isValid } from 'date-fns';
 import { z } from 'zod';
@@ -1005,15 +1006,14 @@ function ProvidersTab() {
   const { t } = useTranslation('enterprise');
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
 
   // Centralized error helper, the 6 mutations below previously had no
   // ``onError`` at all, so 403/404/422 from the backend hit a closed
   // dialog and silent failure. This surfaces a destructive toast with
   // the server detail when available.
   const errToast = (title: string) => (err: unknown) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const detail = (err as any)?.response?.data?.detail
-      || (err instanceof Error ? err.message : t('NotificationProvidersPage.toast.unknownError'));
+    const detail = getApiErrorMessage(err, t('NotificationProvidersPage.toast.unknownError'));
     toast({ variant: 'destructive', title, description: String(detail) });
   };
   const { data: providers = [], isLoading } = useProviders();
@@ -1333,8 +1333,16 @@ function ProvidersTab() {
             label: t('NotificationProvidersPage.bulk.delete'),
             icon: Trash2,
             variant: 'destructive',
-            onClick: () => {
-              if (confirm(t('NotificationProvidersPage.bulk.confirmDelete', { count: selectedProviders.length }))) {
+            onClick: async () => {
+              const ok = await confirm({
+                title: t('NotificationProvidersPage.bulk.confirmDelete', { count: selectedProviders.length }),
+                description: t('NotificationProvidersPage.bulk.confirmDeleteDescription'),
+                count: selectedProviders.length,
+                items: selectedProviders.map((p) => p.name),
+                confirmLabel: t('NotificationProvidersPage.bulk.confirmDeleteAction'),
+                destructive: true,
+              });
+              if (ok) {
                 selectedProviders.forEach((p) => deleteMut.mutate(p.id));
                 setSelectedProviders([]);
               }

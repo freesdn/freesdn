@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.metrics import auth_events_total
+from app.core.organization_access import organization_admits
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -802,6 +803,11 @@ async def _get_authenticated_user(
             detail="User account is disabled",
         )
 
+    # A deleted or deactivated organization signs its members out. Same 401 as
+    # any other dead credential, so the answer says nothing about the org.
+    if not await organization_admits(session, user):
+        raise credentials_exception
+
     current_tv = getattr(user, "token_version", 0) or 0
     if payload.get("tv", 0) != current_tv:
         raise credentials_exception
@@ -975,14 +981,20 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.is_active:
+    if not user.is_active or not await organization_admits(session, user):
         # SECURITY: do NOT distinguish "inactive account" from
         # "wrong password" in the response — otherwise an attacker with a
         # valid password for a disabled account can enumerate disabled
         # users. Log the real reason server-side for audit, return the
         # identical 401 the wrong-password branch uses. Timing is already
         # normalized because verify_password() has run for the real hash.
-        logger.info("Login attempt on inactive account: user_id=%s", user.id)
+        # A member of a deleted or deactivated organization is refused the
+        # same way.
+        logger.info(
+            "Login attempt on %s: user_id=%s",
+            "inactive account" if not user.is_active else "retired organization",
+            user.id,
+        )
         await _audit_failed_login(identifier=identifier, request=request)
         await record_auth_user_failure(identifier)
         auth_events_total.labels(event_type="login", status="failure").inc()
@@ -1140,10 +1152,15 @@ async def login(
             detail="Incorrect email/username or password",
         )
 
-    if not user.is_active:
+    if not user.is_active or not await organization_admits(session, user):
         # SECURITY: see /token above — return the identical
         # 401 as wrong-password to prevent disabled-account enumeration.
-        logger.info("Login attempt on inactive account: user_id=%s", user.id)
+        # Covers a member of a deleted or deactivated organization too.
+        logger.info(
+            "Login attempt on %s: user_id=%s",
+            "inactive account" if not user.is_active else "retired organization",
+            user.id,
+        )
         await _audit_failed_login(identifier=identifier, request=request)
         await record_auth_user_failure(identifier)
         auth_events_total.labels(event_type="login", status="failure").inc()
@@ -1275,9 +1292,10 @@ async def refresh_token(
     )
     user = result.scalar_one_or_none()
 
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or not await organization_admits(session, user):
         # SECURITY: do not leak whether the sub-id references
-        # a real user; use the same generic error as other refresh failures.
+        # a real user (or whether its organization is still live); use the
+        # same generic error as other refresh failures.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
@@ -1762,6 +1780,19 @@ async def register(
 # ==========================================================================
 
 
+def _has_local_password(user: User) -> bool:
+    """False for an account that signs in only through SSO.
+
+    JIT-provisioned SSO accounts are stored with a ``!``-prefixed sentinel
+    (``!SSO_MANAGED``) instead of a hash; no hash format starts with ``!``.
+    Email reset must not give such an account a local password: that would add
+    a sign-in path around the identity provider's MFA and conditional access,
+    and one that keeps working after the IdP disables the user. The vault
+    export authority refuses the same fallback.
+    """
+    return not str(user.hashed_password or "").startswith("!")
+
+
 @router.post("/password/reset-request")
 async def request_password_reset(
     data: PasswordResetRequestSchema,
@@ -1835,6 +1866,14 @@ async def request_password_reset(
     user = result.scalar_one_or_none()
 
     response: dict[str, Any] = {"message": "If the email exists, a reset link has been sent"}
+
+    if user and not _has_local_password(user):
+        # Same answer and latency floor as an unknown email: no enumeration.
+        logger.info(
+            "Password reset requested for an SSO-only account; no link issued",
+            extra={"user_id": str(user.id)},
+        )
+        user = None
 
     if user:
         # SECURITY: embed the user's current token_version so that
@@ -1950,7 +1989,13 @@ async def reset_password(
         select(User).where(User.id == UUID(user_id), User.deleted_at.is_(None)).with_for_update()
     )
     user = result.scalar_one_or_none()
-    if user is None or int(reset_exp) <= datetime.now(UTC).timestamp():
+    if (
+        user is None
+        or int(reset_exp) <= datetime.now(UTC).timestamp()
+        # A link minted before this check existed must not create a local
+        # password for an SSO-only account either.
+        or not _has_local_password(user)
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired reset token",
@@ -2255,6 +2300,12 @@ async def login_mfa(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is disabled",
+        )
+
+    if not await organization_admits(session, user):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid MFA session",
         )
 
     if user.locked_until and user.locked_until > datetime.now(UTC):

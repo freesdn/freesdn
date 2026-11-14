@@ -161,12 +161,13 @@ async def _reconcile_all_devices() -> dict[str, Any]:
     name="app.tasks.reconciliation.reconcile_all_devices",
     bind=True,
     soft_time_limit=120,
+    time_limit=180,
 )
 def reconcile_all_devices(self: Any) -> dict[str, Any]:
     """Celery task: fan-out reconciliation to all managed devices."""
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    lock_token = acquire_solo_lock("reconcile_all_devices", ttl_seconds=120)
+    lock_token = acquire_solo_lock("reconcile_all_devices", ttl_seconds=180)
     if not lock_token:
         return {"skipped": True, "reason": "already_running"}
     try:
@@ -274,12 +275,13 @@ async def _recompute_all_health() -> dict[str, Any]:
     name="app.tasks.reconciliation.recompute_all_health",
     bind=True,
     soft_time_limit=120,
+    time_limit=180,
 )
 def recompute_all_health(self: Any) -> dict[str, Any]:
     """Celery task: fan-out health recomputation to all managed devices."""
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    lock_token = acquire_solo_lock("recompute_all_health", ttl_seconds=120)
+    lock_token = acquire_solo_lock("recompute_all_health", ttl_seconds=180)
     if not lock_token:
         return {"skipped": True, "reason": "already_running"}
     try:
@@ -365,12 +367,13 @@ async def _snapshot_daily_health() -> dict[str, Any]:
     name="app.tasks.reconciliation.snapshot_daily_health",
     bind=True,
     soft_time_limit=300,
+    time_limit=360,
 )
 def snapshot_daily_health(self: Any) -> dict[str, Any]:
     """Celery task: nightly health snapshot aggregation."""
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    lock_token = acquire_solo_lock("snapshot_daily_health", ttl_seconds=300)
+    lock_token = acquire_solo_lock("snapshot_daily_health", ttl_seconds=360)
     if not lock_token:
         return {"skipped": True, "reason": "already_running"}
     try:

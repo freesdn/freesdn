@@ -42,11 +42,15 @@ class _FakePubSub:
 
     def __init__(self) -> None:
         self.psubscribed: list[str] = []
+        self.subscribed: list[str] = []
         self._queue: list[dict[str, Any]] = []
         self.closed = False
 
     async def psubscribe(self, pattern: str) -> None:
         self.psubscribed.append(pattern)
+
+    async def subscribe(self, channel: str) -> None:
+        self.subscribed.append(channel)
 
     async def get_message(self, ignore_subscribe_messages: bool = False,
                           timeout: float = 1.0) -> dict[str, Any] | None:

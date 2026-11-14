@@ -188,11 +188,16 @@ def test_no_persist_site_calls_the_bare_enum_constructor() -> None:
     """
     import inspect
 
-    from app.services import discovery
+    from app.services import discovery as discovery_service
+    from app.tasks import discovery
 
+    # app.tasks.discovery is the one discovery implementation and persists every
+    # discovered device; app.services.discovery only hands the Discovery page's
+    # buttons to it and must not grow its own persist site again.
     src = inspect.getsource(discovery)
     assert "DeviceType(data.device_type)" not in src, (
-        "discovery.py is constructing DeviceType directly again; route it "
+        "discovery is constructing DeviceType directly again; route it "
         "through normalize_device_type()"
     )
     assert "normalize_device_type(" in src
+    assert "DeviceType(" not in inspect.getsource(discovery_service)

@@ -161,7 +161,9 @@
         "namePlaceholder": "Management",
         "vlanId": "VLAN ID",
         "descriptionPlaceholder": "Optional description"
-      }
+      },
+      "removeSubnetBody": "It is removed from this site's settings in FreeSDN. Nothing is changed on your network devices.",
+      "removeSubnetAction": "Remove subnet"
     },
     "vpn": {
       "provider": "Provider",
@@ -284,7 +286,9 @@
         "removeConfigFailed": "Failed to remove VPN config",
         "primaryUpdated": "Primary VPN updated",
         "setPrimaryFailed": "Failed to set primary config"
-      }
+      },
+      "removeConfigBody": "This deletes FreeSDN's record of this configuration. Nothing is changed on the VPN server or on any device.",
+      "removeConfigAction": "Remove configuration"
     },
     "reachability": {
       "title": "Device Reachability",
@@ -329,7 +333,8 @@
         "wgAgentConfig": "WireGuard Agent Config",
         "configCopied": "Config copied",
         "addToServerConf": "Add to Server wg0.conf",
-        "peerBlockCopied": "Peer block copied"
+        "peerBlockCopied": "Peer block copied",
+        "copyField": "Copy {{label}}"
       },
       "guide": {
         "title": "Agent Deployment Guide",

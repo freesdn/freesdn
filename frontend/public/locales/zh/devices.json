@@ -163,6 +163,16 @@
       "reboot": "重启",
       "export": "导出",
       "delete": "删除"
+    },
+    "bulkReboot": {
+      "confirm": "要重启 {{n}} 台在线设备吗？每台设备在恢复之前都会断开其客户端和链路。"
+    },
+    "bulkDelete": {
+      "confirmTitle": "要移除 {{n}} 台设备吗？",
+      "confirmDescription": "FreeSDN 会从其清单中移除这 {{n}} 台设备。设备本身不会有任何更改；控制器仍在报告的设备会在下次同步时重新出现。",
+      "doneTitle": "已移除 {{n}} 台设备",
+      "partialTitle": "{{total}} 台设备中有 {{failed}} 台无法移除",
+      "resyncNote": "控制器仍在报告的设备会在下次同步时重新出现。"
     }
   },
   "DeviceDetailPage": {
@@ -238,7 +248,9 @@
     },
     "actions": {
       "sync": "同步",
-      "reboot": "重启"
+      "reboot": "重启",
+      "back": "返回设备",
+      "more": "更多操作"
     },
     "menu": {
       "editDevice": "编辑设备",

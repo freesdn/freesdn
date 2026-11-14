@@ -558,7 +558,9 @@
       "rxSum": "RX 合计",
       "actions": "操作",
       "trunk": "中继",
-      "access": "接入"
+      "access": "接入",
+      "itemName": "端口",
+      "traffic": "流量"
     },
     "poe": {
       "enabled": "已启用",
@@ -581,7 +583,8 @@
       "enable": "启用",
       "disablePoe": "禁用 PoE",
       "enablePoe": "启用 PoE",
-      "controlNotSupported": "不支持端口控制"
+      "controlNotSupported": "不支持端口控制",
+      "menuFor": "{{port}} 的操作"
     }
   },
   "ProfilesTab": {

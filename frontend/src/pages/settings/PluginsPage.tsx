@@ -64,9 +64,11 @@ import { isUpdateAvailable } from '@/lib/plugin-version';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { PageHeader, PageToolbar } from '@/components/layout';
+import { CapabilityMaturityBadge } from '@/components/ui/capability-maturity-badge';
 import { StatsGrid } from '@/components/ui/stats-grid';
 import { StatusBadge, type StatusVariant } from '@/components/ui/status-indicator';
 import { BulkActionsBar } from '@/components/ui/bulk-actions-bar';
+import { useConfirm } from '@/hooks';
 import { SearchBar } from '@/components/ui/search-bar';
 import { cn } from '@/lib/utils';
 
@@ -889,6 +891,7 @@ function PluginRow({
 
 export default function PluginsPage() {
   const { t } = useTranslation('settings');
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { hasPermission } = useAuthStore();
   const user = useAuthStore((s) => s.user);
@@ -1013,6 +1016,7 @@ export default function PluginsPage() {
       <PageHeader
         icon={Package}
         title={t('PluginsPage.header.title')}
+        titleBadge={<CapabilityMaturityBadge capabilityId="plugins" />}
         description={t('PluginsPage.header.description')}
         onRefresh={() => refetch()}
         refreshing={isLoading}
@@ -1024,7 +1028,7 @@ export default function PluginsPage() {
       />
 
       <StatsGrid
-        columns={4}
+        columns={5}
         isLoading={isLoading}
         stats={[
           { title: t('PluginsPage.stats.total.title'), value: stats.total, icon: Package, variant: 'default', description: t('PluginsPage.stats.total.description') },
@@ -1113,9 +1117,18 @@ export default function PluginsPage() {
                   label: t('PluginsPage.actions.uninstall'),
                   icon: Trash2,
                   variant: 'destructive' as const,
-                  onClick: () => {
-                    if (confirm(t('PluginsPage.confirmBulkUninstall', { count: selectedPlugins.length }))) {
-                      selectedPlugins.forEach((p) =>
+                  onClick: async () => {
+                    const targets = [...selectedPlugins];
+                    const ok = await confirm({
+                      title: t('PluginsPage.bulkUninstallDialog.title', { count: targets.length }),
+                      description: t('PluginsPage.bulkUninstallDialog.description'),
+                      count: targets.length,
+                      items: targets.map((p) => p.name),
+                      confirmLabel: t('PluginsPage.bulkUninstallDialog.action', { count: targets.length }),
+                      destructive: true,
+                    });
+                    if (ok) {
+                      targets.forEach((p) =>
                         uninstallMutation.mutate({ id: p.plugin_id, purge: false }),
                       );
                       setSelectedPluginIds(new Set());

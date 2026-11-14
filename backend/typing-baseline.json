@@ -2,7 +2,7 @@
   "recorded_at": "2026-11-11",
   "mypy_version": "2.4.1",
   "scope": "app; existing pyproject exclusions retained, no new exclusions added",
-  "total_errors": 787,
+  "total_errors": 782,
   "diagnostics": {
     "[\"app/adapters/hikvision/adapter.py\", \"no-any-return\", \"Returning Any from function declared to return \\\"str\\\"\"]": 1,
     "[\"app/adapters/onvif/adapter.py\", \"no-untyped-call\", \"Call to untyped function \\\"Transport\\\" in typed context\"]": 1,
@@ -504,7 +504,7 @@
     "[\"app/core/redis_client.py\", \"no-untyped-call\", \"Call to untyped function \\\"master_for\\\" in typed context\"]": 1,
     "[\"app/main.py\", \"no-untyped-def\", \"Function is missing a type annotation for one or more parameters\"]": 1,
     "[\"app/main.py\", \"type-arg\", \"Missing type arguments for generic type \\\"list\\\"\"]": 1,
-    "[\"app/modules/access_control/module.py\", \"no-untyped-call\", \"Call to untyped function \\\"_ev\\\" in typed context\"]": 7,
+    "[\"app/modules/access_control/module.py\", \"no-untyped-call\", \"Call to untyped function \\\"_ev\\\" in typed context\"]": 2,
     "[\"app/modules/access_control/module.py\", \"no-untyped-def\", \"Function is missing a type annotation\"]": 1,
     "[\"app/modules/ai/governance.py\", \"unused-ignore\", \"Unused \\\"type: ignore\\\" comment\"]": 1,
     "[\"app/modules/ai/service.py\", \"unused-ignore\", \"Unused \\\"type: ignore\\\" comment\"]": 2,

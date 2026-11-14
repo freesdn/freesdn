@@ -20,9 +20,38 @@ FROM alpine:3.24 AS tailscale-access
 RUN apk upgrade --no-cache && apk add --no-cache ca-certificates iptables ip6tables iproute2
 COPY --from=tailscale-builder /out/ /usr/local/bin/
 COPY tailscale-build/LICENSE tailscale-build/NOTICE /usr/share/licenses/tailscale/
-RUN mkdir -p /var/lib/tailscale /tailscale \
+# containerboot behind a wrapper that maps TAILSCALE_NO_LOGS_NO_SUPPORT onto
+# tailscaled's --no-logs-no-support (see the script).
+COPY tailscale-access/entrypoint.sh /usr/local/bin/freesdn-tailscale-access
+RUN sed -i 's/\r$//' /usr/local/bin/freesdn-tailscale-access \
+    && chmod 0755 /usr/local/bin/freesdn-tailscale-access \
+    && mkdir -p /var/lib/tailscale /tailscale \
     && ln -s /usr/local/bin/containerboot /tailscale/run.sh
-ENTRYPOINT ["/usr/local/bin/containerboot"]
+ENTRYPOINT ["/usr/local/bin/freesdn-tailscale-access"]
+
+# Tailscale runtime: the `tailscale` service in docker-compose.yml, every tier.
+# The same pinned tailscale/tailscaled as the backend image (the builder stage
+# above) on a digest-pinned base, and nothing else: no Python, no application
+# code, no app credentials. Userspace networking, so it needs no TUN device and
+# no capability. It runs as uid 1001, the backend's appuser uid: tailscaled
+# gives LocalAPI write access to a client running as its own uid, which is how
+# the api and the workers run `tailscale up` over the shared socket volume.
+FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS tailscale-runtime
+RUN apk upgrade --no-cache \
+    && addgroup -S -g 1001 tailscale \
+    && adduser -S -D -H -h /tmp -s /sbin/nologin -u 1001 -G tailscale tailscale \
+    && mkdir -p /var/lib/tailscale /var/run/tailscale \
+    && chown 1001:1001 /var/lib/tailscale /var/run/tailscale \
+    && chmod 0700 /var/lib/tailscale
+COPY --from=tailscale-builder /out/tailscale /out/tailscaled /usr/local/bin/
+COPY tailscale-build/LICENSE tailscale-build/NOTICE /usr/share/licenses/tailscale/
+COPY tailscale-runtime/entrypoint.sh /usr/local/bin/freesdn-tailscale
+COPY tailscale-runtime/healthcheck.sh /usr/local/bin/freesdn-tailscale-health
+RUN sed -i 's/\r$//' /usr/local/bin/freesdn-tailscale /usr/local/bin/freesdn-tailscale-health \
+    && chmod 0755 /usr/local/bin/freesdn-tailscale /usr/local/bin/freesdn-tailscale-health
+ENV HOME=/tmp
+USER 1001:1001
+ENTRYPOINT ["/usr/local/bin/freesdn-tailscale"]
 
 FROM golang:1.27.4-alpine3.24 AS netbird-builder
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
@@ -38,7 +67,7 @@ RUN apk add --no-cache build-base \
     && CGO_ENABLED=1 go test -mod=vendor -race -count=3 -timeout=120s \
        github.com/netbirdio/netbird/client/internal/relay
 RUN go build -mod=vendor -trimpath \
-    -ldflags="-s -w -X github.com/netbirdio/netbird/version.version=0.82.0-freesdn" \
+    -ldflags="-s -w -X github.com/netbirdio/netbird/version.version=0.82.1-freesdn" \
     -o /out/netbird github.com/netbirdio/netbird/client
 
 # Signed upstream stable media build; stable Alpine dependencies only.

@@ -202,12 +202,13 @@ def test_openvpn_validator_is_inline_block_aware():
         _assert_openvpn_config_safe("client\n<ca>\nzzz\n</ca>\nmanagement 127.0.0.1 7\n")
 
 
-def test_brain_vpn_shares_the_single_blocklist():
-    # the two ingest paths must not drift — brain_vpn imports the canonical set
-    from app.schemas.vpn import _DANGEROUS_OPENVPN_DIRECTIVES
-    from app.services.brain_vpn import _DANGEROUS_OPENVPN_DIRECTIVES as brain_set
+def test_brain_vpn_shares_the_single_allowlist_check():
+    # the two ingest paths must not drift — brain_vpn calls the canonical check
+    # (26.12.0: an allowlist) instead of keeping its own directive list
+    from app.schemas.vpn import _assert_openvpn_config_safe
+    from app.services.brain_vpn import _assert_openvpn_config_safe as brain_check
 
-    assert brain_set is _DANGEROUS_OPENVPN_DIRECTIVES
+    assert brain_check is _assert_openvpn_config_safe
 
 
 def test_site_vpn_config_create_rejects_dangerous_directive():
@@ -628,3 +629,87 @@ def test_netbird_endpoints_do_not_build_their_own_service():
             f"{mod.__name__} imports NetbirdService; use get_vpn_manager().netbird "
             "so the status cache is shared across requests"
         )
+
+
+# ── NetBird: a daemon address nothing listens on answers at once ─────────────
+#
+# docker-compose.yml sets NETBIRD_DAEMON_ADDR=tcp://127.0.0.1:41731 for every
+# install, but only the optional VPN sidecar listens there. Without it every
+# status check spent the full CLI budget retrying gRPC at a closed port and
+# logged "Failed to get Netbird status: " (a TimeoutError has no message) at
+# ERROR, around 150 times a day on a real install that never set NetBird up.
+
+
+def _closed_port() -> int:
+    import socket
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+async def test_netbird_closed_daemon_port_answers_without_running_the_cli(monkeypatch):
+    fake = _CountingExec()
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake)
+    monkeypatch.setenv("NETBIRD_DAEMON_ADDR", f"tcp://127.0.0.1:{_closed_port()}")
+
+    status = await NetbirdService().get_status()
+
+    assert status == {"connected": False, "management_state": "NotRunning", "peers": []}
+    assert fake.calls == 0, "the CLI was run against a port nothing listens on"
+
+
+async def test_netbird_missing_unix_socket_answers_without_running_the_cli(monkeypatch, tmp_path):
+    fake = _CountingExec()
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake)
+    monkeypatch.setenv("NETBIRD_DAEMON_ADDR", f"unix://{tmp_path / 'netbird.sock'}")
+
+    status = await NetbirdService().get_status()
+
+    assert status["management_state"] == "NotRunning"
+    assert fake.calls == 0
+
+
+async def test_netbird_listening_daemon_is_still_asked(monkeypatch):
+    """The probe only short-cuts a refused connect; a live daemon is queried."""
+    server = await asyncio.start_server(lambda _r, w: w.close(), "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    fake = _CountingExec(rc=0, stdout=b'{"management": {"connected": true}, "peers": {}}')
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake)
+    monkeypatch.setenv("NETBIRD_DAEMON_ADDR", f"tcp://127.0.0.1:{port}")
+    try:
+        await NetbirdService().get_status()
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    assert fake.calls == 1
+
+
+async def test_netbird_timeout_is_logged_with_a_reason(monkeypatch, caplog):
+    """A timeout used to log "Failed to get Netbird status: " with nothing after it."""
+
+    async def fake_exec(*args, **kwargs):
+        class _P:
+            returncode = None
+
+            async def communicate(self):
+                raise TimeoutError
+
+            def kill(self):
+                pass
+
+            async def wait(self):
+                return 0
+
+        return _P()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.delenv("NETBIRD_DAEMON_ADDR", raising=False)
+
+    with caplog.at_level("WARNING", logger="app.services.vpn_integration"):
+        status = await NetbirdService().get_status()
+
+    assert status["management_state"] == "Error"
+    assert "did not answer a status request within 5s" in caplog.text
+    assert "Failed to get Netbird status" not in caplog.text

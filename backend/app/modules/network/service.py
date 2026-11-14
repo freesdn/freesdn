@@ -180,10 +180,11 @@ def _network_event(event_type: str, **payload) -> Event:
     """Create a network-module domain event.
 
     SECURITY: if the caller put ``organization_id``
-    into ``**payload`` (every existing caller does — e.g.
+    into ``**payload`` (every caller must:
     ``_emit("network.vlan.created", site_id=..., organization_id=...)``)
     we also lift it onto ``Event.organization_id`` so the fail-closed
-    WS router can route correctly. The payload key is preserved so
+    WS router can route correctly and the Fabric can fire Connections. (Until
+    now NO caller passed it, so every network.vlan/wifi trigger was dead.) The payload key is preserved so
     existing consumers that read ``event.payload['organization_id']``
     (e.g. ``modules/gateway/events/handlers.py:53``) keep working.
     """
@@ -310,6 +311,7 @@ class VlanService:
         logger.info("Created VLAN %s (%s) for org %s", vlan_id, name, organization_id)
         await _emit(
             "network.vlan.created",
+            organization_id=str(organization_id),
             vlan_id=vlan_id,
             vlan_uuid=str(vlan.id),
             name=name,
@@ -334,6 +336,7 @@ class VlanService:
         logger.info("Updated VLAN %s", vlan.vlan_id)
         await _emit(
             "network.vlan.updated",
+            organization_id=str(organization_id),
             vlan_id=vlan.vlan_id,
             vlan_uuid=str(vlan.id),
             site_id=str(vlan.site_id) if vlan.site_id else None,
@@ -351,6 +354,7 @@ class VlanService:
         logger.info("Deleted VLAN %s", vlan_id)
         await _emit(
             "network.vlan.deleted",
+            organization_id=str(organization_id),
             vlan_id=vlan_id,
             vlan_uuid=str(vlan_uuid),
             site_id=str(site_id) if site_id else None,
@@ -472,6 +476,7 @@ class WifiNetworkService:
         logger.info("Created WiFi network '%s' for org %s", ssid, organization_id)
         await _emit(
             "network.wifi.created",
+            organization_id=str(organization_id),
             ssid=ssid,
             wifi_uuid=str(network.id),
             site_id=str(site_id) if site_id else None,
@@ -496,6 +501,7 @@ class WifiNetworkService:
         logger.info("Updated WiFi network '%s'", network.ssid)
         await _emit(
             "network.wifi.updated",
+            organization_id=str(organization_id),
             ssid=network.ssid,
             wifi_uuid=str(network.id),
             site_id=str(network.site_id) if network.site_id else None,
@@ -513,6 +519,7 @@ class WifiNetworkService:
         logger.info("Deleted WiFi network '%s'", ssid)
         await _emit(
             "network.wifi.deleted",
+            organization_id=str(organization_id),
             ssid=ssid,
             wifi_uuid=str(wifi_id),
             site_id=str(site_id) if site_id else None,

@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import CurrentUser, get_current_active_user, is_unscoped_superuser
+from app.core.http_client import build_async_client
 from app.core.query import MAX_PAGE
 from app.core.security_utils import escape_like
 from app.db import get_session
@@ -853,8 +854,6 @@ async def _fetch_registry_catalog(url: str) -> dict[str, Any]:
     import json as _json
     from urllib.parse import urlparse, urlunparse
 
-    import httpx
-
     from app.core.security_utils import _is_ip_safe, _resolve_and_validate
 
     parsed = urlparse(url)
@@ -910,7 +909,7 @@ async def _fetch_registry_catalog(url: str) -> dict[str, Any]:
     total = 0
     chunks: list[bytes] = []
     async with (
-        httpx.AsyncClient(
+        build_async_client(
             timeout=30.0,
             follow_redirects=False,
             max_redirects=0,

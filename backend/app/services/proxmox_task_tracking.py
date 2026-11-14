@@ -214,132 +214,212 @@ async def observe_task(session: AsyncSession, change: AdapterPendingChange) -> N
     ):
         observation["detail"] = "target_unavailable_or_scope_changed"
     else:
-        adapter = None
-        try:
-            # Includes authentication, GET retries and disconnect. The outer
-            # worker deadline is a second bound; cancellation only loses a GET.
-            async with asyncio.timeout(10):
-                adapter = await build_proxmox_adapter(target.Controller)
-                if firewall:
-                    from app.services.hypervisor_firewall_operations import (
-                        readback as firewall_readback,
-                    )
+        # One request group per cluster across every poller and process
+        # (app/core/device_slot.py), and nothing while the shared breaker says
+        # the cluster stopped answering (the health check probes it; this
+        # observer only peeks). A skipped observation changes nothing and is
+        # retried shortly; it is not "observation unavailable".
+        from app.core.device_breaker import CLOSED, controller_breaker, controller_key
+        from app.core.device_poll import device_poll
+        from app.core.device_slot import controller_slot_key
 
-                    observation.update(await firewall_readback(adapter, change))
-                    result = None
-                elif task_stop:
-                    from app.services.hypervisor_task_control import readback as task_stop_readback
-
-                    observation.update(await task_stop_readback(adapter, change))
-                    result = None
-                elif backup_job:
-                    from app.services.hypervisor_backup_jobs import readback as backup_job_readback
-
-                    observation.update(await backup_job_readback(adapter, change))
-                    result = None
-                elif certificate and not has_task:
-                    from app.services.hypervisor_certificates import (
-                        readback as certificate_readback,
-                    )
-
-                    observation.update(await certificate_readback(adapter, change, None))
-                    result = None
-                elif cluster_operation:
-                    from app.services.hypervisor_cluster_operations import (
-                        readback as cluster_readback,
-                    )
-
-                    observation.update(await cluster_readback(adapter, change))
-                    result = None
-                elif not has_task:
-                    from app.services.hypervisor_guest_changes import readback, validated_plan
-
-                    observation.update(await readback(adapter, validated_plan(change)))
-                    result = None
+        skip: timedelta | None = None
+        if controller_breaker.peek(controller_key(target.Controller.id)) != CLOSED:
+            skip = timedelta(minutes=5)
+        else:
+            async with device_poll(
+                slot_key=controller_slot_key(target.Controller),
+                breaker=None,
+                breaker_key=None,
+                holder="Proxmox task observer",
+            ) as turn:
+                if turn.skipped:
+                    skip = timedelta(seconds=60)
                 else:
-                    assert isinstance(node, str) and isinstance(upid, str)
-                    result = await adapter.get_task_status(node, upid)
-                if result is not None and result.success and result.data is not None:
-                    task = result.data
-                    if task.upid != upid or task.node != node:
-                        observation["detail"] = "task_identity_mismatch"
-                    elif task.status == "running":
-                        observation.update(status="running", detail=None)
-                    elif task.status == "stopped" and task.exitstatus:
-                        if task.exitstatus == "OK":
-                            observation.update(status="succeeded", detail=None)
-                        elif re.fullmatch(r"WARNINGS: [0-9]+", task.exitstatus):
-                            observation.update(status="warnings", detail="provider_warnings")
-                        elif task.exitstatus == "unexpected status" or task.exitstatus.startswith(
-                            "unable to get last line from task log"
-                        ):
-                            observation["detail"] = "provider_result_unavailable"
-                        else:
-                            observation.update(status="failed", detail="provider_task_failed")
-                    else:
-                        observation["detail"] = "provider_result_unavailable"
-                    if storage_operation and observation["status"] == "failed":
-                        observation.update(status="unknown", detail="storage_provider_task_failed")
-                    if storage_operation and observation["status"] in {"succeeded", "warnings"}:
-                        from app.services.hypervisor_storage_operations import (
-                            readback as storage_readback,
-                        )
+                    adapter = None
+                    try:
+                        # Includes authentication, GET retries and disconnect. The outer
+                        # worker deadline is a second bound; cancellation only loses a GET.
+                        async with asyncio.timeout(10):
+                            adapter = await build_proxmox_adapter(target.Controller)
+                            if firewall:
+                                from app.services.hypervisor_firewall_operations import (
+                                    readback as firewall_readback,
+                                )
 
-                        had_warnings = observation["status"] == "warnings"
-                        observation.update(status="unknown", detail="storage_state_not_verified")
-                        assert isinstance(upid, str)
-                        observation.update(await storage_readback(adapter, change, upid))
-                        if had_warnings and observation["status"] == "succeeded":
-                            observation.update(
-                                status="warnings", detail="storage_verified_with_warnings"
-                            )
-                    if certificate and observation["status"] == "failed":
-                        # ACME may fail after installing files but before proxy
-                        # reload/revocation completes. Do not unlock a blind retry.
-                        observation.update(
-                            status="unknown", detail="certificate_provider_task_failed"
-                        )
-                    if certificate and observation["status"] in {"succeeded", "warnings"}:
-                        from app.services.hypervisor_certificates import (
-                            readback as certificate_readback,
-                        )
+                                observation.update(await firewall_readback(adapter, change))
+                                result = None
+                            elif task_stop:
+                                from app.services.hypervisor_task_control import (
+                                    readback as task_stop_readback,
+                                )
 
-                        had_warnings = observation["status"] == "warnings"
-                        observation.update(status="unknown", detail="certificate_not_verified")
-                        observation.update(await certificate_readback(adapter, change, upid))
-                        if had_warnings and observation["status"] == "succeeded":
-                            observation.update(
-                                status="warnings",
-                                detail="certificate_endpoint_verified_with_warnings",
-                            )
-                    if creation and observation["status"] == "succeeded":
-                        from app.services.hypervisor_creation import readback as creation_readback
+                                observation.update(await task_stop_readback(adapter, change))
+                                result = None
+                            elif backup_job:
+                                from app.services.hypervisor_backup_jobs import (
+                                    readback as backup_job_readback,
+                                )
 
-                        assert isinstance(upid, str)
-                        observation.update(status="unknown", detail="guest_creation_not_verified")
-                        observation.update(await creation_readback(adapter, change, upid))
-                    if deletion and observation["status"] == "succeeded":
-                        from app.services.hypervisor_deletion import readback as deletion_readback
+                                observation.update(await backup_job_readback(adapter, change))
+                                result = None
+                            elif certificate and not has_task:
+                                from app.services.hypervisor_certificates import (
+                                    readback as certificate_readback,
+                                )
 
-                        observation.update(status="unknown", detail="guest_absence_not_verified")
-                        assert isinstance(upid, str)
-                        observation.update(await deletion_readback(adapter, change, upid))
-                    if guest_change and observation["status"] == "succeeded":
-                        from app.services.hypervisor_guest_changes import readback, validated_plan
+                                observation.update(
+                                    await certificate_readback(adapter, change, None)
+                                )
+                                result = None
+                            elif cluster_operation:
+                                from app.services.hypervisor_cluster_operations import (
+                                    readback as cluster_readback,
+                                )
 
-                        # A completed provider task is insufficient if the intended
-                        # state cannot be verified. Failure here must reset success.
-                        observation.update(status="unknown", detail="guest_state_not_verified")
-                        observation.update(await readback(adapter, validated_plan(change)))
-        except Exception:
-            # Missing history, permissions, timeout and malformed provider data
-            # all mean unobserved, never failed or successful execution.
-            observation["detail"] = "observation_unavailable"
-        finally:
-            if adapter is not None:
-                with contextlib.suppress(Exception):
-                    async with asyncio.timeout(2):
-                        await adapter.disconnect()
+                                observation.update(await cluster_readback(adapter, change))
+                                result = None
+                            elif not has_task:
+                                from app.services.hypervisor_guest_changes import (
+                                    readback,
+                                    validated_plan,
+                                )
+
+                                observation.update(await readback(adapter, validated_plan(change)))
+                                result = None
+                            else:
+                                assert isinstance(node, str) and isinstance(upid, str)
+                                result = await adapter.get_task_status(node, upid)
+                            if result is not None and result.success and result.data is not None:
+                                task = result.data
+                                if task.upid != upid or task.node != node:
+                                    observation["detail"] = "task_identity_mismatch"
+                                elif task.status == "running":
+                                    observation.update(status="running", detail=None)
+                                elif task.status == "stopped" and task.exitstatus:
+                                    if task.exitstatus == "OK":
+                                        observation.update(status="succeeded", detail=None)
+                                    elif re.fullmatch(r"WARNINGS: [0-9]+", task.exitstatus):
+                                        observation.update(
+                                            status="warnings", detail="provider_warnings"
+                                        )
+                                    elif (
+                                        task.exitstatus == "unexpected status"
+                                        or task.exitstatus.startswith(
+                                            "unable to get last line from task log"
+                                        )
+                                    ):
+                                        observation["detail"] = "provider_result_unavailable"
+                                    else:
+                                        observation.update(
+                                            status="failed", detail="provider_task_failed"
+                                        )
+                                else:
+                                    observation["detail"] = "provider_result_unavailable"
+                                if storage_operation and observation["status"] == "failed":
+                                    observation.update(
+                                        status="unknown", detail="storage_provider_task_failed"
+                                    )
+                                if storage_operation and observation["status"] in {
+                                    "succeeded",
+                                    "warnings",
+                                }:
+                                    from app.services.hypervisor_storage_operations import (
+                                        readback as storage_readback,
+                                    )
+
+                                    had_warnings = observation["status"] == "warnings"
+                                    observation.update(
+                                        status="unknown", detail="storage_state_not_verified"
+                                    )
+                                    assert isinstance(upid, str)
+                                    observation.update(
+                                        await storage_readback(adapter, change, upid)
+                                    )
+                                    if had_warnings and observation["status"] == "succeeded":
+                                        observation.update(
+                                            status="warnings",
+                                            detail="storage_verified_with_warnings",
+                                        )
+                                if certificate and observation["status"] == "failed":
+                                    # ACME may fail after installing files but before proxy
+                                    # reload/revocation completes. Do not unlock a blind retry.
+                                    observation.update(
+                                        status="unknown", detail="certificate_provider_task_failed"
+                                    )
+                                if certificate and observation["status"] in {
+                                    "succeeded",
+                                    "warnings",
+                                }:
+                                    from app.services.hypervisor_certificates import (
+                                        readback as certificate_readback,
+                                    )
+
+                                    had_warnings = observation["status"] == "warnings"
+                                    observation.update(
+                                        status="unknown", detail="certificate_not_verified"
+                                    )
+                                    observation.update(
+                                        await certificate_readback(adapter, change, upid)
+                                    )
+                                    if had_warnings and observation["status"] == "succeeded":
+                                        observation.update(
+                                            status="warnings",
+                                            detail="certificate_endpoint_verified_with_warnings",
+                                        )
+                                if creation and observation["status"] == "succeeded":
+                                    from app.services.hypervisor_creation import (
+                                        readback as creation_readback,
+                                    )
+
+                                    assert isinstance(upid, str)
+                                    observation.update(
+                                        status="unknown", detail="guest_creation_not_verified"
+                                    )
+                                    observation.update(
+                                        await creation_readback(adapter, change, upid)
+                                    )
+                                if deletion and observation["status"] == "succeeded":
+                                    from app.services.hypervisor_deletion import (
+                                        readback as deletion_readback,
+                                    )
+
+                                    observation.update(
+                                        status="unknown", detail="guest_absence_not_verified"
+                                    )
+                                    assert isinstance(upid, str)
+                                    observation.update(
+                                        await deletion_readback(adapter, change, upid)
+                                    )
+                                if guest_change and observation["status"] == "succeeded":
+                                    from app.services.hypervisor_guest_changes import (
+                                        readback,
+                                        validated_plan,
+                                    )
+
+                                    # A completed provider task is insufficient if the intended
+                                    # state cannot be verified. Failure here must reset success.
+                                    observation.update(
+                                        status="unknown", detail="guest_state_not_verified"
+                                    )
+                                    observation.update(
+                                        await readback(adapter, validated_plan(change))
+                                    )
+                    except Exception:
+                        # Missing history, permissions, timeout and malformed provider data
+                        # all mean unobserved, never failed or successful execution.
+                        observation["detail"] = "observation_unavailable"
+                    finally:
+                        if adapter is not None:
+                            with contextlib.suppress(Exception):
+                                async with asyncio.timeout(2):
+                                    await adapter.disconnect()
+        if skip is not None:
+            if change.applied_at is None or now - change.applied_at <= timedelta(days=7):
+                change.provider_task_next_poll_at = now + skip
+                return
+            # Seven days without one observation: the expiry below applies,
+            # exactly as after a failed observation.
 
     if observation["status"] in _TERMINAL:
         observation["finished_at"] = now.isoformat()

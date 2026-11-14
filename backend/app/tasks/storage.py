@@ -165,12 +165,16 @@ async def _poll_storage_health() -> dict[str, Any]:
     # Proxmox datastores appeared in an on-demand health read and were never
     # monitored, never snapshotted, and never emitted a transition event. The
     # two now share modules/storage/providers.py.
+    from app.core.device_breaker import controller_breaker, controller_key
+    from app.core.device_poll import device_poll
+    from app.core.device_slot import controller_slot_key
+    from app.modules.poll_gate import orgs_with_module_disabled
     from app.modules.storage.providers import (
         read_controller_storage,
         storage_controller_types,
     )
 
-    polled = 0
+    polled = skipped = 0
     emitted = 0
     pending_events: list[Any] = []
 
@@ -190,45 +194,77 @@ async def _poll_storage_health() -> dict[str, Any]:
             .all()
         )
 
-        for ctrl in controllers:
-            polled += 1
-            org_id = await _org_for_controller(session, ctrl)
-            if org_id is None:
-                # No resolvable org → cannot org-scope the event. Skip (fail-closed).
+        orgs = {ctrl.id: await _org_for_controller(session, ctrl) for ctrl in controllers}
+        # An organization that switched the Storage module off is not polled.
+        disabled = await orgs_with_module_disabled(session, "storage", orgs.values())
+    # Leaving the block ends the read transaction before the first byte goes to
+    # a device: no database transaction or connection is held while one answers.
+
+    snapshots: dict[UUID, dict[str, Any]] = {}
+
+    for ctrl in controllers:
+        org_id = orgs.get(ctrl.id)
+        if org_id is None:
+            # No resolvable org → cannot org-scope the event. Skip (fail-closed).
+            continue
+        if org_id in disabled:
+            continue
+
+        cfg = ctrl.config or {}
+        prev = cfg.get(_SNAP_KEY) or {}
+        warn_pct = float(cfg.get("_fabric_storage_capacity_warn_pct", _DEFAULT_CAPACITY_WARN_PCT))
+
+        summary: dict[str, Any] | None = None
+        # The provider owns connecting, reading and disconnecting, and
+        # returns None rather than raising -- one bad appliance must not
+        # abort the sweep for every other one.
+        # Shared breaker + the appliance's device slot (see device_poll).
+        # The provider swallows errors and returns None, so a None reading
+        # is counted as the appliance not answering.
+        async with device_poll(
+            slot_key=controller_slot_key(ctrl),
+            breaker=controller_breaker,
+            breaker_key=controller_key(ctrl.id),
+            holder="storage monitor",
+        ) as turn:
+            if turn.skipped:
+                skipped += 1
+                logger.info("Storage poll: %s skipped: %s", ctrl.name, turn.reason)
                 continue
-
-            cfg = ctrl.config or {}
-            prev = cfg.get(_SNAP_KEY) or {}
-            warn_pct = float(
-                cfg.get("_fabric_storage_capacity_warn_pct", _DEFAULT_CAPACITY_WARN_PCT)
-            )
-
-            summary: dict[str, Any] | None = None
-            # The provider owns connecting, reading and disconnecting, and
-            # returns None rather than raising -- one bad appliance must not
-            # abort the sweep for every other one.
+            polled += 1
             reading = await read_controller_storage(ctrl)
-            reachable = reading is not None
-            if reading is not None:
-                summary = summarize_health(
-                    reading.pools,
-                    reading.alerts,
-                    reading.disk_temps,
-                    capacity_warn_pct=warn_pct,
+            if reading is None:
+                turn.unreachable("no storage reading")
+        reachable = reading is not None
+        if reading is not None:
+            summary = summarize_health(
+                reading.pools,
+                reading.alerts,
+                reading.disk_temps,
+                capacity_warn_pct=warn_pct,
+            )
+        else:
+            logger.warning("Storage poll: %s (%s) unreachable or unclaimed", ctrl.name, ctrl.host)
+
+        # Collect transition events (published after commit so a steady
+        # state never re-fires, and a publish failure can't roll back).
+        pending_events.extend(_transitions(prev, summary, reachable, ctrl, org_id))
+
+        snapshots[ctrl.id] = _snapshot(reachable, summary)
+
+    # One short transaction for the new snapshots, merged into each row's
+    # CURRENT config, so a setting an operator saved during the poll is kept.
+    if snapshots:
+        async with CelerySessionLocal() as session:
+            rows = (
+                await session.execute(
+                    select(Controller).where(Controller.id.in_(list(snapshots))).with_for_update()
                 )
-            else:
-                logger.warning(
-                    "Storage poll: %s (%s) unreachable or unclaimed", ctrl.name, ctrl.host
-                )
-
-            # Collect transition events (published after commit so a steady
-            # state never re-fires, and a publish failure can't roll back).
-            pending_events.extend(_transitions(prev, summary, reachable, ctrl, org_id))
-
-            ctrl.config = {**cfg, _SNAP_KEY: _snapshot(reachable, summary)}
-            flag_modified(ctrl, "config")
-
-        await session.commit()
+            ).scalars()
+            for row in rows:
+                row.config = {**(row.config or {}), _SNAP_KEY: snapshots[row.id]}
+                flag_modified(row, "config")
+            await session.commit()
 
     # Publish AFTER the snapshot is durably committed.
     for ev in pending_events:
@@ -240,13 +276,13 @@ async def _poll_storage_health() -> dict[str, Any]:
         except Exception:
             logger.debug("storage event publish skipped", exc_info=True)
 
-    return {"success": True, "polled": polled, "events_emitted": emitted}
+    return {"success": True, "polled": polled, "skipped": skipped, "events_emitted": emitted}
 
 
 @celery_app.task(bind=True, name="storage.poll_health", soft_time_limit=240, time_limit=300)
 def poll_health(self) -> dict[str, Any]:
     """Periodic storage health poll → storage.* transition events."""
-    lock_token = acquire_solo_lock("storage.poll_health", ttl_seconds=180)
+    lock_token = acquire_solo_lock("storage.poll_health", ttl_seconds=300)
     if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:

@@ -24,7 +24,8 @@
       "close": "Close",
       "previewChanges": "Preview Changes",
       "restoreNow": "Restore Now",
-      "selectItem": "Select {{name}}"
+      "selectItem": "Select {{name}}",
+      "menuFor": "Actions for {{name}}"
     },
     "common": {
       "encrypted": "Encrypted"
@@ -148,7 +149,7 @@
       "fullBackupWarnLabel": "This file contains sensitive credentials.",
       "fullBackupWarnText": "Protect the .fsdnvault file and its passphrase separately. Configuration snapshots (.fsdn) also contain sensitive inventory and account information; review and protect them before sharing.",
       "passphraseLabel": "Backup passphrase",
-      "passphrasePlaceholder": "At least 12 characters — you'll need it to restore"
+      "passphrasePlaceholder": "At least 12 characters; you'll need it to restore"
     },
     "backupTypeOptions": {
       "full": "Full Backup",
@@ -215,7 +216,7 @@
       "warningLabel": "Warning:",
       "warningText": "Restoring will modify your current configuration. Consider running a dry run first to preview changes.",
       "credentialNoteLabel": "Secrets are not included.",
-      "credentialNoteText": "A configuration snapshot excludes controller, device, camera, and PBX passwords, VPN keys, and other secrets — re-enter them after restore for any restored controllers or devices. For full disaster recovery including secrets, use the pg-backup container output.",
+      "credentialNoteText": "A configuration snapshot excludes controller, device, camera, and PBX passwords, VPN keys, and other secrets. Re-enter them after restore for any restored controllers or devices. For full disaster recovery including secrets, use the pg-backup container output.",
       "passphraseLabel": "Backup passphrase (required for a Full backup)",
       "passphrasePlaceholder": "The passphrase this .fsdnvault was created with",
       "confirmTypePrefix": "Type",
@@ -330,7 +331,9 @@
     },
     "bulk": {
       "itemName": "backup",
-      "deleteConfirm": "Delete {{count}} backup(s)?"
+      "deleteConfirm": "Delete {{count}} backup(s)?",
+      "deleteBody": "Each backup and its archive file are deleted. This cannot be undone.",
+      "deleteAction": "Delete backups"
     },
     "validation": {
       "nameRequired": "Backup name is required"
@@ -589,5 +592,105 @@
     "verifySaved": "Verify the saved file. A browser download request does not prove the file was saved.",
     "encryptionRequired": "Vault encryption is required.",
     "individual": "Download vault archives individually. Each needs its own account confirmation."
+  },
+  "DatabaseBackupStatus": {
+    "title": {
+      "healthy": "Database backups: working",
+      "unencrypted": "Database backups: working, UNENCRYPTED",
+      "pending": "Database backups: first backup pending",
+      "unknown": "Database backups: status unknown",
+      "disabled": "Database backups: OFF",
+      "failing": "Database backups: last run FAILED",
+      "stale": "Database backups: stale"
+    },
+    "body": {
+      "healthy": "pg-backup writes an encrypted dump of both databases on schedule. This is the instance's disaster-recovery backup; the configuration snapshots on this page are not.",
+      "unencrypted": "Dumps are written WITHOUT encryption because BACKUP_ALLOW_PLAINTEXT=1. Anyone who can read the backup volume can read every stored credential.",
+      "pending": "Encryption is configured; the first dump has not completed yet.",
+      "unknown": "FreeSDN cannot read the pg-backup status (the pg_backups volume is not mounted in this service, or pg-backup has not started).",
+      "disabled": "This FreeSDN has NO database backups. pg-backup refuses to write unencrypted dumps and no usable GPG public key is installed.",
+      "failing": "The last pg-backup run failed. Check the pg-backup container log (docker compose logs pg-backup).",
+      "stale": "No database backup has completed within the expected interval. Is the pg-backup container running?"
+    },
+    "reason": {
+      "no_key": "No public key is installed yet.",
+      "key_path_is_directory": "The key path is a directory that Docker created because the file was missing. On the host, remove it (sudo rmdir), run the command below, then recreate the pg-backup container.",
+      "no_public_key": "The key file holds no OpenPGP public key.",
+      "import_failed": "The public key could not be imported.",
+      "ambiguous_key": "The key file holds more than one key: set BACKUP_GPG_RECIPIENT to the fingerprint to use.",
+      "recipient_unusable": "The configured recipient cannot be encrypted to (no matching key, expired or revoked). Leave BACKUP_GPG_RECIPIENT empty to use the key in the file."
+    },
+    "lastSuccess": "Last completed backup: {{when}}",
+    "setupHint": "Run this on the FreeSDN host to create the key pair. It installs the public key for pg-backup, which starts backing up within a minute:",
+    "privateKeyWarning": "The private key is handed to you once and is never stored by FreeSDN. Keep it off this host: without it no backup can be restored."
+  },
+  "DeviceConfigBackups": {
+    "title": "Network device configuration history",
+    "description": "Scheduled read-only exports of each OPNsense and OpenWrt configuration (daily unless you change it), kept only when they change and stored encrypted. Secrets are always shown redacted.",
+    "empty": "No exportable devices yet. OPNsense and OpenWrt gateways appear here automatically.",
+    "disabled": "Disabled",
+    "columns": {
+      "device": "Device",
+      "status": "Last export",
+      "lastSuccess": "Last success",
+      "versions": "Versions",
+      "nextRun": "Next run",
+      "schedule": "Schedule"
+    },
+    "status": {
+      "changed": "Changed",
+      "unchanged": "Unchanged",
+      "failed": "Failed",
+      "paused": "Paused (polling off)",
+      "never": "Not yet exported",
+      "unsupported": "Unsupported",
+      "source_removed": "Device removed"
+    },
+    "error": {
+      "timeout": "timed out",
+      "auth_failed": "authentication failed",
+      "unreachable": "unreachable",
+      "invalid_content": "invalid export",
+      "export_failed": "export failed",
+      "unsupported": "not supported"
+    },
+    "actions": {
+      "history": "History",
+      "capture": "Back up now",
+      "schedule": "Schedule"
+    },
+    "capture": {
+      "queued": "Export queued",
+      "refused": "Export not started"
+    },
+    "history": {
+      "title": "{{name}}: configuration history",
+      "redactedNote": "Changes against the previous version. Secret values are replaced by fingerprints: a changed fingerprint means the secret changed.",
+      "versions": "Versions",
+      "none": "No versions yet.",
+      "noChanges": "No differences.",
+      "summary": "{{added}} added, {{removed}} removed",
+      "truncated": "(truncated)"
+    },
+    "permission": {
+      "manage": "Changing the schedule and starting a backup need the firewall.manage_rules permission, which site admins and above have.",
+      "unschedulable": "This device can no longer be exported, so it has no schedule to change."
+    },
+    "schedule": {
+      "title": "{{name}}: backup schedule",
+      "description": "How often FreeSDN exports this device's configuration. An export only reads from the device and never writes to it; a version is kept only when the configuration changed.",
+      "enabled": "Scheduled backups",
+      "enabledOn": "On: FreeSDN exports the configuration on this schedule.",
+      "enabledOff": "Off: no scheduled exports. Back up now still works.",
+      "interval": "Interval",
+      "intervalHelp": "Between {{min}} and {{max}} hours.",
+      "everyHours": "Every {{hours}} hours",
+      "daily": "Daily (every 24 hours)",
+      "weekly": "Weekly (every 168 hours)",
+      "save": "Save schedule",
+      "cancel": "Cancel",
+      "saved": "Schedule saved for {{name}}",
+      "failed": "Schedule not saved"
+    }
   }
 }

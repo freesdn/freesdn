@@ -25,6 +25,8 @@ import {
 
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout';
+import { CapabilityMaturityBadge } from '@/components/ui/capability-maturity-badge';
+import { SeverityBadge } from './severity';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -102,37 +104,6 @@ interface LogStats {
   top_sources: { source_ip: string; count: number }[];
 }
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Severity badge helper
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SEVERITY_COLORS: Record<string, string> = {
-  emergency: 'bg-red-600 text-white',
-  alert: 'bg-red-500 text-white',
-  critical: 'bg-red-400 text-white',
-  error: 'bg-orange-500 text-white',
-  warning: 'bg-yellow-500 text-black',
-  notice: 'bg-blue-500 text-white',
-  // Both spellings on purpose. The receivers store the RFC 5424 name
-  // ('informational' -- SEVERITY_NAMES in
-  // backend/app/modules/collector/services/syslog.py), while the filter
-  // dropdown, the API description and every syslog shorthand say 'info'.
-  // Keyed on 'info' alone, every stored row fell through to the default
-  // below and rendered as an un-tokenized light-grey pill in a dark-mode
-  // -default UI -- the single most common severity in the table.
-  informational: 'bg-blue-400 text-white',
-  info: 'bg-blue-400 text-white',
-  debug: 'bg-gray-400 text-white',
-};
-
-function SeverityBadge({ severity }: { severity: string | null }) {
-  if (!severity) return <Badge variant="outline">-</Badge>;
-  const cls = SEVERITY_COLORS[severity.toLowerCase()] ?? 'bg-gray-300 text-black';
-  return <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>{severity}</span>;
-}
-
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Service status card
 // ─────────────────────────────────────────────────────────────────────────────
@@ -181,11 +152,11 @@ function ServiceCard({
       <CardContent className="space-y-2">
         <div className="flex items-center gap-2">
           {isRunning ? (
-            <Wifi className="h-4 w-4 text-green-500" />
+            <Wifi className="h-4 w-4 text-success" />
           ) : (
             <WifiOff className="h-4 w-4 text-muted-foreground" />
           )}
-          <span className={`text-sm font-medium ${isRunning ? 'text-green-600' : 'text-muted-foreground'}`}>
+          <span className={`text-sm font-medium ${isRunning ? 'text-foreground' : 'text-muted-foreground'}`}>
             {isRunning ? t('CollectorPage.status.running') : t('CollectorPage.status.stopped')}
           </span>
           {port && (
@@ -293,6 +264,7 @@ export default function CollectorPage() {
       <PageHeader
         icon={Radio}
         title={t('CollectorPage.header.title')}
+        titleBadge={<CapabilityMaturityBadge capabilityId="collector" />}
         subtitle={t('CollectorPage.header.subtitle')}
         actions={
           <>

@@ -20,18 +20,29 @@ python scripts/migrate_logdb.py
 # daemon that can't start degrades the VPN feature to "not connected", never a
 # crash-loop.
 if [ "${FREESDN_VPN_AUTOSTART:-false}" = "true" ]; then
-    if command -v tailscaled >/dev/null 2>&1; then
-        echo "[entrypoint] Starting tailscaled (userspace-networking)..."
-        tailscaled \
-            --state=/var/lib/tailscale/tailscaled.state \
-            --socket=/var/run/tailscale/tailscaled.sock \
-            --tun=userspace-networking \
-            >/var/lib/tailscale/tailscaled.log 2>&1 &
-    fi
+    echo "[entrypoint] Starting supervised tailscaled (userspace-networking)..."
+    python -m app.tailscaled_supervisor --detach || true
     if command -v netbird >/dev/null 2>&1; then
         echo "[entrypoint] Starting netbird daemon..."
         ( netbird service run >/var/lib/netbird/netbird.log 2>&1 || true ) &
     fi
+elif [ "${TAILSCALE_RUNTIME:-}" = "container" ]; then
+    # ── Tailscale runs in its own container (docker-compose `tailscale`) ─────
+    # The runtime container owns tailscaled and its node state, starts it once
+    # Tailscale is in use, and Docker restarts it. Nothing to start here: this
+    # container only has the socket volume, and drives tailscaled through it.
+    :
+else
+    # ── Capless Tailscale in this container (outside the shipped compose) ────
+    # Once Tailscale has been started in this deployment its node state lives
+    # in the tailscale_state volume, so bring the daemon back on every api
+    # start instead of leaving the node offline until someone clicks Connect
+    # again. A no-op when never enrolled, in VPN sidecar mode (the vpn
+    # container owns tailscaled), or when the binary or volumes are absent.
+    # The supervisor detaches, restarts tailscaled if it exits, logs to
+    # /var/lib/tailscale/tailscaled.log, and is shared safely with a second
+    # api replica (one daemon per state volume, flock).
+    python -m app.tailscaled_supervisor --detach --if-enrolled || true
 fi
 
 # ── Gunicorn elastic configuration ──────────────────────────────────────────

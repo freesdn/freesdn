@@ -60,6 +60,68 @@ class StorageConfigurationError(ValueError):
     """Operator-actionable messages which contain no provider response or secret."""
 
 
+class LocalBackupPathError(StorageConfigurationError):
+    """A local/NFS backup path outside the allowed roots; the message is shown as is."""
+
+
+#: The backup_data volume, mounted at this path in api, worker and worker-io.
+DEFAULT_LOCAL_BACKUP_ROOT = "/data/backups"
+
+#: Storage types whose ``path`` is a directory on this server.
+LOCAL_PATH_STORAGE_TYPES = frozenset({"local", "nfs"})
+
+
+def allowed_local_backup_roots() -> tuple[str, ...]:
+    """/data/backups plus BACKUP_LOCAL_EXTRA_ROOTS, each resolved.
+
+    The extra roots come only from the server's environment, never from the web
+    UI or the API: a storage location's path is chosen by an org admin, and the
+    backup writer runs as the application user, so an unconfined path would let
+    that admin place files anywhere the application can write (its own code
+    tree, the VPN sidecar's config volumes).
+    """
+    import logging
+    import os
+
+    from app.core.config import settings
+
+    roots = [DEFAULT_LOCAL_BACKUP_ROOT]
+    for item in str(getattr(settings, "BACKUP_LOCAL_EXTRA_ROOTS", "") or "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if not os.path.isabs(item):
+            logging.getLogger(__name__).warning(
+                "BACKUP_LOCAL_EXTRA_ROOTS entry %r ignored: it must be an absolute path", item
+            )
+            continue
+        roots.append(item)
+    return tuple(os.path.realpath(root) for root in roots)
+
+
+def confine_local_backup_path(path: object) -> str:
+    """Return ``path`` if it resolves inside an allowed root, else refuse.
+
+    Resolved with realpath, so ``..`` and symlinks cannot step outside a root.
+    The path is returned AS GIVEN, not resolved: the file layer opens it with
+    O_NOFOLLOW and must keep refusing a symlinked directory itself.
+    """
+    import os
+
+    raw = str(path or DEFAULT_LOCAL_BACKUP_ROOT)
+    roots = allowed_local_backup_roots()
+    if os.path.isabs(raw):
+        real = os.path.realpath(raw)
+        for root in roots:
+            if real == root or real.startswith(root.rstrip(os.sep) + os.sep):
+                return raw
+    raise LocalBackupPathError(
+        f"Local backup path {raw!r} is outside the allowed backup storage "
+        f"({', '.join(roots)}). Use a folder under {DEFAULT_LOCAL_BACKUP_ROOT}, or ask the "
+        "server administrator to add the path to BACKUP_LOCAL_EXTRA_ROOTS."
+    )
+
+
 def require_tls(value: object) -> None:
     # Form fields are strings; bool("false") must never enable a security option.
     if value is not True and value != "true":

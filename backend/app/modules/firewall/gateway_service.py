@@ -11,10 +11,12 @@ is centralised here; the API layer stays thin.
 """
 
 import asyncio
+import contextvars
 import copy
+import inspect
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -37,6 +39,7 @@ from app.adapters.trust_inventory import inventory_data, inventory_rows, invento
 from app.core.adapter_result import raise_for_adapter_result
 from app.core.crypto import decrypt_dict, encrypt_dict
 from app.models.core import Organization, Site
+from app.modules.firewall.adapter_settings import gateway_adapter_settings
 from app.modules.firewall.gateway_live_reads import aggregate_payload
 from app.modules.firewall.models import (
     GatewayConnection,
@@ -44,9 +47,13 @@ from app.modules.firewall.models import (
     GatewaySyncStatus,
     GatewayVendor,
 )
-from app.modules.firewall.schemas import FORBIDDEN_ADAPTER_SETTINGS
 
 logger = logging.getLogger(__name__)
+
+#: (read name, parameters) of the interactive ``get_live_*`` read in progress.
+_live_read_params: contextvars.ContextVar[tuple[str, tuple[Any, ...]] | None] = (
+    contextvars.ContextVar("freesdn_gateway_live_read", default=None)
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -215,26 +222,17 @@ def _sanitize_adapter_error(exc: Exception) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _safe_gateway_adapter_settings(settings: dict[str, Any] | None) -> dict[str, Any]:
-    """Keep vendor options separate from trusted connection identity and write policy."""
-    reserved = {
-        "adapter_id",
-        "vendor",
-        "host",
-        "port",
-        "verify_ssl",
-        "username",
-        "password",
-        "api_key",
-        "api_secret",
-    }
-    return {
-        key: value
-        for key, value in (settings or {}).items()
-        if isinstance(key, str)
-        and key.lower() not in reserved
-        and key.lower() not in FORBIDDEN_ADAPTER_SETTINGS
-    }
+def _safe_gateway_adapter_settings(
+    vendor: Any, settings: dict[str, Any] | None, *, gateway_id: Any = None
+) -> dict[str, Any]:
+    """Keep vendor options separate from trusted connection identity and write policy.
+
+    Was a block-list (identity keys plus FORBIDDEN_ADAPTER_SETTINGS), so every
+    other key became an adapter constructor argument. Now the vendor's explicit
+    allow-list in app.modules.firewall.adapter_settings, shared with
+    app.modules.gateway.adapter_helpers.build_adapter.
+    """
+    return gateway_adapter_settings(vendor, settings, gateway_id=gateway_id)
 
 
 def _gateway_test_result_message(result: AdapterResult) -> str:
@@ -268,7 +266,14 @@ class GatewayService:
     # ─── helpers ─────────────────────────────────────────────────────────
 
     def _build_adapter(self, gw: GatewayConnection) -> BaseAdapter:
-        """Instantiate the correct vendor adapter from a GatewayConnection row."""
+        """Instantiate the correct vendor adapter from a GatewayConnection row.
+
+        Never for a soft-deleted gateway: FreeSDN no longer manages it, so a
+        caller that loaded the row without the deleted_at filter (the limb
+        distribution used ``db.get``) is refused here instead of writing to it.
+        """
+        if getattr(gw, "deleted_at", None) is not None:
+            raise GatewayNotFoundError(gw.id)
         creds = decrypt_dict(gw.credentials or {})
 
         if gw.vendor in (GatewayVendor.OPNSENSE, GatewayVendor.PFSENSE):
@@ -283,7 +288,7 @@ class GatewayService:
         # adapter constructor - that would bypass ADAPTER_READ_ONLY. The schema
         # strips these on write; this is the defense-in-depth backstop for any
         # pre-existing or out-of-band row.
-        safe_settings = _safe_gateway_adapter_settings(gw.settings)
+        safe_settings = _safe_gateway_adapter_settings(gw.vendor, gw.settings, gateway_id=gw.id)
         return adapter_registry.create_adapter(
             adapter_id=gw.vendor,
             host=gw.host,
@@ -313,7 +318,7 @@ class GatewayService:
         else:
             u, p = username or "", password or ""
 
-        safe_extra = _safe_gateway_adapter_settings(extra)
+        safe_extra = _safe_gateway_adapter_settings(vendor, extra)
         return adapter_registry.create_adapter(
             adapter_id=vendor,
             host=host,
@@ -779,7 +784,7 @@ class GatewayService:
             api_secret=creds.get("api_secret"),
             username=creds.get("username"),
             password=creds.get("password"),
-            **_safe_gateway_adapter_settings(gw.settings),
+            **_safe_gateway_adapter_settings(gw.vendor, gw.settings, gateway_id=gw.id),
         )
 
         # Lock current resource authority only after device I/O has ended.
@@ -815,6 +820,115 @@ class GatewayService:
         adapter = self._build_adapter(gw)
         return adapter
 
+    @asynccontextmanager
+    async def _connected(self, gw: GatewayConnection) -> AsyncIterator[BaseAdapter]:
+        """Build the gateway's adapter, connect, and disconnect afterwards."""
+        adapter = self._build_adapter(gw)
+        try:
+            await adapter.connect()
+            yield adapter
+        finally:
+            try:
+                await adapter.disconnect()
+            except Exception:
+                logger.debug("Adapter disconnect failed for gateway %s", gw.id)
+
+    # ─── device writes (docs/agents/STAGING-MIGRATION.md) ────────────────
+    #
+    # Every write the gateway API makes goes through one of the two envelopes
+    # below. The gateway is authorized first; read-only mode then refuses the
+    # write before the device is contacted; the device's slot is taken so the
+    # write never lands on a sync or health poll in progress; and the write is
+    # recorded. Responses are built from the adapter's result as before.
+
+    async def _gateway_write(
+        self,
+        gw_id: UUID,
+        org_id: UUID,
+        *,
+        feature: str,
+        operation: str,
+        payload: dict[str, Any],
+        perform: Callable[[GatewayConnection, BaseAdapter], Awaitable[Any]],
+        target_id: str | None = None,
+    ) -> Any:
+        """A configuration write, staged and applied in this request.
+
+        Recorded as a ``direct.gateway.<feature>`` ledger row (secrets in the
+        payload masked) with who, what, when and the result. The gateway API has
+        never taken a force flag, so it passes one: behaviour is unchanged
+        except that read-only mode now refuses before the device is contacted.
+        The adapter's result comes back as it was, a refusal included, so the
+        caller's ``_write_result`` raises with the same status as before.
+        """
+        from app.core.device_slot import gateway_slot_key
+        from app.services.device_writes import request_actor_id, write_through_staging
+
+        gw = await self._get_gw(gw_id, org_id)
+
+        async def _on_device() -> Any:
+            async with self._connected(gw) as adapter:
+                return await perform(gw, adapter)
+
+        return await write_through_staging(
+            self.db,
+            organization_id=gw.org_id,
+            controller_id=None,
+            site_id=gw.site_id,
+            feature=f"gateway.{feature}",
+            operation=operation,
+            target_id=target_id or str(gw.id),
+            payload={"gateway_id": str(gw.id), **payload},
+            perform=_on_device,
+            force=True,
+            actor_id=request_actor_id(),
+            return_failed_result=True,
+            slot_key=gateway_slot_key(gw),
+        )
+
+    async def _gateway_action(
+        self,
+        gw_id: UUID,
+        org_id: UUID,
+        *,
+        action: str,
+        parameters: dict[str, Any],
+        perform: Callable[[GatewayConnection, BaseAdapter], Awaitable[Any]],
+    ) -> Any:
+        """An operational action (reboot, service control, session kill...).
+
+        Not staged: refused in read-only mode before the device is contacted,
+        then run in the device's turn, and audited (``device_action:<action>``)
+        once the gateway accepts it.
+        """
+        from fastapi import HTTPException
+
+        from app.core.device_slot import gateway_slot_key
+        from app.services.adapter_staging import AdapterStagingService
+        from app.services.device_writes import audited_device_action, request_actor_id
+
+        gw = await self._get_gw(gw_id, org_id)
+        if AdapterStagingService.is_read_only():
+            raise HTTPException(403, detail="Read-only mode is on: gateway actions are refused.")
+
+        async def _on_device() -> Any:
+            async with self._connected(gw) as adapter:
+                return await perform(gw, adapter)
+
+        return await audited_device_action(
+            self.db,
+            action=action,
+            target_type="gateway",
+            target_id=gw.id,
+            target_name=gw.name,
+            organization_id=gw.org_id,
+            site_id=gw.site_id,
+            actor_id=request_actor_id(),
+            parameters=parameters,
+            perform=_on_device,
+            slot_key=gateway_slot_key(gw),
+        )
+
     async def _adapter_for(self, gw_id: UUID, org_id: UUID):
         """Fetch gateway + build + connect adapter, yielding it in a context manager.
 
@@ -827,15 +941,17 @@ class GatewayService:
         @asynccontextmanager
         async def _ctx() -> AsyncIterator[tuple[GatewayConnection, BaseAdapter]]:
             gw = await self._get_gw(gw_id, org_id)
-            adapter = self._build_adapter(gw)
-            try:
-                await adapter.connect()
+            current = _live_read_params.get()
+            if current is not None:
+                # An interactive read: wait briefly for the device's turn, or
+                # answer from the last read (app/services/device_live_read.py).
+                from app.core.device_slot import gateway_slot_key
+                from app.services.device_live_read import cache_key, take_turn
+
+                name, params = current
+                await take_turn(gateway_slot_key(gw), cache_key("gateway", gw.id, name, *params))
+            async with self._connected(gw) as adapter:
                 yield gw, adapter
-            finally:
-                try:
-                    await adapter.disconnect()
-                except Exception:
-                    logger.debug("Adapter disconnect failed for gateway %s", gw_id)
 
         return _ctx()
 
@@ -1009,9 +1125,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_dns_override(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="dns.override",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_dns_override(payload),
+        )
+        return self._write_result(result)
 
     async def update_live_dns_override(
         self,
@@ -1020,9 +1142,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_dns_override(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="dns.override",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_dns_override(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_dns_override(
         self,
@@ -1030,9 +1159,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_dns_override(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="dns.override",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_dns_override(vendor_id),
+        )
+        return self._write_result(result)
 
     # --- DNS domain overrides ---------------------------------------------
 
@@ -1055,9 +1191,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_dns_domain_override(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="dns.domain_override",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_dns_domain_override(payload),
+        )
+        return self._write_result(result)
 
     async def update_live_dns_domain_override(
         self,
@@ -1066,9 +1208,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_dns_domain_override(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="dns.domain_override",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_dns_domain_override(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_dns_domain_override(
         self,
@@ -1076,9 +1225,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_dns_domain_override(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="dns.domain_override",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_dns_domain_override(vendor_id),
+        )
+        return self._write_result(result)
 
     # --- DHCP static mappings ---------------------------------------------
 
@@ -1101,9 +1257,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_dhcp_static_mapping(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="dhcp.static_mapping",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_dhcp_static_mapping(payload),
+        )
+        return self._write_result(result)
 
     async def update_live_dhcp_static_mapping(
         self,
@@ -1112,9 +1274,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_dhcp_static_mapping(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="dhcp.static_mapping",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_dhcp_static_mapping(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_dhcp_static_mapping(
         self,
@@ -1122,9 +1291,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_dhcp_static_mapping(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="dhcp.static_mapping",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_dhcp_static_mapping(vendor_id),
+        )
+        return self._write_result(result)
 
     # --- Port forwards / DNAT ---------------------------------------------
 
@@ -1145,9 +1321,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_port_forward(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="nat.port_forward",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_port_forward(payload),
+        )
+        return self._write_result(result)
 
     async def update_live_port_forward(
         self,
@@ -1156,9 +1338,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_port_forward(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="nat.port_forward",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_port_forward(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_port_forward(
         self,
@@ -1166,9 +1355,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_port_forward(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="nat.port_forward",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_port_forward(vendor_id),
+        )
+        return self._write_result(result)
 
     # --- Source NAT -------------------------------------------------------
 
@@ -1178,9 +1374,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_source_nat_rule(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="nat.source",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_source_nat_rule(payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_source_nat_rule(
         self,
@@ -1188,9 +1390,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_source_nat_rule(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="nat.source",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_source_nat_rule(vendor_id),
+        )
+        return self._write_result(result)
 
     # --- Aliases ----------------------------------------------------------
 
@@ -1211,9 +1420,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_alias(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="alias",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_alias(payload),
+        )
+        return self._write_result(result)
 
     async def update_live_alias(
         self,
@@ -1222,9 +1437,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_alias(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="alias",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_alias(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_alias(
         self,
@@ -1232,9 +1454,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_alias(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="alias",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_alias(vendor_id),
+        )
+        return self._write_result(result)
 
     # --- WireGuard --------------------------------------------------------
 
@@ -1263,9 +1492,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_wireguard_server(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="wireguard.server",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_wireguard_server(payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_wireguard_server(
         self,
@@ -1273,9 +1508,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_wireguard_server(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="wireguard.server",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_wireguard_server(vendor_id),
+        )
+        return self._write_result(result)
 
     async def create_live_wireguard_peer(
         self,
@@ -1283,9 +1525,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_wireguard_peer(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="wireguard.peer",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_wireguard_peer(payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_wireguard_peer(
         self,
@@ -1293,9 +1541,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_wireguard_peer(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="wireguard.peer",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_wireguard_peer(vendor_id),
+        )
+        return self._write_result(result)
 
     # --- OpenVPN ----------------------------------------------------------
 
@@ -1323,9 +1578,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_openvpn_instance(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="openvpn.instance",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_openvpn_instance(payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_openvpn_instance(
         self,
@@ -1333,9 +1594,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_openvpn_instance(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="openvpn.instance",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_openvpn_instance(vendor_id),
+        )
+        return self._write_result(result)
 
     async def kill_live_openvpn_session(
         self,
@@ -1343,9 +1611,14 @@ class GatewayService:
         org_id: UUID,
         session_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.kill_openvpn_session(session_id)
-            return self._write_result(result)
+        result = await self._gateway_action(
+            gw_id,
+            org_id,
+            action="kill_openvpn_session",
+            parameters={"session_id": session_id},
+            perform=lambda _gw, adapter: adapter.kill_openvpn_session(session_id),
+        )
+        return self._write_result(result)
 
     # --- IPsec ------------------------------------------------------------
 
@@ -1380,9 +1653,14 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.connect_ipsec_tunnel(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_action(
+            gw_id,
+            org_id,
+            action="connect_ipsec_tunnel",
+            parameters={"tunnel": vendor_id},
+            perform=lambda _gw, adapter: adapter.connect_ipsec_tunnel(vendor_id),
+        )
+        return self._write_result(result)
 
     async def disconnect_live_ipsec_tunnel(
         self,
@@ -1390,9 +1668,14 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.disconnect_ipsec_tunnel(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_action(
+            gw_id,
+            org_id,
+            action="disconnect_ipsec_tunnel",
+            parameters={"tunnel": vendor_id},
+            perform=lambda _gw, adapter: adapter.disconnect_ipsec_tunnel(vendor_id),
+        )
+        return self._write_result(result)
 
     # --- Static Routes ----------------------------------------------------
 
@@ -1413,9 +1696,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_static_route(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="route.static",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_static_route(payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_static_route(
         self,
@@ -1423,9 +1712,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_static_route(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="route.static",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_static_route(vendor_id),
+        )
+        return self._write_result(result)
 
     async def get_live_routing_table(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
         async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
@@ -1474,9 +1770,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_ids_settings(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="ids.settings",
+            operation="update",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.update_ids_settings(payload),
+        )
+        return self._write_result(result)
 
     async def get_live_ids_alerts(
         self,
@@ -1513,9 +1815,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_shaper_pipe(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="shaper.pipe",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_shaper_pipe(payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_shaper_pipe(
         self,
@@ -1523,9 +1831,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_shaper_pipe(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="shaper.pipe",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_shaper_pipe(vendor_id),
+        )
+        return self._write_result(result)
 
     async def get_live_shaper_queues(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
         async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
@@ -1558,9 +1873,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_shaper_pipe(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="shaper.pipe",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_shaper_pipe(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     async def create_live_shaper_queue(
         self,
@@ -1568,9 +1890,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_shaper_queue(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="shaper.queue",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_shaper_queue(payload),
+        )
+        return self._write_result(result)
 
     async def update_live_shaper_queue(
         self,
@@ -1579,9 +1907,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_shaper_queue(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="shaper.queue",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_shaper_queue(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_shaper_queue(
         self,
@@ -1589,9 +1924,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_shaper_queue(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="shaper.queue",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_shaper_queue(vendor_id),
+        )
+        return self._write_result(result)
 
     async def create_live_shaper_rule(
         self,
@@ -1599,9 +1941,15 @@ class GatewayService:
         org_id: UUID,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_shaper_rule(payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="shaper.rule",
+            operation="create",
+            payload=payload,
+            perform=lambda _gw, adapter: adapter.create_shaper_rule(payload),
+        )
+        return self._write_result(result)
 
     async def update_live_shaper_rule(
         self,
@@ -1610,9 +1958,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_shaper_rule(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="shaper.rule",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_shaper_rule(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     async def delete_live_shaper_rule(
         self,
@@ -1620,9 +1975,16 @@ class GatewayService:
         org_id: UUID,
         vendor_id: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_shaper_rule(vendor_id)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="shaper.rule",
+            operation="delete",
+            payload={},
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.delete_shaper_rule(vendor_id),
+        )
+        return self._write_result(result)
 
     # --- Backups ----------------------------------------------------------
 
@@ -1663,9 +2025,14 @@ class GatewayService:
             ) from None
 
     async def create_live_backup(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.create_backup()
-            return self._write_result(result)
+        result = await self._gateway_action(
+            gw_id,
+            org_id,
+            action="create_backup",
+            parameters={},
+            perform=lambda _gw, adapter: adapter.create_backup(),
+        )
+        return self._write_result(result)
 
     async def revert_live_backup(
         self,
@@ -1677,9 +2044,16 @@ class GatewayService:
 
         if not filename or not re.match(r"^[a-zA-Z0-9._\-]+$", filename):
             raise ValueError("Invalid backup filename")
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.revert_backup(filename)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="backup.revert",
+            operation="update",
+            payload={"filename": filename},
+            target_id=filename,
+            perform=lambda _gw, adapter: adapter.revert_backup(filename),
+        )
+        return self._write_result(result)
 
     # --- Firmware ---------------------------------------------------------
 
@@ -1777,21 +2151,35 @@ class GatewayService:
         service_name: str,
         action: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
+
+        async def _control(_gw: GatewayConnection, adapter: BaseAdapter) -> Any:
             if action == "start":
-                result = await adapter.start_service(service_name)
-            elif action == "stop":
-                result = await adapter.stop_service(service_name)
-            else:
-                result = await adapter.restart_service(service_name)
-            return self._write_result(result)
+                return await adapter.start_service(service_name)
+            if action == "stop":
+                return await adapter.stop_service(service_name)
+            return await adapter.restart_service(service_name)
+
+        verb = action if action in ("start", "stop") else "restart"
+        result = await self._gateway_action(
+            gw_id,
+            org_id,
+            action=f"{verb}_service",
+            parameters={"service": service_name},
+            perform=_control,
+        )
+        return self._write_result(result)
 
     # --- Reboot -----------------------------------------------------------
 
     async def reboot_live_gateway(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.reboot_device(str(gw.id))
-            return self._write_result(result)
+        result = await self._gateway_action(
+            gw_id,
+            org_id,
+            action="reboot_device",
+            parameters={},
+            perform=lambda gw, adapter: adapter.reboot_device(str(gw.id)),
+        )
+        return self._write_result(result)
 
     # ─── write-result helper ─────────────────────────────────────────────
 
@@ -1832,9 +2220,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_source_nat_rule(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="nat.source",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_source_nat_rule(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     # --- WireGuard update -------------------------------------------------
 
@@ -1845,9 +2240,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_wireguard_server(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="wireguard.server",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_wireguard_server(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     async def update_live_wireguard_peer(
         self,
@@ -1856,9 +2258,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_wireguard_peer(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="wireguard.peer",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_wireguard_peer(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     # --- OpenVPN update ---------------------------------------------------
 
@@ -1869,9 +2278,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_openvpn_instance(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="openvpn.instance",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_openvpn_instance(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     # --- Static Route update ----------------------------------------------
 
@@ -1882,9 +2298,16 @@ class GatewayService:
         vendor_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.update_static_route(vendor_id, payload)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="route.static",
+            operation="update",
+            payload=payload,
+            target_id=vendor_id,
+            perform=lambda _gw, adapter: adapter.update_static_route(vendor_id, payload),
+        )
+        return self._write_result(result)
 
     # ═══════════════════════════════════════════════════════════════════════
     # Newly-exposed adapter methods (previously unwired)
@@ -1893,9 +2316,14 @@ class GatewayService:
     # --- System — halt ----------------------------------------------------
 
     async def halt_live_gateway(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.halt_device(str(gw.id))
-            return self._write_result(result)
+        result = await self._gateway_action(
+            gw_id,
+            org_id,
+            action="halt_device",
+            parameters={},
+            perform=lambda gw, adapter: adapter.halt_device(str(gw.id)),
+        )
+        return self._write_result(result)
 
     # --- Firmware extras --------------------------------------------------
 
@@ -1918,9 +2346,15 @@ class GatewayService:
             }
 
     async def firmware_update(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.firmware_update()
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="firmware",
+            operation="update",
+            payload={},
+            perform=lambda _gw, adapter: adapter.firmware_update(),
+        )
+        return self._write_result(result)
 
     async def firmware_upgrade_status(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
         async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
@@ -1979,9 +2413,16 @@ class GatewayService:
 
         if not filename or not re.match(r"^[a-zA-Z0-9._\-]+$", filename):
             raise ValueError("Invalid backup filename")
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_backup(filename)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="backup",
+            operation="delete",
+            payload={"filename": filename},
+            target_id=filename,
+            perform=lambda _gw, adapter: adapter.delete_backup(filename),
+        )
+        return self._write_result(result)
 
     async def download_live_config(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
         import base64
@@ -2062,9 +2503,14 @@ class GatewayService:
             }
 
     async def flush_live_arp(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.flush_arp()
-            return self._write_result(result)
+        result = await self._gateway_action(
+            gw_id,
+            org_id,
+            action="flush_arp",
+            parameters={},
+            perform=lambda _gw, adapter: adapter.flush_arp(),
+        )
+        return self._write_result(result)
 
     async def get_live_vip_status(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
         async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
@@ -2086,9 +2532,18 @@ class GatewayService:
         vendor_rule_id: str,
         enabled: bool = True,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.toggle_firewall_rule(vendor_rule_id, enabled=enabled)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="firewall_rule",
+            operation="update",
+            payload={"enabled": enabled},
+            target_id=vendor_rule_id,
+            perform=lambda _gw, adapter: adapter.toggle_firewall_rule(
+                vendor_rule_id, enabled=enabled
+            ),
+        )
+        return self._write_result(result)
 
     async def update_live_firewall_rule(
         self,
@@ -2097,10 +2552,18 @@ class GatewayService:
         vendor_rule_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            vendor_rule = self._translate_rule_to_vendor(gw.vendor, payload)
-            result = await adapter.update_firewall_rule(vendor_rule_id, vendor_rule)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="firewall_rule",
+            operation="update",
+            payload=payload,
+            target_id=vendor_rule_id,
+            perform=lambda gw, adapter: adapter.update_firewall_rule(
+                vendor_rule_id, self._translate_rule_to_vendor(gw.vendor, payload)
+            ),
+        )
+        return self._write_result(result)
 
     # --- DNS extras -------------------------------------------------------
 
@@ -2150,9 +2613,15 @@ class GatewayService:
             }
 
     async def apply_live_ipsec_changes(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.apply_ipsec_changes()
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="ipsec.apply",
+            operation="update",
+            payload={},
+            perform=lambda _gw, adapter: adapter.apply_ipsec_changes(),
+        )
+        return self._write_result(result)
 
     # --- IDS/IPS extras ---------------------------------------------------
 
@@ -2193,14 +2662,26 @@ class GatewayService:
         org_id: UUID,
         sid: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.toggle_ids_rule(sid)
-            return self._write_result(result)
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="ids.rule",
+            operation="update",
+            payload={"toggle": True},
+            target_id=sid,
+            perform=lambda _gw, adapter: adapter.toggle_ids_rule(sid),
+        )
+        return self._write_result(result)
 
     async def drop_live_ids_alert_log(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.drop_ids_alert_log()
-            return self._write_result(result)
+        result = await self._gateway_action(
+            gw_id,
+            org_id,
+            action="drop_ids_alert_log",
+            parameters={},
+            perform=lambda _gw, adapter: adapter.drop_ids_alert_log(),
+        )
+        return self._write_result(result)
 
     async def get_live_ids_status(self, gw_id: UUID, org_id: UUID) -> dict[str, Any]:
         async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
@@ -2217,18 +2698,34 @@ class GatewayService:
         org_id: UUID,
         action: str,
     ) -> dict[str, Any]:
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            if action == "start":
-                result = await adapter.start_ids()
-            elif action == "stop":
-                result = await adapter.stop_ids()
-            elif action == "restart":
-                result = await adapter.restart_ids()
-            elif action == "update-rules":
-                result = await adapter.update_ids_rules()
-            else:
-                return {"success": False, "message": f"Unknown IDS action: {action}"}
+        if action == "update-rules":
+            # Downloads and installs the configured rule sets: a change to what
+            # the IDS enforces, so it is staged rather than audited.
+            result = await self._gateway_write(
+                gw_id,
+                org_id,
+                feature="ids.rules_update",
+                operation="update",
+                payload={},
+                perform=lambda _gw, adapter: adapter.update_ids_rules(),
+            )
             return self._write_result(result)
+        if action not in ("start", "stop", "restart"):
+            # Authorize the gateway as before, then refuse without contacting it.
+            await self._get_gw(gw_id, org_id)
+            return {"success": False, "message": f"Unknown IDS action: {action}"}
+
+        async def _control(_gw: GatewayConnection, adapter: BaseAdapter) -> Any:
+            if action == "start":
+                return await adapter.start_ids()
+            if action == "stop":
+                return await adapter.stop_ids()
+            return await adapter.restart_ids()
+
+        result = await self._gateway_action(
+            gw_id, org_id, action=f"{action}_ids", parameters={}, perform=_control
+        )
+        return self._write_result(result)
 
     # --- Diagnostics extras -----------------------------------------------
 
@@ -2366,26 +2863,37 @@ class GatewayService:
         rule: dict[str, Any],
     ) -> dict[str, Any]:
         """Push a vendor-normalised firewall rule to the gateway."""
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            # Translate normalised → vendor-specific payload
-            vendor_rule = self._translate_rule_to_vendor(gw.vendor, rule)
-            result = await adapter.create_firewall_rule(vendor_rule)
+        vendors: list[str] = []
 
-            # Raise on a refused write, exactly as _write_result does for every
-            # other gateway write. These two methods were the only ones that
-            # bypassed that chokepoint, returning HTTP 200 with success:false --
-            # the precise shape _write_result was introduced to eliminate (see
-            # its docstring). The response body is built by hand here rather
-            # than delegating because GatewayRulePushResponse needs
-            # vendor_rule_id / applied, which _write_result does not produce.
-            raise_for_adapter_result(result)
+        def _translated(gw: GatewayConnection) -> dict[str, Any]:
+            vendors.append(gw.vendor)
+            return self._translate_rule_to_vendor(gw.vendor, rule)
 
-            return {
-                "success": result.success,
-                "message": result.message or ("Rule pushed" if result.success else "Push failed"),
-                "vendor_rule_id": self._extract_vendor_rule_id(gw.vendor, result),
-                "applied": result.success,
-            }
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="firewall_rule",
+            operation="create",
+            payload=rule,
+            # Translate normalised -> vendor-specific payload.
+            perform=lambda gw, adapter: adapter.create_firewall_rule(_translated(gw)),
+        )
+
+        # Raise on a refused write, exactly as _write_result does for every
+        # other gateway write. These two methods were the only ones that
+        # bypassed that chokepoint, returning HTTP 200 with success:false --
+        # the precise shape _write_result was introduced to eliminate (see
+        # its docstring). The response body is built by hand here rather
+        # than delegating because GatewayRulePushResponse needs
+        # vendor_rule_id / applied, which _write_result does not produce.
+        raise_for_adapter_result(result)
+
+        return {
+            "success": result.success,
+            "message": result.message or ("Rule pushed" if result.success else "Push failed"),
+            "vendor_rule_id": self._extract_vendor_rule_id(vendors[0], result),
+            "applied": result.success,
+        }
 
     async def delete_vendor_rule(
         self,
@@ -2394,16 +2902,22 @@ class GatewayService:
         vendor_rule_id: str,
     ) -> dict[str, Any]:
         """Delete a rule on the gateway by its vendor-native ID."""
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
-            result = await adapter.delete_firewall_rule(vendor_rule_id)
-            # Same chokepoint parity as push_firewall_rule above: a rule the
-            # device refused to delete must not come back as HTTP 200.
-            raise_for_adapter_result(result)
-            return {
-                "success": result.success,
-                "message": result.message
-                or ("Rule deleted" if result.success else "Delete failed"),
-            }
+        result = await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="firewall_rule",
+            operation="delete",
+            payload={},
+            target_id=vendor_rule_id,
+            perform=lambda _gw, adapter: adapter.delete_firewall_rule(vendor_rule_id),
+        )
+        # Same chokepoint parity as push_firewall_rule above: a rule the
+        # device refused to delete must not come back as HTTP 200.
+        raise_for_adapter_result(result)
+        return {
+            "success": result.success,
+            "message": result.message or ("Rule deleted" if result.success else "Delete failed"),
+        }
 
     # ─── vendor translation helpers ──────────────────────────────────────
 
@@ -2527,90 +3041,110 @@ class GatewayService:
         the gateway row.  Full rule-sync into local models is a Tier B feature.
         """
         gw = await self._get_gw(gw_id, org_id)
-        log = GatewaySyncLog(
-            gateway_id=gw.id,
-            started_at=datetime.now(UTC),
-            status="syncing",
+        # An operator's "Sync" takes its turn at the device like a UI read: it
+        # waits for a poll in progress to finish, and answers 503 "device
+        # busy" (Retry-After) rather than pile a session onto a busy box.
+        from app.core.config import settings
+        from app.core.device_slot import API_TTL_SECONDS, SHARED, device_slots, gateway_slot_key
+        from app.services.device_live_read import DeviceBusyError
+
+        slot_key = gateway_slot_key(gw)
+        lease = await device_slots.acquire(
+            slot_key,
+            "manual gateway sync",
+            mode=SHARED,
+            wait=float(settings.DEVICE_UI_READ_MAX_WAIT_SECONDS),
+            ttl=API_TTL_SECONDS,
         )
-        self.db.add(log)
-
-        adapter = self._build_adapter(gw)
-        t0 = time.monotonic()
+        if lease is None:
+            raise DeviceBusyError(await device_slots.abusy_reason(slot_key))
         try:
-            await adapter.connect()
-
-            # Discover device info
-            devices = await adapter.discover_devices()
-
-            elapsed = int((time.monotonic() - t0) * 1000)
-
-            if devices:
-                dev = devices[0]
-                gw.detected_hostname = dev.name
-                gw.detected_model = dev.model
-                gw.detected_version = dev.firmware_version
-
-            gw.is_online = True
-            gw.last_seen_at = datetime.now(UTC)
-            gw.sync_status = GatewaySyncStatus.SUCCESS
-            gw.last_sync_at = datetime.now(UTC)
-            gw.last_sync_error = None
-            gw.last_sync_duration_ms = elapsed
-
-            log.finished_at = datetime.now(UTC)
-            log.duration_ms = elapsed
-            log.status = "success"
-            log.items_synced = 1
-            log.details = {
-                "hostname": gw.detected_hostname,
-                "version": gw.detected_version,
-                "model": gw.detected_model,
-            }
-
-            await self.db.flush()
-            return {
-                "status": "success",
-                "duration_ms": elapsed,
-                # `full` is accepted by the API (GatewaySyncRequest.full_sync)
-                # and cannot be honoured yet -- full rule-sync into the local
-                # models is a Tier B feature. Say so in the response instead
-                # of letting a caller who asked for a full sync believe they
-                # got one.
-                "full_sync_requested": full,
-                "full_sync_performed": False,
-                "hostname": gw.detected_hostname,
-                "version": gw.detected_version,
-            }
-
-        except Exception as exc:
-            elapsed = int((time.monotonic() - t0) * 1000)
-            logger.error(
-                "Gateway sync failed for %s: %s",
-                gw_id,
-                exc,
-                exc_info=True,
+            log = GatewaySyncLog(
+                gateway_id=gw.id,
+                started_at=datetime.now(UTC),
+                status="syncing",
             )
-            sanitized_msg = _sanitize_adapter_error(exc)
-            gw.sync_status = GatewaySyncStatus.FAILED
-            gw.last_sync_at = datetime.now(UTC)
-            gw.last_sync_error = sanitized_msg
-            gw.last_sync_duration_ms = elapsed
-            gw.is_online = False
+            self.db.add(log)
 
-            log.finished_at = datetime.now(UTC)
-            log.duration_ms = elapsed
-            log.status = "failed"
-            log.error = sanitized_msg
+            adapter = self._build_adapter(gw)
+            t0 = time.monotonic()
+            try:
+                await adapter.connect()
 
-            await self.db.flush()
-            return {
-                "status": "failed",
-                "duration_ms": elapsed,
-                "error": sanitized_msg,
-            }
+                # Discover device info
+                devices = await adapter.discover_devices()
+
+                elapsed = int((time.monotonic() - t0) * 1000)
+
+                if devices:
+                    dev = devices[0]
+                    gw.detected_hostname = dev.name
+                    gw.detected_model = dev.model
+                    gw.detected_version = dev.firmware_version
+
+                gw.is_online = True
+                gw.last_seen_at = datetime.now(UTC)
+                gw.sync_status = GatewaySyncStatus.SUCCESS
+                gw.last_sync_at = datetime.now(UTC)
+                gw.last_sync_error = None
+                gw.last_sync_duration_ms = elapsed
+
+                log.finished_at = datetime.now(UTC)
+                log.duration_ms = elapsed
+                log.status = "success"
+                log.items_synced = 1
+                log.details = {
+                    "hostname": gw.detected_hostname,
+                    "version": gw.detected_version,
+                    "model": gw.detected_model,
+                }
+
+                await self.db.flush()
+                return {
+                    "status": "success",
+                    "duration_ms": elapsed,
+                    # `full` is accepted by the API (GatewaySyncRequest.full_sync)
+                    # and cannot be honoured yet -- full rule-sync into the local
+                    # models is a Tier B feature. Say so in the response instead
+                    # of letting a caller who asked for a full sync believe they
+                    # got one.
+                    "full_sync_requested": full,
+                    "full_sync_performed": False,
+                    "hostname": gw.detected_hostname,
+                    "version": gw.detected_version,
+                }
+
+            except Exception as exc:
+                elapsed = int((time.monotonic() - t0) * 1000)
+                logger.error(
+                    "Gateway sync failed for %s: %s",
+                    gw_id,
+                    exc,
+                    exc_info=True,
+                )
+                sanitized_msg = _sanitize_adapter_error(exc)
+                gw.sync_status = GatewaySyncStatus.FAILED
+                gw.last_sync_at = datetime.now(UTC)
+                gw.last_sync_error = sanitized_msg
+                gw.last_sync_duration_ms = elapsed
+                gw.is_online = False
+
+                log.finished_at = datetime.now(UTC)
+                log.duration_ms = elapsed
+                log.status = "failed"
+                log.error = sanitized_msg
+
+                await self.db.flush()
+                return {
+                    "status": "failed",
+                    "duration_ms": elapsed,
+                    "error": sanitized_msg,
+                }
+            finally:
+                with suppress(Exception):
+                    await adapter.disconnect()
         finally:
-            with suppress(Exception):
-                await adapter.disconnect()
+            await device_slots.arelease(lease)
 
     async def get_sync_logs(
         self,
@@ -3069,7 +3603,7 @@ class GatewayService:
         if action not in ("delete", "enable", "disable"):
             raise ValueError(f"Unknown action: {action}")
 
-        async with await self._adapter_for(gw_id, org_id) as (gw, adapter):
+        async def _batch(gw: GatewayConnection, adapter: BaseAdapter) -> dict[str, Any]:
             results: dict[str, list[Any]] = {"success": [], "failed": []}
             for uuid in rule_uuids:
                 try:
@@ -3123,6 +3657,19 @@ class GatewayService:
                 "applied": apply_error is None,
                 **({"apply_error": apply_error} if apply_error else {}),
             }
+
+        # One staged row for the whole batch (the rule ids, and the outcome per
+        # rule in its result), made over one connection as before. Read-only
+        # mode now refuses the batch before the gateway is contacted, where each
+        # rule used to be tried and reported as failed.
+        return await self._gateway_write(
+            gw_id,
+            org_id,
+            feature="firewall_rule.bulk",
+            operation="delete" if action == "delete" else "update",
+            payload={"action": action, "rule_uuids": list(rule_uuids)},
+            perform=_batch,
+        )
 
     # ═══════════════════════════════════════════════════════════════════
     # Cross-cutting: Config Diff
@@ -3287,3 +3834,39 @@ class GatewayService:
             "unknown_count": len(unknown),
             "needs_attention": bool(expired or expiring or unknown),
         }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Live reads take their turn at the device
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _turn_taking_read(name: str, read: Any) -> Any:
+    """Wrap one ``get_live_*`` read (see app/services/device_live_read.py).
+
+    ``_adapter_for`` authorizes the gateway (scoped to the caller's
+    organization) and then takes the device's turn before connecting, so the
+    remembered answer is only ever served to somebody who may read that
+    gateway live, and only after the same checks a live read makes.
+    """
+    import functools
+
+    @functools.wraps(read)
+    async def wrapper(self: GatewayService, gw_id: UUID, org_id: UUID, *args: Any, **kw: Any):
+        from app.services.device_live_read import run_read
+
+        params = (args, tuple(sorted(kw.items()))) if (args or kw) else ()
+        holder = f"UI read ({name.removeprefix('get_live_')})"
+        token = _live_read_params.set((name, params))
+        try:
+            return await run_read(holder, lambda: read(self, gw_id, org_id, *args, **kw))
+        finally:
+            _live_read_params.reset(token)
+
+    return wrapper
+
+
+for _name, _read in list(vars(GatewayService).items()):
+    if _name.startswith("get_live_") and inspect.iscoroutinefunction(_read):
+        setattr(GatewayService, _name, _turn_taking_read(_name, _read))
+del _name, _read

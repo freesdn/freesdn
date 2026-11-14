@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { useSiteStore } from '@/stores/siteStore';
 import { correlationApi, usersApi, type CorrelationRule, type Incident, type IncidentEvent, type UserAccount } from '@/lib/api';
 import { PageHeader, PageToolbar } from '@/components/layout';
@@ -42,6 +43,7 @@ import {
   Power,
   PowerOff,
 } from 'lucide-react';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ───────────────────────────────────────────────────────────────────
 // Mappings to canonical StatusBadge variants
@@ -68,6 +70,7 @@ const INCIDENT_TABS = ['incidents', 'rules'] as const;
 export default function IncidentsPage() {
   const { t } = useTranslation('enterprise');
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const { tab: urlTab } = useParams<{ tab?: string }>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -120,9 +123,7 @@ export default function IncidentsPage() {
 
   const { toast } = useToast();
   const errToast = (title: string) => (err: unknown) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const detail = (err as any)?.response?.data?.detail
-      || (err instanceof Error ? err.message : t('IncidentsPage.errors.unknown'));
+    const detail = getApiErrorMessage(err, t('IncidentsPage.errors.unknown'));
     toast({ variant: 'destructive', title, description: String(detail) });
   };
 
@@ -399,10 +400,15 @@ export default function IncidentsPage() {
             size="sm"
             title={t('delete', { ns: 'common' })}
             className="text-destructive hover:text-destructive"
-            onClick={() => {
-              if (window.confirm(`${t('delete', { ns: 'common' })} "${row.name}"?`)) {
-                deleteRuleMutation.mutate(row.id);
-              }
+            onClick={async () => {
+              const ok = await confirm({
+                title: t('IncidentsPage.confirm.deleteRule.title', { name: row.name }),
+                description: t('IncidentsPage.confirm.deleteRule.description'),
+                items: [row.name],
+                confirmLabel: t('IncidentsPage.confirm.deleteRule.confirmLabel'),
+                destructive: true,
+              });
+              if (ok) deleteRuleMutation.mutate(row.id);
             }}
           >
             <Trash2 className="h-4 w-4" />

@@ -120,13 +120,20 @@
       "trunkCreated": "中继已创建",
       "trunkCreateFailed": "创建中继失败 · 写入 API 可能不可用",
       "callOriginated": "呼叫已发起",
-      "callOriginateFailed": "发起呼叫失败"
+      "callOriginateFailed": "发起呼叫失败",
+      "pbxDeleteFailed": "无法删除该 PBX"
     },
     "confirm": {
       "deleteExtension": "删除分机 {{number}}？",
       "deleteRingGroup": "删除振铃组 {{number}}？这将暂存一个删除以供审核。",
       "deleteInboundRoute": "删除呼入路由 {{route}}？这将暂存一个删除以供审核。",
-      "deleteTrunk": "删除中继 \"{{name}}\"？此操作无法撤销。"
+      "deleteTrunk": "删除中继 \"{{name}}\"？此操作无法撤销。",
+      "stageDelete": "暂存删除",
+      "deleteInboundRouteTitle": "删除呼入路由 {{route}}？",
+      "deleteRingGroupTitle": "删除振铃组 {{number}}？",
+      "deleteTrunkTitle": "删除中继“{{name}}”？",
+      "deleteTrunkBody": "中继将直接在 PBX 上删除，不经过审核步骤。此操作无法撤销。",
+      "deleteTrunkAction": "删除中继"
     },
     "columns": {
       "extension": "分机",
@@ -229,7 +236,7 @@
       "viewDescription": "中继注册和配置详情",
       "activeChannels": "活动通道",
       "editSettings": "编辑设置",
-      "readOnlyNote": "此处中继为只读 — FreePBX 未提供中继写入 API。请在 FreePBX 管理界面中管理中继。"
+      "readOnlyNote": "此处中继为只读：FreePBX 未提供中继写入 API。请在 FreePBX 管理界面中管理中继。"
     },
     "reloadBanner": {
       "message": "配置更改已暂存到 PBX，但尚未生效。点击“应用配置”以激活（这将重新加载 Asterisk）。"
@@ -635,7 +642,8 @@
       "syncNow": "立即同步",
       "viewExtensions": "查看分机",
       "openWebUI": "打开 Web 界面",
-      "delete": "删除"
+      "delete": "删除",
+      "menuFor": "{{name}} 的操作"
     },
     "itemName": "PBX 系统",
     "itemNamePlural": "PBX 系统",
@@ -723,6 +731,18 @@
       "tls": {
         "label": "允许自签名 / 已过期的 TLS 证书",
         "help": "仅当您的 PBX 使用自签名或已过期的证书时才勾选此项。默认采用严格验证。该覆盖按 PBX 生效并记录到审计日志。"
+      }
+    },
+    "confirm": {
+      "bulkDelete": {
+        "title_one": "删除 {{count}} 个 PBX 系统？",
+        "title_other": "删除 {{count}} 个 PBX 系统？",
+        "body": "FreeSDN 将停止管理这些系统并移除其连接设置。PBX 系统本身不会有任何更改。",
+        "action": "删除 PBX 系统"
+      },
+      "delete": {
+        "title": "删除 {{name}}？",
+        "action": "删除 PBX"
       }
     }
   },
@@ -812,6 +832,20 @@
       "disableVoicemail": "已为 {{count}} 个分机禁用语音信箱。",
       "deleteExtensionsSafety": "为安全起见，请逐个删除分机。",
       "deleteRingGroupsSafety": "为安全起见，请逐个删除振铃组。"
+    },
+    "confirm": {
+      "bulkDeleteExtensions": {
+        "title_one": "删除 {{count}} 个分机？",
+        "title_other": "删除 {{count}} 个分机？",
+        "body": "每个分机将直接在其 PBX 上删除，不经过审核步骤。",
+        "action": "删除分机"
+      },
+      "bulkDeleteRingGroups": {
+        "title_one": "删除 {{count}} 个振铃组？",
+        "title_other": "删除 {{count}} 个振铃组？",
+        "body": "每个振铃组将直接在其 PBX 上删除，不经过审核步骤。",
+        "action": "删除振铃组"
+      }
     }
   },
   "components": {
@@ -1020,7 +1054,7 @@
     "dataLoadError": "部分数据加载失败，结果可能不完整。",
     "unknown": "未知",
     "urgent": "紧急",
-    "empty": "暂无语音留言",
+    "empty": "未存储语音留言。FreeSDN 目前尚不从 PBX 复制语音留言：请在话机或 FreePBX 中收听。",
     "itemName": "语音留言",
     "columns": {
       "from": "来自",
@@ -1038,6 +1072,10 @@
       "totalMessages": "消息总数",
       "unread": "未读",
       "urgent": "紧急"
+    },
+    "collectionNotice": {
+      "title": "语音留言尚未导入",
+      "body": "FreeSDN 尚不会从 PBX 复制语音留言，因此即使有来电者留言，此收件箱也会保持为空。请在电话或 PBX 上收听留言。语音信箱本身列在“PBX 系统”中各 PBX 的“语音信箱”选项卡下。"
     }
   },
   "PBXExtensionsTab": {
@@ -1194,7 +1232,15 @@
     "confirm": {
       "deletePhone": "删除话机“{{name}}”？",
       "deletePbx": "删除 PBX“{{name}}”？此操作无法撤消。",
-      "deleteVoicemail": "删除此语音留言？"
+      "deleteVoicemail": "删除此语音留言？",
+      "deletePhoneBody": "该话机将从 FreeSDN 中移除。话机本身不会被重置或更改。",
+      "deletePbxTitle": "删除 PBX“{{name}}”？",
+      "deletePbxBody": "FreeSDN 将停止管理此 PBX 并移除其连接设置。PBX 本身不会有任何更改。",
+      "deleteRingGroupTitle": "删除振铃组“{{name}}”？",
+      "deleteRingGroupBody": "振铃组将直接在 PBX 上删除，不经过审核步骤。",
+      "deleteRingGroupAction": "删除振铃组",
+      "deleteVoicemailBody": "仅从 FreeSDN 中移除。该留言仍保留在 PBX 的语音信箱中。",
+      "deleteVoicemailAction": "删除语音留言"
     },
     "phoneColumns": {
       "phone": "话机",
@@ -1448,7 +1494,8 @@
       "maintenanceMode": "维护模式",
       "exitMaintenance": "退出维护",
       "decommission": "停用",
-      "delete": "删除"
+      "delete": "删除",
+      "menuFor": "{{name}} 的操作"
     },
     "itemName": {
       "phones": "台电话",
@@ -1551,6 +1598,29 @@
           "noSip": "没有带 SIP 信息的可发现电话"
         },
         "failed": "自动关联失败"
+      }
+    },
+    "confirm": {
+      "bulkDelete": {
+        "title_one": "删除 {{count}} 部话机？",
+        "title_other": "删除 {{count}} 部话机？",
+        "body": "这些话机将从 FreeSDN 中移除。话机本身不会被重置或更改。",
+        "action": "删除话机"
+      },
+      "bulkReboot": {
+        "title_one": "重启 {{count}} 部话机？",
+        "title_other": "重启 {{count}} 部话机？",
+        "body": "每部话机将立即重启，并中断正在进行的通话。",
+        "action": "重启话机"
+      },
+      "delete": {
+        "title": "删除 {{name}}？",
+        "action": "删除话机"
+      },
+      "decommission": {
+        "title": "停用 {{name}}？",
+        "body": "FreeSDN 将停止管理此话机，并清除其与 PBX、分机和配置模板的关联。不会向话机发送任何内容：话机保留当前的设置和注册。之后可以重新接入。",
+        "action": "停用话机"
       }
     }
   },
@@ -1695,9 +1765,11 @@
     "credentials": {
       "label": "电话登录凭据",
       "custom": "用于电话 Web 界面登录的自定义凭据",
-      "default": "使用默认 admin/admin",
+      "default": "关闭：仅识别话机，从不尝试登录",
       "username": "用户名",
-      "password": "密码"
+      "password": "密码",
+      "tryDefault": "尝试出厂默认登录 (admin/admin)",
+      "tryDefaultWarning": "每次错误尝试都会计入话机管理员账户的锁定次数，且默认密码会发送到扫描发现的每一部话机。仅在您管理的网络上使用。"
     },
     "history": {
       "title": "扫描历史",
@@ -1871,8 +1943,9 @@
       "failed": "失败"
     },
     "empty": {
-      "noRecords": "未找到通话记录"
-    }
+      "noRecords": "未存储通话记录。通话历史每 15 分钟从各 PBX 导入一次，且仅适用于通过 FreePBX 管理 API（OAuth2）应用连接的 PBX。"
+    },
+    "subtitleCapped": "显示最新的 {{count}} 条通话记录"
   },
   "PBXConfigTab": {
     "heading": "PBX 配置快照",

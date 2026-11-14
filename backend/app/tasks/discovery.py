@@ -9,10 +9,11 @@ Celery tasks for discovering devices from controllers.
 """
 
 import asyncio
+import contextvars
 import logging
 import time
 from contextlib import suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -22,7 +23,14 @@ from sqlalchemy.orm import selectinload
 
 from app.core.celery_app import celery_app
 from app.core.crypto import decrypt_credential, is_encrypted
-from app.core.events import EventType, publish_controller_event, publish_device_event
+from app.core.device_slot import controller_slot_key, device_slots
+from app.core.events import (
+    EventType,
+    discovery_event,
+    get_event_bus,
+    publish_controller_event,
+    publish_device_event,
+)
 from app.db.models import Controller, ControllerStatus, Device
 from app.db.session import CelerySessionLocal as AsyncSessionLocal
 from app.models.core import Organization, Site
@@ -31,6 +39,11 @@ from app.services.adapter_factory import build_adapter_for_controller
 from app.services.controller_sync import deep_sync_controller
 
 logger = logging.getLogger(__name__)
+
+
+def _status_text(status: Any) -> str:
+    """``DeviceStatus`` or the adapter's plain string, as comparable text."""
+    return str(getattr(status, "value", status) or "").lower()
 
 
 class _DiscoveryDeviceScopeConflict(RuntimeError):
@@ -108,7 +121,9 @@ def _resolve_device_site_id(
     return controller.site_id
 
 
-async def _discover_devices_for_controller(controller_id: str) -> dict[str, Any]:
+async def _discover_devices_for_controller(
+    controller_id: str, *, slot_wait: float = 0.0
+) -> dict[str, Any]:
     """Per-controller solo-locked wrapper around the discovery impl.
 
     A single Omada sync is slow (minutes), and a user who clicks "Sync Now"
@@ -132,14 +147,113 @@ async def _discover_devices_for_controller(controller_id: str) -> dict[str, Any]
             "controller_id": controller_id,
         }
     try:
-        return await _discover_devices_for_controller_impl(controller_id)
+        state: dict[str, Any] = {}
+        token = _discovery_run.set(state)
+        try:
+            try:
+                if slot_wait:
+                    result = await _discover_devices_for_controller_impl(
+                        controller_id, slot_wait=slot_wait
+                    )
+                else:
+                    result = await _discover_devices_for_controller_impl(controller_id)
+            except Exception as exc:
+                if state:
+                    await _announce(
+                        discovery_event(
+                            "failed",
+                            organization_id=state["org"],
+                            controller_id=controller_id,
+                            controller_name=state["name"],
+                            error=type(exc).__name__,
+                        )
+                    )
+                raise
+            if state:
+                if result.get("success") and not result.get("skipped"):
+                    await _announce(
+                        discovery_event(
+                            "completed",
+                            organization_id=state["org"],
+                            controller_id=controller_id,
+                            controller_name=state["name"],
+                            stats={
+                                k: v
+                                for k, v in result.items()
+                                if isinstance(v, int) and not isinstance(v, bool)
+                            },
+                        )
+                    )
+                else:
+                    await _announce(
+                        discovery_event(
+                            "failed",
+                            organization_id=state["org"],
+                            controller_id=controller_id,
+                            controller_name=state["name"],
+                            # Our own reason code only; never adapter or vendor text.
+                            error="DiscoveryFailed",
+                        )
+                    )
+            return result
+        finally:
+            _discovery_run.reset(token)
     finally:
         release_solo_lock(lock_key, lock_token)
 
 
-async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str, Any]:
+#: Per-run record that discovery.started went out (organization and controller
+#: name), so the wrapper announces completed/failed only for a run that really
+#: started: a run skipped because the device was busy, or refused before it
+#: touched the controller, announces nothing.
+_discovery_run: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "_discovery_run", default=None
+)
+
+
+async def _announce_started(organization_id: str, controller_id: str, name: str) -> None:
+    """discovery.started, once the run holds the controller's slot."""
+    state = _discovery_run.get()
+    if state is not None:
+        state.update(org=organization_id, name=name)
+    await _announce(
+        discovery_event(
+            "started",
+            organization_id=organization_id,
+            controller_id=controller_id,
+            controller_name=name,
+        )
+    )
+
+
+async def _announce(event: Any) -> None:
+    """Publish a discovery.* event without ever failing the discovery.
+
+    discovery.started / completed / failed were published only by the Discovery
+    page's private copy of the pipeline. When that copy was replaced by this one
+    implementation they went silent, while the n8n trigger and the webhook event
+    list still offered them. An event without an organization reaches no
+    tenant-scoped subscriber, so it is not published at all.
+    """
+    if not event.organization_id:
+        return
+    try:
+        await get_event_bus().publish(event)
+    except Exception:  # noqa: BLE001 - announcements never break discovery
+        logger.warning("Could not publish %s", event.event_type, exc_info=True)
+
+
+async def _discover_devices_for_controller_impl(
+    controller_id: str, *, slot_wait: float = 0.0
+) -> dict[str, Any]:
     """
     Discover devices from a specific controller.
+
+    Holds the controller's device slot (``app/core/device_slot.py``) for the
+    whole request group, discovery and deep sync: while the health check, the
+    status sync or a monitor is talking to the controller, a scheduled run
+    skips (``slot_wait`` 0) and is due again on the next beat. No database
+    transaction is open while the controller is contacted.
 
     Returns:
         Discovery result with counts and any errors.
@@ -183,6 +297,21 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
         if active_org is None:
             return {"success": False, "error": "discovery_device_scope_conflict"}
 
+        slot_key = controller_slot_key(controller)
+        lease = await device_slots.acquire(slot_key, "controller discovery", wait=slot_wait)
+        if lease is None:
+            reason = await device_slots.abusy_reason(slot_key)
+            logger.info("Discovery of controller %s skipped: %s", controller_id, reason)
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": "device_busy",
+                "detail": reason,
+                "controller_id": controller_id,
+            }
+
+        await _announce_started(str(organization_id), controller_id, controller.name)
+
         # Publish sync started event
         await publish_controller_event(
             EventType.CONTROLLER_SYNC_STARTED,
@@ -207,6 +336,11 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
             # code paths. One assembly point means the next vendor cannot
             # drift the same way.
             adapter = build_adapter_for_controller(controller)
+            # End the read transaction before the first byte goes to the
+            # controller: a slow discovery (minutes against a large Omada site)
+            # used to hold it, and behind PgBouncer a server connection, open
+            # the whole time. The authority re-check below starts a new one.
+            await session.commit()
 
             # Connect and discover using async context manager
             async with adapter:
@@ -343,6 +477,7 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
                     existing_device = macless_map.get(macless_key) if macless_key else None
 
                 if existing_device:
+                    previous_status = existing_device.status
                     # Reassign to current controller if it was orphaned
                     if existing_device.controller_id != controller.id:
                         existing_device.controller_id = controller.id
@@ -386,6 +521,31 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
                         if controller.site
                         else None,
                     )
+                    # Discovery is where a controller-managed device's status is
+                    # refreshed every five minutes, and it published only
+                    # device.updated, every run, for every device. A device
+                    # going offline or coming back therefore never raised
+                    # device.status.changed -- the event alert automations,
+                    # webhooks and the n8n trigger default to -- unless the
+                    # per-device status sync or the 30-minute stale sweep
+                    # happened to notice it first.
+                    if _status_text(previous_status) != _status_text(existing_device.status):
+                        await publish_device_event(
+                            EventType.DEVICE_STATUS_CHANGED,
+                            device_id=str(existing_device.id),
+                            data={
+                                "name": existing_device.name,
+                                "old_status": _status_text(previous_status),
+                                "new_status": _status_text(existing_device.status),
+                                "reason": "controller_report",
+                            },
+                            device_type=existing_device.device_type,
+                            controller_id=str(controller.id),
+                            site_id=resolved_site_str,
+                            organization_id=str(controller.site.organization_id)
+                            if controller.site
+                            else None,
+                        )
                 else:
                     # Create new device from DiscoveredDevice
                     raw = device_data.raw_data or {}
@@ -705,6 +865,9 @@ async def _discover_devices_for_controller_impl(controller_id: str) -> dict[str,
                 logger.warning("Discovery failure event publication unavailable")
             return failure
 
+        finally:
+            await device_slots.arelease(lease)
+
 
 @celery_app.task(bind=True, max_retries=3, soft_time_limit=600, time_limit=720)
 def discover_devices_for_controller(self: Any, controller_id: str) -> dict[str, Any]:
@@ -718,13 +881,41 @@ def discover_devices_for_controller(self: Any, controller_id: str) -> dict[str, 
         Discovery result dictionary
     """
     try:
-        return asyncio.run(_discover_devices_for_controller(controller_id))
+        # Asked for by an operator ("Sync now"): wait a while for a poll that
+        # is talking to the controller to finish, rather than skip.
+        return asyncio.run(
+            _discover_devices_for_controller(controller_id, slot_wait=_MANUAL_SLOT_WAIT)
+        )
     except Exception as e:
         logger.exception("Discovery task failed for controller %s", controller_id)
         raise self.retry(exc=e, countdown=60 * (self.request.retries + 1))
 
 
 _CONTROLLER_CONCURRENCY = 5  # Max controllers synced in parallel
+#: How long an operator-requested discovery waits for the controller's slot.
+_MANUAL_SLOT_WAIT = 60.0
+
+
+def _interval_due(last_sync: datetime | None, interval_seconds: int | None, now: datetime) -> bool:
+    """Is a controller's own sync interval up?
+
+    Same rule as the gateway sync: a 60 s floor and 30 s of slack for beat
+    jitter. The beat itself runs every 5 minutes, so a shorter interval
+    effectively means "every run". A controller whose discovery keeps failing
+    never sets last_sync and is retried on every run, as before.
+    """
+    if last_sync is None:
+        return True
+    interval = max(int(interval_seconds or 300), 60)
+    return now - last_sync >= timedelta(seconds=interval - 30)
+
+
+def _controller_sync_floor() -> int:
+    """CONTROLLER_SYNC_MIN_INTERVAL_SECONDS: the gentlest a scheduled discovery
+    of one controller may be, whatever the controller's own interval says."""
+    from app.core.config import settings
+
+    return max(300, int(settings.CONTROLLER_SYNC_MIN_INTERVAL_SECONDS))
 
 
 async def _discover_all_devices(
@@ -745,7 +936,7 @@ async def _discover_all_devices(
 
     async with AsyncSessionLocal() as session:
         # Get enabled, non-deleted controllers (org/site scoped if asked)
-        q = select(Controller.id).where(
+        q = select(Controller.id, Controller.last_sync, Controller.sync_interval_seconds).where(
             Controller.is_active,
             Controller.deleted_at.is_(None),
         )
@@ -756,8 +947,35 @@ async def _discover_all_devices(
             )
             if site_id:
                 q = q.where(Controller.site_id == _UUID(site_id))
-        result = await session.execute(q)
-        controller_ids = [str(cid) for cid in result.scalars().all()]
+        else:
+            # The scheduled beat honours the controller's own "Auto sync" switch
+            # and "Sync interval" (Add/Edit Controller). It used to read neither:
+            # a controller with auto sync off, or a 3600 s interval set to spare a
+            # struggling appliance, was still fully discovered every 5 minutes.
+            q = q.where(Controller.sync_enabled.is_(True))
+        rows = (await session.execute(q)).all()
+        now = datetime.now(UTC)
+        floor = _controller_sync_floor()
+        controller_ids = [
+            str(cid)
+            for cid, last_sync, interval in rows
+            if organization_id or _interval_due(last_sync, max(int(interval or 0), floor), now)
+        ]
+        if not organization_id:
+            # The scheduled run leaves a controller the health check found
+            # unreachable alone (its shared breaker is open); the health check
+            # probes it and discovery resumes once it answers. A user's "Sync
+            # now" still goes through.
+            from app.core.device_breaker import CLOSED, controller_breaker, controller_key
+
+            paused = {
+                cid
+                for cid in controller_ids
+                if controller_breaker.peek(controller_key(cid)) != CLOSED
+            }
+            if paused:
+                logger.info("Discovery skipped for %d unreachable controller(s)", len(paused))
+                controller_ids = [cid for cid in controller_ids if cid not in paused]
 
         if not controller_ids:
             return {

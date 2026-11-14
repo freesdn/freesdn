@@ -45,8 +45,10 @@ import {
 import '@xyflow/react/dist/style.css';
 import { toPng } from 'html-to-image';
 import { topologyApi, deviceControlApi } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 import { useSiteStore } from '@/stores/siteStore';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import type { TopologyNode as APITopologyNode, TopologyGraph } from '@/lib/api';
 import { PageHeader } from '@/components/layout';
 import { StatsGrid } from '@/components/ui/stats-grid';
@@ -733,7 +735,7 @@ function TopologyCanvas({
    Device Detail Panel
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function DeviceDetailPanel({
+export function DeviceDetailPanel({
   node,
   graph,
   onSelectNode,
@@ -745,6 +747,7 @@ function DeviceDetailPanel({
   const { t } = useTranslation('enterprise');
   const navigate = useNavigate();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const meta = DEVICE_TYPE_META[node.device_type] || DEVICE_TYPE_META.other;
   const Icon = meta.icon;
   const statusColor = STATUS_COLORS[node.status] || STATUS_COLORS.unknown;
@@ -760,7 +763,7 @@ function DeviceDetailPanel({
     onError: (err) => toast({
       variant: 'destructive',
       title: t('TopologyPage.toast.rebootFailed.title'),
-      description: err instanceof Error ? err.message : t('TopologyPage.toast.unknownError'),
+      description: getApiErrorMessage(err, t('TopologyPage.toast.unknownError')),
     }),
   });
 
@@ -912,13 +915,16 @@ function DeviceDetailPanel({
               size="sm"
               variant="outline"
               disabled={node.status !== 'online' || rebootMutation.isPending}
-              onClick={() => {
+              onClick={async () => {
                 // Confirm, one click was previously a live reboot with no undo.
-                if (window.confirm(
-                  t('TopologyPage.confirm.reboot', { label: node.label }),
-                )) {
-                  rebootMutation.mutate();
-                }
+                const ok = await confirm({
+                  title: t('TopologyPage.confirm.reboot', { label: node.label }),
+                  description: t('TopologyPage.confirm.rebootDescription'),
+                  items: [node.label],
+                  confirmLabel: t('TopologyPage.confirm.rebootAction'),
+                  destructive: true,
+                });
+                if (ok) rebootMutation.mutate();
               }}
             >
               <Power className="h-3.5 w-3.5 mr-1.5" />

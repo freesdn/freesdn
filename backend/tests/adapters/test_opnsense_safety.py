@@ -24,6 +24,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.adapters.apply_context import apply_window
 from app.adapters.exceptions import AdapterError
 from app.adapters.opnsense.client import (
     OPNsenseClient,
@@ -122,11 +123,10 @@ class TestReadOnlyGate:
 
     @pytest.mark.asyncio
     @patch("app.adapters.opnsense.client._is_adapter_read_only", lambda: True)
-    async def test_allows_writes_when_force_true(self) -> None:
-        """Even with read-only on, ``force=True`` satisfies the client-layer gate; the env+force dual-gate is enforced upstream by the apply endpoint.
-        This is the single sanctioned write path — the apply endpoint
-        is responsible for setting force only when its own dual-gate
-        has cleared (env-off + force-true on the request)."""
+    async def test_allows_writes_inside_staged_apply_window(self) -> None:
+        """With read-only on, only an approved staged apply gets through:
+        apply_change opens the window after its own env + force gate, and
+        the applier passes force=True. Force alone is refused (26.12.0)."""
         client = _make_client()
         mock_response = MagicMock(status_code=200, text='{"ok": true}')
         mock_response.json.return_value = {"ok": True}
@@ -134,12 +134,13 @@ class TestReadOnlyGate:
         client._client.is_closed = False
         client._client.request = AsyncMock(return_value=mock_response)
         # Should NOT raise.
-        result = await client._request(
-            "POST",
-            "/api/firewall/filter/addRule",
-            data={"rule": {}},
-            force=True,
-        )
+        with apply_window():
+            result = await client._request(
+                "POST",
+                "/api/firewall/filter/addRule",
+                data={"rule": {}},
+                force=True,
+            )
         assert result == {"ok": True}
 
     @pytest.mark.asyncio

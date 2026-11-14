@@ -13,6 +13,8 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Trans, useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   HardDrive,
   Plus,
@@ -47,6 +49,7 @@ import { HealthRing } from '@/components/ui/health-ring';
 import { MetricBar } from '@/components/ui/metric-bar';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { PageHeader } from '@/components/layout';
+import { CapabilityMaturityBadge } from '@/components/ui/capability-maturity-badge';
 import { useSiteStore } from '@/stores/siteStore';
 import { controllersApi } from '@/lib/api';
 import type { StorageInventory, StoragePool, StorageDisk, StorageDataset, StorageSnapshot } from '@/lib/api';
@@ -60,6 +63,7 @@ import {
 } from './StorageWriteActions';
 import { PendingChangesBadge } from '@/components/gateways/PendingChangesBadge';
 import { PendingChangesDrawer } from '@/components/gateways/PendingChangesDrawer';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 function formatBytes(n: number, decimals = 1): string {
@@ -70,25 +74,25 @@ function formatBytes(n: number, decimals = 1): string {
   return `${(n / Math.pow(k, i)).toFixed(decimals)} ${units[i]}`;
 }
 
-function formatUptime(seconds: number): string {
+function formatUptime(t: TFunction, seconds: number): string {
   if (!seconds || seconds <= 0) return '-';
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
-  if (d > 0) return `${d}d ${h}h`;
+  if (d > 0) return t('time.uptimeDays', { d, h });
   const m = Math.floor((seconds % 3600) / 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  return h > 0 ? t('time.uptimeHours', { h, m }) : t('time.uptimeMinutes', { m });
 }
 
-function timeAgo(ms: number | null): string {
+function timeAgo(t: TFunction, ms: number | null): string {
   if (!ms) return '';
   const diff = Date.now() - ms;
-  if (diff < 0) return 'just now';
+  if (diff < 0) return t('time.justNow');
   const days = Math.floor(diff / 86_400_000);
-  if (days > 0) return `${days}d ago`;
+  if (days > 0) return t('time.daysAgo', { count: days });
   const hrs = Math.floor(diff / 3_600_000);
-  if (hrs > 0) return `${hrs}h ago`;
+  if (hrs > 0) return t('time.hoursAgo', { count: hrs });
   const min = Math.floor(diff / 60_000);
-  return min > 0 ? `${min}m ago` : 'just now';
+  return min > 0 ? t('time.minutesAgo', { count: min }) : t('time.justNow');
 }
 
 function tempColor(t: number | null): string {
@@ -106,10 +110,19 @@ function fillTone(pct: number): Tone {
   return 'success';
 }
 
-const HEALTH_META: Record<string, { label: string; cls: string; Icon: LucideIcon }> = {
-  ok: { label: 'Healthy', cls: 'text-success', Icon: CheckCircle2 },
-  warning: { label: 'Degraded', cls: 'text-warning', Icon: AlertTriangle },
-  error: { label: 'Fault', cls: 'text-destructive', Icon: XCircle },
+/** TrueNAS reports scrub state as FINISHED, SCANNING or CANCELED; anything else is shown as sent. */
+function scrubStateLabel(t: TFunction, state: string): string {
+  const key = state.toUpperCase();
+  if (key === 'FINISHED') return t('pool.scrubStates.finished');
+  if (key === 'SCANNING') return t('pool.scrubStates.scanning');
+  if (key === 'CANCELED' || key === 'CANCELLED') return t('pool.scrubStates.canceled');
+  return state.toLowerCase();
+}
+
+const HEALTH_META: Record<string, { labelKey: string; cls: string; Icon: LucideIcon }> = {
+  ok: { labelKey: 'health.ok', cls: 'text-success', Icon: CheckCircle2 },
+  warning: { labelKey: 'health.warning', cls: 'text-warning', Icon: AlertTriangle },
+  error: { labelKey: 'health.error', cls: 'text-destructive', Icon: XCircle },
 };
 
 const ALERT_META: Record<string, { cls: string; Icon: LucideIcon }> = {
@@ -134,6 +147,7 @@ interface ControllerListItem {
 }
 
 export default function StoragePage() {
+  const { t } = useTranslation('storage');
   const selectedSiteId = useSiteStore((s) => s.selectedSiteId);
   const [addOpen, setAddOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -168,17 +182,15 @@ export default function StoragePage() {
     refetchInterval: 30_000,
   });
 
-  const invErrorDetail =
-    (invError as import('axios').AxiosError<{ detail?: string }>)?.response?.data?.detail ||
-    (invError as { message?: string })?.message ||
-    'Could not reach the appliance.';
+  const invErrorDetail = getApiErrorMessage(invError, t('errors.unreachable'));
 
   return (
     <div className="space-y-6">
       <PageHeader
         icon={HardDrive}
-        title="Storage"
-        subtitle="ZFS pool health, capacity, redundancy, disk temps, alerts and snapshots across your storage appliances, with staged writes."
+        title={t('header.title')}
+        titleBadge={<CapabilityMaturityBadge capabilityId="storage" />}
+        subtitle={t('header.subtitle')}
         actions={
           <div className="flex items-center gap-2">
             {activeId && (
@@ -190,7 +202,7 @@ export default function StoragePage() {
               />
             )}
             <Button onClick={() => setAddOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" /> Add TrueNAS Storage
+              <Plus className="h-4 w-4 mr-2" /> {t('actions.addTrueNAS')}
             </Button>
           </div>
         }
@@ -206,13 +218,13 @@ export default function StoragePage() {
           {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
         </div>
       ) : devicesError ? (
-        <ErrorState message="Failed to load storage appliances." onRetry={() => refetchDevices()} />
+        <ErrorState message={t('errors.loadAppliances')} onRetry={() => refetchDevices()} />
       ) : devices.length === 0 ? (
         <EmptyState
           icon={HardDrive}
-          title="No storage appliances yet"
-          description="Connect a TrueNAS appliance to surface pool health, capacity, disks, and alerts in one pane."
-          action={{ label: 'Add TrueNAS Storage', onClick: () => setAddOpen(true) }}
+          title={t('empty.title')}
+          description={t('empty.description')}
+          action={{ label: t('actions.addTrueNAS'), onClick: () => setAddOpen(true) }}
         />
       ) : (
         <>
@@ -260,7 +272,7 @@ export default function StoragePage() {
           onOpenChange={setPendingOpen}
           vendor="storage"
           gatewayId={activeId}
-          gatewayName={devices.find((d) => d.id === activeId)?.name ?? 'storage'}
+          gatewayName={devices.find((d) => d.id === activeId)?.name ?? t('header.title')}
           onApplied={() => {
             if (activeId) refetchInv();
           }}
@@ -280,14 +292,13 @@ function StorageDashboard({
   controllerId: string;
   onStaged: () => void;
 }) {
+  const { t } = useTranslation('storage');
   const health = HEALTH_META[inv.health.status] ?? HEALTH_META.ok;
 
   // Writes are WS-only. On a legacy REST appliance the actions are disabled
   // with a reason rather than hidden, so an operator is not left wondering.
   const canWrite = inv.transport === 'ws';
-  const writeDisabledReason = canWrite
-    ? undefined
-    : 'Writes need the WS JSON-RPC API (TrueNAS SCALE 25.04+). This appliance answered on the legacy REST surface.';
+  const writeDisabledReason = canWrite ? undefined : t('writes.needWs');
 
   // One piece of dialog state; only one storage action is ever open at a time.
   const [snapshotTarget, setSnapshotTarget] = useState<StorageDataset | null>(null);
@@ -312,35 +323,46 @@ function StorageDashboard({
   // ── uniform KPI row ───────────────────────────────────────────────────
   const stats = [
     {
-      title: 'Pools',
+      title: t('stats.pools'),
       value: inv.pools.length,
       icon: Database,
       variant: healthyPools === inv.pools.length ? ('success' as const) : ('destructive' as const),
-      description: `${healthyPools}/${inv.pools.length} healthy`,
+      description: t('stats.poolsHealthy', { healthy: healthyPools, total: inv.pools.length }),
     },
     {
-      title: 'Disks',
+      title: t('stats.disks'),
       value: inv.disks.length,
       icon: hottest != null && hottest >= 55 ? Thermometer : HardDrive,
       variant:
         hottest != null && hottest >= 55 ? ('destructive' as const)
         : hottest != null && hottest >= 45 ? ('warning' as const)
         : ('success' as const),
-      description: hottest != null ? `hottest ${hottest.toFixed(0)}°C · ${formatBytes(rawTotal)} raw` : `${formatBytes(rawTotal)} raw`,
+      description:
+        hottest != null
+          ? t('stats.disksHottest', { temp: hottest.toFixed(0), raw: formatBytes(rawTotal) })
+          : t('stats.disksRaw', { raw: formatBytes(rawTotal) }),
     },
     {
-      title: 'Data protection',
+      title: t('stats.dataProtection'),
       value: dpTotal,
       icon: dpTotal > 0 ? ShieldCheck : ShieldAlert,
       variant: dpTotal > 0 ? ('success' as const) : ('warning' as const),
-      description: dpTotal > 0 ? `${dp.snapshot_tasks} snap · ${dp.replication} repl · ${dp.cloudsync} cloud` : 'no snapshot/replication tasks',
+      description:
+        dpTotal > 0
+          ? t('stats.dataProtectionSummary', { snap: dp.snapshot_tasks, repl: dp.replication, cloud: dp.cloudsync })
+          : t('stats.dataProtectionNone'),
     },
     {
-      title: 'Alerts',
+      title: t('stats.alerts'),
       value: inv.health.alert_count,
       icon: crit > 0 ? XCircle : inv.health.alert_count > 0 ? AlertTriangle : CheckCircle2,
       variant: crit > 0 ? ('destructive' as const) : inv.health.alert_count > 0 ? ('warning' as const) : ('success' as const),
-      description: crit > 0 ? `${crit} critical` : inv.health.alert_count > 0 ? 'active' : 'all clear',
+      description:
+        crit > 0
+          ? t('stats.alertsCritical', { n: crit })
+          : inv.health.alert_count > 0
+            ? t('stats.alertsActive')
+            : t('stats.alertsClear'),
     },
   ];
 
@@ -351,7 +373,7 @@ function StorageDashboard({
         <CardContent className="p-5 sm:p-6">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-5">
-              <HealthRing value={usedPct} tone={fillTone(usedPct)} size="lg" label="used" />
+              <HealthRing value={usedPct} tone={fillTone(usedPct)} size="lg" label={t('capacity.used')} />
               <div className="min-w-0 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-semibold tracking-tight truncate">
@@ -367,19 +389,24 @@ function StorageDashboard({
                 </div>
                 <div className={cn('inline-flex items-center gap-1.5 text-sm font-medium', health.cls)}>
                   <health.Icon className="h-4 w-4" />
-                  {health.label}
+                  {t(health.labelKey)}
                   <span className="text-muted-foreground font-normal">
-                    · {formatBytes(totalUsed)} of {formatBytes(totalSize)} used · {formatBytes(totalSize - totalUsed)} free
+                    ·{' '}
+                    {t('capacity.summary', {
+                      used: formatBytes(totalUsed),
+                      total: formatBytes(totalSize),
+                      free: formatBytes(totalSize - totalUsed),
+                    })}
                   </span>
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 lg:shrink-0">
-              <Fact Icon={Cpu} label="Model" value={inv.system.product || '-'} />
-              <Fact Icon={MemoryStick} label="Memory" value={formatBytes(inv.system.physmem)} />
-              <Fact Icon={Clock} label="Uptime" value={formatUptime(inv.system.uptime_seconds)} />
-              <Fact Icon={Server} label="Timezone" value={inv.system.timezone || '-'} />
+              <Fact Icon={Cpu} label={t('facts.model')} value={inv.system.product || '-'} />
+              <Fact Icon={MemoryStick} label={t('facts.memory')} value={formatBytes(inv.system.physmem)} />
+              <Fact Icon={Clock} label={t('facts.uptime')} value={formatUptime(t, inv.system.uptime_seconds)} />
+              <Fact Icon={Server} label={t('facts.timezone')} value={inv.system.timezone || '-'} />
             </div>
           </div>
         </CardContent>
@@ -397,7 +424,7 @@ function StorageDashboard({
                   <div className="flex items-center gap-2">
                     <span className="font-semibold uppercase text-xs tracking-wide">{a.level}</span>
                     {a.klass && <span className="text-xs opacity-70">{a.klass}</span>}
-                    {a.at_ms && <span className="text-xs opacity-60">· {timeAgo(a.at_ms)}</span>}
+                    {a.at_ms && <span className="text-xs opacity-60">· {timeAgo(t, a.at_ms)}</span>}
                   </div>
                   <div className="break-words">{a.message}</div>
                 </div>
@@ -413,7 +440,7 @@ function StorageDashboard({
       {/* Pools */}
       <Section
         icon={Database}
-        title="Pools"
+        title={t('sections.pools')}
         badge={`${inv.pools.length}`}
         action={
           <Button
@@ -423,7 +450,7 @@ function StorageDashboard({
             title={writeDisabledReason}
             onClick={() => setCreateDatasetPool(primaryPool)}
           >
-            <Layers className="mr-2 h-4 w-4" /> New dataset
+            <Layers className="mr-2 h-4 w-4" /> {t('actions.newDataset')}
           </Button>
         }
       >
@@ -442,7 +469,7 @@ function StorageDashboard({
       </Section>
 
       {/* Services */}
-      <Section icon={Share2} title="Sharing & Services">
+      <Section icon={Share2} title={t('sections.services')}>
         <div className="flex flex-wrap gap-2">
           {SERVICE_ORDER.map((svc) => {
             const found = inv.services.find((s) => s.service === svc);
@@ -457,7 +484,7 @@ function StorageDashboard({
               >
                 <span className={cn('h-2 w-2 rounded-full', running ? 'bg-success' : 'bg-muted-foreground/40')} />
                 <span className="font-medium">{SERVICE_LABELS[svc] ?? svc}</span>
-                <span className="text-xs opacity-60">{running ? 'running' : 'stopped'}</span>
+                <span className="text-xs opacity-60">{running ? t('services.running') : t('services.stopped')}</span>
               </div>
             );
           })}
@@ -467,12 +494,12 @@ function StorageDashboard({
       {/* Disks */}
       <Section
         icon={Thermometer}
-        title="Disks"
-        badge={`${inv.disks.length} · ${formatBytes(rawTotal)} raw`}
+        title={t('sections.disks')}
+        badge={t('sections.disksBadge', { disks: inv.disks.length, raw: formatBytes(rawTotal) })}
       >
         <DataTable
           data={inv.disks}
-          columns={diskColumns}
+          columns={diskColumns(t)}
           getRowId={(d) => d.name}
           searchable
           paginated={inv.disks.length > 50}
@@ -483,51 +510,48 @@ function StorageDashboard({
       {/* Datasets */}
       <Section
         icon={Layers}
-        title="Datasets"
+        title={t('sections.datasets')}
         badge={`${inv.datasets.length}`}
       >
         <DataTable
           data={inv.datasets}
-          columns={datasetColumnsWithActions(canWrite, writeDisabledReason, (d) => setSnapshotTarget(d))}
+          columns={datasetColumnsWithActions(t, canWrite, writeDisabledReason, (d) => setSnapshotTarget(d))}
           getRowId={(d) => d.id}
           searchable
           paginated={inv.datasets.length > 25}
-          emptyState={<div className="py-10 text-center text-sm text-muted-foreground">No datasets.</div>}
+          emptyState={<div className="py-10 text-center text-sm text-muted-foreground">{t('datasets.empty')}</div>}
         />
       </Section>
 
       {/* Snapshots */}
       <Section
         icon={Camera}
-        title="Snapshots"
+        title={t('sections.snapshots')}
         badge={
           inv.snapshot_count > inv.snapshots.length
-            ? `${inv.snapshots.length} of ${inv.snapshot_count}`
+            ? t('sections.snapshotsBadgeOf', { shown: inv.snapshots.length, total: inv.snapshot_count })
             : `${inv.snapshot_count}`
         }
       >
         {inv.snapshot_count > inv.snapshots.length && (
           <div className="mb-3 flex items-center gap-2 rounded-lg border border-info/30 bg-info/10 px-3 py-2 text-xs text-info">
             <Info className="h-3.5 w-3.5 shrink-0" />
-            Showing the {inv.snapshots.length} most recent of {inv.snapshot_count}. Search the
-            appliance for older ones.
+            {t('snapshots.truncated', { shown: inv.snapshots.length, total: inv.snapshot_count })}
           </div>
         )}
         <DataTable
           data={inv.snapshots}
-          columns={snapshotColumns(canWrite, writeDisabledReason, (s) => setDeleteSnap(s))}
+          columns={snapshotColumns(t, canWrite, writeDisabledReason, (s) => setDeleteSnap(s))}
           getRowId={(sn) => sn.id}
           searchable
           paginated={inv.snapshots.length > 25}
           emptyState={
-            <div className="py-10 text-center text-sm text-muted-foreground">
-              No snapshots yet. Take one from the Datasets table above.
-            </div>
+            <div className="py-10 text-center text-sm text-muted-foreground">{t('snapshots.empty')}</div>
           }
         />
       </Section>
 
-      {/* Write action dialogs — all stage, none touch the appliance directly */}
+      {/* Write action dialogs: all stage, none touch the appliance directly */}
       <SnapshotDatasetDialog
         controllerId={controllerId}
         dataset={snapshotTarget}
@@ -561,27 +585,27 @@ function StorageDashboard({
 }
 
 // ─── columns ─────────────────────────────────────────────────────────────
-const diskColumns: DataTableColumn<StorageDisk>[] = [
+const diskColumns = (t: TFunction): DataTableColumn<StorageDisk>[] => [
   {
     id: 'name',
-    header: 'Device',
+    header: t('disks.device'),
     accessorFn: (d) => d.name,
     cell: (d) => <span className="font-mono text-xs">{d.name}</span>,
   },
   {
     id: 'type',
-    header: 'Type',
+    header: t('disks.type'),
     cell: (d) => <Badge variant="outline" className="text-xs font-normal">{d.type || '-'}</Badge>,
   },
   {
     id: 'model',
-    header: 'Model',
+    header: t('disks.model'),
     accessorFn: (d) => d.model,
     cell: (d) => <span className="block max-w-[220px] truncate" title={d.model}>{d.model || '-'}</span>,
   },
   {
     id: 'size',
-    header: 'Size',
+    header: t('disks.size'),
     accessorFn: (d) => d.size,
     className: 'text-right tabular-nums',
     headerClassName: 'text-right',
@@ -589,7 +613,7 @@ const diskColumns: DataTableColumn<StorageDisk>[] = [
   },
   {
     id: 'temp',
-    header: 'Temp',
+    header: t('disks.temp'),
     accessorFn: (d) => d.temperature_c ?? -1,
     className: 'text-right tabular-nums',
     headerClassName: 'text-right',
@@ -601,17 +625,17 @@ const diskColumns: DataTableColumn<StorageDisk>[] = [
   },
   {
     id: 'status',
-    header: 'Status',
+    header: t('disks.status'),
     accessorFn: (d) => d.zfs_status ?? '',
     cell: (d) => {
-      if (!d.zfs_status) return <span className="text-xs text-muted-foreground">unassigned</span>;
+      if (!d.zfs_status) return <span className="text-xs text-muted-foreground">{t('disks.unassigned')}</span>;
       const ok = d.zfs_status === 'ONLINE';
       return <span className={cn('text-xs font-medium', ok ? 'text-success' : 'text-destructive')}>{d.zfs_status}</span>;
     },
   },
   {
     id: 'pool',
-    header: 'Pool / vdev',
+    header: t('disks.poolVdev'),
     accessorFn: (d) => d.pool ?? '',
     cell: (d) => (
       <span className="text-xs text-muted-foreground">
@@ -621,7 +645,7 @@ const diskColumns: DataTableColumn<StorageDisk>[] = [
   },
   {
     id: 'errors',
-    header: 'Errors',
+    header: t('disks.errors'),
     accessorFn: (d) => (d.read_errors ?? 0) + (d.write_errors ?? 0) + (d.checksum_errors ?? 0),
     className: 'text-right tabular-nums',
     headerClassName: 'text-right',
@@ -633,21 +657,21 @@ const diskColumns: DataTableColumn<StorageDisk>[] = [
   },
 ];
 
-const datasetColumns: DataTableColumn<StorageDataset>[] = [
+const datasetColumns = (t: TFunction): DataTableColumn<StorageDataset>[] => [
   {
     id: 'id',
-    header: 'Dataset',
+    header: t('datasets.dataset'),
     accessorFn: (d) => d.id,
     cell: (d) => <span className="font-mono text-xs">{d.id}</span>,
   },
   {
     id: 'type',
-    header: 'Type',
+    header: t('datasets.type'),
     cell: (d) => <Badge variant="outline" className="text-xs font-normal">{d.type}</Badge>,
   },
   {
     id: 'used',
-    header: 'Used',
+    header: t('datasets.used'),
     accessorFn: (d) => d.used_bytes,
     className: 'text-right tabular-nums',
     headerClassName: 'text-right',
@@ -655,7 +679,7 @@ const datasetColumns: DataTableColumn<StorageDataset>[] = [
   },
   {
     id: 'usage',
-    header: 'Usage',
+    header: t('datasets.usage'),
     sortable: false,
     className: 'w-[160px]',
     cell: (d) => {
@@ -666,7 +690,7 @@ const datasetColumns: DataTableColumn<StorageDataset>[] = [
   },
   {
     id: 'available',
-    header: 'Available',
+    header: t('datasets.available'),
     accessorFn: (d) => d.available_bytes,
     className: 'text-right tabular-nums',
     headerClassName: 'text-right',
@@ -674,12 +698,12 @@ const datasetColumns: DataTableColumn<StorageDataset>[] = [
   },
   {
     id: 'flags',
-    header: 'Flags',
+    header: t('datasets.flags'),
     sortable: false,
     cell: (d) => (
       <div className="flex gap-1">
-        {d.encrypted && <Badge variant="outline" className="text-xs font-normal">Encrypted</Badge>}
-        {d.locked && <Badge variant="destructive" className="text-xs">Locked</Badge>}
+        {d.encrypted && <Badge variant="outline" className="text-xs font-normal">{t('datasets.encrypted')}</Badge>}
+        {d.locked && <Badge variant="destructive" className="text-xs">{t('datasets.locked')}</Badge>}
         {!d.encrypted && !d.locked && <span className="text-xs text-muted-foreground">-</span>}
       </div>
     ),
@@ -688,12 +712,13 @@ const datasetColumns: DataTableColumn<StorageDataset>[] = [
 
 /** Datasets table with a trailing Snapshot action column. */
 function datasetColumnsWithActions(
+  t: TFunction,
   canWrite: boolean,
   disabledReason: string | undefined,
   onSnapshot: (d: StorageDataset) => void,
 ): DataTableColumn<StorageDataset>[] {
   return [
-    ...datasetColumns,
+    ...datasetColumns(t),
     {
       id: 'actions',
       header: '',
@@ -707,7 +732,7 @@ function datasetColumnsWithActions(
           title={disabledReason}
           onClick={() => onSnapshot(d)}
         >
-          <Camera className="mr-1.5 h-3.5 w-3.5" /> Snapshot
+          <Camera className="mr-1.5 h-3.5 w-3.5" /> {t('datasets.snapshotAction')}
         </Button>
       ),
     },
@@ -716,6 +741,7 @@ function datasetColumnsWithActions(
 
 /** Snapshots table with a trailing Delete action. */
 function snapshotColumns(
+  t: TFunction,
   canWrite: boolean,
   disabledReason: string | undefined,
   onDelete: (s: StorageSnapshot) => void,
@@ -723,19 +749,19 @@ function snapshotColumns(
   return [
     {
       id: 'id',
-      header: 'Snapshot',
+      header: t('snapshots.snapshot'),
       accessorFn: (sn) => sn.id,
       cell: (sn) => <span className="font-mono text-xs">{sn.id}</span>,
     },
     {
       id: 'dataset',
-      header: 'Dataset',
+      header: t('snapshots.dataset'),
       accessorFn: (sn) => sn.dataset,
       cell: (sn) => <span className="font-mono text-xs text-muted-foreground">{sn.dataset}</span>,
     },
     {
       id: 'used',
-      header: 'Referenced',
+      header: t('snapshots.referenced'),
       accessorFn: (sn) => sn.used_bytes,
       className: 'text-right tabular-nums',
       headerClassName: 'text-right',
@@ -743,7 +769,7 @@ function snapshotColumns(
     },
     {
       id: 'created',
-      header: 'Created',
+      header: t('snapshots.created'),
       accessorFn: (sn) => sn.created_at ?? '',
       cell: (sn) => <span className="text-xs text-muted-foreground">{sn.created_at ?? '-'}</span>,
     },
@@ -761,7 +787,7 @@ function snapshotColumns(
           title={disabledReason}
           onClick={() => onDelete(sn)}
         >
-          <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
+          <Trash2 className="mr-1.5 h-3.5 w-3.5" /> {t('snapshots.deleteAction')}
         </Button>
       ),
     },
@@ -824,6 +850,7 @@ function PoolCard({
   onScrub: () => void;
   onNewDataset: () => void;
 }) {
+  const { t } = useTranslation('storage');
   const scrub = p.scrub;
   const scrubClean = scrub && (scrub.errors ?? 0) === 0 && scrub.state === 'FINISHED';
   const scrubbing = scrub?.state === 'SCANNING';
@@ -840,19 +867,24 @@ function PoolCard({
         </div>
 
         <div className="flex items-center gap-4">
-          <HealthRing value={p.usage_percent} tone={fillTone(p.usage_percent)} size="md" label="used" />
+          <HealthRing value={p.usage_percent} tone={fillTone(p.usage_percent)} size="md" label={t('capacity.used')} />
           <div className="min-w-0 flex-1 space-y-2">
             <div className="text-xs text-muted-foreground">
-              <span className="text-foreground font-medium">{formatBytes(p.allocated)}</span> used ·{' '}
-              {formatBytes(p.free)} free
-              <div className="opacity-70">of {formatBytes(p.size)} total</div>
+              <Trans
+                i18nKey="pool.usedFree"
+                t={t}
+                values={{ used: formatBytes(p.allocated), free: formatBytes(p.free) }}
+                components={{ strong: <span className="text-foreground font-medium" /> }}
+              />
+              <div className="opacity-70">{t('pool.ofTotal', { total: formatBytes(p.size) })}</div>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                {p.redundancy.type}{p.redundancy.width > 1 ? ` · ${p.redundancy.width}-wide` : ''}
+                {p.redundancy.type}
+                {p.redundancy.width > 1 ? ` · ${t('pool.width', { width: p.redundancy.width })}` : ''}
               </span>
-              {p.fragmentation && <span>frag {p.fragmentation}</span>}
+              {p.fragmentation && <span>{t('pool.fragmentation', { value: p.fragmentation })}</span>}
             </div>
           </div>
         </div>
@@ -861,12 +893,12 @@ function PoolCard({
           <Activity className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           {scrub && scrub.state ? (
             <span className={scrubClean ? 'text-success' : 'text-warning'}>
-              Scrub {scrub.state.toLowerCase()}
-              {scrub.finished_at_ms ? ` ${timeAgo(scrub.finished_at_ms)}` : ''}
-              {scrub.errors != null ? ` · ${scrub.errors} error${scrub.errors === 1 ? '' : 's'}` : ''}
+              {t('pool.scrubState', { state: scrubStateLabel(t, scrub.state) })}
+              {scrub.finished_at_ms ? ` ${timeAgo(t, scrub.finished_at_ms)}` : ''}
+              {scrub.errors != null ? ` · ${t('pool.scrubErrors', { count: scrub.errors })}` : ''}
             </span>
           ) : (
-            <span className="text-muted-foreground">No scrub history</span>
+            <span className="text-muted-foreground">{t('pool.noScrub')}</span>
           )}
         </div>
 
@@ -876,10 +908,10 @@ function PoolCard({
             variant="outline"
             className="flex-1"
             disabled={!canWrite || scrubbing}
-            title={!canWrite ? writeDisabledReason : scrubbing ? 'A scrub is already running' : undefined}
+            title={!canWrite ? writeDisabledReason : scrubbing ? t('pool.scrubRunning') : undefined}
             onClick={onScrub}
           >
-            <Play className="mr-1.5 h-3.5 w-3.5" /> {scrubbing ? 'Scrubbing…' : 'Scrub'}
+            <Play className="mr-1.5 h-3.5 w-3.5" /> {scrubbing ? t('pool.scrubbing') : t('pool.scrub')}
           </Button>
           <Button
             size="sm"
@@ -888,7 +920,7 @@ function PoolCard({
             title={writeDisabledReason}
             onClick={onNewDataset}
           >
-            <Layers className="mr-1.5 h-3.5 w-3.5" /> Dataset
+            <Layers className="mr-1.5 h-3.5 w-3.5" /> {t('pool.dataset')}
           </Button>
         </div>
       </CardContent>

@@ -63,8 +63,11 @@ def test_known_honest_write_grades_are_locked() -> None:
         # The grade is PARTIAL rather than LIVE_VALIDATED because no cassette
         # was persisted. This lock exists so the correction cannot drift back.
         "truenas": WriteMaturity.PARTIAL,
-        # writes intentionally off:
-        "proxmox": WriteMaturity.DISABLED,
+        # proxmox was DISABLED until 2026-11-12, which the badge rendered as
+        # "Writes are intentionally disabled" while the Proxmox pages staged and
+        # applied VM power, snapshot and config writes. Writes run; none is proven
+        # on hardware. This lock keeps the false label from coming back.
+        "proxmox": WriteMaturity.MOCK_TESTED,
         # experimental adapters — writes experimental:
         "pfsense": WriteMaturity.EXPERIMENTAL,
         "openwrt": WriteMaturity.EXPERIMENTAL,

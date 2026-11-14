@@ -13,7 +13,8 @@
       "untitled": "New conversation",
       "empty": "No conversations yet",
       "loadError": "Failed to load conversation",
-      "retry": "Retry"
+      "retry": "Retry",
+      "showList": "Conversations"
     },
     "provider": {
       "label": "Provider",
@@ -38,7 +39,7 @@
     },
     "input": {
       "placeholder": "Ask about your network...",
-      "hint": "Press Enter to send · Shift+Enter for new line"
+      "hint": "Press Enter to send"
     },
     "deleteDialog": {
       "title": "Delete conversation?",

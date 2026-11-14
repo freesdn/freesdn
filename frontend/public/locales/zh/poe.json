@@ -136,6 +136,11 @@
         "title": "暂无计划",
         "description": "创建计划以自动控制 PoE 供电",
         "notSupported": "此设备不支持 PoE 计划"
+      },
+      "confirmDelete": {
+        "title": "删除 PoE 计划“{{name}}”？",
+        "body": "FreeSDN 将不再按此计划开关这些端口。每个端口保持当前的供电状态，因此被该计划关闭的端口会保持关闭，直到你将其打开。",
+        "action": "删除计划"
       }
     },
     "portDialog": {

@@ -39,6 +39,7 @@ from app.models.devices import (
     DeviceType,
 )
 from app.services.adapter_factory import get_adapter
+from app.services.device_writes import device_action, within, write_device_config
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -194,6 +195,13 @@ async def _get_adapter_for_device(device: Device) -> Any:
     ctrl = device.controller
     if not ctrl:
         raise HTTPException(404, detail="Device has no controller")
+
+    # A page's live read waits briefly for the controller's turn, or is answered
+    # with its last response (app/services/device_live_read.py).
+    from app.core.device_slot import controller_slot_key
+    from app.services.device_live_read import take_device_turn
+
+    await take_device_turn(controller_slot_key(ctrl))
 
     cloud_kwargs: dict[str, Any] = {}
     if ctrl.connection_mode == "cloud":
@@ -454,10 +462,22 @@ async def update_poe_port(
 
     if omada_config:
         try:
-            async with adapter:
-                poe_result = await adapter.configure_switch_port(
-                    device.mac_address, port.port_number, omada_config
-                )
+            poe_result = await write_device_config(
+                session,
+                device,
+                actor_id=_user.id,
+                feature="switch.port.poe",
+                operation="update",
+                payload={"port": port.port_number, "config": omada_config},
+                perform=lambda: within(
+                    adapter,
+                    lambda: adapter.configure_switch_port(
+                        device.mac_address, port.port_number, omada_config
+                    ),
+                ),
+            )
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error("Failed to push PoE config to controller: %s", e, exc_info=True)
             raise HTTPException(502, detail="Controller error")
@@ -515,8 +535,18 @@ async def cycle_poe_port(
     assert_can_access_site(_user, device.site_id, detail="Port not found")
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            cycle_result = await adapter.cycle_poe_port(device.mac_address, port.port_number)
+        cycle_result = await device_action(
+            session,
+            device,
+            actor_id=_user.id,
+            action="cycle_poe_port",
+            parameters={"port": port.port_number},
+            perform=lambda: within(
+                adapter, lambda: adapter.cycle_poe_port(device.mac_address, port.port_number)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to cycle PoE port: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -572,8 +602,16 @@ async def bulk_update_poe(
                     if data.power_limit is not None:
                         omada_config["poePowerLimit"] = data.power_limit
                     if omada_config:
-                        bulk_result = await adapter.configure_switch_port(
-                            device.mac_address, port.port_number, omada_config
+                        bulk_result = await write_device_config(
+                            session,
+                            device,
+                            actor_id=_user.id,
+                            feature="switch.port.poe.bulk",
+                            operation="update",
+                            payload={"port": port.port_number, "config": omada_config},
+                            perform=lambda adapter=adapter, mac=device.mac_address, n=port.port_number, cfg=omada_config: (  # noqa: E501
+                                adapter.configure_switch_port(mac, n, cfg)
+                            ),
                         )
                         # CONV2-001: a non-throwing AdapterResult(success=False)
                         # must drop this device from the succeeded set (raises into

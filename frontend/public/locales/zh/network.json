@@ -96,7 +96,8 @@
       "saveChanges": "保存更改",
       "createNetwork": "创建网络",
       "deleting": "删除中…",
-      "deleteNetwork": "删除网络"
+      "deleteNetwork": "删除网络",
+      "menuFor": "{{ssid}} 的操作"
     },
     "security": {
       "modes": {
@@ -208,7 +209,20 @@
     },
     "toast": {
       "bulkDeleteTitle": "批量删除",
-      "bulkDeleteDescription": "为安全起见，请逐个删除网络。"
+      "bulkDeleteDescription": "为安全起见，请逐个删除网络。",
+      "controllerUnconfirmed": "控制器未确认删除",
+      "deleteUnconfirmed": "{{name}} 已从 FreeSDN 中移除，但其控制器未确认删除，该 SSID 可能仍在广播。请检查控制器。原因：{{warning}}",
+      "deleteKept": "由于控制器未确认删除，FreeSDN 保留了 {{name}}。原因：{{warning}}",
+      "noReason": "未提供原因"
+    },
+    "confirm": {
+      "bulkDelete": {
+        "title_one": "删除 {{count}} 个 WiFi 网络？",
+        "title_other": "删除 {{count}} 个 WiFi 网络？",
+        "body": "每个网络都会立即从其控制器中删除（不经过暂存），其上的所有客户端都会断开连接。即使控制器拒绝删除，FreeSDN 也会删除其记录，此时该网络会保留在该控制器上。",
+        "action_one": "删除网络",
+        "action_other": "删除网络"
+      }
     }
   },
   "NetworkClientsPage": {
@@ -315,6 +329,12 @@
       "unblockDescription": "允许“{{name}}”重新连接到网络。",
       "blockDescription": "禁止“{{name}}”访问网络。该客户端将立即断开连接。",
       "processing": "处理中…"
+    },
+    "bulk": {
+      "blockTitle_one": "要阻止 {{count}} 个客户端吗？",
+      "blockTitle_other": "要阻止 {{count}} 个客户端吗？",
+      "blockDescription": "控制器会立即断开每个客户端，在解除阻止之前它们无法重新连接。",
+      "blockConfirm": "阻止客户端"
     }
   },
   "NetworkDashboardPage": {
@@ -413,7 +433,8 @@
       "addVlan": "添加 VLAN",
       "export": "导出",
       "edit": "编辑",
-      "delete": "删除"
+      "delete": "删除",
+      "menuFor": "VLAN {{vlanId}} {{name}} 的操作"
     },
     "columns": {
       "vlanId": "VLAN ID",
@@ -499,8 +520,27 @@
       "operationFailed": "操作失败",
       "distributeSuccess": "VLAN 分发成功。",
       "distributeFailed": "VLAN 分发失败：{{error}}",
+      "distributePartial": "已在 {{succeeded}} 个控制器上创建；{{failed}} 个拒绝：{{error}}",
       "bulkDeleteTitle": "批量删除",
-      "bulkDeleteMessage": "为安全起见，请逐个删除 VLAN。"
+      "bulkDeleteMessage": "为安全起见，请逐个删除 VLAN。",
+      "controllerUnconfirmed": "控制器未确认删除",
+      "deleteUnconfirmed": "VLAN {{name}} 已从 FreeSDN 中移除，但其控制器未确认删除，它可能仍存在于控制器上。请检查控制器。原因：{{warning}}",
+      "deleteKept": "由于控制器未确认删除，FreeSDN 保留了 VLAN {{name}}。原因：{{warning}}",
+      "noReason": "未提供原因"
+    },
+    "confirm": {
+      "bulkDelete": {
+        "title_one": "删除 {{count}} 个 VLAN？",
+        "title_other": "删除 {{count}} 个 VLAN？",
+        "body": "每个 VLAN 都会立即从其控制器中删除（不经过暂存），使用它的端口和设备将失去该 VLAN。即使控制器拒绝删除，FreeSDN 也会删除其记录，此时该 VLAN 会保留在该控制器上。",
+        "action_one": "删除 VLAN",
+        "action_other": "删除 VLAN"
+      },
+      "syncAll": {
+        "title": "将缺失的 VLAN 复制到其他控制器？",
+        "body": "FreeSDN 会立即在缺少该 VLAN 的控制器上创建每个缺失的 VLAN，内容复制自已有该 VLAN 的控制器。设置不同的 VLAN 保持不变。Omada 以外的控制器只会收到 VLAN ID 和名称，不包括子网、网关或 DHCP 设置。",
+        "action": "复制 VLAN"
+      }
     }
   }
 }
