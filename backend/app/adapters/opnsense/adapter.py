@@ -917,7 +917,9 @@ class OPNsenseAdapter(BaseAdapter):
     # Firewall Rules (CRUD)
     # ═══════════════════════════════════════════════════════════════════════
 
-    async def get_firewall_rules(self, search: str = "") -> AdapterResult:
+    async def get_firewall_rules(
+        self, search: str = "", *, legacy_fallback: bool = True
+    ) -> AdapterResult:
         """Return list of NormalizedFirewallRule.
 
         Strategy:
@@ -926,6 +928,13 @@ class OPNsenseAdapter(BaseAdapter):
         2. If that returns zero rows, fall back to downloading config.xml
            and parsing the legacy ``<filter><rule>`` elements that virtually
            every OPNsense / pfSense box still uses.
+
+        ``legacy_fallback=False`` skips step 2 and says so
+        (``legacy_skipped: True``, no rules). The periodic gateway sync uses it
+        to download the whole config.xml at most every few hours instead of on
+        every sync: on a box whose rules all live in config.xml the MVC API is
+        ALWAYS empty, so the fallback used to fetch the full configuration
+        every five minutes on the 2026-11 soak.
         """
         try:
             raw = await self._api.get_firewall_rules(search)
@@ -934,14 +943,18 @@ class OPNsenseAdapter(BaseAdapter):
             if mvc_rows:
                 # MVC filter rules present — use them directly
                 rules = self._normalize_mvc_rules(mvc_rows)
-            else:
-                # Fall back to legacy config.xml rules
-                logger.info(
-                    "MVC filter module returned 0 rules — falling back to config.xml legacy rules"
-                )
-                rules = await self._get_legacy_firewall_rules(search)
+                return AdapterResult.ok(data={"rules": rules, "count": len(rules), "source": "mvc"})
+            if not legacy_fallback:
+                return AdapterResult.ok(data={"rules": [], "count": 0, "legacy_skipped": True})
+            # Fall back to legacy config.xml rules
+            logger.info(
+                "MVC filter module returned 0 rules — falling back to config.xml legacy rules"
+            )
+            rules = await self._get_legacy_firewall_rules(search)
 
-            return AdapterResult.ok(data={"rules": rules, "count": len(rules)})
+            return AdapterResult.ok(
+                data={"rules": rules, "count": len(rules), "source": "config_xml"}
+            )
         except Exception as exc:
             logger.exception("OPNsense adapter operation failed")
             return AdapterResult.fail(type(exc).__name__)
@@ -2183,6 +2196,14 @@ class OPNsenseAdapter(BaseAdapter):
         """Create WireGuard server and/or peer from tunnel config."""
         server_cfg = config.get("server", {})
         peer_cfg = config.get("peer", {})
+        if not server_cfg and not peer_cfg:
+            # Tunnel templates are free-form, so a config with neither section is
+            # common. This used to fall through to "WireGuard tunnel configured"
+            # with nothing sent, and the tunnel was marked active on that answer.
+            return AdapterResult.fail(
+                "The tunnel config has no WireGuard server or peer section, so nothing was pushed",
+                error_code="MISSING_CONFIG",
+            )
 
         results: dict[str, Any] = {}
         errors: list[str] = []

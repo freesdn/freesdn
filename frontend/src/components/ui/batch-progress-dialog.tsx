@@ -36,13 +36,13 @@ interface BatchProgressDialogProps {
 const statusIcon = (status: BatchDeviceStatus['status']) => {
   switch (status) {
     case 'success':
-      return <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />;
+      return <CheckCircle className="h-4 w-4 text-success shrink-0" />;
     case 'running':
-      return <Loader2 className="h-4 w-4 text-blue-500 animate-spin shrink-0" />;
+      return <Loader2 className="h-4 w-4 text-info animate-spin shrink-0" />;
     case 'failed':
-      return <XCircle className="h-4 w-4 text-red-500 shrink-0" />;
+      return <XCircle className="h-4 w-4 text-destructive shrink-0" />;
     case 'skipped':
-      return <Clock className="h-4 w-4 text-yellow-500 shrink-0" />;
+      return <Clock className="h-4 w-4 text-warning shrink-0" />;
     default:
       return <Clock className="h-4 w-4 text-muted-foreground shrink-0" />;
   }
@@ -88,18 +88,18 @@ export function BatchProgressDialog({
 
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-green-500" />
+              <span className="h-2 w-2 rounded-full bg-success" />
               {t('BatchProgressDialog.stats.success', { count: completed })}
             </span>
             {running > 0 && (
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-info animate-pulse" />
                 {t('BatchProgressDialog.stats.running', { count: running })}
               </span>
             )}
             {failed > 0 && (
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-red-500" />
+                <span className="h-2 w-2 rounded-full bg-destructive" />
                 {t('BatchProgressDialog.stats.failed', { count: failed })}
               </span>
             )}

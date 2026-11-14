@@ -8,6 +8,7 @@ import { useUIPaletteStore } from '@/stores/sidebarStore';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useGlobalShortcuts } from '@/hooks/useGlobalShortcuts';
 import { Toaster } from '@/components/ui/toast';
+import { ConfirmProvider } from '@/components/ui/confirm-dialog';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { CommandPalette } from '@/components/command-palette';
 import { ShortcutsCheatsheet } from '@/components/ui/shortcuts-cheatsheet';
@@ -186,6 +187,7 @@ function App() {
   return (
     <ThemeProvider>
       <Toaster>
+      <ConfirmProvider>
         <DemoModeBanner />
         <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>}>
         <Routes>
@@ -1047,6 +1049,7 @@ function App() {
       {isAuthenticated && (
         <ShortcutsCheatsheet open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       )}
+      </ConfirmProvider>
       </Toaster>
     </ThemeProvider>
   );

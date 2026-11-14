@@ -879,10 +879,16 @@ async def delete_profile(
 async def apply_profile_to_device(
     profile_id: UUID,
     device_id: UUID,
+    force: bool = False,
     session: AsyncSession = Depends(get_session),
     user: Any = Depends(get_current_active_user),
 ) -> dict[str, Any]:
-    """Apply a provisioning profile to an existing device."""
+    """Apply a provisioning profile to an existing device.
+
+    Writes the device's configuration, so like every device write it is refused
+    while read-only mode is on and needs ``force=true``; it is recorded in the
+    staging ledger (``direct.ztp.profile_apply``).
+    """
     _require_admin(user)
     org_id = _org_id(user)
 
@@ -918,7 +924,7 @@ async def apply_profile_to_device(
     _validate_site_grant(user, device.site_id, detail="Device not found")
 
     svc = ProvisioningProfileService(session)
-    result = await svc.apply_profile(device, profile)
+    result = await svc.apply_profile(device, profile, force=force, actor_id=user.id)
     await session.commit()
 
     if not result.get("success"):

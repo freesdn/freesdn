@@ -33,5 +33,17 @@
     "positive": "Debe ser un número positivo",
     "url": "Por favor, ingrese una URL válida",
     "date": "Por favor, ingrese una fecha válida"
+  },
+  "api": {
+    "generic": "Se produjo un error",
+    "unreachable": "No se pudo contactar con el servidor de FreeSDN. Compruebe su conexión e inténtelo de nuevo.",
+    "timeout": "El servidor tardó demasiado en responder. Inténtelo de nuevo.",
+    "cancelled": "La solicitud se canceló.",
+    "payloadTooLarge": "La solicitud es demasiado grande para que el servidor la acepte.",
+    "rateLimitedRetry": "Demasiadas solicitudes. Inténtelo de nuevo en {{seconds}} s.",
+    "badGateway": "La API de FreeSDN no responde (HTTP 502). Puede que se esté reiniciando; inténtelo de nuevo en breve.",
+    "gatewayTimeout": "La API de FreeSDN no respondió a tiempo (HTTP 504).",
+    "status": "El servidor devolvió un error (HTTP {{status}}).",
+    "withRequestId": "{{message}} (ID de solicitud {{requestId}})"
   }
 }

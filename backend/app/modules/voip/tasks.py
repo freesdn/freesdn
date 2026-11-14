@@ -18,6 +18,7 @@ Background tasks for VoIP operations:
 import contextlib
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from celery import shared_task
@@ -32,13 +33,47 @@ def _get_adapter(vendor: str, host: str, username: str, password: str, **kwargs)
     return adapter_registry.create_adapter(vendor, host, username, password, **kwargs)
 
 
-def _phone_creds(phone) -> tuple[str, str]:
-    """Extract adapter credentials from phone settings JSONB."""
+def _phone_creds(phone) -> tuple[str, str] | None:
+    """The phone's saved admin login, or None when none is saved.
+
+    ``VoIPService.save_phone_credentials`` stores ``web_username`` and a
+    Fernet-encrypted ``web_password``. These tasks used to read ``username`` /
+    ``password``, which nothing writes, and fall back to ``admin``/``admin``, so
+    every poll tried the factory default against the phone instead of the login
+    the operator saved. Rows written before that change may carry the plain
+    keys, so they are still honoured. A default is never guessed: a wrong guess
+    every five minutes is how a phone locks its admin account.
+    """
+    from app.core.crypto import decrypt_credential, is_encrypted
+
     settings = phone.settings or {}
-    return (
-        settings.get("username", "admin"),
-        settings.get("password", "admin"),
-    )
+    password = settings.get("web_password") or settings.get("password")
+    if not password:
+        return None
+    if is_encrypted(password):
+        password = decrypt_credential(password)
+    username = settings.get("web_username") or settings.get("username") or "admin"
+    return username, password
+
+
+#: Phones an operator has adopted. Onboarding moves a phone to "onboarding" and
+#: nothing moves it on to "managed" (mark_phone_managed has no caller, and under
+#: ADAPTER_READ_ONLY a phone cannot be provisioned at all), so polling only
+#: "managed" phones polled none: status, SIP registration and uptime froze at
+#: whatever the discovery scan saw.
+_POLLED_LIFECYCLE_STATES = ("managed", "onboarding")
+
+
+async def _adopted_phones(service, site_id: str | None, limit: int) -> list:
+    phones: list = []
+    for state in _POLLED_LIFECYCLE_STATES:
+        batch, _ = await service.list_phones(
+            site_id=UUID(site_id) if site_id else None,
+            lifecycle_state=state,
+            limit=limit,
+        )
+        phones.extend(batch)
+    return phones
 
 
 async def _sync_phone_shadow_status(
@@ -129,13 +164,43 @@ def _reset_phone_fail_count(phone) -> None:
         flag_modified(phone, "settings")
 
 
-def _pbx_creds(pbx) -> tuple[str, str]:
-    """Extract adapter credentials from PBX settings JSONB."""
-    settings = pbx.settings or {}
-    return (
-        settings.get("api_username", ""),
-        settings.get("api_password", ""),
-    )
+def _pbx_adapter(pbx):
+    """Build the adapter for a saved PBX the same way the UI and staging do.
+
+    These tasks used to read ``settings.api_username`` / ``settings.api_password``
+    and hand them to the generic registry. The password moved to the encrypted
+    ``web_password_enc`` column long ago, so every task logged in with an empty
+    password, and no AMI or ARI login was ever passed, so the AMI fallback that
+    extension listing and state polling depend on could not connect either.
+
+    ``build_freepbx_adapter_from_pbx`` is the one place that knows the column
+    precedence, the AMI/ARI logins, OAuth2 vs web session and the TLS
+    acknowledgement gate; using it here means a task authenticates exactly as an
+    operator's click does. Returns ``None`` for PBX types it cannot build.
+    """
+    if (pbx.pbx_type or "freepbx") not in ("freepbx", "asterisk"):
+        return None
+    from app.modules.voip.adapter_factory import build_freepbx_adapter_from_pbx
+
+    return build_freepbx_adapter_from_pbx(pbx)
+
+
+def _result_list(result) -> list:
+    """Unwrap an ``AdapterResult`` (or a bare list) into a list of records.
+
+    The FreePBX adapter returns ``AdapterResult`` envelopes. Iterating the
+    envelope itself, as ``sync_extensions`` did, raises before any record is
+    read; a failed result is an empty batch, not an exception.
+    """
+    if result is None:
+        return []
+    if hasattr(result, "success"):
+        if not result.success:
+            return []
+        result = result.data
+    if isinstance(result, list):
+        return result
+    return []
 
 
 # =============================================================================
@@ -165,22 +230,25 @@ def sync_phones(self, site_id: str | None = None) -> dict:
             from app.modules.voip.service import VoIPService
 
             service = VoIPService(session)
-            phones, _ = await service.list_phones(
-                site_id=UUID(site_id) if site_id else None,
-                lifecycle_state="managed",
-                limit=1000,
-            )
+            phones = await _adopted_phones(service, site_id, limit=1000)
 
             synced = 0
             errors = 0
+            no_credentials = 0
 
             # Group phones by IP for batch probes  (one adapter per phone)
             for phone in phones:
                 if not phone.ip_address:
                     continue
+                creds = _phone_creds(phone)
+                if creds is None:
+                    # Not knowing the login says nothing about the phone, so
+                    # leave its status alone rather than counting a failure.
+                    no_credentials += 1
+                    continue
+                uname, pwd = creds
                 try:
                     vendor = (phone.vendor or "grandstream").lower()
-                    uname, pwd = _phone_creds(phone)
                     adapter = _get_adapter(
                         vendor,
                         host=phone.ip_address,
@@ -251,6 +319,7 @@ def sync_phones(self, site_id: str | None = None) -> dict:
                 "status": "success",
                 "synced": synced,
                 "errors": errors,
+                "no_credentials": no_credentials,
                 "total": len(phones),
             }
 
@@ -262,84 +331,223 @@ def sync_phones(self, site_id: str | None = None) -> dict:
 # =============================================================================
 
 
+# Bounds for one CDR sync of one PBX. The first sync of a PBX imports at most
+# the last CDR_BACKFILL_DAYS; a PBX that fell behind catches up at most
+# CDR_MAX_DAYS_PER_RUN days per run; each day is one bounded request.
+CDR_BACKFILL_DAYS = 7
+CDR_MAX_DAYS_PER_RUN = 8
+CDR_MAX_RECORDS_PER_DAY = 2000
+
+
+def _call_direction(record: dict, extensions: set[str]) -> str:
+    """inbound / outbound / internal from the PBX's own extension numbers."""
+    src = str(record.get("cnum") or record.get("src") or "")
+    dst = str(record.get("dst") or "")
+    if src in extensions and dst in extensions:
+        return "internal"
+    if src in extensions:
+        return "outbound"
+    return "inbound"
+
+
+def _record_cdr_state(pbx, **state) -> None:
+    """Keep the last sync outcome on the PBX row, where the API returns it.
+
+    Without it a PBX that cannot provide call history and a PBX on which nobody
+    made a call look identical: an empty Call History page.
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+
+    settings = dict(pbx.settings or {})
+    settings["cdr_sync"] = {"last_run_at": datetime.now(UTC).isoformat(), **state}
+    pbx.settings = settings
+    flag_modified(pbx, "settings")
+
+
+async def _sync_cdr_for_pbx(pbx_id: str) -> dict:
+    """Import new call detail records for one PBX into voip.call_logs.
+
+    Incremental: resumes from the newest stored call (that day is re-read, and
+    ``create_call_log`` skips a ``unique_id`` it already has, so re-reads and
+    retries never duplicate). Bounded by the constants above.
+    """
+    from sqlalchemy import func, select
+
+    from app.db.session import celery_session_factory
+    from app.modules.voip.models import CallLog, Extension
+    from app.modules.voip.service import VoIPService
+
+    async with celery_session_factory() as session:
+        service = VoIPService(session)
+        try:
+            pbx = await service.get_pbx(UUID(pbx_id))
+        except Exception:
+            return {"status": "error", "reason": f"PBX {pbx_id} not found"}
+
+        adapter = _pbx_adapter(pbx)
+        if adapter is None:
+            return {"status": "skipped", "reason": f"no adapter for {pbx.pbx_type}"}
+        # Only the OAuth2 Admin API serves CDR. Do not log in to a PBX just to
+        # be told so every fifteen minutes.
+        has_api_app = getattr(pbx, "api_client_id", None) and getattr(
+            pbx, "api_client_secret_enc", None
+        )
+        if not has_api_app:
+            reason = (
+                "This PBX is connected with a web session; call history needs a "
+                "FreePBX Admin API (OAuth2) application on the connection"
+            )
+            _record_cdr_state(pbx, status="unsupported", imported=0, error=reason)
+            await session.commit()
+            return {"status": "unsupported", "pbx_id": pbx_id, "reason": reason}
+
+        newest = await session.scalar(
+            select(func.max(CallLog.start_time)).where(CallLog.pbx_id == pbx.id)
+        )
+        today = datetime.now(UTC).date()
+        first_day = newest.date() if newest else today - timedelta(days=CDR_BACKFILL_DAYS)
+        days = [
+            first_day + timedelta(days=i)
+            for i in range(CDR_MAX_DAYS_PER_RUN)
+            if first_day + timedelta(days=i) <= today
+        ]
+        extensions = {
+            str(n)
+            for n in (
+                await session.execute(
+                    select(Extension.extension_number).where(
+                        Extension.pbx_id == pbx.id, Extension.deleted_at.is_(None)
+                    )
+                )
+            ).scalars()
+        }
+
+        imported = 0
+        truncated: list[str] = []
+        status, error = "ok", None
+        # One request group per PBX across every poller and process
+        # (app/core/device_slot.py): a PBX another poller or a page is reading is
+        # left to the next run, and its last sync outcome stands.
+        from app.core.device_poll import device_poll
+        from app.core.device_slot import pbx_slot_key
+
+        async with device_poll(
+            slot_key=pbx_slot_key(pbx), breaker=None, breaker_key=None, holder="CDR sync"
+        ) as turn:
+            if turn.skipped:
+                return {"status": "skipped", "pbx_id": pbx_id, "reason": turn.reason}
+            try:
+                async with adapter:
+                    for day in days:
+                        stamp = day.isoformat()
+                        result = await adapter.search_call_logs(
+                            start_date=stamp, end_date=stamp, limit=CDR_MAX_RECORDS_PER_DAY
+                        )
+                        if not getattr(result, "success", False):
+                            code = getattr(result, "error_code", None)
+                            status = "unsupported" if code == "NOT_SUPPORTED" else "error"
+                            error = str(getattr(result, "error", "") or "CDR read failed")[:300]
+                            break
+                        rows = [r for r in (result.data or []) if isinstance(r, dict)]
+                        if len(rows) >= CDR_MAX_RECORDS_PER_DAY:
+                            truncated.append(stamp)
+                        for record in rows:
+                            record = dict(record)
+                            record.setdefault("direction", _call_direction(record, extensions))
+                            call = await service.create_call_log(pbx_id=pbx.id, **record)
+                            if call in session.new:
+                                imported += 1
+                        # Flush per day so the next day's dedupe sees these rows.
+                        await session.flush()
+            except Exception as exc:
+                logger.warning("CDR sync failed for PBX %s: %s", pbx_id, type(exc).__name__)
+                status, error = "error", f"CDR sync failed ({type(exc).__name__})"
+                turn.failed(exc)
+
+        _record_cdr_state(
+            pbx,
+            status=status,
+            imported=imported,
+            error=error,
+            through=days[-1].isoformat() if days else None,
+            truncated_days=truncated,
+        )
+        await session.commit()
+        return {"status": status, "pbx_id": pbx_id, "new_records": imported, "error": error}
+
+
 @shared_task(
     bind=True,
     name="voip.sync_cdr",
     max_retries=3,
     default_retry_delay=120,
+    soft_time_limit=540,
+    time_limit=600,
 )
 def sync_cdr(self, pbx_id: str) -> dict:
-    """
-    Sync Call Detail Records from a PBX.
+    """Import new call detail records from one PBX (see ``_sync_cdr_for_pbx``).
 
-    Pulls CDR from FreePBX REST API and inserts new records
-    into the FreeSDN call_log table.
+    One run per PBX at a time: two overlapping runs would both read the same
+    day before either stored it.
     """
     import asyncio
 
-    async def run_cdr_sync():
+    from app.core.celery_app import acquire_solo_lock, release_solo_lock
+
+    lock = f"voip.sync_cdr:{pbx_id}"
+    token = acquire_solo_lock(lock, ttl_seconds=600)
+    if not token:
+        return {"status": "skipped", "pbx_id": pbx_id, "reason": "already_running"}
+    try:
+        return asyncio.run(_sync_cdr_for_pbx(pbx_id))
+    finally:
+        release_solo_lock(lock, token)
+
+
+@shared_task(name="voip.sync_all_cdr", soft_time_limit=60, time_limit=90)
+def sync_all_cdr() -> dict:
+    """Beat entry: queue a CDR sync for every active FreePBX/Asterisk PBX.
+
+    ``voip.sync_cdr`` was registered and never scheduled, so stored call history
+    (the Call History page and its stats) stayed empty on every install.
+    """
+    import asyncio
+
+    async def _pbx_ids() -> list[str]:
+        from sqlalchemy import select
+
         from app.db.session import celery_session_factory
+        from app.models.core import Site
+        from app.modules.enablement import is_module_explicitly_disabled
+        from app.modules.voip.models import PBX
 
         async with celery_session_factory() as session:
-            from app.modules.voip.service import VoIPService
-
-            service = VoIPService(session)
-
-            try:
-                pbx = await service.get_pbx(UUID(pbx_id))
-            except Exception:
-                return {"status": "error", "reason": f"PBX {pbx_id} not found"}
-
-            # Create adapter from PBX settings
-            api_user, api_pass = _pbx_creds(pbx)
-            adapter = _get_adapter(
-                pbx.pbx_type or "freepbx",
-                host=pbx.ip_address,
-                username=api_user,
-                password=api_pass,
-            )
-
-            new_records = 0
-            try:
-                async with adapter:
-                    await adapter.discover_devices()
-                    # For PBX adapters, CDR comes from a dedicated method.
-                    if hasattr(adapter, "search_call_logs"):
-                        # The adapter expects ``start_date`` (YYYY-MM-DD), not
-                        # ``start_time``, and returns an AdapterResult envelope —
-                        # both were wrong here, so every sync errored before it
-                        # could reach the (previously missing) create_call_log.
-                        since = pbx.last_sync_at
-                        cdr_result = await adapter.search_call_logs(
-                            start_date=since.strftime("%Y-%m-%d") if since else None,
-                        )
-                        # Tolerate both the AdapterResult envelope and a bare list.
-                        if hasattr(cdr_result, "data"):
-                            records = (
-                                cdr_result.data if getattr(cdr_result, "success", True) else []
-                            )
-                        else:
-                            records = cdr_result
-                        for record in records or []:
-                            if isinstance(record, dict):
-                                await service.create_call_log(pbx_id=UUID(pbx_id), **record)
-                                new_records += 1
-            except Exception as exc:
-                logger.warning("CDR sync failed for PBX %s: %s", pbx_id, exc)
-                return {
-                    "status": "partial",
-                    "pbx_id": pbx_id,
-                    "error": f"CDR sync failed ({type(exc).__name__})",
-                }
-
-            await session.commit()
-            return {
-                "status": "success",
-                "pbx_id": pbx_id,
-                "new_records": new_records,
+            rows = (
+                await session.execute(
+                    select(PBX.id, Site.organization_id)
+                    .join(Site, PBX.site_id == Site.id)
+                    .where(
+                        PBX.deleted_at.is_(None),
+                        PBX.is_active.is_(True),
+                        PBX.pbx_type.in_(("freepbx", "asterisk")),
+                        Site.alive(),
+                    )
+                )
+            ).all()
+            # An organization that switched the VoIP module off is not polled:
+            # disabling a module must stop its background work, not only its UI.
+            disabled = {
+                org
+                for org in {row[1] for row in rows}
+                if await is_module_explicitly_disabled(session, org, "voip")
             }
+            return [str(pbx_id) for pbx_id, org in rows if org not in disabled]
 
-    return asyncio.run(run_cdr_sync())
+    ids = asyncio.run(_pbx_ids())
+    for pbx_id in ids:
+        # No queue=: routes to "default", which every tier consumes.
+        sync_cdr.apply_async(args=[pbx_id], expires=840)
+    return {"dispatched": len(ids)}
 
 
 # =============================================================================
@@ -372,19 +580,15 @@ def sync_extensions(self, pbx_id: str) -> dict:
             except Exception:
                 return {"status": "error", "reason": f"PBX {pbx_id} not found"}
 
-            api_user, api_pass = _pbx_creds(pbx)
-            adapter = _get_adapter(
-                pbx.pbx_type or "freepbx",
-                host=pbx.ip_address,
-                username=api_user,
-                password=api_pass,
-            )
+            adapter = _pbx_adapter(pbx)
+            if adapter is None:
+                return {"status": "skipped", "reason": f"no adapter for {pbx.pbx_type}"}
 
             added = updated = removed = 0
             try:
                 async with adapter:
                     if hasattr(adapter, "list_extensions"):
-                        remote_exts = await adapter.list_extensions()
+                        remote_exts = _result_list(await adapter.list_extensions())
                         # Upsert each extension
                         db_exts, _ = await service.list_extensions(
                             pbx_id=UUID(pbx_id),
@@ -515,16 +719,16 @@ def poll_extension_states() -> dict:
             async def _poll_one(pbx) -> int:
                 async with sem:
                     try:
-                        api_user, api_pass = _pbx_creds(pbx)
-                        adapter = _get_adapter(
-                            pbx.pbx_type or "freepbx",
-                            host=pbx.ip_address,
-                            username=api_user,
-                            password=api_pass,
-                        )
+                        adapter = _pbx_adapter(pbx)
+                        if adapter is None:
+                            return 0
                         async with adapter:
-                            if hasattr(adapter, "get_extension_states"):
-                                states = await adapter.get_extension_states()
+                            # The adapter has no extension-state method of its
+                            # own (BaseAdapter stubs get_* to NOT_SUPPORTED);
+                            # the states come from its AMI client.
+                            ami = getattr(adapter, "_ami", None)
+                            if ami is not None and getattr(ami, "connected", False):
+                                states = await ami.get_extension_states()
                                 return len(states) if states else 0
                     except Exception as exc:
                         logger.debug("Extension poll failed for PBX %s: %s", pbx.id, exc)
@@ -566,8 +770,14 @@ def reboot_phone(self, phone_id: str) -> dict:
             if not phone.ip_address:
                 return {"status": "error", "reason": "Phone has no IP address"}
 
+            creds = _phone_creds(phone)
+            if creds is None:
+                return {
+                    "status": "error",
+                    "reason": "Phone has no saved admin credentials; save them on the phone first",
+                }
+            uname, pwd = creds
             vendor = (phone.vendor or "grandstream").lower()
-            uname, pwd = _phone_creds(phone)
             adapter = _get_adapter(
                 vendor,
                 host=phone.ip_address,
@@ -576,14 +786,45 @@ def reboot_phone(self, phone_id: str) -> dict:
             )
 
             try:
-                async with adapter:
-                    adapter.add_phone(phone.ip_address, mac=phone.mac_address or "")
-                    result = await adapter.reboot_phone(phone.mac_address or "")
-                    return {
-                        "status": "success",
-                        "phone_id": phone_id,
-                        "adapter_result": result.success if result else False,
-                    }
+                from sqlalchemy import select as _select
+
+                from app.core.device_slot import phone_slot_key
+                from app.models.core import Site as _Site
+                from app.services.device_writes import audited_device_action
+
+                phone_org = (
+                    await session.execute(
+                        _select(_Site.organization_id).where(
+                            _Site.id == getattr(phone, "site_id", None)
+                        )
+                    )
+                ).scalar_one_or_none()
+
+                async def _reboot() -> Any:
+                    # Login and reboot are one request group, inside the
+                    # phone's turn, so neither lands on a health poll.
+                    async with adapter:
+                        adapter.add_phone(phone.ip_address, mac=phone.mac_address or "")
+                        return await adapter.reboot_phone(phone.mac_address or "")
+
+                result = await audited_device_action(
+                    session,
+                    action="reboot_phone",
+                    target_type="device",
+                    target_id=phone.id,
+                    target_name=f"phone {phone.ip_address}",
+                    organization_id=phone_org,
+                    site_id=getattr(phone, "site_id", None),
+                    actor_id=None,
+                    parameters={"phone_ip": phone.ip_address},
+                    perform=_reboot,
+                    slot_key=phone_slot_key(phone),
+                )
+                return {
+                    "status": "success",
+                    "phone_id": phone_id,
+                    "adapter_result": result.success if result else False,
+                }
             except Exception as exc:
                 logger.warning("Reboot failed for phone %s: %s", phone_id, exc)
                 return {
@@ -608,7 +849,12 @@ def reboot_phone(self, phone_id: str) -> dict:
     time_limit=600,  # 10 minute hard limit
     soft_time_limit=540,
 )
-def run_discovery_scan_task(self, scan_id: str, transient_creds: dict | None = None) -> dict:
+def run_discovery_scan_task(
+    self,
+    scan_id: str,
+    transient_creds: dict | None = None,
+    try_default_credentials: bool = False,
+) -> dict:
     """
     Run a network discovery scan for VoIP devices.
 
@@ -619,7 +865,9 @@ def run_discovery_scan_task(self, scan_id: str, transient_creds: dict | None = N
         scan_id: UUID of the DiscoveryScan record.
         transient_creds: Optional dict with ``username`` and encrypted
             ``password``.  Passed transiently from the API — never
-            persisted in the DB.
+            persisted in the DB. Without them phones are only identified.
+        try_default_credentials: the operator's explicit opt-in to also try
+            the phones' factory default login.
     """
     import asyncio
 
@@ -740,23 +988,25 @@ def run_discovery_scan_task(self, scan_id: str, transient_creds: dict | None = N
                 scan_type = scan.scan_type or "full"
 
                 # Use transient credentials passed from the API (not persisted in DB)
+                # Never fill in a default: a missing username or password
+                # means "identify only", unless the operator opted in below.
                 scan_credentials = None
                 if transient_creds and isinstance(transient_creds, dict):
                     from app.core.crypto import decrypt_credential, is_encrypted
 
-                    raw_pw = transient_creds.get("password", "admin")
-                    if is_encrypted(raw_pw):
+                    raw_user = transient_creds.get("username")
+                    raw_pw = transient_creds.get("password")
+                    if raw_pw and is_encrypted(raw_pw):
                         raw_pw = decrypt_credential(raw_pw)
-                    scan_credentials = {
-                        "username": transient_creds.get("username", "admin"),
-                        "password": raw_pw,
-                    }
+                    if raw_user and raw_pw:
+                        scan_credentials = {"username": raw_user, "password": raw_pw}
 
                 discovered = await run_discovery_scan(
                     subnet=subnet,
                     scan_type=scan_type,
                     on_progress=on_progress,
                     credentials=scan_credentials,
+                    try_default_credentials=bool(try_default_credentials),
                 )
 
                 # Check if scan was cancelled during execution
@@ -893,6 +1143,49 @@ def run_discovery_scan_task(self, scan_id: str, transient_creds: dict | None = N
 # =============================================================================
 
 
+#: ``_poll_phone_status`` could not read the phone.
+_POLL_FAILED = object()
+
+
+async def _poll_phone_status(turn, phone, username: str, password: str):
+    """One login and one status read, or ``_POLL_FAILED``."""
+    try:
+        vendor = (phone.vendor or "grandstream").lower()
+        adapter = _get_adapter(vendor, host=phone.ip_address, username=username, password=password)
+        async with adapter:
+            return await adapter.get_device_status(phone.mac_address or "")
+    except Exception as exc:
+        # WARNING, not DEBUG: at DEBUG a fleet whose every poll failed produced
+        # no log line at all.
+        logger.warning(
+            "Phone health check failed for %s (%s): %s",
+            phone.id,
+            phone.ip_address,
+            type(exc).__name__,
+        )
+        turn.failed(exc)
+        return _POLL_FAILED
+
+
+async def _sites_with_voip_disabled(session, phones) -> set:
+    """Sites of organizations that explicitly switched the VoIP module off."""
+    from sqlalchemy import select
+
+    from app.models.core import Site
+    from app.modules.poll_gate import orgs_with_module_disabled
+
+    # freesdn:include-deleted -- the organization of a polled phone's site
+    # decides the module gate whether or not the site row was soft-deleted.
+    site_ids = {getattr(p, "site_id", None) for p in phones} - {None}
+    if not site_ids:
+        return set()
+    rows = (
+        await session.execute(select(Site.id, Site.organization_id).where(Site.id.in_(site_ids)))
+    ).all()
+    disabled = await orgs_with_module_disabled(session, "voip", {org for _, org in rows})
+    return {sid for sid, org in rows if org in disabled}
+
+
 @shared_task(name="voip.health_check")
 def health_check(site_id: str | None = None) -> dict:
     """
@@ -907,36 +1200,64 @@ def health_check(site_id: str | None = None) -> dict:
         from app.db.session import celery_session_factory
 
         async with celery_session_factory() as session:
+            from app.core.device_breaker import phone_breaker, phone_key
+            from app.core.device_poll import device_poll
+            from app.core.device_slot import phone_slot_key
             from app.modules.voip.service import VoIPService
 
             service = VoIPService(session)
-            phones, _ = await service.list_phones(
-                site_id=UUID(site_id) if site_id else None,
-                lifecycle_state="managed",
-                limit=2000,
-            )
+            phones = await _adopted_phones(service, site_id, limit=2000)
+            # An organization that switched the VoIP module off is not polled.
+            disabled_sites = await _sites_with_voip_disabled(session, phones)
 
             healthy = 0
             degraded = 0
             offline = 0
+            no_credentials = 0
+            skipped = 0
 
             for phone in phones:
+                if getattr(phone, "site_id", None) in disabled_sites:
+                    continue
                 if not phone.ip_address:
                     offline += 1
                     continue
+                creds = _phone_creds(phone)
+                if creds is None:
+                    # Unknown login is not evidence the phone is down: leave its
+                    # status alone instead of letting the grace gate flip it.
+                    no_credentials += 1
+                    continue
+                uname, pwd = creds
+
+                # Nothing below holds a database transaction while the phone
+                # answers: what the loop changed so far is committed here, and
+                # this phone's update is written after its reply.
+                await session.commit()
+                # The phone's shared breaker and device slot: a phone that does
+                # not answer is not logged into every 5 minutes, and one that a
+                # discovery scan or a UI read is talking to keeps its status.
+                async with device_poll(
+                    slot_key=phone_slot_key(phone),
+                    breaker=phone_breaker,
+                    breaker_key=phone_key(phone.id),
+                    holder="phone health check",
+                ) as turn:
+                    if turn.skipped:
+                        skipped += 1
+                        continue
+                    status_data = await _poll_phone_status(turn, phone, uname, pwd)
+                if status_data is _POLL_FAILED:
+                    # Transient failure: only flip offline once past the grace
+                    # gate so a single blip doesn't flap the phone row.
+                    with contextlib.suppress(Exception):
+                        if _should_mark_phone_offline(phone):
+                            await service.update_phone(phone.id, {"status": "offline"})
+                            offline += 1
+                        _bump_phone_fail_count(phone)
+                    continue
 
                 try:
-                    vendor = (phone.vendor or "grandstream").lower()
-                    uname, pwd = _phone_creds(phone)
-                    adapter = _get_adapter(
-                        vendor,
-                        host=phone.ip_address,
-                        username=uname,
-                        password=pwd,
-                    )
-                    async with adapter:
-                        status_data = await adapter.get_device_status(phone.mac_address or "")
-
                     update: dict = {"last_seen": datetime.now(UTC)}
                     if status_data and isinstance(status_data, dict):
                         sd = status_data.get("data", status_data)
@@ -951,8 +1272,12 @@ def health_check(site_id: str | None = None) -> dict:
                         if "firmware_version" in sd:
                             update["firmware_version"] = sd["firmware_version"]
 
+                        # A reachable phone that is not SIP-registered stays
+                        # "online"; sip_registered=False above records the
+                        # registration problem. This used to write "warning",
+                        # which is not a PhoneStatus, so the phone pages counted
+                        # the phone as neither online nor offline.
                         if not sd.get("sip_registered", True):
-                            update["status"] = "warning"
                             degraded += 1
                         else:
                             healthy += 1
@@ -973,14 +1298,9 @@ def health_check(site_id: str | None = None) -> dict:
                     await service.update_phone(phone.id, update)
 
                 except Exception as exc:
-                    logger.debug("Health check failed for %s: %s", phone.id, exc)
-                    # Transient failure: only flip offline once past the grace
-                    # gate so a single blip doesn't flap the phone row.
-                    with contextlib.suppress(Exception):
-                        if _should_mark_phone_offline(phone):
-                            await service.update_phone(phone.id, {"status": "offline"})
-                            offline += 1
-                        _bump_phone_fail_count(phone)
+                    logger.warning(
+                        "Phone health update failed for %s: %s", phone.id, type(exc).__name__
+                    )
 
             await session.commit()
             return {
@@ -989,6 +1309,8 @@ def health_check(site_id: str | None = None) -> dict:
                 "healthy": healthy,
                 "degraded": degraded,
                 "offline": offline,
+                "no_credentials": no_credentials,
+                "skipped": skipped,
             }
 
     return asyncio.run(run_health())
@@ -1063,18 +1385,45 @@ def bulk_reboot(self, phone_ids: list[str]) -> dict:
                     if not phone or not phone.ip_address:
                         failed += 1
                         continue
+                    creds = _phone_creds(phone)
+                    if creds is None:
+                        logger.warning("Bulk reboot skipped %s: no saved admin credentials", pid)
+                        failed += 1
+                        continue
+                    uname, pwd = creds
 
                     vendor = (phone.vendor or "grandstream").lower()
-                    uname, pwd = _phone_creds(phone)
                     adapter = _get_adapter(
                         vendor,
                         host=phone.ip_address,
                         username=uname,
                         password=pwd,
                     )
-                    async with adapter:
-                        adapter.add_phone(phone.ip_address, mac=phone.mac_address or "")
-                        await adapter.reboot_phone(phone.mac_address or "")
+                    from app.core.device_slot import phone_slot_key
+                    from app.services.device_writes import audited_device_action
+
+                    async def _reboot(
+                        adapter: Any = adapter,
+                        ip: str = phone.ip_address,
+                        mac: str = phone.mac_address or "",
+                    ) -> Any:
+                        async with adapter:
+                            adapter.add_phone(ip, mac=mac)
+                            return await adapter.reboot_phone(mac)
+
+                    await audited_device_action(
+                        session,
+                        action="reboot_phone",
+                        target_type="device",
+                        target_id=phone.id,
+                        target_name=f"phone {phone.ip_address}",
+                        organization_id=None,
+                        site_id=getattr(phone, "site_id", None),
+                        actor_id=None,
+                        parameters={"phone_ip": phone.ip_address, "bulk": True},
+                        perform=_reboot,
+                        slot_key=phone_slot_key(phone),
+                    )
                     succeeded += 1
                 except Exception as exc:
                     logger.warning("Bulk reboot failed for %s: %s", pid, exc)

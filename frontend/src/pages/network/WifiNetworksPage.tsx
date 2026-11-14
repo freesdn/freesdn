@@ -109,7 +109,10 @@ import { StatsGrid } from '@/components/ui/stats-grid';
 import { BulkActionsBar } from '@/components/ui/bulk-actions-bar';
 import { ErrorState } from '@/components/ui/empty-state';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { escapeCell } from '@/lib/csv';
+import { getApiErrorMessage } from '@/lib/api/errors';
+import { readControllerDelete } from '@/lib/api/controllerSync';
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -889,6 +892,7 @@ function WifiDetailPanel({
 
 export default function WifiNetworksPage() {
   const { t } = useTranslation('network');
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -944,7 +948,7 @@ export default function WifiNetworksPage() {
   const onMutationError = (err: any) =>
     toast({
       title: t('common:error'),
-      description: err?.response?.data?.detail || t('errors:internalServer'),
+      description: getApiErrorMessage(err, t('errors:internalServer')),
       variant: 'destructive',
     });
 
@@ -969,13 +973,26 @@ export default function WifiNetworksPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => networkApi.wifi.delete(id),
-    onSuccess: () => {
+    mutationFn: (network: WifiNetwork) => networkApi.wifi.delete(network.id),
+    onSuccess: (res, network) => {
       queryClient.invalidateQueries({ queryKey: ['wifi-networks'] });
       setDeletingNetwork(undefined);
-      if (selectedNetworkId === deletingNetwork?.id) {
+      // The delete went to the controller first. When it did not confirm,
+      // say so: either FreeSDN removed its record anyway (the SSID may still
+      // be broadcasting) or it kept the record.
+      const outcome = readControllerDelete(res);
+      if (outcome.kind !== 'kept' && selectedNetworkId === network.id) {
         selectNetwork(undefined);
       }
+      if (outcome.kind === 'deleted') return;
+      const warning = outcome.warning ?? t('WifiNetworksPage.toast.noReason');
+      toast({
+        title: t('WifiNetworksPage.toast.controllerUnconfirmed'),
+        description: outcome.kind === 'kept'
+          ? t('WifiNetworksPage.toast.deleteKept', { name: network.ssid, warning })
+          : t('WifiNetworksPage.toast.deleteUnconfirmed', { name: network.ssid, warning }),
+        variant: 'destructive',
+      });
     },
     onError: onMutationError,
   });
@@ -1069,8 +1086,14 @@ export default function WifiNetworksPage() {
               {n.hidden && (
                 <TooltipProvider>
                   <Tooltip>
-                    <TooltipTrigger>
-                      <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                    {/* asChild: the default trigger is a <button>, and this
+                        sits inside the row's name button. A button inside a
+                        button is invalid HTML (React logged it on every load)
+                        and breaks the row for keyboard and screen readers. */}
+                    <TooltipTrigger asChild>
+                      <span role="img" aria-label={t('WifiNetworksPage.features.hiddenSsid')}>
+                        <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                      </span>
                     </TooltipTrigger>
                     <TooltipContent>{t('WifiNetworksPage.features.hiddenSsid')}</TooltipContent>
                   </Tooltip>
@@ -1155,7 +1178,7 @@ export default function WifiNetworksPage() {
       cell: (n: WifiNetwork) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" aria-label={t('WifiNetworksPage.actions.menuFor', { ssid: n.ssid })}>
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -1403,6 +1426,7 @@ export default function WifiNetworksPage() {
           isLoading={isLoading}
           selectable
           onSelectionChange={setSelectedRows}
+          selectedRows={selectedRows}
           searchable={false}
           itemName={t('WifiNetworksPage.itemNamePlural')}
           getRowId={(row) => row.id}
@@ -1437,10 +1461,19 @@ export default function WifiNetworksPage() {
               label: t('WifiNetworksPage.actions.delete'),
               icon: Trash2,
               variant: 'destructive',
-              onClick: () => {
+              onClick: async () => {
                 if (selectedRows.length === 0) return;
-                if (!window.confirm(t('WifiNetworksPage.toast.bulkDeleteTitle'))) return;
-                selectedRows.forEach((n) => deleteMutation.mutate(n.id));
+                const targets = [...selectedRows];
+                const ok = await confirm({
+                  title: t('WifiNetworksPage.confirm.bulkDelete.title', { count: targets.length }),
+                  description: t('WifiNetworksPage.confirm.bulkDelete.body'),
+                  count: targets.length,
+                  items: targets.map((n) => n.ssid),
+                  confirmLabel: t('WifiNetworksPage.confirm.bulkDelete.action', { count: targets.length }),
+                  destructive: true,
+                });
+                if (!ok) return;
+                targets.forEach((n) => deleteMutation.mutate(n));
                 setSelectedRows([]);
               },
             },
@@ -1498,7 +1531,7 @@ export default function WifiNetworksPage() {
             <AlertDialogCancel>{t('WifiNetworksPage.actions.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
-                deletingNetwork && deleteMutation.mutate(deletingNetwork.id)
+                deletingNetwork && deleteMutation.mutate(deletingNetwork)
               }
               className="bg-destructive hover:bg-destructive/90"
             >

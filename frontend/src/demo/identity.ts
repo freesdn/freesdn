@@ -32,3 +32,23 @@ export const demoUser = {
   roles: ['super_admin'],
 };
 
+
+/**
+ * Stable UUID for a demo camera, derived from its readable fixture key
+ * ('cam-front-door'). The camera detail route only accepts a UUID (anything
+ * else is reported as a malformed link), and the readable keys made every
+ * camera detail page in the demo say "Invalid camera link". The fixtures keep
+ * their readable keys; the camera-domain records are emitted with this id.
+ */
+export function demoCameraId(key: string): string {
+  let hex = '';
+  for (let seed = 0; seed < 4; seed++) {
+    let h = (0x811c9dc5 ^ seed) >>> 0;
+    for (let i = 0; i < key.length; i++) {
+      h ^= key.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    hex += h.toString(16).padStart(8, '0');
+  }
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}

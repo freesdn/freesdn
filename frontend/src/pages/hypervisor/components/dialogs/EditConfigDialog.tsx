@@ -32,6 +32,7 @@ import { useToast } from '@/hooks/use-toast';
 import { hypervisorApi } from '@/lib/api';
 import { newHypervisorRequestId, reviewedGuestDigest } from '@/lib/api/hypervisor';
 import type { HypervisorVM, GuestAgentInfo } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface EditConfigDialogProps {
   open: boolean;
@@ -140,7 +141,7 @@ export function EditConfigDialog({ open, onClose, controllerId, vm, onTracked }:
     onError: (err: unknown) => {
       onTracked?.();
       const e = err as { response?: { data?: { detail?: string } }; message?: string };
-      const msg = e.message === 'No changes' ? t('EditConfigDialog.toast.noChanges') : (e?.response?.data?.detail || e.message);
+      const msg = e.message === 'No changes' ? t('EditConfigDialog.toast.noChanges') : (getApiErrorMessage(e));
       toast({ title: t('EditConfigDialog.toast.updateFailed'), description: msg, variant: 'destructive' });
     },
   });

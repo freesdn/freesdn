@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import CurrentUser, require_permissions
 from app.db import get_session
 from app.modules.gateway.adapter_helpers import build_adapter, get_gateway
+from app.services.device_writes import audited_device_action
 
 router = APIRouter(prefix="/diagnostics", tags=["Gateway Diagnostics"])
 
@@ -189,7 +190,18 @@ async def trigger_backup(
     gw = await get_gateway(db, gateway_id, organization_id=org_id, current_user=current_user)
     adapter = build_adapter(gw)
     async with adapter:
-        result = await adapter.create_backup()
+        result = await audited_device_action(
+            db,
+            action="create_backup",
+            target_type="gateway",
+            target_id=gw.id,
+            target_name=getattr(gw, "name", None),
+            organization_id=gw.org_id,
+            site_id=gw.site_id,
+            actor_id=current_user.id,
+            parameters={},
+            perform=lambda: adapter.create_backup(),
+        )
     if not result.success:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
@@ -241,7 +253,18 @@ async def restart_service(
     gw = await get_gateway(db, body.gateway_id, organization_id=org_id, current_user=current_user)
     adapter = build_adapter(gw)
     async with adapter:
-        result = await adapter.restart_service(body.service_name)
+        result = await audited_device_action(
+            db,
+            action="restart_service",
+            target_type="gateway",
+            target_id=gw.id,
+            target_name=getattr(gw, "name", None),
+            organization_id=gw.org_id,
+            site_id=gw.site_id,
+            actor_id=current_user.id,
+            parameters={"service": body.service_name},
+            perform=lambda: adapter.restart_service(body.service_name),
+        )
     if not result.success:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,

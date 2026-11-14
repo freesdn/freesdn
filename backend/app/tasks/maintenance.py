@@ -47,14 +47,18 @@ def cleanup_token_revocations(self: Any) -> dict[str, Any]:
 
 
 @celery_app.task(bind=True, base=FreeSDNTask, soft_time_limit=300, time_limit=360)  # type: ignore[untyped-decorator]
-def cleanup_old_events(self: Any, days: int = 90) -> dict[str, Any]:
+def cleanup_old_events(self: Any, days: int | None = None) -> dict[str, Any]:
     """Prune expired event history in bounded, independently committed batches.
 
-    Keeps the existing 90-day default. A remaining backlog or locked rows are
-    reported explicitly; the task never claims that a partial sweep is complete.
+    ``days`` defaults to ``EVENT_RETENTION_DAYS`` (30). It used to be a fixed
+    90 in this signature, which the daily beat entry never overrode. A remaining
+    backlog or locked rows are reported explicitly; the task never claims that a
+    partial sweep is complete.
     """
     from app.services.event_retention import prune_event_history, retention_cutoff
 
+    if days is None:
+        days = settings.EVENT_RETENTION_DAYS
     # Reject invalid values before opening a LogDB connection/factory.
     retention_cutoff(days)
     result = asyncio.run(prune_event_history(_get_logdb(), days))
@@ -64,6 +68,31 @@ def cleanup_old_events(self: Any, days: int = 90) -> dict[str, Any]:
             "expired rows remain (budget or concurrent locks)",
             result["deleted"],
             result["batches"],
+        )
+    return result
+
+
+@celery_app.task(bind=True, base=FreeSDNTask, soft_time_limit=300, time_limit=360)  # type: ignore[untyped-decorator]
+def cleanup_webhook_deliveries(self: Any, days: int | None = None) -> dict[str, Any]:
+    """Prune webhook delivery and dead-letter records older than the event retention.
+
+    Nothing deleted them before: ``PersistentWebhookService.cleanup_old_deliveries``
+    existed with no caller, so ``core.webhook_deliveries`` grew by one row per
+    event per webhook for the life of the install. Same bounded, batch-committed
+    shape as ``cleanup_old_events``.
+    """
+    from app.services.event_retention import retention_cutoff
+    from app.services.webhook_retention import prune_webhook_records
+
+    if days is None:
+        days = settings.EVENT_RETENTION_DAYS
+    retention_cutoff(days)
+    result = asyncio.run(prune_webhook_records(AsyncSessionLocal, days))
+    if result["remaining_expired"]:
+        logger.warning(
+            "Webhook record retention sweep incomplete: deliveries=%s dead_letters=%s",
+            result["deleted_deliveries"],
+            result["deleted_dead_letters"],
         )
     return result
 

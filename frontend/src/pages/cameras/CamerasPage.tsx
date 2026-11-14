@@ -15,7 +15,7 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -1131,9 +1131,6 @@ export default function CamerasPage() {
   // Pathname drives the active tab so it survives reload + bookmark.
   const isListTab = location.pathname === '/cameras/list';
   const activeTab: 'dashboard' | 'list' = isListTab ? 'list' : 'dashboard';
-  const handleTabChange = useCallback((v: string) => {
-    navigate(v === 'list' ? '/cameras/list' : '/cameras', { replace: true });
-  }, [navigate]);
 
   // Deep-link: read initial state from URL search params
   const [viewMode, setViewModeState] = useState<ViewMode>(() => {
@@ -1141,6 +1138,17 @@ export default function CamerasPage() {
     const v = searchParams.get('view') as ViewMode;
     return v && VALID_VIEW_MODES.has(v) ? v : 'grid';
   });
+  // The page stays mounted across Dashboard and List (filters, search and the
+  // selection survive the switch), so remember which dashboard view to return to.
+  const dashboardViewRef = useRef<ViewMode>(viewMode === 'list' ? 'grid' : viewMode);
+  const handleTabChange = useCallback((v: string) => {
+    if (v === 'list') {
+      navigate('/cameras/list', { replace: true });
+      return;
+    }
+    const view = dashboardViewRef.current;
+    navigate(view === 'grid' ? '/cameras' : `/cameras?view=${view}`, { replace: true });
+  }, [navigate]);
   const [filters, setFilters] = useState<Filters>(() => ({
     ...DEFAULT_FILTERS,
     status: searchParams.get('status') || 'all',
@@ -1183,14 +1191,22 @@ export default function CamerasPage() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  // Force list viewMode + always-on selection when on /cameras/list
-  useEffect(() => {
-    if (isListTab && viewMode !== 'list') setViewModeState('list');
-    if (!isListTab && viewMode === 'list') setViewModeState('grid');
-  }, [isListTab, viewMode]);
-  useEffect(() => {
-    if (isListTab) setSelectionMode(true);
-  }, [isListTab]);
+  // Force list viewMode + always-on selection when on /cameras/list. A layout
+  // effect, so the tab never paints a frame of the other tab's view.
+  useLayoutEffect(() => {
+    if (isListTab) {
+      if (viewMode !== 'list') {
+        dashboardViewRef.current = viewMode;
+        setViewModeState('list');
+      }
+      setSelectionMode(true);
+    } else if (viewMode === 'list') {
+      setViewModeState(dashboardViewRef.current);
+      // Back on the dashboard: show a selection made in the list, or leave the
+      // list's always-on selection mode behind.
+      setSelectionMode(selectedIds.size > 0);
+    }
+  }, [isListTab, viewMode, selectedIds]);
 
   const setWallLayout = useCallback((layout: WallLayout) => {
     setWallLayoutState(layout);
@@ -1541,6 +1557,13 @@ export default function CamerasPage() {
     return result;
   }, [cameras, filters, groupCameraIds]);
 
+  // The list table follows the page's selection, so a bulk-bar "clear" unticks
+  // its rows and a selection made on the dashboard shows up ticked in the list.
+  const selectedListRows = useMemo(
+    () => filteredCameras.filter((c) => selectedIds.has(String(c.id))),
+    [filteredCameras, selectedIds],
+  );
+
   // Grid pagination · 24 cameras per *grid* page to cap simultaneous snapshot
   // polling. This sub-pages WITHIN the current server page (up to PAGE_SIZE=100);
   // when the user pages past the loaded set, the server `offset` advances to fetch
@@ -1745,7 +1768,7 @@ export default function CamerasPage() {
         onRefresh={() => refetch()}
         refreshing={isLoading}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate('/cameras/display?fill=true&mode=live')} className="gap-1.5">
               <Monitor className="h-4 w-4" /> {t('CamerasPage.actions.displayWall')}
             </Button>
@@ -2056,6 +2079,7 @@ export default function CamerasPage() {
                 isLoading={isLoading}
                 selectable={selectionMode}
                 onSelectionChange={(rows) => setSelectedIds(new Set(rows.map((r) => String(r.id))))}
+                selectedRows={selectedListRows}
                 searchable={false}
                 paginated
                 defaultPageSize={25}

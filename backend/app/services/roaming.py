@@ -395,16 +395,46 @@ class RoamingAnalyticsService:
                             verify_ssl=controller.verify_ssl,
                         )
                         if hasattr(adapter, "update_ssid_config"):
+                            from app.services.device_writes import (
+                                request_actor_id,
+                                write_controller_config,
+                            )
+
                             roaming_payload = {
                                 "fast_roaming": wifi.fast_roaming,
                                 "roaming_protocol": wifi.roaming_protocol,
                                 "minimum_rssi": wifi.minimum_rssi,
                             }
-                            async with adapter:
-                                await adapter.update_ssid_config(str(wifi.id), roaming_payload)
-                            logger.info(
-                                "Pushed roaming config to controller for WiFi %s", wifi_network_id
+
+                            async def _push():
+                                async with adapter:
+                                    return await adapter.update_ssid_config(
+                                        str(wifi.id), roaming_payload
+                                    )
+
+                            # Staged and applied in this request; read-only
+                            # mode refuses it before the controller is asked.
+                            pushed = await write_controller_config(
+                                self.db,
+                                controller.id,
+                                actor_id=request_actor_id(),
+                                feature="roaming.ssid",
+                                operation="update",
+                                target_id=str(wifi.id),
+                                payload=dict(roaming_payload),
+                                perform=_push,
                             )
+                            if getattr(pushed, "success", False):
+                                logger.info(
+                                    "Pushed roaming config to controller for WiFi %s",
+                                    wifi_network_id,
+                                )
+                            else:
+                                logger.warning(
+                                    "Controller refused the roaming config for WiFi %s: %s",
+                                    wifi_network_id,
+                                    getattr(pushed, "error", None),
+                                )
                     except Exception:
                         logger.warning(
                             "Failed to push roaming config to controller for WiFi %s — DB updated, device push pending",

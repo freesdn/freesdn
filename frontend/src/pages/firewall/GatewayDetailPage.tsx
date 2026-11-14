@@ -116,6 +116,9 @@ import { MikroTikBackupTab } from './mikrotik-tabs/MikroTikBackupTab';
 import { MikroTikTopologyTab } from './mikrotik-tabs/MikroTikTopologyTab';
 import { MikroTikSnmpTab } from './mikrotik-tabs/MikroTikSnmpTab';
 import { OpenWrtTab } from './openwrt-tabs/OpenWrtTab';
+import { getApiErrorMessage } from '@/lib/api/errors';
+import { isDeviceBusyError, liveReadQueryOptions } from '@/lib/api/liveRead';
+import { LiveReadStatus } from '@/components/ui/live-read-status';
 
 // ─── Component ─────────────────────────────────────────────────────────
 
@@ -235,10 +238,10 @@ export default function GatewayDetailPage() {
     refetchInterval: 30_000,
   });
 
-  const { data: deviceSummaryData, isPending: deviceSummaryPending, isFetching: deviceSummaryFetching, isError: deviceSummaryError, refetch: retryDeviceSummary } = useQuery({
+  const { data: deviceSummaryData, isPending: deviceSummaryPending, isFetching: deviceSummaryFetching, isError: deviceSummaryError, failureReason: deviceSummaryFailure, refetch: retryDeviceSummary } = useQuery({
     queryKey: ['gateways', id, 'device-summary'],
     queryFn: async () => validatedAggregate(await gatewayApi.getDeviceSummary(id!), id!, 'device-summary'),
-    retry: false,
+    ...liveReadQueryOptions(),
     enabled: !!id && activeTab === 'overview',
     refetchInterval: 60_000,
   });
@@ -265,7 +268,7 @@ export default function GatewayDetailPage() {
   const { data: vpnData, isPending: vpnPending, isFetching: vpnFetching, isError: vpnError, refetch: retryVpn } = useQuery({
     queryKey: ['gateways', id, 'vpn'],
     queryFn: async () => validatedAggregate(await gatewayApi.getVPN(id!), id!, 'vpn'),
-    retry: false,
+    ...liveReadQueryOptions(),
     enabled: !!id && activeTab === 'vpn',
   });
   const vpnLoading = vpnPending || vpnFetching;
@@ -396,17 +399,17 @@ export default function GatewayDetailPage() {
     if (!backupDeleteCurrent) setDeleteDialog((current) => current.open ? { ...current, open: false } : current);
   }, [backupDeleteCurrent]);
 
-  const { data: firmwareData, isPending: firmwarePending, isFetching: firmwareFetching, isError: firmwareError, refetch: retryFirmware } = useQuery({
+  const { data: firmwareData, isPending: firmwarePending, isFetching: firmwareFetching, isError: firmwareError, failureReason: firmwareFailure, refetch: retryFirmware } = useQuery({
     queryKey: ['gateways', id, 'firmware'],
     queryFn: async () => validatedSystemRead(await gatewayApi.getFirmware(id!), id!, 'firmware'),
-    retry: false,
+    ...liveReadQueryOptions(),
     enabled: !!id && activeTab === 'overview',
   });
 
-  const { data: healthData, isPending: healthPending, isFetching: healthFetching, isError: healthError, refetch: retryHealth } = useQuery({
+  const { data: healthData, isPending: healthPending, isFetching: healthFetching, isError: healthError, failureReason: healthFailure, refetch: retryHealth } = useQuery({
     queryKey: ['gateways', id, 'health'],
     queryFn: async () => validatedSystemRead(await gatewayApi.getGatewayHealth(id!), id!, 'health'),
-    retry: false,
+    ...liveReadQueryOptions(),
     enabled: !!id && activeTab === 'overview',
     refetchInterval: 30_000,
   });
@@ -470,7 +473,7 @@ export default function GatewayDetailPage() {
   const { data: tailscaleData, isPending: tailscalePending, isFetching: tailscaleFetching, isError: tailscaleError, refetch: retryTailscale } = useQuery({
     queryKey: ['gateways', id, 'tailscale'],
     queryFn: async () => validatedAggregate(await gatewayApi.getTailscaleStatus(id!), id!, 'tailscale'),
-    retry: false,
+    ...liveReadQueryOptions(),
     enabled: !!id && activeTab === 'vpn',
   });
   const tailscaleLoading = tailscalePending || tailscaleFetching;
@@ -497,7 +500,7 @@ export default function GatewayDetailPage() {
   const { data: haproxyData, isPending: haproxyPending, isFetching: haproxyFetching, isError: haproxyError, refetch: retryHaproxy } = useQuery({
     queryKey: ['gateways', id, 'haproxy'],
     queryFn: async () => validatedAggregate(await gatewayApi.getHAProxyStatus(id!), id!, 'haproxy'),
-    retry: false,
+    ...liveReadQueryOptions(),
     enabled: !!id && activeTab === 'services',
   });
   const haproxyLoading = haproxyPending || haproxyFetching;
@@ -507,7 +510,7 @@ export default function GatewayDetailPage() {
     queryKey: ['gateways', id, 'trust-overview'],
     queryFn: () => gatewayApi.getTrustOverview(id!),
     enabled: !!id && activeTab === 'system',
-    retry: false,
+    ...liveReadQueryOptions(),
   });
 
   // ─── ACME / Let's Encrypt ──────────────────────────────────────────
@@ -515,7 +518,7 @@ export default function GatewayDetailPage() {
     queryKey: ['gateways', id, 'acme-overview'],
     queryFn: () => gatewayApi.getACMEOverview(id!),
     enabled: !!id && activeTab === 'system',
-    retry: false,
+    ...liveReadQueryOptions(),
   });
 
   // ─── Syslog Forwarding ─────────────────────────────────────────────
@@ -629,7 +632,7 @@ export default function GatewayDetailPage() {
   const { data: proxyData, isPending: proxyPending, isFetching: proxyFetching, isError: proxyError, refetch: retryProxy } = useQuery({
     queryKey: ['gateways', id, 'proxy'],
     queryFn: async () => validatedAggregate(await gatewayApi.getProxySettings(id!), id!, 'proxy'),
-    retry: false,
+    ...liveReadQueryOptions(),
     enabled: !!id && activeTab === 'services',
   });
   const proxyLoading = proxyPending || proxyFetching;
@@ -643,7 +646,7 @@ export default function GatewayDetailPage() {
   const { data: crowdsecData, isPending: crowdsecPending, isFetching: crowdsecFetching, isError: crowdsecError, refetch: retryCrowdsec } = useQuery({
     queryKey: ['gateways', id, 'crowdsec'],
     queryFn: async () => validatedAggregate(await gatewayApi.getCrowdSecStatus(id!), id!, 'crowdsec'),
-    retry: false,
+    ...liveReadQueryOptions(),
     enabled: !!id && activeTab === 'ids',
   });
   const crowdsecLoading = crowdsecPending || crowdsecFetching;
@@ -655,7 +658,7 @@ export default function GatewayDetailPage() {
     queryKey: ['gateways', id, 'config-diff'],
     queryFn: () => gatewayApi.getConfigDiff(id!),
     enabled: !!id && activeTab === 'backups',
-    retry: false,
+    ...liveReadQueryOptions(),
   });
 
   // ─── Cross-cutting: Certificate Expiry ────────────────────────────
@@ -663,7 +666,7 @@ export default function GatewayDetailPage() {
     queryKey: ['gateways', id, 'cert-expiry'],
     queryFn: () => gatewayApi.getCertificateExpiry(id!, 30),
     enabled: !!id && activeTab === 'system',
-    retry: false,
+    ...liveReadQueryOptions(),
   });
 
   // ─── Mutations ────────────────────────────────────────────────────
@@ -680,7 +683,7 @@ export default function GatewayDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['gateways', id] });
     },
     onError: (err: any) => {
-      toast({ title: t('GatewayDetailPage.toasts.error'), description: err?.response?.data?.detail || t('GatewayDetailPage.toasts.testFailed'), variant: 'destructive' });
+      toast({ title: t('GatewayDetailPage.toasts.error'), description: getApiErrorMessage(err, t('GatewayDetailPage.toasts.testFailed')), variant: 'destructive' });
     },
   });
 
@@ -691,7 +694,13 @@ export default function GatewayDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['gateways', id] });
     },
     onError: (err: any) => {
-      toast({ title: t('GatewayDetailPage.toasts.syncFailed'), description: err?.response?.data?.detail || t('GatewayDetailPage.toasts.syncFailedDesc'), variant: 'destructive' });
+      // A sync that found the gateway busy (another sync or a poll talking to
+      // it) sent it nothing: say so plainly, not as a failure.
+      if (isDeviceBusyError(err)) {
+        toast({ title: t('GatewayDetailPage.toasts.deviceBusy'), description: getApiErrorMessage(err) });
+        return;
+      }
+      toast({ title: t('GatewayDetailPage.toasts.syncFailed'), description: getApiErrorMessage(err, t('GatewayDetailPage.toasts.syncFailedDesc')), variant: 'destructive' });
     },
   });
 
@@ -714,7 +723,7 @@ export default function GatewayDetailPage() {
         );
       })
       .catch((err: any) => {
-        toast({ title: t('GatewayDetailPage.toasts.error'), description: err?.response?.data?.detail || t('GatewayDetailPage.toasts.requestFailed'), variant: 'destructive' });
+        toast({ title: t('GatewayDetailPage.toasts.error'), description: getApiErrorMessage(err, t('GatewayDetailPage.toasts.requestFailed')), variant: 'destructive' });
       });
   };
 
@@ -727,7 +736,7 @@ export default function GatewayDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['gateways', id, 'services'] });
     },
     onError: (err: any) => {
-      toast({ title: t('GatewayDetailPage.toasts.error'), description: err?.response?.data?.detail || t('GatewayDetailPage.toasts.serviceControlFailed'), variant: 'destructive' });
+      toast({ title: t('GatewayDetailPage.toasts.error'), description: getApiErrorMessage(err, t('GatewayDetailPage.toasts.serviceControlFailed')), variant: 'destructive' });
     },
   });
 
@@ -738,7 +747,7 @@ export default function GatewayDetailPage() {
       setShowRebootDialog(false);
     },
     onError: (err: any) => {
-      toast({ title: t('GatewayDetailPage.toasts.rebootFailed'), description: err?.response?.data?.detail || t('GatewayDetailPage.toasts.error'), variant: 'destructive' });
+      toast({ title: t('GatewayDetailPage.toasts.rebootFailed'), description: getApiErrorMessage(err, t('GatewayDetailPage.toasts.error')), variant: 'destructive' });
     },
   });
 
@@ -748,7 +757,7 @@ export default function GatewayDetailPage() {
   // truncated detail instead of the request silently disappearing.
   const diagnosticErrorToast = (label: string) => (err: any) => {
     const name = err?.name || err?.constructor?.name || 'Error';
-    const raw = err?.response?.data?.detail || err?.message || t('GatewayDetailPage.toasts.requestFailed');
+    const raw = getApiErrorMessage(err, t('GatewayDetailPage.toasts.requestFailed'));
     const detail = typeof raw === 'string' ? raw : JSON.stringify(raw);
     const truncated = detail.length > 100 ? `${detail.slice(0, 100)}…` : detail;
     toast({ title: t('GatewayDetailPage.toasts.diagnosticFailed', { label }), description: `${name}: ${truncated}`, variant: 'destructive' });
@@ -909,6 +918,7 @@ export default function GatewayDetailPage() {
             <TabsTrigger value="mtk-topology" data-testid="tab-mtk-topology" onClick={tabClick('mtk-topology')}>{t('GatewayDetailPage.tabs.topology')}</TabsTrigger>
             <TabsTrigger value="mtk-snmp" data-testid="tab-mtk-snmp" onClick={tabClick('mtk-snmp')}>{t('GatewayDetailPage.tabs.snmp')}</TabsTrigger>
           </TabsList>
+          <LiveReadStatus deviceId={id} className="mt-3" />
 
           <TabsContent value="system" className="mt-6">
             <MikroTikSystemTab
@@ -1093,6 +1103,7 @@ export default function GatewayDetailPage() {
           ]}
         />
 
+        <LiveReadStatus deviceId={id} />
         <OpenWrtTab controllerId={id!} />
       </div>
     );
@@ -1290,10 +1301,11 @@ export default function GatewayDetailPage() {
           <TabsTrigger value="logs" data-testid="tab-logs" onClick={tabClick('logs')}>{t('GatewayDetailPage.tabs.logs')}</TabsTrigger>
           <TabsTrigger value="sync" data-testid="tab-sync" onClick={tabClick('sync')}>{t('GatewayDetailPage.tabs.syncLog')}</TabsTrigger>
         </TabsList>
+        <LiveReadStatus deviceId={id} className="mt-3" />
 
         {/* ─── Overview Tab ─────────────────────────────────────────── */}
         <TabsContent value="overview" className="mt-6 space-y-6">
-          {(deviceSummaryLoading || deviceSummaryError) && <Card><CardHeader><CardTitle>{t('GatewayLiveRead.summary')}</CardTitle></CardHeader><GatewayLiveReadNotice loading={deviceSummaryLoading} onRetry={() => { void retryDeviceSummary(); }} /></Card>}
+          {(deviceSummaryLoading || deviceSummaryError) && <Card><CardHeader><CardTitle>{t('GatewayLiveRead.summary')}</CardTitle></CardHeader><GatewayLiveReadNotice loading={deviceSummaryLoading} busy={isDeviceBusyError(deviceSummaryFailure)} onRetry={() => { void retryDeviceSummary(); }} /></Card>}
           <GatewayOverviewTab
             gw={gw}
             vendorLabel={vendorLabel}
@@ -1301,10 +1313,12 @@ export default function GatewayDetailPage() {
             firmware={firmware}
             firmwareLoading={firmwareLoading}
             firmwareError={firmwareError}
+            firmwareBusy={isDeviceBusyError(firmwareFailure)}
             onRetryFirmware={() => { void retryFirmware(); }}
             gwHealth={gwHealth}
             healthLoading={healthLoading}
             healthError={healthError}
+            healthBusy={isDeviceBusyError(healthFailure)}
             onRetryHealth={() => { void retryHealth(); }}
             liveStatus={liveStatus}
           />

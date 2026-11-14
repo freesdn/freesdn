@@ -50,6 +50,7 @@ def sync_dot1x_events(self) -> dict[str, Any]:
 
         synced_total = 0
         errors = 0
+        skipped = 0
 
         async with AsyncSessionLocal() as session:
             try:
@@ -61,21 +62,53 @@ def sync_dot1x_events(self) -> dict[str, Any]:
                     )
                 )
                 controller_ids = [row[0] for row in result.all()]
+                from app.core.device_breaker import CLOSED, controller_breaker, controller_key
+                from app.core.device_poll import device_poll
+                from app.core.device_slot import controller_slot_key
+                from app.models.core import Controller
+
+                controllers = {
+                    c.id: c
+                    for c in (
+                        await session.execute(
+                            select(Controller).where(Controller.id.in_(controller_ids))
+                        )
+                    ).scalars()
+                }
 
                 for ctrl_id in controller_ids:
-                    try:
-                        svc = RadiusProfileService(session)
-                        outcome = await svc.sync_auth_events(ctrl_id)
-                        synced_total += outcome.get("synced", 0)
-                        if not outcome.get("success"):
+                    ctrl = controllers.get(ctrl_id)
+                    # A controller the health check found unreachable is left to
+                    # it (this sync only peeks the breaker), and one that another
+                    # poller is talking to is read on the next cycle.
+                    if controller_breaker.peek(controller_key(ctrl_id)) != CLOSED:
+                        skipped += 1
+                        continue
+                    async with device_poll(
+                        slot_key=controller_slot_key(ctrl) if ctrl else f"controller:{ctrl_id}",
+                        breaker=None,
+                        breaker_key=None,
+                        holder="802.1X event sync",
+                    ) as turn:
+                        if turn.skipped:
+                            skipped += 1
+                            logger.info(
+                                "sync_dot1x_events: controller %s skipped: %s", ctrl_id, turn.reason
+                            )
+                            continue
+                        try:
+                            svc = RadiusProfileService(session)
+                            outcome = await svc.sync_auth_events(ctrl_id)
+                            synced_total += outcome.get("synced", 0)
+                            if not outcome.get("success"):
+                                errors += 1
+                        except Exception as exc:
+                            logger.warning(
+                                "sync_dot1x_events failed for controller %s: %s",
+                                ctrl_id,
+                                exc,
+                            )
                             errors += 1
-                    except Exception as exc:
-                        logger.warning(
-                            "sync_dot1x_events failed for controller %s: %s",
-                            ctrl_id,
-                            exc,
-                        )
-                        errors += 1
 
                 await session.commit()
                 logger.info(
@@ -92,6 +125,7 @@ def sync_dot1x_events(self) -> dict[str, Any]:
         return {
             "synced": synced_total,
             "errors": errors,
+            "skipped": skipped,
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
@@ -121,6 +155,7 @@ def check_radius_health(self) -> dict[str, Any]:
         checked = 0
         healthy = 0
         errors = 0
+        skipped = 0
 
         async with AsyncSessionLocal() as session:
             try:
@@ -131,20 +166,35 @@ def check_radius_health(self) -> dict[str, Any]:
                 )
                 profiles = result.scalars().all()
 
+                from app.core.device_poll import device_poll
+                from app.core.device_slot import host_slot_key
+
                 svc = RadiusProfileService(session)
                 for profile in profiles:
-                    try:
-                        outcome = await svc.health_check_profile(profile)
-                        checked += 1
-                        if outcome.get("is_healthy"):
-                            healthy += 1
-                    except Exception as exc:
-                        logger.warning(
-                            "Health check failed for RADIUS profile %s: %s",
-                            profile.id,
-                            exc,
-                        )
-                        errors += 1
+                    # A RADIUS server is often a managed box (a firewall's
+                    # FreeRADIUS): the probe takes its turn like every poller,
+                    # and a server another poller has is checked next cycle.
+                    async with device_poll(
+                        slot_key=host_slot_key(profile.host, fallback=f"radius:{profile.id}"),
+                        breaker=None,
+                        breaker_key=None,
+                        holder="RADIUS health check",
+                    ) as turn:
+                        if turn.skipped:
+                            skipped += 1
+                            continue
+                        try:
+                            outcome = await svc.health_check_profile(profile)
+                            checked += 1
+                            if outcome.get("is_healthy"):
+                                healthy += 1
+                        except Exception as exc:
+                            logger.warning(
+                                "Health check failed for RADIUS profile %s: %s",
+                                profile.id,
+                                exc,
+                            )
+                            errors += 1
 
                 await session.commit()
                 logger.info(
@@ -162,6 +212,7 @@ def check_radius_health(self) -> dict[str, Any]:
             "checked": checked,
             "healthy": healthy,
             "errors": errors,
+            "skipped": skipped,
             "timestamp": datetime.now(UTC).isoformat(),
         }
 

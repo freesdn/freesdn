@@ -2,8 +2,10 @@
 # Scrapes the API's /metrics (app + business + queue metrics), plus the Valkey
 # and Postgres/LogDB exporters, and loads the shipped alert rules.
 #
-# If you set METRICS_AUTH_TOKEN on the api, add to the freesdn-api job:
-#   authorization: { type: Bearer, credentials: "<token>" }
+# The api serves /metrics in production only to a bearer token. The installer
+# generates METRICS_AUTH_TOKEN; the compose entrypoint writes it to
+# /tmp/metrics_auth_token inside this container, which the freesdn-api job
+# reads below. Never paste the token into this file.
 # Wire alerts to Alertmanager by adding an `alerting:` block + an alertmanager
 # service; the rules already carry severity + runbook_url annotations.
 
@@ -24,6 +26,9 @@ scrape_configs:
   # FastAPI app metrics (prometheus-fastapi-instrumentator + app/core/metrics.py)
   - job_name: freesdn-api
     metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /tmp/metrics_auth_token
     static_configs:
       - targets: ["api:8000"]
 

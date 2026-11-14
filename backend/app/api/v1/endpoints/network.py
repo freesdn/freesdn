@@ -49,6 +49,7 @@ from app.modules.network.models import (
     WifiNetwork,
 )
 from app.services.adapter_factory import get_adapter
+from app.services.device_writes import controller_scope, within, write_through_staging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -488,6 +489,13 @@ def _decrypt_if_needed(value: str | None) -> str:
 
 
 async def _get_adapter_for_controller(ctrl: Controller) -> dict[str, Any]:
+    # A page's live read waits briefly for the controller's turn, or is answered
+    # with its last response (app/services/device_live_read.py).
+    from app.core.device_slot import controller_slot_key
+    from app.services.device_live_read import take_device_turn
+
+    await take_device_turn(controller_slot_key(ctrl))
+
     cloud_kwargs: dict[str, Any] = {}
     if ctrl.connection_mode == "cloud":
         cloud_kwargs = {
@@ -713,82 +721,174 @@ async def distribute_vlan(
     if not targets:
         raise HTTPException(400, detail="No valid target controllers found at the same site")
 
-    results: list[VlanDistributeResult] = []
+    # One change group for the whole distribution: a staged row per target
+    # controller, every controller preflighted before any VLAN is created, and
+    # a result per controller. A refused preflight on any controller creates
+    # the VLAN nowhere; a controller that then refuses stops the rest, and the
+    # VLANs already created are deleted again where the adapter can.
+    from app.services.adapter_staging import GroupMember
+    from app.services.device_writes import apply_group_through_staging
+
+    members: list[GroupMember] = []
+    layer3: dict[str, bool] = {}
     for ctrl in targets:
+        key = str(ctrl.id)
+        adapter: Any = None
+        build_error: str | None = None
         try:
             adapter = await _get_adapter_for_controller(ctrl)
+        except Exception as exc:  # noqa: BLE001 - reported by the preflight
+            build_error = type(exc).__name__
 
-            # Push VLAN to controller via adapter
-            vlan_payload: dict[str, Any] = {
-                "name": source.name,
-                "vlanId": source.vlan_id,
-                "purpose": source.purpose or "Interface",
-                "gateway": source.gateway,
-                "subnet": source.subnet,
-                "cidr": source.cidr,
-                "dhcpEnable": source.dhcp_enabled,
-            }
+        # Only Omada's create_vlan takes this whole-network dict, which is
+        # what carries the subnet, gateway and DHCP. Every other adapter
+        # takes (vlan_id, name) and creates a layer-2 VLAN; it used to be
+        # handed the dict AS the VLAN id. So the record and the message
+        # claim the layer-3 settings only where they were actually sent.
+        with_l3 = (ctrl.controller_type or "").lower() == "omada"
+        layer3[key] = with_l3
+        l3_body = {
+            "name": source.name,
+            "vlanId": source.vlan_id,
+            "purpose": source.purpose or "Interface",
+            "gateway": source.gateway,
+            "subnet": source.subnet,
+            "cidr": source.cidr,
+            "dhcpEnable": source.dhcp_enabled,
+        }
 
+        async def _preflight(adapter: Any = adapter, build_error: str | None = build_error) -> Any:
+            if adapter is None:
+                return f"the controller could not be reached ({build_error})"
+            if not _overrides(adapter, "create_vlan"):
+                return "this controller's adapter cannot create a VLAN"
+            try:
+                async with adapter:
+                    pass
+            except Exception as exc:  # noqa: BLE001 - the reason is the answer
+                return f"the controller did not answer ({type(exc).__name__})"
+            return None
+
+        async def _create(
+            adapter: Any = adapter, with_l3: bool = with_l3, body: Any = l3_body
+        ) -> Any:
             async with adapter:
-                adapter_result = await adapter.create_vlan(vlan_payload)
+                if with_l3:
+                    return await adapter.create_vlan(body)
+                return await adapter.create_vlan(source.vlan_id, source.name)
 
-            if not getattr(adapter_result, "success", True):
-                results.append(
-                    VlanDistributeResult(
-                        controller_id=str(ctrl.id),
-                        controller_name=ctrl.name,
-                        success=False,
-                        message=getattr(adapter_result, "message", "Adapter error"),
-                    )
-                )
-                continue
+        async def _remove(result: Any, adapter: Any = adapter) -> Any:
+            data = getattr(result, "data", None)
+            external = data.get("id") if isinstance(data, dict) else None
+            async with adapter:
+                return await adapter.delete_vlan(str(external or source.vlan_id))
 
-            # Create DB record
-            ext_id = None
-            val = getattr(adapter_result, "value", None)
-            if isinstance(val, dict):
-                ext_id = val.get("id")
+        member = GroupMember(
+            key=key,
+            organization_id=org_id,
+            controller_id=ctrl.id,
+            site_id=source.site_id,
+            feature="network.vlan.distribute",
+            operation="create",
+            target_id=str(source.vlan_id),
+            payload={
+                "vlan_id": source.vlan_id,
+                "name": source.name,
+                "layer3": with_l3,
+                "source_network_id": str(source.id),
+            },
+            perform=_create,
+            preflight=_preflight,
+            compensate=_remove,
+        )
+        if adapter is None or not _overrides(adapter, "delete_vlan"):
+            member.compensate = None
+        members.append(member)
 
-            new_net = Network(
-                controller_id=ctrl.id,
-                site_id=source.site_id,
-                external_id=ext_id,
-                name=source.name,
-                vlan_id=source.vlan_id,
-                description=source.description,
-                purpose=source.purpose,
-                gateway=source.gateway,
-                subnet=source.subnet,
-                subnet_mask=source.subnet_mask,
-                cidr=source.cidr,
-                dhcp_enabled=source.dhcp_enabled,
-                dhcp_start=source.dhcp_start,
-                dhcp_end=source.dhcp_end,
-            )
-            session.add(new_net)
-            await session.flush()
-
-            results.append(
+    try:
+        outcome = await apply_group_through_staging(
+            session,
+            members,
+            # The VLAN routes have never taken a force flag; unchanged.
+            force=True,
+            actor_id=_user.id,
+            notes=f"VLAN {source.vlan_id} distributed to {len(members)} controllers",
+        )
+    except HTTPException as exc:
+        # Read-only mode: refused before any controller was contacted.
+        return VlanDistributeResponse(
+            vlan_id=source.vlan_id,
+            vlan_name=source.name,
+            results=[
                 VlanDistributeResult(
                     controller_id=str(ctrl.id),
                     controller_name=ctrl.name,
-                    success=True,
-                    message="VLAN created",
-                    network_id=str(new_net.id),
+                    success=False,
+                    message=str(exc.detail),
                 )
-            )
-        except Exception as e:
-            logger.error(
-                "Failed to distribute VLAN to controller %s: %s", ctrl.id, e, exc_info=True
-            )
+                for ctrl in targets
+            ],
+            succeeded=0,
+            failed=len(targets),
+        )
+
+    by_key = {m.key: m for m in outcome.members}
+    results: list[VlanDistributeResult] = []
+    for ctrl in targets:
+        member_outcome = by_key.get(str(ctrl.id))
+        if member_outcome is None or member_outcome.status != "applied":
+            reason = (member_outcome.reason if member_outcome else None) or "not applied"
             results.append(
                 VlanDistributeResult(
                     controller_id=str(ctrl.id),
                     controller_name=ctrl.name,
                     success=False,
-                    message=str(e),
+                    message=reason,
                 )
             )
+            continue
+        adapter_result = member_outcome.result
+        with_l3 = layer3[str(ctrl.id)]
+        # Create DB record. AdapterResult carries its payload in ``data``;
+        # this read ``value``, so the external id was never stored.
+        ext_id = None
+        val = getattr(adapter_result, "data", None)
+        if isinstance(val, dict):
+            ext_id = val.get("id")
+
+        new_net = Network(
+            controller_id=ctrl.id,
+            site_id=source.site_id,
+            external_id=ext_id,
+            name=source.name,
+            vlan_id=source.vlan_id,
+            description=source.description,
+            purpose=source.purpose,
+            gateway=source.gateway if with_l3 else None,
+            subnet=source.subnet if with_l3 else None,
+            subnet_mask=source.subnet_mask if with_l3 else None,
+            cidr=source.cidr if with_l3 else None,
+            dhcp_enabled=source.dhcp_enabled if with_l3 else False,
+            dhcp_start=source.dhcp_start if with_l3 else None,
+            dhcp_end=source.dhcp_end if with_l3 else None,
+        )
+        session.add(new_net)
+        await session.flush()
+
+        results.append(
+            VlanDistributeResult(
+                controller_id=str(ctrl.id),
+                controller_name=ctrl.name,
+                success=True,
+                message=(
+                    (getattr(adapter_result, "message", None) or "VLAN created")
+                    if with_l3
+                    else "VLAN created as layer 2 only; subnet, gateway and DHCP were not "
+                    "configured on this controller"
+                ),
+                network_id=str(new_net.id),
+            )
+        )
 
     await session.commit()
 
@@ -868,7 +968,7 @@ async def create_vlan(
     # Try pushing to controller if there's a site with a controller.
     # The helper returns a sync-status dict; a failed controller write is
     # surfaced in the response instead of being silently swallowed.
-    sync = await _push_vlan_to_controller(session, net, action="create")
+    sync = await _push_vlan_to_controller(session, net, action="create", actor_id=_user.id)
 
     return VlanOut(
         id=str(net.id),
@@ -912,7 +1012,7 @@ async def update_vlan(
     await session.refresh(net)
 
     # Push update to controller; surface any failure in the response.
-    sync = await _push_vlan_to_controller(session, net, action="update")
+    sync = await _push_vlan_to_controller(session, net, action="update", actor_id=_user.id)
 
     return VlanOut(
         id=str(net.id),
@@ -932,6 +1032,11 @@ async def update_vlan(
 @router.delete("/vlans/{vlan_id}")
 async def delete_vlan(
     vlan_id: str,
+    local_only: bool = Query(
+        False,
+        description="Remove only FreeSDN's record and leave the controller unchanged "
+        "(for a VLAN the controller refuses to delete or no longer manages).",
+    ),
     session: AsyncSession = Depends(get_session),
     _user: CurrentUser = Depends(require_permissions("config:write")),
 ) -> dict[str, Any]:
@@ -948,19 +1053,159 @@ async def delete_vlan(
         raise HTTPException(404, detail="VLAN not found")
     _verify_site_grant(_user, net.site_id, detail="VLAN not found")
 
-    # Push delete to controller before soft-deleting locally so a
-    # controller failure is captured and returned rather than swallowed.
-    sync = await _push_vlan_to_controller(session, net, action="delete")
+    # Delete on the controller first; a refusal keeps the record and says why.
+    deleted, body = await _delete_on_controller(
+        lambda: _push_vlan_to_controller(
+            session, net, action="delete", actor_id=_user.id, raise_refusal=True
+        ),
+        "VLAN",
+        local_only,
+    )
+    if not deleted:
+        return body
 
     from datetime import datetime
 
     net.deleted_at = datetime.now(UTC)
     await session.commit()
-    return {"success": True, **sync}
+    return body
+
+
+class ControllerRefusedError(Exception):
+    """A controller write that did not happen, with the HTTP status that says why."""
+
+    def __init__(self, status_code: int, reason: str, *, raised: bool = False) -> None:
+        super().__init__(reason)
+        self.status_code = status_code
+        self.reason = reason
+        #: The write raised (rather than the controller answering "no").
+        self.raised = raised
+
+
+async def _site_controller(session: AsyncSession, site_id: Any, what: str) -> Controller | None:
+    """The one controller at ``site_id``, or None when it has none.
+
+    A site with two or more controllers is refused: FreeSDN cannot tell which
+    one the record belongs to. This was ``scalar_one_or_none()`` outside the
+    caller's ``try``, so such a site answered 500 on every VLAN/WiFi write.
+    """
+    controllers = list(
+        (
+            await session.execute(
+                select(Controller)
+                .join(Site, Controller.site_id == Site.id)
+                .where(Site.id == site_id, Controller.deleted_at.is_(None))
+            )
+        ).scalars()
+    )
+    if len(controllers) > 1:
+        raise ControllerRefusedError(
+            409,
+            f"This site has {len(controllers)} controllers, so FreeSDN cannot tell which one "
+            f"this {what} belongs to; nothing was sent to a controller",
+        )
+    return controllers[0] if controllers else None
+
+
+def _refusal_of(exc: Exception, action: str, what: str) -> ControllerRefusedError:
+    """The refusal a controller write that raised stands for."""
+    from app.adapters.exceptions import AdapterNotFoundError
+
+    if isinstance(exc, ControllerRefusedError):
+        return exc
+    if isinstance(exc, HTTPException):
+        # Read-only mode (403), device busy (503): refused before the controller
+        # was contacted, and the detail says so.
+        return ControllerRefusedError(exc.status_code, str(exc.detail))
+    if isinstance(exc, AdapterNotFoundError):
+        return ControllerRefusedError(404, f"the controller has no such {what}")
+    return ControllerRefusedError(502, f"controller write failed ({action}): {exc}", raised=True)
+
+
+def _result_refusal(result: Any, action: str, what: str) -> ControllerRefusedError | None:
+    """The refusal in a failed AdapterResult (Omada/base adapters return, not raise)."""
+    if result is None or getattr(result, "success", True):
+        return None
+    reason = (
+        getattr(result, "error", None)
+        or getattr(result, "message", None)
+        or f"controller rejected the {what} {action}"
+    )
+    status = 404 if getattr(result, "error_code", None) == "NOT_FOUND" else 502
+    return ControllerRefusedError(status, str(reason))
+
+
+def _sync_envelope(refused: ControllerRefusedError | None) -> dict[str, Any]:
+    """``{controller_synced, controller_warning}`` for a create/update/toggle.
+
+    Those routes have already saved FreeSDN's record, so a failed push is a
+    warning on the saved record rather than an error.
+    """
+    if refused is None:
+        return {"controller_synced": True, "controller_warning": None}
+    warning = f"Local DB updated but {refused.reason}" if refused.raised else refused.reason
+    return {"controller_synced": False, "controller_warning": warning}
+
+
+async def _delete_on_controller(
+    push: Any, what: str, local_only: bool
+) -> tuple[bool, dict[str, Any]]:
+    """Delete a VLAN/SSID on its controller first; keep FreeSDN's record if it refuses.
+
+    Returns (delete FreeSDN's record?, response body). The record used to be
+    dropped whatever the controller answered, with ``controller_synced: false``
+    in a response the UI did not read, so a VLAN or SSID the controller kept
+    became an orphan nobody could see. Now a refusal (read-only mode, a site with
+    several controllers, a busy or refusing controller) keeps the record and
+    answers ``success: false, record_kept: true`` with the reason. An object
+    the controller no longer has is not a refusal: it is already gone, and the
+    record goes too. ``local_only`` removes only FreeSDN's record.
+    """
+    if local_only:
+        return True, {
+            "success": True,
+            "controller_synced": False,
+            "controller_warning": f"Removed from FreeSDN only; the {what} was not changed "
+            "on the controller.",
+        }
+    try:
+        await push()
+    except ControllerRefusedError as refused:
+        if refused.status_code == 404:
+            return True, {
+                "success": True,
+                "controller_synced": True,
+                "controller_warning": f"The controller no longer had this {what}.",
+            }
+        return False, {
+            "success": False,
+            "record_kept": True,
+            "controller_synced": False,
+            "controller_warning": refused.reason,
+            "reason": (
+                f"The controller did not delete this {what}, so FreeSDN kept it: "
+                f"{refused.reason}. To remove only FreeSDN's record, delete again "
+                "with local_only=true."
+            ),
+        }
+    return True, {"success": True, "controller_synced": True, "controller_warning": None}
+
+
+def _overrides(adapter: Any, name: str) -> bool:
+    """True when the adapter implements ``name`` (BaseAdapter's is a NOT_SUPPORTED stub)."""
+    from app.adapters.base import BaseAdapter
+
+    method = getattr(type(adapter), name, None)
+    return method is not None and method is not getattr(BaseAdapter, name, None)
 
 
 async def _push_vlan_to_controller(
-    session: AsyncSession, net: Network, action: str
+    session: AsyncSession,
+    net: Network,
+    action: str,
+    *,
+    actor_id: UUID | None = None,
+    raise_refusal: bool = False,
 ) -> dict[str, Any]:
     """Push a VLAN change to the controller.
 
@@ -968,66 +1213,81 @@ async def _push_vlan_to_controller(
     ``controller_warning`` (str | None).  When there is no controller
     configured the call is a no-op and ``controller_synced`` is True
     (nothing to sync).  On adapter failure the warning message is set so
-    callers can surface it to the client without raising.
+    callers can surface it to the client without raising; with
+    ``raise_refusal`` (the delete route) it raises ControllerRefusedError.
     """
-    ctrl_id = net.controller_id
-    # Resolve the controller from the site when it is not set directly. create_vlan
-    # never sets controller_id (VlanCreate has no such field), so without this the
-    # guard below short-circuited on EVERY create/update/delete and reported
-    # controller_synced=True having never opened an adapter. The WiFi twin below
-    # has always done this; the VLAN path simply never got it.
-    if not ctrl_id and net.site_id:
-        site_result = await session.execute(
-            select(Controller)
-            .join(Site, Controller.site_id == Site.id)
-            .where(Site.id == net.site_id)
-        )
-        resolved = site_result.scalar_one_or_none()
-        if resolved:
-            ctrl_id = resolved.id
-            net.controller_id = ctrl_id
-            await session.flush()
-    if not ctrl_id:
-        return {"controller_synced": True, "controller_warning": None}
+    refused: ControllerRefusedError | None = None
     try:
-        ctrl_result = await session.execute(select(Controller).where(Controller.id == ctrl_id))
+        ctrl_id = net.controller_id
+        # Resolve the controller from the site when it is not set directly.
+        # create_vlan never sets controller_id (VlanCreate has no such field), so
+        # without this the guard below short-circuited on EVERY create/update/
+        # delete and reported controller_synced=True having never opened an
+        # adapter. The WiFi twin below has always done this.
+        if not ctrl_id and net.site_id:
+            resolved = await _site_controller(session, net.site_id, "VLAN")
+            if resolved:
+                ctrl_id = resolved.id
+                net.controller_id = ctrl_id
+                await session.flush()
+        if not ctrl_id:
+            return {"controller_synced": True, "controller_warning": None}
+        # A soft-deleted controller is not written to; FreeSDN no longer manages it.
+        ctrl_result = await session.execute(
+            select(Controller).where(Controller.id == ctrl_id, Controller.deleted_at.is_(None))
+        )
         ctrl = ctrl_result.scalar_one_or_none()
         if not ctrl:
             return {"controller_synced": True, "controller_warning": None}
 
         adapter = await _get_adapter_for_controller(ctrl)
-        result = None
-        async with adapter:
-            if action == "create":
-                result = await adapter.create_vlan(
-                    net.vlan_id, net.name, description=net.description
-                )
-            elif action == "update":
-                result = await adapter.update_vlan(
-                    net.external_id or str(net.vlan_id),
-                    {
-                        "name": net.name,
-                        "description": net.description,
-                    },
-                )
-            elif action == "delete":
-                result = await adapter.delete_vlan(net.external_id or str(net.vlan_id))
+
+        async def _write_vlan() -> Any:
+            async with adapter:
+                if action == "create":
+                    return await adapter.create_vlan(
+                        net.vlan_id, net.name, description=net.description
+                    )
+                if action == "update":
+                    return await adapter.update_vlan(
+                        net.external_id or str(net.vlan_id),
+                        {
+                            "name": net.name,
+                            "description": net.description,
+                        },
+                    )
+                if action == "delete":
+                    return await adapter.delete_vlan(net.external_id or str(net.vlan_id))
+            return None
+
+        organization_id, ctrl_site_id = await controller_scope(session, ctrl.id)
+        result = await write_through_staging(
+            session,
+            organization_id=organization_id,
+            controller_id=ctrl.id,
+            site_id=net.site_id or ctrl_site_id,
+            feature="network.vlan",
+            operation=action,
+            target_id=net.external_id or str(net.vlan_id),
+            payload={"vlan_id": net.vlan_id, "name": net.name, "description": net.description},
+            perform=_write_vlan,
+            # The VLAN routes have never taken a force flag; unchanged.
+            force=True,
+            actor_id=actor_id,
+            return_failed_result=True,
+        )
         # CONV-001: Omada/base adapters return AdapterResult(success=False) WITHOUT
         # raising (controller rejection / read-only refusal), so inspect the result
         # — not just exceptions — before claiming controller_synced=True.
-        if result is not None and not getattr(result, "success", True):
-            warning = (
-                getattr(result, "error", None)
-                or getattr(result, "message", None)
-                or f"controller rejected the VLAN {action}"
-            )
-            logger.warning("VLAN %s not synced to controller: %s", action, warning)
-            return {"controller_synced": False, "controller_warning": warning}
-        return {"controller_synced": True, "controller_warning": None}
+        refused = _result_refusal(result, action, "VLAN")
     except Exception as e:
-        warning = f"Local DB updated but controller write failed ({action}): {e}"
         logger.warning("Could not push VLAN %s to controller: %s", action, e)
-        return {"controller_synced": False, "controller_warning": warning}
+        refused = _refusal_of(e, action, "VLAN")
+    if refused is not None:
+        logger.warning("VLAN %s not synced to controller: %s", action, refused.reason)
+        if raise_refusal:
+            raise refused
+    return _sync_envelope(refused)
 
 
 # =====================================================================
@@ -1120,7 +1380,9 @@ async def create_wifi(
     await session.refresh(wifi)
 
     # Push to controller (honest sync envelope: local row is already committed)
-    sync = await _push_wifi_to_controller(session, wifi, action="create", password=data.password)
+    sync = await _push_wifi_to_controller(
+        session, wifi, action="create", password=data.password, actor_id=_user.id
+    )
     out = _wifi_to_out(wifi)
     out.controller_synced = sync["controller_synced"]
     out.controller_warning = sync["controller_warning"]
@@ -1155,7 +1417,9 @@ async def update_wifi(
     await session.commit()
     await session.refresh(wifi)
 
-    sync = await _push_wifi_to_controller(session, wifi, action="update", password=password)
+    sync = await _push_wifi_to_controller(
+        session, wifi, action="update", password=password, actor_id=_user.id
+    )
     out = _wifi_to_out(wifi)
     out.controller_synced = sync["controller_synced"]
     out.controller_warning = sync["controller_warning"]
@@ -1165,6 +1429,11 @@ async def update_wifi(
 @router.delete("/wifi/{wifi_id}")
 async def delete_wifi(
     wifi_id: str,
+    local_only: bool = Query(
+        False,
+        description="Remove only FreeSDN's record and leave the controller unchanged "
+        "(for an SSID the controller refuses to delete or no longer manages).",
+    ),
     session: AsyncSession = Depends(get_session),
     _user: CurrentUser = Depends(require_permissions("config:write")),
 ) -> dict[str, Any]:
@@ -1181,16 +1450,22 @@ async def delete_wifi(
         raise HTTPException(404, detail="WiFi network not found")
     _verify_site_grant(_user, wifi.site_id, detail="WiFi network not found")
 
-    sync = await _push_wifi_to_controller(session, wifi, action="delete")
+    # Delete on the controller first; a refusal keeps the record and says why.
+    deleted, body = await _delete_on_controller(
+        lambda: _push_wifi_to_controller(
+            session, wifi, action="delete", actor_id=_user.id, raise_refusal=True
+        ),
+        "SSID",
+        local_only,
+    )
+    if not deleted:
+        return body
 
     from datetime import datetime
 
     wifi.deleted_at = datetime.now(UTC)
     await session.commit()
-    # Surface controller_synced=False when the live SSID delete failed, so the
-    # caller knows the SSID may still be live on the controller (orphan) even
-    # though the local row is soft-deleted.
-    return {"success": True, **sync}
+    return body
 
 
 @router.post("/wifi/{wifi_id}/toggle", response_model=WifiNetworkOut)
@@ -1226,8 +1501,24 @@ async def toggle_wifi(
             ctrl = ctrl_result.scalar_one_or_none()
             if ctrl:
                 adapter = await _get_adapter_for_controller(ctrl)
-                async with adapter:
-                    toggle_result = await adapter.toggle_ssid(wifi.external_id, data.enabled)
+                external_id = wifi.external_id
+                organization_id, ctrl_site_id = await controller_scope(session, ctrl.id)
+                toggle_result = await write_through_staging(
+                    session,
+                    organization_id=organization_id,
+                    controller_id=ctrl.id,
+                    site_id=wifi.site_id or ctrl_site_id,
+                    feature="network.wifi.toggle",
+                    operation="update",
+                    target_id=external_id,
+                    payload={"ssid": wifi.ssid, "enabled": data.enabled},
+                    perform=lambda: within(
+                        adapter, lambda: adapter.toggle_ssid(external_id, data.enabled)
+                    ),
+                    force=True,
+                    actor_id=_user.id,
+                    return_failed_result=True,
+                )
                 # CONV-001: AdapterResult(success=False) is returned non-throwing.
                 if toggle_result is not None and not getattr(toggle_result, "success", True):
                     ctrl_synced = False
@@ -1285,105 +1576,131 @@ async def _push_wifi_to_controller(
     wifi: WifiNetwork,
     action: str,
     password: str | None = None,
+    *,
+    actor_id: UUID | None = None,
+    raise_refusal: bool = False,
 ) -> dict[str, Any]:
-    ctrl_id = wifi.controller_id
-    # Resolve controller from site if not set directly
-    if not ctrl_id and wifi.site_id:
-        site_result = await session.execute(
-            select(Controller)
-            .join(Site, Controller.site_id == Site.id)
-            .where(Site.id == wifi.site_id)
-        )
-        ctrl = site_result.scalar_one_or_none()
-        if ctrl:
-            ctrl_id = ctrl.id
-            wifi.controller_id = ctrl_id
-            await session.flush()
-    if not ctrl_id:
-        return {"controller_synced": True, "controller_warning": None}
+    refused: ControllerRefusedError | None = None
     try:
-        ctrl_result = await session.execute(select(Controller).where(Controller.id == ctrl_id))
+        ctrl_id = wifi.controller_id
+        # Resolve controller from site if not set directly
+        if not ctrl_id and wifi.site_id:
+            resolved = await _site_controller(session, wifi.site_id, "SSID")
+            if resolved:
+                ctrl_id = resolved.id
+                wifi.controller_id = ctrl_id
+                await session.flush()
+        if not ctrl_id:
+            return {"controller_synced": True, "controller_warning": None}
+        # A soft-deleted controller is not written to; FreeSDN no longer manages it.
+        ctrl_result = await session.execute(
+            select(Controller).where(Controller.id == ctrl_id, Controller.deleted_at.is_(None))
+        )
         ctrl = ctrl_result.scalar_one_or_none()
         if not ctrl:
             return {"controller_synced": True, "controller_warning": None}
 
         adapter = await _get_adapter_for_controller(ctrl)
         wlan_group_id = (wifi.wifi_metadata or {}).get("wlan_group_id")
-        result: Any = None
-        async with adapter:
-            if action == "create":
-                config: dict[str, Any] = {
-                    "name": wifi.ssid,
-                    "security": _map_security_to_omada(wifi.security),
-                    "band": _map_band_to_omada(wifi.band),
-                    "broadcast": not wifi.hidden,
-                }
-                if wifi.vlan_id:
-                    config["vlanEnable"] = True
-                    config["vlanId"] = wifi.vlan_id
-                if password:
-                    config["pskSetting"] = {
-                        "securityKey": password,
+
+        async def _write_wifi() -> Any:
+            async with adapter:
+                if action == "create":
+                    config: dict[str, Any] = {
+                        "name": wifi.ssid,
+                        "security": _map_security_to_omada(wifi.security),
+                        "band": _map_band_to_omada(wifi.band),
+                        "broadcast": not wifi.hidden,
                     }
-                if wlan_group_id:
-                    config["wlan_group_id"] = wlan_group_id
-                result = await adapter.create_ssid(config)
-                # Store external_id from controller response
-                if result.success and result.data and isinstance(result.data, dict):
-                    wifi.external_id = result.data.get("id")
-                    await session.flush()
-            elif action == "update":
-                config = {}
-                if wifi.ssid:
-                    config["name"] = wifi.ssid
-                if password:
-                    config["pskSetting"] = {"securityKey": password}
-                config["broadcast"] = not wifi.hidden
-                config["security"] = _map_security_to_omada(wifi.security)
-                config["band"] = _map_band_to_omada(wifi.band)
-                # VLAN was sent on CREATE and silently dropped on UPDATE, so
-                # changing an existing SSID's VLAN saved the new id in FreeSDN,
-                # returned ``controller_synced: true``, and left the controller
-                # on the old VLAN. That is a segmentation failure, not a display
-                # one: an operator moving a guest SSID onto the guest VLAN got a
-                # success message while guests kept landing wherever they were
-                # before -- possibly the corporate VLAN.
-                #
-                # Clearing the VLAN has to be sent too. Omitting the keys when
-                # vlan_id is empty would make "remove the VLAN tag" the one edit
-                # that still silently does nothing.
-                if wifi.vlan_id:
-                    config["vlanEnable"] = True
-                    config["vlanId"] = wifi.vlan_id
-                else:
-                    config["vlanEnable"] = False
-                if wlan_group_id:
-                    config["wlan_group_id"] = wlan_group_id
-                result = await adapter.update_ssid(wifi.external_id or "", config)
-            elif action == "delete":
-                result = await adapter.delete_ssid(
-                    wifi.external_id or "",
-                    wlan_id=wlan_group_id,
-                )
+                    if wifi.vlan_id:
+                        config["vlanEnable"] = True
+                        config["vlanId"] = wifi.vlan_id
+                    if password:
+                        config["pskSetting"] = {
+                            "securityKey": password,
+                        }
+                    if wlan_group_id:
+                        config["wlan_group_id"] = wlan_group_id
+                    created = await adapter.create_ssid(config)
+                    # Store external_id from controller response
+                    if created.success and created.data and isinstance(created.data, dict):
+                        wifi.external_id = created.data.get("id")
+                        await session.flush()
+                    return created
+                elif action == "update":
+                    config = {}
+                    if wifi.ssid:
+                        config["name"] = wifi.ssid
+                    if password:
+                        config["pskSetting"] = {"securityKey": password}
+                    config["broadcast"] = not wifi.hidden
+                    config["security"] = _map_security_to_omada(wifi.security)
+                    config["band"] = _map_band_to_omada(wifi.band)
+                    # VLAN was sent on CREATE and silently dropped on UPDATE, so
+                    # changing an existing SSID's VLAN saved the new id in FreeSDN,
+                    # returned ``controller_synced: true``, and left the controller
+                    # on the old VLAN. That is a segmentation failure, not a display
+                    # one: an operator moving a guest SSID onto the guest VLAN got a
+                    # success message while guests kept landing wherever they were
+                    # before -- possibly the corporate VLAN.
+                    #
+                    # Clearing the VLAN has to be sent too. Omitting the keys when
+                    # vlan_id is empty would make "remove the VLAN tag" the one edit
+                    # that still silently does nothing.
+                    if wifi.vlan_id:
+                        config["vlanEnable"] = True
+                        config["vlanId"] = wifi.vlan_id
+                    else:
+                        config["vlanEnable"] = False
+                    if wlan_group_id:
+                        config["wlan_group_id"] = wlan_group_id
+                    return await adapter.update_ssid(wifi.external_id or "", config)
+                elif action == "delete":
+                    return await adapter.delete_ssid(
+                        wifi.external_id or "",
+                        wlan_id=wlan_group_id,
+                    )
+            return None
+
+        organization_id, ctrl_site_id = await controller_scope(session, ctrl.id)
+        result = await write_through_staging(
+            session,
+            organization_id=organization_id,
+            controller_id=ctrl.id,
+            site_id=wifi.site_id or ctrl_site_id,
+            feature="network.wifi",
+            operation=action,
+            target_id=wifi.external_id or str(wifi.id),
+            # The ledger keeps whether a key was sent, never the key.
+            payload={
+                "ssid": wifi.ssid,
+                "security": wifi.security,
+                "band": wifi.band,
+                "vlan_id": wifi.vlan_id,
+                "hidden": wifi.hidden,
+                "password": password,
+            },
+            perform=_write_wifi,
+            # The WiFi routes have never taken a force flag; unchanged.
+            force=True,
+            actor_id=actor_id,
+            return_failed_result=True,
+        )
         # CONV-001: adapters return AdapterResult(success=False) WITHOUT raising;
         # surface a failed controller write (incl. failed create) honestly instead
         # of reporting controller_synced=True.
-        if result is not None and not getattr(result, "success", True):
-            warning = (
-                getattr(result, "error", None)
-                or getattr(result, "message", None)
-                or f"controller rejected the WiFi {action}"
-            )
-            logger.warning("WiFi %s not synced to controller: %s", action, warning)
-            return {"controller_synced": False, "controller_warning": warning}
-        return {"controller_synced": True, "controller_warning": None}
+        refused = _result_refusal(result, action, "WiFi")
     except Exception as e:
         # Mirror _push_vlan_to_controller: the local DB row is already committed,
         # so surface the controller failure honestly (controller_synced=False)
         # instead of silently swallowing it and reporting an unqualified success.
-        warning = f"Local DB updated but controller write failed ({action}): {e}"
         logger.warning("Could not push WiFi %s to controller: %s", action, e)
-        return {"controller_synced": False, "controller_warning": warning}
+        refused = _refusal_of(e, action, "SSID")
+    if refused is not None:
+        logger.warning("WiFi %s not synced to controller: %s", action, refused.reason)
+        if raise_refusal:
+            raise refused
+    return _sync_envelope(refused)
 
 
 def _map_security_to_omada(security: str) -> int:
@@ -1583,8 +1900,25 @@ async def block_client(
         if ctrl:
             try:
                 adapter = await _get_adapter_for_controller(ctrl)
-                async with adapter:
-                    block_result = await adapter.block_client(client.mac_address)
+                organization_id, ctrl_site_id = await controller_scope(session, ctrl.id)
+                block_result = await write_through_staging(
+                    session,
+                    organization_id=organization_id,
+                    controller_id=ctrl.id,
+                    site_id=device.site_id or ctrl_site_id,
+                    feature="network.client.block",
+                    operation="update",
+                    target_id=client.mac_address,
+                    payload={"mac": client.mac_address},
+                    perform=lambda: within(
+                        adapter, lambda: adapter.block_client(client.mac_address)
+                    ),
+                    force=True,
+                    actor_id=_user.id,
+                    return_failed_result=True,
+                )
+            except HTTPException:
+                raise
             except Exception as e:
                 # block is an ENFORCEMENT action: if the controller write was
                 # attempted and failed, do NOT record a false "blocked" state or
@@ -1643,8 +1977,25 @@ async def unblock_client(
         if ctrl:
             try:
                 adapter = await _get_adapter_for_controller(ctrl)
-                async with adapter:
-                    unblock_result = await adapter.unblock_client(client.mac_address)
+                organization_id, ctrl_site_id = await controller_scope(session, ctrl.id)
+                unblock_result = await write_through_staging(
+                    session,
+                    organization_id=organization_id,
+                    controller_id=ctrl.id,
+                    site_id=device.site_id or ctrl_site_id,
+                    feature="network.client.unblock",
+                    operation="update",
+                    target_id=client.mac_address,
+                    payload={"mac": client.mac_address},
+                    perform=lambda: within(
+                        adapter, lambda: adapter.unblock_client(client.mac_address)
+                    ),
+                    force=True,
+                    actor_id=_user.id,
+                    return_failed_result=True,
+                )
+            except HTTPException:
+                raise
             except Exception as e:
                 # Symmetric to block: if the controller write was attempted and
                 # failed, don't clear the "blocked" state or report success — the

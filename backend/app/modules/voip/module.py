@@ -147,8 +147,10 @@ async def _fabric_originate_handler(ctx: Any) -> Any:
     operational action meant to fire automatically from an automation (e.g.
     "security alarm -> call the on-call extension"), so it executes immediately
     rather than staging for sign-off. It is gated by the ``voip.manage_phones``
-    permission (enforced by the negotiator against the Connection author) and
-    the adapter's ADAPTER_READ_ONLY env lock.
+    permission (enforced by the negotiator against the Connection author) and,
+    as a ``live_action``, by the executor's ADAPTER_READ_ONLY refusal: the
+    adapter itself lets ``force=True`` live call control through read-only
+    mode, and VoIPService.originate_call always passes force=True.
     """
     from app.core.fabric.execution import OperationResult
 
@@ -685,7 +687,8 @@ class VoIPModule(BaseModule):
                 description=(
                     "Place a call from an extension to a destination. A real-time "
                     "action that fires immediately (not staged) — e.g. 'alarm -> "
-                    "call the on-call'. Gated by voip.manage_phones + the read-only env lock."
+                    "call the on-call'. Needs voip.manage_phones; refused while "
+                    "ADAPTER_READ_ONLY is on; never offered to the AI assistant."
                 ),
                 input_schema={
                     "type": "object",
@@ -701,6 +704,7 @@ class VoIPModule(BaseModule):
                 produces=("application/json",),
                 permission="voip.manage_phones",
                 write=False,
+                live_action=True,
                 handler=_fabric_originate_handler,
                 tier=OperationTier.NATIVE,
                 provider_id="voip",

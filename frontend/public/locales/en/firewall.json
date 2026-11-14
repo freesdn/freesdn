@@ -232,7 +232,11 @@
     },
     "confirm": {
       "deleteGateway": "Delete gateway \"{{name}}\"? This cannot be undone.",
-      "deleteRule": "Delete rule \"{{name}}\"?"
+      "deleteRule": "Delete rule \"{{name}}\"?",
+      "deleteGatewayTitle": "Delete gateway \"{{name}}\"?",
+      "deleteGatewayBody": "FreeSDN stops managing and monitoring this gateway and removes it from the device list and site role maps. Nothing is changed on the gateway itself.",
+      "deleteGatewayAction": "Delete gateway",
+      "deleteRuleBody": "This removes FreeSDN's record of the rule only. Nothing is changed on the gateway."
     },
     "errors": {
       "partialLoad": "Some data failed to load. Results may be incomplete."
@@ -444,7 +448,8 @@
       "rebootInitiated": "Reboot initiated",
       "rebootInitiatedDesc": "The gateway is rebooting · it will be offline briefly.",
       "rebootFailed": "Reboot failed",
-      "diagnosticFailed": "{{label}} failed"
+      "diagnosticFailed": "{{label}} failed",
+      "deviceBusy": "Gateway busy"
     },
     "resources": {
       "firewallRule": "Firewall Rule",
@@ -501,7 +506,10 @@
       "checkUpdates": "Check Updates",
       "downloadConfig": "Download Config",
       "halt": "Halt",
-      "haltConfirm": "This will HALT (power off) the gateway. Are you sure?"
+      "haltConfirm": "This will HALT (power off) the gateway. Are you sure?",
+      "haltTitle": "Halt this gateway?",
+      "haltBody": "The gateway powers off right away. Every network that routes through it loses connectivity, and FreeSDN cannot turn it back on: someone has to power it on at the device.",
+      "haltAction": "Halt gateway"
     },
     "packages": {
       "title": "Installed Packages",
@@ -1119,7 +1127,8 @@
       "never": "Never",
       "lastError": "Last Error",
       "lastSeen": "Last Seen",
-      "capabilities": "Capabilities"
+      "capabilities": "Capabilities",
+      "lastSkipped": "Last Sync Skipped"
     },
     "wanHealth": {
       "title": "WAN Gateway Health",
@@ -2479,6 +2488,10 @@
       "macAddress": "MAC address",
       "ipAddress": "IP address",
       "submit": "Stage reservation"
+    },
+    "confirmStaged": {
+      "body": "Nothing changes on the router yet. The delete waits in Pending Changes until you apply it there.",
+      "action": "Stage delete"
     }
   },
   "MikroTikSnmpTab": {
@@ -3853,6 +3866,7 @@
     "retry": "Retry",
     "running": "Running",
     "stopped": "Stopped",
-    "summary": "Live device summary"
+    "summary": "Live device summary",
+    "busy": "The gateway is busy with another request. Nothing was sent to it; retrying shortly."
   }
 }

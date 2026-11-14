@@ -84,6 +84,7 @@ import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatsGrid } from '@/components/ui/stats-grid';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { PageHeader } from '@/components/layout';
 import {
   firewallApi,
@@ -96,6 +97,7 @@ import {
   type GatewaySummary,
   type Site,
 } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // =============================================================================
 // Types
@@ -1219,6 +1221,7 @@ export default function FirewallPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [showAddGateway, setShowAddGateway] = useState(false);
   const [editingGateway, setEditingGateway] = useState<GatewayConnection | null>(null);
   const [editingRule, setEditingRule] = useState<FirewallRule | null>(null);
@@ -1324,7 +1327,7 @@ export default function FirewallPage() {
       setShowAddGateway(false);
     },
     onError: (err: any) => {
-      toast({ title: t('FirewallPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('FirewallPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('FirewallPage.toast.errorTitle'), description: getApiErrorMessage(err, t('FirewallPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
@@ -1337,7 +1340,7 @@ export default function FirewallPage() {
       setEditingGateway(null);
     },
     onError: (err: any) => {
-      toast({ title: t('FirewallPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('FirewallPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('FirewallPage.toast.errorTitle'), description: getApiErrorMessage(err, t('FirewallPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
@@ -1348,7 +1351,7 @@ export default function FirewallPage() {
       queryClient.invalidateQueries({ queryKey: ['fw-gateways-summary'] });
     },
     onError: (err: any) => {
-      toast({ title: t('FirewallPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('FirewallPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('FirewallPage.toast.errorTitle'), description: getApiErrorMessage(err, t('FirewallPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
@@ -1358,14 +1361,14 @@ export default function FirewallPage() {
       queryClient.invalidateQueries({ queryKey: ['fw-gateways'] });
     },
     onError: (err: any) => {
-      toast({ title: t('FirewallPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('FirewallPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('FirewallPage.toast.errorTitle'), description: getApiErrorMessage(err, t('FirewallPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
   const testConnectionMutation = useMutation({
     mutationFn: (data: GatewayTestRequest) => gatewayApi.testConnection(data),
     onError: (err: any) => {
-      toast({ title: t('FirewallPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('FirewallPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('FirewallPage.toast.errorTitle'), description: getApiErrorMessage(err, t('FirewallPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
@@ -1382,7 +1385,7 @@ export default function FirewallPage() {
       queryClient.invalidateQueries({ queryKey: ['fw-gateways'] });
     },
     onError: (err: any) => {
-      toast({ title: t('FirewallPage.toast.testFailed'), description: err?.response?.data?.detail || t('FirewallPage.toast.connectionTestFailed'), variant: 'destructive' });
+      toast({ title: t('FirewallPage.toast.testFailed'), description: getApiErrorMessage(err, t('FirewallPage.toast.connectionTestFailed')), variant: 'destructive' });
     },
   });
 
@@ -1394,7 +1397,7 @@ export default function FirewallPage() {
     mutationFn: (id: string) => firewallApi.deleteRule(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['fw-rules'] }),
     onError: (err: any) => {
-      toast({ title: t('FirewallPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('FirewallPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('FirewallPage.toast.errorTitle'), description: getApiErrorMessage(err, t('FirewallPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
@@ -1405,7 +1408,7 @@ export default function FirewallPage() {
       setEditingRule(null);
     },
     onError: (err: any) => {
-      toast({ title: t('FirewallPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('FirewallPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('FirewallPage.toast.errorTitle'), description: getApiErrorMessage(err, t('FirewallPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
@@ -1420,7 +1423,7 @@ export default function FirewallPage() {
       queryClient.invalidateQueries({ queryKey: ['fw-alert-stats'] });
     },
     onError: (err: any) => {
-      toast({ title: t('FirewallPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('FirewallPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('FirewallPage.toast.errorTitle'), description: getApiErrorMessage(err, t('FirewallPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
@@ -1549,9 +1552,15 @@ export default function FirewallPage() {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-red-500 focus:text-red-500"
-              onClick={() => {
-                if (window.confirm(t('FirewallPage.confirm.deleteGateway', { name: gw.name })))
-                  deleteGatewayMutation.mutate(gw.id);
+              onClick={async () => {
+                const ok = await confirm({
+                  title: t('FirewallPage.confirm.deleteGatewayTitle', { name: gw.name }),
+                  description: t('FirewallPage.confirm.deleteGatewayBody'),
+                  items: [gw.name],
+                  confirmLabel: t('FirewallPage.confirm.deleteGatewayAction'),
+                  destructive: true,
+                });
+                if (ok) deleteGatewayMutation.mutate(gw.id);
               }}
             >
               <Trash2 className="h-4 w-4 mr-2" />{t('FirewallPage.actions.delete')}
@@ -1649,9 +1658,15 @@ export default function FirewallPage() {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-red-500 focus:text-red-500"
-              onClick={() => {
-                if (window.confirm(t('FirewallPage.confirm.deleteRule', { name: rule.name })))
-                  deleteRuleMutation.mutate(rule.id);
+              onClick={async () => {
+                const ok = await confirm({
+                  title: t('FirewallPage.confirm.deleteRule', { name: rule.name }),
+                  description: t('FirewallPage.confirm.deleteRuleBody'),
+                  items: [rule.name],
+                  confirmLabel: t('FirewallPage.actions.deleteRule'),
+                  destructive: true,
+                });
+                if (ok) deleteRuleMutation.mutate(rule.id);
               }}
             >
               <Trash2 className="h-4 w-4 mr-2" />{t('FirewallPage.actions.deleteRule')}
@@ -2232,7 +2247,7 @@ export default function FirewallPage() {
     <div className="space-y-6">
       {/* Alert stats */}
       <StatsGrid
-        columns={4}
+        columns={5}
         stats={[
           { title: t('FirewallPage.stats.totalAlerts'), value: alertStats.total, icon: ShieldAlert, variant: 'warning' },
           {
@@ -2311,14 +2326,16 @@ export default function FirewallPage() {
         icon={Shield}
         title={t('FirewallPage.header.title')}
         subtitle={t('FirewallPage.header.subtitle')}
-        onRefresh={() => {
-          refetchGateways();
-          refetchSummary();
-          refetchRules();
-          refetchAlerts();
-          refetchVpn();
-          refetchLogs();
-        }}
+        onRefresh={() =>
+          Promise.all([
+            refetchGateways(),
+            refetchSummary(),
+            refetchRules(),
+            refetchAlerts(),
+            refetchVpn(),
+            refetchLogs(),
+          ])
+        }
         refreshing={gatewaysLoading}
         primaryAction={{
           label: t('FirewallPage.actions.addGateway'),
@@ -2338,7 +2355,7 @@ export default function FirewallPage() {
 
       {/* Top-level summary stats */}
       <StatsGrid
-        columns={4}
+        columns={5}
         stats={[
           {
             title: t('FirewallPage.stats.gateways'),

@@ -520,6 +520,16 @@ async def delete_agent(
 
     await logdb.commit()
     await session.commit()
+
+    # Its key is dead from here on, but a socket it already holds was
+    # authenticated once at connect and never again, so commands for the site
+    # could still be routed to it. Drop it. The registry is per process: a
+    # socket held by another API worker ends when it next reconnects.
+    if _agent_registry is not None:
+        try:
+            await _agent_registry.unregister_connection(str(agent_id))
+        except Exception:
+            logger.warning("Could not drop the live socket of deleted agent %s", agent_id)
     return MessageResponse(message="Agent deleted successfully")
 
 

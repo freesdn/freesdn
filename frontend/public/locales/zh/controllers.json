@@ -12,7 +12,8 @@
       "disconnected": "已断开",
       "error": "错误",
       "syncing": "同步中",
-      "unknown": "未知"
+      "unknown": "未知",
+      "unreachable": "无法访问"
     },
     "error": {
       "notFound": "未找到控制器",
@@ -150,8 +151,13 @@
       "title": "危险区域",
       "description": "删除此控制器还将从 FreeSDN 中移除所有关联设备。",
       "confirm": "删除控制器 \"{{name}}\"？这还将移除全部 {{count}} 台受管设备。",
-      "delete": "删除控制器"
-    }
+      "delete": "删除控制器",
+      "confirmTitle": "删除控制器 \"{{name}}\"？",
+      "confirmBody_one": "FreeSDN 将停止管理它，并从 FreeSDN 中移除其 {{count}} 台设备。控制器本身不会有任何更改。",
+      "confirmBody_other": "FreeSDN 将停止管理它，并从 FreeSDN 中移除其 {{count}} 台设备。控制器本身不会有任何更改。",
+      "confirmBodyNoCount": "FreeSDN 将停止管理它，并从 FreeSDN 中移除它管理的所有设备。控制器本身不会有任何更改。"
+    },
+    "copyValue": "复制{{label}}"
   },
   "ControllersPage": {
     "header": {

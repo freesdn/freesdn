@@ -98,6 +98,8 @@ celery_app = Celery(
         "app.tasks.alert_rules",
         "app.tasks.sla",
         "app.tasks.backup",
+        # Network device configuration backup (read-only exports, daily).
+        "app.tasks.config_backup",
         "app.tasks.reconciliation",
         "app.tasks.bulk_operations",
         "app.modules.gateway.tasks.sync_tasks",
@@ -172,9 +174,52 @@ def worker_heartbeat() -> None:
         r.close()
 
 
+@celery_app.task(name="worker.queue_heartbeat", ignore_result=True)  # type: ignore[untyped-decorator]
+def queue_heartbeat(queue: str) -> None:
+    """Prove that a task routed to ``queue`` actually runs (app/core/queue_heartbeat.py)."""
+    from app.core.queue_heartbeat import record_heartbeat
+
+    record_heartbeat(queue)
+
+
+@celery_app.task(name="worker.dispatch_queue_heartbeats", ignore_result=True)  # type: ignore[untyped-decorator]
+def dispatch_queue_heartbeats() -> int:
+    """Send one heartbeat to every queue a worker of this install consumes.
+
+    Only to those: a queue no tier runs gets nothing to pile up in it. The
+    message expires before the next one is due, so a worker that comes back
+    after an outage drops the backlog of heartbeats instead of running it.
+    """
+    from app.core.queue_heartbeat import consumed_queues
+
+    consumed = consumed_queues()
+    sent = 0
+    for queue in (q.name for q in task_queues):
+        if queue in consumed:
+            queue_heartbeat.apply_async(args=[queue], queue=queue, expires=_QUEUE_HEARTBEAT_EXPIRES)
+            sent += 1
+    return sent
+
+
+_QUEUE_HEARTBEAT_EXPIRES = 60
+
+
 # ===========================================
 # Celery Configuration
 # ===========================================
+
+
+def _every(seconds: float) -> float:
+    """A device poller's beat interval, from its setting (see config.py,
+    "Polling budgets"). Interval schedules, not crontab, so any number of
+    seconds the setting allows is honoured."""
+    return float(seconds)
+
+
+def _expires(seconds: float) -> int:
+    """A poll message that has not started before the next one is due is stale."""
+    return max(30, int(seconds) - 10)
+
 
 celery_app.conf.update(
     # Logging: Celery hijacks the ROOT logger by default, which replaces the
@@ -277,17 +322,31 @@ celery_app.conf.update(
             "schedule": 30.0,
             "options": {"queue": "default"},
         },
+        # Per-queue heartbeats: one tiny task to each consumed queue every 30 s,
+        # so a stalled or unconsumed queue (e.g. a wedged I/O worker holding
+        # discovery/sync/metrics) shows in /health/detail and in
+        # freesdn_celery_queue_stalled. See app/core/queue_heartbeat.py.
+        "dispatch-queue-heartbeats": {
+            "task": "worker.dispatch_queue_heartbeats",
+            "schedule": 30.0,
+            "options": {"queue": "default", "expires": 25},
+        },
         # Device discovery - every 5 minutes
         "discover-all-devices": {
             "task": "app.tasks.discovery.discover_all_devices",
             "schedule": crontab(minute="*/5"),
             "options": {"queue": "discovery"},
         },
-        # Device status sync - every minute
+        # Device status through each controller - every
+        # DEVICE_STATUS_INTERVAL_SECONDS (5 min; it was every minute, one login
+        # and one status read per device per minute against every controller).
         "sync-device-statuses": {
             "task": "app.tasks.sync.sync_all_device_statuses",
-            "schedule": crontab(minute="*"),
-            "options": {"queue": "sync"},
+            "schedule": _every(settings.DEVICE_STATUS_INTERVAL_SECONDS),
+            "options": {
+                "queue": "sync",
+                "expires": _expires(settings.DEVICE_STATUS_INTERVAL_SECONDS),
+            },
         },
         # Mark stale devices offline - every minute
         "mark-stale-devices": {
@@ -295,17 +354,33 @@ celery_app.conf.update(
             "schedule": crontab(minute="*"),
             "options": {"queue": "sync"},
         },
-        # Metrics collection - every 5 minutes
-        "collect-device-metrics": {
-            "task": "app.tasks.metrics.collect_all_device_metrics",
-            "schedule": crontab(minute="*/5"),
-            "options": {"queue": "metrics"},
-        },
-        # Controller health check - every 2 minutes
+        # NOT scheduled: app.tasks.metrics.collect_all_device_metrics. Every five
+        # minutes it queued one task per online device, each of which logged into
+        # that device's controller, fetched its metrics and returned them to a
+        # result nobody read: controller load for nothing stored. Only the Omada
+        # adapter even implements get_device_metrics, from the same cpuUtil /
+        # memUtil / uptimeLong / clientNum payload discovery already writes onto
+        # the device row. analytics.collect_device_metrics (below) now records
+        # those synced values into analytics.metric_data without contacting a
+        # device.
+        #
+        # Controller health check - every 2 minutes.
+        #
+        # On "default", the quick lane, not "sync": it is now one bounded login
+        # probe per controller (seconds), and on the I/O lane it queued behind
+        # gateway syncs, per-device reconciles and discovery that can each run
+        # for minutes against a slow device -- so a recovered controller waited
+        # for the backlog to drain before anything noticed (2026-11 soak:
+        # Omada "unreachable" for ~10 minutes after it answered again).
+        # expires < interval: a check that has not started before the next one
+        # is due is stale, and running it late helps nobody.
         "check-controller-health": {
             "task": "sync.check_controller_health",
-            "schedule": crontab(minute="*/2"),
-            "options": {"queue": "sync"},
+            "schedule": _every(settings.CONTROLLER_HEALTH_INTERVAL_SECONDS),
+            "options": {
+                "queue": "default",
+                "expires": _expires(settings.CONTROLLER_HEALTH_INTERVAL_SECONDS),
+            },
         },
         # Cleanup old events - daily at 3 AM
         "cleanup-token-revocations": {
@@ -316,6 +391,20 @@ celery_app.conf.update(
         "cleanup-old-events": {
             "task": "app.tasks.maintenance.cleanup_old_events",
             "schedule": crontab(hour=3, minute=0),
+            "options": {"queue": "default"},
+        },
+        # Webhook deliveries whose task was lost (pending/retrying, unchanged
+        # for 15 min) get another attempt - every 5 minutes.
+        "requeue-stalled-webhook-deliveries": {
+            "task": "app.tasks.webhooks.requeue_stalled_deliveries",
+            "schedule": crontab(minute="*/5"),
+            "options": {"queue": "default", "expires": 280},
+        },
+        # Webhook delivery log and dead letters, same retention as events
+        # (EVENT_RETENTION_DAYS) - daily at 3:20 AM.
+        "cleanup-webhook-deliveries": {
+            "task": "app.tasks.maintenance.cleanup_webhook_deliveries",
+            "schedule": crontab(hour=3, minute=20),
             "options": {"queue": "default"},
         },
         # Cleanup stale task progress - hourly
@@ -499,10 +588,12 @@ celery_app.conf.update(
             "schedule": crontab(minute=15),
             "options": {"queue": "default"},
         },
-        # Enterprise: config reconciliation - every 5 minutes
+        # Enterprise: config reconciliation - every RECONCILE_INTERVAL_SECONDS
+        # (15 min). Database only: it compares desired with pushed config and
+        # contacts no device (tests/tasks/test_reconcile_is_gentle.py).
         "enterprise-reconcile-all": {
             "task": "app.tasks.reconciliation.reconcile_all_devices",
-            "schedule": crontab(minute="*/5"),
+            "schedule": _every(settings.RECONCILE_INTERVAL_SECONDS),
             "options": {"queue": "sync"},
         },
         # Enterprise: health score recomputation - every 5 minutes
@@ -570,6 +661,21 @@ celery_app.conf.update(
             "schedule": crontab(minute="*"),
             "options": {"queue": "default"},
         },
+        # Backup: database (pg-backup) dumps off/failing/stale -> notify super
+        # admins; once per state per day, plus one "working again" notice.
+        "backup-check-database-backups": {
+            "task": "backup.check_database_backups",
+            "schedule": crontab(minute=23),
+            "options": {"queue": "default"},
+        },
+        # Network device config backup: discover + lease due targets, enqueue
+        # one read-only export per device on "sync". Each device is exported
+        # daily (jittered) at most; this tick only decides who is due.
+        "config-backup-dispatch-due": {
+            "task": "config_backup.dispatch_due",
+            "schedule": crontab(minute="*/10"),
+            "options": {"queue": "default"},
+        },
         # Backup: cleanup expired backups - daily at 2:30 AM
         "backup-cleanup-expired": {
             "task": "backup.cleanup_expired",
@@ -612,16 +718,21 @@ celery_app.conf.update(
             "schedule": crontab(minute="*/15"),
             "options": {"queue": "sync"},
         },
-        # Camera: health polling - every 60 seconds
+        # Camera: NVR health polling - every CAMERA_HEALTH_INTERVAL_SECONDS (5
+        # min; it was every minute: one request per camera channel per minute).
         "camera-poll-health": {
             "task": "cameras.poll_camera_health",
-            "schedule": crontab(minute="*"),
-            "options": {"queue": "metrics"},
+            "schedule": _every(settings.CAMERA_HEALTH_INTERVAL_SECONDS),
+            "options": {
+                "queue": "metrics",
+                "expires": _expires(settings.CAMERA_HEALTH_INTERVAL_SECONDS),
+            },
         },
-        # Camera: NVR alert ingestion - every 30 seconds
+        # Camera: NVR alert ingestion - every CAMERA_ALERT_POLL_INTERVAL_SECONDS
+        # (30 s: the recorder only returns what it currently buffers).
         "camera-ingest-alerts": {
             "task": "cameras.ingest_nvr_alerts",
-            "schedule": 30.0,
+            "schedule": _every(settings.CAMERA_ALERT_POLL_INTERVAL_SECONDS),
             "options": {"queue": "metrics"},
         },
         # Camera: cleanup old health snapshots - daily at 3:15 AM
@@ -717,15 +828,20 @@ celery_app.conf.update(
         # warning, critical alert, appliance unreachable/online) - every 2 min.
         "storage-poll-health": {
             "task": "storage.poll_health",
-            "schedule": crontab(minute="*/2"),
+            "schedule": _every(settings.STORAGE_HEALTH_INTERVAL_SECONDS),
             "options": {"queue": "metrics"},
         },
         # Firewall (OPNsense/pfSense): poll gateway health + emit firewall.event.*
-        # on transitions (IDS-critical, WAN up/down, reachability) - every 2 min.
+        # on transitions (IDS-critical, WAN up/down, reachability) - every
+        # FIREWALL_HEALTH_INTERVAL_SECONDS (5 min; light: connect, gateway
+        # status, IDS). The full sync has its own 30-minute floor.
         "firewall-poll-health": {
             "task": "firewall.poll_health",
-            "schedule": crontab(minute="*/2"),
-            "options": {"queue": "metrics"},
+            "schedule": _every(settings.FIREWALL_HEALTH_INTERVAL_SECONDS),
+            "options": {
+                "queue": "metrics",
+                "expires": _expires(settings.FIREWALL_HEALTH_INTERVAL_SECONDS),
+            },
         },
         # Proxmox: poll cluster quorum + node up/down + emit hypervisor.*
         # on transitions (node offline/online, inquorate, unreachable) - every 2 min.
@@ -737,15 +853,15 @@ celery_app.conf.update(
         },
         "hypervisor-poll-health": {
             "task": "hypervisor.poll_health",
-            "schedule": crontab(minute="*/2"),
+            "schedule": _every(settings.HYPERVISOR_HEALTH_INTERVAL_SECONDS),
             "options": {"queue": "metrics"},
         },
         # Omada: poll controllers + emit omada.event.* on transitions (new alerts
         # normalized to device_offline/rogue_ap/poe_overload/firmware_available,
-        # reachability) - every 2 min.
+        # reachability) - every OMADA_MONITOR_INTERVAL_SECONDS (5 min).
         "omada-poll-health": {
             "task": "omada.poll_health",
-            "schedule": crontab(minute="*/2"),
+            "schedule": _every(settings.OMADA_MONITOR_INTERVAL_SECONDS),
             "options": {"queue": "metrics"},
         },
         # Overlay mesh: poll Tailscale/NetBird peers + emit overlay.* on transitions
@@ -778,8 +894,23 @@ celery_app.conf.update(
         # inventory, and dropping it is better than compounding the backlog.
         "voip-phone-health-check": {
             "task": "voip.health_check",
-            "schedule": crontab(minute="*/5"),
-            "options": {"queue": "default", "expires": 240},
+            "schedule": _every(settings.VOIP_HEALTH_INTERVAL_SECONDS),
+            "options": {
+                "queue": "default",
+                "expires": _expires(settings.VOIP_HEALTH_INTERVAL_SECONDS),
+            },
+        },
+        # VoIP: import new call detail records from every active PBX into
+        # voip.call_logs (Call History page + call stats). Fans out one
+        # voip.sync_cdr per PBX; each run is incremental from the newest stored
+        # call, bounded to a few days and 2000 records per day, deduplicated on
+        # the CDR uniqueid, and records its outcome on the PBX row. A PBX
+        # without a FreePBX Admin API (OAuth2) application is marked
+        # "unsupported" without being contacted.
+        "voip-sync-cdr": {
+            "task": "voip.sync_all_cdr",
+            "schedule": crontab(minute="*/15"),
+            "options": {"queue": "default", "expires": 600},
         },
     },
 )
@@ -829,10 +960,12 @@ from typing import Any
 
 from celery.signals import (
     before_task_publish,
+    heartbeat_sent,
     task_failure,
     task_postrun,
     task_prerun,
     worker_process_init,
+    worker_process_shutdown,
     worker_ready,
     worker_shutdown,
 )
@@ -951,10 +1084,37 @@ def on_worker_ready(sender: Any, **kwargs: Any) -> None:
     logger.info("Celery worker ready: %s", sender)
 
 
+@worker_ready.connect  # type: ignore[untyped-decorator]
+def register_queue_consumer(sender: Any = None, **_: Any) -> None:
+    """Record which queues this worker consumes (per-queue heartbeats)."""
+    try:
+        from app.core.queue_heartbeat import consumer_queues, register_consumer
+
+        hostname = str(getattr(sender, "hostname", "") or "")
+        if hostname:
+            register_consumer(hostname, consumer_queues(sender))
+    except Exception:  # noqa: BLE001 - monitoring must never stop a worker starting
+        logger.warning("Could not register this worker's queues for heartbeats", exc_info=True)
+
+
+@heartbeat_sent.connect  # type: ignore[untyped-decorator]
+def refresh_queue_consumer(**_: Any) -> None:
+    """Keep the registration fresh from the worker's own event heartbeat."""
+    from app.core.queue_heartbeat import refresh_registration
+
+    refresh_registration()
+
+
 @worker_shutdown.connect  # type: ignore[untyped-decorator]
 def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
     """Log when worker is shutting down."""
     logger.info("Celery worker shutting down: %s", sender)
+    try:
+        from app.core.queue_heartbeat import unregister_consumer
+
+        unregister_consumer(str(getattr(sender, "hostname", "") or "") or None)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @task_prerun.connect  # type: ignore[untyped-decorator]
@@ -969,6 +1129,34 @@ def on_task_postrun(
 ) -> None:
     """Log task completion."""
     logger.info("Task finished: %s[%s] state=%s", task.name, task_id, state)
+
+
+@task_postrun.connect  # type: ignore[untyped-decorator]
+def release_leftover_device_slots(sender: Any = None, task_id: str | None = None, **_: Any) -> None:
+    """Free any device slot the finished task still holds.
+
+    A poller releases its slot in a ``finally``; this covers the paths where
+    that never ran (a soft time limit raised inside the event loop, a task that
+    swallowed the cancellation). Without it the device would stay "busy" for
+    every other poller until the lease's TTL ran out.
+    """
+    try:
+        from app.core.device_slot import release_task_leases
+
+        release_task_leases(task_id)
+    except Exception:  # noqa: BLE001 - cleanup must never fail a finished task
+        logger.debug("device slot cleanup skipped", exc_info=True)
+
+
+@worker_process_shutdown.connect  # type: ignore[untyped-decorator]
+def release_device_slots_on_exit(**_: Any) -> None:
+    """A pool process that exits (recycled, warm shutdown) frees its device slots."""
+    try:
+        from app.core.device_slot import release_all_held
+
+        release_all_held()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @task_failure.connect  # type: ignore[untyped-decorator]

@@ -110,6 +110,18 @@ async def test_unsupported_inventory_is_explicit(inventory, kind):
     assert SECRET not in response.text and f.calls[-1] == "disconnect"
 
 
+def _without_as_of(body):
+    """The original fields of a live read; asserts the three added ones.
+
+    Live gateway reads gained ``as_of``/``cached``/``cache_reason``
+    (app/services/device_live_read.py). Every other field must be exactly
+    what it was.
+    """
+    added = {key: body.pop(key) for key in ("as_of", "cached", "cache_reason")}
+    assert added["cached"] is False and added["cache_reason"] is None and added["as_of"]
+    return body
+
+
 @pytest.mark.parametrize("rows", [[], [ITEM]])
 async def test_confirmed_empty_and_valid_inventory_remain_distinct_successes(inventory, rows):
     f = inventory
@@ -117,7 +129,7 @@ async def test_confirmed_empty_and_valid_inventory_remain_distinct_successes(inv
     before = await snapshot(f)
     response = await request(f)
     assert response.status_code == 200
-    assert response.json() == {
+    assert _without_as_of(response.json()) == {
         "gateway_id": str(f.gateway.id),
         "vendor": "opnsense",
         "backups": rows,

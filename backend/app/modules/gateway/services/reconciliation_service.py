@@ -36,6 +36,7 @@ from app.modules.gateway.models import (
     SiteRoleMap,
     VLANPurpose,
 )
+from app.services.device_writes import controller_scope, request_actor_id
 
 logger = logging.getLogger(__name__)
 
@@ -554,65 +555,91 @@ class ReconciliationService:
             result.errors.append("No limb devices assigned")
             return result
 
-        # Track per-limb failure separately so we can summarise
-        # ``partial_failure`` + ``failed_devices`` at the end. A push
-        # is "per limb × per vlan" — if ANY VLAN fails on a limb, the
-        # whole limb is considered to be in an incomplete state and
-        # surfaces in ``failed_devices`` for targeted retry.
-        failed_device_ids: set[str] = set()
+        if dry_run:
+            for limb in limbs:
+                for vlan in canon_vlans:
+                    result.details.append(
+                        {
+                            "device_id": str(limb.device_id),
+                            "device_type": limb.device_type,
+                            "vlan_id": vlan.vlan_id,
+                            "vlan_name": vlan.name,
+                            "action": "would_create",
+                        }
+                    )
+                    result.distributed += 1
+            return result
 
-        # Distribute to each limb
+        # One staged change group for the whole distribution: a ledger row per
+        # limb and VLAN, every limb preflighted (registered, not deleted, its
+        # adapter can create the VLAN, it answers) before any VLAN is created,
+        # and the first refusal stops the rest. VLANs already created are NOT
+        # removed again: a limb may have had the VLAN before, and deleting it
+        # there would destroy configuration the operator kept. They are reported
+        # as created, and ``failed_devices`` names the limbs to retry.
+        from fastapi import HTTPException
+
+        from app.services.device_writes import apply_group_through_staging
+
+        members = []
+        details: dict[str, dict[str, Any]] = {}
+        limb_of: dict[str, str] = {}
         for limb in limbs:
             for vlan in canon_vlans:
-                detail = {
+                key = f"{limb.device_id}:{vlan.vlan_id}"
+                details[key] = {
                     "device_id": str(limb.device_id),
                     "device_type": limb.device_type,
                     "vlan_id": vlan.vlan_id,
                     "vlan_name": vlan.name,
                 }
+                limb_of[key] = str(limb.device_id)
+                members.append(await self._limb_member(key, limb, vlan, org_id=org_id))
 
-                if dry_run:
-                    detail["action"] = "would_create"
-                    result.distributed += 1
-                    result.details.append(detail)
-                    continue
-
-                try:
-                    if limb.device_type == "controller":
-                        success = await self._push_vlan_to_controller(
-                            limb.controller_id,
-                            vlan,
-                        )
-                    else:
-                        success = await self._push_vlan_to_gateway(
-                            limb.gateway_id,
-                            vlan,
-                        )
-
-                    if success:
-                        detail["action"] = "created"
-                        result.distributed += 1
-                    else:
-                        detail["action"] = "skipped"
-                        result.skipped += 1
-                except Exception as exc:
-                    detail["action"] = "failed"
-                    # Don't echo ``str(exc)`` — adapter exceptions can
-                    # carry controller URLs / auth fragments (Phase-A
-                    # error-sanitization audit pattern). Class name +
-                    # short message is enough for the UI; the full
-                    # repr stays in the server-side log below.
-                    detail["error"] = type(exc).__name__
-                    result.failed += 1
-                    failed_device_ids.add(str(limb.device_id))
-                    logger.warning(
-                        "Failed to push VLAN %d to device %s: %s",
-                        vlan.vlan_id,
-                        limb.device_id,
-                        exc,
-                    )
-
+        failed_device_ids: set[str] = set()
+        try:
+            outcome = await apply_group_through_staging(
+                self.db,
+                members,
+                # Distribute to limbs has never taken a force flag; unchanged.
+                force=True,
+                actor_id=request_actor_id(),
+                notes=f"distribute {len(canon_vlans)} VLAN(s) to {len(limbs)} limb(s)",
+            )
+        except HTTPException as exc:
+            # Read-only mode: refused before any limb was contacted.
+            for key, detail in details.items():
+                detail["action"] = "not_applied"
+                detail["error"] = str(exc.detail)
+                result.skipped += 1
                 result.details.append(detail)
+                failed_device_ids.add(limb_of[key])
+            result.errors.append(str(exc.detail))
+        else:
+            for member in outcome.members:
+                detail = details[member.key]
+                if member.status == "applied":
+                    detail["action"] = "created"
+                    result.distributed += 1
+                elif member.status == "not_applied":
+                    detail["action"] = "not_applied"
+                    detail["error"] = member.reason or "not applied"
+                    result.skipped += 1
+                    failed_device_ids.add(limb_of[member.key])
+                else:
+                    detail["action"] = "failed"
+                    detail["error"] = member.reason or member.status
+                    result.failed += 1
+                    failed_device_ids.add(limb_of[member.key])
+                    logger.warning(
+                        "Failed to push VLAN %s to device %s: %s",
+                        detail["vlan_id"],
+                        detail["device_id"],
+                        member.reason,
+                    )
+                result.details.append(detail)
+            if outcome.preflight_refused:
+                result.errors.append("A limb refused the preflight, so no VLAN was created")
 
         # Cross-limb consistency status: if ANY limb saw a failure,
         # the site is in an incomplete state. ``partial_failure``
@@ -642,8 +669,18 @@ class ReconciliationService:
         from app.modules.firewall.gateway_service import GatewayService
         from app.modules.firewall.models import GatewayConnection
 
-        gw = await self.db.get(GatewayConnection, gateway_id)
+        gw = (
+            await self.db.execute(
+                select(GatewayConnection).where(
+                    GatewayConnection.id == gateway_id,
+                    GatewayConnection.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
         if gw is None:
+            # A soft-deleted gateway is never written to: it used to be loaded
+            # with db.get, which ignores deleted_at, so a distribution pushed to
+            # a gateway the operator had removed.
             raise ReconciliationError(f"Gateway {gateway_id} not found")
 
         gw_svc = GatewayService(self.db)
@@ -681,71 +718,116 @@ class ReconciliationService:
             for v in vlans
         ]
 
-    async def _push_vlan_to_controller(
-        self,
-        controller_id: UUID,
-        vlan: CanonicalVLAN,
-    ) -> bool:
-        """Push a VLAN to a controller via the network adapter."""
+    async def _limb_member(self, key: str, limb: Any, vlan: CanonicalVLAN, *, org_id: UUID) -> Any:
+        """One limb's part of a distribution: its ledger row, preflight and write."""
+        if limb.device_type == "controller":
+            return await self._controller_limb_member(key, limb.controller_id, vlan, org_id)
+        return await self._gateway_limb_member(key, limb.gateway_id, vlan, org_id)
+
+    async def _controller_limb_member(
+        self, key: str, controller_id: UUID, vlan: CanonicalVLAN, org_id: UUID
+    ) -> Any:
+        """A controller limb (Omada, UniFi)."""
         from app.models.core import Controller
         from app.services.adapter_factory import build_adapter_for_controller
+        from app.services.adapter_staging import GroupMember
+        from app.services.device_writes import adapter_implements
 
+        body = {"vlan_id": vlan.vlan_id, "name": vlan.name, "purpose": vlan.purpose}
         ctrl = await self.db.get(Controller, controller_id)
-        if ctrl is None:
-            raise ReconciliationError(f"Controller {controller_id} not found")
+        refusal: str | None = None
+        adapter: Any = None
+        organization_id, site_id = org_id, None
+        if ctrl is None or ctrl.deleted_at is not None:
+            # A soft-deleted controller is never written to.
+            refusal = "the controller is no longer registered"
+        else:
+            organization_id, site_id = await controller_scope(self.db, ctrl.id)
+            try:
+                # Was `await get_adapter(ctrl, self.db)`. get_adapter is
+                # synchronous and takes (controller_type, host, username,
+                # password), so that call raised TypeError before a single
+                # packet reached the device.
+                adapter = build_adapter_for_controller(ctrl)
+            except Exception as exc:  # noqa: BLE001 - the preflight reports it
+                refusal = f"its adapter could not be built ({type(exc).__name__})"
+            else:
+                if not adapter_implements(adapter, "create_vlan"):
+                    refusal = "this controller's adapter cannot create a VLAN"
 
-        try:
-            # Was `await get_adapter(ctrl, self.db)`. get_adapter is synchronous
-            # and takes (controller_type, host, username, password), so that
-            # call raised TypeError before a single packet reached the device --
-            # every VLAN push to a controller limb failed 100% of the time.
-            adapter = build_adapter_for_controller(ctrl)
-            async with _DEVICE_SEMAPHORE:
-                result = await asyncio.wait_for(
-                    adapter.create_vlan(
-                        {
-                            "vlan_id": vlan.vlan_id,
-                            "name": vlan.name,
-                            "purpose": vlan.purpose,
-                        }
-                    ),
-                    timeout=_DEVICE_TIMEOUT,
-                )
-            return result.success if hasattr(result, "success") else bool(result)
-        except Exception as exc:
-            logger.error(
-                "Push VLAN %d to controller %s failed: %s",
-                vlan.vlan_id,
-                controller_id,
-                exc,
-            )
-            raise
+        async def _preflight(adapter: Any = adapter, refusal: str | None = refusal) -> Any:
+            if refusal:
+                return refusal
+            try:
+                async with adapter:
+                    pass
+            except Exception as exc:  # noqa: BLE001 - the reason is the answer
+                return f"the controller did not answer ({type(exc).__name__})"
+            return None
 
-    async def _push_vlan_to_gateway(
-        self,
-        gateway_id: UUID,
-        vlan: CanonicalVLAN,
-    ) -> bool:
-        """Push a VLAN to a gateway device (L2 only — tagged interface)."""
-        try:
-            adapter = await self._get_gateway_adapter(gateway_id)
-            async with _DEVICE_SEMAPHORE:
-                result = await asyncio.wait_for(
-                    adapter.create_vlan_device(
-                        {
-                            "vlan_id": vlan.vlan_id,
-                            "name": vlan.name,
-                            "parent_interface": "lan",
-                        }
-                    ),
-                    timeout=_DEVICE_TIMEOUT,
-                )
-            return result.success if hasattr(result, "success") else bool(result)
-        except Exception as exc:
-            logger.error(
-                "Push VLAN %d to gateway %s failed: %s",
-                vlan.vlan_id,
-                gateway_id,
-                exc,
-            )
-            raise
+        return GroupMember(
+            key=key,
+            organization_id=organization_id,
+            controller_id=ctrl.id if ctrl is not None and refusal is None else None,
+            site_id=site_id,
+            feature="network.vlan.limb",
+            operation="create",
+            target_id=str(vlan.vlan_id),
+            payload={**body, "controller_id": str(controller_id)},
+            perform=lambda adapter=adapter: asyncio.wait_for(
+                adapter.create_vlan(body), timeout=_DEVICE_TIMEOUT
+            ),
+            preflight=_preflight,
+        )
+
+    async def _gateway_limb_member(
+        self, key: str, gateway_id: UUID, vlan: CanonicalVLAN, org_id: UUID
+    ) -> Any:
+        """A gateway limb (L2 only: a tagged interface)."""
+        from app.core.device_slot import gateway_slot_key
+        from app.modules.firewall.models import GatewayConnection
+        from app.services.adapter_staging import GroupMember
+        from app.services.device_writes import adapter_implements
+
+        body = {"vlan_id": vlan.vlan_id, "name": vlan.name, "parent_interface": "lan"}
+        gw = await self.db.get(GatewayConnection, gateway_id)
+        refusal: str | None = None
+        adapter: Any = None
+        if gw is None or gw.deleted_at is not None:
+            # A soft-deleted gateway is never written to.
+            refusal = "the gateway is no longer registered"
+        else:
+            try:
+                adapter = await self._get_gateway_adapter(gateway_id)
+            except Exception as exc:  # noqa: BLE001 - the preflight reports it
+                refusal = f"its adapter could not be built ({type(exc).__name__})"
+            else:
+                if not adapter_implements(adapter, "create_vlan_device"):
+                    refusal = "this gateway's adapter cannot create a VLAN interface"
+
+        async def _preflight(adapter: Any = adapter, refusal: str | None = refusal) -> Any:
+            if refusal:
+                return refusal
+            try:
+                async with adapter:
+                    pass
+            except Exception as exc:  # noqa: BLE001 - the reason is the answer
+                return f"the gateway did not answer ({type(exc).__name__})"
+            return None
+
+        live = gw is not None and refusal is None
+        return GroupMember(
+            key=key,
+            organization_id=gw.org_id if gw is not None else org_id,
+            controller_id=None,
+            site_id=gw.site_id if gw is not None else None,
+            feature="network.vlan.limb_gateway",
+            operation="create",
+            target_id=str(gateway_id),
+            payload={**body, "gateway_id": str(gateway_id)},
+            perform=lambda adapter=adapter: asyncio.wait_for(
+                adapter.create_vlan_device(body), timeout=_DEVICE_TIMEOUT
+            ),
+            preflight=_preflight,
+            slot_key=gateway_slot_key(gw) if live else None,
+        )

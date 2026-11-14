@@ -13,11 +13,13 @@ import { validatedAggregate } from './gatewayAggregateRead';
 import { GatewayLiveReadNotice } from './GatewayLiveReadNotice';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useConfigValueFormatter } from '@/lib/format-value';
 import { Activity, HardDrive, Shield } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatsGrid, type StatItem } from '@/components/ui/stats-grid';
 import { gatewayApi } from '@/lib/api';
+import { liveReadQueryOptions } from '@/lib/api/liveRead';
 
 export interface GatewayMonitoringTabProps {
   gatewayId: string;
@@ -26,6 +28,7 @@ export interface GatewayMonitoringTabProps {
 
 export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringTabProps) {
   const { t } = useTranslation('firewall');
+  const formatValue = useConfigValueFormatter();
 
   const { data: temperatureData } = useQuery({
     queryKey: ['gateways', gatewayId, 'temperature'],
@@ -57,7 +60,7 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
   const { data: telegrafData, isPending: telegrafPending, isFetching: telegrafFetching, isError: telegrafError, refetch: retryTelegraf } = useQuery({
     queryKey: ['gateways', gatewayId, 'telegraf'],
     queryFn: async () => validatedAggregate(await gatewayApi.getTelegrafStatus(gatewayId), gatewayId, 'telegraf'),
-    retry: false,
+    ...liveReadQueryOptions(),
     enabled: !!gatewayId && isActive,
   });
   const telegrafLoading = telegrafPending || telegrafFetching;
@@ -65,7 +68,7 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
   const { data: monitData, isPending: monitPending, isFetching: monitFetching, isError: monitError, refetch: retryMonit } = useQuery({
     queryKey: ['gateways', gatewayId, 'monit'],
     queryFn: async () => validatedAggregate(await gatewayApi.getMonitStatus(gatewayId), gatewayId, 'monit'),
-    retry: false,
+    ...liveReadQueryOptions(),
     enabled: !!gatewayId && isActive,
   });
   const monitLoading = monitPending || monitFetching;
@@ -73,7 +76,7 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
   const { data: netflowData, isPending: netflowPending, isFetching: netflowFetching, isError: netflowError, refetch: retryNetflow } = useQuery({
     queryKey: ['gateways', gatewayId, 'netflow'],
     queryFn: async () => validatedAggregate(await gatewayApi.getNetFlowStatus(gatewayId), gatewayId, 'netflow'),
-    retry: false,
+    ...liveReadQueryOptions(),
     enabled: !!gatewayId && isActive,
   });
   const netflowLoading = netflowPending || netflowFetching;
@@ -188,7 +191,8 @@ export function GatewayMonitoringTab({ gatewayId, isActive }: GatewayMonitoringT
                   {Object.entries(health).filter(([k]) => k !== 'gateways').map(([k, v]) => (
                     <div key={k} className="flex justify-between">
                       <dt className="text-muted-foreground capitalize">{k.replace(/_/g, ' ')}</dt>
-                      <dd className="font-medium">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</dd>
+                      {/* Was JSON.stringify for objects (raw JSON, and "null" for null). */}
+                      <dd className="font-medium text-right">{formatValue(v)}</dd>
                     </div>
                   ))}
                 </dl>

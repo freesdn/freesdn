@@ -22,6 +22,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSiteStore } from '@/stores/siteStore';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -87,6 +88,7 @@ import {
 } from '@/lib/api';
 import { useAlertBadgeStore } from '@/stores/alertBadgeStore';
 import { useToast } from '@/hooks/use-toast';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -150,6 +152,12 @@ const STATUS_VARIANT: Record<string, StatusVariant> = {
   success: 'success',
 };
 
+// Statuses come from three vocabularies (rule alerts, incidents, security
+// events) and were printed raw and untranslated ("firing", "success").
+function statusLabel(t: TFunction, status: string): string {
+  return t(`AlertsPage.status.${status}`, { defaultValue: humanizeEventType(status) });
+}
+
 const SOURCE_LABELS: Record<string, { labelKey: string; variant: StatusVariant }> = {
   rule:     { labelKey: 'sources.rule',     variant: 'info' },
   incident: { labelKey: 'sources.incident', variant: 'info' },
@@ -190,27 +198,37 @@ function normalizeAlertInstance(a: AlertInstance): UnifiedAlert {
   };
 }
 
-function normalizeIncident(i: Incident): UnifiedAlert {
+function normalizeIncident(i: Incident, t: TFunction): UnifiedAlert {
   return {
     id: `incident:${i.id}`,
     source: 'incident',
     severity: i.severity,
     title: i.title,
-    description: i.description || `Incident with ${i.event_count} correlated events`,
+    description: i.description || t('AlertsPage.incidentRow.fallbackDescription', { count: i.event_count }),
     status: i.status,
     timestamp: i.opened_at,
     raw: i,
   };
 }
 
-function normalizeSecurityEvent(e: SecurityEvent): UnifiedAlert {
+// An event type with no curated label used to be shown raw ("permission_change",
+// "data_export") as the alert title.
+function humanizeEventType(eventType: string): string {
+  return (eventType || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizeSecurityEvent(e: SecurityEvent, t: TFunction): UnifiedAlert {
   const severity = e.risk_score >= 80 ? 'critical' : e.risk_score >= 60 ? 'high' : e.risk_score >= 30 ? 'medium' : 'low';
   return {
     id: `security:${e.id}`,
     source: 'security',
     severity,
-    title: SECURITY_EVENT_LABELS[e.event_type] || e.event_type,
-    description: `${e.user_email || 'Unknown user'} from ${e.ip_address || 'unknown IP'} · risk ${e.risk_score}`,
+    title: SECURITY_EVENT_LABELS[e.event_type] || humanizeEventType(e.event_type),
+    description: t('AlertsPage.securityRow.description', {
+      user: e.user_email || t('AlertsPage.securityRow.unknownUser'),
+      ip: e.ip_address || t('AlertsPage.securityRow.unknownIp'),
+      risk: e.risk_score,
+    }),
     status: e.success ? 'success' : 'failed',
     timestamp: e.timestamp,
     raw: e,
@@ -324,7 +342,7 @@ export default function AlertsPage() {
       queryClient.invalidateQueries({ queryKey: ['alert-rules-stats'] });
     },
     onError: (err: any) => {
-      toast({ title: t('AlertsPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertsPage.toast.operationFailed'), variant: "destructive" });
+      toast({ title: t('AlertsPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertsPage.toast.operationFailed')), variant: "destructive" });
     },
   });
 
@@ -335,7 +353,7 @@ export default function AlertsPage() {
       queryClient.invalidateQueries({ queryKey: ['alert-rules-stats'] });
     },
     onError: (err: any) => {
-      toast({ title: t('AlertsPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertsPage.toast.operationFailed'), variant: "destructive" });
+      toast({ title: t('AlertsPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertsPage.toast.operationFailed')), variant: "destructive" });
     },
   });
 
@@ -347,7 +365,7 @@ export default function AlertsPage() {
       queryClient.invalidateQueries({ queryKey: ['alert-rules-stats'] });
     },
     onError: (err: any) => {
-      toast({ title: t('AlertsPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertsPage.toast.operationFailed'), variant: "destructive" });
+      toast({ title: t('AlertsPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertsPage.toast.operationFailed')), variant: "destructive" });
     },
   });
 
@@ -358,7 +376,7 @@ export default function AlertsPage() {
       queryClient.invalidateQueries({ queryKey: ['alert-rules-stats'] });
     },
     onError: (err: any) => {
-      toast({ title: t('AlertsPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertsPage.toast.operationFailed'), variant: "destructive" });
+      toast({ title: t('AlertsPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertsPage.toast.operationFailed')), variant: "destructive" });
     },
   });
 
@@ -370,7 +388,7 @@ export default function AlertsPage() {
       queryClient.invalidateQueries({ queryKey: ['correlation-stats'] });
     },
     onError: (err: any) => {
-      toast({ title: t('AlertsPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertsPage.toast.operationFailed'), variant: "destructive" });
+      toast({ title: t('AlertsPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertsPage.toast.operationFailed')), variant: "destructive" });
     },
   });
 
@@ -381,7 +399,7 @@ export default function AlertsPage() {
       queryClient.invalidateQueries({ queryKey: ['correlation-stats'] });
     },
     onError: (err: any) => {
-      toast({ title: t('AlertsPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertsPage.toast.operationFailed'), variant: "destructive" });
+      toast({ title: t('AlertsPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertsPage.toast.operationFailed')), variant: "destructive" });
     },
   });
 
@@ -397,7 +415,7 @@ export default function AlertsPage() {
       queryClient.invalidateQueries({ queryKey: ['incidents-all'] });
     },
     onError: (err: any) => {
-      toast({ title: t('AlertsPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertsPage.toast.operationFailed'), variant: "destructive" });
+      toast({ title: t('AlertsPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertsPage.toast.operationFailed')), variant: "destructive" });
     },
   });
 
@@ -415,8 +433,8 @@ export default function AlertsPage() {
 
     const all: UnifiedAlert[] = [
       ...alertInstances.map(normalizeAlertInstance),
-      ...incidents.map(normalizeIncident),
-      ...securityEvents.map(normalizeSecurityEvent),
+      ...incidents.map((i) => normalizeIncident(i, t)),
+      ...securityEvents.map((e) => normalizeSecurityEvent(e, t)),
     ];
     all.sort((a, b) => {
       const sevA = SEVERITY_ORDER[a.severity] ?? 5;
@@ -425,7 +443,7 @@ export default function AlertsPage() {
       return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
     });
     return all;
-  }, [alertInstancesQuery.data?.alerts, incidentsQuery.data?.incidents, securityQuery.data]);
+  }, [alertInstancesQuery.data?.alerts, incidentsQuery.data?.incidents, securityQuery.data, t]);
 
   // ── Filters ──
 
@@ -488,7 +506,7 @@ export default function AlertsPage() {
       sortable: true,
       cell: (row) => (
         <StatusBadge variant={SEVERITY_VARIANT[row.severity] || 'info'} hideIcon size="sm">
-          {row.severity}
+          {t(`AlertsPage.severity.${row.severity}`, { defaultValue: humanizeEventType(row.severity) })}
         </StatusBadge>
       ),
     },
@@ -519,8 +537,8 @@ export default function AlertsPage() {
       accessorKey: 'status',
       sortable: true,
       cell: (row) => (
-        <StatusBadge variant={STATUS_VARIANT[row.status] || 'neutral'} hideIcon size="sm">
-          {row.status}
+        <StatusBadge variant={STATUS_VARIANT[row.status] || 'neutral'} size="sm">
+          {statusLabel(t, row.status)}
         </StatusBadge>
       ),
     },
@@ -626,7 +644,7 @@ export default function AlertsPage() {
           onRefresh={refetchAll}
           refreshing={isRefreshing}
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -677,7 +695,7 @@ export default function AlertsPage() {
 
       {/* Stats Row */}
       <StatsGrid
-        columns={4}
+        columns={5}
         isLoading={isLoading}
         stats={[
           { title: t('AlertsPage.stats.activeAlerts'), value: totalActive, icon: Siren, variant: 'destructive' },
@@ -877,7 +895,7 @@ function UnifiedAlertDetail({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 flex-wrap">
             <StatusBadge variant={SEVERITY_VARIANT[alert.severity] || 'info'} hideIcon size="sm">
-              {alert.severity}
+              {t(`AlertsPage.severity.${alert.severity}`, { defaultValue: humanizeEventType(alert.severity) })}
             </StatusBadge>
             <StatusBadge variant={sourceInfo.variant} hideIcon size="sm">{t(`AlertsPage.${sourceInfo.labelKey}`)}</StatusBadge>
             <span className="text-lg">{alert.title}</span>
@@ -894,8 +912,8 @@ function UnifiedAlertDetail({
             <div>
               <Label className="text-muted-foreground">{t('AlertsPage.detail.status')}</Label>
               <div className="mt-1">
-                <StatusBadge variant={STATUS_VARIANT[alert.status] || 'neutral'} hideIcon size="sm">
-                  {alert.status}
+                <StatusBadge variant={STATUS_VARIANT[alert.status] || 'neutral'} size="sm">
+                  {statusLabel(t, alert.status)}
                 </StatusBadge>
               </div>
             </div>

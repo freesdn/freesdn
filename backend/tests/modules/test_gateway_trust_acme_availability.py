@@ -128,6 +128,18 @@ async def test_unsupported_is_explicit(trust_inventory, route, code):
     assert response.status_code == 501 and SECRET not in response.text
 
 
+def _without_as_of(body):
+    """The original fields of a live read; asserts the three added ones.
+
+    Live gateway reads gained ``as_of``/``cached``/``cache_reason``
+    (app/services/device_live_read.py). Every other field must be exactly
+    what it was.
+    """
+    added = {key: body.pop(key) for key in ("as_of", "cached", "cache_reason")}
+    assert added["cached"] is False and added["cache_reason"] is None and added["as_of"]
+    return body
+
+
 @pytest.mark.parametrize("route", ROUTES)
 @pytest.mark.parametrize("rows", [[], [{"uuid": "owned", "name": "Owned", "descr": "Owned"}]])
 async def test_complete_empty_and_nonempty_controls(trust_inventory, route, rows):
@@ -138,7 +150,11 @@ async def test_complete_empty_and_nonempty_controls(trust_inventory, route, rows
     before = await snapshot(f)
     response = await request(f, route)
     assert response.status_code == 200
-    assert response.json() == {"gateway_id": str(f.gateway.id), "vendor": "opnsense", **data}
+    assert _without_as_of(response.json()) == {
+        "gateway_id": str(f.gateway.id),
+        "vendor": "opnsense",
+        **data,
+    }
     assert await snapshot(f) == before
 
 

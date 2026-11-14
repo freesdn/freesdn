@@ -2,18 +2,20 @@
 # Copyright (C) 2024-2026 FreeSDN
 """Camera device-config write envelope — audit + best-effort rollback.
 
-Camera/NVR config writes can't ride the controller-bound ``AdapterStagingService``
-(NVRs aren't ``core.controllers`` rows), so this is the camera-native equivalent
-of "stage → auto-apply + audit": for every config write it
+Every camera configuration write runs through this envelope. For each write it
 
   1. CAPTURES the device's current state (``capture``),
-  2. APPLIES the write (``apply`` — the adapter ``set_*`` still enforces the
-     ``ADAPTER_READ_ONLY``/``force`` dual-gate, so the apply-now UX is unchanged),
+  2. APPLIES the write through the staging chokepoint, in the same request
+     (``write_through_staging``): refused while read-only mode is on, and
+     recorded in the staging ledger as ``direct.camera.<feature>`` with who,
+     when and the result. Cameras are not ``core.controllers`` rows, so the
+     row targets no controller,
   3. writes a structured AUDIT record with the before/after + outcome, and
-  4. on failure, best-effort ROLLS BACK to the captured pre-state.
+  4. on failure, best-effort ROLLS BACK to the captured pre-state, through the
+     chokepoint too (``direct.camera.<feature>.rollback``).
 
-The apply-now UX is preserved; the gains are a per-change audit trail with
-before/after and automatic restore if the device write fails mid-way.
+The apply-now UX is preserved; the gains are a per-change ledger row and audit
+trail with before/after, and automatic restore if the device write fails.
 """
 
 from __future__ import annotations
@@ -24,7 +26,10 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
+from fastapi import HTTPException
+
 from app.services.audit import AuditAction, AuditService, ResourceType
+from app.services.device_writes import write_through_staging
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +60,29 @@ async def staged_camera_write(
     apply: Callable[[], Awaitable[Any]],
     rollback: Callable[[Any], Awaitable[Any]] | None = None,
 ) -> Any:
-    """Run a camera config write inside the audit + rollback envelope.
+    """Run a camera config write inside the ledger + audit + rollback envelope.
 
     ``capture`` reads device pre-state. ``apply`` performs the write and MUST
     raise on a device-reported failure (so a ``{"success": false}`` result is
     surfaced as an exception by the caller). ``rollback(old)`` best-effort
     restores the pre-state if ``apply`` raises. Returns ``apply``'s result;
-    re-raises ``apply`` errors after the rollback + failure audit.
+    re-raises ``apply`` errors after the rollback + failure audit. A refusal by
+    the chokepoint (read-only mode) is an ``HTTPException`` raised before the
+    device is contacted; nothing is rolled back then, since nothing changed.
     """
+    camera_id = getattr(camera, "id", None)
+    ledger: dict[str, Any] = {
+        "organization_id": getattr(camera, "organization_id", None) or organization_id,
+        "controller_id": None,
+        "site_id": getattr(camera, "site_id", None),
+        "operation": "update",
+        "target_id": str(camera_id) if camera_id is not None else None,
+        "payload": {"camera_id": str(camera_id), "config": feature},
+        # The cameras API's contract: the route's permission is the opt-in, so
+        # it always writes with force (see _API_WRITE_FORCE in cameras/api.py).
+        "force": True,
+        "actor_id": actor_id,
+    }
     before: Any = None
     try:
         before = await capture()
@@ -73,12 +93,20 @@ async def staged_camera_write(
     restorable = isinstance(before, dict) and "error" not in before
 
     try:
-        result = await apply()
+        result = await write_through_staging(
+            db, feature=f"camera.{feature}", perform=apply, **ledger
+        )
     except Exception as exc:
         rolled_back = False
-        if rollback is not None and restorable:
+        if rollback is not None and restorable and not isinstance(exc, HTTPException):
+
+            async def _restore() -> Any:
+                return await rollback(before)
+
             try:
-                await rollback(before)
+                await write_through_staging(
+                    db, feature=f"camera.{feature}.rollback", perform=_restore, **ledger
+                )
                 rolled_back = True
             except Exception:  # noqa: BLE001 — rollback is best-effort
                 logger.exception("camera config %s: rollback failed", feature)

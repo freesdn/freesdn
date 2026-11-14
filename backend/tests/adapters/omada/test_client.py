@@ -12,11 +12,12 @@ import pytest
 from app.adapters.omada.client import OmadaApiClient, OmadaClientConfig
 from app.adapters.omada.constants import (
     OMADA_ERROR_INVALID_PARAMS,
+    OMADA_ERROR_INVALID_REQUEST,
     OMADA_ERROR_PERMISSION_DENIED,
-    OMADA_ERROR_SESSION_EXPIRED,
 )
 from app.adapters.omada.exceptions import (
     OmadaAuthorizationError,
+    OmadaInvalidRequestError,
     OmadaNotFoundError,
     OmadaValidationError,
 )
@@ -81,21 +82,26 @@ class TestOmadaApiClient:
         assert client._retry_count >= 1
 
     @pytest.mark.asyncio
-    async def test_request_refreshes_session_on_session_expired_error_code(self):
+    async def test_request_does_not_relogin_on_invalid_request_error_code(self):
+        # -1001 is "Invalid request parameters." on a real controller. It was
+        # mislabelled as "session expired", so each such read logged in again.
         client, http = _make_client()
         http.request.side_effect = [
             MockHttpResponse(
                 200,
-                {"errorCode": OMADA_ERROR_SESSION_EXPIRED, "msg": "session expired"},
+                {"errorCode": OMADA_ERROR_INVALID_REQUEST, "msg": "Invalid request parameters."},
             ),
             MockHttpResponse(200, {"errorCode": 0, "result": {"ok": True}}),
         ]
-        client.login = AsyncMock(return_value={"controller_id": "ctrl-1", "version": "5.14"})
+        client.login = AsyncMock(return_value={"controller_id": "ctrl-1", "version": "6.3"})
+        client._login_local = AsyncMock()
 
-        result = await client._request("GET", "/sites")
+        with pytest.raises(OmadaInvalidRequestError):
+            await client._request("GET", "/sites/site-1/setting/lan/networks")
 
-        assert result == {"ok": True}
-        assert client.login.await_count == 1
+        assert client.login.await_count == 0
+        assert client._login_local.await_count == 0
+        assert http.request.await_count == 1
 
     @pytest.mark.asyncio
     async def test_request_maps_permission_denied_to_authorization_error(self):

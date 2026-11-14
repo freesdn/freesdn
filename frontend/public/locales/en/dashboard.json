@@ -95,7 +95,9 @@
       "last24h": "Last 24h",
       "downloadMiB": "Download (MiB)",
       "uploadMiB": "Upload (MiB)",
-      "counterSnapshot": "Current cumulative counters; reset times vary"
+      "counterSnapshot": "Current cumulative counters; reset times vary",
+      "download": "Received (download)",
+      "upload": "Sent (upload)"
     },
     "networkHealth": {
       "notAvailable": "N/A",

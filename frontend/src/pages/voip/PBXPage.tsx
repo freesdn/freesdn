@@ -40,17 +40,21 @@ import {
 import { voipApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader, PageToolbar } from '@/components/layout';
+import { CapabilityMaturityBadge } from '@/components/ui/capability-maturity-badge';
 import { StatsGrid } from '@/components/ui/stats-grid';
 import { StatusBadge } from '@/components/ui/status-indicator';
 import { BulkActionsBar } from '@/components/ui/bulk-actions-bar';
 import { SearchBar } from '@/components/ui/search-bar';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { useAdapterMaturity } from '@/hooks/useAdapterMaturity';
 import { MaturityBadge } from '@/components/ui/maturity-badge';
 import { escapeCell } from '@/lib/csv';
 import { PBXTypeBadge, formatTimeAgo } from './components';
 import { Download } from 'lucide-react';
 import type { PBXSystem } from './types';
+import { getApiErrorMessage } from '@/lib/api/errors';
+import { summariseBulkDelete } from '@/lib/bulk-result';
 
 // Only vendors with a real, shipping adapter are selectable — we don't list a
 // PBX type we can't actually talk to. FreePBX is the live-validated adapter;
@@ -77,6 +81,7 @@ export default function PBXPage() {
   const queryClient = useQueryClient();
 
   const { toast } = useToast();
+  const confirm = useConfirm();
   const { maturityFor } = useAdapterMaturity();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
@@ -134,7 +139,7 @@ export default function PBXPage() {
       toast({ title: t('PBXPage.toasts.added.title'), description: t('PBXPage.toasts.added.description', { name: form.name }) });
     },
     onError: (err: any) => {
-      toast({ title: t('PBXPage.toasts.error.title'), description: err?.response?.data?.detail || t('PBXPage.toasts.error.createFailed'), variant: 'destructive' });
+      toast({ title: t('PBXPage.toasts.error.title'), description: getApiErrorMessage(err, t('PBXPage.toasts.error.createFailed')), variant: 'destructive' });
     },
   });
 
@@ -142,7 +147,7 @@ export default function PBXPage() {
     mutationFn: (id: string) => voipApi.deletePBX(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['voip-pbx'] }),
     onError: (err: any) => {
-      toast({ title: t('PBXPage.toasts.error.title'), description: err?.response?.data?.detail || t('PBXPage.toasts.error.deleteFailed'), variant: 'destructive' });
+      toast({ title: t('PBXPage.toasts.error.title'), description: getApiErrorMessage(err, t('PBXPage.toasts.error.deleteFailed')), variant: 'destructive' });
     },
   });
 
@@ -153,7 +158,7 @@ export default function PBXPage() {
       queryClient.invalidateQueries({ queryKey: ['voip-extensions'] });
     },
     onError: (err: any) => {
-      toast({ title: t('PBXPage.toasts.error.title'), description: err?.response?.data?.detail || t('PBXPage.toasts.error.syncFailed'), variant: 'destructive' });
+      toast({ title: t('PBXPage.toasts.error.title'), description: getApiErrorMessage(err, t('PBXPage.toasts.error.syncFailed')), variant: 'destructive' });
     },
   });
 
@@ -262,7 +267,7 @@ export default function PBXPage() {
       cell: (row) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t('PBXPage.rowActions.menuFor', { name: row.name })}>
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -281,7 +286,19 @@ export default function PBXPage() {
               <ExternalLink className="h-4 w-4 mr-2" /> {t('PBXPage.rowActions.openWebUI')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => deleteMutation.mutate(row.id)} className="text-destructive focus:text-destructive">
+            <DropdownMenuItem
+              onClick={async () => {
+                const ok = await confirm({
+                  title: t('PBXPage.confirm.delete.title', { name: row.name }),
+                  description: t('PBXPage.confirm.bulkDelete.body'),
+                  items: [row.name],
+                  confirmLabel: t('PBXPage.confirm.delete.action'),
+                  destructive: true,
+                });
+                if (ok) deleteMutation.mutate(row.id);
+              }}
+              className="text-destructive focus:text-destructive"
+            >
               <Trash2 className="h-4 w-4 mr-2" /> {t('PBXPage.rowActions.delete')}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -318,16 +335,23 @@ export default function PBXPage() {
 
   async function handleBulkDelete() {
     if (selected.length === 0) return;
-    if (!window.confirm(t('PBXPage.bulk.deleteToast.title') + ` (${selected.length})`)) return;
+    const confirmed = await confirm({
+      title: t('PBXPage.confirm.bulkDelete.title', { count: selected.length }),
+      description: t('PBXPage.confirm.bulkDelete.body'),
+      count: selected.length,
+      items: selected.map((s) => s.name),
+      confirmLabel: t('PBXPage.confirm.bulkDelete.action'),
+      destructive: true,
+    });
+    if (!confirmed) return;
     const results = await Promise.allSettled(selected.map((s) => voipApi.deletePBX(s.id)));
-    const ok = results.filter((r) => r.status === 'fulfilled').length;
-    const failed = results.length - ok;
+    const summary = summariseBulkDelete(results, t);
     queryClient.invalidateQueries({ queryKey: ['voip-pbx'] });
     setSelected([]);
     toast({
       title: t('PBXPage.bulk.deleteToast.title'),
-      description: t('PhonesListPage.toasts.bulkConnectComplete.description', { succeeded: ok, failed, skipped: 0 }),
-      variant: failed > 0 ? 'destructive' : undefined,
+      description: summary.description,
+      variant: summary.failed > 0 ? 'destructive' : undefined,
     });
   }
 
@@ -341,6 +365,7 @@ export default function PBXPage() {
       <PageHeader
         icon={Server}
         title={t('PBXPage.header.title')}
+        titleBadge={<CapabilityMaturityBadge capabilityId="voip_freepbx_write" />}
         description={t('PBXPage.header.description', { count: allSystems.length, online: onlineCount })}
         onRefresh={() => refetch()}
         refreshing={isLoading}

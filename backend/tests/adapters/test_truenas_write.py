@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.adapters.apply_context import apply_window
 from app.adapters.exceptions import AdapterAuthenticationError, AdapterError
 from app.adapters.truenas.adapter import (
     TrueNASAdapter,
@@ -71,9 +72,10 @@ class TestUploadFile:
     @pytest.mark.asyncio
     async def test_happy_path_uploads_and_waits(self) -> None:
         a = _adapter()
-        res = await a.upload_file(
-            dataset_path="/mnt/s4_hdd/freesdn", filename="cam.jpg", blob=b"jpegbytes", force=True
-        )
+        with apply_window():
+            res = await a.upload_file(
+                dataset_path="/mnt/s4_hdd/freesdn", filename="cam.jpg", blob=b"jpegbytes", force=True
+            )
         assert res["state"] == "SUCCESS" and res["job_id"] == 99 and res["size"] == 9
         assert res["path"] == "/mnt/s4_hdd/freesdn/cam.jpg"
         assert a._api.calls == [("/mnt/s4_hdd/freesdn/cam.jpg", 9, None)]
@@ -81,19 +83,19 @@ class TestUploadFile:
     @pytest.mark.asyncio
     async def test_rejects_empty_blob(self) -> None:
         a = _adapter()
-        with pytest.raises(AdapterError, match="empty"):
+        with apply_window(), pytest.raises(AdapterError, match="empty"):
             await a.upload_file(dataset_path="/mnt/s4_hdd/freesdn", filename="x.jpg", blob=b"", force=True)
 
     @pytest.mark.asyncio
     async def test_rejects_unsafe_path(self) -> None:
         a = _adapter()
-        with pytest.raises(AdapterError):
+        with apply_window(), pytest.raises(AdapterError):
             await a.upload_file(dataset_path="/etc", filename="x.jpg", blob=b"x", force=True)
 
     @pytest.mark.asyncio
     async def test_job_failure_raises(self) -> None:
         a = _adapter(state="FAILED")
-        with pytest.raises(AdapterError, match="did not succeed"):
+        with apply_window(), pytest.raises(AdapterError, match="did not succeed"):
             await a.upload_file(dataset_path="/mnt/s4_hdd/freesdn", filename="x.jpg", blob=b"x", force=True)
 
     @pytest.mark.asyncio
@@ -101,7 +103,7 @@ class TestUploadFile:
         a = TrueNASAdapter(host="nas.lab", api_key="k")
         a._transport = "rest"  # legacy box; upload unsupported
         a._api = _FakeApi()
-        with pytest.raises(AdapterError, match="WS JSON-RPC"):
+        with apply_window(), pytest.raises(AdapterError, match="WS JSON-RPC"):
             await a.upload_file(dataset_path="/mnt/s4_hdd/freesdn", filename="x.jpg", blob=b"x", force=True)
 
 

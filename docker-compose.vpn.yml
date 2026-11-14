@@ -139,3 +139,12 @@ services:
     environment:
       # the api now lives in the vpn sidecar's netns → reach it as vpn:8000
       API_UPSTREAM: vpn:8000
+
+  # The capless Tailscale runtime container stands by in sidecar mode: the vpn
+  # container runs tailscaled (kernel TUN, so its routes land in the shared
+  # namespace) on the same tailscale_state / tailscale_run volumes, and two
+  # daemons on one node identity would fight over it. The env change also makes
+  # `up -d` recreate a runtime container that was already running tailscaled,
+  # so it lets go of the socket instead of racing the sidecar for it.
+  tailscale:
+    environment: *vpn-sidecar-env

@@ -165,6 +165,11 @@ async def _authenticate_agent_for_update_check(
     if not agent.is_approved:
         logger.warning("agent update-check auth failed: id=%s reason=not_approved", agent.id)
         raise generic
+    from app.core.organization_access import organization_admits
+
+    if not await organization_admits(session, agent):
+        logger.warning("agent update-check auth failed: id=%s reason=organization", agent.id)
+        raise generic
     return agent
 
 

@@ -133,7 +133,7 @@ class TopologyService:
 
             node = {
                 "id": device.id,
-                "label": device.name or device.hostname or str(device.id)[:8],
+                "label": device.name or str(device.id)[:8],  # Device has no hostname
                 "device_type": device.device_type or "unknown",
                 "status": device.status or "unknown",
                 "ip_address": device.ip_address,

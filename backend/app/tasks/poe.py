@@ -20,6 +20,98 @@ from app.tasks.base import FreeSDNTask
 
 logger = logging.getLogger(__name__)
 
+#: How long a scheduled PoE change waits for a busy controller's slot.
+_SLOT_WAIT = 10.0
+
+
+async def _apply_schedule_to_device(
+    session: Any, schedule: Any, device: Any, *, poe_enabled: bool
+) -> None:
+    """Switch PoE on or off on a schedule's ports of one device; raise on any failure.
+
+    A scheduled on/off is a CONFIGURATION change (STAGING-MIGRATION option 2),
+    not an operational action: it sets the port's PoE administrative state,
+    which the switch keeps (across a reboot too) until the next window changes
+    it, exactly what the interactive PoE toggle changes (``switch.port.poe``,
+    staged). A PoE cycle, by contrast, ends where it started and is audited as
+    an action. So each port write goes through the staging chokepoint: refused
+    while read-only mode is on, and recorded in the staging ledger
+    (``direct.switch.port.poe.schedule``) with the schedule, port and state.
+    The schedule, set up by an administrator, is the standing request, so it
+    writes with force.
+    """
+    from app.api.v1.endpoints.poe import _decrypt_if_needed
+    from app.core.adapter_result import raise_for_adapter_result
+    from app.services.adapter_factory import get_adapter
+    from app.services.device_writes import write_device_config
+
+    ctrl = device.controller
+    cloud_kwargs: dict = {}
+    if ctrl.connection_mode == "cloud":
+        cloud_kwargs = {
+            "client_id": ctrl.client_id or "",
+            "client_secret": _decrypt_if_needed(ctrl.client_secret),
+            "omada_id": ctrl.omada_id or "",
+            "cloud_region": ctrl.cloud_region or "us",
+        }
+    adapter = get_adapter(
+        controller_type=ctrl.controller_type,
+        host=ctrl.host,
+        username=ctrl.username or "",
+        password=_decrypt_if_needed(ctrl.password),
+        port=ctrl.port,
+        use_ssl=ctrl.use_ssl,
+        verify_ssl=ctrl.verify_ssl,
+        mode=ctrl.connection_mode or "local",
+        **cloud_kwargs,
+    )
+    # A scheduled change takes the controller's device slot like every poller;
+    # a busy controller is tried again next minute (last_action stays unchanged).
+    from app.core.device_slot import controller_slot_key, device_slots
+
+    slot_key = controller_slot_key(ctrl)
+    lease = await device_slots.acquire(slot_key, "PoE schedule", wait=_SLOT_WAIT)
+    if lease is None:
+        raise RuntimeError(await device_slots.abusy_reason(slot_key))
+    try:
+        async with adapter:
+            for port_num in schedule.port_numbers or []:
+                config = {"poe": {"enable": poe_enabled}}
+                port_result = await write_device_config(
+                    session,
+                    device,
+                    actor_id=None,
+                    feature="switch.port.poe.schedule",
+                    operation="update",
+                    payload={
+                        "schedule_id": str(schedule.id),
+                        "port": port_num,
+                        "enabled": poe_enabled,
+                    },
+                    perform=lambda n=port_num, cfg=config: adapter.configure_switch_port(
+                        device.mac_address, n, cfg
+                    ),
+                )
+                # CONV2-001, the scheduled path. A refused write comes back as
+                # AdapterResult(success=False) and does NOT raise, so discarding it
+                # set any_device_succeeded=True on a switch that was never touched.
+                #
+                # That is worse here than on the interactive path, because the
+                # success also writes ``last_action``, and the guard at the top of
+                # the loop skips any schedule whose last_action already equals the
+                # desired one. So a failed 22:00 power-off was recorded as done,
+                # never retried for the rest of the window, and the PoE Schedules
+                # card showed a fresh "last action" timestamp. The cameras and APs
+                # the operator scheduled down stayed powered all night with FreeSDN
+                # reporting success.
+                #
+                # Both interactive PoE endpoints already call
+                # raise_for_adapter_result for exactly this; the scheduled one was
+                # the miss.
+                raise_for_adapter_result(port_result)
+    finally:
+        await device_slots.arelease(lease)
+
 
 @celery_app.task(
     bind=True, base=FreeSDNTask, name="poe.evaluate_schedules", soft_time_limit=120, time_limit=180
@@ -139,61 +231,9 @@ def evaluate_poe_schedules(self) -> dict[str, Any]:
                             logger.warning("Device %s has no controller, skipping", device.id)
                             continue
                         try:
-                            from app.api.v1.endpoints.poe import _decrypt_if_needed
-                            from app.core.adapter_result import raise_for_adapter_result
-                            from app.services.adapter_factory import get_adapter
-
-                            ctrl = device.controller
-                            cloud_kwargs: dict = {}
-                            if ctrl.connection_mode == "cloud":
-                                cloud_kwargs = {
-                                    "client_id": ctrl.client_id or "",
-                                    "client_secret": _decrypt_if_needed(ctrl.client_secret),
-                                    "omada_id": ctrl.omada_id or "",
-                                    "cloud_region": ctrl.cloud_region or "us",
-                                }
-                            adapter = get_adapter(
-                                controller_type=ctrl.controller_type,
-                                host=ctrl.host,
-                                username=ctrl.username or "",
-                                password=_decrypt_if_needed(ctrl.password),
-                                port=ctrl.port,
-                                use_ssl=ctrl.use_ssl,
-                                verify_ssl=ctrl.verify_ssl,
-                                mode=ctrl.connection_mode or "local",
-                                **cloud_kwargs,
+                            await _apply_schedule_to_device(
+                                session, schedule, device, poe_enabled=poe_enabled
                             )
-                            async with adapter:
-                                for port_num in schedule.port_numbers or []:
-                                    config = {"poe": {"enable": poe_enabled}}
-                                    port_result = await adapter.configure_switch_port(
-                                        device.mac_address,
-                                        port_num,
-                                        config,
-                                    )
-                                    # CONV2-001, the scheduled path. A refused
-                                    # write comes back as AdapterResult(success=
-                                    # False) and does NOT raise, so discarding it
-                                    # set any_device_succeeded=True on a switch
-                                    # that was never touched.
-                                    #
-                                    # That is worse here than on the interactive
-                                    # path, because the success also writes
-                                    # ``last_action``, and the guard at the top
-                                    # of this loop skips any schedule whose
-                                    # last_action already equals the desired one.
-                                    # So a failed 22:00 power-off was recorded as
-                                    # done, never retried for the rest of the
-                                    # window, and the PoE Schedules card showed a
-                                    # fresh "last action" timestamp. The cameras
-                                    # and APs the operator scheduled down stayed
-                                    # powered all night with FreeSDN reporting
-                                    # success.
-                                    #
-                                    # Both interactive PoE endpoints already call
-                                    # raise_for_adapter_result for exactly this;
-                                    # the scheduled one was the miss.
-                                    raise_for_adapter_result(port_result)
                             any_device_succeeded = True
                         except Exception as e:
                             logger.warning(

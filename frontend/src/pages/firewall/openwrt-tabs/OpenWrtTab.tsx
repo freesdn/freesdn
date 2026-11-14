@@ -33,7 +33,9 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { cn } from '@/lib/utils';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 type SubTab =
   | 'overview'
@@ -84,6 +86,7 @@ export function OpenWrtTab({ controllerId }: { controllerId: string }) {
   const { t } = useTranslation('firewall');
   const [sub, setSub] = useState<SubTab>('overview');
   const { toast } = useToast();
+  const confirm = useConfirm();
   const qc = useQueryClient();
 
   // Write dialogs, keep the "draft" close to the dialog open state so a
@@ -91,6 +94,18 @@ export function OpenWrtTab({ controllerId }: { controllerId: string }) {
   const [ruleDialog, setRuleDialog] = useState<RuleDraft | null>(null);
   const [pfDialog, setPfDialog] = useState<PfDraft | null>(null);
   const [hostDialog, setHostDialog] = useState<HostDraft | null>(null);
+
+  // A delete here is only staged: nothing reaches the router until it is
+  // applied from Pending Changes. The dialog says so, so a staged delete is
+  // not mistaken for one that already took effect.
+  const confirmStagedDelete = (title: string, name: string) =>
+    confirm({
+      title,
+      description: t('OpenWrtTab.confirmStaged.body'),
+      items: name ? [name] : undefined,
+      confirmLabel: t('OpenWrtTab.confirmStaged.action'),
+      destructive: true,
+    });
 
   const stagedToast = (msg: string) =>
     toast({
@@ -116,7 +131,7 @@ export function OpenWrtTab({ controllerId }: { controllerId: string }) {
     onError: (err: any) =>
       toast({
         title: t('OpenWrtTab.toasts.stageFailed.title'),
-        description: err?.response?.data?.detail || err?.message || t('OpenWrtTab.toasts.stageFailed.unknown'),
+        description: getApiErrorMessage(err, t('OpenWrtTab.toasts.stageFailed.unknown')),
         variant: 'destructive',
       }),
   });
@@ -138,7 +153,7 @@ export function OpenWrtTab({ controllerId }: { controllerId: string }) {
     onError: (err: any) =>
       toast({
         title: t('OpenWrtTab.toasts.stageFailed.title'),
-        description: err?.response?.data?.detail || err?.message || t('OpenWrtTab.toasts.stageFailed.unknown'),
+        description: getApiErrorMessage(err, t('OpenWrtTab.toasts.stageFailed.unknown')),
         variant: 'destructive',
       }),
   });
@@ -160,7 +175,7 @@ export function OpenWrtTab({ controllerId }: { controllerId: string }) {
     onError: (err: any) =>
       toast({
         title: t('OpenWrtTab.toasts.stageFailed.title'),
-        description: err?.response?.data?.detail || err?.message || t('OpenWrtTab.toasts.stageFailed.unknown'),
+        description: getApiErrorMessage(err, t('OpenWrtTab.toasts.stageFailed.unknown')),
         variant: 'destructive',
       }),
   });
@@ -315,8 +330,9 @@ export function OpenWrtTab({ controllerId }: { controllerId: string }) {
                       size="sm"
                       variant="ghost"
                       className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                      onClick={() => {
-                        if (!window.confirm(t('OpenWrtTab.firewall.confirmDelete', { name: r.name || r.uci_name }))) return;
+                      onClick={async () => {
+                        const name = String(r.name || r.uci_name || '');
+                        if (!(await confirmStagedDelete(t('OpenWrtTab.firewall.confirmDelete', { name }), name))) return;
                         const targetId = (r.id as string) || (r.uci_name as string);
                         stageRule.mutate({ op: 'delete', payload: {}, targetId });
                       }}
@@ -372,8 +388,9 @@ export function OpenWrtTab({ controllerId }: { controllerId: string }) {
                       size="sm"
                       variant="ghost"
                       className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                      onClick={() => {
-                        if (!window.confirm(t('OpenWrtTab.portForwards.confirmDelete', { name: r.name || r.uci_name }))) return;
+                      onClick={async () => {
+                        const name = String(r.name || r.uci_name || '');
+                        if (!(await confirmStagedDelete(t('OpenWrtTab.portForwards.confirmDelete', { name }), name))) return;
                         const targetId = (r.id as string) || (r.uci_name as string);
                         stagePf.mutate({ op: 'delete', payload: {}, targetId });
                       }}
@@ -500,8 +517,9 @@ export function OpenWrtTab({ controllerId }: { controllerId: string }) {
                       size="sm"
                       variant="ghost"
                       className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                      onClick={() => {
-                        if (!window.confirm(t('OpenWrtTab.dhcpStatic.confirmDelete', { name: h.hostname || h.mac_address }))) return;
+                      onClick={async () => {
+                        const name = String(h.hostname || h.mac_address || '');
+                        if (!(await confirmStagedDelete(t('OpenWrtTab.dhcpStatic.confirmDelete', { name }), name))) return;
                         const targetId = (h.id as string) || (h.uci_name as string);
                         stageHost.mutate({ op: 'delete', payload: {}, targetId });
                       }}
@@ -543,7 +561,7 @@ export function OpenWrtTab({ controllerId }: { controllerId: string }) {
   // Show "no creds saved" hint if the first read 502s with auth-related error
   const isAuthError = deviceInfoQ.isError && (
     String(deviceInfoQ.error || '').toLowerCase().includes('auth')
-    || String((deviceInfoQ.error as any)?.response?.data?.detail || '').toLowerCase().includes('login')
+    || getApiErrorMessage(deviceInfoQ.error).toLowerCase().includes('login')
   );
 
   return (

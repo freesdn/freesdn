@@ -68,6 +68,7 @@ import {
 import { RunScanDialog } from '@/components/agent/RunScanDialog';
 import { AdHocScansPanel } from '@/components/agent/AdHocScansPanel';
 import { AgentSettingsPanel } from '@/components/agent/AgentSettingsPanel';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 type TFn = (key: string, options?: Record<string, unknown>) => string;
 
@@ -129,7 +130,7 @@ export function AgentDetailPage() {
     onError: (err: any) => {
       toast({
         title: t('AgentDetailPage.toast.saveFailed'),
-        description: err?.response?.data?.detail || String(err),
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },

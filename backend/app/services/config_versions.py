@@ -60,11 +60,14 @@ class ConfigVersionService:
         Returns:
             The newly created ConfigVersion.
         """
-        # Auto-increment version number
-        max_ver_q = (
-            select(func.coalesce(func.max(ConfigVersion.version_number), 0))
-            .where(ConfigVersion.device_id == device_id)
-            .with_for_update()
+        # Auto-increment version number. No FOR UPDATE: PostgreSQL refuses it
+        # on an aggregate ("FOR UPDATE is not allowed with aggregate
+        # functions"), so every recording failed and left the caller's
+        # transaction aborted. Concurrent recordings are already handled: the
+        # unique (device_id, version_number) constraint rejects a duplicate and
+        # the savepoint retry below takes the next number.
+        max_ver_q = select(func.coalesce(func.max(ConfigVersion.version_number), 0)).where(
+            ConfigVersion.device_id == device_id
         )
         result = await self.db.execute(max_ver_q)
         next_version = (result.scalar() or 0) + 1
@@ -239,15 +242,68 @@ class ConfigVersionService:
             organization_id=target.organization_id,
         )
 
-        # Push to device via adapter
-        try:
+        # Push to the device through the staging chokepoint: refused in
+        # read-only mode before the device is contacted, run in the device's
+        # turn, and recorded (``direct.device.config.rollback``; the row names
+        # the version, the configuration itself stays in its ConfigVersion).
+        #
+        # This called ``adapter.push_config(snapshot)``, which no adapter has
+        # ever defined: every rollback raised AttributeError and answered 502.
+        # ``push_full_config(device_id, config)`` is the interface
+        # (BaseAdapter). No adapter implements it yet, so a rollback still
+        # cannot reach a device; that is now said without contacting it.
+        from fastapi import HTTPException
+
+        from app.models.devices import Device
+        from app.services.device_writes import adapter_implements, write_device_config
+
+        if not adapter_implements(adapter, "push_full_config"):
+            raise RuntimeError(
+                f"Failed to push rollback configuration to device {device_id}: "
+                f"{type(adapter).__name__} cannot apply a full configuration"
+            )
+
+        device = (
+            await self.db.execute(
+                select(Device).where(Device.id == device_id, Device.deleted_at.is_(None))
+            )
+        ).scalar_one_or_none()
+        if device is None:
+            raise ValueError(f"Device {device_id} not found")
+        snapshot = target.config_snapshot or {}
+
+        async def _push() -> Any:
             async with adapter:
-                await adapter.push_config(target.config_snapshot)
+                return await adapter.push_full_config(
+                    device.external_id or device.mac_address, snapshot
+                )
+
+        try:
+            result = await write_device_config(
+                self.db,
+                device,
+                actor_id=user_id,
+                feature="device.config.rollback",
+                operation="update",
+                payload={
+                    "version_id": str(version_id),
+                    "version_number": target.version_number,
+                },
+                perform=_push,
+            )
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error("Rollback push failed for device %s: %s", device_id, e, exc_info=True)
             raise RuntimeError(
                 f"Failed to push rollback configuration to device {device_id}: {e}"
             ) from e
+        if not getattr(result, "success", False):
+            reason = getattr(result, "error", None) or "the device refused the configuration"
+            logger.error("Rollback push refused for device %s: %s", device_id, reason)
+            raise RuntimeError(
+                f"Failed to push rollback configuration to device {device_id}: {reason}"
+            )
 
         logger.info(
             "Rollback complete: device=%s from_version=%d new_version=%d",

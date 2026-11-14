@@ -522,10 +522,14 @@ manager = ConnectionManager()
 async def _revalidate_ws_session(info: ConnectionInfo) -> bool:
     """Check if the user is still active and their token_version hasn't changed.
 
+    Also closes the socket of a member whose organization has been deleted or
+    deactivated, like the REST chokepoint does.
+
     Returns True if the session is still valid, False if it should be closed.
     """
     from sqlalchemy import select
 
+    from app.core.organization_access import organization_admits
     from app.db import async_session_factory
     from app.models import User
 
@@ -552,6 +556,13 @@ async def _revalidate_ws_session(info: ConnectionInfo) -> bool:
 
                 if await is_session_revoked_for_access_jti(session, info.access_jti):
                     return False
+            membership = (
+                await session.execute(
+                    select(User.role, User.organization_id).where(User.id == UUID(info.user_id))
+                )
+            ).one_or_none()
+            if membership is None or not await organization_admits(session, membership):
+                return False
         return True
     except Exception:
         logger.warning("WebSocket revalidation failed for %s", info.user_id, exc_info=True)

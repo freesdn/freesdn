@@ -74,6 +74,7 @@ import {
 } from '@/components/ui/select';
 import OverlayDiscoveryTab from '@/components/vpn/OverlayDiscoveryTab';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import {
   vpnApi,
   sitesApiV2,
@@ -90,6 +91,7 @@ import {
   type VPNCertExpiry,
 } from '@/lib/api';
 import TailscaleSetupWizard from './TailscaleSetupWizard';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 const VPNTopologyTab = React.lazy(() => import('./VPNTopologyTab'));
 
@@ -194,7 +196,7 @@ function ReconnectStatusBadge({ connectionId }: { connectionId: string }) {
       toast({ title: t('VPNPage.reconnect.resetToast'), description: data.message });
     },
     onError: (err: any) => {
-      toast({ title: t('VPNPage.common.error'), description: err?.response?.data?.detail || t('VPNPage.reconnect.resetFailed'), variant: 'destructive' });
+      toast({ title: t('VPNPage.common.error'), description: getApiErrorMessage(err, t('VPNPage.reconnect.resetFailed')), variant: 'destructive' });
     },
   });
 
@@ -437,6 +439,7 @@ function VPNConnectionCard({
   isActioning: boolean;
 }) {
   const { t } = useTranslation('vpn');
+  const confirm = useConfirm();
   const StatusIcon = statusIcons[connection.status] || Activity;
   const isConnected = connection.status === 'connected';
   const isError = connection.status === 'error';
@@ -512,8 +515,15 @@ function VPNConnectionCard({
                 variant="outline"
                 size="sm"
                 className="flex-1 text-destructive hover:text-destructive"
-                onClick={() => {
-                  if (confirm(t('VPNPage.connectionCard.disconnectConfirm', { name: connection.name }))) {
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: t('VPNPage.connectionCard.disconnectConfirm', { name: connection.name }),
+                    description: t('VPNPage.connectionCard.disconnectBody'),
+                    items: [connection.name],
+                    confirmLabel: t('VPNPage.connectionCard.disconnect'),
+                    destructive: true,
+                  });
+                  if (ok) {
                     onAction(connection.id, 'disconnect');
                   }
                 }}
@@ -665,7 +675,7 @@ function ConnectionFormDialog({
       onOpenChange(false);
     },
     onError: (err: any) => {
-      toast({ title: t('VPNPage.common.error'), description: err?.response?.data?.detail || err.message || t('VPNPage.connectionForm.saveFailed'), variant: 'destructive' });
+      toast({ title: t('VPNPage.common.error'), description: getApiErrorMessage(err, t('VPNPage.connectionForm.saveFailed')), variant: 'destructive' });
     },
   });
 
@@ -833,7 +843,7 @@ function DeleteConnectionDialog({
       onOpenChange(false);
     },
     onError: (err: any) => {
-      toast({ title: t('VPNPage.common.error'), description: err?.response?.data?.detail || t('VPNPage.deleteDialog.deleteFailed'), variant: 'destructive' });
+      toast({ title: t('VPNPage.common.error'), description: getApiErrorMessage(err, t('VPNPage.deleteDialog.deleteFailed')), variant: 'destructive' });
     },
   });
 
@@ -1073,7 +1083,7 @@ function SiteVPNConfigDialog({
       onOpenChange(false);
     },
     onError: (err: any) => {
-      toast({ title: t('VPNPage.common.error'), description: err?.response?.data?.detail || t('VPNPage.siteConfig.saveFailed'), variant: 'destructive' });
+      toast({ title: t('VPNPage.common.error'), description: getApiErrorMessage(err, t('VPNPage.siteConfig.saveFailed')), variant: 'destructive' });
     },
   });
 
@@ -1214,7 +1224,7 @@ function CreateTemplateDialog({
       onOpenChange(false);
     },
     onError: (err: any) => {
-      toast({ title: t('VPNPage.common.error'), description: err?.response?.data?.detail || t('VPNPage.templateDialog.createFailed'), variant: 'destructive' });
+      toast({ title: t('VPNPage.common.error'), description: getApiErrorMessage(err, t('VPNPage.templateDialog.createFailed')), variant: 'destructive' });
     },
   });
 
@@ -1285,6 +1295,7 @@ export default function VPNPage() {
   const { t } = useTranslation('vpn');
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const { tab: tabParam } = useParams<{ tab?: string }>();
   const activeTab =
     (VPN_TAB_VALUES as readonly string[]).includes(tabParam ?? '') ? (tabParam as string) : 'overview';
@@ -1475,7 +1486,7 @@ export default function VPNPage() {
       toast({ title: data.success ? t('VPNPage.toasts.success') : t('VPNPage.toasts.notice'), description: data.message });
     },
     onError: (err: any) => {
-      toast({ title: t('VPNPage.toasts.actionFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('VPNPage.toasts.actionFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
     onSettled: (_d, _e, vars) => {
       setActioningIds((prev) => { const next = new Set(prev); next.delete(vars.id); return next; });
@@ -1488,10 +1499,20 @@ export default function VPNPage() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['vpn', 'tunnels'] });
+      // A refused push comes back as HTTP 200 with success:false; showing it as
+      // a plain confirmation read as if the tunnel had come up.
+      if (data.success === false) {
+        toast({
+          title: t('VPNPage.toasts.actionFailed'),
+          description: data.error_message ? `${data.message}: ${data.error_message}` : data.message,
+          variant: 'destructive',
+        });
+        return;
+      }
       toast({ title: t('VPNPage.toasts.tunnelAction'), description: data.message });
     },
     onError: (err: any) => {
-      toast({ title: t('VPNPage.toasts.actionFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('VPNPage.toasts.actionFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -1504,7 +1525,7 @@ export default function VPNPage() {
       toast({ title: t('VPNPage.toasts.tunnelRemoved'), description: t('VPNPage.toasts.tunnelRemovedDesc') });
     },
     onError: (err: any) => {
-      toast({ title: t('VPNPage.toasts.teardownFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('VPNPage.toasts.teardownFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -1515,7 +1536,7 @@ export default function VPNPage() {
       toast({ title: t('VPNPage.toasts.certScanComplete'), description: t('VPNPage.toasts.certScanCompleteDesc', { scanned: data.scanned, updated: data.updated, errors: data.errors }) });
     },
     onError: (err: any) => {
-      toast({ title: t('VPNPage.toasts.certScanFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('VPNPage.toasts.certScanFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -1601,11 +1622,8 @@ export default function VPNPage() {
 
   const hasQueryError = connectionsError || tailscaleError || netbirdError || sitesError;
 
-  const handleRefresh = () => {
-    refetchConnections();
-    refetchTailscale();
-    refetchNetbird();
-  };
+  const handleRefresh = () =>
+    Promise.all([refetchConnections(), refetchTailscale(), refetchNetbird()]);
 
   const handleEditConnection = (c: VPNConnection) => {
     setEditingConnection(c);
@@ -1710,7 +1728,7 @@ export default function VPNPage() {
 
       {/* Stats */}
       <StatsGrid
-        columns={4}
+        columns={5}
         stats={[
           {
             title: t('VPNPage.stats.activeConnections'),
@@ -2474,11 +2492,16 @@ export default function VPNPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => {
-                  if (confirm(t('VPNPage.tunnelsTab.disableConfirm'))) {
-                    tunnelActionMutation.mutate({ id: tunnel.id, action: 'disable' });
-                  }
-                }}
+                                onClick={async () => {
+                                  const ok = await confirm({
+                                    title: t('VPNPage.tunnelsTab.disableTitle', { siteA: siteA?.name || t('VPNPage.tunnelsTab.siteA'), siteB: siteB?.name || t('VPNPage.tunnelsTab.siteB') }),
+                                    description: t('VPNPage.tunnelsTab.disableBody'),
+                                    confirmLabel: t('VPNPage.tunnelsTab.disableAction'),
+                                  });
+                                  if (ok) {
+                                    tunnelActionMutation.mutate({ id: tunnel.id, action: 'disable' });
+                                  }
+                                }}
                                 disabled={isActionPending}
                               >
                                 <Square className="mr-1 h-3 w-3" />
@@ -2489,8 +2512,14 @@ export default function VPNPage() {
                               variant="outline"
                               size="sm"
                               className="text-destructive hover:text-destructive"
-                              onClick={() => {
-                                if (confirm(t('VPNPage.tunnelsTab.teardownConfirm', { siteA: siteA?.name || t('VPNPage.tunnelsTab.siteA'), siteB: siteB?.name || t('VPNPage.tunnelsTab.siteB') }))) {
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: t('VPNPage.tunnelsTab.teardownConfirm', { siteA: siteA?.name || t('VPNPage.tunnelsTab.siteA'), siteB: siteB?.name || t('VPNPage.tunnelsTab.siteB') }),
+                                  description: t('VPNPage.tunnelsTab.teardownBody'),
+                                  confirmLabel: t('VPNPage.tunnelsTab.teardownAction'),
+                                  destructive: true,
+                                });
+                                if (ok) {
                                   teardownMutation.mutate(tunnel.id);
                                 }
                               }}

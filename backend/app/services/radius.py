@@ -117,7 +117,7 @@ class RadiusProfileService:
         # Build adapter
         adapter_kwargs: dict[str, Any] = {
             "port": controller.port,
-            "ssl": controller.use_ssl,
+            "use_ssl": controller.use_ssl,
             "verify_ssl": controller.verify_ssl,
         }
         try:
@@ -154,9 +154,38 @@ class RadiusProfileService:
             "reauthentication_interval": config.reauthentication_interval,
         }
 
-        try:
+        from fastapi import HTTPException
+
+        from app.services.device_writes import request_actor_id, write_controller_config
+
+        async def _push() -> Any:
             async with adapter:
-                await adapter.update_dot1x_config(payload)
+                return await adapter.update_dot1x_config(payload)
+
+        try:
+            # Staged and applied in this request (``direct.radius.dot1x``, the
+            # shared secret masked): refused in read-only mode before the
+            # controller is contacted, and run in the controller's turn.
+            result = await write_controller_config(
+                self.db,
+                controller.id,
+                actor_id=request_actor_id(),
+                feature="radius.dot1x",
+                operation="update",
+                target_id=str(config_id),
+                payload=payload,
+                perform=_push,
+            )
+            if not getattr(result, "success", False):
+                # The controller refused: this used to be ignored, and a refused
+                # push was recorded as "pushed".
+                config.push_status = "failed"
+                await self.db.flush()
+                return {
+                    "success": False,
+                    "error": getattr(result, "error", None)
+                    or "The controller refused the 802.1X configuration",
+                }
 
             config.push_status = "pushed"
             config.pushed_at = datetime.now(UTC)
@@ -167,6 +196,11 @@ class RadiusProfileService:
             )
             return {"success": True, "pushed_at": config.pushed_at.isoformat()}
 
+        except HTTPException as exc:
+            # Read-only mode or a busy controller: nothing was sent.
+            config.push_status = "failed"
+            await self.db.flush()
+            return {"success": False, "error": str(exc.detail)}
         except Exception:
             logger.exception(
                 "Failed to push 802.1X config %s",
@@ -202,7 +236,7 @@ class RadiusProfileService:
 
         adapter_kwargs: dict[str, Any] = {
             "port": controller.port,
-            "ssl": controller.use_ssl,
+            "use_ssl": controller.use_ssl,
             "verify_ssl": controller.verify_ssl,
         }
         try:

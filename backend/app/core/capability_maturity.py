@@ -107,7 +107,7 @@ CAPABILITY_MATURITY: dict[str, CapabilityInfo] = {
         "compose service. SNMP-trap and NetFlow share the same receiver/store path "
         "(unit-tested; not yet fired live). Syslog and traps now also publish "
         "`collector.syslog.received` / `collector.trap.received` onto the event bus, "
-        "so an automation rule can act on them — severity-floored at warning and "
+        "so an automation rule can act on them, severity-floored at warning and "
         "rate-capped per source; still BETA because that bridge has not been fired "
         "live against real gear.",
     ),
@@ -136,13 +136,19 @@ CAPABILITY_MATURITY: dict[str, CapabilityInfo] = {
         _EXPERIMENTAL,
         "VPN / overlay",
         "Security audited (🟢); the live-tunnel soak against real infrastructure is "
-        "still pending — do not assume the data path is proven.",
+        "still pending; do not assume the data path is proven.",
     ),
     "voip_freepbx_write": CapabilityInfo(
         _EXPERIMENTAL,
         "FreePBX configuration writes",
-        "Reads are live-validated; the configuration-WRITE transport is stubbed — "
-        "writes are not yet functional.",
+        # CORRECTED 2026-11-12 to agree with app/adapters/maturity.py: this said
+        # the write transport was "stubbed" and "not yet functional", while the
+        # adapter record (corrected earlier, on evidence) says it is implemented
+        # and was proven live. The grade stays EXPERIMENTAL: that proof was
+        # never recorded, and promotion here is the owner's call.
+        "Reads are live-validated. The write transport is implemented: extension, "
+        "ring-group and inbound-route creation was proven live once, without a "
+        "recorded cassette; other entities are tested against mocks only.",
     ),
     # ── 🟡 BETA — works, real evidence, known gaps ──
     "audit_log": CapabilityInfo(
@@ -165,7 +171,7 @@ CAPABILITY_MATURITY: dict[str, CapabilityInfo] = {
     "plugins": CapabilityInfo(
         _BETA,
         "External plugin system",
-        "Sandbox is hygiene, NOT a security boundary, by design — treat plugins "
+        "Sandbox is hygiene, NOT a security boundary, by design; treat plugins "
         "like installing a Python package.",
     ),
 }

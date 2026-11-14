@@ -69,8 +69,18 @@ def build_adapter(gw: GatewayConnection) -> BaseAdapter:
     Create an adapter instance from a ``GatewayConnection``.
 
     Decrypts credentials and resolves the vendor-specific
-    username / password mapping automatically.
+    username / password mapping automatically. Only the vendor's allow-listed
+    options from ``gw.settings`` reach the constructor (see
+    ``app.modules.firewall.adapter_settings``); the JSON used to be splatted in
+    whole, so any key in it became an adapter argument.
     """
+    from app.modules.firewall.adapter_settings import gateway_adapter_settings
+
+    if getattr(gw, "deleted_at", None) is not None:
+        # A soft-deleted gateway is never contacted, for a read or a write:
+        # FreeSDN no longer manages it. Every caller that loaded the row without
+        # the deleted_at filter is refused here instead of reaching the device.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gateway not found")
     creds = decrypt_dict(gw.credentials or {})
     if gw.vendor in ("opnsense", "pfsense"):
         username = creds.get("api_key", "")
@@ -85,5 +95,5 @@ def build_adapter(gw: GatewayConnection) -> BaseAdapter:
         password=password,
         port=gw.port,
         verify_ssl=gw.verify_ssl,
-        **gw.settings,
+        **gateway_adapter_settings(gw.vendor, gw.settings, gateway_id=gw.id),
     )

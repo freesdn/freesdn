@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.adapters.apply_context import apply_window
 from app.adapters.exceptions import AdapterError
 from app.adapters.pfsense.client import PfSenseClient, _validate_path
 
@@ -102,16 +103,17 @@ class TestReadOnlyGate:
 
     @pytest.mark.asyncio
     @patch("app.adapters.pfsense.client._is_adapter_read_only", lambda: True)
-    async def test_allows_writes_when_force_true(self) -> None:
+    async def test_allows_writes_inside_staged_apply_window(self) -> None:
         client = _make_client()
         mock_response = MagicMock(status_code=200, text='{"data": "ok"}')
         mock_response.json.return_value = {"data": "ok"}
         client._client = AsyncMock()
         client._client.is_closed = False
         client._client.request = AsyncMock(return_value=mock_response)
-        result = await client._request(
-            "POST", "/firewall/rule", data={}, force=True
-        )
+        with apply_window():
+            result = await client._request(
+                "POST", "/firewall/rule", data={}, force=True
+            )
         assert result == "ok"
 
     @pytest.mark.asyncio

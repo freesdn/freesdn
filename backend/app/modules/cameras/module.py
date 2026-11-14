@@ -183,9 +183,19 @@ class CamerasModule(BaseModule):
                 ModulePermission(
                     code="cameras.ptz",
                     name="PTZ Control",
-                    description="Control PTZ cameras",
+                    description="Move PTZ cameras, go to a preset, run or stop a patrol",
                     resource="camera_ptz",
                     action="execute",
+                ),
+                ModulePermission(
+                    code="cameras.manage_ptz",
+                    name="Manage PTZ and Two-Way Audio",
+                    description=(
+                        "Save, edit and delete PTZ presets and patrol tours, configure "
+                        "auto-tracking, and talk through a camera's speaker"
+                    ),
+                    resource="camera_ptz",
+                    action="update",
                 ),
                 ModulePermission(
                     code="cameras.playback",

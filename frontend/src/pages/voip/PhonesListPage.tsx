@@ -46,6 +46,7 @@ import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { voipApi } from '@/lib/api';
 import { PageHeader, PageToolbar } from '@/components/layout';
 import { StatsGrid } from '@/components/ui/stats-grid';
@@ -55,6 +56,8 @@ import { escapeCell } from '@/lib/csv';
 import { Download } from 'lucide-react';
 import { PhoneStatusBadge, LifecycleBadge, ProvisionBadge, SIPIndicator, VendorLabel, formatTimeAgo } from './components';
 import type { VoIPPhone } from './types';
+import { getApiErrorMessage } from '@/lib/api/errors';
+import { summariseBulkDelete } from '@/lib/bulk-result';
 
 export default function PhonesListPage() {
   const { t } = useTranslation('voip');
@@ -62,6 +65,7 @@ export default function PhonesListPage() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
+  const confirm = useConfirm();
 
   const [search, setSearch] = useState('');
   const [filterLifecycle, setFilterLifecycle] = useState(searchParams.get('lifecycle') || 'all');
@@ -110,7 +114,7 @@ export default function PhonesListPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => voipApi.deletePhone(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['voip-phones'] }),
-    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.deleteFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.deleteFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const onboardMutation = useMutation({
@@ -120,37 +124,37 @@ export default function PhonesListPage() {
       setShowOnboardDialog(false);
       setSelectedPhone(null);
     },
-    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.onboardFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.onboardFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const decommissionMutation = useMutation({
     mutationFn: (id: string) => voipApi.decommissionPhone(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['voip-phones'] }),
-    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.decommissionFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.decommissionFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const maintenanceMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => voipApi.toggleMaintenance(id, enabled),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['voip-phones'] }),
-    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.maintenanceFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.maintenanceFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const provisionMutation = useMutation({
     mutationFn: (id: string) => voipApi.provisionPhone(id, { force: true }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['voip-phones'] }),
-    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.provisionFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.provisionFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const bulkRebootMutation = useMutation({
     mutationFn: (ids: string[]) => voipApi.bulkReboot(ids),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['voip-phones'] }),
-    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.bulkRebootFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.bulkRebootFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const bulkProvisionMutation = useMutation({
     mutationFn: (ids: string[]) => voipApi.bulkProvision(ids),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['voip-phones'] }),
-    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.bulkProvisionFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.bulkProvisionFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const bulkConnectMutation = useMutation({
@@ -172,7 +176,7 @@ export default function PhonesListPage() {
     onError: (err: any) => {
       toast({
         title: t('PhonesListPage.toasts.bulkConnectFailed'),
-        description: err?.response?.data?.detail || err.message,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },
@@ -191,7 +195,7 @@ export default function PhonesListPage() {
       setShowAddDialog(false);
       setNewPhone({ name: '', mac_address: '', ip_address: '', vendor: 'grandstream', model: '', location: '' });
     },
-    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.createFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('PhonesListPage.toasts.createFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   // Auto-link discovered phones to PBX extensions in one click.
@@ -230,7 +234,7 @@ export default function PhonesListPage() {
     },
     onError: (err: any) => toast({
       title: t('PhonesListPage.toasts.autoLink.failed'),
-      description: err?.response?.data?.detail || err.message,
+      description: getApiErrorMessage(err),
       variant: 'destructive',
     }),
   });
@@ -266,18 +270,35 @@ export default function PhonesListPage() {
 
   // ── Bulk delete · confirm + per-phone delete with a summary toast ──
 
+  // Names for the confirmation list; a selected phone no longer in the
+  // current page of results still shows by its id.
+  function selectedPhoneNames(ids: string[]): string[] {
+    return ids.map((id) => {
+      const phone = phones.find((p) => p.id === id);
+      return phone?.name || phone?.mac_address || id;
+    });
+  }
+
   async function handleBulkDelete() {
     if (selectedIds.length === 0) return;
-    if (!window.confirm(t('PhonesListPage.toasts.bulkDelete.title') + ` (${selectedIds.length})`)) return;
-    const results = await Promise.allSettled(selectedIds.map((id) => voipApi.deletePhone(id)));
-    const ok = results.filter((r) => r.status === 'fulfilled').length;
-    const failed = results.length - ok;
+    const ids = selectedIds;
+    const confirmed = await confirm({
+      title: t('PhonesListPage.confirm.bulkDelete.title', { count: ids.length }),
+      description: t('PhonesListPage.confirm.bulkDelete.body'),
+      count: ids.length,
+      items: selectedPhoneNames(ids),
+      confirmLabel: t('PhonesListPage.confirm.bulkDelete.action'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const results = await Promise.allSettled(ids.map((id) => voipApi.deletePhone(id)));
+    const summary = summariseBulkDelete(results, t);
     queryClient.invalidateQueries({ queryKey: ['voip-phones'] });
     setSelectedIds([]);
     toast({
       title: t('PhonesListPage.toasts.bulkDelete.title'),
-      description: t('PhonesListPage.toasts.bulkConnectComplete.description', { succeeded: ok, failed, skipped: 0 }),
-      variant: failed > 0 ? 'destructive' : undefined,
+      description: summary.description,
+      variant: summary.failed > 0 ? 'destructive' : undefined,
     });
   }
 
@@ -389,9 +410,13 @@ export default function PhonesListPage() {
       id: 'actions',
       header: '',
       cell: (row) => (
+        // The row opens the phone on click. Without this, opening the menu
+        // or choosing any item in it (React bubbles portal events to the
+        // row) also navigated to the phone's page.
+        <div onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t('PhonesListPage.rowActions.menuFor', { name: row.name || row.mac_address })}>
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -423,14 +448,28 @@ export default function PhonesListPage() {
             <DropdownMenuItem onClick={() => decommissionMutation.mutate(row.id)} className="text-warning focus:text-warning">
               <XCircle className="h-4 w-4 mr-2" /> {t('PhonesListPage.rowActions.decommission')}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => deleteMutation.mutate(row.id)} className="text-destructive focus:text-destructive">
+            <DropdownMenuItem
+              onClick={async () => {
+                const name = row.name || row.mac_address || row.id;
+                const ok = await confirm({
+                  title: t('PhonesListPage.confirm.delete.title', { name }),
+                  description: t('PhonesListPage.confirm.bulkDelete.body'),
+                  items: [name],
+                  confirmLabel: t('PhonesListPage.confirm.delete.action'),
+                  destructive: true,
+                });
+                if (ok) deleteMutation.mutate(row.id);
+              }}
+              className="text-destructive focus:text-destructive"
+            >
               <Trash2 className="h-4 w-4 mr-2" /> {t('PhonesListPage.rowActions.delete')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       ),
     },
-  ], [t, navigate, provisionMutation, maintenanceMutation, decommissionMutation, deleteMutation]);
+  ], [t, navigate, provisionMutation, maintenanceMutation, decommissionMutation, deleteMutation, confirm]);
 
   // ── Render ──
 
@@ -654,16 +693,20 @@ export default function PhonesListPage() {
             // Confirm first. This fired straight from the bulk bar with no
             // prompt; the backend's required confirm flag (which the client
             // never sent) was the only thing preventing a one-click fleet-wide
-            // reboot. Same window.confirm pattern the bulk-delete action above
-            // already uses.
-            onClick: () => {
-              if (
-                !window.confirm(
-                  t('PhonesListPage.bulkActions.reboot') + ` (${selectedIds.length})`,
-                )
-              )
-                return;
-              bulkRebootMutation.mutate(selectedIds);
+            // reboot. Same confirmation dialog the bulk-delete action above
+            // uses.
+            onClick: async () => {
+              const ids = selectedIds;
+              const confirmed = await confirm({
+                title: t('PhonesListPage.confirm.bulkReboot.title', { count: ids.length }),
+                description: t('PhonesListPage.confirm.bulkReboot.body'),
+                count: ids.length,
+                items: selectedPhoneNames(ids),
+                confirmLabel: t('PhonesListPage.confirm.bulkReboot.action'),
+                destructive: true,
+              });
+              if (!confirmed) return;
+              bulkRebootMutation.mutate(ids);
             },
           },
           {

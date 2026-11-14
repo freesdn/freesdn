@@ -43,6 +43,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 /* ============================================================
    Types
@@ -255,7 +256,7 @@ function OverviewTab({ dashboard }: { dashboard: OrgDashboard }) {
     <div className="space-y-6">
       {/* Stat cards */}
       <StatsGrid
-        columns={4}
+        columns={5}
         stats={[
           { title: t('OrganizationDetailPage.stats.sites'), value: dashboard.site_count, icon: MapPin, variant: 'primary' },
           { title: t('OrganizationDetailPage.stats.users'), value: dashboard.user_count, icon: Users, variant: 'primary' },
@@ -404,11 +405,10 @@ function SettingsTab({ dashboard }: { dashboard: OrgDashboard }) {
       toast({ title: tc('common.success'), description: dashboard.name });
     },
     onError: (err: unknown) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const detail = (err as any)?.response?.data?.detail;
+      const detail = getApiErrorMessage(err, tc('common.error'));
       toast({
         title: tc('common.error'),
-        description: typeof detail === 'string' ? detail : tc('common.error'),
+        description: detail,
         variant: 'destructive',
       });
     },

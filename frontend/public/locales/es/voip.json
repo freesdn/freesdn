@@ -120,13 +120,20 @@
       "trunkCreated": "Troncal creada",
       "trunkCreateFailed": "No se pudo crear la troncal · la API de escritura podría no estar disponible",
       "callOriginated": "Llamada originada",
-      "callOriginateFailed": "No se pudo originar la llamada"
+      "callOriginateFailed": "No se pudo originar la llamada",
+      "pbxDeleteFailed": "No se pudo eliminar la centralita"
     },
     "confirm": {
       "deleteExtension": "¿Eliminar la extensión {{number}}?",
       "deleteRingGroup": "¿Eliminar el grupo de timbre {{number}}? Esto prepara una eliminación para revisión.",
       "deleteInboundRoute": "¿Eliminar la ruta entrante {{route}}? Esto prepara una eliminación para revisión.",
-      "deleteTrunk": "¿Eliminar la troncal \"{{name}}\"? Esta acción no se puede deshacer."
+      "deleteTrunk": "¿Eliminar la troncal \"{{name}}\"? Esta acción no se puede deshacer.",
+      "stageDelete": "Preparar eliminación",
+      "deleteInboundRouteTitle": "¿Eliminar la ruta entrante {{route}}?",
+      "deleteRingGroupTitle": "¿Eliminar el grupo de timbrado {{number}}?",
+      "deleteTrunkTitle": "¿Eliminar la troncal \"{{name}}\"?",
+      "deleteTrunkBody": "La troncal se elimina en el propio PBX, sin paso de revisión. Esta acción no se puede deshacer.",
+      "deleteTrunkAction": "Eliminar troncal"
     },
     "columns": {
       "extension": "Extensión",
@@ -229,7 +236,7 @@
       "viewDescription": "Detalles de registro y configuración de la troncal",
       "activeChannels": "Canales activos",
       "editSettings": "Editar ajustes",
-      "readOnlyNote": "Las troncales son de solo lectura aquí — FreePBX no expone una API de escritura de troncales. Gestiónelas en la interfaz de administración de FreePBX."
+      "readOnlyNote": "Las troncales son de solo lectura aquí: FreePBX no expone una API de escritura de troncales. Gestiónelas en la interfaz de administración de FreePBX."
     },
     "reloadBanner": {
       "message": "Hay cambios de configuración preparados en el PBX pero aún no activos. Use Aplicar configuración para activarlos (esto recarga Asterisk)."
@@ -635,7 +642,8 @@
       "syncNow": "Sincronizar ahora",
       "viewExtensions": "Ver extensiones",
       "openWebUI": "Abrir interfaz web",
-      "delete": "Eliminar"
+      "delete": "Eliminar",
+      "menuFor": "Acciones para {{name}}"
     },
     "itemName": "sistema PBX",
     "itemNamePlural": "sistemas PBX",
@@ -723,6 +731,18 @@
       "tls": {
         "label": "Permitir certificado TLS autofirmado / expirado",
         "help": "Marque esto solo si su PBX usa un certificado autofirmado o expirado. La opción predeterminada es la verificación estricta. La anulación se aplica por PBX y queda registrada en la auditoría."
+      }
+    },
+    "confirm": {
+      "bulkDelete": {
+        "title_one": "¿Eliminar {{count}} sistema PBX?",
+        "title_other": "¿Eliminar {{count}} sistemas PBX?",
+        "body": "FreeSDN deja de administrarlos y elimina su configuración de conexión. No se cambia nada en los propios sistemas PBX.",
+        "action": "Eliminar sistemas PBX"
+      },
+      "delete": {
+        "title": "¿Eliminar {{name}}?",
+        "action": "Eliminar centralita"
       }
     }
   },
@@ -812,6 +832,20 @@
       "disableVoicemail": "Buzón de voz deshabilitado para {{count}} extensiones.",
       "deleteExtensionsSafety": "Elimina las extensiones de forma individual por seguridad.",
       "deleteRingGroupsSafety": "Elimina los grupos de timbre de forma individual por seguridad."
+    },
+    "confirm": {
+      "bulkDeleteExtensions": {
+        "title_one": "¿Eliminar {{count}} extensión?",
+        "title_other": "¿Eliminar {{count}} extensiones?",
+        "body": "Cada extensión se elimina directamente en su PBX, sin paso de revisión.",
+        "action": "Eliminar extensiones"
+      },
+      "bulkDeleteRingGroups": {
+        "title_one": "¿Eliminar {{count}} grupo de timbrado?",
+        "title_other": "¿Eliminar {{count}} grupos de timbrado?",
+        "body": "Cada grupo de timbrado se elimina directamente en su PBX, sin paso de revisión.",
+        "action": "Eliminar grupos de timbrado"
+      }
     }
   },
   "components": {
@@ -1020,7 +1054,7 @@
     "dataLoadError": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos.",
     "unknown": "Desconocido",
     "urgent": "Urgente",
-    "empty": "No hay mensajes de voz",
+    "empty": "No hay mensajes de voz guardados. FreeSDN todavía no copia el buzón de voz desde la centralita: escúchelo en el teléfono o en FreePBX.",
     "itemName": "mensajes de voz",
     "columns": {
       "from": "De",
@@ -1038,6 +1072,10 @@
       "totalMessages": "Total de mensajes",
       "unread": "Sin leer",
       "urgent": "Urgentes"
+    },
+    "collectionNotice": {
+      "title": "Los mensajes de voz aún no se importan",
+      "body": "FreeSDN todavía no copia los mensajes de voz de su PBX, por lo que esta bandeja permanece vacía aunque las personas dejen mensajes. Escuche los mensajes en el teléfono o en la PBX. Los buzones aparecen en la pestaña Buzón de voz de cada PBX, en Sistemas PBX."
     }
   },
   "PBXExtensionsTab": {
@@ -1194,7 +1232,15 @@
     "confirm": {
       "deletePhone": "¿Eliminar el teléfono \"{{name}}\"?",
       "deletePbx": "¿Eliminar el PBX \"{{name}}\"? Esto no se puede deshacer.",
-      "deleteVoicemail": "¿Eliminar este mensaje de voz?"
+      "deleteVoicemail": "¿Eliminar este mensaje de voz?",
+      "deletePhoneBody": "El teléfono se quita de FreeSDN. El propio teléfono no se restablece ni se modifica.",
+      "deletePbxTitle": "¿Eliminar el PBX \"{{name}}\"?",
+      "deletePbxBody": "FreeSDN deja de administrar este PBX y elimina su configuración de conexión. No se cambia nada en el propio PBX.",
+      "deleteRingGroupTitle": "¿Eliminar el grupo de timbrado \"{{name}}\"?",
+      "deleteRingGroupBody": "El grupo de timbrado se elimina en el propio PBX, sin paso de revisión.",
+      "deleteRingGroupAction": "Eliminar grupo de timbrado",
+      "deleteVoicemailBody": "Solo se quita de FreeSDN. El mensaje permanece en el buzón del PBX.",
+      "deleteVoicemailAction": "Eliminar mensaje de voz"
     },
     "phoneColumns": {
       "phone": "Teléfono",
@@ -1448,7 +1494,8 @@
       "maintenanceMode": "Modo de mantenimiento",
       "exitMaintenance": "Salir del mantenimiento",
       "decommission": "Dar de baja",
-      "delete": "Eliminar"
+      "delete": "Eliminar",
+      "menuFor": "Acciones para {{name}}"
     },
     "itemName": {
       "phones": "teléfonos",
@@ -1551,6 +1598,24 @@
           "noSip": "No hay teléfonos detectables con información SIP"
         },
         "failed": "Falló la vinculación automática"
+      }
+    },
+    "confirm": {
+      "bulkDelete": {
+        "title_one": "¿Eliminar {{count}} teléfono?",
+        "title_other": "¿Eliminar {{count}} teléfonos?",
+        "body": "Se quitan de FreeSDN. Los propios teléfonos no se restablecen ni se modifican.",
+        "action": "Eliminar teléfonos"
+      },
+      "bulkReboot": {
+        "title_one": "¿Reiniciar {{count}} teléfono?",
+        "title_other": "¿Reiniciar {{count}} teléfonos?",
+        "body": "Cada teléfono se reinicia ahora y corta cualquier llamada en curso.",
+        "action": "Reiniciar teléfonos"
+      },
+      "delete": {
+        "title": "¿Eliminar {{name}}?",
+        "action": "Eliminar teléfono"
       }
     }
   },
@@ -1695,9 +1760,11 @@
     "credentials": {
       "label": "Credenciales de inicio de sesión del teléfono",
       "custom": "Credenciales personalizadas para el inicio de sesión web del teléfono",
-      "default": "Usa admin/admin predeterminado",
+      "default": "Desactivado: los teléfonos se identifican pero nunca se inicia sesión",
       "username": "Usuario",
-      "password": "Contraseña"
+      "password": "Contraseña",
+      "tryDefault": "Probar el inicio de sesión de fábrica (admin/admin)",
+      "tryDefaultWarning": "Cada intento fallido cuenta para el bloqueo de administrador del teléfono, y la contraseña predeterminada se envía a todos los teléfonos que encuentre el escaneo. Úselo solo en una red que administre."
     },
     "history": {
       "title": "Historial de escaneos",
@@ -1871,8 +1938,9 @@
       "failed": "Fallidas"
     },
     "empty": {
-      "noRecords": "No se encontraron registros de llamadas"
-    }
+      "noRecords": "No hay registros de llamadas guardados. El historial se importa de cada centralita cada 15 minutos, y solo de una centralita conectada con una aplicación de la API de administración de FreePBX (OAuth2)."
+    },
+    "subtitleCapped": "Mostrando los {{count}} registros de llamadas más recientes"
   },
   "PBXConfigTab": {
     "heading": "Instantánea de configuración del PBX",

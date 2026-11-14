@@ -53,6 +53,10 @@ services:
       TS_SERVE_CONFIG: /config/serve.json
       # e.g. --login-server=https://your-headscale.example for self-hosted Headscale
       TS_EXTRA_ARGS: ${TS_EXTRA_ARGS:-}
+      # The base stack's setting (x-backend-env and the tailscale runtime
+      # container): true stops this node's log uploads to Tailscale Inc. The
+      # image's entrypoint turns it into tailscaled --no-logs-no-support.
+      TAILSCALE_NO_LOGS_NO_SUPPORT: ${TAILSCALE_NO_LOGS_NO_SUPPORT:-true}
     volumes:
       - tailscale_access_state:/var/lib/tailscale
       - ./docker/tailscale/serve.json:/config/serve.json:ro

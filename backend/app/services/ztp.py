@@ -9,11 +9,14 @@ Evaluates newly discovered devices against adoption rules and
 executes the multi-step adoption pipeline.
 """
 
+import contextlib
 import logging
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -31,6 +34,58 @@ from app.models.ztp import (
 from app.services.adapter_factory import get_adapter
 
 logger = logging.getLogger(__name__)
+
+
+def _result_field(result: Any, name: str, default: Any = None) -> Any:
+    from app.core.adapter_result import adapter_result_field
+
+    return adapter_result_field(result, name, default)
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Deep merge two dicts, override values take precedence."""
+    result = dict(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+async def resolve_profile_config(
+    db: AsyncSession, profile: ProvisioningProfile, device: Device
+) -> dict[str, Any]:
+    """The configuration a provisioning profile gives a device.
+
+    The profile's own payload, merged over its linked configuration template
+    when that template is live, active and meant for this kind of device.
+    Template values are ``ConfigTemplate.config``. The merge used to read
+    ``tpl.config_data``, an attribute the model does not have, so applying any
+    profile with a template raised before anything was sent; and the adoption
+    pipeline ignored the template altogether, so the two paths pushed different
+    configurations for the same profile.
+    """
+    config: dict[str, Any] = dict(profile.config_payload or {})
+    if not profile.config_template_id:
+        return config
+    from app.models.enterprise import ConfigTemplate
+
+    tpl = (
+        await db.execute(
+            select(ConfigTemplate).where(
+                ConfigTemplate.id == profile.config_template_id,
+                ConfigTemplate.organization_id == profile.organization_id,
+                ConfigTemplate.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if tpl is None or not tpl.is_active or not tpl.config:
+        return config
+    device_type = getattr(device.device_type, "value", device.device_type)
+    if tpl.device_type and str(tpl.device_type) != str(device_type):
+        return config
+    return _deep_merge(dict(tpl.config), config)
 
 
 def _decrypt_if_needed(value: str | None) -> str:
@@ -252,6 +307,71 @@ class AdoptionOrchestrator:
 
     STEPS = ["validate", "adopt", "firmware_check", "provision", "verify"]
 
+    def __init__(
+        self,
+        ledger_session_factory: Callable[[], contextlib.AbstractAsyncContextManager[AsyncSession]]
+        | None = None,
+    ) -> None:
+        # The staging ledger is written in its own transaction: the pipeline's
+        # transaction rolls back on failure, and the record of a write the
+        # device already took must survive that.
+        self._ledger_session_factory = ledger_session_factory
+
+    @contextlib.asynccontextmanager
+    async def _ledger_session(self) -> AsyncIterator[AsyncSession]:
+        factory = self._ledger_session_factory
+        if factory is None:
+            from app.db.session import celery_session_factory
+
+            factory = celery_session_factory
+        async with factory() as ledger:
+            yield ledger
+
+    async def _device_write(
+        self,
+        *,
+        device: Device,
+        organization_id: UUID,
+        feature: str,
+        operation: str,
+        payload: dict[str, Any],
+        perform: Callable[[], Awaitable[Any]],
+        notes: str,
+        actor_id: UUID | None = None,
+        force: bool = True,
+    ) -> Any:
+        """Make one device write through the staging chokepoint.
+
+        Refused while read-only mode is on; otherwise recorded in the staging
+        ledger (``direct.ztp.*``) and applied in the same call. Returns the
+        adapter's result, a failed one included, so each step keeps deciding
+        what a refusal means for the adoption.
+        """
+        from app.services.adapter_staging import AdapterStagingService
+
+        async with self._ledger_session() as ledger:
+            return await AdapterStagingService(ledger).apply_now(
+                organization_id=organization_id,
+                controller_id=device.controller_id,
+                site_id=device.site_id,
+                feature=f"ztp.{feature}",
+                operation=operation,
+                target_id=device.mac_address or str(device.id),
+                payload=payload,
+                perform=perform,
+                # An adoption job is the explicit request: an administrator
+                # started it, or an administrator's auto-adoption rule matched.
+                # "Apply profile" passes the request's own force flag.
+                force=force,
+                actor_id=actor_id,
+                notes=notes,
+                return_failed_result=True,
+            )
+
+    @staticmethod
+    def _job_note(job: AdoptionJob) -> str:
+        return f"zero-touch adoption job {job.id} ({job.triggered_by})"
+
     async def execute(self, job_id: UUID, session: AsyncSession) -> dict[str, Any]:
         """Run adoption pipeline for a job."""
         result = await session.execute(
@@ -298,6 +418,7 @@ class AdoptionOrchestrator:
             data={"triggered_by": job.triggered_by},
         )
 
+        steps_skipped: list[str] = []
         try:
             for step in self.STEPS:
                 job.current_step = step
@@ -314,6 +435,13 @@ class AdoptionOrchestrator:
                         device=device,
                     )
 
+                # A step the device's adapter cannot perform does not fail the
+                # adoption, but it did not happen either. It used to be listed in
+                # steps_completed, so a profile no adapter can push read as applied.
+                if step_result.get("skipped"):
+                    steps_skipped.append(f"{step}: {step_result['skipped']}")
+                    continue
+
                 job.steps_completed = [*job.steps_completed, step]
 
                 await self._publish_event(
@@ -326,6 +454,10 @@ class AdoptionOrchestrator:
             # Success
             job.status = AdoptionJobStatus.COMPLETED
             job.completed_at = datetime.now(UTC)
+            if steps_skipped:
+                job.error_message = "Adopted, but these steps did not run: " + "; ".join(
+                    steps_skipped
+                )
             device.is_adopted = True
             device.adopted_at = datetime.now(UTC)
             device.status = DeviceStatus.ONLINE
@@ -337,7 +469,7 @@ class AdoptionOrchestrator:
                 "adoption.completed",
                 device,
                 job,
-                data={"steps_completed": job.steps_completed},
+                data={"steps_completed": job.steps_completed, "steps_skipped": steps_skipped},
             )
 
             return {
@@ -345,6 +477,7 @@ class AdoptionOrchestrator:
                 "job_id": str(job.id),
                 "device_id": str(device.id),
                 "steps_completed": job.steps_completed,
+                "steps_skipped": steps_skipped,
             }
 
         except Exception:
@@ -392,29 +525,47 @@ class AdoptionOrchestrator:
         if not adapter:
             return {"success": False, "error": "Cannot create adapter"}
 
-        try:
+        mac = device.mac_address or ""
+
+        async def _adopt() -> Any:
             async with adapter:
-                mac = device.mac_address or ""
-                # adopt_device returns an AdapterResult dataclass (NOT a dict).
-                # The old `result.get(...)` raised AttributeError that the broad
-                # except below swallowed, so adoption ALWAYS failed — even for
-                # Omada, the only adapter that implements it.
-                result = await adapter.adopt_device(mac)
-                if getattr(result, "success", False):
-                    return {"success": True}
-                # A base / non-adopting adapter returns AdapterResult.fail(
-                # error_code="NOT_SUPPORTED") — treat that as a no-op skip (the
-                # device just isn't controller-adoptable), not a hard failure.
-                if getattr(result, "error_code", None) == "NOT_SUPPORTED":
-                    logger.info(
-                        "Adapter %s does not support device adoption — skipping",
-                        type(adapter).__name__,
-                    )
-                    return {"success": True}
+                return await adapter.adopt_device(mac)
+
+        try:
+            # adopt_device returns an AdapterResult dataclass (NOT a dict).
+            # The old `result.get(...)` raised AttributeError that the broad
+            # except below swallowed, so adoption ALWAYS failed, even for
+            # Omada, the only adapter that implements it.
+            result = await self._device_write(
+                device=device,
+                organization_id=job.organization_id,
+                feature="adopt",
+                operation="create",
+                payload={"device_id": str(device.id), "mac": mac},
+                perform=_adopt,
+                notes=self._job_note(job),
+            )
+            if _result_field(result, "success", False):
+                return {"success": True}
+            # A base / non-adopting adapter returns AdapterResult.fail(
+            # error_code="NOT_SUPPORTED") — treat that as a no-op skip (the
+            # device just isn't controller-adoptable), not a hard failure.
+            if _result_field(result, "error_code") == "NOT_SUPPORTED":
+                logger.info(
+                    "Adapter %s does not support device adoption — skipping",
+                    type(adapter).__name__,
+                )
                 return {
-                    "success": False,
-                    "error": getattr(result, "error", None) or "Adoption failed",
+                    "success": True,
+                    "skipped": "this device's adapter cannot adopt devices",
                 }
+            return {
+                "success": False,
+                "error": _result_field(result, "error") or "Adoption failed",
+            }
+        except HTTPException as exc:
+            # Read-only mode, or the staging chokepoint refused the write.
+            return {"success": False, "error": str(exc.detail)}
         except Exception:
             logger.exception("Adapter adopt_device failed for device %s", device.id)
             return {"success": False, "error": "Device adoption failed"}
@@ -450,38 +601,77 @@ class AdoptionOrchestrator:
             profile.target_firmware_version,
         )
 
-        # Trigger firmware upgrade via adapter
+        # Trigger firmware upgrade via adapter. A failure does not fail the
+        # adoption, but it is reported as a skipped step, not a completed one.
+        target = profile.target_firmware_version
         adapter = await self._get_adapter(device, session)
         if not adapter:
             logger.warning("Cannot create adapter for firmware upgrade — skipping")
-            return {"success": True}
+            return {
+                "success": True,
+                "skipped": f"no adapter was available, so the upgrade to {target} was not started",
+            }
+
+        mac = device.mac_address or ""
+
+        async def _upgrade() -> Any:
+            async with adapter:
+                return await adapter.upgrade_firmware(mac)
 
         try:
-            async with adapter:
-                mac = device.mac_address or ""
-                result = await adapter.upgrade_firmware(mac)
-                if hasattr(result, "success") and not result.success:
-                    # Non-blocking: log but don't fail adoption
-                    logger.warning(
-                        "Firmware upgrade request failed for %s: %s — adoption continues",
-                        device.name,
-                        getattr(result, "error", "unknown"),
-                    )
-                else:
-                    logger.info(
-                        "Firmware upgrade initiated for device %s (%s → %s)",
-                        device.name,
-                        current,
-                        profile.target_firmware_version,
-                    )
+            result = await self._device_write(
+                device=device,
+                organization_id=job.organization_id,
+                feature="firmware_upgrade",
+                operation="update",
+                payload={
+                    "device_id": str(device.id),
+                    "mac": mac,
+                    "from_version": current,
+                    "target_version": target,
+                },
+                perform=_upgrade,
+                notes=self._job_note(job),
+            )
+            if _result_field(result, "success", True) is False:
+                # Non-blocking: log but don't fail adoption
+                reason = _result_field(result, "error") or "the adapter refused it"
+                logger.warning(
+                    "Firmware upgrade request failed for %s: %s — adoption continues",
+                    device.name,
+                    reason,
+                )
+                return {
+                    "success": True,
+                    "skipped": f"the upgrade to {target} was not started: {reason}",
+                }
+            logger.info(
+                "Firmware upgrade initiated for device %s (%s → %s)",
+                device.name,
+                current,
+                target,
+            )
+        except HTTPException as exc:
+            return {
+                "success": True,
+                "skipped": f"the upgrade to {target} was not started: {exc.detail}",
+            }
         except NotImplementedError:
             logger.info("Adapter does not support firmware upgrade — skipping")
+            return {
+                "success": True,
+                "skipped": f"this device's adapter cannot upgrade firmware to {target}",
+            }
         except Exception:
             logger.warning(
                 "Firmware upgrade dispatch failed for %s — adoption continues",
                 device.name,
                 exc_info=True,
             )
+            return {
+                "success": True,
+                "skipped": f"the request to upgrade firmware to {target} failed",
+            }
 
         return {"success": True}
 
@@ -497,36 +687,58 @@ class AdoptionOrchestrator:
             return {"success": True}
 
         profile = await session.get(ProvisioningProfile, job.profile_id)
-        if not profile or not profile.config_payload:
+        if not profile:
             return {"success": True}
         if profile.deleted_at is not None:
             return {"success": False, "error": "Provisioning profile has been deleted"}
+        # The same configuration "apply profile" pushes: payload over template.
+        config = await resolve_profile_config(session, profile, device)
+        if not config:
+            return {"success": True}
 
         adapter = await self._get_adapter(device, session)
         if not adapter:
             return {"success": False, "error": "Cannot create adapter"}
 
-        try:
+        mac = device.mac_address or device.external_id or ""
+
+        async def _push() -> Any:
             async with adapter:
-                mac = device.mac_address or device.external_id or ""
-                result = await adapter.push_full_config(mac, profile.config_payload)
-                if getattr(result, "success", False):
-                    device.status = DeviceStatus.PROVISIONING
-                    device.lifecycle_state = LifecycleState.PROVISIONING
-                    return {"success": True}
-                # No adapter implements full-config push yet — base returns
-                # AdapterResult.fail(error_code="NOT_SUPPORTED"). Skip honestly
-                # rather than hard-failing every profile-bearing adoption.
-                if getattr(result, "error_code", None) == "NOT_SUPPORTED":
-                    logger.info(
-                        "Adapter %s does not support full-config push — skipping provision",
-                        type(adapter).__name__,
-                    )
-                    return {"success": True}
+                return await adapter.push_full_config(mac, config)
+
+        try:
+            result = await self._device_write(
+                device=device,
+                organization_id=job.organization_id,
+                feature="provision",
+                operation="update",
+                payload={"profile_id": str(profile.id), "config": config},
+                perform=_push,
+                notes=self._job_note(job),
+            )
+            if _result_field(result, "success", False):
+                device.status = DeviceStatus.PROVISIONING
+                device.lifecycle_state = LifecycleState.PROVISIONING
+                return {"success": True}
+            # No adapter implements full-config push yet — base returns
+            # AdapterResult.fail(error_code="NOT_SUPPORTED"). Skip honestly
+            # rather than hard-failing every profile-bearing adoption.
+            if _result_field(result, "error_code") == "NOT_SUPPORTED":
+                logger.info(
+                    "Adapter %s does not support full-config push — skipping provision",
+                    type(adapter).__name__,
+                )
                 return {
-                    "success": False,
-                    "error": getattr(result, "error", None) or "Config push failed",
+                    "success": True,
+                    "skipped": "this device's adapter cannot push a full configuration, "
+                    "so the provisioning profile was not applied",
                 }
+            return {
+                "success": False,
+                "error": _result_field(result, "error") or "Config push failed",
+            }
+        except HTTPException as exc:
+            return {"success": False, "error": str(exc.detail)}
         except Exception:
             logger.exception("Provisioning failed for device %s", device.id)
             return {"success": False, "error": "Provisioning failed"}
@@ -679,8 +891,11 @@ class AdoptionOrchestrator:
                 **(data or {}),
             }
 
+            # Every caller already passes "adoption.<x>"; prefixing again published
+            # "adoption.adoption.completed", which matched nothing the
+            # integrations catalogue advertises.
             event = Event(
-                event_type=f"adoption.{event_name}",
+                event_type=event_name,
                 payload=payload,
                 category=EventCategory.SYSTEM,
                 priority=EventPriority.NORMAL,
@@ -706,55 +921,68 @@ class ProvisioningProfileService:
         self,
         device: Device,
         profile: ProvisioningProfile,
+        *,
+        force: bool = False,
+        actor_id: UUID | None = None,
     ) -> dict[str, Any]:
         """
         Apply a provisioning profile to an existing device.
 
-        1. Merge profile.config_payload with linked ConfigTemplate (if any)
-        2. Push via adapter
-        3. Update device state
+        1. Resolve the configuration (profile payload over its linked template)
+        2. Push it through the staging chokepoint: refused while read-only mode
+           is on and without ``force``; recorded in the staging ledger
+        3. Report what the device's adapter actually did
         """
-        if not profile.config_payload:
-            return {"success": False, "error": "Profile has no config payload"}
+        config = await resolve_profile_config(self.db, profile, device)
+        if not config:
+            return {"success": False, "error": "Profile has no configuration to apply"}
 
-        config = dict(profile.config_payload)
-
-        # Merge with linked enterprise ConfigTemplate if present
-        if profile.config_template_id:
-            from app.models.enterprise import ConfigTemplate
-
-            result = await self.db.execute(
-                select(ConfigTemplate).where(
-                    ConfigTemplate.id == profile.config_template_id,
-                    ConfigTemplate.organization_id == profile.organization_id,
-                )
-            )
-            tpl = result.scalar_one_or_none()
-            if tpl and tpl.config_data:
-                config = self._deep_merge(tpl.config_data, config)
-
-        # Get adapter and push
-        orchestrator = AdoptionOrchestrator()
+        orchestrator = AdoptionOrchestrator(
+            ledger_session_factory=lambda: contextlib.nullcontext(self.db)
+        )
         adapter = await orchestrator._get_adapter(device, self.db)
         if not adapter:
             return {"success": False, "error": "Cannot create adapter for device"}
 
-        try:
+        mac = device.mac_address or device.external_id or ""
+
+        async def _push() -> Any:
             async with adapter:
-                mac = device.mac_address or device.external_id or ""
-                result = await adapter.push_full_config(mac, config)
-                return {"success": True, "config_pushed": True}
+                return await adapter.push_full_config(mac, config)
+
+        try:
+            result = await orchestrator._device_write(
+                device=device,
+                organization_id=profile.organization_id,
+                feature="profile_apply",
+                operation="update",
+                payload={"profile_id": str(profile.id), "config": config},
+                perform=_push,
+                notes=f"provisioning profile {profile.id} applied",
+                actor_id=actor_id,
+                force=force,
+            )
+        except HTTPException:
+            raise
         except Exception:
             logger.exception("Failed to apply profile to device %s", device.id)
             return {"success": False, "error": "Failed to push configuration to device"}
+        if _result_field(result, "success", False):
+            return {"success": True, "config_pushed": True}
+        # It used to answer "config_pushed: true" whatever the adapter said, and
+        # no adapter implements a full-configuration push yet.
+        if _result_field(result, "error_code") == "NOT_SUPPORTED":
+            return {
+                "success": False,
+                "error": "this device's adapter cannot push a full configuration; "
+                "nothing was changed on the device",
+            }
+        return {
+            "success": False,
+            "error": _result_field(result, "error") or "The device refused the configuration",
+        }
 
     @staticmethod
     def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
         """Deep merge two dicts, override values take precedence."""
-        result = dict(base)
-        for key, value in override.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = ProvisioningProfileService._deep_merge(result[key], value)
-            else:
-                result[key] = value
-        return result
+        return _deep_merge(base, override)

@@ -19,7 +19,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_active_user
 from app.core.dependencies import is_unscoped_org_admin, is_unscoped_superuser
+from app.core.organization_access import (
+    organization_holds_last_super_admin,
+    sign_out_organization_members,
+)
 from app.core.site_access import site_scope_filter
+from app.core.user_lifecycle import lock_user_lifecycle
 from app.db import get_session
 from app.models import Controller, Device, Organization, Site, User, UserSiteAccess
 from app.schemas import (
@@ -310,6 +315,23 @@ async def update_organization(
     }
     update_data = org_data.model_dump(exclude_unset=True)
 
+    # Switching an organization off signs out every member (see
+    # app.core.organization_access), so it is a platform decision like delete.
+    # An org admin who did it would lock the whole organization out, themselves
+    # included, with no way back. The settings form always sends the current
+    # value, so only an actual change is refused.
+    deactivating = False
+    if "is_active" in update_data and update_data["is_active"] != org.is_active:
+        if update_data["is_active"] is None:
+            update_data.pop("is_active")
+        elif not is_super:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only a super admin can deactivate or reactivate an organization",
+            )
+        else:
+            deactivating = update_data["is_active"] is False
+
     # SECURITY: strip setup_completed from settings to prevent re-opening wizard
     if "settings" in update_data and isinstance(update_data.get("settings"), dict):
         update_data["settings"].pop("setup_completed", None)
@@ -332,6 +354,11 @@ async def update_organization(
         setattr(org, field, value)
 
     org.updated_by = current_user.id
+    if deactivating:
+        # Takes effect at once: the auth paths already refuse members of an
+        # inactive organization, and the bump keeps their old tokens dead if
+        # the organization is reactivated later.
+        await sign_out_organization_members(session, org.id)
     await session.flush()
     await session.refresh(org)
 
@@ -344,14 +371,24 @@ async def delete_organization(
     session: Annotated[AsyncSession, Depends(get_session)],
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> None:
-    """Soft delete organization (super admin only)."""
+    """Soft delete organization (super admin only).
+
+    Signs out every member at once. Super admins are not signed out (they
+    manage every organization), and the organization holding the last active
+    super admin cannot be deleted.
+    """
     require_super_admin(current_user)
 
+    # Serialize with user disable/demote/delete, which count super admins under
+    # the same lock: the last-super-admin check below must not race them.
+    await lock_user_lifecycle(session)
     result = await session.execute(
-        select(Organization).where(
+        select(Organization)
+        .where(
             Organization.id == org_id,
             Organization.deleted_at.is_(None),
         )
+        .with_for_update()
     )
     org = result.scalar_one_or_none()
 
@@ -361,11 +398,26 @@ async def delete_organization(
             detail="Organization not found",
         )
 
+    if await organization_holds_last_super_admin(session, org.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Cannot delete the organization that holds the last active super admin "
+                "account. The appliance would be left with no super admin outside a "
+                "deleted organization."
+            ),
+        )
+
     # Soft delete
     from datetime import datetime
 
     org.deleted_at = datetime.now(UTC)
+    # Background jobs that select organizations by is_active alone (sync,
+    # discovery, notifications) must stop for a deleted one too, as
+    # OrganizationService.delete_organization already did.
+    org.is_active = False
     org.updated_by = current_user.id
+    await sign_out_organization_members(session, org.id)
     await session.commit()
 
 

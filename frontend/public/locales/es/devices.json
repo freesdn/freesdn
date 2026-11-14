@@ -198,6 +198,16 @@
       "reboot": "Reiniciar",
       "export": "Exportar",
       "delete": "Eliminar"
+    },
+    "bulkReboot": {
+      "confirm": "¿Reiniciar {{n}} dispositivos en línea? Cada uno desconecta sus clientes y enlaces hasta que vuelva a estar activo."
+    },
+    "bulkDelete": {
+      "confirmTitle": "¿Quitar {{n}} dispositivos?",
+      "confirmDescription": "FreeSDN quita estos {{n}} dispositivos de su inventario. No se cambia nada en los propios dispositivos, y un dispositivo que un controlador aún informa vuelve en la próxima sincronización.",
+      "doneTitle": "Se quitaron {{n}} dispositivos",
+      "partialTitle": "No se pudieron quitar {{failed}} de {{total}} dispositivos",
+      "resyncNote": "Los dispositivos que un controlador aún informa vuelven en la próxima sincronización."
     }
   },
   "DeviceDetailPage": {
@@ -273,7 +283,9 @@
     },
     "actions": {
       "sync": "Sincronizar",
-      "reboot": "Reiniciar"
+      "reboot": "Reiniciar",
+      "back": "Volver a dispositivos",
+      "more": "Más acciones"
     },
     "menu": {
       "editDevice": "Editar dispositivo",

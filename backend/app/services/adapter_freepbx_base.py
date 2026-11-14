@@ -160,6 +160,10 @@ class FreePBXServiceBase(GatewayServiceBase):
         # synchronous build only and restore it immediately (no ``await`` in
         # between → no flush window, the cached row is left untouched).
         self._validate_controller_host(pbx.ip_address)
+        from app.core.device_slot import pbx_slot_key
+        from app.services.device_live_read import take_device_turn
+
+        await take_device_turn(pbx_slot_key(pbx))
         effective_host = self._pin_controller_host(controller)
         original_ip = pbx.ip_address
         if effective_host and effective_host != original_ip:

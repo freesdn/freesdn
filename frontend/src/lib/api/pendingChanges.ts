@@ -26,6 +26,7 @@
 import { AxiosError } from 'axios';
 
 import { api } from './client';
+import { isReadOnlyRefusal, parseApiError } from './errors';
 import type {
   ChangeStatus,
   PendingChangeResponse,
@@ -464,36 +465,24 @@ export function describeApplyError(err: unknown): ApplyErrorInfo {
     return info;
   }
 
-  info.status = err.response?.status ?? null;
+  // The shared reader handles the { error: { message, type } } envelope the
+  // backend's handlers send as well as a bare { detail }. Reading only
+  // ``detail`` missed the envelope, so the read-only refusal (403,
+  // type adapter_read_only) showed "Apply failed" and never lit the banner.
+  const parsed = parseApiError(err, info.message);
+  info.status = parsed.status;
+  info.message = parsed.message;
   const data = err.response?.data as
-    | {
-        detail?: string | { msg?: string }[];
-        applied_response?: { error?: string };
-      }
+    | { applied_response?: { error?: string } }
     | undefined;
-
-  // Pydantic returns ``detail`` as a list of validation errors; FastAPI
-  // HTTPException returns ``detail`` as a string. Handle both.
-  let detail: string | undefined;
-  if (typeof data?.detail === 'string') {
-    detail = data.detail;
-  } else if (Array.isArray(data?.detail) && data.detail[0]?.msg) {
-    detail = data.detail[0].msg;
-  }
-  if (detail) info.message = detail;
 
   if (info.status === 403) {
     info.isForbidden = true;
-    // Backend can surface the read-only gate as either the legacy
-    // ``OMADA_READ_ONLY`` env name, the broader ``ADAPTER_READ_ONLY``,
-    // or the plain "read-only" / "read only" phrasing from a pydantic
-    // / role-check rejection. All three should light up the banner.
-    if (
-      detail &&
-      /OMADA_READ_ONLY|ADAPTER_READ_ONLY|read[- _]only/i.test(detail)
-    ) {
-      info.isReadOnly = true;
-    }
+    // Backend can surface the read-only gate as the typed adapter refusal,
+    // the legacy ``OMADA_READ_ONLY`` env name, the broader
+    // ``ADAPTER_READ_ONLY``, or plain "read-only" / "read only" phrasing.
+    // All of them should light up the banner.
+    info.isReadOnly = isReadOnlyRefusal(err);
   }
 
   // 502 carries the RouterOS-side rejection in applied_response.error

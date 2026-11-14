@@ -298,6 +298,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         SUBSYSTEM_STATUS["fabric"] = "degraded"
         logger.warning("Fabric negotiator failed to start: %s", exc, exc_info=True)
 
+    # Forward bus events to the organisations' webhooks (non-critical). Without
+    # this subscriber no configured webhook or integration ever received a real
+    # event, only the deliveries an operator triggered with "Test".
+    try:
+        from app.services.webhook_events import webhook_event_forwarder
+
+        await webhook_event_forwarder.start()
+        SUBSYSTEM_STATUS["webhooks"] = "healthy"
+    except Exception as exc:
+        SUBSYSTEM_STATUS["webhooks"] = "degraded"
+        logger.warning("Webhook event forwarder failed to start: %s", exc, exc_info=True)
+
     # Load third-party plugins from PLUGIN_DIR (non-critical)
     try:
         from app.db import async_session_factory
@@ -520,6 +532,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     except Exception:
         logger.debug("Error stopping automation engine", exc_info=True)
 
+    try:
+        from app.services.webhook_events import webhook_event_forwarder
+
+        await webhook_event_forwarder.stop()
+    except Exception:
+        logger.debug("Error stopping webhook event forwarder", exc_info=True)
+
     # Cancel the Fabric background sweep started in wire_and_start().
     try:
         from app.core.fabric.runtime import stop_fabric_runtime
@@ -592,6 +611,14 @@ def create_application() -> FastAPI:
         oidc_redirect_uri=settings.VAULT_OIDC_REDIRECT_URI or None,
     )
 
+    # Innermost on purpose (added before every other middleware): a live device
+    # read that finds the device busy is answered here with its last response,
+    # or a 503 (app/services/device_live_read.py), and the signal it raises
+    # inside the endpoint must reach it without crossing another middleware.
+    from app.services.device_live_read import FRESHNESS_HEADERS, DeviceReadTurnMiddleware
+
+    app.add_middleware(DeviceReadTurnMiddleware)
+
     # Setup middleware (request ID, logging, rate limiting, exception handlers)
     setup_middleware(app, auth_path_prefix=settings.API_V1_PREFIX + "/auth/")
 
@@ -628,6 +655,7 @@ def create_application() -> FastAPI:
             "X-RateLimit-Remaining",
             "X-FreeSDN-Artifact-Integrity",
             "Content-Disposition",
+            *FRESHNESS_HEADERS,
         ],
     )
 

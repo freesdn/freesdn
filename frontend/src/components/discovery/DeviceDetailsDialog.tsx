@@ -10,7 +10,6 @@ import {
   Network,
   Fingerprint,
   Globe,
-  Copy,
   CheckCircle2,
   XCircle,
   Server,
@@ -27,6 +26,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CopyButton } from '@/components/ui/copy-button';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import type { DiscoveredDevice } from './DiscoveredDeviceCard';
@@ -56,19 +56,17 @@ const PORT_SERVICES: Record<number, string> = {
 };
 
 function CopyableField({ label, value }: { label: string; value: string }) {
+  const { t } = useTranslation('common');
   return (
     <div className="flex items-center justify-between text-sm py-1">
       <span className="text-muted-foreground">{label}</span>
       <div className="flex items-center gap-1.5">
         <span className="font-mono text-xs">{value}</span>
-        <Button
-          variant="ghost"
-          size="icon"
+        <CopyButton
+          value={value}
           className="h-5 w-5"
-          onClick={() => navigator.clipboard.writeText(value)}
-        >
-          <Copy className="h-3 w-3" />
-        </Button>
+          aria-label={t('DeviceDetailsDialog.copyValue', { label })}
+        />
       </div>
     </div>
   );

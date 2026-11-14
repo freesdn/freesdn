@@ -223,6 +223,8 @@ class StorageLocationResponse(BaseSchema):
     description: str | None = None
     storage_type: str
     transport_security_review_required: bool = False
+    # Needs attention: a local/NFS path outside the server's allowed backup roots.
+    local_path_review_required: bool = False
     is_active: bool = True
     is_default: bool = False
     last_test_at: datetime | None = None
@@ -364,6 +366,20 @@ class BackupStats(BaseSchema):
     recent_backups: list[BackupResponse] = Field(default_factory=list)
     schedules_enabled: int = 0
     schedules_disabled: int = 0
+
+
+class DatabaseBackupStatusResponse(BaseModel):
+    """State of the pg-backup database dumps (instance-wide, not per org)."""
+
+    state: Literal["healthy", "unencrypted", "pending", "unknown", "disabled", "failing", "stale"]
+    severity: Literal["ok", "warning", "critical"]
+    enabled: bool | None = None
+    encrypted: bool | None = None
+    reason: str | None = None
+    last_success_at: datetime | None = None
+    max_age_seconds: int | None = None
+    checked_at: datetime
+    setup_command: str | None = None
 
 
 # =============================================================================

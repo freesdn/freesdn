@@ -531,6 +531,42 @@ def validate_restore(self) -> dict[str, Any]:
     return asyncio.run(_validate_restore_async())
 
 
+@celery_app.task(
+    bind=True,
+    base=FreeSDNTask,
+    name="backup.check_database_backups",
+    soft_time_limit=120,
+    time_limit=180,
+)
+def check_database_backups(self) -> dict[str, Any]:
+    """Hourly: tell super admins when the pg-backup database dumps are off or stale.
+
+    pg-backup refuses plaintext, so a fresh install writes NO database backups
+    until a GPG public key exists, and said so only in its own container log.
+    Reads the read-only status files pg-backup publishes (the worker mounts the
+    pg_backups volume ``:ro``); never touches a dump.
+    """
+
+    async def _run() -> dict[str, Any]:
+        from app.services.database_backup_status import (
+            notify_database_backup_state,
+            read_database_backup_status,
+        )
+
+        status = read_database_backup_status()
+        if status.state == "unknown":
+            logger.warning(
+                "Database backup status unavailable (pg_backups volume not mounted here?)"
+            )
+            return {"state": "unknown", "notified": 0}
+        async with AsyncSessionLocal() as session:
+            notified = await notify_database_backup_state(session, status)
+            await session.commit()
+        return {"state": status.state, "reason": status.reason, "notified": notified}
+
+    return asyncio.run(_run())
+
+
 async def _emit_validation_failure(
     *,
     org_id: Any,

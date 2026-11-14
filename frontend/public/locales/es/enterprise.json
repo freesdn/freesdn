@@ -62,7 +62,11 @@
     },
     "confirm": {
       "deleteRule": "¿Eliminar la regla \"{{name}}\"?",
-      "deleteRules": "¿Eliminar {{count}} regla(s)?"
+      "deleteRules": "¿Eliminar {{count}} regla(s)?",
+      "deleteRuleDescription": "Deja de generar alertas nuevas. Las alertas que ya generó permanecen en la lista de alertas.",
+      "deleteRuleAction": "Eliminar regla",
+      "deleteRulesDescription": "Dejan de generar alertas nuevas. Las alertas que ya generaron permanecen en la lista de alertas.",
+      "deleteRulesAction": "Eliminar reglas"
     },
     "emptyRules": {
       "title": "No se encontraron reglas",
@@ -704,6 +708,13 @@
       "createRule": "Error al crear la regla de correlación",
       "triggerCorrelation": "Error al activar la correlación",
       "loadFailed": "No se pudieron cargar los datos de incidentes"
+    },
+    "confirm": {
+      "deleteRule": {
+        "title": "¿Eliminar la regla de correlación \"{{name}}\"?",
+        "description": "Deja de agrupar eventos nuevos en incidentes. Los incidentes que ya abrió se conservan.",
+        "confirmLabel": "Eliminar regla"
+      }
     }
   },
   "LifecyclePage": {
@@ -875,7 +886,9 @@
       "verify": "Verificar",
       "disable": "Deshabilitar",
       "delete": "Eliminar",
-      "confirmDelete": "¿Eliminar {{count}} proveedor(es)?"
+      "confirmDelete": "¿Eliminar {{count}} proveedor(es)?",
+      "confirmDeleteDescription": "Se eliminan de forma permanente junto con sus credenciales almacenadas. Las notificaciones activas que los usen fallarán.",
+      "confirmDeleteAction": "Eliminar proveedores"
     },
     "deleteDialog": {
       "title": "Eliminar proveedor",
@@ -1103,10 +1116,18 @@
       "deviceGroups": "grupos de dispositivos"
     },
     "confirm": {
-      "deleteSiteGroup": "¿Eliminar el grupo de sitios \"{{name}}\"? Los sitios miembros se conservan; solo se elimina el grupo.",
-      "deleteDeviceGroup": "¿Eliminar el grupo de dispositivos \"{{name}}\"? Los dispositivos miembros se conservan; solo se elimina el grupo.",
+      "deleteSiteGroup": "¿Eliminar el grupo de sitios \"{{name}}\"?",
+      "deleteDeviceGroup": "¿Eliminar el grupo de dispositivos \"{{name}}\"?",
       "bulkDeleteSiteGroups": "¿Eliminar {{count}} grupo(s) de sitios?",
-      "bulkDeleteDeviceGroups": "¿Eliminar {{count}} grupo(s) de dispositivos?"
+      "bulkDeleteDeviceGroups": "¿Eliminar {{count}} grupo(s) de dispositivos?",
+      "deleteSiteGroupDescription": "Sus sitios se desvinculan del grupo, no se eliminan, y sus grupos hijos pasan al nivel superior.",
+      "deleteSiteGroupAction": "Eliminar grupo de sitios",
+      "bulkDeleteSiteGroupsDescription": "Sus sitios se desvinculan de los grupos, no se eliminan, y sus grupos hijos pasan al nivel superior.",
+      "bulkDeleteSiteGroupsAction": "Eliminar grupos de sitios",
+      "deleteDeviceGroupDescription": "Sus dispositivos salen del grupo. Ningún dispositivo se elimina ni se reconfigura.",
+      "deleteDeviceGroupAction": "Eliminar grupo de dispositivos",
+      "bulkDeleteDeviceGroupsDescription": "Sus dispositivos salen de los grupos. Ningún dispositivo se elimina ni se reconfigura.",
+      "bulkDeleteDeviceGroupsAction": "Eliminar grupos de dispositivos"
     },
     "dialogs": {
       "siteGroup": {
@@ -1203,7 +1224,8 @@
     "tabs": {
       "overview": "Resumen",
       "policies": "Políticas ({{count}})",
-      "breaches": "Incumplimientos ({{count}})"
+      "breaches": "Incumplimientos ({{count}})",
+      "reports": "Informes"
     },
     "overview": {
       "worstPerforming": "SLA con peor rendimiento"
@@ -1281,6 +1303,19 @@
       "uptimePercentMin": "% de disponibilidad mín.",
       "latencyMsMax": "Latencia ms máx.",
       "optional": "opcional"
+    },
+    "measurementScope": "El cumplimiento requiere datos de todos los objetivos configurados. Las políticas de sitio y de organización miden por ahora el estado de los dispositivos; el tiempo de actividad muestreado está disponible para las políticas de cámaras y NVR. Las observaciones que faltan se muestran como N/A, no como éxito. Los informes históricos no son una garantía contractual de disponibilidad.",
+    "confirm": {
+      "deleteOne": {
+        "title": "¿Eliminar la política de SLA \"{{name}}\"?",
+        "description": "Su historial de incumplimientos y sus instantáneas de cumplimiento se eliminan con ella. Esta acción no se puede deshacer.",
+        "confirmLabel": "Eliminar política"
+      },
+      "deleteMany": {
+        "title": "¿Eliminar las políticas de SLA seleccionadas?",
+        "description": "Su historial de incumplimientos y sus instantáneas de cumplimiento se eliminan con ellas. Esta acción no se puede deshacer.",
+        "confirmLabel": "Eliminar políticas"
+      }
     }
   },
   "ConfigTemplatesPage": {
@@ -1346,8 +1381,12 @@
       "copyName": "{{name}} (copia)"
     },
     "confirm": {
-      "deleteOne": "¿Eliminar la plantilla \"{{name}}\"? Esta acción no se puede deshacer.",
-      "deleteMany": "¿Eliminar {{count}} plantilla(s)?"
+      "deleteOne": "¿Eliminar la plantilla \"{{name}}\"?",
+      "deleteMany": "¿Eliminar {{count}} plantilla(s)?",
+      "deleteOneDescription": "La plantilla se elimina de FreeSDN y no se puede restaurar. Los dispositivos conservan su configuración actual.",
+      "deleteOneAction": "Eliminar plantilla",
+      "deleteManyDescription": "Las plantillas se eliminan de FreeSDN y no se pueden restaurar. Los dispositivos conservan su configuración actual.",
+      "deleteManyAction": "Eliminar plantillas"
     },
     "dialog": {
       "createTitle": "Crear plantilla",
@@ -1456,7 +1495,9 @@
       "quickActions": "Acciones rápidas"
     },
     "confirm": {
-      "reboot": "¿Reiniciar {{label}}? El dispositivo estará inaccesible durante ~30-90 s."
+      "reboot": "¿Reiniciar {{label}}?",
+      "rebootDescription": "El reinicio se envía ahora al dispositivo a través de su controlador. El dispositivo estará inaccesible durante unos 30 a 90 segundos, al igual que todo lo que se conecta a través de él.",
+      "rebootAction": "Reiniciar dispositivo"
     },
     "toast": {
       "unknownError": "Error desconocido",
@@ -1495,6 +1536,119 @@
       "iot": "IoT",
       "sensor": "Sensor",
       "other": "Otro"
+    }
+  },
+  "SLAReportsPanel": {
+    "intro": "Los informes siguen los permisos de tu organización y de tus sitios. Las fechas se introducen en UTC; las marcas de tiempo se muestran en la zona horaria de tu navegador. Las ejecuciones programadas usan su zona horaria configurada y se ejecutan en la siguiente pasada de generación, que ocurre cada hora.",
+    "pagination": {
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "none": "0 resultados",
+      "range": "{{from}}-{{to}} de {{total}}"
+    },
+    "generate": {
+      "title": "Generar un informe",
+      "start": "Inicio (incluido)",
+      "startAria": "Inicio del informe",
+      "end": "Fin (excluido)",
+      "endAria": "Fin del informe",
+      "policies": "Políticas",
+      "policiesAria": "Políticas del informe",
+      "policiesHint": "Sin selección se incluyen todas las políticas a las que tienes acceso.",
+      "format": "Formato",
+      "formatAria": "Formato del informe",
+      "submit": "Generar"
+    },
+    "archive": {
+      "title": "Archivo de informes",
+      "lastRefreshed": "Última actualización: {{time}}",
+      "waiting": "Esperando respuesta",
+      "loading": "Cargando informes…",
+      "empty": "No se ha generado ningún informe.",
+      "downloadLinked": "Descargar el informe enlazado",
+      "columns": {
+        "report": "Informe",
+        "generated": "Generado",
+        "actions": "Acciones"
+      },
+      "period": "{{start}} a {{end}}",
+      "download": "Descargar {{format}}",
+      "deliveryStatus": "Estado de entrega"
+    },
+    "delivery": {
+      "title": "Estado de entrega por correo",
+      "explain": "Aceptado significa que el servidor SMTP aceptó el aviso; no prueba que llegara a la bandeja de entrada. Desconocido significa que no se pudo confirmar la aceptación. Revisa los registros del relé con el ID de entrega; FreeSDN no lo reenvía automáticamente.",
+      "loading": "Cargando el estado de entrega…",
+      "empty": "No se programó ninguna entrega por correo para este informe.",
+      "attempts_one": "{{count}} intento",
+      "attempts_other": "{{count}} intentos",
+      "id": "ID de entrega: {{id}}",
+      "code": "Código: {{code}}",
+      "nextAttempt": "Próximo intento: {{time}}",
+      "cancel": "Cancelar la entrega pendiente"
+    },
+    "deliveryStates": {
+      "pending": "Pendiente",
+      "sending": "Enviando",
+      "retry": "Reintentando",
+      "accepted": "Aceptado",
+      "unknown": "Desconocido",
+      "failed": "Fallido",
+      "skipped": "Omitido",
+      "cancelled": "Cancelado"
+    },
+    "frequencies": {
+      "weekly": "Semanal",
+      "monthly": "Mensual",
+      "quarterly": "Trimestral"
+    },
+    "weekdays": {
+      "monday": "Lunes",
+      "tuesday": "Martes",
+      "wednesday": "Miércoles",
+      "thursday": "Jueves",
+      "friday": "Viernes",
+      "saturday": "Sábado",
+      "sunday": "Domingo"
+    },
+    "schedules": {
+      "title": "Programaciones de informes",
+      "loading": "Cargando programaciones…",
+      "empty": "No hay programaciones de informes.",
+      "enabled": "Activada",
+      "paused": "En pausa",
+      "cadence": "{{frequency}} a las {{time}} ({{timezone}})",
+      "runs": "Próxima: {{next}} · Última generación: {{last}} · Correo: {{email}}",
+      "emailOn": "Activado",
+      "emailOff": "Desactivado",
+      "needsReview": "Requiere revisión: {{error}}",
+      "edit": "Editar y revisar",
+      "pause": "Pausar",
+      "reapprove": "Volver a aprobar y activar"
+    },
+    "form": {
+      "createTitle": "Crear programación",
+      "reviewTitle": "Revisar programación",
+      "name": "Nombre",
+      "frequency": "Frecuencia",
+      "dayOfWeek": "Día de la semana",
+      "dayOfMonth": "Día del mes",
+      "timezone": "Zona horaria",
+      "localTime": "Hora local",
+      "policyIds": "ID de políticas (separados por comas; vacío significa todas las políticas)",
+      "policyHint": "Los operadores limitados a sitios deben elegir políticas concretas. Editar una programación reemplaza su aprobación de entrega; los avisos pendientes anteriores se cancelan al procesarse.",
+      "enableGeneration": "Activar la generación de informes",
+      "sendEmail": "Enviar avisos por correo de los próximos informes programados",
+      "emailExplain": "El correo está desactivado de forma predeterminada. Los avisos contienen un enlace de inicio de sesión, no un adjunto. Los destinatarios deben ser usuarios activos de esta organización con acceso al informe. Configura primero un FRONTEND_URL con HTTPS y verifica tu proveedor SMTP.",
+      "recipients": "Destinatarios (separados por comas)",
+      "provider": "Proveedor SMTP verificado",
+      "providerPlaceholder": "Elige un proveedor",
+      "create": "Crear programación",
+      "saveReapprove": "Guardar y volver a aprobar",
+      "cancelEdit": "Cancelar la edición"
+    },
+    "errors": {
+      "fallback": "La solicitud falló. Actualiza la página e inténtalo de nuevo."
     }
   }
 }

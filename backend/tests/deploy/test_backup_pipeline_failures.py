@@ -24,7 +24,14 @@ pytestmark = pytest.mark.skipif(
 
 
 def _run_pipeline(
-    tmp_path: Path, encrypted: bool, fail: str, previous_success: int = 0
+    tmp_path: Path,
+    encrypted: bool,
+    fail: str,
+    previous_success: int = 0,
+    *,
+    key: str | None = "synthetic key for the GPG fault injector",
+    extra_env: dict[str, str] | None = None,
+    sleep_script: str = "#!/bin/bash\nexit 99\n",
 ) -> tuple[int, str, Path]:
     entrypoint = yaml.safe_load(COMPOSE.read_text())["services"]["pg-backup"]["entrypoint"]
     command = shlex.split(entrypoint)[2].replace("$$", "$")
@@ -37,16 +44,35 @@ def _run_pipeline(
         )
     command = command.replace("/backups", str(backups))
     command = command.replace("/tmp/gnupg", str(tmp_path / "gnupg"))
-    key = tmp_path / "public.asc"
-    key.write_text("synthetic key for the GPG fault injector")
-    command = command.replace("/etc/freesdn/gpg/backup-public.asc", str(key))
+    key_path = tmp_path / "public.asc"
+    if key == "<directory>":
+        key_path.mkdir()
+    elif key is not None:
+        key_path.write_text(key)
+    command = command.replace("/etc/freesdn/gpg/backup-public.asc", str(key_path))
     command = command.replace("/tmp/gpg-import.log", str(tmp_path / "gpg-import.log"))
     binary = tmp_path / "bin"
     binary.mkdir()
     scripts = {
         "pg_dump": '#!/bin/bash\n[[ "$2" != "$FAIL_AT" ]] || exit 42\nprintf "SELECT 1;\\n"\n',
+        # FAKE_KEYS = public keys the file "holds"; FAKE_FPR = the imported
+        # fingerprint; ACCEPT_RECIPIENT limits which recipient can encrypt; the
+        # --output /dev/null call is the startup encryption probe (PROBE_EXIT).
         "gpg": """#!/bin/bash
+if [[ "$*" == *"--show-keys"* ]]; then
+  for i in $(seq 1 "${FAKE_KEYS:-1}"); do echo "pub:u:255:22:K$i:1:::u:::scESC:"; done
+  exit 0
+fi
+if [[ "$*" == *"--list-keys"* ]]; then
+  echo "pub:u:255:22:K1:1:::u:::scESC:"; echo "fpr:::::::::${FAKE_FPR:-FPR1}:"; exit 0
+fi
 if [[ "$*" == *"--import"* ]]; then exit 0; fi
+args=("$@"); recipient=""
+for ((i = 0; i < ${#args[@]}; i++)); do
+  [[ "${args[i]}" != "--recipient" ]] || recipient="${args[i+1]}"
+done
+[[ -z "${ACCEPT_RECIPIENT:-}" || "$recipient" == "$ACCEPT_RECIPIENT" ]] || exit 45
+if [[ "$*" == *"--output /dev/null"* ]]; then cat > /dev/null; exit "${PROBE_EXIT:-0}"; fi
 [[ "$FAIL_AT" != "gpg" ]] || exit 43
 while [[ $# -gt 0 ]]; do
   if [[ "$1" == "--output" ]]; then cat > "$2"; exit; fi
@@ -55,7 +81,7 @@ done
 exit 44
 """,
         # End the infinite service loop only after its first successful iteration.
-        "sleep": "#!/bin/bash\nexit 99\n",
+        "sleep": sleep_script,
     }
     for name, content in scripts.items():
         executable = binary / name
@@ -75,6 +101,9 @@ exit 44
         "BACKUP_INTERVAL_SECONDS": "86400",
         "BACKUP_RETENTION_DAYS": "7",
         "FAIL_AT": fail,
+        # The default key file is not an OpenPGP key unless the test says so.
+        "FAKE_KEYS": "1" if encrypted else "0",
+        **(extra_env or {}),
     }
     result = subprocess.run(
         ["bash", "-c", command], env=env, capture_output=True, text=True, timeout=10
@@ -207,3 +236,87 @@ def test_disabled_encryption_is_explicitly_unhealthy(tmp_path: Path):
     assert "Backups DISABLED" in output
     assert "freesdn_pg_backup_enabled 0" in (backups / ".metrics/pg_backup.prom").read_text()
     assert _health(backups) != 0
+
+
+def _reason(backups: Path) -> str:
+    return (backups / ".metrics/pg_backup.reason").read_text().strip()
+
+
+def test_single_key_is_used_when_no_recipient_is_configured(tmp_path: Path):
+    """A fresh tier env leaves BACKUP_GPG_RECIPIENT empty: the key file decides."""
+    code, output, backups = _run_pipeline(
+        tmp_path,
+        False,
+        "",
+        extra_env={
+            "FAKE_KEYS": "1",
+            "FAKE_FPR": "A1B2C3",
+            "ACCEPT_RECIPIENT": "A1B2C3",
+            "BACKUP_ALLOW_PLAINTEXT": "0",
+        },
+    )
+    assert code == 99, output
+    assert "recipient: A1B2C3" in output
+    assert len(list(backups.glob("*.sql.gz.gpg"))) == 2
+    assert not list(backups.glob("*.sql.gz"))
+    assert (
+        "freesdn_pg_backup_encryption_enabled 1"
+        in (backups / ".metrics/pg_backup.prom").read_text()
+    )
+    assert _reason(backups) == "encrypted"
+
+
+def test_ambiguous_key_file_without_recipient_never_writes_plaintext(tmp_path: Path):
+    code, output, backups = _run_pipeline(tmp_path, False, "disabled", extra_env={"FAKE_KEYS": "2"})
+    assert code == 99, output
+    assert "Backups DISABLED (ambiguous_key)" in output
+    assert not list(backups.glob("*.sql.gz*"))
+    assert _reason(backups) == "ambiguous_key"
+
+
+def test_unusable_recipient_is_refused_at_startup_instead_of_crash_looping(tmp_path: Path):
+    """The env example once named backup@example.com: a key with any other user ID
+    imported fine, then every pg_dump | gpg failed and the container restarted."""
+    code, output, backups = _run_pipeline(tmp_path, True, "", extra_env={"PROBE_EXIT": "2"})
+    assert code == 99, output
+    assert "Backups DISABLED (recipient_unusable)" in output
+    assert "freesdn_pg_backup_enabled 0" in (backups / ".metrics/pg_backup.prom").read_text()
+    assert not list(backups.glob("*.sql.gz*"))
+    assert _reason(backups) == "recipient_unusable"
+
+
+def test_key_path_created_as_a_directory_is_explained(tmp_path: Path):
+    """Docker creates a missing bind-mount source as a root-owned directory."""
+    code, output, backups = _run_pipeline(tmp_path, True, "", key="<directory>")
+    assert code == 99, output
+    assert "Backups DISABLED (key_path_is_directory)" in output
+    assert "sudo rmdir" in output
+    assert _reason(backups) == "key_path_is_directory"
+
+
+def test_key_installed_while_idle_starts_encrypted_backups_without_restart(tmp_path: Path):
+    """The operator drops the public key in place; the next re-check enables backups."""
+    key_path = tmp_path / "public.asc"
+    marker = tmp_path / "sleep-count"
+    sleep = (
+        "#!/bin/bash\n"
+        f'n=$(cat "{marker}" 2>/dev/null || echo 0); echo $((n + 1)) > "{marker}"\n'
+        f'if [ "$n" = 0 ]; then echo "real key" > "{key_path}"; exit 0; fi\n'
+        "exit 99\n"
+    )
+    code, output, backups = _run_pipeline(
+        tmp_path,
+        False,
+        "",
+        key="",
+        extra_env={"FAKE_KEYS": "1", "BACKUP_ALLOW_PLAINTEXT": "0"},
+        sleep_script=sleep,
+    )
+    assert code == 99, output
+    assert "Backups DISABLED (no_key)" in output
+    assert "Public key detected" in output
+    assert len(list(backups.glob("*.sql.gz.gpg"))) == 2
+    metrics = (backups / ".metrics/pg_backup.prom").read_text()
+    assert "freesdn_pg_backup_enabled 1" in metrics
+    assert "freesdn_pg_backup_encryption_enabled 1" in metrics
+    assert _reason(backups) == "encrypted"

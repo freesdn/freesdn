@@ -7,12 +7,23 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from app.adapters.apply_context import apply_window
 from app.adapters.opnsense.adapter import OPNsenseAdapter
 from app.core.config import settings
 
 SECRET = "owned-backup-mutation-private-diagnostic"
 FILENAME = "config-1720000000.xml"
 OPERATIONS = ["delete", "revert"]
+
+
+@pytest.fixture
+def staged_apply():
+    """The write-outcome tests below run inside an approved staged apply, the
+    only place a write dispatches while read-only mode is on (26.12.0: force
+    alone no longer lifts it). The "still blocked" test deliberately does not
+    use this fixture."""
+    with apply_window():
+        yield
 
 
 @pytest_asyncio.fixture
@@ -45,7 +56,7 @@ async def wire(monkeypatch):
 
 
 @pytest.mark.parametrize("operation", OPERATIONS)
-async def test_filename_is_a_path_argument_and_body_is_a_valid_empty_object(wire, operation):
+async def test_filename_is_a_path_argument_and_body_is_a_valid_empty_object(wire, staged_apply, operation):
     _, client, state = wire
     state["body"] = {"status": operation + "d" if operation == "delete" else "reverted"}
     await getattr(client, operation + "_backup")(FILENAME, force=True)
@@ -53,7 +64,7 @@ async def test_filename_is_a_path_argument_and_body_is_a_valid_empty_object(wire
 
 
 @pytest.mark.parametrize("operation", OPERATIONS)
-async def test_success_is_exact_and_discards_arbitrary_provider_fields(wire, operation):
+async def test_success_is_exact_and_discards_arbitrary_provider_fields(wire, staged_apply, operation):
     adapter, _, state = wire
     expected = "deleted" if operation == "delete" else "reverted"
     state["body"] = {"status": expected, "message": SECRET, "config": SECRET}
@@ -80,7 +91,7 @@ async def test_success_is_exact_and_discards_arbitrary_provider_fields(wire, ope
         "unknown",
     ],
 )
-async def test_refused_or_unknown_outcomes_do_not_report_success(wire, operation, kind, caplog):
+async def test_refused_or_unknown_outcomes_do_not_report_success(wire, staged_apply, operation, kind, caplog):
     adapter, _, state = wire
     state["body"] = {
         "failed": {"status": "failed", "message": SECRET},
@@ -134,6 +145,7 @@ async def test_adapter_invalid_filename_has_safe_validation_outcome(
 @pytest.mark.parametrize("operation", OPERATIONS)
 @pytest.mark.parametrize("failure", [401, 403, 503, "timeout", "connection", "body-refusal"])
 async def test_failures_are_not_replayed_and_do_not_log_provider_diagnostics(
+    staged_apply,
     wire, operation, failure, caplog
 ):
     adapter, _, state = wire
@@ -160,7 +172,7 @@ async def test_direct_adapter_write_is_still_blocked_without_explicit_force(wire
 
 
 @pytest.mark.parametrize("operation", OPERATIONS)
-async def test_cancellation_is_not_converted_to_a_failed_or_successful_result(wire, operation):
+async def test_cancellation_is_not_converted_to_a_failed_or_successful_result(wire, staged_apply, operation):
     adapter, _, state = wire
     state["error"] = asyncio.CancelledError("owned")
     with pytest.raises(asyncio.CancelledError):

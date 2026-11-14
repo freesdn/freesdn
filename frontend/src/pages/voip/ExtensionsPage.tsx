@@ -8,6 +8,7 @@
  */
 
 import { useState, useMemo } from 'react';
+import { summariseBulkDelete } from '@/lib/bulk-result';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
@@ -51,6 +52,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { voipApi, getApiErrorMessage } from '@/lib/api';
 import { PageHeader, PageToolbar, PageTabs, type PageTab } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { escapeCell } from '@/lib/csv';
 import type { Extension, RingGroup, PBXSystem } from './types';
 
@@ -69,6 +71,7 @@ function RingStrategyBadge({ strategy }: { strategy?: string }) {
 export default function ExtensionsPage() {
   const { t } = useTranslation('voip');
   const { toast } = useToast();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const defaultPBX = searchParams.get('pbx') || 'all';
@@ -189,7 +192,17 @@ export default function ExtensionsPage() {
   // Each extension is removed via /voip/pbx/{pbxId}/extensions/{number}.
   async function handleBulkDeleteExtensions() {
     if (selectedExt.length === 0) return;
-    if (!window.confirm(t('ExtensionsPage.toasts.bulkDelete') + ` (${selectedExt.length})`)) return;
+    const confirmed = await confirm({
+      title: t('ExtensionsPage.confirm.bulkDeleteExtensions.title', { count: selectedExt.length }),
+      description: t('ExtensionsPage.confirm.bulkDeleteExtensions.body'),
+      count: selectedExt.length,
+      items: selectedExt.map((e) =>
+        e.display_name ? `${e.extension_number} (${e.display_name})` : e.extension_number,
+      ),
+      confirmLabel: t('ExtensionsPage.confirm.bulkDeleteExtensions.action'),
+      destructive: true,
+    });
+    if (!confirmed) return;
     const results = await Promise.allSettled(
       selectedExt.map((e) => {
         const pbxId = e.pbx_id ?? e.pbx_system_id;
@@ -197,14 +210,13 @@ export default function ExtensionsPage() {
         return voipApi.deletePBXExtension(pbxId, e.extension_number);
       }),
     );
-    const ok = results.filter((r) => r.status === 'fulfilled').length;
-    const failed = results.length - ok;
+    const summary = summariseBulkDelete(results, t);
     queryClient.invalidateQueries({ queryKey: ['voip-all-extensions'] });
     setSelectedExt([]);
     toast({
       title: t('ExtensionsPage.toasts.bulkDelete'),
-      description: t('PhonesListPage.toasts.bulkConnectComplete.description', { succeeded: ok, failed, skipped: 0 }),
-      variant: failed > 0 ? 'destructive' : undefined,
+      description: summary.description,
+      variant: summary.failed > 0 ? 'destructive' : undefined,
     });
   }
 
@@ -267,19 +279,26 @@ export default function ExtensionsPage() {
   // ── Ring-group bulk delete · DELETE /voip/ring-groups/{id} ──
   async function handleBulkDeleteRingGroups() {
     if (selectedRG.length === 0) return;
-    if (!window.confirm(t('ExtensionsPage.toasts.bulkDelete') + ` (${selectedRG.length})`)) return;
+    const confirmed = await confirm({
+      title: t('ExtensionsPage.confirm.bulkDeleteRingGroups.title', { count: selectedRG.length }),
+      description: t('ExtensionsPage.confirm.bulkDeleteRingGroups.body'),
+      count: selectedRG.length,
+      items: selectedRG.map((g) => `${g.name} (#${g.group_number})`),
+      confirmLabel: t('ExtensionsPage.confirm.bulkDeleteRingGroups.action'),
+      destructive: true,
+    });
+    if (!confirmed) return;
     const results = await Promise.allSettled(
       selectedRG.map((g) => voipApi.deleteRingGroup(g.id)),
     );
-    const ok = results.filter((r) => r.status === 'fulfilled').length;
-    const failed = results.length - ok;
+    const summary = summariseBulkDelete(results, t);
     queryClient.invalidateQueries({ queryKey: ['voip-ring-groups'] });
     setSelectedRG([]);
     refetchRG();
     toast({
       title: t('ExtensionsPage.toasts.bulkDelete'),
-      description: t('PhonesListPage.toasts.bulkConnectComplete.description', { succeeded: ok, failed, skipped: 0 }),
-      variant: failed > 0 ? 'destructive' : undefined,
+      description: summary.description,
+      variant: summary.failed > 0 ? 'destructive' : undefined,
     });
   }
 

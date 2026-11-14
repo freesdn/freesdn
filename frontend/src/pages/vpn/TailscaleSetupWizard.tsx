@@ -37,6 +37,8 @@ import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import {
   vpnApi,
   type TailscaleSetupStatus,
@@ -44,6 +46,7 @@ import {
   type TailscaleAuthKeyLogin,
   type TailscaleConfigureRequest,
 } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ─── State Visual Mapping ────────────────────────────────────────────────────
 
@@ -131,12 +134,14 @@ function SetupStatusBanner({ status }: { status: TailscaleSetupStatus }) {
 function ConnectedInfoPanel({ status }: { status: TailscaleSetupStatus }) {
   const { toast } = useToast();
   const { t } = useTranslation('vpn');
+  const { copy } = useCopyToClipboard();
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text).then(
-      () => toast({ title: t('TailscaleSetupWizard.toast.copied.title'), description: t('TailscaleSetupWizard.toast.copied.description', { label }) }),
-      () => toast({ title: t('TailscaleSetupWizard.toast.copyFailed.title'), description: t('TailscaleSetupWizard.toast.copyFailed.description'), variant: 'destructive' }),
-    );
+  const copyToClipboard = async (text: string, label: string) => {
+    if (await copy(text)) {
+      toast({ title: t('TailscaleSetupWizard.toast.copied.title'), description: t('TailscaleSetupWizard.toast.copied.description', { label }) });
+    } else {
+      toast({ title: t('TailscaleSetupWizard.toast.copyFailed.title'), description: t('CopyButton.failedHint', { ns: 'common' }), variant: 'destructive' });
+    }
   };
 
   return (
@@ -155,7 +160,7 @@ function ConnectedInfoPanel({ status }: { status: TailscaleSetupStatus }) {
             <div className="flex items-center gap-2">
               <span className="font-mono text-sm font-medium">{status.hostname || t('TailscaleSetupWizard.nodeInfo.notAvailable')}</span>
               {status.hostname && (
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(status.hostname!, t('TailscaleSetupWizard.nodeInfo.hostname'))}>
+                <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={t('TailscaleSetupWizard.actions.copyField', { label: t('TailscaleSetupWizard.nodeInfo.hostname') })} onClick={() => void copyToClipboard(status.hostname!, t('TailscaleSetupWizard.nodeInfo.hostname'))}>
                   <Copy className="h-3 w-3" />
                 </Button>
               )}
@@ -168,7 +173,7 @@ function ConnectedInfoPanel({ status }: { status: TailscaleSetupStatus }) {
             <div className="flex items-center gap-2">
               <span className="font-mono text-sm font-medium">{status.tailscale_ip || t('TailscaleSetupWizard.nodeInfo.notAvailable')}</span>
               {status.tailscale_ip && (
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(status.tailscale_ip!, t('TailscaleSetupWizard.nodeInfo.tailscaleIp'))}>
+                <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={t('TailscaleSetupWizard.actions.copyField', { label: t('TailscaleSetupWizard.nodeInfo.tailscaleIp') })} onClick={() => void copyToClipboard(status.tailscale_ip!, t('TailscaleSetupWizard.nodeInfo.tailscaleIp'))}>
                   <Copy className="h-3 w-3" />
                 </Button>
               )}
@@ -398,12 +403,14 @@ function InteractiveLoginPanel({
   const { t } = useTranslation('vpn');
   const [hostname, setHostname] = useState('freesdn-controller');
 
-  const copyUrl = () => {
-    if (loginUrl) {
-      navigator.clipboard.writeText(loginUrl).then(
-        () => toast({ title: t('TailscaleSetupWizard.toast.copied.title'), description: t('TailscaleSetupWizard.toast.loginUrlCopied') }),
-        () => toast({ title: t('TailscaleSetupWizard.toast.copyFailed.title'), description: t('TailscaleSetupWizard.toast.copyFailed.description'), variant: 'destructive' }),
-      );
+  const { copy } = useCopyToClipboard();
+
+  const copyUrl = async () => {
+    if (!loginUrl) return;
+    if (await copy(loginUrl)) {
+      toast({ title: t('TailscaleSetupWizard.toast.copied.title'), description: t('TailscaleSetupWizard.toast.loginUrlCopied') });
+    } else {
+      toast({ title: t('TailscaleSetupWizard.toast.copyFailed.title'), description: t('CopyButton.failedHint', { ns: 'common' }), variant: 'destructive' });
     }
   };
 
@@ -448,7 +455,7 @@ function InteractiveLoginPanel({
 
           <div className="flex items-center gap-2 rounded-lg border bg-muted/50 p-3">
             <code className="flex-1 text-xs font-mono break-all select-all">{loginUrl}</code>
-            <Button variant="outline" size="sm" onClick={copyUrl}>
+            <Button variant="outline" size="sm" onClick={() => void copyUrl()}>
               <Copy className="h-3 w-3 mr-1" />
               {t('TailscaleSetupWizard.actions.copy')}
             </Button>
@@ -590,6 +597,7 @@ function ConfigurePanel({
 export default function TailscaleSetupWizard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirmAction = useConfirm();
   const { t } = useTranslation('vpn');
   const [loginUrl, setLoginUrl] = useState<string | undefined>();
   const [authMethod, setAuthMethod] = useState<'authkey' | 'browser'>('authkey');
@@ -622,7 +630,7 @@ export default function TailscaleSetupWizard() {
       refetchStatus();
     },
     onError: (err: any) => {
-      toast({ title: t('TailscaleSetupWizard.toast.startDaemonFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('TailscaleSetupWizard.toast.startDaemonFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -638,7 +646,7 @@ export default function TailscaleSetupWizard() {
       refetchStatus();
     },
     onError: (err: any) => {
-      toast({ title: t('TailscaleSetupWizard.toast.authFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('TailscaleSetupWizard.toast.authFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -655,7 +663,7 @@ export default function TailscaleSetupWizard() {
       refetchStatus();
     },
     onError: (err: any) => {
-      toast({ title: t('TailscaleSetupWizard.toast.interactiveLoginFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('TailscaleSetupWizard.toast.interactiveLoginFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -667,7 +675,7 @@ export default function TailscaleSetupWizard() {
       queryClient.invalidateQueries({ queryKey: ['tailscaleStatus'] });
     },
     onError: (err: any) => {
-      toast({ title: t('TailscaleSetupWizard.toast.configureFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('TailscaleSetupWizard.toast.configureFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -679,7 +687,7 @@ export default function TailscaleSetupWizard() {
       queryClient.invalidateQueries({ queryKey: ['tailscaleStatus'] });
     },
     onError: (err: any) => {
-      toast({ title: t('TailscaleSetupWizard.toast.disconnectFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('TailscaleSetupWizard.toast.disconnectFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -691,7 +699,7 @@ export default function TailscaleSetupWizard() {
       queryClient.invalidateQueries({ queryKey: ['tailscaleStatus'] });
     },
     onError: (err: any) => {
-      toast({ title: t('TailscaleSetupWizard.toast.reconnectFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('TailscaleSetupWizard.toast.reconnectFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -704,7 +712,7 @@ export default function TailscaleSetupWizard() {
       queryClient.invalidateQueries({ queryKey: ['tailscaleStatus'] });
     },
     onError: (err: any) => {
-      toast({ title: t('TailscaleSetupWizard.toast.logoutFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('TailscaleSetupWizard.toast.logoutFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -888,10 +896,15 @@ export default function TailscaleSetupWizard() {
                 variant="outline"
                 size="sm"
                 className="text-orange-600 hover:text-orange-600"
-                onClick={() => {
-                  if (confirm(t('TailscaleSetupWizard.confirm.disconnect'))) {
-                    disconnectMutation.mutate();
-                  }
+                onClick={async () => {
+                  const ok = await confirmAction({
+                    title: t('TailscaleSetupWizard.confirm.disconnect'),
+                    description: t('TailscaleSetupWizard.confirm.disconnectBody'),
+                    confirmLabel: t('TailscaleSetupWizard.quickActions.disconnect'),
+                    destructive: true,
+                  });
+                  if (!ok) return;
+                  disconnectMutation.mutate();
                 }}
                 disabled={disconnectMutation.isPending}
               >
@@ -906,10 +919,15 @@ export default function TailscaleSetupWizard() {
                 variant="outline"
                 size="sm"
                 className="text-destructive hover:text-destructive"
-                onClick={() => {
-                  if (confirm(t('TailscaleSetupWizard.confirm.logout'))) {
-                    logoutMutation.mutate();
-                  }
+                onClick={async () => {
+                  const ok = await confirmAction({
+                    title: t('TailscaleSetupWizard.confirm.logoutTitle'),
+                    description: t('TailscaleSetupWizard.confirm.logoutBody'),
+                    confirmLabel: t('TailscaleSetupWizard.quickActions.logout'),
+                    destructive: true,
+                  });
+                  if (!ok) return;
+                  logoutMutation.mutate();
                 }}
                 disabled={logoutMutation.isPending}
               >

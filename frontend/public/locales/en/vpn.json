@@ -135,13 +135,17 @@
     },
     "confirm": {
       "disconnect": "Disconnect from Tailscale network?",
-      "logout": "Logout will de-authorize this node from your tailnet. Continue?"
+      "logout": "Logout will de-authorize this node from your tailnet. Continue?",
+      "disconnectBody": "This node leaves the tailnet until you reconnect it. It stays authorized, so reconnecting needs no new login. If you reach FreeSDN through Tailscale, that connection drops.",
+      "logoutTitle": "Log out of Tailscale?",
+      "logoutBody": "This node is de-authorized from your tailnet. Joining again needs a new login or auth key. If you reach FreeSDN through Tailscale, that connection drops."
     },
     "actions": {
       "copy": "Copy",
       "retry": "Retry",
       "refresh": "Refresh",
-      "reconnect": "Reconnect"
+      "reconnect": "Reconnect",
+      "copyField": "Copy {{label}}"
     },
     "toast": {
       "copied": {
@@ -217,7 +221,8 @@
       "editAria": "Edit connection",
       "deleteAria": "Delete connection",
       "hideHealth": "Hide Health History",
-      "showHealth": "Show Health History"
+      "showHealth": "Show Health History",
+      "disconnectBody": "This takes the tunnel down on the FreeSDN server right away. Sites and devices reached through it stop responding until you connect it again. If you reach FreeSDN itself through this tunnel, you will lose access to it."
     },
     "connectionForm": {
       "updatedToast": "Connection updated",
@@ -371,7 +376,7 @@
     },
     "coexistence": {
       "title": "Tailscale and NetBird are both configured",
-      "body": "Both overlays use the 100.64.0.0/10 range and can conflict on one host. FreeSDN automatically runs Tailscale with --netfilter-mode=off so they coexist. Trade-off: with netfilter off, Tailscale exit-node and subnet routing stop working — if you need those, set FREESDN_TAILSCALE_NETFILTER_MODE=on and accept the NetBird conflict risk. If a device on one overlay is unreachable, reconnect Tailscale and avoid overlapping peer IPs across the two networks."
+      "body": "Both overlays use the 100.64.0.0/10 range and can conflict on one host. FreeSDN automatically runs Tailscale with --netfilter-mode=off so they coexist. Trade-off: with netfilter off, Tailscale exit-node and subnet routing stop working. If you need those, set FREESDN_TAILSCALE_NETFILTER_MODE=on and accept the NetBird conflict risk. If a device on one overlay is unreachable, reconnect Tailscale and avoid overlapping peer IPs across the two networks."
     },
     "stats": {
       "activeConnections": "Active Connections",
@@ -515,7 +520,7 @@
       "activeTunnels": "Active Tunnels",
       "enable": "Enable",
       "disable": "Disable",
-      "disableConfirm": "Disable this tunnel? Traffic will stop flowing.",
+      "disableConfirm": "Mark this tunnel disabled? FreeSDN stops health-checking it. The gateways keep its configuration, so traffic keeps flowing until you tear the tunnel down.",
       "teardownConfirm": "Tear down tunnel between {{siteA}} and {{siteB}}?",
       "siteA": "Site A",
       "siteB": "Site B",
@@ -523,7 +528,12 @@
       "provisioned": "Provisioned {{date}}",
       "lastCheck": "Last check {{date}}",
       "emptyTitle": "No Site-to-Site Tunnels",
-      "emptyDescription": "Create a tunnel template first, then provision tunnels between your sites."
+      "emptyDescription": "Create a tunnel template first, then provision tunnels between your sites.",
+      "disableTitle": "Disable the tunnel between {{siteA}} and {{siteB}}?",
+      "disableBody": "FreeSDN stops health-checking it. The gateways keep its configuration, so traffic keeps flowing until you tear the tunnel down.",
+      "disableAction": "Disable tunnel",
+      "teardownBody": "FreeSDN asks both gateways to remove this tunnel's configuration right away, then deletes the tunnel. If a gateway cannot remove it, the tunnel is still deleted here and its configuration stays on that gateway, so check both gateways afterwards.",
+      "teardownAction": "Tear down tunnel"
     },
     "conflictsTab": {
       "loadError": "Failed to load route conflict data.",

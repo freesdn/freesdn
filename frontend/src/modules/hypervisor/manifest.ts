@@ -9,6 +9,11 @@ import { lazy } from 'react';
 import { Server } from 'lucide-react';
 import type { FrontendModuleManifest } from '../types';
 
+// One lazy component shared by /hypervisor and /hypervisor/:tab. Two separate
+// `lazy()` wrappers are two component types, so moving between the first tab
+// and any other remounted the whole page.
+const HypervisorPage = lazy(() => import('@/pages/hypervisor/HypervisorPage'));
+
 export const hypervisorModule: FrontendModuleManifest = {
   id: 'hypervisor',
   name: 'Hypervisor',
@@ -18,12 +23,12 @@ export const hypervisorModule: FrontendModuleManifest = {
   routes: [
     {
       path: '/hypervisor',
-      component: lazy(() => import('@/pages/hypervisor/HypervisorPage')),
+      component: HypervisorPage,
       title: 'Hypervisor',
     },
     {
       path: '/hypervisor/:tab',
-      component: lazy(() => import('@/pages/hypervisor/HypervisorPage')),
+      component: HypervisorPage,
       title: 'Hypervisor',
     },
   ],

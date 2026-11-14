@@ -38,6 +38,11 @@ from app.core.security_utils import is_ssrf_blocked_ip
 
 logger = logging.getLogger(__name__)
 
+#: The factory default web login of Grandstream and Yealink phones. Tried ONLY
+#: when an operator opts in for one scan (try_default_credentials): every wrong
+#: guess counts toward the phone's admin lockout.
+FACTORY_DEFAULT_LOGIN: dict[str, str] = {"username": "admin", "password": "admin"}
+
 # =============================================================================
 # Constants
 # =============================================================================
@@ -310,6 +315,7 @@ async def http_probe_host(
     semaphore: asyncio.Semaphore | None = None,
     timeout: float = _PROBE_TIMEOUT,
     credentials: dict[str, str] | None = None,
+    try_default_credentials: bool = False,
 ) -> DiscoveredPhone | None:
     """
     Probe a single IP for VoIP phone web UI via HTTP.
@@ -318,10 +324,15 @@ async def http_probe_host(
 
     Args:
         credentials: {"username": ..., "password": ...} for phone web UI login.
-                     Defaults to admin/admin if not provided.
+            Without them the probe only IDENTIFIES the phone from unauthenticated
+            requests and never attempts a login.
+        try_default_credentials: explicit per-scan opt-in to also try the
+            factory default login (admin/admin). Off by default: phones lock
+            their admin account after failed logins, and a scan would otherwise
+            spray a default password across the network.
     """
     sem = semaphore or asyncio.Semaphore(_MAX_CONCURRENT_PROBES)
-    creds = credentials or {"username": "admin", "password": "admin"}
+    creds = credentials or (dict(FACTORY_DEFAULT_LOGIN) if try_default_credentials else None)
     async with sem:
         conn = aiohttp.TCPConnector(ssl=False)
         client_timeout = aiohttp.ClientTimeout(total=timeout, connect=2.0)
@@ -336,7 +347,7 @@ async def http_probe_host(
             cookie_jar=jar,
         ) as session:
             # Try Grandstream API first (most reliable detection)
-            result = await _probe_grandstream(session, ip, creds)
+            result = await _probe_grandstream(session, ip, creds, try_default_credentials)
             if result:
                 return result
 
@@ -357,6 +368,7 @@ async def _probe_grandstream(
     session: aiohttp.ClientSession,
     ip: str,
     credentials: dict[str, str] | None = None,
+    try_default_credentials: bool = False,
 ) -> DiscoveredPhone | None:
     """Probe for Grandstream phone web UI with full login support.
 
@@ -381,9 +393,9 @@ async def _probe_grandstream(
     import hashlib
     import json as _json
 
-    creds = credentials or {"username": "admin", "password": "admin"}
-    username = creds.get("username", "admin")
-    password = creds.get("password", "admin")
+    # No credentials: identify only (phase 1 and 4), never log in.
+    username = (credentials or {}).get("username") or ""
+    password = (credentials or {}).get("password") or ""
 
     phone = DiscoveredPhone(
         ip_address=ip,
@@ -571,9 +583,13 @@ async def _probe_grandstream(
         #         → {"response":"success","body":{"sid":"...","role":"admin",...}}
         # The phone also sets session-role + session-identity cookies via
         # Set-Cookie headers; subsequent authenticated requests rely on these.
-        passwords_to_try = [password]
-        if password != "admin":
-            passwords_to_try.append("admin")
+        passwords_to_try = [password] if username and password else []
+        if try_default_credentials and FACTORY_DEFAULT_LOGIN["password"] not in passwords_to_try:
+            # Only on the operator's explicit opt-in, and only for the default
+            # account name: a wrong guess counts toward the phone's lockout.
+            if not username:
+                username = FACTORY_DEFAULT_LOGIN["username"]
+            passwords_to_try.append(FACTORY_DEFAULT_LOGIN["password"])
 
         sid = ""
         for pw in passwords_to_try:
@@ -785,14 +801,16 @@ async def _probe_yealink(
     ip: str,
     credentials: dict[str, str] | None = None,
 ) -> DiscoveredPhone | None:
-    """Probe for Yealink phone web UI with auth support."""
-    creds = credentials or {"username": "admin", "password": "admin"}
+    """Probe for Yealink phone web UI; logs in only with the credentials given."""
+    attempts: list[aiohttp.BasicAuth | None] = [None]
+    if credentials and credentials.get("username") and credentials.get("password"):
+        attempts.append(aiohttp.BasicAuth(credentials["username"], credentials["password"]))
     try:
         url = f"http://{ip}/servlet"
         params = {"m": "mod_data", "p": "status-dev", "q": "load"}
 
-        # Try unauthenticated first, then with basic auth
-        for auth in [None, aiohttp.BasicAuth(creds["username"], creds["password"])]:
+        # Try unauthenticated first, then with basic auth if we were given any
+        for auth in attempts:
             try:
                 async with session.get(url, params=params, auth=auth) as resp:
                     if resp.status == 200:
@@ -1082,6 +1100,7 @@ async def run_discovery_scan(
     sip_ports: list[int] | None = None,
     on_progress: Any | None = None,
     credentials: dict[str, str] | None = None,
+    try_default_credentials: bool = False,
 ) -> list[DiscoveredPhone]:
     """
     Run a full network discovery scan combining multiple methods.
@@ -1092,7 +1111,8 @@ async def run_discovery_scan(
         sip_ports: SIP ports to probe (default: [5060])
         on_progress: Async callback(phase, detail_dict) for live progress
         credentials: {"username": ..., "password": ...} for phone web UI login.
-                     Defaults to admin/admin if not provided.
+            Without them phones are identified but never logged into.
+        try_default_credentials: explicit opt-in to also try admin/admin.
 
     Returns:
         Deduplicated list of discovered phones, merged across methods.
@@ -1148,7 +1168,9 @@ async def run_discovery_scan(
         http_found = 0
 
         async def _http_task(ip: str) -> tuple[str, DiscoveredPhone | None]:
-            result = await http_probe_host(ip, semaphore, _PROBE_TIMEOUT, credentials)
+            result = await http_probe_host(
+                ip, semaphore, _PROBE_TIMEOUT, credentials, try_default_credentials
+            )
             return ip, result
 
         batch_size = 100
@@ -1291,11 +1313,42 @@ async def _get_local_ip() -> str:
 # Phone Connection Test
 # =============================================================================
 
+# Grandstream P-values that hold a credential: admin (P2) and user (P196)
+# passwords, the SIP auth password of each account (P34, then a stride of 100
+# on the GXP16xx numbering and P406/P506/P606 on the GXP21xx numbering), and
+# the XML config passwords (P145, P1359). Mirrors the write-side
+# _FORBIDDEN_P_VALUES in app/adapters/grandstream/adapter.py. The connection
+# test returns every config value it reads, so these must never be read into
+# it; stored SIP secrets are write-only everywhere else in FreeSDN.
+_CREDENTIAL_PVALUES: frozenset[str] = frozenset(
+    {
+        "2",
+        "196",
+        "34",
+        "134",
+        "234",
+        *(f"{n}34" for n in range(4, 17)),
+        "406",
+        "506",
+        "606",
+        "145",
+        "1359",
+    }
+)
+
+
+def _is_credential_pvalue(pvalue: object, alias: object) -> bool:
+    """True when a config_get item carries a password, by number or by alias."""
+    p = str(pvalue or "").strip().upper().removeprefix("P")
+    if p in _CREDENTIAL_PVALUES:
+        return True
+    return "password" in str(alias or "").lower()
+
 
 async def test_phone_connection(
     ip: str,
-    username: str = "admin",
-    password: str = "admin",
+    username: str,
+    password: str,
     timeout: float = 8.0,
 ) -> dict[str, Any]:
     """Test connectivity and login to a specific phone.
@@ -1339,7 +1392,9 @@ async def test_phone_connection(
     # SIP Account 3:  P501, P502, P507, ...
     # SIP Account 4:  P601, P602, P607, ...
 
-    # P-values for comprehensive authenticated config_get read
+    # P-values for comprehensive authenticated config_get read. Credential
+    # P-values (_CREDENTIAL_PVALUES) are deliberately absent: nothing here needs
+    # them, and every non-empty value read lands in the HTTP response.
     _AUTH_CONFIG_PVALS = [
         # Device identity
         "67",
@@ -1389,7 +1444,6 @@ async def test_phone_connection(
         "35",
         "36",
         "3",
-        "34",
         "33",
         "31",
         "130",
@@ -1661,6 +1715,10 @@ async def test_phone_connection(
                                 pval = str(item.get("pvalue", ""))
                                 val = str(item.get("value", ""))
                                 alias = item.get("alias", "")
+                                # Firmware can answer with more than was asked
+                                # for, and _config below is returned verbatim.
+                                if _is_credential_pvalue(pval, alias):
+                                    continue
                                 pv[pval] = val
                                 if val:
                                     pv_with_alias[pval] = {

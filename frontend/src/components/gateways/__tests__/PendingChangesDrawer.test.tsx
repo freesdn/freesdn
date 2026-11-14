@@ -514,9 +514,9 @@ describe('PendingChangesDrawer', () => {
 
 describe('Proxmox provider observations', () => {
   it.each([
-    ['pending', 'Accepted — awaiting observation'],
+    ['pending', 'Accepted, awaiting observation'],
     ['running', 'Running on Proxmox'],
-    ['failed', 'Provider task failed — verify changes'],
+    ['failed', 'Provider task failed. Verify the changes.'],
     ['unknown', 'Outcome unverified'],
     ['warnings', 'Completed with warnings'],
   ] as const)('keeps %s tasks visible without calling them completed', async (status, label) => {

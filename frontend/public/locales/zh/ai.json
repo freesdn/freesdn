@@ -13,7 +13,8 @@
       "untitled": "新对话",
       "empty": "暂无对话",
       "loadError": "加载对话失败",
-      "retry": "重试"
+      "retry": "重试",
+      "showList": "对话列表"
     },
     "provider": {
       "label": "提供商",
@@ -38,7 +39,7 @@
     },
     "input": {
       "placeholder": "询问有关你的网络的问题...",
-      "hint": "按 Enter 发送 · Shift+Enter 换行"
+      "hint": "按 Enter 发送"
     },
     "deleteDialog": {
       "title": "删除对话？",

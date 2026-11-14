@@ -109,7 +109,10 @@
       "distribute": "Distribuir",
       "retract": "Retirar",
       "delete": "Eliminar",
-      "deleteConfirm": "¿Eliminar esta VLAN canónica? Esta acción no se puede deshacer."
+      "deleteConfirm": "¿Eliminar esta VLAN canónica? Esta acción no se puede deshacer.",
+      "deleteTitle": "¿Eliminar la VLAN {{vlanId}} \"{{name}}\"?",
+      "deleteBody": "Esto solo elimina la VLAN de FreeSDN. Las copias ya distribuidas a los dispositivos permanecen en ellos; si quieres quitarlas, revierte primero sus distribuciones en la pestaña Distribución.",
+      "deleteAction": "Eliminar VLAN"
     },
     "vlans": {
       "searchPlaceholder": "Buscar VLAN...",
@@ -161,7 +164,10 @@
     },
     "templateActions": {
       "delete": "Eliminar",
-      "deleteConfirm": "¿Eliminar esta plantilla de VLAN? Esta acción no se puede deshacer."
+      "deleteConfirm": "¿Eliminar esta plantilla de VLAN? Esta acción no se puede deshacer.",
+      "deleteTitle": "¿Eliminar la plantilla de VLAN \"{{name}}\"?",
+      "deleteBody": "Las VLAN ya creadas a partir de esta plantilla se conservan y no se cambia nada en ningún dispositivo.",
+      "deleteAction": "Eliminar plantilla"
     },
     "templates": {
       "createTemplate": "Crear plantilla"
@@ -521,7 +527,7 @@
       "placeholder": "Elegir sitio",
       "empty": "No hay sitios disponibles."
     },
-    "unreachable": "Controlador inaccesible — verifica que esté en línea y accesible (host, puerto, credenciales) y vuelve a intentarlo."
+    "unreachable": "Controlador inaccesible. Verifica que esté en línea y accesible (host, puerto, credenciales) y vuelve a intentarlo."
   },
   "GatewayFirmwarePage": {
     "header": {

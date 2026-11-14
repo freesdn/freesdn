@@ -484,10 +484,7 @@ export default function FabricPage() {
         title="Fabric"
         titleBadge={<CapabilityMaturityBadge capabilityId="fabric" />}
         description="Wire any app to any other, an event in one module triggers an action in another, as config, no code."
-        onRefresh={() => {
-          connectionsQ.refetch();
-          catalogQ.refetch();
-        }}
+        onRefresh={() => Promise.all([connectionsQ.refetch(), catalogQ.refetch()])}
         refreshing={connectionsQ.isLoading || catalogQ.isFetching}
         actions={
           <Button onClick={openCreate} disabled={!catalog}>

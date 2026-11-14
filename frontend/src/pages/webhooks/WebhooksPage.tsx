@@ -65,6 +65,7 @@ import {
   Download,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { escapeCell } from '@/lib/csv';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -359,6 +360,7 @@ const DeliveriesModal: React.FC<DeliveriesModalProps> = ({ webhookId, onClose })
 export default function WebhooksPage() {
   const { t } = useTranslation('webhooks');
   const { toast } = useToast();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewDeliveriesId, setViewDeliveriesId] = useState<string | null>(null);
@@ -503,8 +505,16 @@ export default function WebhooksPage() {
   };
 
   const handleBulkDelete = async () => {
-    if (!confirm(t('WebhooksPage.actions.deleteConfirm'))) return;
     const targets = [...selectedWebhooks];
+    const ok = await confirm({
+      title: t('WebhooksPage.bulk.delete.confirmTitle', { count: targets.length }),
+      description: t('WebhooksPage.bulk.delete.confirmBody'),
+      count: targets.length,
+      items: targets.map((w) => w.name),
+      confirmLabel: t('WebhooksPage.bulk.delete.confirmAction'),
+      destructive: true,
+    });
+    if (!ok) return;
     const results = await Promise.allSettled(targets.map((w) => deleteMutation.mutateAsync(w.id)));
     const failed = results.filter((r) => r.status === 'rejected').length;
     summarize('WebhooksPage.bulk.delete.title', failed);
@@ -653,8 +663,15 @@ export default function WebhooksPage() {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => {
-                  if (confirm(t('WebhooksPage.actions.deleteConfirm'))) {
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: t('WebhooksPage.actions.deleteTitle', { name: w.name }),
+                    description: t('WebhooksPage.actions.deleteBody'),
+                    items: [w.name],
+                    confirmLabel: t('WebhooksPage.actions.deleteAction'),
+                    destructive: true,
+                  });
+                  if (ok) {
                     deleteMutation.mutate(w.id);
                   }
                 }}

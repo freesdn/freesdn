@@ -22,8 +22,10 @@ Concrete harm this prevents, from the review:
   * Hikvision -- a ReadTimeout on a PUT was replayed.
 
 The pattern every transport now follows is the one ``proxmox/client.py`` already
-had: replay ``GET``/``HEAD`` (or a connect-phase failure, which never left us),
-transmit a mutation exactly once and surface its failure. The staging layer's
+had: transmit a mutation exactly once and surface its failure. WHICH read
+failures are replayed is ``app/adapters/io_policy.py``'s call (a dropped
+connection or 502/503/504 only; never a timeout or a refused connection), and
+``tests/adapters/test_device_io_policy.py`` counts those transmissions. The staging layer's
 ``outcome_is_unknown()`` then records that as ``reconciliation_required`` rather
 than a false ``failed``.
 

@@ -165,6 +165,12 @@ async def build_truenas_adapter(ctrl: Controller) -> TrueNASAdapter:
     API key — so storage builds its own adapter, mirroring ``build_proxmox_adapter``.
     ``Controller.password`` already auto-decrypts the API key from ``config``.
     """
+    # A page's live read waits briefly for the box's turn, or is answered with
+    # its last response (app/services/device_live_read.py).
+    from app.core.device_slot import controller_slot_key
+    from app.services.device_live_read import take_device_turn
+
+    await take_device_turn(controller_slot_key(ctrl))
     adapter = TrueNASAdapter(
         host=ctrl.host,
         username=ctrl.username or "",

@@ -121,6 +121,14 @@
         "username": "Username is required",
         "password": "Password must be at least 12 characters"
       }
+    },
+    "deleteDialog": {
+      "titleOne": "Delete user?",
+      "titleMany": "Delete {{count}} users?",
+      "descriptionMany": "These {{count}} accounts will be deleted. This action cannot be undone.",
+      "more": "and {{count}} more",
+      "confirmMany": "Delete {{count}} users",
+      "cancel": "Cancel"
     }
   }
 }

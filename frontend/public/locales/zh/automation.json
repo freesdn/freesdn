@@ -118,7 +118,9 @@
       "triggered": "规则已成功触发"
     },
     "confirm": {
-      "delete": "确定要删除此规则吗？"
+      "delete": "删除规则“{{name}}”？",
+      "deleteDescription": "该规则将停止运行，其执行历史也将一并删除。",
+      "deleteAction": "删除规则"
     },
     "errors": {
       "loadFailed": "加载自动化数据失败"

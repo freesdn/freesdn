@@ -21,6 +21,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSiteStore } from '@/stores/siteStore';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { motion } from 'framer-motion';
 import {
   alertRulesApi,
@@ -88,6 +89,7 @@ import {
   Webhook,
   Zap,
 } from 'lucide-react';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 
@@ -142,6 +144,7 @@ export default function AlertRulesPage() {
   const channelLabels = useMemo(() => buildChannelLabels(t), [t]);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const { tab: urlTab } = useParams<{ tab?: string }>();
   const tab: PageTab = PAGE_TABS.includes(urlTab as PageTab) ? (urlTab as PageTab) : 'rules';
@@ -203,7 +206,7 @@ export default function AlertRulesPage() {
       queryClient.invalidateQueries({ queryKey: ['alert-rules-stats'] });
       setShowCreate(false);
     },
-    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertRulesPage.toast.createFailed'), variant: "destructive" }); },
+    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertRulesPage.toast.createFailed')), variant: "destructive" }); },
   });
 
   const updateRuleMutation = useMutation({
@@ -213,7 +216,7 @@ export default function AlertRulesPage() {
       queryClient.invalidateQueries({ queryKey: ['alert-rules-stats'] });
       setEditingRule(null);
     },
-    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertRulesPage.toast.updateFailed'), variant: "destructive" }); },
+    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertRulesPage.toast.updateFailed')), variant: "destructive" }); },
   });
 
   const deleteRuleMutation = useMutation({
@@ -222,14 +225,14 @@ export default function AlertRulesPage() {
       queryClient.invalidateQueries({ queryKey: ['alert-rules'] });
       queryClient.invalidateQueries({ queryKey: ['alert-rules-stats'] });
     },
-    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertRulesPage.toast.deleteFailed'), variant: "destructive" }); },
+    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertRulesPage.toast.deleteFailed')), variant: "destructive" }); },
   });
 
   const toggleRuleMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       alertRulesApi.updateRule(id, { status }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alert-rules'] }),
-    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertRulesPage.toast.toggleFailed'), variant: "destructive" }); },
+    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertRulesPage.toast.toggleFailed')), variant: "destructive" }); },
   });
 
   const acknowledgeAlertMutation = useMutation({
@@ -238,7 +241,7 @@ export default function AlertRulesPage() {
       queryClient.invalidateQueries({ queryKey: ['alert-instances'] });
       queryClient.invalidateQueries({ queryKey: ['alert-rules-stats'] });
     },
-    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertRulesPage.toast.acknowledgeFailed'), variant: "destructive" }); },
+    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertRulesPage.toast.acknowledgeFailed')), variant: "destructive" }); },
   });
 
   const resolveAlertMutation = useMutation({
@@ -247,7 +250,7 @@ export default function AlertRulesPage() {
       queryClient.invalidateQueries({ queryKey: ['alert-instances'] });
       queryClient.invalidateQueries({ queryKey: ['alert-rules-stats'] });
     },
-    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertRulesPage.toast.resolveFailed'), variant: "destructive" }); },
+    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertRulesPage.toast.resolveFailed')), variant: "destructive" }); },
   });
 
   const evaluateMutation = useMutation({
@@ -256,7 +259,7 @@ export default function AlertRulesPage() {
       queryClient.invalidateQueries({ queryKey: ['alert-instances'] });
       queryClient.invalidateQueries({ queryKey: ['alert-rules-stats'] });
     },
-    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertRulesPage.toast.evaluationFailed'), variant: "destructive" }); },
+    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertRulesPage.toast.evaluationFailed')), variant: "destructive" }); },
   });
 
   // The Channels tab's row-level "Test" button is a connectivity check,
@@ -270,7 +273,7 @@ export default function AlertRulesPage() {
   const testProviderMutation = useMutation({
     mutationFn: (providerId: string) => notificationApi.verifyProvider(providerId),
     onSuccess: () => toast({ title: t('AlertRulesPage.toast.providerVerifiedTitle'), description: t('AlertRulesPage.toast.providerVerifiedDesc') }),
-    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AlertRulesPage.toast.verificationFailed'), variant: "destructive" }); },
+    onError: (err: any) => { toast({ title: t('AlertRulesPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AlertRulesPage.toast.verificationFailed')), variant: "destructive" }); },
   });
 
   // ── Data ──
@@ -430,10 +433,15 @@ export default function AlertRulesPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
-              if (confirm(t('AlertRulesPage.confirm.deleteRule', { name: row.name }))) {
-                deleteRuleMutation.mutate(row.id);
-              }
+            onClick={async () => {
+              const ok = await confirm({
+                title: t('AlertRulesPage.confirm.deleteRule', { name: row.name }),
+                description: t('AlertRulesPage.confirm.deleteRuleDescription'),
+                items: [row.name],
+                confirmLabel: t('AlertRulesPage.confirm.deleteRuleAction'),
+                destructive: true,
+              });
+              if (ok) deleteRuleMutation.mutate(row.id);
             }}
             className="text-destructive hover:text-destructive"
           >
@@ -688,8 +696,16 @@ export default function AlertRulesPage() {
                   label: t('AlertRulesPage.bulkActions.delete'),
                   icon: Trash2,
                   variant: 'destructive',
-                  onClick: () => {
-                    if (confirm(t('AlertRulesPage.confirm.deleteRules', { count: selectedRules.length }))) {
+                  onClick: async () => {
+                    const ok = await confirm({
+                      title: t('AlertRulesPage.confirm.deleteRules', { count: selectedRules.length }),
+                      description: t('AlertRulesPage.confirm.deleteRulesDescription'),
+                      count: selectedRules.length,
+                      items: selectedRules.map((r) => r.name),
+                      confirmLabel: t('AlertRulesPage.confirm.deleteRulesAction'),
+                      destructive: true,
+                    });
+                    if (ok) {
                       selectedRules.forEach((r) => deleteRuleMutation.mutate(r.id));
                       setSelectedRules([]);
                     }

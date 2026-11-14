@@ -1,0 +1,208 @@
+{
+  "header": {
+    "title": "存储",
+    "subtitle": "汇总各存储设备的 ZFS 存储池健康状况、容量、冗余、磁盘温度、告警和快照，变更先暂存再审核。"
+  },
+  "actions": {
+    "addTrueNAS": "添加 TrueNAS 存储",
+    "newDataset": "新建数据集"
+  },
+  "errors": {
+    "loadAppliances": "无法加载存储设备。",
+    "unreachable": "无法连接到设备。"
+  },
+  "empty": {
+    "title": "尚无存储设备",
+    "description": "连接一台 TrueNAS 设备，即可在一处查看存储池健康状况、容量、磁盘和告警。"
+  },
+  "health": {
+    "ok": "正常",
+    "warning": "降级",
+    "error": "故障"
+  },
+  "writes": {
+    "needWs": "变更需要 WebSocket JSON-RPC API（TrueNAS SCALE 25.04 或更高版本）。此设备通过旧版 REST API 响应。"
+  },
+  "stats": {
+    "pools": "存储池",
+    "poolsHealthy": "{{healthy}}/{{total}} 正常",
+    "disks": "磁盘",
+    "disksHottest": "最高 {{temp}}°C · 原始容量 {{raw}}",
+    "disksRaw": "原始容量 {{raw}}",
+    "dataProtection": "数据保护",
+    "dataProtectionSummary": "快照 {{snap}} · 复制 {{repl}} · 云同步 {{cloud}}",
+    "dataProtectionNone": "没有快照或复制任务",
+    "alerts": "告警",
+    "alertsCritical": "{{n}} 个严重",
+    "alertsActive": "活动中",
+    "alertsClear": "无告警"
+  },
+  "capacity": {
+    "used": "已用",
+    "summary": "已用 {{used}} / 共 {{total}} · 可用 {{free}}"
+  },
+  "facts": {
+    "model": "型号",
+    "memory": "内存",
+    "uptime": "运行时间",
+    "timezone": "时区"
+  },
+  "time": {
+    "uptimeDays": "{{d}} 天 {{h}} 小时",
+    "uptimeHours": "{{h}} 小时 {{m}} 分钟",
+    "uptimeMinutes": "{{m}} 分钟",
+    "justNow": "刚刚",
+    "daysAgo_one": "{{count}} 天前",
+    "daysAgo_other": "{{count}} 天前",
+    "hoursAgo_one": "{{count}} 小时前",
+    "hoursAgo_other": "{{count}} 小时前",
+    "minutesAgo_one": "{{count}} 分钟前",
+    "minutesAgo_other": "{{count}} 分钟前"
+  },
+  "sections": {
+    "pools": "存储池",
+    "services": "共享与服务",
+    "disks": "磁盘",
+    "disksBadge": "{{disks}} · 原始容量 {{raw}}",
+    "datasets": "数据集",
+    "snapshots": "快照",
+    "snapshotsBadgeOf": "{{shown}} / {{total}}"
+  },
+  "services": {
+    "running": "运行中",
+    "stopped": "已停止"
+  },
+  "disks": {
+    "device": "设备",
+    "type": "类型",
+    "model": "型号",
+    "size": "容量",
+    "temp": "温度",
+    "status": "状态",
+    "unassigned": "未分配",
+    "poolVdev": "存储池 / vdev",
+    "errors": "错误"
+  },
+  "datasets": {
+    "empty": "没有数据集。",
+    "dataset": "数据集",
+    "type": "类型",
+    "used": "已用",
+    "usage": "使用率",
+    "available": "可用",
+    "flags": "标记",
+    "encrypted": "已加密",
+    "locked": "已锁定",
+    "snapshotAction": "快照"
+  },
+  "snapshots": {
+    "truncated": "显示 {{total}} 个中最近的 {{shown}} 个。更早的快照请在设备上搜索。",
+    "empty": "尚无快照。可在上方的数据集表格中创建。",
+    "snapshot": "快照",
+    "dataset": "数据集",
+    "referenced": "引用",
+    "created": "创建时间",
+    "deleteAction": "删除"
+  },
+  "pool": {
+    "usedFree": "已用 <strong>{{used}}</strong> · 可用 {{free}}",
+    "ofTotal": "共 {{total}}",
+    "width": "{{width}} 盘",
+    "fragmentation": "碎片率 {{value}}",
+    "scrubState": "校验{{state}}",
+    "scrubStates": {
+      "finished": "已完成",
+      "scanning": "进行中",
+      "canceled": "已取消"
+    },
+    "scrubErrors_one": "{{count}} 个错误",
+    "scrubErrors_other": "{{count}} 个错误",
+    "noScrub": "没有校验记录",
+    "scrubRunning": "已有校验正在运行",
+    "scrubbing": "正在校验…",
+    "scrub": "校验",
+    "dataset": "数据集"
+  },
+  "validation": {
+    "required": "{{label}}为必填项",
+    "zfsName": "{{label}}只能使用字母、数字和 . _ - :"
+  },
+  "stage": {
+    "staged": "变更已暂存",
+    "failed": "无法暂存变更",
+    "failedDetail": "变更未暂存，请重试。"
+  },
+  "dialog": {
+    "cancel": "取消"
+  },
+  "snapshotDialog": {
+    "title": "创建快照",
+    "description": "{{dataset}} 的时间点快照。它只增加一个还原点，不改变磁盘上的任何数据。",
+    "submit": "暂存快照",
+    "staged": "快照 {{snapshot}} 已暂存，等待审核。",
+    "nameLabel": "快照名称",
+    "namePlaceholder": "名称",
+    "storedAs": "保存为 <mono>{{snapshot}}</mono>",
+    "recursiveLabel": "包含子数据集",
+    "recursiveDescription": "以原子方式为其下嵌套的所有数据集创建快照。"
+  },
+  "datasetDialog": {
+    "title": "创建数据集",
+    "description": "新的 ZFS 数据集。请填写存储池内的路径，例如 backups 或 media/photos，而不是 /mnt 路径。",
+    "submit": "暂存数据集",
+    "staged": "数据集 {{dataset}} 已暂存，等待审核。",
+    "nameLabel": "数据集名称",
+    "pathLabel": "数据集路径",
+    "namePlaceholder": "名称",
+    "createdAs": "创建为 <mono>{{dataset}}</mono>",
+    "commentLabel": "备注（可选）",
+    "commentPlaceholder": "此数据集的用途"
+  },
+  "scrubDialog": {
+    "title": "要对 {{pool}} 开始校验吗？",
+    "description": "校验会根据校验和检查存储池中的每个数据块，并尽可能修复。它是安全的，但会读取整个存储池，因此会在后台运行一段时间，本页面会显示进度。此操作会暂存请求，由你来应用。",
+    "submit": "暂存校验",
+    "staged": "{{pool}} 的校验已暂存，等待审核。"
+  },
+  "deleteSnapshotDialog": {
+    "title": "要删除此快照吗？",
+    "description": "应用变更后，<mono>{{snapshot}}</mono> 将被销毁。数据集及其当前数据不受影响：只会移除这个还原点，而且只在你应用之后。",
+    "submit": "暂存删除",
+    "staged": "删除 {{snapshot}} 的操作已暂存，等待审核。"
+  },
+  "addDialog": {
+    "title": "添加 TrueNAS 存储",
+    "description": "连接一台 TrueNAS SCALE 或 CORE 设备，查看存储池健康状况、容量和磁盘。添加设备不会更改设备上的任何内容。",
+    "submit": "添加设备",
+    "heading": "TrueNAS 存储",
+    "testNeedsFields": "请填写主机、API 密钥所有者和 API 密钥后再测试连接。",
+    "name": "名称",
+    "namePlaceholder": "例如：备份 NAS",
+    "site": "站点",
+    "sitePlaceholder": "选择站点",
+    "host": "主机",
+    "hostPlaceholder": "truenas.lan 或 100.x.y.z",
+    "port": "端口",
+    "keyOwner": "API 密钥所有者",
+    "keyOwnerHelp": "API 密钥所属的可登录账户。TrueNAS 25.x 默认禁用 <code>root</code> 账户，请使用 <code>truenas_admin</code>。",
+    "apiKey": "API 密钥",
+    "apiKeyPlaceholder": "3-…（Credentials > API Keys）",
+    "showKey": "显示 API 密钥",
+    "hideKey": "隐藏 API 密钥",
+    "apiKeyHelp": "连接始终使用 TLS：TrueNAS 会吊销通过明文连接看到的任何密钥。只读密钥足以监控设备；应用暂存的变更需要具有写权限的密钥。",
+    "verifyTls": "验证 TLS 证书",
+    "verifyTlsHelp": "设备使用默认自签名证书时请关闭。",
+    "test": "测试连接",
+    "testing": "正在测试…",
+    "testOk": "连接正常",
+    "testFailed": "连接失败",
+    "writesNote": "FreeSDN 读取存储池健康状况、容量、磁盘、数据集和快照。从存储页面发起的快照、数据集或校验会暂存在待处理变更中，只有在你应用后才会到达设备。",
+    "validation": {
+      "name": "名称为必填项",
+      "site": "站点为必填项",
+      "host": "主机为必填项",
+      "username": "API 密钥所有者为必填项",
+      "apiKey": "API 密钥为必填项"
+    }
+  }
+}

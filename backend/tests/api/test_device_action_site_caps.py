@@ -4,6 +4,7 @@ Real PostgreSQL and HTTP routes; authentication and controller adapters are
 synthetic. No vendor hardware or concurrent grant-revocation proof.
 """
 
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -213,7 +214,24 @@ def action_adapter_patch(f):
         f.created += 1
         return Adapter()
 
-    return patch.object(endpoint, "_get_adapter_for_device", factory)
+    return read_write(patch.object(endpoint, "_get_adapter_for_device", factory))
+
+
+def read_write(adapter_patch):
+    """The synthetic adapters model a read-write install.
+
+    Since 26.12 the staging chokepoint refuses a configuration write (adopt,
+    forget, LED, firmware) in read-only mode before any adapter is called, and
+    the suite runs with the fail-safe ADAPTER_READ_ONLY=true default. These
+    tests are about site caps and outcomes on a writable install;
+    tests/api/test_direct_writes_are_staged.py covers the read-only refusal.
+    """
+    import app.core.runtime_flags as runtime_flags
+
+    stack = ExitStack()
+    stack.enter_context(adapter_patch)
+    stack.enter_context(patch.object(runtime_flags, "is_adapter_read_only", lambda: False))
+    return stack
 
 
 async def inspect_action_response(f, response, *, after=True):

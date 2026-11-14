@@ -1,0 +1,208 @@
+{
+  "header": {
+    "title": "Storage",
+    "subtitle": "ZFS pool health, capacity, redundancy, disk temperatures, alerts and snapshots across your storage appliances, with staged changes."
+  },
+  "actions": {
+    "addTrueNAS": "Add TrueNAS Storage",
+    "newDataset": "New dataset"
+  },
+  "errors": {
+    "loadAppliances": "Failed to load storage appliances.",
+    "unreachable": "Could not reach the appliance."
+  },
+  "empty": {
+    "title": "No storage appliances yet",
+    "description": "Connect a TrueNAS appliance to see pool health, capacity, disks and alerts in one place."
+  },
+  "health": {
+    "ok": "Healthy",
+    "warning": "Degraded",
+    "error": "Fault"
+  },
+  "writes": {
+    "needWs": "Changes need the WebSocket JSON-RPC API (TrueNAS SCALE 25.04 or later). This appliance answered on the older REST API."
+  },
+  "stats": {
+    "pools": "Pools",
+    "poolsHealthy": "{{healthy}}/{{total}} healthy",
+    "disks": "Disks",
+    "disksHottest": "hottest {{temp}}°C · {{raw}} raw",
+    "disksRaw": "{{raw}} raw",
+    "dataProtection": "Data protection",
+    "dataProtectionSummary": "{{snap}} snapshot · {{repl}} replication · {{cloud}} cloud",
+    "dataProtectionNone": "no snapshot or replication tasks",
+    "alerts": "Alerts",
+    "alertsCritical": "{{n}} critical",
+    "alertsActive": "active",
+    "alertsClear": "all clear"
+  },
+  "capacity": {
+    "used": "used",
+    "summary": "{{used}} of {{total}} used · {{free}} free"
+  },
+  "facts": {
+    "model": "Model",
+    "memory": "Memory",
+    "uptime": "Uptime",
+    "timezone": "Timezone"
+  },
+  "time": {
+    "uptimeDays": "{{d}}d {{h}}h",
+    "uptimeHours": "{{h}}h {{m}}m",
+    "uptimeMinutes": "{{m}}m",
+    "justNow": "just now",
+    "daysAgo_one": "{{count}} day ago",
+    "daysAgo_other": "{{count}} days ago",
+    "hoursAgo_one": "{{count}} hour ago",
+    "hoursAgo_other": "{{count}} hours ago",
+    "minutesAgo_one": "{{count}} minute ago",
+    "minutesAgo_other": "{{count}} minutes ago"
+  },
+  "sections": {
+    "pools": "Pools",
+    "services": "Sharing and services",
+    "disks": "Disks",
+    "disksBadge": "{{disks}} · {{raw}} raw",
+    "datasets": "Datasets",
+    "snapshots": "Snapshots",
+    "snapshotsBadgeOf": "{{shown}} of {{total}}"
+  },
+  "services": {
+    "running": "running",
+    "stopped": "stopped"
+  },
+  "disks": {
+    "device": "Device",
+    "type": "Type",
+    "model": "Model",
+    "size": "Size",
+    "temp": "Temp",
+    "status": "Status",
+    "unassigned": "unassigned",
+    "poolVdev": "Pool / vdev",
+    "errors": "Errors"
+  },
+  "datasets": {
+    "empty": "No datasets.",
+    "dataset": "Dataset",
+    "type": "Type",
+    "used": "Used",
+    "usage": "Usage",
+    "available": "Available",
+    "flags": "Flags",
+    "encrypted": "Encrypted",
+    "locked": "Locked",
+    "snapshotAction": "Snapshot"
+  },
+  "snapshots": {
+    "truncated": "Showing the {{shown}} most recent of {{total}}. Search the appliance for older ones.",
+    "empty": "No snapshots yet. Take one from the Datasets table above.",
+    "snapshot": "Snapshot",
+    "dataset": "Dataset",
+    "referenced": "Referenced",
+    "created": "Created",
+    "deleteAction": "Delete"
+  },
+  "pool": {
+    "usedFree": "<strong>{{used}}</strong> used · {{free}} free",
+    "ofTotal": "of {{total}} total",
+    "width": "{{width}}-wide",
+    "fragmentation": "fragmentation {{value}}",
+    "scrubState": "Scrub {{state}}",
+    "scrubStates": {
+      "finished": "finished",
+      "scanning": "running",
+      "canceled": "canceled"
+    },
+    "scrubErrors_one": "{{count}} error",
+    "scrubErrors_other": "{{count}} errors",
+    "noScrub": "No scrub history",
+    "scrubRunning": "A scrub is already running",
+    "scrubbing": "Scrubbing…",
+    "scrub": "Scrub",
+    "dataset": "Dataset"
+  },
+  "validation": {
+    "required": "{{label}} is required",
+    "zfsName": "{{label}} may use letters, numbers and . _ - :"
+  },
+  "stage": {
+    "staged": "Change staged",
+    "failed": "Could not stage the change",
+    "failedDetail": "The change was not staged. Try again."
+  },
+  "dialog": {
+    "cancel": "Cancel"
+  },
+  "snapshotDialog": {
+    "title": "Take a snapshot",
+    "description": "A point-in-time snapshot of {{dataset}}. It adds a restore point and changes nothing on disk.",
+    "submit": "Stage snapshot",
+    "staged": "Snapshot {{snapshot}} staged for review.",
+    "nameLabel": "Snapshot name",
+    "namePlaceholder": "name",
+    "storedAs": "Stored as <mono>{{snapshot}}</mono>",
+    "recursiveLabel": "Include child datasets",
+    "recursiveDescription": "Snapshot every dataset nested under this one, atomically."
+  },
+  "datasetDialog": {
+    "title": "Create a dataset",
+    "description": "A new ZFS dataset. Give a path inside the pool, such as backups or media/photos, not a /mnt path.",
+    "submit": "Stage dataset",
+    "staged": "Dataset {{dataset}} staged for review.",
+    "nameLabel": "Dataset name",
+    "pathLabel": "Dataset path",
+    "namePlaceholder": "name",
+    "createdAs": "Created as <mono>{{dataset}}</mono>",
+    "commentLabel": "Comment (optional)",
+    "commentPlaceholder": "What this dataset is for"
+  },
+  "scrubDialog": {
+    "title": "Start a scrub on {{pool}}?",
+    "description": "A scrub checks every block in the pool against its checksum and repairs what it can. It is safe but reads the whole pool, so it runs in the background for a while, and this page shows its progress. This stages the request for you to apply.",
+    "submit": "Stage scrub",
+    "staged": "Scrub of {{pool}} staged for review."
+  },
+  "deleteSnapshotDialog": {
+    "title": "Delete this snapshot?",
+    "description": "<mono>{{snapshot}}</mono> is destroyed when you apply the change. The dataset and its live data are not touched: only this restore point is removed, and only after you apply.",
+    "submit": "Stage delete",
+    "staged": "Deletion of {{snapshot}} staged for review."
+  },
+  "addDialog": {
+    "title": "Add TrueNAS Storage",
+    "description": "Connect a TrueNAS SCALE or CORE appliance to see pool health, capacity and disks. Adding it changes nothing on the appliance.",
+    "submit": "Add appliance",
+    "heading": "TrueNAS Storage",
+    "testNeedsFields": "Enter the host, the API key owner and the API key to test the connection.",
+    "name": "Name",
+    "namePlaceholder": "e.g. Backup NAS",
+    "site": "Site",
+    "sitePlaceholder": "Select a site",
+    "host": "Host",
+    "hostPlaceholder": "truenas.lan or 100.x.y.z",
+    "port": "Port",
+    "keyOwner": "API key owner",
+    "keyOwnerHelp": "The login-enabled account the API key belongs to. On TrueNAS 25.x the <code>root</code> account is disabled by default; use <code>truenas_admin</code>.",
+    "apiKey": "API key",
+    "apiKeyPlaceholder": "3-…  (Credentials > API Keys)",
+    "showKey": "Show API key",
+    "hideKey": "Hide API key",
+    "apiKeyHelp": "The connection always uses TLS: TrueNAS revokes any key it sees over plaintext. A read-only key is enough to monitor the appliance; applying staged changes needs a key that can write.",
+    "verifyTls": "Verify TLS certificate",
+    "verifyTlsHelp": "Turn off for the appliance's default self-signed certificate.",
+    "test": "Test connection",
+    "testing": "Testing…",
+    "testOk": "Connection OK",
+    "testFailed": "Connection failed",
+    "writesNote": "FreeSDN reads pool health, capacity, disks, datasets and snapshots. A snapshot, dataset or scrub you start from the Storage page is staged in Pending Changes and reaches the appliance only when you apply it.",
+    "validation": {
+      "name": "Name is required",
+      "site": "Site is required",
+      "host": "Host is required",
+      "username": "API key owner is required",
+      "apiKey": "API key is required"
+    }
+  }
+}

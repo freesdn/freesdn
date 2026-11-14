@@ -35,6 +35,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -58,6 +59,7 @@ import { voipApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { ScanStatusBadge, VendorLabel, formatTimeAgo } from './components';
 import type { DiscoveryScan, DiscoveredDevice, ScanStatusResponse } from './types';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ─── Phase configuration for visual display ─────────────────────────────────
 
@@ -159,6 +161,7 @@ export default function DiscoveryPage() {
     use_credentials: false,
     cred_username: 'admin',
     cred_password: '',
+    try_default_credentials: false,
   });
 
   // ── Queries ──
@@ -236,10 +239,8 @@ export default function DiscoveryPage() {
       );
     },
     onError: (err: any) => {
-      const detail = err?.response?.data?.detail;
-      const msg = Array.isArray(detail)
-        ? detail.map((d: any) => d.msg || d).join('; ')
-        : detail || t('VoipDiscoveryPage.toast.scanFailed.fallback');
+      // The shared reader already joins a 422's per-field messages.
+      const msg = getApiErrorMessage(err, t('VoipDiscoveryPage.toast.scanFailed.fallback'));
       toast.error(t('VoipDiscoveryPage.toast.scanFailed.title'), msg);
     },
   });
@@ -252,7 +253,7 @@ export default function DiscoveryPage() {
       toast.warning(t('VoipDiscoveryPage.toast.scanCancelled.title'), t('VoipDiscoveryPage.toast.scanCancelled.message'));
     },
     onError: (err: any) => {
-      toast.error(t('VoipDiscoveryPage.toast.cancelFailed.title'), err?.response?.data?.detail || t('VoipDiscoveryPage.toast.cancelFailed.fallback'));
+      toast.error(t('VoipDiscoveryPage.toast.cancelFailed.title'), getApiErrorMessage(err, t('VoipDiscoveryPage.toast.cancelFailed.fallback')));
     },
   });
 
@@ -265,7 +266,7 @@ export default function DiscoveryPage() {
     },
     onError: (err: any) => {
       setDeleteTarget(null);
-      toast.error(t('VoipDiscoveryPage.toast.deleteFailed.title'), err?.response?.data?.detail || t('VoipDiscoveryPage.toast.deleteFailed.fallback'));
+      toast.error(t('VoipDiscoveryPage.toast.deleteFailed.title'), getApiErrorMessage(err, t('VoipDiscoveryPage.toast.deleteFailed.fallback')));
     },
   });
 
@@ -288,11 +289,14 @@ export default function DiscoveryPage() {
       scan_type: scanForm.scan_type,
       auto_onboard: scanForm.auto_onboard,
       default_template_id: scanForm.default_template_id || undefined,
+      // The factory default login is tried only when the operator ticks it.
+      try_default_credentials: scanForm.try_default_credentials,
     };
-    if (scanForm.use_credentials) {
+    // Never fill in a default: blank fields mean "identify only".
+    if (scanForm.use_credentials && scanForm.cred_username && scanForm.cred_password) {
       payload.credentials = {
-        username: scanForm.cred_username || 'admin',
-        password: scanForm.cred_password || 'admin',
+        username: scanForm.cred_username,
+        password: scanForm.cred_password,
       };
     }
     triggerScanMutation.mutate(payload);
@@ -919,6 +923,23 @@ export default function DiscoveryPage() {
                   </div>
                 </div>
               )}
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="voip-scan-try-default-login"
+                  checked={scanForm.try_default_credentials}
+                  onCheckedChange={(v) => setScanForm({ ...scanForm, try_default_credentials: v === true })}
+                  className="mt-0.5"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="voip-scan-try-default-login" className="cursor-pointer">
+                    {t('VoipDiscoveryPage.credentials.tryDefault')}
+                  </Label>
+                  <p className="flex items-start gap-1 text-xs text-muted-foreground">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+                    {t('VoipDiscoveryPage.credentials.tryDefaultWarning')}
+                  </p>
+                </div>
+              </div>
             </div>
             <div className="flex items-center justify-end gap-2 mt-4">
               <Button variant="outline" onClick={() => setShowScanForm(false)}>{t('VoipDiscoveryPage.common.cancel')}</Button>

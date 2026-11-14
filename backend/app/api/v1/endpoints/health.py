@@ -345,6 +345,54 @@ async def _collect_components(session: AsyncSession) -> dict[str, ComponentHealt
     return components
 
 
+def _database_backup_component() -> ComponentHealth:
+    """pg-backup's dumps, judged like its own healthcheck (authenticated view only).
+
+    DEGRADED, never UNHEALTHY: the controller works without them, but an install
+    with no recent restorable database backup must not read as fully healthy.
+    ``unknown`` (status volume not mounted, e.g. outside Compose) stays healthy.
+    """
+    from app.services.database_backup_status import read_database_backup_status
+
+    backup = read_database_backup_status()
+    return ComponentHealth(
+        status=HealthStatus.DEGRADED if backup.severity == "critical" else HealthStatus.HEALTHY,
+        details={
+            "state": backup.state,
+            "reason": backup.reason,
+            "encrypted": backup.encrypted,
+            "last_success_at": backup.last_success_at.isoformat()
+            if backup.last_success_at
+            else None,
+        },
+    )
+
+
+async def _celery_queues_component() -> ComponentHealth:
+    """Per-queue heartbeats (authenticated view only).
+
+    DEGRADED when any queue some worker of this install consumes has not run
+    its heartbeat task within CELERY_QUEUE_STALE_SECONDS, or when tasks are
+    waiting in a queue no worker consumes. A queue this tier does not run is
+    reported ``not_consumed`` and does not degrade anything.
+    """
+    from app.core.queue_heartbeat import STALLED, queue_status
+
+    try:
+        queues = await asyncio.wait_for(asyncio.to_thread(queue_status), timeout=5.0)
+    except Exception:  # noqa: BLE001 - health must never fail on its own probe
+        return ComponentHealth(
+            status=HealthStatus.DEGRADED,
+            error="Queue heartbeats unavailable",
+            details={"message": "Could not read the per-queue heartbeats"},
+        )
+    stalled = sorted(name for name, q in queues.items() if q["state"] == STALLED)
+    return ComponentHealth(
+        status=HealthStatus.DEGRADED if stalled else HealthStatus.HEALTHY,
+        details={"stalled": stalled, "queues": queues},
+    )
+
+
 @router.get("/", response_model=PublicHealthResponse)
 async def health_check(
     session: AsyncSession = Depends(get_session),
@@ -378,6 +426,8 @@ async def health_detail(
     should be able to fingerprint.
     """
     components = await _collect_components(session)
+    components["database_backups"] = _database_backup_component()
+    components["celery_queues"] = await _celery_queues_component()
     return HealthResponse(
         status=aggregate_status(components),
         app=settings.APP_NAME,

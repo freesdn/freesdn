@@ -38,6 +38,7 @@ from urllib.parse import quote, urlparse, urlunparse
 
 import httpx
 
+from app.adapters.apply_context import FORCE_DOES_NOT_LIFT_READ_ONLY, read_only_refuses_write
 from app.adapters.base import (
     AdapterManifest,
     AdapterResult,
@@ -94,17 +95,26 @@ def _is_adapter_read_only() -> bool:
     return is_adapter_read_only()
 
 
+# Live operator controls that change no stored camera configuration; they keep
+# working in read-only mode when the caller passes force=True, mirroring the
+# Hikvision adapter. Reboot, saving/deleting presets and image settings are
+# refused while read-only is on. Must match the ``action`` strings exactly.
+_OPERATIONAL_ACTIONS: frozenset[str] = frozenset({"PTZ control", "goto preset"})
+
+
 def _enforce_read_only(*, force: bool, action: str) -> None:
     """Raise ``AdapterReadOnlyError`` when the write would mutate device state.
 
     Centralised so the message + behaviour stay in sync across the ONVIF
     write methods, mirroring the Hikvision adapter's gate exactly.
     """
-    if _is_adapter_read_only() and not force:
+    if force and action in _OPERATIONAL_ACTIONS:
+        return
+    if read_only_refuses_write(_is_adapter_read_only()):
         raise AdapterReadOnlyError(
             f"ADAPTER_READ_ONLY is set — ONVIF {action} refused. "
             "Set ADAPTER_READ_ONLY=false in the environment AND pass "
-            "force=true to override.",
+            "force=true to override." + (FORCE_DOES_NOT_LIFT_READ_ONLY if force else ""),
             adapter_id="onvif",
         )
 

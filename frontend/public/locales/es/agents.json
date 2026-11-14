@@ -236,7 +236,10 @@
       "runScan": "Ejecutar escaneo",
       "disconnect": "Desconectar",
       "disconnectConfirm": "¿Seguro que deseas eliminar este agente?",
-      "menuLabel": "Acciones para {{name}}"
+      "menuLabel": "Acciones para {{name}}",
+      "disconnectTitle": "¿Eliminar el agente \"{{name}}\"?",
+      "disconnectBody": "Su clave deja de funcionar, por lo que ya no puede conectarse, y se elimina su historial de latidos. FreeSDN también revoca cualquier configuración de VPN WireGuard de su sitio. Los descubrimientos y las ejecuciones se conservan.",
+      "disconnectAction": "Eliminar agente"
     },
     "stats": {
       "total": {
@@ -312,7 +315,12 @@
         "confirm": "¿Eliminar {{count}} agente(s)? Esto elimina el registro de forma reversible; los descubrimientos y las ejecuciones existentes se conservan.",
         "result": "{{ok}} eliminados",
         "resultWithFailures": "{{ok}} eliminados, {{fail}} fallidos",
-        "toastTitle": "Eliminación masiva completada"
+        "toastTitle": "Eliminación masiva completada",
+        "confirmTitle_one": "¿Eliminar {{count}} agente?",
+        "confirmTitle_other": "¿Eliminar {{count}} agentes?",
+        "confirmBody": "La clave de cada agente deja de funcionar y se elimina su historial de latidos. FreeSDN también revoca cualquier configuración de VPN WireGuard de sus sitios. Los descubrimientos y las ejecuciones se conservan.",
+        "confirmAction_one": "Eliminar agente",
+        "confirmAction_other": "Eliminar agentes"
       }
     },
     "register": {
@@ -346,7 +354,8 @@
         "name": "El nombre del agente es obligatorio",
         "siteRequired": "Selecciona un sitio",
         "nameRequired": "El nombre del agente es obligatorio"
-      }
+      },
+      "copyField": "Copiar {{label}}"
     },
     "pageHeader": {
       "title": "Agentes remotos",

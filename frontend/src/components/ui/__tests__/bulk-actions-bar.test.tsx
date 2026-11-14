@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
+import type React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -75,5 +76,43 @@ describe('BulkActionsBar', () => {
       />
     );
     expect(screen.getByRole('button', { name: 'Disabled action' })).toBeDisabled();
+  });
+
+  it('never submits a surrounding form (every control is type="button")', async () => {
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    const onDelete = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <form onSubmit={onSubmit}>
+        <BulkActionsBar
+          selectedCount={2}
+          totalCount={10}
+          isAllPageSelected
+          onSelectAll={() => {}}
+          onClear={() => {}}
+          actions={[{ label: 'Delete', icon: Trash2, variant: 'destructive', onClick: onDelete }]}
+        />
+      </form>,
+    );
+    for (const button of screen.getAllByRole('button')) {
+      expect(button).toHaveAttribute('type', 'button');
+    }
+    await user.click(screen.getByRole('button', { name: /delete/i }));
+    await user.click(screen.getByRole('button', { name: /clear selection/i }));
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('gives every control a keyboard focus ring that shows on the inverted pill', () => {
+    render(
+      <BulkActionsBar
+        selectedCount={2}
+        onClear={() => {}}
+        actions={[{ label: 'Export', icon: Download, onClick: () => {} }]}
+      />,
+    );
+    for (const button of screen.getAllByRole('button')) {
+      expect(button).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-background');
+    }
   });
 });

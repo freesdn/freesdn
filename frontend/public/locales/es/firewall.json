@@ -232,7 +232,11 @@
     },
     "confirm": {
       "deleteGateway": "¿Eliminar el gateway \"{{name}}\"? Esta acción no se puede deshacer.",
-      "deleteRule": "¿Eliminar la regla \"{{name}}\"?"
+      "deleteRule": "¿Eliminar la regla \"{{name}}\"?",
+      "deleteGatewayTitle": "¿Eliminar el gateway \"{{name}}\"?",
+      "deleteGatewayBody": "FreeSDN deja de gestionar y supervisar este gateway y lo quita de la lista de dispositivos y de los mapas de roles de sitio. No se cambia nada en el propio gateway.",
+      "deleteGatewayAction": "Eliminar gateway",
+      "deleteRuleBody": "Esto solo elimina el registro de la regla en FreeSDN. No se cambia nada en el gateway."
     },
     "errors": {
       "partialLoad": "No se pudieron cargar algunos datos. Los resultados pueden estar incompletos."
@@ -444,7 +448,8 @@
       "rebootInitiated": "Reinicio iniciado",
       "rebootInitiatedDesc": "La puerta de enlace se está reiniciando · estará desconectada brevemente.",
       "rebootFailed": "El reinicio falló",
-      "diagnosticFailed": "{{label}} falló"
+      "diagnosticFailed": "{{label}} falló",
+      "deviceBusy": "Puerta de enlace ocupada"
     },
     "resources": {
       "firewallRule": "Regla de firewall",
@@ -501,7 +506,10 @@
       "checkUpdates": "Buscar actualizaciones",
       "downloadConfig": "Descargar configuración",
       "halt": "Detener",
-      "haltConfirm": "Esto DETENDRÁ (apagará) la puerta de enlace. ¿Está seguro?"
+      "haltConfirm": "Esto DETENDRÁ (apagará) la puerta de enlace. ¿Está seguro?",
+      "haltTitle": "¿Detener esta puerta de enlace?",
+      "haltBody": "La puerta de enlace se apaga de inmediato. Todas las redes que se enrutan a través de ella pierden la conectividad y FreeSDN no puede volver a encenderla: alguien tiene que encenderla en el propio equipo.",
+      "haltAction": "Detener puerta de enlace"
     },
     "packages": {
       "title": "Paquetes instalados",
@@ -1119,7 +1127,8 @@
       "never": "Nunca",
       "lastError": "Último error",
       "lastSeen": "Visto por última vez",
-      "capabilities": "Capacidades"
+      "capabilities": "Capacidades",
+      "lastSkipped": "Última sincronización omitida"
     },
     "wanHealth": {
       "title": "Estado de la puerta de enlace WAN",
@@ -2479,6 +2488,10 @@
       "macAddress": "Dirección MAC",
       "ipAddress": "Dirección IP",
       "submit": "Preparar reserva"
+    },
+    "confirmStaged": {
+      "body": "Todavía no cambia nada en el router. La eliminación queda en Cambios pendientes hasta que la apliques allí.",
+      "action": "Preparar eliminación"
     }
   },
   "MikroTikSnmpTab": {
@@ -3853,6 +3866,7 @@
     "retry": "Reintentar",
     "running": "En ejecución",
     "stopped": "Detenido",
-    "summary": "Resumen en vivo del dispositivo"
+    "summary": "Resumen en vivo del dispositivo",
+    "busy": "La puerta de enlace está ocupada con otra solicitud. No se le envió nada; se reintentará en breve."
   }
 }

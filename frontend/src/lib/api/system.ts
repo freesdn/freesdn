@@ -20,8 +20,27 @@ import type {
 // Adapter read-only mode. When ``read_only`` is true device writes are
 // refused platform-wide (the safe monitor-only mode); false means
 // read-write ("manage"). Admin-only on the backend.
+//
+// Two sources, and the more restrictive wins: ADAPTER_READ_ONLY in the server
+// environment (``env_read_only``, only changeable there) and the Settings
+// switch (``setting_read_only``, stored in the database; null when it could
+// not be read, in which case writes are refused). Older servers send only
+// ``read_only``, so every other field is optional.
+export type AdapterReadOnlyEnforcedBy =
+  | 'environment'
+  | 'setting'
+  | 'environment_and_setting'
+  | 'unverified'
+  | 'none';
+
 export interface AdapterReadOnly {
   read_only: boolean;
+  env_read_only?: boolean;
+  setting_read_only?: boolean | null;
+  enforced_by?: AdapterReadOnlyEnforcedBy;
+  can_disable?: boolean;
+  setting_updated_at?: string | null;
+  propagated?: boolean | null;
 }
 
 export const systemApi = {

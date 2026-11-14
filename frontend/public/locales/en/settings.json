@@ -137,18 +137,53 @@
         "labelWrite": "Read-write mode (manage)",
         "descReadOnly": "Device writes are disabled. Turn this off to manage and configure devices.",
         "descWrite": "Device writes are enabled. Turn this on to lock the platform to monitor-only.",
-        "toggleAria": "Toggle read-only mode"
+        "toggleAria": "Toggle read-only mode",
+        "labelUnknown": "Current mode unknown",
+        "descError": "The server did not report the current mode, so it is not shown here. The switch stays disabled until it can be read.",
+        "descLoading": "Reading the current mode from the server.",
+        "retry": "Retry",
+        "descEnvEnforced": "Read-only mode is set by ADAPTER_READ_ONLY=true in the server environment, so it cannot be turned off here. Set ADAPTER_READ_ONLY=false in the server's .env file and restart FreeSDN to allow device writes.",
+        "descUnverified": "The stored switch could not be read, so device writes are refused until it can be. Retry in a moment."
       },
       "status": {
         "readOnly": "Read-only mode is ON. FreeSDN will not write to any device.",
-        "write": "Write access is ON. FreeSDN can apply changes to managed devices."
+        "write": "Write access is ON. FreeSDN can apply changes to managed devices.",
+        "unknown": "The current mode has not been confirmed by the server."
       },
       "toast": {
         "readOnlyTitle": "Read-only mode enabled",
         "readOnlyDesc": "Device writes are now disabled platform-wide.",
         "writeTitle": "Write access enabled",
         "writeDesc": "Devices can now be managed and configured.",
-        "errorTitle": "Failed to update mode"
+        "errorTitle": "Failed to update mode",
+        "mismatchTitle": "Mode not changed",
+        "mismatchStillReadOnly": "The server kept read-only mode on. No device writes are possible.",
+        "mismatchStillWrite": "The server kept write access on.",
+        "notPropagatedTitle": "Saved",
+        "notPropagatedDesc": "The change is saved. Some FreeSDN processes may take up to 30 seconds to apply it."
+      },
+      "confirm": {
+        "title": "Allow FreeSDN to write to devices?",
+        "description": "This turns read-only mode off for the whole platform. Staged changes can then be applied to switches, firewalls, cameras, phones and hypervisors by anyone with write permission. Each apply still needs its own confirmation.",
+        "cancel": "Keep read-only",
+        "confirm": "Enable write access"
+      },
+      "sources": {
+        "title": "Where the mode comes from",
+        "env": "Server environment (ADAPTER_READ_ONLY)",
+        "setting": "Settings switch",
+        "readOnly": "Read-only",
+        "envOff": "Not enforced",
+        "settingOff": "Off",
+        "settingUnknown": "Could not be read",
+        "inForce": "In force"
+      },
+      "enforcedBy": {
+        "environment": "Read-only, set by the server environment",
+        "setting": "Read-only, set by the Settings switch",
+        "environment_and_setting": "Read-only, set by the server environment and the Settings switch",
+        "unverified": "Read-only, because the Settings switch could not be read",
+        "none": "Read-write: neither source enforces read-only"
       }
     },
     "appearance": {
@@ -393,7 +428,9 @@
       "notShownAgain": "It will not be shown again.",
       "storeSecurely": "Store this key securely. Anyone with this key can access the API with your permissions.",
       "keyLabel": "Your new API key",
-      "copiedConfirm": "I have copied the key"
+      "copiedConfirm": "I have copied the key",
+      "copyKey": "Copy API key",
+      "copyFailed": "The key could not be copied to the clipboard. Select it in the field above and copy it by hand (Ctrl+C or Cmd+C) before you close this dialog. It cannot be shown again."
     },
     "create": {
       "title": "Create API Key",
@@ -575,7 +612,7 @@
       "beta": "Beta",
       "missingDeps": "Missing deps: {{deps}}",
       "comingSoon": "Coming soon",
-      "comingSoonAria": "Coming soon — not yet available",
+      "comingSoonAria": "Coming soon, not yet available",
       "comingSoonTooltip": "This module is a preview and cannot be enabled yet.",
       "capsCount_one": "{{count}} cap",
       "capsCount_other": "{{count}} caps"
@@ -767,7 +804,7 @@
   "OAuth2AppsTab": {
     "header": {
       "title": "OAuth2 Applications",
-      "description": "Register third-party applications for OAuth2 Authorization Code integration with PKCE."
+      "description": "Register third-party applications for the OAuth2 Authorization Code flow with PKCE. The token endpoint is not active yet, so a registered app cannot obtain tokens. Use an API key for programmatic access today."
     },
     "actions": {
       "registerApp": "Register App",
@@ -786,7 +823,7 @@
     },
     "empty": {
       "title": "No OAuth2 apps registered",
-      "description": "Register your first app to enable OAuth2 integrations and grant programmatic access via the Authorization Code flow."
+      "description": "Registering an app does not grant access yet: the OAuth2 token endpoint is not active. Use an API key for programmatic access."
     },
     "fields": {
       "clientId": "Client ID",
@@ -822,7 +859,9 @@
       "copyNow": "Copy the client secret now.",
       "notShownAgain": "It will not be shown again.",
       "storeSecurely": "Store this secret securely. It cannot be recovered.",
-      "stored": "I have stored the secret"
+      "stored": "I have stored the secret",
+      "copySecret": "Copy client secret",
+      "copyFailed": "The secret could not be copied to the clipboard. Select it in the field above and copy it by hand (Ctrl+C or Cmd+C) before you close this dialog. It cannot be shown again."
     },
     "registerDialog": {
       "title": "Register OAuth2 App",
@@ -971,6 +1010,13 @@
         "boolean": "boolean",
         "null": "null"
       }
+    },
+    "bulkUninstallDialog": {
+      "title_one": "Uninstall {{count}} plugin?",
+      "title_other": "Uninstall {{count}} plugins?",
+      "description": "This calls each plugin's uninstall hook and removes its files everywhere. Their stored settings, including any credentials, are kept so a reinstall picks up where you left off.",
+      "action_one": "Uninstall plugin",
+      "action_other": "Uninstall plugins"
     }
   },
   "SSOSettingsPage": {
@@ -980,7 +1026,7 @@
     },
     "backToSecurity": "Back to Security Settings",
     "backToProviders": "Back to providers",
-    "confirmDelete": "Are you sure you want to delete this SSO provider?",
+    "confirmDelete": "Delete SSO provider \"{{name}}\"?",
     "status": {
       "active": "Active",
       "disabled": "Disabled"
@@ -1067,6 +1113,8 @@
       "loadFailed": "Failed to load SSO providers",
       "saveFailed": "Failed to save provider",
       "deleteFailed": "Failed to delete provider"
-    }
+    },
+    "confirmDeleteDescription": "Nobody can sign in with it afterwards. FreeSDN refuses the delete while any account is still linked to it.",
+    "confirmDeleteAction": "Delete provider"
   }
 }

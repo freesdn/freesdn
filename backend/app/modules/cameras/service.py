@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -687,32 +688,19 @@ class StreamService:
         at a single chokepoint for every vendor. (Private RFC1918 subnets stay
         allowed — cameras/NVRs live on private networks.)
         """
-        from app.modules.cameras.schemas import _validate_host_not_ssrf
+        # Shared with the camera Celery tasks (app/modules/cameras/host_guard.py):
+        # the SSRF validator above plus "the stored camera login only goes to a
+        # private address". A cameras.manage holder (site_admin) who points
+        # ip_address at a public address must not be able to exfiltrate the
+        # stored camera secret, which the ONVIF Basic-auth 401 fallback would
+        # send in clear (sibling of the firewall/credentials/controller
+        # stored-secret-egress fix).
+        from app.modules.cameras.host_guard import CameraHostRefused, check_stored_camera_host
 
         try:
-            _validate_host_not_ssrf(str(host))
-        except ValueError as exc:
+            check_stored_camera_host(host)
+        except CameraHostRefused as exc:
             raise CameraError(str(exc)) from exc
-
-        # this read path decrypts the stored camera credential and (for the
-        # ONVIF Basic-auth 401 fallback) sends it as plaintext Basic auth to ``host``.
-        # Cameras/NVRs live on private networks, so refuse to send the credential to
-        # a PUBLIC host — a cameras.manage holder (site_admin) who points ip_address
-        # at a public address must not be able to exfiltrate the stored camera secret
-        # (sibling of the firewall/credentials/controller stored-secret-egress fix).
-        from app.core.security_utils import is_private_ip, resolve_and_pin_host
-
-        try:
-            _pinned = resolve_and_pin_host(str(host), allow_private=True)
-        except ValueError as exc:
-            raise CameraError(str(exc)) from exc
-        if not is_private_ip(_pinned):
-            raise CameraError(
-                f"Camera host {host!r} resolves to a PUBLIC address. Cameras and NVRs "
-                "must live on a private/on-prem network — FreeSDN refuses to send the "
-                "stored camera credentials to a public-internet host. Set the camera's "
-                "IP/host to its on-prem (RFC1918) address."
-            )
 
         vendor_lower = (vendor or "").lower().strip()
 
@@ -1506,7 +1494,24 @@ class PTZService:
                     kwargs["force"] = True
             except (TypeError, ValueError):
                 pass
-            ptz_result = await adapter.set_preset(**kwargs)
+            from app.services.device_writes import request_actor_id, write_through_staging
+
+            ptz_result = await write_through_staging(
+                self.db,
+                organization_id=camera.organization_id,
+                controller_id=None,
+                site_id=camera.site_id,
+                feature="camera.ptz_preset",
+                operation="update",
+                target_id=str(camera.id),
+                payload={"preset": preset, "name": name},
+                perform=lambda: adapter.set_preset(**kwargs),
+                force=True,
+                actor_id=request_actor_id(),
+                return_failed_result=True,
+            )
+        except HTTPException:
+            raise
         except Exception as exc:
             logger.error("Set preset failed for camera %s: %s", camera_id, exc)
             raise CameraError("Preset save failed on the camera") from exc
@@ -2423,6 +2428,14 @@ class NVRDiscoveryService:
 
         if not nvr.password_encrypted:
             raise CameraError("NVR has no stored credentials for sync")
+        # The stored login is about to go to the stored host: same point-of-use
+        # check as the snapshot path and the camera tasks.
+        from app.modules.cameras.host_guard import CameraHostRefused, check_stored_camera_host
+
+        try:
+            await asyncio.to_thread(check_stored_camera_host, nvr.ip_address)
+        except CameraHostRefused as exc:
+            raise CameraError(str(exc)) from exc
         password = decrypt_credential(nvr.password_encrypted)
 
         # 2. Discover current state
@@ -3788,11 +3801,27 @@ class ThermalService:
         )
         try:
             await adapter.connect()
-            await adapter.set_thermal_threshold(
-                channel=channel,
-                min_temp=min_temp,
-                max_temp=max_temp,
+            from app.services.device_writes import request_actor_id, write_through_staging
+
+            await write_through_staging(
+                self.db,
+                organization_id=camera.organization_id,
+                controller_id=None,
+                site_id=camera.site_id,
+                feature="camera.thermal_threshold",
+                operation="update",
+                target_id=str(camera.id),
+                payload={"min_temp": min_temp, "max_temp": max_temp},
+                perform=lambda: adapter.set_thermal_threshold(
+                    channel=channel,
+                    min_temp=min_temp,
+                    max_temp=max_temp,
+                ),
+                force=True,
+                actor_id=request_actor_id(),
             )
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error("Failed to set thermal threshold for camera %s: %s", camera_id, e)
             raise CameraError("Failed to set thermal threshold on device")
