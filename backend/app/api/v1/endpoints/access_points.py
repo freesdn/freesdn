@@ -36,6 +36,7 @@ from app.models.devices import (
     DeviceType,
 )
 from app.services.adapter_factory import get_adapter
+from app.services.device_writes import device_action, within, write_device_config
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -199,6 +200,13 @@ async def _get_adapter_for_device(device: Device) -> Any:
     # adapter callers reject loopback / metadata hosts even on the
     # legacy switch/AP path.
     GatewayServiceBase._validate_controller_host(ctrl.host or "")
+
+    # A page's live read waits briefly for the controller's turn, or is answered
+    # with its last response (app/services/device_live_read.py).
+    from app.core.device_slot import controller_slot_key
+    from app.services.device_live_read import take_device_turn
+
+    await take_device_turn(controller_slot_key(ctrl))
 
     cloud_kwargs: dict[str, Any] = {}
     if ctrl.connection_mode == "cloud":
@@ -553,8 +561,19 @@ async def update_ap_radio(
         config["txPowerMode"] = data.tx_power_mode
 
     try:
-        async with adapter:
-            result = await adapter.update_ap_radio(device.mac_address, band, config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="ap.radio",
+            operation="update",
+            payload={"band": band, **config},
+            perform=lambda: within(
+                adapter, lambda: adapter.update_ap_radio(device.mac_address, band, config)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Controller communication error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -604,8 +623,19 @@ async def update_ap_ssid_overrides(
     payload = [{"ssidId": o.ssid_id, "enabled": o.enabled} for o in overrides]
 
     try:
-        async with adapter:
-            result = await adapter.update_ap_ssid_override(device.mac_address, payload)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="ap.ssid_override",
+            operation="update",
+            payload={"overrides": payload},
+            perform=lambda: within(
+                adapter, lambda: adapter.update_ap_ssid_override(device.mac_address, payload)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Controller communication error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -661,8 +691,19 @@ async def update_ap_lan_port(
         config["poeEnable"] = data.poe_enable
 
     try:
-        async with adapter:
-            result = await adapter.configure_ap_lan_port(device.mac_address, config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="ap.lan_port",
+            operation="update",
+            payload=dict(config),
+            perform=lambda: within(
+                adapter, lambda: adapter.configure_ap_lan_port(device.mac_address, config)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Controller communication error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -690,8 +731,19 @@ async def update_ap_mesh(
     adapter = await _get_adapter_for_device(device)
 
     try:
-        async with adapter:
-            result = await adapter.set_ap_mesh(device.mac_address, data.enabled)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="ap.mesh",
+            operation="update",
+            payload={"enabled": data.enabled},
+            perform=lambda: within(
+                adapter, lambda: adapter.set_ap_mesh(device.mac_address, data.enabled)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Controller communication error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -719,8 +771,19 @@ async def update_ap_led(
     adapter = await _get_adapter_for_device(device)
 
     try:
-        async with adapter:
-            result = await adapter.set_device_led(device.mac_address, data.setting)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="ap.led",
+            operation="update",
+            payload={"setting": data.setting},
+            perform=lambda: within(
+                adapter, lambda: adapter.set_device_led(device.mac_address, data.setting)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Controller communication error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -748,10 +811,20 @@ async def update_ap_location(
     adapter = await _get_adapter_for_device(device)
 
     try:
-        async with adapter:
-            result = await adapter.set_ap_location(
-                device.mac_address, data.latitude, data.longitude
-            )
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="ap.location",
+            operation="update",
+            payload={"latitude": data.latitude, "longitude": data.longitude},
+            perform=lambda: within(
+                adapter,
+                lambda: adapter.set_ap_location(device.mac_address, data.latitude, data.longitude),
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Controller communication error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -818,8 +891,16 @@ async def reboot_ap(
     adapter = await _get_adapter_for_device(device)
 
     try:
-        async with adapter:
-            result = await adapter.reboot_device(device.mac_address)
+        result = await device_action(
+            session,
+            device,
+            actor_id=_user.id,
+            action="reboot_device",
+            parameters={},
+            perform=lambda: within(adapter, lambda: adapter.reboot_device(device.mac_address)),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Controller communication error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -865,8 +946,17 @@ async def adopt_ap(
     adapter = await _get_adapter_for_device(device)
 
     try:
-        async with adapter:
-            result = await adapter.adopt_device(device.mac_address)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="device.adopt",
+            operation="create",
+            payload={},
+            perform=lambda: within(adapter, lambda: adapter.adopt_device(device.mac_address)),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Controller communication error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -910,8 +1000,17 @@ async def forget_ap(
     adapter = await _get_adapter_for_device(device)
 
     try:
-        async with adapter:
-            result = await adapter.forget_device(device.mac_address)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="device.forget",
+            operation="delete",
+            payload={"confirmed": confirmed},
+            perform=lambda: within(adapter, lambda: adapter.forget_device(device.mac_address)),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Controller communication error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -953,8 +1052,17 @@ async def upgrade_ap_firmware(
     adapter = await _get_adapter_for_device(device)
 
     try:
-        async with adapter:
-            result = await adapter.upgrade_firmware(device.mac_address)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="device.firmware_upgrade",
+            operation="update",
+            payload={"confirmed": confirmed},
+            perform=lambda: within(adapter, lambda: adapter.upgrade_firmware(device.mac_address)),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Controller communication error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")

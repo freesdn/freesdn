@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { StatsGrid, type StatItem } from '@/components/ui/stats-grid';
 import type { GatewayConnection } from '@/lib/api';
 import { GatewayLiveReadNotice } from './GatewayLiveReadNotice';
+import { isDeviceBusyReason } from '@/lib/api/liveRead';
 
 export interface GatewayOverviewTabProps {
   gw: GatewayConnection;
@@ -23,9 +24,13 @@ export interface GatewayOverviewTabProps {
   firmware: Record<string, any>;
   firmwareLoading?: boolean;
   firmwareError?: boolean;
+  /** The firmware read is waiting out a busy gateway (device-busy 503). */
+  firmwareBusy?: boolean;
   onRetryFirmware?: () => void;
   healthLoading?: boolean;
   healthError?: boolean;
+  /** The WAN health read is waiting out a busy gateway (device-busy 503). */
+  healthBusy?: boolean;
   onRetryHealth?: () => void;
   gwHealth: any[];
   liveStatus: any;
@@ -36,8 +41,8 @@ export function GatewayOverviewTab({
   vendorLabel,
   deviceSummary,
   firmware,
-  firmwareLoading = false, firmwareError = false, onRetryFirmware,
-  healthLoading = false, healthError = false, onRetryHealth,
+  firmwareLoading = false, firmwareError = false, firmwareBusy = false, onRetryFirmware,
+  healthLoading = false, healthError = false, healthBusy = false, onRetryHealth,
   gwHealth,
   liveStatus,
 }: GatewayOverviewTabProps) {
@@ -180,7 +185,7 @@ export function GatewayOverviewTab({
           <CardHeader className="pb-4">
             <CardTitle>{t('GatewayOverviewTab.firmware.title')}</CardTitle>
           </CardHeader>
-          {(firmwareLoading || firmwareError) && <GatewayLiveReadNotice loading={firmwareLoading} onRetry={onRetryFirmware} />}
+          {(firmwareLoading || firmwareError) && <GatewayLiveReadNotice loading={firmwareLoading} busy={firmwareBusy} onRetry={onRetryFirmware} />}
           <CardContent>
             <dl className="space-y-3 text-sm">
               {[
@@ -189,12 +194,14 @@ export function GatewayOverviewTab({
                 [t('GatewayOverviewTab.firmware.interval'), `${gw.sync_interval_seconds}s`],
                 [t('GatewayOverviewTab.firmware.syncStatus'), gw.sync_status],
                 [t('GatewayOverviewTab.firmware.lastSync'), gw.last_sync_at ? new Date(gw.last_sync_at).toLocaleString() : t('GatewayOverviewTab.firmware.never')],
-                [t('GatewayOverviewTab.firmware.lastError'), gw.last_sync_error || '-'],
+                // A sync skipped because the gateway was busy ("Device busy: ...")
+                // is not an error: label it as a skip.
+                [isDeviceBusyReason(gw.last_sync_error) ? t('GatewayOverviewTab.firmware.lastSkipped') : t('GatewayOverviewTab.firmware.lastError'), gw.last_sync_error || '-'],
                 [t('GatewayOverviewTab.firmware.lastSeen'), gw.last_seen_at ? new Date(gw.last_seen_at).toLocaleString() : '-'],
               ].map(([label, val]) => (
                 <div key={label} className="flex justify-between">
                   <dt className="text-muted-foreground">{label}</dt>
-                  <dd className="font-medium text-right max-w-[60%] truncate">{val}</dd>
+                  <dd className="font-medium text-right max-w-[60%] truncate" title={typeof val === 'string' ? val : undefined}>{val}</dd>
                 </div>
               ))}
             </dl>
@@ -218,7 +225,7 @@ export function GatewayOverviewTab({
           <CardHeader className="pb-4">
             <CardTitle>{t('GatewayOverviewTab.wanHealth.title')}</CardTitle>
           </CardHeader>
-          {healthLoading || healthError ? <GatewayLiveReadNotice loading={healthLoading} onRetry={onRetryHealth} /> : <CardContent>
+          {healthLoading || healthError ? <GatewayLiveReadNotice loading={healthLoading} busy={healthBusy} onRetry={onRetryHealth} /> : <CardContent>
             {gwHealth.length === 0 && <p className="text-sm text-muted-foreground">{t('GatewayOverviewTab.wanHealth.empty')}</p>}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {gwHealth.map((g: any, i: number) => {

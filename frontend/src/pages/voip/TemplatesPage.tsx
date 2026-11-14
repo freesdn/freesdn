@@ -40,6 +40,7 @@ import { PageHeader } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
 import { VendorLabel, formatTimeAgo } from './components';
 import type { ConfigTemplate } from './types';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface TemplateForm {
   name: string;
@@ -92,19 +93,19 @@ export default function TemplatesPage() {
   const createMutation = useMutation({
     mutationFn: (data: any) => voipApi.createTemplate(data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['voip-templates'] }); closeDialog(); },
-    onError: (err: any) => { toast({ title: t('VoipTemplatesPage.toast.errorTitle'), description: err?.response?.data?.detail || t('VoipTemplatesPage.toast.createFailed'), variant: 'destructive' }); },
+    onError: (err: any) => { toast({ title: t('VoipTemplatesPage.toast.errorTitle'), description: getApiErrorMessage(err, t('VoipTemplatesPage.toast.createFailed')), variant: 'destructive' }); },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => voipApi.updateTemplate(id, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['voip-templates'] }); closeDialog(); },
-    onError: (err: any) => { toast({ title: t('VoipTemplatesPage.toast.errorTitle'), description: err?.response?.data?.detail || t('VoipTemplatesPage.toast.updateFailed'), variant: 'destructive' }); },
+    onError: (err: any) => { toast({ title: t('VoipTemplatesPage.toast.errorTitle'), description: getApiErrorMessage(err, t('VoipTemplatesPage.toast.updateFailed')), variant: 'destructive' }); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => voipApi.deleteTemplate(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['voip-templates'] }),
-    onError: (err: any) => { toast({ title: t('VoipTemplatesPage.toast.errorTitle'), description: err?.response?.data?.detail || t('VoipTemplatesPage.toast.deleteFailed'), variant: 'destructive' }); },
+    onError: (err: any) => { toast({ title: t('VoipTemplatesPage.toast.errorTitle'), description: getApiErrorMessage(err, t('VoipTemplatesPage.toast.deleteFailed')), variant: 'destructive' }); },
   });
 
   // ── Helpers ──

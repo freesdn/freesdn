@@ -73,6 +73,17 @@ class OperationExecutor:
                 return await self._execute_plugin(op, ctx)
             if op.write:
                 return await self._execute_native_write(op, ctx)
+            if op.live_action:
+                # Live actions skip staging, so the platform-wide read-only lock
+                # is the only thing between an automation and the real world.
+                # The adapter cannot be relied on for it: FreePBX deliberately
+                # lets force=True through for live call control.
+                from app.core.runtime_flags import is_adapter_read_only
+
+                if is_adapter_read_only():
+                    return OperationResult.fail(
+                        f"operation {op.id} refused: ADAPTER_READ_ONLY is on", "READ_ONLY"
+                    )
             return await self._execute_native_read(op, ctx)
         except Exception:  # noqa: BLE001 — normalize without disclosing client internals
             # Database/adapter exceptions can contain credentials, SQL parameters

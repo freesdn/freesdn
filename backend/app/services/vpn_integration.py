@@ -28,6 +28,7 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -78,6 +79,96 @@ async def _await_tailscale_login(proc: asyncio.subprocess.Process, timeout: floa
             pass
     except Exception:
         logger.exception("Tailscale interactive login keep-alive failed")
+
+
+# =============================================================================
+# Where tailscaled runs
+# =============================================================================
+
+#: tailscaled's LocalAPI socket, which is also the `tailscale` CLI's default on
+#: Linux. Every topology serves it here: the `tailscale` runtime container in
+#: the shipped compose (shared with the api and the workers through the
+#: tailscale_run volume), the privileged vpn sidecar, and the in-container
+#: supervisor of a single-container deployment.
+TAILSCALE_SOCKET = "/var/run/tailscale/tailscaled.sock"
+
+#: How start_daemon() asks the runtime container to start tailscaled: the api
+#: cannot see the state volume, and nothing else crosses the container
+#: boundary. backend/tailscale-runtime/entrypoint.sh consumes the file.
+TAILSCALE_START_REQUEST = "/var/run/tailscale/freesdn-start-requested"
+
+#: How long start_daemon() waits for the runtime container to answer. It polls
+#: for a request every second and tailscaled opens its socket within about one
+#: more, so this is plenty and still well inside a request's patience.
+TAILSCALE_START_WAIT_SECONDS = 8.0
+
+#: ``TailscaleStatus.backend_state`` when no tailscaled answers. Not a state
+#: tailscaled reports itself, so it cannot be mistaken for its "Stopped".
+TAILSCALE_NOT_RUNNING = "NotRunning"
+
+
+def _tailscale_runtime_is_container() -> bool:
+    """The `tailscale` runtime container owns tailscaled (the shipped compose)."""
+    return os.environ.get("TAILSCALE_RUNTIME", "").strip().lower() == "container"
+
+
+def _sidecar_mode() -> bool:
+    """The privileged vpn sidecar owns tailscaled (docker-compose.vpn.yml).
+
+    The same test as app/tailscaled_supervisor.py and the runtime container's
+    entrypoint; read straight off the environment like the OpenVPN/WireGuard
+    services, which the overlay configures the same way.
+    """
+    truthy = ("1", "true", "yes", "on")
+    return (
+        os.environ.get("VPN_MODE", "off").strip().lower() == "sidecar"
+        or os.environ.get("FREESDN_OPENVPN_SIDECAR", "").strip().lower() in truthy
+        or os.environ.get("FREESDN_WIREGUARD_SIDECAR", "").strip().lower() in truthy
+    )
+
+
+async def _tailscaled_answers() -> bool:
+    """Whether a tailscaled accepts connections on its LocalAPI socket.
+
+    The ``tailscale`` CLI takes about two seconds to give up on a socket nobody
+    listens on (measured on 1.104.5, for a missing socket file and a refused
+    connect alike), and its message for the refused case ("no tailscaled
+    process found ... connection refused") is not the "doesn't appear to be
+    running" this module recognised, so it was logged at ERROR. With the
+    runtime container stopped or absent that was every status read, in the api
+    and in each worker. A connect answers the same question in milliseconds.
+    The socket file outlives a daemon that was killed, hence the connect rather
+    than an existence check alone.
+    """
+    path = TAILSCALE_SOCKET
+    if not os.path.exists(path):
+        return False
+    try:
+        _reader, writer = await asyncio.wait_for(asyncio.open_unix_connection(path), timeout=1)
+    except (OSError, TimeoutError):
+        return False
+    writer.close()
+    with contextlib.suppress(Exception):
+        await writer.wait_closed()
+    return True
+
+
+async def _communicate_or_kill(
+    proc: asyncio.subprocess.Process, timeout: float
+) -> tuple[bytes, bytes]:
+    """``proc.communicate()`` within ``timeout``; on timeout kill and reap it.
+
+    ``asyncio.wait_for`` cancels the await, not the child, so every timed-out
+    call used to leave a ``tailscale`` process behind.
+    """
+    try:
+        return await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except TimeoutError:
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
+        with contextlib.suppress(Exception):
+            await proc.wait()
+        raise
 
 
 # =============================================================================
@@ -284,7 +375,12 @@ class TailscaleNode:
 class TailscaleStatus:
     """Tailscale daemon status."""
 
-    backend_state: str  # Running, Stopped, NeedsLogin
+    # tailscaled's own BackendState (Running, Stopped, NeedsLogin, ...), or one of
+    # ours when it could not be asked: NotRunning (nothing answers on the socket),
+    # NotInstalled, Error. "Stopped" therefore always means the daemon answered
+    # and the node is down (``tailscale down``), which a bare ``tailscale up``
+    # reconnects; it used to mean "no daemon" as well.
+    backend_state: str
     self_node: TailscaleNode | None = None
     peers: list[TailscaleNode] = field(default_factory=list)
     tailnet_name: str = ""
@@ -367,21 +463,51 @@ class TailscaleService:
         self._status_cache: TailscaleStatus | None = None
         self._cache_time: datetime | None = None
         self._cache_ttl_seconds = 30
+        # A daemon that is not there is the common case (Tailscale unused, or its
+        # runtime container stopped) and costs nothing to re-check, so that
+        # answer is never cached. A daemon that does not ANSWER costs the whole
+        # CLI budget each time; that outcome is kept briefly, even against
+        # refresh=True, so the dashboard poll and the per-provider loops in the
+        # workers do not pay it over and over.
+        self._negative_cache_ttl_seconds = 10
+        self._cache_is_failure = False
+
+    def _remember(self, status: TailscaleStatus, *, failure: bool = False) -> TailscaleStatus:
+        self._status_cache = status
+        self._cache_time = datetime.now(UTC)
+        self._cache_is_failure = failure
+        return status
+
+    def _cached_status(self, refresh: bool) -> TailscaleStatus | None:
+        if not self._status_cache or not self._cache_time:
+            return None
+        elapsed = (datetime.now(UTC) - self._cache_time).total_seconds()
+        if self._cache_is_failure:
+            return self._status_cache if elapsed < self._negative_cache_ttl_seconds else None
+        if refresh or elapsed >= self._cache_ttl_seconds:
+            return None
+        return self._status_cache
 
     async def get_status(self, refresh: bool = False) -> TailscaleStatus:
         """
         Get Tailscale daemon status.
 
-        Uses local Tailscale CLI for status information.
+        Asks tailscaled with the local ``tailscale`` CLI, over its LocalAPI
+        socket. When nothing answers on the socket (Tailscale not in use, or the
+        ``tailscale`` runtime container stopped or absent) this returns
+        ``backend_state="NotRunning"`` at once, logged at DEBUG, without running
+        the CLI.
         """
-        # Check cache
-        if not refresh and self._status_cache and self._cache_time:
-            elapsed = (datetime.now(UTC) - self._cache_time).total_seconds()
-            if elapsed < self._cache_ttl_seconds:
-                return self._status_cache
+        cached = self._cached_status(refresh)
+        if cached is not None:
+            return cached
+
+        if not await _tailscaled_answers():
+            logger.debug("Tailscale is not running (nothing answers on %s)", TAILSCALE_SOCKET)
+            self._status_cache = None  # never serve an older "Running" after this
+            return TailscaleStatus(backend_state=TAILSCALE_NOT_RUNNING)
 
         try:
-            # Use tailscale CLI to get status
             result = await asyncio.create_subprocess_exec(
                 "tailscale",
                 "status",
@@ -389,31 +515,40 @@ class TailscaleService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=15)
+            # The LocalAPI is local: a healthy daemon answers in milliseconds.
+            stdout, stderr = await _communicate_or_kill(result, timeout=5)
 
             if result.returncode != 0:
-                msg = stderr.decode().strip()
-                if "doesn't appear to be running" in msg:
-                    logger.debug("Tailscale daemon not running (expected in worker containers)")
+                msg = stderr.decode(errors="replace").strip()
+                if "doesn't appear to be running" in msg or "connection refused" in msg:
+                    # It went away between the probe and the CLI.
+                    logger.debug("Tailscale is not running: %s", msg)
+                    state = TAILSCALE_NOT_RUNNING
                 else:
-                    logger.error("Tailscale status error: %s", msg)
-                return TailscaleStatus(backend_state="Stopped")
+                    logger.error(
+                        "Tailscale status failed (exit %s): %s",
+                        result.returncode,
+                        msg or "no output",
+                    )
+                    state = "Error"
+                return self._remember(TailscaleStatus(backend_state=state), failure=True)
 
             data = json.loads(stdout.decode())
-            status = self._parse_status(data)
-
-            # Update cache
-            self._status_cache = status
-            self._cache_time = datetime.now(UTC)
-
-            return status
+            return self._remember(self._parse_status(data))
 
         except FileNotFoundError:
             logger.debug("Tailscale CLI not found")
-            return TailscaleStatus(backend_state="NotInstalled")
+            return self._remember(TailscaleStatus(backend_state="NotInstalled"), failure=True)
+        except TimeoutError:
+            logger.warning(
+                "tailscaled accepted a connection on %s but did not answer a status "
+                "request within 5s",
+                TAILSCALE_SOCKET,
+            )
+            return self._remember(TailscaleStatus(backend_state="Error"), failure=True)
         except Exception as e:
-            logger.error("Failed to get Tailscale status: %s", e)
-            return TailscaleStatus(backend_state="Error")
+            logger.error("Failed to get Tailscale status: %s: %s", type(e).__name__, e)
+            return self._remember(TailscaleStatus(backend_state="Error"), failure=True)
 
     def _parse_status(self, data: dict[str, Any]) -> TailscaleStatus:
         """Parse Tailscale status JSON."""
@@ -515,6 +650,9 @@ class TailscaleService:
         if not _is_safe_host_token(target):
             logger.warning("Tailscale ping: rejecting unsafe target %r", target)
             return None
+        if not await _tailscaled_answers():
+            logger.debug("Tailscale ping %s skipped: Tailscale is not running", target)
+            return None
         try:
             result = await asyncio.create_subprocess_exec(
                 "tailscale",
@@ -528,10 +666,7 @@ class TailscaleService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, _ = await asyncio.wait_for(
-                result.communicate(),
-                timeout=timeout + 1,
-            )
+            stdout, _ = await _communicate_or_kill(result, timeout=timeout + 1)
 
             if result.returncode == 0:
                 # Parse latency from output
@@ -623,6 +758,35 @@ class TailscaleService:
 # =============================================================================
 
 
+def _launch_tailscaled_supervisor() -> bool:
+    """Start ``app.tailscaled_supervisor`` fully detached from this process.
+
+    Plain ``subprocess`` rather than asyncio: an asyncio subprocess transport
+    kills a still-running child when it is closed, which is exactly the tie to
+    the request worker this replaces. The supervisor double-forks, so the
+    process started here exits at once (reaped below) and the supervisor is
+    reparented to the container's init. Its stdio is /dev/null and this
+    process's own stderr (the container log), never a pipe to this worker.
+    """
+    import subprocess
+    import sys
+
+    backend_root = Path(__file__).resolve().parents[2]
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "app.tailscaled_supervisor", "--detach"],
+            cwd=str(backend_root),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True,
+        )
+        return proc.wait(timeout=15) == 0
+    except (OSError, subprocess.TimeoutExpired):
+        logger.exception("Could not launch the tailscaled supervisor")
+        return False
+
+
 class TailscaleSetupService:
     """
     Enterprise-grade Tailscale agent setup and lifecycle management.
@@ -651,7 +815,7 @@ class TailscaleSetupService:
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            stdout, stderr = await _communicate_or_kill(proc, timeout=timeout)
             return proc.returncode or 0, stdout.decode(), stderr.decode()
         except FileNotFoundError:
             return -1, "", "tailscale binary not found"
@@ -668,6 +832,8 @@ class TailscaleSetupService:
           - not_installed: tailscale binary missing
           - daemon_stopped: tailscaled not running
           - needs_login: daemon running, not authenticated
+          - disconnected: daemon running and logged in, node down
+            (``tailscale down``); a bare ``tailscale up`` reconnects it
           - connected: fully operational
           - error: unexpected state
         """
@@ -689,22 +855,31 @@ class TailscaleSetupService:
             }
         version = stdout.strip().split("\n")[0] if stdout else None
 
-        # 2. Check daemon / auth state via status
-        rc, stdout, stderr = await self._run_cmd("tailscale", "status", "--json")
+        stopped = {
+            "state": "daemon_stopped",
+            "installed": True,
+            "daemon_running": False,
+            "authenticated": False,
+            "connected": False,
+            "version": version,
+            "hostname": None,
+            "tailscale_ip": None,
+            "tailnet": None,
+            "login_url": None,
+        }
+
+        # 2. Is anything there? A connect to the socket answers in milliseconds;
+        # the CLI spends ~2 s concluding the same, on every UI poll.
+        if not await _tailscaled_answers():
+            return {**stopped, "message": self._not_running_message()}
+
+        # 3. Daemon / auth state via status
+        rc, stdout, stderr = await self._run_cmd("tailscale", "status", "--json", timeout=5.0)
         if rc != 0:
-            # daemon not running or socket not available
+            # it went away after the probe, or does not answer
             return {
-                "state": "daemon_stopped",
-                "installed": True,
-                "daemon_running": False,
-                "authenticated": False,
-                "connected": False,
-                "version": version,
-                "hostname": None,
-                "tailscale_ip": None,
-                "tailnet": None,
-                "login_url": None,
-                "message": f"Tailscale daemon is not running. {stderr.strip()}",
+                **stopped,
+                "message": f"Tailscale daemon is not answering. {stderr.strip()}".strip(),
             }
 
         try:
@@ -764,11 +939,34 @@ class TailscaleSetupService:
                 "message": "Tailscale daemon running but not authenticated. Provide an auth key or use browser login.",
             }
 
-        # Stopped, Starting, etc.
+        if backend_state == "Stopped":
+            # The daemon answered, so it is running: the node was taken down
+            # (Disconnect). This used to report daemon_stopped with
+            # daemon_running False, so the wizard offered "Start daemon", which
+            # waited for a daemon that was already there and failed after 8 s.
+            node = self_node or {}
+            return {
+                "state": "disconnected",
+                "installed": True,
+                "daemon_running": True,
+                "authenticated": True,
+                "connected": False,
+                "version": version,
+                "hostname": node.get("HostName") or None,
+                "tailscale_ip": None,
+                "tailnet": (tailnet or {}).get("Name") or None,
+                "login_url": None,
+                "message": (
+                    "Tailscale is disconnected. Reconnect to rejoin the tailnet "
+                    "with this node's saved settings."
+                ),
+            }
+
+        # Starting, etc.
         return {
-            "state": "daemon_stopped" if backend_state == "Stopped" else "error",
+            "state": "error",
             "installed": True,
-            "daemon_running": backend_state not in ("Stopped",),
+            "daemon_running": True,
             "authenticated": False,
             "connected": False,
             "version": version,
@@ -781,12 +979,90 @@ class TailscaleSetupService:
 
     # ── daemon start ─────────────────────────────────────────────────────
 
+    @staticmethod
+    def _not_running_message() -> str:
+        """What "not running" means in this deployment, for the setup page."""
+        if _sidecar_mode():
+            return (
+                "Tailscale is not running. In VPN sidecar mode the vpn container "
+                "runs it: check `docker compose ps vpn`."
+            )
+        if _tailscale_runtime_is_container():
+            if os.path.exists(TAILSCALE_START_REQUEST):
+                return (
+                    "Tailscale was asked to start, but its runtime container has not "
+                    "started it. Check `docker compose ps tailscale`; it starts "
+                    "Tailscale as soon as it runs."
+                )
+            return "Tailscale is not running. Start it to connect this controller to a tailnet."
+        return "Tailscale daemon is not running."
+
+    async def _wait_until_running(self, seconds: float) -> dict[str, Any]:
+        """Poll the setup status until tailscaled answers or ``seconds`` pass."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + seconds
+        status = await self.get_setup_status()
+        while not status["daemon_running"] and loop.time() < deadline:
+            await asyncio.sleep(0.5)
+            status = await self.get_setup_status()
+        return status
+
+    async def _request_runtime_start(self) -> dict[str, Any]:
+        """Ask the ``tailscale`` runtime container to start tailscaled.
+
+        The api cannot start a process in another container, and has no access
+        to the node state; what it shares with the runtime container is the
+        socket volume. So it leaves a request file there, which the runtime's
+        entrypoint turns into "Tailscale is in use here" (a marker on the state
+        volume, so it also comes back after every restart) and then starts
+        tailscaled. The request persists: if the runtime container is down
+        right now, it starts Tailscale when it comes up.
+        """
+        try:
+            await asyncio.to_thread(Path(TAILSCALE_START_REQUEST).touch)
+        except OSError as exc:
+            logger.warning("Could not ask the Tailscale runtime container to start: %s", exc)
+            return {
+                "success": False,
+                "message": (
+                    "Could not ask the Tailscale runtime container to start "
+                    f"({exc.strerror or exc}). The api needs the tailscale_run volume "
+                    "at /var/run/tailscale, as docker-compose.yml mounts it."
+                ),
+                "state": "daemon_stopped",
+            }
+        status = await self._wait_until_running(TAILSCALE_START_WAIT_SECONDS)
+        if status["daemon_running"]:
+            logger.info("Tailscale started by its runtime container (%s)", status["state"])
+            return {"success": True, "message": "Tailscale started.", "state": status["state"]}
+        logger.info("Tailscale start requested; the runtime container has not answered yet")
+        return {
+            "success": False,
+            "message": self._not_running_message(),
+            "state": status["state"],
+        }
+
     async def start_daemon(self) -> dict[str, Any]:
         """
         Ensure the tailscaled daemon is running.
 
-        In Docker the daemon is started by the container entrypoint.
-        This restarts it if it crashed.
+        Shipped compose (``TAILSCALE_RUNTIME=container``): tailscaled lives in
+        the ``tailscale`` runtime container, and this asks that container to
+        start it (see :meth:`_request_runtime_start`). Docker restarts it when
+        it exits, and it starts on its own once a node is enrolled.
+
+        Single-container deployment: tailscaled is owned by
+        ``app/tailscaled_supervisor.py``, started here detached from this
+        request worker, and by the api entrypoint on every container start once
+        Tailscale has been started here before (the state volume persists). The
+        supervisor restarts the daemon when it exits.
+
+        It used to be spawned right here with ``stdout=PIPE, stderr=PIPE`` and
+        the pipes never read, so tailscaled lived and died with whichever
+        gunicorn worker served the click: a worker recycle (max_requests) broke
+        its stdout/stderr, and nothing ever started it again after an api
+        restart (2026-11 soak). The sidecar mode is unchanged: the vpn
+        container runs tailscaled and this returns "already running".
         """
         # Check if already running
         status = await self.get_setup_status()
@@ -796,6 +1072,18 @@ class TailscaleSetupService:
                 "message": "Tailscale daemon is already running.",
                 "state": status["state"],
             }
+
+        if _sidecar_mode():
+            # The vpn container owns tailscaled; a second daemon here or in the
+            # runtime container would fight it for the node state.
+            return {
+                "success": False,
+                "message": self._not_running_message(),
+                "state": status["state"],
+            }
+
+        if _tailscale_runtime_is_container():
+            return await self._request_runtime_start()
 
         # The DEFAULT deployment is capless: tailscaled lives in the privileged
         # `vpn` sidecar, and the api container only gets its control socket when
@@ -828,38 +1116,20 @@ class TailscaleSetupService:
             }
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "tailscaled",
-                "--state=/var/lib/tailscale/tailscaled.state",
-                "--socket=/var/run/tailscale/tailscaled.sock",
-                "--tun=userspace-networking",
-                # netstack SOCKS5. app/core/http_client.py:overlay_socks_proxy()
-                # expects exactly this endpoint when VPN_MODE=userspace, so the
-                # overlay is usable rather than merely connected.
-                "--socks5-server=127.0.0.1:1055",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                # tailscaled's log policy writes to UserCacheDir, i.e. $HOME/.cache.
-                # The image has no /home/appuser and the rootfs is read-only, so
-                # without this it fails on `mkdir /home/appuser` before it ever
-                # gets to work. /tmp is this container's private writable tmpfs --
-                # the same trick pg-backup already uses for the same reason.
-                env={**os.environ, "HOME": "/tmp"},
-            )
-            # Give it a couple seconds to start
-            await asyncio.sleep(2)
-
-            # Check if it started OK
-            if proc.returncode is not None:
-                _, stderr = await proc.communicate()
+            launched = await asyncio.to_thread(_launch_tailscaled_supervisor)
+            if not launched:
                 return {
                     "success": False,
-                    "message": f"Daemon failed to start: {stderr.decode()}",
+                    "message": "Could not start the Tailscale supervisor.",
                     "state": "error",
                 }
-
-            # Re-check
+            # The daemon needs a moment to open its socket.
             new_status = await self.get_setup_status()
+            for _ in range(12):
+                if new_status["daemon_running"]:
+                    break
+                await asyncio.sleep(0.5)
+                new_status = await self.get_setup_status()
             return {
                 "success": new_status["daemon_running"],
                 "message": "Tailscale daemon started."
@@ -1094,15 +1364,57 @@ class TailscaleSetupService:
     async def reconnect(self, netfilter_mode: str | None = None) -> dict[str, Any]:
         """Reconnect a previously disconnected (but still authed) agent.
 
-        ``netfilter_mode`` MUST be re-passed here: this uses ``tailscale up
-        --reset``, which wipes unspecified prefs including --netfilter-mode — so
-        without it a reconnect would silently revert NetBird coexistence to the
-        default (on) and break the overlay sharing 100.64.0.0/10.
+        Every preference the node has stays as it is: its name, accepted and
+        advertised routes, exit node, shields-up, DNS and netfilter settings.
+        A bare ``tailscale up`` is the CLI's own reconnect: for a node that has
+        logged in and is not NeedsLogin it only sets WantRunning (1.104.5
+        ``cmd/tailscale/cli/up.go``, the "bare tailscale up" special case). Any
+        flag turns that off, ``--timeout`` included.
+
+        This used to run ``tailscale up --accept-routes --reset``. ``--reset``
+        puts every preference not on the command line back to its default, so a
+        Disconnect then Connect cleared the node's hostname (it fell back to the
+        container's, renaming the node on the tailnet), its advertised routes and
+        exit node, shields-up and accept-dns, and turned accept-routes back on.
+        Measured with the pinned 1.104.5 binaries on a logged-in, disconnected
+        node: the bare ``up`` kept all of them, the old command cleared them.
+
+        ``netfilter_mode`` (NetBird coexistence, resolved by the endpoint) is
+        applied first with ``tailscale set``, which changes only that setting.
+        A logged-out node is refused rather than sent into a fresh login.
         """
-        cmd = ["tailscale", "up", "--accept-routes", "--reset"]
+        if not await _tailscaled_answers():
+            return {
+                "success": False,
+                "message": self._not_running_message(),
+                "state": "daemon_stopped",
+            }
+        rc, stdout, stderr = await self._run_cmd("tailscale", "status", "--json", timeout=5.0)
+        backend_state = None
+        if rc == 0:
+            with contextlib.suppress(ValueError, AttributeError):
+                backend_state = json.loads(stdout).get("BackendState")
+        if backend_state == "NeedsLogin":
+            # A bare `up` here is a new login with default settings, and it
+            # blocks on a browser login nobody opens.
+            return {
+                "success": False,
+                "message": (
+                    "Tailscale is logged out, so there is nothing to reconnect. "
+                    "Log in again with an auth key or in the browser."
+                ),
+                "state": "needs_login",
+            }
         if netfilter_mode in ("off", "nodivert", "on"):
-            cmd.append(f"--netfilter-mode={netfilter_mode}")
-        rc, stdout, stderr = await self._run_cmd(*cmd)
+            rc, stdout, stderr = await self._run_cmd(
+                "tailscale", "set", f"--netfilter-mode={netfilter_mode}"
+            )
+            if rc != 0:
+                return {
+                    "success": False,
+                    "message": f"Reconnect failed: {stderr.strip() or stdout.strip()}",
+                }
+        rc, stdout, stderr = await self._run_cmd("tailscale", "up")
         if rc == 0:
             await asyncio.sleep(2)
             new_status = await self.get_setup_status()
@@ -2052,11 +2364,48 @@ class NetbirdService:
             return self._status_cache
         return None
 
+    async def _daemon_listening(self) -> bool | None:
+        """Whether the configured daemon address accepts a connection.
+
+        The shipped compose file sets ``NETBIRD_DAEMON_ADDR`` for every install,
+        but only the optional VPN sidecar listens on it. Without the sidecar,
+        ``netbird status`` spent its whole budget retrying gRPC at a closed port
+        on every check, and the TimeoutError it ended in has an empty message,
+        so the worker logged "Failed to get Netbird status: " at ERROR about
+        150 times a day for a component that was never set up. A refused
+        connect answers the same question in milliseconds.
+
+        Returns None when there is no explicit address to check (the default
+        unix socket), so the CLI decides as before.
+        """
+        addr = self.daemon_addr or ""
+        if addr.startswith("unix://"):
+            return os.path.exists(addr[len("unix://") :])
+        if not addr.startswith("tcp://"):
+            return None
+        host, _, port = addr[len("tcp://") :].rpartition(":")
+        try:
+            _reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(host or "127.0.0.1", int(port)), timeout=1
+            )
+        except (OSError, TimeoutError, ValueError):
+            return False
+        writer.close()
+        with contextlib.suppress(Exception):
+            await writer.wait_closed()
+        return True
+
     async def get_status(self, refresh: bool = False) -> dict[str, Any]:
         """Get Netbird daemon status."""
         cached = self._cached_status(refresh)
         if cached is not None:
             return cached
+
+        if await self._daemon_listening() is False:
+            logger.debug("Netbird daemon is not listening at %s", self.daemon_addr)
+            return self._remember(
+                {"connected": False, "management_state": "NotRunning", "peers": []}
+            )
 
         try:
             result = await asyncio.create_subprocess_exec(
@@ -2096,8 +2445,11 @@ class NetbirdService:
             return self._remember(
                 {"connected": False, "management_state": "NotInstalled", "peers": []}
             )
+        except TimeoutError:
+            logger.warning("Netbird daemon did not answer a status request within 5s")
+            return self._remember({"connected": False, "management_state": "Error", "peers": []})
         except Exception as e:
-            logger.error("Failed to get Netbird status: %s", e)
+            logger.error("Failed to get Netbird status: %s: %s", type(e).__name__, e)
             return self._remember({"connected": False, "management_state": "Error", "peers": []})
 
     def _parse_status(self, data: dict[str, Any]) -> dict[str, Any]:

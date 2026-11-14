@@ -24,7 +24,7 @@
       "eventTypes": {
         "label": "事件类型",
         "add": "添加",
-        "description": "留空以接收所有事件"
+        "description": "留空以接收除进度更新外的所有事件。device.* 匹配所有设备事件。"
       },
       "enabled": "已启用",
       "verifySsl": "验证 TLS"
@@ -70,7 +70,10 @@
       "test": "测试 Webhook",
       "viewDeliveries": "查看投递记录",
       "deleteConfirm": "确定要删除此 Webhook 吗？",
-      "delete": "删除"
+      "delete": "删除",
+      "deleteTitle": "删除 Webhook“{{name}}”？",
+      "deleteBody": "FreeSDN 将停止向其发送事件，其投递记录也会被删除。此操作无法撤销。",
+      "deleteAction": "删除 Webhook"
     },
     "header": {
       "title": "Webhooks",
@@ -122,7 +125,11 @@
       "delete": {
         "label": "删除",
         "title": "批量删除",
-        "description": "为安全起见，请逐个删除 Webhook。"
+        "description": "为安全起见，请逐个删除 Webhook。",
+        "confirmTitle_one": "删除 {{count}} 个 Webhook？",
+        "confirmTitle_other": "删除 {{count}} 个 Webhook？",
+        "confirmBody": "FreeSDN 将停止向它们发送事件，其投递记录也会被删除。此操作无法撤销。",
+        "confirmAction": "删除 Webhook"
       }
     }
   }

@@ -46,6 +46,8 @@ import {
   DoorOpen,
   Video,
   Copy,
+  Check,
+  X,
   Info,
   Loader2,
   ExternalLink,
@@ -80,6 +82,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -251,8 +254,16 @@ function DetailRow({ label, value, mono, copyable }: {
   label: string; value: string | number | null | undefined; mono?: boolean; copyable?: boolean;
 }) {
   const { t } = useTranslation('devices');
+  const { copy, state: copyState } = useCopyToClipboard();
   const display = value != null && value !== '' ? String(value) : '-';
   const isEmpty = display === '-';
+  const CopyIcon = copyState === 'copied' ? Check : copyState === 'failed' ? X : Copy;
+  const copyHint =
+    copyState === 'copied'
+      ? t('CopyButton.copied', { ns: 'common' })
+      : copyState === 'failed'
+        ? t('CopyButton.failedHint', { ns: 'common' })
+        : t('DeviceDetailPage.detailRow.clickToCopy');
 
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-border last:border-0">
@@ -267,15 +278,24 @@ function DetailRow({ label, value, mono, copyable }: {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="inline-flex items-center gap-1.5 hover:text-primary transition-colors"
-                  onClick={() => navigator.clipboard.writeText(display)}
+                  type="button"
+                  className={cn(
+                    'inline-flex items-center gap-1.5 hover:text-primary transition-colors',
+                    copyState === 'copied' && 'text-success',
+                    copyState === 'failed' && 'text-destructive',
+                  )}
+                  data-copy-state={copyState}
+                  onClick={() => void copy(display)}
                 >
                   {display}
-                  <Copy className="h-3 w-3 opacity-40" />
+                  <CopyIcon className={cn('h-3 w-3', copyState === 'idle' && 'opacity-40')} aria-hidden="true" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent><p className="text-xs">{t('DeviceDetailPage.detailRow.clickToCopy')}</p></TooltipContent>
+              <TooltipContent><p className="text-xs">{copyHint}</p></TooltipContent>
             </Tooltip>
+            <span className="sr-only" role="status" aria-live="polite">
+              {copyState === 'idle' ? '' : copyHint}
+            </span>
           </TooltipProvider>
         ) : display}
       </dd>
@@ -565,10 +585,20 @@ export default function DeviceDetailPage() {
     <TooltipProvider delayDuration={300}>
       <div className="space-y-6">
 
-        {/* ──── Header ──── */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/devices')}>
+        {/* ──── Header ────
+            Stacks on narrow screens: the one-row layout pushed Sync, Reboot
+            and the menu past the right edge at 390px, where they were clipped
+            and unreachable. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              onClick={() => navigate('/devices')}
+              aria-label={t('DeviceDetailPage.actions.back')}
+              title={t('DeviceDetailPage.actions.back')}
+            >
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className={cn(
@@ -577,8 +607,9 @@ export default function DeviceDetailPage() {
             )}>
               <DeviceIcon type={device.device_type} className="h-6 w-6" />
             </div>
-            <div>
-              <h2 className="text-xl font-semibold flex items-center gap-2">
+            <div className="min-w-0">
+              {/* h1: this is the page title (the page had no h1 at all). */}
+              <h1 className="text-xl font-semibold flex flex-wrap items-center gap-2 break-words">
                 {device.name}
                 <StatusBadge status={device.status} />
                 {!device.is_managed && (
@@ -586,8 +617,8 @@ export default function DeviceDetailPage() {
                     {t('DeviceDetailPage.badge.unmanaged')}
                   </Badge>
                 )}
-              </h2>
-              <p className="text-sm text-muted-foreground">
+              </h1>
+              <p className="text-sm text-muted-foreground break-words">
                 {t(`DeviceDetailPage.deviceTypes.${typeMeta.labelKey}`)}
                 {device.manufacturer && ` · ${device.manufacturer}`}
                 {device.model && ` · ${device.model}`}
@@ -597,7 +628,7 @@ export default function DeviceDetailPage() {
           </div>
 
           {/* Actions · refresh/utility left, primary rightmost */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
               <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} />
               {t('DeviceDetailPage.actions.sync')}
@@ -615,7 +646,13 @@ export default function DeviceDetailPage() {
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="h-9 w-9">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  aria-label={t('DeviceDetailPage.actions.more')}
+                  title={t('DeviceDetailPage.actions.more')}
+                >
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>

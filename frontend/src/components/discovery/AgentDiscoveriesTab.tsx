@@ -31,6 +31,7 @@ import {
 import { discoveryApi, type AgentDiscoveredHost } from '@/lib/api/discovery';
 import { agentsApi } from '@/lib/api/agents';
 import { useToast } from '@/hooks/use-toast';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface Props {
   siteId?: string;
@@ -81,7 +82,7 @@ export function AgentDiscoveriesTab({ siteId }: Props) {
     onError: (err: any) => {
       toast({
         title: t('AgentDiscoveriesTab.toast.probeFailed.title'),
-        description: err?.response?.data?.detail || String(err?.message || err),
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },
@@ -117,7 +118,7 @@ export function AgentDiscoveriesTab({ siteId }: Props) {
     onError: (err: any) => {
       toast({
         title: t('AgentDiscoveriesTab.toast.adoptFailed.title'),
-        description: err?.response?.data?.detail || String(err),
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },

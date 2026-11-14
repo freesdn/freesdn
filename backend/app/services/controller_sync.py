@@ -96,6 +96,164 @@ def _unwrap(result: Any, fallback: Any = None) -> Any:
 # =====================================================================
 
 
+async def _mac_index(session: AsyncSession, controller: Controller) -> dict[str, Device]:
+    """mac -> Device for this controller (normalised and raw uppercase keys)."""
+    result = await session.execute(
+        select(Device).where(
+            Device.controller_id == controller.id,
+            Device.deleted_at.is_(None),
+        )
+    )
+    devices = result.scalars().all()
+    mac_to_device: dict[str, Device] = {}
+    for d in devices:
+        if d.mac_address:
+            key = d.mac_address.upper().replace("-", ":").replace(".", ":")
+            mac_to_device[key] = d
+            # Also store raw uppercase key for exact match
+            raw_key = d.mac_address.upper()
+            if raw_key != key:
+                mac_to_device[raw_key] = d
+    return mac_to_device
+
+
+#: Every adapter read the deep sync makes. The replay exposes exactly these
+#: (when the real adapter has them), so ``hasattr`` checks behave as before.
+_DEEP_SYNC_READS = (
+    "get_ports",
+    "get_vlans",
+    "get_ssids",
+    "get_port_profiles",
+    "get_switch_lag_groups",
+    "get_topology_data",
+    "get_clients",
+    "get_switch_detail",
+    "get_ap_detail",
+    "get_gateway_detail",
+    "get_controller_status",
+    "get_system_info",
+    "get_firmware_overview",
+)
+
+#: The per-device reads ran concurrently before (the adapter rate-limits
+#: internally); everything else ran one at a time.
+_CONCURRENT_READS = frozenset(
+    {"get_ports", "get_switch_detail", "get_ap_detail", "get_gateway_detail"}
+)
+
+_ReadKey = tuple[str, tuple[Any, ...]]
+
+
+class _NotReadAhead(LookupError):
+    """The write phase asked for a read the read phase did not make."""
+
+
+class _ReplayAdapter:
+    """Serves the deep sync's writes from reads already made, never the device."""
+
+    def __init__(self, reads: dict[_ReadKey, tuple[bool, Any]], names: set[str]) -> None:
+        self._reads = reads
+        self._names = names
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_") or name not in self._names:
+            raise AttributeError(name)
+
+        async def _replay(*args: Any, **kwargs: Any) -> Any:
+            key = (name, args)
+            if kwargs or key not in self._reads:
+                raise _NotReadAhead(f"{name}{args} was not read before the write phase")
+            ok, value = self._reads[key]
+            if not ok:
+                raise value
+            return value
+
+        return _replay
+
+
+def _planned_reads(
+    adapter: Any,
+    mac_to_device: dict[str, Device],
+    *,
+    sync_ports: bool,
+    sync_networks: bool,
+    sync_wifi: bool,
+    sync_profiles: bool,
+    sync_lags: bool,
+    sync_topology: bool,
+    sync_clients: bool,
+) -> list[_ReadKey]:
+    """The reads the write phase will ask for, in the order it asks.
+
+    Mirrors each ``_sync_*`` section's own calls, including its ``hasattr``
+    guards, so the device receives the same requests it always did.
+    """
+    has = {name for name in _DEEP_SYNC_READS if hasattr(adapter, name)}
+    switches = [d for d in mac_to_device.values() if d.device_type == DeviceType.SWITCH]
+    plan: list[_ReadKey] = []
+    seen: set[_ReadKey] = set()
+
+    def add(name: str, *args: Any) -> None:
+        key = (name, args)
+        if name in has and key not in seen:
+            seen.add(key)
+            plan.append(key)
+
+    if sync_ports:
+        for dev in switches:
+            add("get_ports", dev.mac_address)
+    if sync_networks:
+        add("get_vlans")
+    if sync_wifi:
+        add("get_ssids")
+    if sync_profiles:
+        add("get_port_profiles")
+    if sync_lags:
+        for dev in switches:
+            add("get_switch_lag_groups", dev.mac_address)
+    if sync_topology:
+        add("get_topology_data")
+    if sync_clients:
+        add("get_clients")
+    for mac, dev in mac_to_device.items():
+        if dev.device_type == DeviceType.SWITCH:
+            add("get_switch_detail", mac)
+        elif dev.device_type == DeviceType.ACCESS_POINT:
+            add("get_ap_detail", mac)
+        elif dev.device_type in (DeviceType.ROUTER, DeviceType.GATEWAY):
+            add("get_gateway_detail", mac)
+    add("get_controller_status")
+    add("get_system_info")
+    add("get_firmware_overview")
+    return plan
+
+
+async def _read_ahead(adapter: Any, plan: list[_ReadKey]) -> dict[_ReadKey, tuple[bool, Any]]:
+    """Make every planned read. Touches no database state."""
+    reads: dict[_ReadKey, tuple[bool, Any]] = {}
+
+    async def _one(name: str, args: tuple[Any, ...]) -> None:
+        try:
+            reads[(name, args)] = (True, await getattr(adapter, name)(*args))
+        except Exception as exc:  # noqa: BLE001 - replayed to the section, which decides
+            reads[(name, args)] = (False, exc)
+
+    # In plan order, as the sections asked: a run of per-device reads goes out
+    # together (as each section's own gather did), everything else one by one.
+    batch: list[_ReadKey] = []
+    for name, args in [*plan, ("", ())]:
+        if batch and (name != batch[0][0] or name not in _CONCURRENT_READS):
+            await asyncio.gather(*(_one(n, a) for n, a in batch))
+            batch = []
+        if not name:
+            break
+        if name in _CONCURRENT_READS:
+            batch.append((name, args))
+        else:
+            await _one(name, args)
+    return reads
+
+
 async def deep_sync_controller(
     session: AsyncSession,
     adapter: Any,  # BaseAdapter (connected)
@@ -115,29 +273,58 @@ async def deep_sync_controller(
 
     ``adapter`` must already be connected (inside ``async with adapter:``).
     Returns a summary dict.
+
+    Three phases, and NO database transaction is open during the second:
+
+    1. read this controller's devices, then COMMIT;
+    2. make every adapter read the sections need (ports, VLANs, SSIDs,
+       profiles, LAGs, topology, clients, details, metadata, firmware);
+    3. run the sections' writes against those answers (``_ReplayAdapter``),
+       never the device.
+
+    The sections used to interleave their reads with their writes inside one
+    transaction, so a slow controller (minutes for a large Omada site) held a
+    transaction, its row locks and, behind PgBouncer, a server connection the
+    whole time.
     """
+    flags = {
+        "sync_ports": sync_ports,
+        "sync_networks": sync_networks,
+        "sync_wifi": sync_wifi,
+        "sync_profiles": sync_profiles,
+        "sync_lags": sync_lags,
+        "sync_topology": sync_topology,
+        "sync_clients": sync_clients,
+    }
+    plan = _planned_reads(adapter, await _mac_index(session, controller), **flags)
+    await session.commit()
+    reads = await _read_ahead(adapter, plan)
+    replay = _ReplayAdapter(reads, {name for name in _DEEP_SYNC_READS if hasattr(adapter, name)})
+    return await _write_deep_sync(session, replay, controller, site_id, **flags)
+
+
+async def _write_deep_sync(
+    session: AsyncSession,
+    adapter: Any,
+    controller: Controller,
+    site_id: UUID,
+    *,
+    sync_ports: bool,
+    sync_networks: bool,
+    sync_wifi: bool,
+    sync_profiles: bool,
+    sync_lags: bool,
+    sync_topology: bool,
+    sync_clients: bool,
+) -> dict[str, Any]:
+    """Phase 3 of ``deep_sync_controller``: every section's writes."""
     summary: dict[str, Any] = {
         "controller_id": str(controller.id),
         "site_id": str(site_id),
     }
 
     # Build device lookup  mac → Device  for this controller
-    result = await session.execute(
-        select(Device).where(
-            Device.controller_id == controller.id,
-            Device.deleted_at.is_(None),
-        )
-    )
-    devices = result.scalars().all()
-    mac_to_device: dict[str, Device] = {}
-    for d in devices:
-        if d.mac_address:
-            key = d.mac_address.upper().replace("-", ":").replace(".", ":")
-            mac_to_device[key] = d
-            # Also store raw uppercase key for exact match
-            raw_key = d.mac_address.upper()
-            if raw_key != key:
-                mac_to_device[raw_key] = d
+    mac_to_device = await _mac_index(session, controller)
 
     # --- Switch Ports -----------------------------------------------
     if sync_ports:

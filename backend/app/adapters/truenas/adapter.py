@@ -19,6 +19,7 @@ import logging
 import re
 from typing import Any, ClassVar
 
+from app.adapters.apply_context import FORCE_DOES_NOT_LIFT_READ_ONLY, read_only_refuses_write
 from app.adapters.base import (
     AdapterManifest,
     AdapterResult,
@@ -31,6 +32,7 @@ from app.adapters.exceptions import (
     AdapterAuthenticationError,
     AdapterConnectionError,
     AdapterError,
+    AdapterReadOnlyError,
 )
 from app.adapters.truenas.client import TrueNASClient
 from app.adapters.truenas.models import (
@@ -76,6 +78,26 @@ def _validate_filename(name: str) -> str:
     if not _SEGMENT_RE.match(n):
         raise AdapterError(f"unsafe filename: {name!r}")
     return n
+
+
+def _refuse_if_read_only(action: str) -> None:
+    """Apply the shared read-only rule to the force-gated management writes.
+
+    Every other adapter's write gate refuses while ``ADAPTER_READ_ONLY`` is on
+    unless the call runs inside an approved staged apply; this one checked only
+    ``force``, so the lock rested entirely on every caller being the staged
+    applier. The backup data plane (``put_data_file`` and friends) is not
+    routed here: it writes FreeSDN's own artifacts into a dataset the operator
+    nominated, not device configuration.
+    """
+    from app.core.runtime_flags import is_adapter_read_only
+
+    if read_only_refuses_write(is_adapter_read_only()):
+        raise AdapterReadOnlyError(
+            f"ADAPTER_READ_ONLY is set — TrueNAS {action} refused outside an approved "
+            "staged apply." + FORCE_DOES_NOT_LIFT_READ_ONLY,
+            adapter_id="truenas",
+        )
 
 
 class TrueNASAdapter(BaseAdapter):
@@ -468,6 +490,7 @@ class TrueNASAdapter(BaseAdapter):
         """
         if not force:
             raise AdapterError("TrueNAS write refused: staging force-gate not set")
+        _refuse_if_read_only("upload")
         if self._transport != "ws" or not hasattr(self._api, "upload_blob"):
             raise AdapterError("TrueNAS upload requires the WS JSON-RPC transport (25.04+)")
 
@@ -734,3 +757,4 @@ class TrueNASAdapter(BaseAdapter):
         """
         if not force:
             raise AdapterError("TrueNAS write refused: staging force-gate not set")
+        _refuse_if_read_only("write")

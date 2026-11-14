@@ -163,7 +163,9 @@ async def test_cancellation_is_not_converted(wire):
 async def test_retry_diagnostics_do_not_log_private_device_text(wire, monkeypatch, caplog):
     adapter, state = wire
     adapter._api.max_retries = 3
-    state["error"] = httpx.ReadTimeout(SECRET)
+    # A dropped connection, not a timeout: io_policy never retries a timeout, and
+    # this test is about what the RETRY path logs.
+    state["error"] = httpx.RemoteProtocolError(SECRET)
 
     async def no_delay(_delay):
         return None

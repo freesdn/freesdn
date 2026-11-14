@@ -4231,6 +4231,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/backups/database-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Database Backup Status
+         * @description State of the encrypted PostgreSQL/LogDB dumps made by the pg-backup service.
+         *
+         *     This is the instance's disaster-recovery backup (every organization's data), so
+         *     only an unscoped administrator may read it. On a fresh install it reports
+         *     ``disabled`` / ``no_key`` until a public key is installed with
+         *     ``scripts/backup-keygen.sh``; the API cannot install a key itself, by design,
+         *     so a compromised web session can never redirect where backups are encrypted to.
+         */
+        get: operations["get_database_backup_status_api_v1_backups_database_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/backups/export": {
         parameters: {
             query?: never;
@@ -6960,6 +6986,149 @@ export interface paths {
          *     anything, at INFO, inside the collector container.
          */
         get: operations["collector_status_api_v1_collector_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/config-backups/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Config Backup Targets
+         * @description Every device whose configuration FreeSDN backs up, with its last outcome.
+         */
+        get: operations["list_config_backup_targets_api_v1_config_backups__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/config-backups/{target_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Config Backup Target
+         * @description Enable/disable, change the cadence (6-168 h) or the versions kept (1-365).
+         */
+        patch: operations["update_config_backup_target_api_v1_config_backups__target_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/config-backups/{target_id}/capture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Capture Config Now
+         * @description Queue ONE read-only export now. Refused while one runs or within 10 minutes
+         *     of the last attempt, so a button cannot hammer the device.
+         */
+        post: operations["capture_config_now_api_v1_config_backups__target_id__capture_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/config-backups/{target_id}/versions/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Config Versions */
+        get: operations["list_config_versions_api_v1_config_backups__target_id__versions__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/config-backups/{target_id}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Config Version
+         * @description The configuration with every secret-looking value replaced by a fingerprint.
+         */
+        get: operations["get_config_version_api_v1_config_backups__target_id__versions__version__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/config-backups/{target_id}/versions/{version}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Diff Config Version
+         * @description Unified diff of two REDACTED renderings (a changed secret shows as a
+         *     changed fingerprint, never as its value).
+         */
+        get: operations["diff_config_version_api_v1_config_backups__target_id__versions__version__diff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/config-backups/{target_id}/versions/{version}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Config Version
+         * @description The UNREDACTED export, for restoring through the vendor's own UI.
+         *
+         *     It carries every secret on the device, so it is gated like the live
+         *     config-download endpoints and audit-logged before decryption; if the audit
+         *     entry cannot be written the download is refused.
+         */
+        get: operations["download_config_version_api_v1_config_backups__target_id__versions__version__download_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -21101,11 +21270,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Direct Omada v2 API passthrough. Use only when no typed endpoint exists. Writes are gated by OMADA_READ_ONLY + force.
-         * @description Forward an arbitrary v2 call to the controller.
+         * Direct Omada v2 API passthrough. Use only when no typed endpoint exists. Read-only: only GET is forwarded.
+         * @description Forward an arbitrary v2 GET to the controller, redacted.
          *
-         *     Reads run live. Writes refuse unless ``OMADA_READ_ONLY=false`` AND
-         *     ``force=true`` — same dual-gate as ``apply_change``.
+         *     Writes are refused: they would bypass staging, confirmation and the
+         *     device slot. Site-limited callers are refused: the upstream site id in the
+         *     path cannot be checked against their FreeSDN site grants.
          */
         post: operations["raw_call_api_v1_gateway_raw__controller_id__call_post"];
         delete?: never;
@@ -26728,6 +26898,10 @@ export interface paths {
         /**
          * Delete Organization
          * @description Soft delete organization (super admin only).
+         *
+         *     Signs out every member at once. Super admins are not signed out (they
+         *     manage every organization), and the organization holding the last active
+         *     super admin cannot be deleted.
          */
         delete: operations["delete_organization_api_v1_organizations__org_id__delete"];
         options?: never;
@@ -29624,15 +29798,16 @@ export interface paths {
         };
         /**
          * Get Adapter Read Only State
-         * @description Current effective write-safety state (runtime override, else env default).
+         * @description Current write-safety mode, with the environment and the Settings switch.
          */
         get: operations["get_adapter_read_only_state_api_v1_system_settings_adapter_read_only_get"];
         /**
          * Set Adapter Read Only State
-         * @description Flip the platform write-safety mode LIVE (no restart) — super-admin only.
+         * @description Turn the Settings read-only switch on or off, live (no restart). Super admin only.
          *
-         *     Persisted as a runtime override in Redis (the env var stays the durable
-         *     default). Propagates to every worker's gate within a few seconds.
+         *     Saved in the database, then pushed to every process through Valkey. Refused
+         *     with 409 when asked to turn read-only off while ``ADAPTER_READ_ONLY`` is set
+         *     in the server environment: the Settings switch cannot override it.
          */
         put: operations["set_adapter_read_only_state_api_v1_system_settings_adapter_read_only_put"];
         post?: never;
@@ -30709,10 +30884,12 @@ export interface paths {
         put?: never;
         /**
          * Bulk Firmware Upgrade
-         * @description Schedule bulk firmware upgrade for multiple phones.
+         * @description Record a firmware target (and optional time) for multiple phones.
          *
-         *     Requires the ``site_admin`` role — firmware operations are
-         *     irreversible and brick-the-fleet risky.
+         *     This does not upgrade anything: nothing reads the stored target to push
+         *     firmware, so the response says so instead of reporting an upgrade as
+         *     scheduled. The target feeds firmware compliance. Requires the
+         *     ``site_admin`` role.
          */
         post: operations["bulk_firmware_upgrade_api_v1_voip_fleet_bulk_firmware_post"];
         delete?: never;
@@ -32774,8 +32951,15 @@ export interface paths {
          *     FreeSDN is capless by default (no privileged VPN sidecar). The frontend reads
          *     this to render an honest state — e.g. a "VPN sidecar not deployed" banner when
          *     the module is enabled but the infra component isn't running — instead of empty
-         *     or erroring widgets. PURE / best-effort: it only reads env + checks for the
-         *     control socket / tun device; it never shells out, so it can't 500.
+         *     or erroring widgets. PURE / best-effort: it only reads env, connects to the
+         *     control socket and checks for the tun device; it never shells out, so it
+         *     can't 500.
+         *
+         *     ``sidecar_reachable`` means tailscaled accepts a connection on its LocalAPI
+         *     socket (the runtime container, or the vpn sidecar). It used to mean the
+         *     socket FILE exists, and a killed or crashed tailscaled leaves that file
+         *     behind, so a dead daemon read as reachable. The connect takes milliseconds
+         *     and is the same check the Tailscale status reads make before running the CLI.
          */
         get: operations["get_vpn_runtime_api_v1_vpn_runtime_get"];
         put?: never;
@@ -33351,6 +33535,10 @@ export interface paths {
         /**
          * Teardown Tunnel
          * @description Tear down (delete) a site-to-site VPN tunnel.
+         *
+         *     The tunnel is removed from both gateways first (204 when it is gone). When
+         *     a gateway refuses, or read-only mode is on, FreeSDN keeps the tunnel and
+         *     answers 200 ``{"success": false, "record_kept": true, "reason": ...}``.
          */
         delete: operations["teardown_tunnel_api_v1_vpn_tunnels__tunnel_id__delete"];
         options?: never;
@@ -33975,6 +34163,10 @@ export interface paths {
         /**
          * Apply Profile To Device
          * @description Apply a provisioning profile to an existing device.
+         *
+         *     Writes the device's configuration, so like every device write it is refused
+         *     while read-only mode is on and needs ``force=true``; it is recorded in the
+         *     staging ledger (``direct.ztp.profile_apply``).
          */
         post: operations["apply_profile_to_device_api_v1_ztp_profiles__profile_id__apply__device_id__post"];
         delete?: never;
@@ -34509,10 +34701,51 @@ export interface components {
         };
         /**
          * AdapterReadOnlyState
-         * @description Platform write-safety mode. read_only=true ⇒ device writes are refused
-         *     (monitor-only); false ⇒ read-write (manage). One switch, two states.
+         * @description Platform write-safety mode, with both of its sources.
+         *
+         *     ``read_only`` is what is in force: true means device writes are refused
+         *     (monitor-only). It is true when EITHER source says so:
+         *
+         *     * ``env_read_only``: ``ADAPTER_READ_ONLY`` in the server environment. Only a
+         *       change to the environment (and a restart) can turn it off.
+         *     * ``setting_read_only``: the Settings switch, stored in the database.
+         *       ``null`` when it could not be read, in which case writes are refused.
+         *
+         *     ``enforced_by`` names the source in force: ``environment``, ``setting``,
+         *     ``environment_and_setting``, ``unverified`` (the switch could not be read,
+         *     so writes are refused to be safe) or ``none`` (read-write).
          */
         AdapterReadOnlyState: {
+            /**
+             * Can Disable
+             * @default true
+             */
+            can_disable: boolean;
+            /**
+             * Enforced By
+             * @default none
+             * @enum {string}
+             */
+            enforced_by: "environment" | "setting" | "environment_and_setting" | "unverified" | "none";
+            /**
+             * Env Read Only
+             * @default false
+             */
+            env_read_only: boolean;
+            /** Propagated */
+            propagated?: boolean | null;
+            /** Read Only */
+            read_only: boolean;
+            /** Setting Read Only */
+            setting_read_only?: boolean | null;
+            /** Setting Updated At */
+            setting_updated_at?: string | null;
+        };
+        /**
+         * AdapterReadOnlyUpdate
+         * @description Requested state of the Settings read-only switch.
+         */
+        AdapterReadOnlyUpdate: {
             /** Read Only */
             read_only: boolean;
         };
@@ -37152,17 +37385,11 @@ export interface components {
          * @description Bulk connect — set credentials and fully connect selected phones.
          */
         BulkConnectRequest: {
-            /**
-             * Password
-             * @default admin
-             */
+            /** Password */
             password: string;
             /** Phone Ids */
             phone_ids: string[];
-            /**
-             * Username
-             * @default admin
-             */
+            /** Username */
             username: string;
         };
         /**
@@ -39238,6 +39465,75 @@ export interface components {
             /** Value */
             value: string | number | boolean | unknown[];
         };
+        /** ConfigBackupTargetResponse */
+        ConfigBackupTargetResponse: {
+            /** Capture Running */
+            capture_running: boolean;
+            /** Consecutive Failures */
+            consecutive_failures: number;
+            /** Display Name */
+            display_name: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Interval Hours */
+            interval_hours: number;
+            /** Last Attempt At */
+            last_attempt_at: string | null;
+            /** Last Changed At */
+            last_changed_at: string | null;
+            /** Last Error Code */
+            last_error_code: string | null;
+            /** Last Status */
+            last_status: string;
+            /** Last Success At */
+            last_success_at: string | null;
+            /** Latest Captured At */
+            latest_captured_at: string | null;
+            /** Latest Version */
+            latest_version: number | null;
+            /** Next Due At */
+            next_due_at: string | null;
+            /** Retention Versions */
+            retention_versions: number;
+            /** Site Id */
+            site_id: string | null;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /** Source Kind */
+            source_kind: string;
+            /** Vendor */
+            vendor: string;
+        };
+        /** ConfigBackupTargetUpdate */
+        ConfigBackupTargetUpdate: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Interval Hours */
+            interval_hours?: number | null;
+            /** Retention Versions */
+            retention_versions?: number | null;
+        };
+        /** ConfigCaptureAccepted */
+        ConfigCaptureAccepted: {
+            /**
+             * Status
+             * @default queued
+             */
+            status: string;
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+        };
         /** ConfigDiffOut */
         ConfigDiffOut: {
             /** Added */
@@ -39270,6 +39566,88 @@ export interface components {
             version_b: {
                 [key: string]: unknown;
             };
+        };
+        /** ConfigDiffResponse */
+        ConfigDiffResponse: {
+            /** Added */
+            added: number;
+            /** From Version */
+            from_version: number | null;
+            /** Lines */
+            lines: string[];
+            /**
+             * Redacted
+             * @default true
+             */
+            redacted: boolean;
+            /** Removed */
+            removed: number;
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+            /** To Version */
+            to_version: number;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** ConfigSnapshotContentResponse */
+        ConfigSnapshotContentResponse: {
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Content */
+            content: string;
+            /** Format */
+            format: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Redacted
+             * @default true
+             */
+            redacted: boolean;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Summary */
+            summary: {
+                [key: string]: number;
+            } | null;
+            /** Trigger */
+            trigger: string;
+            /** Version */
+            version: number;
+        };
+        /** ConfigSnapshotResponse */
+        ConfigSnapshotResponse: {
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Format */
+            format: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Summary */
+            summary: {
+                [key: string]: number;
+            } | null;
+            /** Trigger */
+            trigger: string;
+            /** Version */
+            version: number;
         };
         /** ConfigTemplateResponse */
         ConfigTemplateResponse: {
@@ -41000,6 +41378,39 @@ export interface components {
             total_imports: number;
         };
         /**
+         * DatabaseBackupStatusResponse
+         * @description State of the pg-backup database dumps (instance-wide, not per org).
+         */
+        DatabaseBackupStatusResponse: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Encrypted */
+            encrypted?: boolean | null;
+            /** Last Success At */
+            last_success_at?: string | null;
+            /** Max Age Seconds */
+            max_age_seconds?: number | null;
+            /** Reason */
+            reason?: string | null;
+            /** Setup Command */
+            setup_command?: string | null;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "ok" | "warning" | "critical";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "healthy" | "unencrypted" | "pending" | "unknown" | "disabled" | "failing" | "stale";
+        };
+        /**
          * DatabaseCheckResponse
          * @description Database check response.
          */
@@ -41979,7 +42390,7 @@ export interface components {
              * @default false
              */
             auto_onboard: boolean;
-            /** @description Credentials for phone web UI login during discovery. Defaults to admin/admin if omitted. */
+            /** @description Credentials for phone web UI login during discovery. Without them the scan only identifies phones and never attempts a login. */
             credentials?: components["schemas"]["PhoneCredentials"] | null;
             /**
              * Default Template Id
@@ -42006,6 +42417,12 @@ export interface components {
              * @description CIDR subnet to scan, e.g. 192.168.1.0/24
              */
             subnet?: string | null;
+            /**
+             * Try Default Credentials
+             * @description Also try the phones' factory default login (admin/admin). Off by default: a failed login counts toward the phone's admin lockout.
+             * @default false
+             */
+            try_default_credentials: boolean;
         };
         /**
          * DiskInfo
@@ -50889,10 +51306,7 @@ export interface components {
              * @description Phone IP address. If omitted, uses the phone's stored IP.
              */
             ip_address?: string | null;
-            /**
-             * Password
-             * @default admin
-             */
+            /** Password */
             password: string;
             /**
              * Save Credentials
@@ -50900,10 +51314,7 @@ export interface components {
              * @default false
              */
             save_credentials: boolean;
-            /**
-             * Username
-             * @default admin
-             */
+            /** Username */
             username: string;
         };
         /**
@@ -51039,15 +51450,9 @@ export interface components {
          * @description Credentials for authenticating to phone web UIs during discovery.
          */
         PhoneCredentials: {
-            /**
-             * Password
-             * @default admin
-             */
+            /** Password */
             password: string;
-            /**
-             * Username
-             * @default admin
-             */
+            /** Username */
             username: string;
         };
         /**
@@ -52713,13 +53118,13 @@ export interface components {
             } | unknown[] | null;
             /**
              * Confirmed
-             * @description Required IN ADDITION to force for catastrophic / irreversible device commands (factory-reset, forget/unadopt, reboot, firmware upgrade). Mirrors the confirmed=true second factor the typed staging path enforces. Default-safe.
+             * @description Ignored. Raw writes are refused; use the staged Omada pages.
              * @default false
              */
             confirmed: boolean;
             /**
              * Force
-             * @description Required for write methods (POST/PUT/PATCH/DELETE) when OMADA_READ_ONLY is True. Default-safe.
+             * @description Ignored. Raw writes are refused; use the staged Omada pages.
              * @default false
              */
             force: boolean;
@@ -57101,6 +57506,11 @@ export interface components {
             last_test_message?: string | null;
             /** Last Test Status */
             last_test_status?: string | null;
+            /**
+             * Local Path Review Required
+             * @default false
+             */
+            local_path_review_required: boolean;
             /** Name */
             name: string;
             /** Storage Type */
@@ -72992,6 +73402,26 @@ export interface operations {
             };
         };
     };
+    get_database_backup_status_api_v1_backups_database_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackupStatusResponse"];
+                };
+            };
+        };
+    };
     export_config_api_v1_backups_export_get: {
         parameters: {
             query?: {
@@ -78492,6 +78922,222 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    list_config_backup_targets_api_v1_config_backups__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigBackupTargetResponse"][];
+                };
+            };
+        };
+    };
+    update_config_backup_target_api_v1_config_backups__target_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigBackupTargetUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigBackupTargetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capture_config_now_api_v1_config_backups__target_id__capture_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigCaptureAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_config_versions_api_v1_config_backups__target_id__versions__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigSnapshotResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_config_version_api_v1_config_backups__target_id__versions__version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                target_id: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigSnapshotContentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    diff_config_version_api_v1_config_backups__target_id__versions__version__diff_get: {
+        parameters: {
+            query?: {
+                /** @description Older version; default: the previous */
+                against?: number | null;
+            };
+            header?: never;
+            path: {
+                target_id: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigDiffResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_config_version_api_v1_config_backups__target_id__versions__version__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                target_id: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -115823,7 +116469,10 @@ export interface operations {
     };
     delete_vlan_api_v1_network_vlans__vlan_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Remove only FreeSDN's record and leave the controller unchanged (for a VLAN the controller refuses to delete or no longer manages). */
+                local_only?: boolean;
+            };
             header?: never;
             path: {
                 vlan_id: string;
@@ -116059,7 +116708,10 @@ export interface operations {
     };
     delete_wifi_api_v1_network_wifi__wifi_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Remove only FreeSDN's record and leave the controller unchanged (for an SSID the controller refuses to delete or no longer manages). */
+                local_only?: boolean;
+            };
             header?: never;
             path: {
                 wifi_id: string;
@@ -122843,7 +123495,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AdapterReadOnlyState"];
+                "application/json": components["schemas"]["AdapterReadOnlyUpdate"];
             };
         };
         responses: {
@@ -129249,7 +129901,10 @@ export interface operations {
     };
     teardown_tunnel_api_v1_vpn_tunnels__tunnel_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Remove only FreeSDN's record and leave both gateways unchanged (for a tunnel a gateway refuses to remove or that FreeSDN no longer reaches). */
+                local_only?: boolean;
+            };
             header?: never;
             path: {
                 tunnel_id: string;
@@ -130433,7 +131088,9 @@ export interface operations {
     };
     apply_profile_to_device_api_v1_ztp_profiles__profile_id__apply__device_id__post: {
         parameters: {
-            query?: never;
+            query?: {
+                force?: boolean;
+            };
             header?: never;
             path: {
                 profile_id: string;

@@ -72,6 +72,7 @@ from app.adapters.unifi.exceptions import (
     UniFiAuthError,
     UniFiConnectionError,
 )
+from app.core.http_client import build_async_client
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +203,7 @@ class UniFiClient:
                 self._req_extensions = {"sni_hostname": host}
         self.base_url = f"{scheme}://{pinned}:{port}"
 
-        self._client = httpx.AsyncClient(
+        self._client = build_async_client(
             base_url=self.base_url,
             verify=verify_ssl,
             headers=default_headers,

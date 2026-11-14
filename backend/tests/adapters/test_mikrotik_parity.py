@@ -23,6 +23,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.adapters.apply_context import apply_window
 from app.adapters.exceptions import AdapterError
 from app.adapters.mikrotik.client import MikroTikClient
 
@@ -203,10 +204,11 @@ class TestFirmwareDualGate:
 
     @pytest.mark.asyncio
     @patch("app.adapters.mikrotik.client._is_adapter_read_only", lambda: True)
-    async def test_allowed_with_force(self) -> None:
+    async def test_allowed_in_staged_apply(self) -> None:
         c, http = _client_with_mocked_http({})
         # Picks one representative — the gate is shared.
-        await c.set_update_channel("stable", force=True)
+        with apply_window():
+            await c.set_update_channel("stable", force=True)
         assert http.request.await_count == 1
 
 

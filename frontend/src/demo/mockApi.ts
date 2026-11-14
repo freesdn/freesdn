@@ -9,6 +9,7 @@ import type {
 import { APP_VERSION } from '@/lib/build-info';
 import { demoWriteMessage } from './mode';
 import { getDemoHypervisorDashboard, getDemoHypervisorFleetDashboard } from './hypervisorDashboard';
+import { demoCapabilityMaturity } from './capabilityMaturity';
 
 // The version the demo reports, derived -- never written down here. This was
 // hardcoded twice ('26.06.1-demo', then '26.10.0-demo') and both times Settings
@@ -1154,7 +1155,14 @@ async function routeGet(path: string, config: InternalAxiosRequestConfig) {
     // Keyed by the URL tail; an absent key degrades to {} so the detail
     // page's `?? []` renders an honest empty table instead of crashing.
     const bundle = gatewayLiveData[gatewaySub[1]] as AnyRecord | undefined;
-    if (bundle && gatewaySub[2] in bundle) return bundle[gatewaySub[2]] as AnyRecord;
+    if (bundle && gatewaySub[2] in bundle) {
+      // The live reads answer inside the gateway's envelope, and the detail
+      // page refuses an answer that does not name the gateway it asked
+      // (gatewayAggregateRead.ts / gatewaySystemRead.ts), so without it the
+      // demo showed "Gateway status is unavailable" on every overview panel.
+      const gw = firewallGateways.find((g) => g.id === gatewaySub[1]);
+      return { gateway_id: gatewaySub[1], vendor: gw?.vendor, ...(bundle[gatewaySub[2]] as AnyRecord) };
+    }
     return {};
   }
   const gatewayOne = path.match(/^\/firewall\/gateways\/([^/]+)$/);
@@ -1810,6 +1818,20 @@ async function routeGet(path: string, config: InternalAxiosRequestConfig) {
 
   // ── Backups: config snapshots, schedules, destinations, restore points ─
   if (path === '/backups/stats') return demoBackupStats;
+  // The pg-backup status card: a demo install with encrypted dumps working.
+  if (path === '/backups/database-status') {
+    return {
+      state: 'healthy',
+      severity: 'ok',
+      enabled: true,
+      encrypted: true,
+      reason: null,
+      last_success_at: iso(180),
+      max_age_seconds: 93600,
+      checked_at: iso(0),
+      setup_command: null,
+    };
+  }
   if (path === '/backups/storage-locations/types/supported') return demoBackupStorageTypes;
   if (path === '/backups/storage-locations') {
     return demoStorageLocations
@@ -2148,6 +2170,41 @@ async function routeGet(path: string, config: InternalAxiosRequestConfig) {
   }
   if (path === '/system/info') return { app: 'FreeSDN', version: DEMO_VERSION, environment: 'demo', demo: true };
   if (path === '/system/frontend-versions') return { react: '19', vite: '8', demo: 'true' };
+  // The demo refuses every write, so it is read-only, and must say so: the
+  // generic list stub had no `read_only` key, and Settings > Access then
+  // told demo visitors "Write access is ON".
+  if (path === '/system/settings/adapter-read-only') {
+    return {
+      read_only: true,
+      env_read_only: true,
+      setting_read_only: true,
+      enforced_by: 'environment_and_setting',
+      can_disable: false,
+      setting_updated_at: null,
+      propagated: null,
+    };
+  }
+  // Users: the generic stub left Settings > Users at "No users found" while
+  // the demo admin was signed in. Same people the rest of the demo refers to.
+  if (path === '/users' || path === '/users/') {
+    const u = (id: string, email: string, username: string, full_name: string, role: string, is_active: boolean, mfa: boolean, lastLoginMin: number | null) => ({
+      id, email, username, full_name, role, organization_id: demoIds.org, is_active, is_verified: true, mfa_enabled: mfa,
+      last_login: lastLoginMin === null ? null : iso(lastLoginMin), language: 'en', created_at: iso(43200), updated_at: iso(1440),
+    });
+    return paginated([
+      u(demoUser.id, demoUser.email, demoUser.username, demoUser.full_name, 'super_admin', true, false, 1),
+      u('10000000-0000-4000-8000-000000000002', 'front-desk@freesdn.local', 'front-desk', 'Front Desk (shared)', 'viewer', true, false, 95),
+      u('10000000-0000-4000-8000-000000000003', 'security@freesdn.local', 'secops', 'Security Operations', 'operator', true, true, 30),
+      u('10000000-0000-4000-8000-000000000004', 'auditor@freesdn.local', 'auditor', 'External Auditor (time limited)', 'viewer', false, true, 20160),
+      u('10000000-0000-4000-8000-000000000005', 'priya@freesdn.local', 'priya', 'Priya Nandakumar', 'org_admin', true, true, 52),
+      u('10000000-0000-4000-8000-000000000006', 'riley@freesdn.local', 'riley', 'Riley Okafor', 'operator', true, false, null),
+    ]);
+  }
+  if (path === '/capabilities/maturity') return demoCapabilityMaturity;
+  if (path.startsWith('/capabilities/maturity/')) {
+    const id = path.split('/')[3];
+    return demoCapabilityMaturity[id] ?? { maturity: 'experimental', title: id, notes: '' };
+  }
 
   if (path === '/organizations' || path === '/organizations/') return paginated(organizations);
   if (/^\/organizations\/[^/]+\/dashboard$/.test(path)) {
@@ -2459,6 +2516,11 @@ async function routeGet(path: string, config: InternalAxiosRequestConfig) {
   if (path === '/sla/summary') return { active_policies: 3, active_breaches: 1, avg_compliance_percent: 96.4, breaches_last_24h: 2, worst_policy: null };
   if (path === '/sla/policies' || path === '/sla/policies/') return { policies: [], total: 0 };
   if (path === '/sla/breaches' || path === '/sla/breaches/') return { breaches: [], total: 0 };
+  // The SLA Reports tab reads these envelopes; the generic list stub had no
+  // `reports` / `schedules` key and the tab crashed in the demo.
+  if (path === '/sla/reports' || path === '/sla/reports/') return { reports: [], total: 0 };
+  if (path === '/sla/report-schedules' || path === '/sla/report-schedules/') return { schedules: [], total: 0 };
+  if (/^\/sla\/reports\/[^/]+\/deliveries$/.test(path)) return [];
   if (path.startsWith('/enterprise') || path.startsWith('/sla') || path.startsWith('/alert-rules') || path.startsWith('/topology') || path.startsWith('/correlation')) return emptyList();
 
   if (path === '/agents/stats') return { total: 1, online: 1, offline: 0, error: 0, pending_approval: 0, by_type: { site: 1 }, by_platform: { linux: 1 } };

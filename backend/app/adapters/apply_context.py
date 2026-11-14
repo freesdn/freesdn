@@ -30,6 +30,31 @@ def in_apply_window() -> bool:
     return _apply_window.get()
 
 
+# Appended to a read-only refusal when the caller sent force=true, so the
+# operator learns why their explicit opt-in did not get through.
+FORCE_DOES_NOT_LIFT_READ_ONLY = " force=true alone does not lift read-only mode."
+
+
+def read_only_refuses_write(read_only: bool) -> bool:
+    """The one read-only rule every adapter write gate applies.
+
+    While ``ADAPTER_READ_ONLY`` is on, a device write is refused unless it runs
+    inside an approved staged apply (:func:`apply_window`). ``force=True`` does
+    NOT lift the lock. It is the explicit-intent flag for read-write mode, and
+    several callers send it unconditionally (the camera API, the hypervisor
+    power/clone/migrate buttons, the distribution engine's MikroTik
+    entrypoints), so letting it open the lock made monitor-only mode
+    meaningless: a "read-only" install still rebooted cameras and stopped VMs.
+
+    ``AdapterStagingService.apply_change`` refuses outright while read-only is
+    on and only then opens the window, so in practice the window matters only
+    when the runtime toggle flips mid-apply. Non-mutating POSTs (OPNsense
+    search/get, MikroTik and pfSense ping/traceroute/DNS) are classified as
+    reads by each client and never reach this rule.
+    """
+    return read_only and not in_apply_window()
+
+
 @contextlib.contextmanager
 def apply_window() -> Iterator[None]:
     """Mark the current task as inside an approved staged apply.

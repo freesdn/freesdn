@@ -24,6 +24,7 @@ from app.core.dependencies import (
     is_unscoped_superuser,
     require_permissions,
 )
+from app.core.http_client import build_async_client
 from app.core.site_access import assert_can_access_site, site_scope_filter
 from app.db import get_session
 from app.models import Credential, Device
@@ -598,7 +599,7 @@ async def test_credential(
                         request_options["extensions"] = {"sni_hostname": original_url.host}
                 # Retain CA configuration while excluding ambient proxies.
                 verify_context = httpx.create_ssl_context(verify=verify_ssl, trust_env=True)
-                async with httpx.AsyncClient(
+                async with build_async_client(
                     verify=verify_context, timeout=10, trust_env=False
                 ) as client:
                     async with client.stream(

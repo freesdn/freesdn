@@ -7,6 +7,15 @@ import { lazy } from 'react';
 import { Camera, Server, Layers, LayoutGrid, Monitor, BellRing, FileBarChart } from 'lucide-react';
 import type { FrontendModuleManifest } from '../types';
 
+// One lazy component per page, shared by every route that renders it. A
+// separate `lazy()` per route gave sibling routes (/cameras and /cameras/list,
+// /cameras/:id and /cameras/:id/:tab) different component types, so React
+// remounted the whole page on a tab click: a refetch, a loading flash, and the
+// loss of filters, selection and scroll position.
+const CamerasPage = lazy(() => import('@/pages/cameras/CamerasPage'));
+const NVRDetailPage = lazy(() => import('@/pages/cameras/NVRDetailPage'));
+const CameraDetailPage = lazy(() => import('@/pages/cameras/CameraDetailPage'));
+
 export const camerasModule: FrontendModuleManifest = {
   id: 'cameras',
   name: 'Cameras',
@@ -16,12 +25,12 @@ export const camerasModule: FrontendModuleManifest = {
   routes: [
     {
       path: '/cameras',
-      component: lazy(() => import('@/pages/cameras/CamerasPage')),
+      component: CamerasPage,
       title: 'Cameras',
     },
     {
       path: '/cameras/list',
-      component: lazy(() => import('@/pages/cameras/CamerasPage')),
+      component: CamerasPage,
       title: 'Cameras · List',
     },
     {
@@ -53,22 +62,22 @@ export const camerasModule: FrontendModuleManifest = {
     },
     {
       path: '/cameras/nvrs/:id',
-      component: lazy(() => import('@/pages/cameras/NVRDetailPage')),
+      component: NVRDetailPage,
       title: 'NVR Detail',
     },
     {
       path: '/cameras/nvrs/:id/:tab',
-      component: lazy(() => import('@/pages/cameras/NVRDetailPage')),
+      component: NVRDetailPage,
       title: 'NVR Detail',
     },
     {
       path: '/cameras/:id',
-      component: lazy(() => import('@/pages/cameras/CameraDetailPage')),
+      component: CameraDetailPage,
       title: 'Camera Detail',
     },
     {
       path: '/cameras/:id/:tab',
-      component: lazy(() => import('@/pages/cameras/CameraDetailPage')),
+      component: CameraDetailPage,
       title: 'Camera Detail',
     },
   ],

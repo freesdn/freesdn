@@ -823,7 +823,11 @@ class AutomationEngine:
 
         async def _handle_camera_motion_detection(params: dict[str, Any]) -> dict[str, Any]:
             from app.db import async_session_factory
-            from app.modules.cameras.api import _API_WRITE_FORCE, _get_adapter_for_camera
+            from app.modules.cameras.api import (
+                _API_WRITE_FORCE,
+                _camera_slot_key,
+                _get_adapter_for_camera,
+            )
 
             async with async_session_factory() as db:
                 cam, err = await _resolve_camera_for_action(
@@ -836,11 +840,34 @@ class AutomationEngine:
                     cfg = {"enabled": bool(params.get("enabled", True))}
                     if params.get("sensitivity_level") is not None:
                         cfg["sensitivity_level"] = int(params["sensitivity_level"])
-                    result = await adapter.set_motion_detection(
-                        config=cfg,
-                        channel=channel,
-                        force=_API_WRITE_FORCE,
-                    )
+                    from fastapi import HTTPException
+
+                    from app.services.device_writes import write_through_staging
+
+                    try:
+                        # Recorded in the staging ledger, refused in read-only
+                        # mode, like the same change made from the camera page.
+                        result = await write_through_staging(
+                            db,
+                            organization_id=cam.organization_id,
+                            controller_id=None,
+                            site_id=cam.site_id,
+                            slot_key=_camera_slot_key(cam, getattr(adapter, "host", None)),
+                            feature="camera.motion_detection.automation",
+                            operation="update",
+                            target_id=str(cam.id),
+                            payload=dict(cfg),
+                            perform=lambda: adapter.set_motion_detection(
+                                config=cfg,
+                                channel=channel,
+                                force=_API_WRITE_FORCE,
+                            ),
+                            force=_API_WRITE_FORCE,
+                            actor_id=None,
+                            return_failed_result=True,
+                        )
+                    except HTTPException as exc:
+                        return {"success": False, "error": str(exc.detail)}
                     return {"success": getattr(result, "success", True), "camera_id": str(cam.id)}
                 finally:
                     with contextlib.suppress(Exception):
@@ -848,7 +875,11 @@ class AutomationEngine:
 
         async def _handle_camera_reboot(params: dict[str, Any]) -> dict[str, Any]:
             from app.db import async_session_factory
-            from app.modules.cameras.api import _API_WRITE_FORCE, _get_adapter_for_camera
+            from app.modules.cameras.api import (
+                _API_WRITE_FORCE,
+                _camera_slot_key,
+                _get_adapter_for_camera,
+            )
 
             async with async_session_factory() as db:
                 cam, err = await _resolve_camera_for_action(
@@ -858,9 +889,23 @@ class AutomationEngine:
                     return {"success": False, "error": err}
                 adapter, _channel = await _get_adapter_for_camera(cam, db)
                 try:
-                    result = await adapter.reboot_device(
-                        device_id=str(cam.id),
-                        force=_API_WRITE_FORCE,
+                    from app.services.device_writes import audited_device_action
+
+                    result = await audited_device_action(
+                        db,
+                        action="reboot_device",
+                        slot_key=_camera_slot_key(cam, getattr(adapter, "host", None)),
+                        target_type="camera",
+                        target_id=cam.id,
+                        target_name=getattr(cam, "name", None),
+                        organization_id=cam.organization_id,
+                        site_id=cam.site_id,
+                        actor_id=None,
+                        parameters={"source": "automation"},
+                        perform=lambda: adapter.reboot_device(
+                            device_id=str(cam.id),
+                            force=_API_WRITE_FORCE,
+                        ),
                     )
                     return {"success": getattr(result, "success", True), "camera_id": str(cam.id)}
                 finally:

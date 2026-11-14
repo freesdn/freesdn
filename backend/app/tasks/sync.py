@@ -16,32 +16,37 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from app.adapters.base import AdapterResult
 from app.core.celery_app import celery_app
-from app.core.crypto import decrypt_credential, is_encrypted
-from app.core.events import EventType, org_id_for_site, publish_device_event
+from app.core.events import (
+    EventType,
+    org_id_for_site,
+    publish_controller_event,
+    publish_device_event,
+)
 from app.db.models import Controller, ControllerStatus, Device, DeviceStatus
 from app.db.session import CelerySessionLocal as AsyncSessionLocal
 from app.models.devices import normalize_device_status
-from app.services.adapter_factory import get_adapter
+from app.services.adapter_factory import adapter_device_id, build_adapter_for_controller
 
 logger = logging.getLogger(__name__)
 
 
-def _decrypt_if_needed(value: str | None) -> str:
-    """Return plaintext for encrypted controller secrets.
+def _status_payload(raw: Any) -> dict[str, Any]:
+    """``get_device_status``'s answer as a dict.
 
-    Raises ValueError if decryption fails — callers should handle this
-    to avoid connecting with empty/invalid credentials.
+    Most adapters return a dict. OPNsense, pfSense, MikroTik and OpenWrt return
+    an ``AdapterResult``, and the sync called ``.get()`` on it, so every status
+    poll of those appliances raised AttributeError. A successful result means
+    the appliance answered, which is all its status payload says about
+    reachability; a failed one is raised so the poll is recorded as failed and
+    the device's status is left alone.
     """
-    if not value:
-        return ""
-    if not is_encrypted(value):
-        return value
-    try:
-        return decrypt_credential(value)
-    except ValueError:
-        logger.error("Failed to decrypt credential — encryption key may have changed")
-        raise
+    if isinstance(raw, AdapterResult):
+        if not raw.success:
+            raise RuntimeError(raw.error or raw.message or "adapter reported a failure")
+        return {"status": DeviceStatus.ONLINE}
+    return raw if isinstance(raw, dict) else {}
 
 
 async def _sync_device_status(device_id: str) -> dict[str, Any]:
@@ -76,32 +81,23 @@ async def _sync_device_status(device_id: str) -> dict[str, Any]:
             }
 
         try:
-            # Build adapter kwargs from controller model
-            ctrl = device.controller
-            adapter_kwargs: dict[str, Any] = {
-                "port": ctrl.port,
-                "use_ssl": ctrl.use_ssl,
-                "verify_ssl": ctrl.verify_ssl,
-                "mode": ctrl.connection_mode,
-            }
+            # One assembly point for controller credentials (see
+            # build_adapter_for_controller): the per-task copies here passed no
+            # Proxmox API token, so a token-authenticated controller failed
+            # every one of these paths while discovery succeeded.
+            adapter = build_adapter_for_controller(device.controller)
 
-            if ctrl.connection_mode == "cloud":
-                adapter_kwargs["client_id"] = ctrl.client_id or ""
-                adapter_kwargs["client_secret"] = _decrypt_if_needed(ctrl.client_secret)
-                adapter_kwargs["omada_id"] = ctrl.omada_id or ""
-                adapter_kwargs["cloud_region"] = ctrl.cloud_region or ""
-
-            adapter = get_adapter(
-                ctrl.controller_type,
-                host=ctrl.host,
-                username=ctrl.username or "",
-                password=_decrypt_if_needed(ctrl.password),
-                **adapter_kwargs,
-            )
+            ident = adapter_device_id(device, device.controller.controller_type)
+            if ident is None:
+                return {
+                    "success": False,
+                    "device_id": str(device.id),
+                    "error": "Device has no identifier its controller's adapter can resolve",
+                }
 
             async with adapter:
                 # Get device status
-                status_data = await adapter.get_device_status(device.mac_address)
+                status_data = _status_payload(await adapter.get_device_status(ident))
 
             if status_data:
                 old_status = device.status
@@ -258,108 +254,137 @@ async def _sync_all_device_statuses(
         for dev in devices:
             by_controller[str(dev.controller_id)].append(dev)
 
+    from app.core.device_breaker import CLOSED, controller_breaker, controller_key
+    from app.core.device_slot import controller_slot_key, device_slots
+
     # Sync all devices for one controller through a single adapter connection
     semaphore = asyncio.Semaphore(_DEVICE_SYNC_CONCURRENCY)
 
-    async def _sync_controller_devices(ctrl_id: str, devs: list[Device]) -> list[dict[str, Any]]:
+    def _skipped(devs: list[Device], reason: str) -> list[dict[str, Any]]:
+        return [
+            {"success": False, "skipped": True, "device_id": str(d.id), "error": reason}
+            for d in devs
+        ]
+
+    async def _sync_group(slot_key: str, members: list[list[Device]]) -> list[dict[str, Any]]:
+        """Controllers on one box share its slot: one turn, one after another."""
         async with semaphore:
-            ctrl = devs[0].controller
-            results_list: list[dict[str, Any]] = []
+            out: list[dict[str, Any]] = []
+            live = []
+            for devs in members:
+                ctrl = devs[0].controller
+                if controller_breaker.peek(controller_key(ctrl.id)) != CLOSED:
+                    # The health check found it unreachable; it probes, we wait.
+                    out.extend(_skipped(devs, "Polling paused: controller unreachable"))
+                else:
+                    live.append(devs)
+            if not live:
+                return out
+            lease = await device_slots.acquire(slot_key, "device status sync")
+            if lease is None:
+                reason = await device_slots.abusy_reason(slot_key)
+                for devs in live:
+                    out.extend(_skipped(devs, reason))
+                return out
             try:
-                cloud_kwargs: dict[str, Any] = {}
-                if ctrl.connection_mode == "cloud":
-                    cloud_kwargs = {
-                        "client_id": ctrl.client_id or "",
-                        "client_secret": _decrypt_if_needed(ctrl.client_secret),
-                        "omada_id": ctrl.omada_id or "",
-                        "cloud_region": ctrl.cloud_region or "",
-                    }
-                adapter = get_adapter(
-                    ctrl.controller_type,
-                    host=ctrl.host,
-                    username=ctrl.username or "",
-                    password=_decrypt_if_needed(ctrl.password),
-                    port=ctrl.port,
-                    use_ssl=ctrl.use_ssl,
-                    verify_ssl=ctrl.verify_ssl,
-                    mode=ctrl.connection_mode or "local",
-                    **cloud_kwargs,
-                )
+                for devs in live:
+                    out.extend(await _sync_controller_devices(devs))
+            finally:
+                await device_slots.arelease(lease)
+            return out
 
-                async with adapter:
-                    for dev in devs:
-                        try:
-                            status_data = await adapter.get_device_status(dev.mac_address)
-                            async with AsyncSessionLocal() as sess:
-                                d = await sess.get(Device, dev.id)
-                                if not d:
-                                    results_list.append(
-                                        {
-                                            "success": False,
-                                            "device_id": str(dev.id),
-                                            "error": "not found",
-                                        }
-                                    )
-                                    continue
-                                old_status = d.status
-                                if status_data:
-                                    new_status = normalize_device_status(
-                                        status_data.get("status", d.status)
-                                    )
-                                    d.status = new_status
-                                    d.last_seen = datetime.now(UTC)
-                                    if "ip_address" in status_data:
-                                        d.ip_address = status_data["ip_address"]
-                                    if "uptime" in status_data:
-                                        d.uptime_seconds = status_data["uptime"]
-                                else:
-                                    new_status = DeviceStatus.OFFLINE
-                                    d.status = DeviceStatus.OFFLINE
-                                await sess.commit()
+    async def _sync_controller_devices(devs: list[Device]) -> list[dict[str, Any]]:
+        ctrl = devs[0].controller
+        ctrl_id = str(ctrl.id)
+        results_list: list[dict[str, Any]] = []
+        try:
+            adapter = build_adapter_for_controller(ctrl)
 
-                                if old_status != new_status:
-                                    d_org_id = await org_id_for_site(sess, d.site_id)
-                                    await publish_device_event(
-                                        EventType.DEVICE_STATUS_CHANGED,
-                                        device_id=str(d.id),
-                                        data={
-                                            "name": d.name,
-                                            "old_status": old_status,
-                                            "new_status": new_status,
-                                        },
-                                        device_type=d.device_type,
-                                        controller_id=str(d.controller_id),
-                                        site_id=str(d.site_id) if d.site_id else None,
-                                        organization_id=d_org_id,
-                                    )
-
+            async with adapter:
+                for dev in devs:
+                    ident = adapter_device_id(dev, ctrl.controller_type)
+                    if ident is None:
+                        results_list.append(
+                            {
+                                "success": False,
+                                "device_id": str(dev.id),
+                                "error": "no identifier its adapter can resolve",
+                            }
+                        )
+                        continue
+                    try:
+                        status_data = _status_payload(await adapter.get_device_status(ident))
+                        async with AsyncSessionLocal() as sess:
+                            d = await sess.get(Device, dev.id)
+                            if not d:
                                 results_list.append(
                                     {
-                                        "success": True,
-                                        "device_id": str(d.id),
-                                        "status": new_status,
-                                        "status_changed": old_status != new_status,
+                                        "success": False,
+                                        "device_id": str(dev.id),
+                                        "error": "not found",
                                     }
                                 )
-                        except Exception as e:
-                            logger.error("Error syncing device %s: %s", dev.id, e)
+                                continue
+                            old_status = d.status
+                            if status_data:
+                                new_status = normalize_device_status(
+                                    status_data.get("status", d.status)
+                                )
+                                d.status = new_status
+                                d.last_seen = datetime.now(UTC)
+                                if "ip_address" in status_data:
+                                    d.ip_address = status_data["ip_address"]
+                                if "uptime" in status_data:
+                                    d.uptime_seconds = status_data["uptime"]
+                            else:
+                                new_status = DeviceStatus.OFFLINE
+                                d.status = DeviceStatus.OFFLINE
+                            await sess.commit()
+
+                            if old_status != new_status:
+                                d_org_id = await org_id_for_site(sess, d.site_id)
+                                await publish_device_event(
+                                    EventType.DEVICE_STATUS_CHANGED,
+                                    device_id=str(d.id),
+                                    data={
+                                        "name": d.name,
+                                        "old_status": old_status,
+                                        "new_status": new_status,
+                                    },
+                                    device_type=d.device_type,
+                                    controller_id=str(d.controller_id),
+                                    site_id=str(d.site_id) if d.site_id else None,
+                                    organization_id=d_org_id,
+                                )
+
                             results_list.append(
-                                {"success": False, "device_id": str(dev.id), "error": str(e)}
+                                {
+                                    "success": True,
+                                    "device_id": str(d.id),
+                                    "status": new_status,
+                                    "status_changed": old_status != new_status,
+                                }
                             )
+                    except Exception as e:
+                        logger.error("Error syncing device %s: %s", dev.id, e)
+                        results_list.append(
+                            {"success": False, "device_id": str(dev.id), "error": str(e)}
+                        )
 
-            except Exception as e:
-                # Connection failed — mark all devices for this controller as failed
-                logger.error("Controller %s unreachable during sync: %s", ctrl_id, e)
-                for dev in devs:
-                    results_list.append(
-                        {"success": False, "device_id": str(dev.id), "error": str(e)}
-                    )
+        except Exception as e:
+            # Connection failed — mark all devices for this controller as failed
+            logger.error("Controller %s unreachable during sync: %s", ctrl_id, e)
+            for dev in devs:
+                results_list.append({"success": False, "device_id": str(dev.id), "error": str(e)})
 
-            return results_list
+        return results_list
 
-    # Run all controllers in parallel (bounded)
+    # Run all controllers in parallel (bounded), one turn per device slot
+    groups: dict[str, list[list[Device]]] = defaultdict(list)
+    for devs in by_controller.values():
+        groups[controller_slot_key(devs[0].controller)].append(devs)
     all_results = await asyncio.gather(
-        *(_sync_controller_devices(cid, devs) for cid, devs in by_controller.items()),
+        *(_sync_group(key, members) for key, members in groups.items()),
         return_exceptions=True,
     )
 
@@ -373,7 +398,8 @@ async def _sync_all_device_statuses(
             flat.extend(r)
 
     successful = [r for r in flat if r.get("success")]
-    failed = [r for r in flat if not r.get("success")]
+    skipped = [r for r in flat if r.get("skipped")]
+    failed = [r for r in flat if not r.get("success") and not r.get("skipped")]
     status_changes = [r for r in successful if r.get("status_changed")]
 
     return {
@@ -381,6 +407,7 @@ async def _sync_all_device_statuses(
         "devices_processed": total_devices,
         "devices_successful": len(successful),
         "devices_failed": len(failed),
+        "devices_skipped": len(skipped),
         "status_changes": len(status_changes),
     }
 
@@ -405,7 +432,7 @@ def sync_all_device_statuses(
         if organization_id
         else "sync_all_device_statuses"
     )
-    lock_token = acquire_solo_lock(lock_name, ttl_seconds=120)
+    lock_token = acquire_solo_lock(lock_name, ttl_seconds=360)
     if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:
@@ -481,7 +508,7 @@ def mark_stale_devices_offline() -> dict[str, Any]:
     """
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    lock_token = acquire_solo_lock("mark_stale_devices_offline", ttl_seconds=90)
+    lock_token = acquire_solo_lock("mark_stale_devices_offline", ttl_seconds=180)
     if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:
@@ -507,29 +534,14 @@ async def _sync_device_config(device_id: str) -> dict[str, Any]:
             return {"success": False, "error": "Device or controller not found"}
 
         try:
-            controller = device.controller
-            cloud_kwargs = {}
-            if controller.connection_mode == "cloud":
-                cloud_kwargs = {
-                    "client_id": controller.client_id or "",
-                    "client_secret": _decrypt_if_needed(controller.client_secret),
-                    "omada_id": controller.omada_id or "",
-                    "cloud_region": controller.cloud_region or "us",
-                }
-            adapter = get_adapter(
-                controller_type=controller.controller_type,
-                host=controller.host,
-                username=controller.username or "",
-                password=_decrypt_if_needed(controller.password),
-                port=controller.port,
-                use_ssl=controller.use_ssl,
-                verify_ssl=controller.verify_ssl,
-                mode=controller.connection_mode or "local",
-                **cloud_kwargs,
-            )
+            adapter = build_adapter_for_controller(device.controller)
+
+            ident = adapter_device_id(device, device.controller.controller_type)
+            if ident is None:
+                return {"success": False, "error": "Device has no adapter identifier"}
 
             async with adapter:
-                config = await adapter.get_device_config(device.mac_address)
+                config = await adapter.get_device_config(ident)
 
             if config:
                 device.device_metadata = config
@@ -563,11 +575,168 @@ def sync_device_config(device_id: str) -> dict[str, Any]:
 # =============================================================================
 
 
+#: One controller's probe: connect (= log in / open the session) and disconnect.
+_HEALTH_PROBE_TIMEOUT = 30.0
+_HEALTH_PROBE_CONCURRENCY = 5
+#: The health check owns REACHABILITY only. A probe that succeeds moves these to
+#: CONNECTED; it leaves ERROR and SYNCING alone, because discovery sets those
+#: about a reachable controller and only discovery can clear them.
+_RECOVERABLE_STATUSES = frozenset(
+    {
+        ControllerStatus.UNREACHABLE,
+        ControllerStatus.DISCONNECTED,
+        ControllerStatus.UNKNOWN,
+    }
+)
+
+
+#: What one probe costs the controller, per type. A probe used to be a full
+#: login and logout every run (2 minutes), whatever the type: about 720 logins
+#: a day per controller, each in the controller's own log.
+#:
+#: * Omada (local): the login session is KEPT between probes, in this process's
+#:   memory only, and a probe asks ``loginStatus`` (never creates a session);
+#:   it logs in again only when the controller says the session is gone.
+#: * OPNsense, pfSense, MikroTik, Hikvision, Grandstream and Proxmox with an API
+#:   token authenticate every request (API key, HTTP auth or token header): a
+#:   probe is one authenticated read and opens no session, so they stay on
+#:   every run.
+#: * Everything that has to log in for a probe (UniFi and UniFi Protect, Omada
+#:   cloud, OpenWrt's ubus session, Proxmox with a password ticket, TrueNAS's
+#:   API-key session, FreePBX, ONVIF's multi-call handshake) is probed at most
+#:   every ``CONTROLLER_LOGIN_PROBE_INTERVAL_SECONDS`` (300 s by default).
+_STATELESS_PROBE_TYPES = frozenset({"opnsense", "pfsense", "mikrotik", "hikvision", "grandstream"})
+
+#: Omada sessions kept between probes: {key: session_state()}. Process memory on
+#: purpose; a session cookie is a credential and is never written to Valkey.
+_KEPT_OMADA_SESSIONS: dict[str, dict[str, Any]] = {}
+
+_PROBE_WINDOW_PREFIX = "freesdn:ctrlprobe:"
+
+
+def _probe_spacing(ctrl: Any) -> float:
+    """Seconds between two probes of ``ctrl`` (0: every run). See above."""
+    from app.core.config import settings
+
+    kind = str(getattr(ctrl, "controller_type", "") or "").lower()
+    if kind in _STATELESS_PROBE_TYPES:
+        return 0.0
+    if kind in ("omada", "tplink_omada"):
+        mode = str(getattr(ctrl, "connection_mode", "local") or "local").lower()
+        return 0.0 if mode != "cloud" else float(settings.CONTROLLER_LOGIN_PROBE_INTERVAL_SECONDS)
+    if kind in ("proxmox", "pve") and (getattr(ctrl, "config", None) or {}).get("token_id"):
+        return 0.0
+    return float(settings.CONTROLLER_LOGIN_PROBE_INTERVAL_SECONDS)
+
+
+def _claim_probe_window(controller_id: Any, seconds: float) -> bool:
+    """Whether a probe of this controller may run now (shared by every worker).
+
+    Fails open: with Valkey unavailable the probe runs, as before.
+    """
+    if seconds <= 0:
+        return True
+    try:
+        from app.core.celery_app import _get_solo_redis
+
+        key = f"{_PROBE_WINDOW_PREFIX}{controller_id}"
+        return bool(_get_solo_redis().set(key, "1", nx=True, ex=max(1, int(seconds) - 5)))
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _omada_session_key(client: Any) -> str:
+    """The kept session belongs to one controller address AND one stored login,
+    so a changed password or address starts a new one."""
+    import hashlib
+
+    config = client.config
+    raw = f"{client.base_url}|{config.username}|{config.password}"
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+async def _probe_controller(adapter: Any) -> str | None:
+    """Can we reach and log in to the controller? ``None`` on success, else why not."""
+    return (await _probe_controller_outcome(adapter))[0]
+
+
+async def _probe_omada_keeping_session(adapter: Any) -> tuple[str | None, bool]:
+    """The Omada probe without a login per run (see ``_KEPT_OMADA_SESSIONS``)."""
+    from app.adapters import io_policy
+
+    client = adapter._client
+    key = _omada_session_key(client)
+    try:
+        kept = _KEPT_OMADA_SESSIONS.get(key)
+        if kept is not None:
+            if await asyncio.wait_for(client.resume_session(kept), timeout=_HEALTH_PROBE_TIMEOUT):
+                return None, False  # it answered, still logged in: no login sent
+            _KEPT_OMADA_SESSIONS.pop(key, None)  # logged out: log in again below
+        connected = await asyncio.wait_for(adapter.connect(), timeout=_HEALTH_PROBE_TIMEOUT)
+        if connected is False:
+            return "connect returned False", False
+        state = client.session_state()
+        if state is not None:
+            _KEPT_OMADA_SESSIONS[key] = state
+        return None, False
+    except Exception as e:  # noqa: BLE001 - every failure is a probe result
+        _KEPT_OMADA_SESSIONS.pop(key, None)
+        detail = str(e)
+        text = (f"{type(e).__name__}: {detail}" if detail else type(e).__name__)[:500]
+        return text, io_policy.is_device_failure(e)
+    finally:
+        # Never log out: the session is what the next probe resumes.
+        try:
+            await asyncio.wait_for(client.close_keeping_session(), timeout=10.0)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+async def _probe_controller_outcome(adapter: Any) -> tuple[str | None, bool]:
+    """``(why it failed or None, whether the controller itself did not answer)``.
+
+    A probe is the adapter's own connect -- for Omada the login, for Proxmox
+    the ticket or token check, for TrueNAS the authenticated WebSocket -- under
+    one deadline. It used to be ``adapter.get_devices()``, i.e. a FULL device
+    discovery of every controller every 2 minutes, run one controller after
+    another: a slow or recovering controller made the whole check overrun
+    while a recovered one waited its turn (2026-11 soak: Omada stayed
+    "unreachable" ~10 minutes after it answered again).
+    """
+    from app.adapters import io_policy
+    from app.adapters.omada.adapter import OmadaAdapter
+
+    if isinstance(adapter, OmadaAdapter) and adapter.connection_mode != "cloud":
+        return await _probe_omada_keeping_session(adapter)
+    try:
+        connected = await asyncio.wait_for(adapter.connect(), timeout=_HEALTH_PROBE_TIMEOUT)
+    except Exception as e:  # noqa: BLE001 - every failure is a probe result
+        detail = str(e)
+        text = (f"{type(e).__name__}: {detail}" if detail else type(e).__name__)[:500]
+        return text, io_policy.is_device_failure(e)
+    finally:
+        try:
+            await asyncio.wait_for(adapter.disconnect(), timeout=10.0)
+        except Exception:  # noqa: BLE001
+            pass
+    if connected is False:
+        return "connect returned False", False
+    return None, False
+
+
 async def _check_controller_health() -> dict[str, Any]:
+    """Probe every active controller; mark it unreachable or connected.
+
+    No database transaction is open while any controller is contacted: the
+    rows are read and the session closed, the probes run concurrently (bounded)
+    with a per-controller deadline, then the outcomes are written in one short
+    transaction. So a controller that answers again flips back to CONNECTED on
+    the very next run, whatever the others are doing.
     """
-    Check reachability / health of all controllers.
-    Marks controllers unreachable or reachable and publishes events.
-    """
+    from app.core.device_breaker import controller_breaker, controller_key
+    from app.core.device_slot import controller_slot_key, device_slots
+    from app.services.adapter_factory import build_adapter_for_controller
+
     async with AsyncSessionLocal() as session:
         result = await session.execute(
             select(Controller).where(
@@ -576,53 +745,129 @@ async def _check_controller_health() -> dict[str, Any]:
                 Controller.sync_enabled.is_(True),
             )
         )
-        controllers = result.scalars().all()
-
-        checked = 0
-        unreachable = 0
-
-        for ctrl in controllers:
-            checked += 1
+        targets: list[tuple[Any, str, str, Any, str]] = []
+        build_failures: dict[Any, str] = {}
+        spacing: dict[Any, float] = {}
+        for ctrl in result.scalars().all():
             try:
-                cloud_kwargs = {}
-                if ctrl.connection_mode == "cloud":
-                    cloud_kwargs = {
-                        "client_id": ctrl.client_id or "",
-                        "client_secret": _decrypt_if_needed(ctrl.client_secret),
-                        "omada_id": ctrl.omada_id or "",
-                        "cloud_region": ctrl.cloud_region or "us",
-                    }
-                adapter = get_adapter(
-                    controller_type=ctrl.controller_type,
-                    host=ctrl.host,
-                    username=ctrl.username or "",
-                    password=_decrypt_if_needed(ctrl.password),
-                    port=ctrl.port,
-                    use_ssl=ctrl.use_ssl,
-                    verify_ssl=ctrl.verify_ssl,
-                    mode=ctrl.connection_mode or "local",
-                    **cloud_kwargs,
-                )
-                async with adapter:
-                    # Simple connectivity probe – get system info / device list
-                    await adapter.get_devices()
-                if ctrl.status != ControllerStatus.CONNECTED:
-                    ctrl.status = ControllerStatus.CONNECTED
-                    ctrl.last_sync = datetime.now(UTC)
-            except Exception as e:
-                unreachable += 1
-                logger.warning("Controller %s (%s) unreachable: %s", ctrl.name, ctrl.host, e)
-                if ctrl.status != ControllerStatus.UNREACHABLE:
-                    ctrl.status = ControllerStatus.UNREACHABLE
-                    ctrl.last_error = str(e)
+                adapter = build_adapter_for_controller(ctrl)
+            except Exception as e:  # noqa: BLE001 - e.g. a secret that no longer decrypts
+                build_failures[ctrl.id] = f"{type(e).__name__}: {e}"[:500]
+                continue
+            targets.append((ctrl.id, ctrl.name, ctrl.host, adapter, controller_slot_key(ctrl)))
+            spacing[ctrl.id] = _probe_spacing(ctrl)
 
+    # Controllers on one box (two services on one host) share its slot, so they
+    # are probed one after another inside one turn instead of racing for it.
+    groups: dict[str, list[tuple[Any, str, str, Any, str]]] = {}
+    for target in targets:
+        groups.setdefault(target[4], []).append(target)
+
+    semaphore = asyncio.Semaphore(_HEALTH_PROBE_CONCURRENCY)
+    failures: dict[Any, str | None] = {}
+    skipped: dict[Any, str] = {}
+
+    async def _group(slot_key: str, members: list[tuple[Any, str, str, Any, str]]) -> None:
+        async with semaphore:
+            lease = await device_slots.acquire(slot_key, "controller health check")
+            if lease is None:
+                # Discovery, a status sync or a monitor is talking to it right
+                # now: that answer is as good as a probe. Try again next run.
+                reason = await device_slots.abusy_reason(slot_key)
+                for cid, *_ in members:
+                    skipped[cid] = reason
+                return
+            try:
+                for cid, _name, _host, adapter, _key in members:
+                    if not _claim_probe_window(cid, spacing.get(cid, 0.0)):
+                        # A probe of this type is a login; the last one was less
+                        # than its interval ago, and its answer stands.
+                        skipped[cid] = "probed recently"
+                        continue
+                    gate = controller_breaker.check(controller_key(cid))
+                    if not gate.allowed:
+                        skipped[cid] = gate.skip_message()
+                        continue
+                    error, device_failure = await _probe_controller_outcome(adapter)
+                    failures[cid] = error
+                    if error is None or not device_failure:
+                        # It answered (perhaps refusing the login): reachable.
+                        controller_breaker.record_success(controller_key(cid))
+                    else:
+                        controller_breaker.record_failure(controller_key(cid), error)
+            finally:
+                await device_slots.arelease(lease)
+
+    await asyncio.gather(*(_group(key, members) for key, members in groups.items()))
+    failures.update(build_failures)
+    names = {cid: (name, host) for cid, name, host, _, _ in targets}
+
+    unreachable = 0
+    recovered = 0
+    # (controller, event type, payload) to announce once the new status is
+    # committed. Nothing used to announce it at all: a controller dropping off
+    # the network flipped a status column and was otherwise silent.
+    transitions: list[tuple[Any, str, dict[str, Any]]] = []
+    async with AsyncSessionLocal() as session:
+        rows = (
+            (await session.execute(select(Controller).where(Controller.id.in_(list(failures)))))
+            .scalars()
+            .all()
+        )
+        for ctrl in rows:
+            if ctrl.id not in failures:
+                continue  # not probed this run (busy or paused): nothing learned
+            error = failures.get(ctrl.id)
+            previous = ctrl.status
+            if error is None:
+                if ctrl.status in _RECOVERABLE_STATUSES or ctrl.status is None:
+                    ctrl.status = ControllerStatus.CONNECTED
+                    ctrl.last_error = None
+                    recovered += 1
+                    if previous == ControllerStatus.UNREACHABLE:
+                        transitions.append(
+                            (ctrl, EventType.CONTROLLER_RECOVERED, {"previous_status": previous})
+                        )
+                continue
+            unreachable += 1
+            name, host = names.get(ctrl.id, (ctrl.name, ctrl.host))
+            logger.warning("Controller %s (%s) unreachable: %s", name, host, error)
+            if ctrl.status != ControllerStatus.UNREACHABLE:
+                transitions.append(
+                    (
+                        ctrl,
+                        EventType.CONTROLLER_UNREACHABLE,
+                        # The class name only: adapter exception text can carry
+                        # hostnames, URLs or response bodies.
+                        {"previous_status": previous, "error": error.split(":", 1)[0]},
+                    )
+                )
+            if ctrl.status != ControllerStatus.UNREACHABLE or ctrl.last_error != error:
+                ctrl.status = ControllerStatus.UNREACHABLE
+                ctrl.last_error = error
         await session.commit()
 
-        return {
-            "success": True,
-            "checked": checked,
-            "unreachable": unreachable,
-        }
+        for ctrl, event_type, extra in transitions:
+            try:
+                await publish_controller_event(
+                    event_type,
+                    controller_id=str(ctrl.id),
+                    organization_id=await org_id_for_site(session, ctrl.site_id),
+                    name=ctrl.name,
+                    controller_type=ctrl.controller_type,
+                    site_id=str(ctrl.site_id) if ctrl.site_id else None,
+                    **{k: str(getattr(v, "value", v)) for k, v in extra.items()},
+                )
+            except Exception:  # noqa: BLE001 - the status change is already stored
+                logger.warning("Could not publish %s for %s", event_type, ctrl.id, exc_info=True)
+
+    return {
+        "success": True,
+        "checked": len(failures),
+        "unreachable": unreachable,
+        "recovered": recovered,
+        "skipped": len(skipped),
+    }
 
 
 @celery_app.task(
@@ -637,7 +882,7 @@ def check_controller_health(self) -> dict[str, Any]:
     """
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    lock_token = acquire_solo_lock("sync.check_controller_health", ttl_seconds=180)
+    lock_token = acquire_solo_lock("sync.check_controller_health", ttl_seconds=360)
     if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "freesdn-backend"
-version = "26.11.0"
+version = "26.11.1"
 description = "FreeSDN - Unified Network Management Platform"
 license = "AGPL-3.0-only"
 authors = ["PyPV - Python Platform Ventures <contact@freesdn.org>"]
@@ -89,6 +89,12 @@ croniter = "6.2.4"
 # (GHSA-4m7w-qmgq-4wj5 TLS hostname reuse, GHSA-63hw-fmq6-xxg2 max_line_size,
 # plus 6 related low/medium fixes). Ships cp314 wheels.
 aiohttp = ">=3.14.4"        # floor is the PATCHED version: <=3.14.3 is CVE-2026-111063..111066, -111748..111750, GHSA-2g87-pp6c-29x5
+# SOCKS transports for VPN_MODE=userspace: every device client goes through the
+# tailscale container's SOCKS5 server (tailscale:1055). socksio is httpx's
+# "socks" extra; aiohttp-socks (with python-socks) is the aiohttp equivalent.
+# Without them app/core/http_client.py connects directly (88da63c4).
+socksio = ">=1.0.0"
+aiohttp-socks = ">=0.12.0"
 # Utilities
 # python-multipart 0.0.31: querystring-parsing DoS + Content-Disposition/2231
 # parameter-smuggling fixes (GHSA-5rvq-cxj2-64vf, GHSA-vffw-93wf-4j4q, GHSA-v9pg-7xvm-68hf).
@@ -109,7 +115,10 @@ pywebpush = ">=2.5.0"
 # Security pins for transitive dependencies (CVE fixes)
 # tornado: pulled by celery/flower. 6.5.7 fixes cross-origin credential leaks
 # (GHSA-3x9g-8vmp-wqvf, GHSA-pw6j-qg29-8w7f) + a gzip-bomb DoS (GHSA-mgf9-4vpg-hj56).
-tornado = ">=6.6"            # floor is the PATCHED version: <=6.5.10 is CVE-2026-115927, -116577, -116578
+# 6.6.1 (2026-11-09) is a security release with no advisory IDs yet: percent-decoding
+# DoS, open redirects in RedirectHandler and @addslash/@removeslash, a redirect hang
+# in SimpleAsyncHTTPClient, and NTFS alternate-data-stream serving on Windows.
+tornado = ">=6.6.1"          # floor is the PATCHED version: <=6.5.10 is CVE-2026-115927, -116577, -116578
 # pyasn1: pulled by ldap3 / pyasn1-modules (google-auth). 0.6.4 is CVE-2026-119194..119197.
 pyasn1 = ">=0.6.5"
 # pygments: pulled by various, CVE-2026-4539
@@ -135,7 +144,9 @@ prometheus-fastapi-instrumentator = ">=8.1.0,<9"
 reportlab = "5.1.0"
 
 [tool.poetry.group.dev.dependencies]
-pypdf = "6.21.4"             # dev only; >=6.21.4 fixes CVE-2026-119203..119209 (6.21.2 fixed CVE-2026-113786..113795, -115572/115580/115585)
+# pypdf 7.0.0 (2026-11-06) carries four upstream SEC fixes without advisory IDs yet:
+# object-stream offsets, XFA decode work, image size limits, random file identifiers.
+pypdf = "7.0.0"              # dev only; >=6.21.4 fixes CVE-2026-119203..119209 (6.21.2 fixed CVE-2026-113786..113795, -115572/115580/115585)
 types-reportlab = "5.1.0.20261104"
 pytest = ">=9.1.1"
 pytest-asyncio = ">=1.4.0"

@@ -41,6 +41,8 @@ def test_build_async_client_injects_proxy_only_when_userspace(monkeypatch):
         return object()
 
     monkeypatch.setattr(http_client.httpx, "AsyncClient", fake_client)
+    # With httpx's SOCKS support installed (see the fallback tests below).
+    monkeypatch.setattr(http_client, "_socks_support", lambda *_a: True)
 
     # off -> no proxy injected
     _clear_vpn_env(monkeypatch)
@@ -72,3 +74,62 @@ def test_build_aiohttp_session_no_connector_in_off_mode(monkeypatch):
     http_client.build_aiohttp_session(trust_env=False)
     # off mode -> no overlay SOCKS connector injected (pure pass-through)
     assert "connector" not in captured
+
+
+def test_userspace_without_socks_support_connects_directly_and_says_so(monkeypatch, caplog):
+    """Without socksio every client used to raise at construction in userspace
+    mode, so every device (LAN ones too) became unreachable."""
+    captured = {}
+
+    def fake_client(**kwargs):
+        captured.clear()
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(http_client.httpx, "AsyncClient", fake_client)
+    monkeypatch.setattr(http_client.importlib.util, "find_spec", lambda _name: None)
+    monkeypatch.setattr(http_client, "_MISSING_SOCKS_REPORTED", set())
+    _clear_vpn_env(monkeypatch)
+    monkeypatch.setenv("FREESDN_VPN_AUTOSTART", "true")  # -> userspace
+
+    with caplog.at_level("ERROR", logger="app.core.http_client"):
+        http_client.build_async_client(base_url="http://device")
+        http_client.build_async_client(base_url="http://device")
+
+    assert "proxy" not in captured
+    reports = [r for r in caplog.records if "socksio is not installed" in r.getMessage()]
+    assert len(reports) == 1, "the missing package is reported once, not per client"
+
+
+def test_userspace_aiohttp_without_socks_support_does_not_raise(monkeypatch):
+    import aiohttp
+
+    captured = {}
+
+    def fake_session(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(aiohttp, "ClientSession", fake_session)
+    monkeypatch.setattr(http_client.importlib.util, "find_spec", lambda _name: None)
+    monkeypatch.setattr(http_client, "_MISSING_SOCKS_REPORTED", set())
+    _clear_vpn_env(monkeypatch)
+    monkeypatch.setenv("FREESDN_VPN_AUTOSTART", "true")
+
+    http_client.build_aiohttp_session()
+    assert "connector" not in captured
+
+
+async def test_userspace_client_builds_through_the_socks_proxy(monkeypatch):
+    """With socksio installed (pyproject.toml), a userspace-mode client really
+    builds with the overlay proxy instead of raising ImportError."""
+    import pytest
+
+    pytest.importorskip("socksio")
+    _clear_vpn_env(monkeypatch)
+    monkeypatch.setenv("FREESDN_VPN_AUTOSTART", "true")
+    client = http_client.build_async_client(base_url="http://device")
+    try:
+        assert client is not None
+    finally:
+        await client.aclose()

@@ -42,6 +42,7 @@ import { ErrorState } from '@/components/ui/empty-state';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { enterpriseApi, devicesApi } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface DeviceWithConfig {
   id: string;
@@ -62,9 +63,7 @@ export default function ReconciliationPage() {
 
   const { toast } = useToast();
   const errToast = (title: string) => (err: unknown) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const detail = (err as any)?.response?.data?.detail
-      || (err instanceof Error ? err.message : t('ReconciliationPage.errors.unknown'));
+    const detail = getApiErrorMessage(err, t('ReconciliationPage.errors.unknown'));
     toast({ variant: 'destructive', title, description: String(detail) });
   };
 

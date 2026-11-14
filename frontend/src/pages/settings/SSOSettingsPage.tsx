@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { ssoApi, type SSOProvider } from '@/lib/ssoApi';
 import { getApiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfirm } from '@/hooks';
 import { PageHeader } from '@/components/layout';
 import { CapabilityMaturityBadge } from '@/components/ui/capability-maturity-badge';
 import { Button } from '@/components/ui/button';
@@ -119,6 +120,7 @@ const statusBadge = (enabled: boolean, t: (key: string) => string) =>
 
 export default function SSOSettingsPage({ embedded }: { embedded?: boolean } = {}) {
   const { t } = useTranslation('settings');
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [view, setView] = useState<PageView>('list');
@@ -241,10 +243,17 @@ export default function SSOSettingsPage({ embedded }: { embedded?: boolean } = {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm(t('SSOSettingsPage.confirmDelete'))) return;
+  const handleDelete = async (provider: SSOProvider) => {
+    const ok = await confirm({
+      title: t('SSOSettingsPage.confirmDelete', { name: provider.name }),
+      description: t('SSOSettingsPage.confirmDeleteDescription'),
+      items: [provider.name],
+      confirmLabel: t('SSOSettingsPage.confirmDeleteAction'),
+      destructive: true,
+    });
+    if (!ok) return;
     try {
-      await ssoApi.deleteProvider(id);
+      await ssoApi.deleteProvider(provider.id);
       await loadProviders();
     } catch (e: unknown) {
       setError(getApiErrorMessage(e, t('SSOSettingsPage.errors.deleteFailed')));
@@ -396,7 +405,7 @@ export default function SSOSettingsPage({ embedded }: { embedded?: boolean } = {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleDelete(p.id)}
+                            onClick={() => handleDelete(p)}
                             title={t('SSOSettingsPage.actions.delete')}
                             className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                           >

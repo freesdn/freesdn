@@ -77,6 +77,7 @@ import { PageHeader } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/stores/authStore';
 import { beginStorageProbe, StorageProbeError } from '@/lib/api/storageProbeTransport';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ─── Icon map for storage types ─────────────────────────────────────────────
 const STORAGE_ICONS: Record<string, React.ElementType> = {
@@ -362,7 +363,7 @@ function StorageLocationsContent({ cacheOwner, contextCurrent }: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
       if (!pageCurrent()) return;
-      toast({ title: t('StorageLocationsPage.notifications.error'), description: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.createFailed'), variant: 'destructive' });
+      toast({ title: t('StorageLocationsPage.notifications.error'), description: getApiErrorMessage(err, t('StorageLocationsPage.notifications.createFailed')), variant: 'destructive' });
     },
   });
 
@@ -382,7 +383,7 @@ function StorageLocationsContent({ cacheOwner, contextCurrent }: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
       if (!pageCurrent()) return;
-      toast({ title: t('StorageLocationsPage.notifications.error'), description: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.updateFailed'), variant: 'destructive' });
+      toast({ title: t('StorageLocationsPage.notifications.error'), description: getApiErrorMessage(err, t('StorageLocationsPage.notifications.updateFailed')), variant: 'destructive' });
     },
   });
 
@@ -401,7 +402,7 @@ function StorageLocationsContent({ cacheOwner, contextCurrent }: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
       if (!pageCurrent()) return;
-      toast({ title: t('StorageLocationsPage.notifications.error'), description: err?.response?.data?.detail || err?.response?.data?.error?.message || t('StorageLocationsPage.notifications.deleteFailed'), variant: 'destructive' });
+      toast({ title: t('StorageLocationsPage.notifications.error'), description: getApiErrorMessage(err, t('StorageLocationsPage.notifications.deleteFailed')), variant: 'destructive' });
     },
   });
 

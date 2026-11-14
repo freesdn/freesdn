@@ -30,11 +30,7 @@ from app.adapters import get_adapter
 from app.core.crypto import decrypt_credential, encrypt_credential, is_encrypted
 from app.models.core import Controller, Site
 from app.models.vpn import SiteVPNConfiguration, VPNSource, VPNStatus, VPNType
-from app.schemas.vpn import (
-    _DANGEROUS_OPENVPN_DIRECTIVES,
-    _OPENVPN_FILE_REF_DIRECTIVES,
-    _OPENVPN_SAFE_FILE_REF_ARGS,
-)
+from app.schemas.vpn import _assert_openvpn_config_safe
 
 logger = logging.getLogger(__name__)
 
@@ -677,9 +673,13 @@ class BrainVPNService:
             "has_tls_auth": False,
         }
 
-        # Detect dangerous directives — single source of truth shared with the
-        # connection-config schema validator so the two ingest paths can't drift.
-        DANGEROUS_DIRECTIVES = _DANGEROUS_OPENVPN_DIRECTIVES
+        # Safety first, through the single allowlist shared with the connection
+        # schema and the materializer, so the ingest paths cannot drift. The loop
+        # below only extracts metadata from a config that already passed it.
+        try:
+            _assert_openvpn_config_safe(content)
+        except ValueError as exc:
+            raise ValueError(f"OpenVPN config refused: {exc}") from exc
 
         in_inline = False
         for line in lines:
@@ -708,27 +708,7 @@ class BrainVPNService:
                 continue
 
             parts = stripped.split(None, 1)
-            # strip a leading `--` (OpenVPN accepts it in config files) so e.g.
-            # `--up /script` can't slip past the dangerous-directive check — mirrors
-            # the schema validator (_assert_openvpn_config_safe)
-            directive = parts[0].lstrip("-").lower()
-
-            # Safety: reject configs with script execution
-            if directive in DANGEROUS_DIRECTIVES:
-                raise ValueError(
-                    f"OpenVPN config contains dangerous directive: '{directive}'. "
-                    "Remove script-execution directives before importing."
-                )
-            # Reject file-PATH references to cert/credential material (arbitrary-
-            # file read/exfil via the root daemon); require inline blocks instead.
-            if directive in _OPENVPN_FILE_REF_DIRECTIVES:
-                arg = ""
-                if len(parts) > 1:
-                    arg = parts[1].split()[0].strip("\"'").lower() if parts[1].split() else ""
-                if arg and arg not in _OPENVPN_SAFE_FILE_REF_ARGS:
-                    raise ValueError(
-                        f"OpenVPN '{directive}' must be supplied inline, not as a file path."
-                    )
+            directive = parts[0].removeprefix("--")
 
             if directive == "remote" and len(parts) > 1:
                 remote_parts = parts[1].split()

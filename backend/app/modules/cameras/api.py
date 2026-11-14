@@ -29,6 +29,8 @@ from app.core.dependencies import (
     org_scope_or_platform,
     require_permissions,
 )
+from app.core.device_slot import host_slot_key, nvr_slot_key
+from app.core.http_client import build_async_client
 from app.core.site_access import assert_can_access_site, site_scope_filter
 from app.db import get_session
 from app.modules.cameras.config_write import staged_camera_write
@@ -176,6 +178,8 @@ from app.modules.cameras.service import (
     StreamService,
 )
 from app.services.audit import AuditAction, AuditService, ResourceType
+from app.services.device_live_read import take_device_turn
+from app.services.device_writes import audited_device_action, write_through_staging
 
 if TYPE_CHECKING:
     from app.modules.cameras.service import CameraAccessService
@@ -599,7 +603,7 @@ class _SnapshotCache:
 
         consecutive_errors = 0
         try:
-            async with httpx.AsyncClient(
+            async with build_async_client(
                 auth=auth,
                 timeout=httpx.Timeout(10.0, connect=5.0),
                 limits=httpx.Limits(max_connections=2, max_keepalive_connections=1),
@@ -863,16 +867,19 @@ async def _resolve_credentials(
     """
     nvr = None
     if camera.nvr_id:
-        # SECURITY: filter by camera's org to prevent cross-tenant NVR credential access
+        # SECURITY: filter by camera's org to prevent cross-tenant NVR credential access.
+        # A soft-deleted NVR is no longer managed: its stored credentials are
+        # not used, as in the service-side lookups (CameraService, StreamService).
         result = await session.execute(
             select(NVRModel).where(
                 NVRModel.id == camera.nvr_id,
                 NVRModel.organization_id == camera.organization_id,
+                NVRModel.deleted_at.is_(None),
             )
         )
         nvr = result.scalar_one_or_none()
 
-    host = nvr.ip_address if nvr else camera.ip_address
+    stored_host = nvr.ip_address if nvr else camera.ip_address
     port = nvr.port if nvr else (camera.port or 80)
     username = nvr.username if nvr else camera.username
     password_enc = nvr.password_encrypted if nvr else camera.password_encrypted
@@ -883,8 +890,44 @@ async def _resolve_credentials(
             detail="No credentials available for this camera",
         )
 
+    host = await _pinned_camera_address(stored_host)
     password = decrypt_credential(password_enc)
     return host, port, username, password
+
+
+async def _pinned_camera_address(stored_host: Any) -> str:
+    """The checked address to send a stored camera or NVR login to.
+
+    Every caller pastes the result into an ISAPI, ONVIF or RTSP URL with the
+    stored login. Handing the transport the stored name would let it resolve
+    the name again, after the check, to an address the check never saw (DNS
+    rebinding), as cameras/service.py and the camera tasks already avoid. The
+    check resolves DNS, so it runs in a thread. Raises HTTP 400 when the stored
+    host is refused.
+    """
+    from app.modules.cameras.host_guard import CameraHostRefused, check_stored_camera_host
+
+    try:
+        return await asyncio.to_thread(check_stored_camera_host, stored_host)
+    except CameraHostRefused as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+def _camera_slot_key(camera: Any, host: Any) -> str:
+    """The device a camera is reached at: its NVR when it is reached through one
+    (``host`` is then the NVR's), else the camera itself. A camera write has no
+    controller row, so it names this key to take the device's turn."""
+    return host_slot_key(host, fallback=f"camera:{camera.id}")
+
+
+async def _camera_turn(camera: Any, host: str | None) -> None:
+    """A page's live read of a camera waits briefly for its device's turn (the
+    NVR's when the camera is reached through one, since ``host`` is then the
+    NVR's), or is answered with its last response
+    (app/services/device_live_read.py). Live video and snapshots do not take a
+    turn: they have their own per-recorder limiter and must not wait on a poll.
+    """
+    await take_device_turn(_camera_slot_key(camera, host))
 
 
 # =============================================================================
@@ -1319,6 +1362,33 @@ async def stream_mjpeg(
     if camera.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Camera not found")
 
+    # The viewer is checked at connect only, and an MJPEG feed runs for as long
+    # as the browser keeps it: a disabled account, a signed-out session or a
+    # retired organization kept watching. Recheck on the realtime socket's
+    # interval while the feed runs, as the live MSE relay does, and end it once
+    # the session is no longer live.
+    from app.api.v1.endpoints import websocket as realtime
+
+    claims = getattr(user, "token_claims", None) or {}
+    viewer = realtime.ConnectionInfo(
+        websocket=None,
+        user_id=str(user.id),
+        organization_id=str(user.organization_id) if user.organization_id else None,
+        token_version=claims.get("tv", 0) or 0,
+        access_jti=claims.get("jti"),
+    )
+    recheck_at = time.monotonic() + realtime._WS_REVALIDATION_INTERVAL_SECONDS
+
+    async def _viewer_still_signed_in() -> bool:
+        nonlocal recheck_at
+        if time.monotonic() < recheck_at:
+            return True
+        recheck_at = time.monotonic() + realtime._WS_REVALIDATION_INTERVAL_SECONDS
+        if await realtime._revalidate_ws_session(viewer):
+            return True
+        logger.info("MJPEG stream closed for camera %s: session revoked", camera_id)
+        return False
+
     host, port, username, password = await _resolve_credentials(camera, session)
 
     channel = camera.channel_id or 1
@@ -1363,7 +1433,7 @@ async def stream_mjpeg(
                 _mjpeg_target, _mjpeg_pin = _pin_url_to_resolved_ip(mjpeg_url)
             except ValueError as exc:
                 logger.warning("native MJPEG skipped (SSRF) ch=%s: %s", isapi_ch, exc)
-            async with httpx.AsyncClient(
+            async with build_async_client(
                 auth=auth,
                 timeout=httpx.Timeout(10.0, connect=5.0),
                 limits=httpx.Limits(
@@ -1385,6 +1455,8 @@ async def stream_mjpeg(
                             )
                             async for chunk in resp.aiter_bytes(chunk_size=65_536):
                                 if await request.is_disconnected():
+                                    return
+                                if not await _viewer_still_signed_in():
                                     return
                                 yield chunk
                             return
@@ -1434,6 +1506,8 @@ async def stream_mjpeg(
             empty_count = 0
             while True:
                 if await request.is_disconnected():
+                    return
+                if not await _viewer_still_signed_in():
                     return
 
                 frame = await _snapshot_cache.wait_frame(cache_key)
@@ -1622,6 +1696,7 @@ async def get_camera_timeline(
 
     s_iso, e_iso = start.isoformat(), end.isoformat()
     host, port, username, password = await _resolve_credentials(camera, session)
+    await _camera_turn(camera, host)
     vendor = (getattr(camera, "vendor", "") or "").lower() or "hikvision"
     adapter = StreamService._create_camera_adapter(
         host=host, port=port, username=username, password=password, vendor=vendor
@@ -1676,6 +1751,7 @@ async def live_mse_ws(
     """
     import websockets
 
+    from app.api.v1.endpoints import websocket as realtime
     from app.api.v1.endpoints.websocket import _validate_ws_origin, authenticate_websocket
     from app.core.config import settings
     from app.core.cookies import ACCESS_COOKIE
@@ -1763,6 +1839,24 @@ async def live_mse_ws(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
+    # ``authenticate_websocket`` checks only the token's signature and claims.
+    # The realtime socket then asks the database whether the account is still
+    # live (disabled, deleted, signed out, organization retired); this relay did
+    # not, so a disabled user's or a signed-out session's token opened a live
+    # camera feed for as long as the token had left, and the feed then ran for
+    # as long as the browser kept it. Check at connect, and again on the
+    # realtime socket's interval while the relay runs.
+    viewer = realtime.ConnectionInfo(
+        websocket=None,
+        user_id=str(auth.get("user_id")),
+        organization_id=org_id,
+        token_version=auth.get("token_version", 0) or 0,
+        access_jti=auth.get("access_jti"),
+    )
+    if not await realtime._revalidate_ws_session(viewer):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     host, port, username, password = await _resolve_credentials(camera, session)
     ch = camera.channel_id or 1
     isapi_ch = ch * 100 + (1 if quality == "main" else 2)
@@ -1826,9 +1920,18 @@ async def live_mse_ws(
                     else:
                         await websocket.send_text(frame)
 
+            async def viewer_still_signed_in() -> None:
+                # Ends the relay once the viewer's session is no longer live.
+                while True:
+                    await asyncio.sleep(realtime._WS_REVALIDATION_INTERVAL_SECONDS)
+                    if not await realtime._revalidate_ws_session(viewer):
+                        logger.info("MSE relay closed for camera %s: session revoked", camera_id)
+                        return
+
             tasks = [
                 asyncio.create_task(client_to_go2rtc()),
                 asyncio.create_task(go2rtc_to_client()),
+                asyncio.create_task(viewer_still_signed_in()),
             ]
             _done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for t in pending:
@@ -2172,7 +2275,7 @@ async def get_ptz_presets(
 @router.post("/{camera_id}/ptz/presets", response_model=PTZActionResponse)
 async def set_ptz_preset(
     camera_id: UUID,
-    current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.ptz"))],
+    current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.manage_ptz"))],
     ptz_service: Annotated[PTZService, Depends(get_ptz_service)],
     preset: int = Query(..., ge=1, le=255),
     name: str = Query(..., min_length=1, max_length=50),
@@ -2279,7 +2382,7 @@ async def set_ptz_tour(
     camera_id: UUID,
     tour_id: Annotated[int, Path(ge=1, le=255)],
     body: PTZPatrolCreateRequest,
-    current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.ptz"))],
+    current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.manage_ptz"))],
     service: Annotated[CameraService, Depends(get_camera_service)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
@@ -2293,8 +2396,22 @@ async def set_ptz_tour(
     assert_can_access_site(current_user, camera.site_id, detail="Camera not found")
     adapter, channel = await _get_adapter_for_camera(camera, session)
     try:
-        result = await adapter.set_patrol(
-            tour_id, body.model_dump(), channel=channel, force=_API_WRITE_FORCE
+        result = await write_through_staging(
+            session,
+            organization_id=camera.organization_id,
+            controller_id=None,
+            site_id=camera.site_id,
+            feature="camera.ptz_tour",
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
+            operation="update",
+            target_id=str(camera.id),
+            payload={"tour_id": tour_id, "tour": body.model_dump()},
+            perform=lambda: adapter.set_patrol(
+                tour_id, body.model_dump(), channel=channel, force=_API_WRITE_FORCE
+            ),
+            force=_API_WRITE_FORCE,
+            actor_id=current_user.id,
+            return_failed_result=True,
         )
         if not result.get("success"):
             raise HTTPException(status_code=500, detail="Failed to update PTZ tour")
@@ -2321,7 +2438,7 @@ async def set_ptz_tour(
 async def delete_ptz_tour(
     camera_id: UUID,
     tour_id: Annotated[int, Path(ge=1, le=255)],
-    current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.ptz"))],
+    current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.manage_ptz"))],
     service: Annotated[CameraService, Depends(get_camera_service)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
@@ -2335,7 +2452,21 @@ async def delete_ptz_tour(
     assert_can_access_site(current_user, camera.site_id, detail="Camera not found")
     adapter, channel = await _get_adapter_for_camera(camera, session)
     try:
-        result = await adapter.delete_patrol(tour_id, channel=channel, force=_API_WRITE_FORCE)
+        result = await write_through_staging(
+            session,
+            organization_id=camera.organization_id,
+            controller_id=None,
+            site_id=camera.site_id,
+            feature="camera.ptz_tour",
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
+            operation="delete",
+            target_id=str(camera.id),
+            payload={"tour_id": tour_id},
+            perform=lambda: adapter.delete_patrol(tour_id, channel=channel, force=_API_WRITE_FORCE),
+            force=_API_WRITE_FORCE,
+            actor_id=current_user.id,
+            return_failed_result=True,
+        )
         if not result.get("success"):
             raise HTTPException(status_code=500, detail="Failed to delete PTZ tour")
         audit = AuditService(db=session)
@@ -2375,17 +2506,22 @@ async def start_ptz_tour(
     assert_can_access_site(current_user, camera.site_id, detail="Camera not found")
     adapter, channel = await _get_adapter_for_camera(camera, session)
     try:
-        result = await adapter.start_patrol(tour_id, channel=channel, force=_API_WRITE_FORCE)
-        audit = AuditService(db=session)
-        await audit.log(
-            action=AuditAction.UPDATE,
-            resource_type=ResourceType.CAMERA,
-            resource_id=camera_id,
-            organization_id=org_scope_or_platform(current_user),
+        result = await audited_device_action(
+            session,
+            action="start_patrol",
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
+            target_type=ResourceType.CAMERA,
+            target_id=camera_id,
+            target_name=getattr(camera, "name", None),
+            organization_id=camera.organization_id,
+            site_id=camera.site_id,
             actor_id=current_user.id,
-            extra_metadata={"action": "ptz_tour_start", "tour_id": tour_id},
+            parameters={"tour_id": tour_id, "channel": channel},
+            perform=lambda: adapter.start_patrol(tour_id, channel=channel, force=_API_WRITE_FORCE),
         )
         return PTZPatrolStartStop(**result)
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Failed to start PTZ tour %d for camera %s", tour_id, camera_id)
         raise HTTPException(status_code=502, detail="Failed to start PTZ tour")
@@ -2411,17 +2547,22 @@ async def stop_ptz_tour(
     assert_can_access_site(current_user, camera.site_id, detail="Camera not found")
     adapter, channel = await _get_adapter_for_camera(camera, session)
     try:
-        result = await adapter.stop_patrol(tour_id, channel=channel, force=_API_WRITE_FORCE)
-        audit = AuditService(db=session)
-        await audit.log(
-            action=AuditAction.UPDATE,
-            resource_type=ResourceType.CAMERA,
-            resource_id=camera_id,
-            organization_id=org_scope_or_platform(current_user),
+        result = await audited_device_action(
+            session,
+            action="stop_patrol",
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
+            target_type=ResourceType.CAMERA,
+            target_id=camera_id,
+            target_name=getattr(camera, "name", None),
+            organization_id=camera.organization_id,
+            site_id=camera.site_id,
             actor_id=current_user.id,
-            extra_metadata={"action": "ptz_tour_stop", "tour_id": tour_id},
+            parameters={"tour_id": tour_id, "channel": channel},
+            perform=lambda: adapter.stop_patrol(tour_id, channel=channel, force=_API_WRITE_FORCE),
         )
         return PTZPatrolStartStop(**result)
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Failed to stop PTZ tour %d for camera %s", tour_id, camera_id)
         raise HTTPException(status_code=502, detail="Failed to stop PTZ tour")
@@ -2458,6 +2599,7 @@ async def get_image_settings(
     from app.adapters.hikvision.adapter import HikvisionAdapter
 
     host, port, username, password = await _resolve_credentials(camera, session)
+    await _camera_turn(camera, host)
 
     adapter = HikvisionAdapter(host=host, username=username, password=password, port=port)
     try:
@@ -2523,6 +2665,7 @@ async def set_image_settings(
             actor_id=current_user.id,
             organization_id=org_scope_or_platform(current_user),
             camera=camera,
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
             feature="image_settings",
             capture=lambda: adapter.get_image_settings(channel=channel),
             apply=_apply,
@@ -2589,6 +2732,7 @@ async def _get_adapter_for_camera(camera: Any, session: AsyncSession) -> tuple[A
     from app.adapters.hikvision.adapter import HikvisionAdapter
 
     host, port, username, password = await _resolve_credentials(camera, session)
+    await _camera_turn(camera, host)
     adapter = HikvisionAdapter(host=host, username=username, password=password, port=port)
     try:
         await adapter.connect()
@@ -2753,6 +2897,7 @@ async def set_motion_detection(
             actor_id=current_user.id,
             organization_id=org_scope_or_platform(current_user),
             camera=camera,
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
             feature="motion_detection",
             capture=lambda: adapter.get_motion_detection(channel=channel),
             apply=_apply,
@@ -2861,6 +3006,7 @@ async def set_privacy_masks(
             actor_id=current_user.id,
             organization_id=org_scope_or_platform(current_user),
             camera=camera,
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
             feature="privacy_masks",
             capture=lambda: adapter.get_privacy_masks(channel=channel),
             apply=_apply,
@@ -2954,6 +3100,7 @@ async def set_line_crossing(
             actor_id=current_user.id,
             organization_id=org_scope_or_platform(current_user),
             camera=camera,
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
             feature="line_crossing",
             capture=lambda: adapter.get_line_crossing(channel=channel),
             apply=_apply,
@@ -3048,6 +3195,7 @@ async def set_intrusion_detection(
             actor_id=current_user.id,
             organization_id=org_scope_or_platform(current_user),
             camera=camera,
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
             feature="intrusion_detection",
             capture=lambda: adapter.get_intrusion_detection(channel=channel),
             apply=_apply,
@@ -3171,6 +3319,7 @@ async def set_face_detection(
             actor_id=current_user.id,
             organization_id=org_scope_or_platform(current_user),
             camera=camera,
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
             feature="face_detection",
             capture=lambda: adapter.get_face_detection(channel=channel),
             apply=_apply,
@@ -3266,6 +3415,7 @@ async def set_recording_schedule(
             actor_id=current_user.id,
             organization_id=org_scope_or_platform(current_user),
             camera=camera,
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
             feature="recording_schedule",
             capture=lambda: adapter.get_recording_schedule(channel=channel),
             apply=_apply,
@@ -3368,6 +3518,7 @@ async def set_holiday_schedule(
             actor_id=current_user.id,
             organization_id=org_scope_or_platform(current_user),
             camera=camera,
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
             feature="holiday_schedule",
             capture=lambda: adapter.get_holiday_schedule(channel=channel),
             apply=_apply,
@@ -4190,8 +4341,9 @@ async def get_nvr_storage(
             detail="NVR has no stored credentials",
         )
 
+    await take_device_turn(nvr_slot_key(nvr))
     adapter = service._create_adapter(
-        host=nvr.ip_address,
+        host=await _pinned_camera_address(nvr.ip_address),
         port=nvr.port or 80,
         username=nvr.username,
         password=decrypt_credential(nvr.password_encrypted),
@@ -4246,8 +4398,9 @@ async def get_nvr_system_info(
     if not nvr.username or not nvr.password_encrypted:
         raise HTTPException(status_code=400, detail="NVR has no stored credentials")
 
+    await take_device_turn(nvr_slot_key(nvr))
     adapter = service._create_adapter(
-        host=nvr.ip_address,
+        host=await _pinned_camera_address(nvr.ip_address),
         port=nvr.port or 80,
         username=nvr.username,
         password=decrypt_credential(nvr.password_encrypted),
@@ -4292,8 +4445,9 @@ async def get_nvr_network(
     if not nvr.username or not nvr.password_encrypted:
         raise HTTPException(status_code=400, detail="NVR has no stored credentials")
 
+    await take_device_turn(nvr_slot_key(nvr))
     adapter = service._create_adapter(
-        host=nvr.ip_address,
+        host=await _pinned_camera_address(nvr.ip_address),
         port=nvr.port or 80,
         username=nvr.username,
         password=decrypt_credential(nvr.password_encrypted),
@@ -4343,8 +4497,9 @@ async def get_nvr_recording_status(
     if not nvr.username or not nvr.password_encrypted:
         raise HTTPException(status_code=400, detail="NVR has no stored credentials")
 
+    await take_device_turn(nvr_slot_key(nvr))
     adapter = service._create_adapter(
-        host=nvr.ip_address,
+        host=await _pinned_camera_address(nvr.ip_address),
         port=nvr.port or 80,
         username=nvr.username,
         password=decrypt_credential(nvr.password_encrypted),
@@ -4395,7 +4550,7 @@ async def search_nvr_recordings(
         raise HTTPException(status_code=400, detail="NVR has no stored credentials")
 
     adapter = service._create_adapter(
-        host=nvr.ip_address,
+        host=await _pinned_camera_address(nvr.ip_address),
         port=nvr.port or 80,
         username=nvr.username,
         password=decrypt_credential(nvr.password_encrypted),
@@ -4489,7 +4644,7 @@ async def reboot_nvr(
         raise HTTPException(status_code=400, detail="NVR has no stored credentials")
 
     adapter = service._create_adapter(
-        host=nvr.ip_address,
+        host=await _pinned_camera_address(nvr.ip_address),
         port=nvr.port or 80,
         username=nvr.username,
         password=decrypt_credential(nvr.password_encrypted),
@@ -4503,22 +4658,25 @@ async def reboot_nvr(
     outcome = "failed"
     try:
         await adapter.connect()
-        result = await adapter.reboot_device(device_id="", force=_API_WRITE_FORCE)
+        # Reboot is a critical operation: audited once the NVR accepts it.
+        result = await audited_device_action(
+            nvr_service.db,
+            action="reboot_device",
+            slot_key=nvr_slot_key(nvr),
+            target_type=ResourceType.NVR,
+            target_id=nvr_id,
+            target_name=getattr(nvr, "name", None),
+            organization_id=getattr(nvr, "organization_id", None)
+            or org_scope_or_platform(current_user),
+            site_id=getattr(nvr, "site_id", None),
+            actor_id=current_user.id,
+            parameters={},
+            perform=lambda: adapter.reboot_device(device_id="", force=_API_WRITE_FORCE),
+        )
         if result.success:
             # Mark NVR as rebooting
             await nvr_service.update_nvr(
                 nvr_id, {"status": "rebooting"}, organization_id=org_scope_or_platform(current_user)
-            )
-            # Audit log — reboot is a critical operation
-            audit = AuditService(db=nvr_service.db)
-            await audit.log(
-                action=AuditAction.REBOOT,
-                resource_type=ResourceType.NVR,
-                resource_id=nvr_id,
-                resource_name=getattr(nvr, "name", None),
-                organization_id=org_scope_or_platform(current_user),
-                actor_id=current_user.id,
-                tags=["critical"],
             )
             outcome = "ok"
             return {
@@ -4593,7 +4751,7 @@ async def get_playback_stream(
     channel = camera.channel_id or 1
 
     adapter = service._create_adapter(
-        host=nvr.ip_address,
+        host=await _pinned_camera_address(nvr.ip_address),
         port=nvr.port or 80,
         username=nvr.username,
         password=decrypt_credential(nvr.password_encrypted),
@@ -4647,8 +4805,10 @@ async def get_nvr_channel_status(
     if not nvr.username or not nvr.password_encrypted:
         raise HTTPException(status_code=400, detail="NVR has no stored credentials")
 
+    address = await _pinned_camera_address(nvr.ip_address)
+    await take_device_turn(nvr_slot_key(nvr))
     adapter = HikvisionAdapter(
-        host=nvr.ip_address,
+        host=address,
         username=nvr.username,
         password=decrypt_credential(nvr.password_encrypted),
         port=nvr.port or 80,
@@ -4688,8 +4848,9 @@ async def get_nvr_holidays(
     if not nvr.username or not nvr.password_encrypted:
         raise HTTPException(status_code=400, detail="NVR has no stored credentials")
 
+    await take_device_turn(nvr_slot_key(nvr))
     adapter = service._create_adapter(
-        host=nvr.ip_address,
+        host=await _pinned_camera_address(nvr.ip_address),
         port=nvr.port or 80,
         username=nvr.username,
         password=decrypt_credential(nvr.password_encrypted),
@@ -4741,7 +4902,7 @@ async def set_nvr_holidays(
         raise HTTPException(status_code=400, detail="NVR has no stored credentials")
 
     adapter = service._create_adapter(
-        host=nvr.ip_address,
+        host=await _pinned_camera_address(nvr.ip_address),
         port=nvr.port or 80,
         username=nvr.username,
         password=decrypt_credential(nvr.password_encrypted),
@@ -4754,8 +4915,21 @@ async def set_nvr_holidays(
     )
     try:
         await adapter.connect()
-        res = await adapter.set_holidays(
-            [h.model_dump() for h in body.holidays], force=_API_WRITE_FORCE
+        holidays = [h.model_dump() for h in body.holidays]
+        res = await write_through_staging(
+            nvr_service.db,
+            organization_id=nvr.organization_id,
+            controller_id=None,
+            site_id=getattr(nvr, "site_id", None),
+            feature="nvr.holidays",
+            slot_key=nvr_slot_key(nvr),
+            operation="update",
+            target_id=str(nvr_id),
+            payload={"holidays": holidays},
+            perform=lambda: adapter.set_holidays(holidays, force=_API_WRITE_FORCE),
+            force=_API_WRITE_FORCE,
+            actor_id=current_user.id,
+            return_failed_result=True,
         )
         if not res.get("success"):
             raise HTTPException(status_code=500, detail="Failed to update holidays")
@@ -6764,6 +6938,7 @@ async def get_codec_info(
     from urllib.parse import quote, urlsplit, urlunsplit
 
     host, _port, username, password = await _resolve_credentials(camera, session)
+    await _camera_turn(camera, host)
     rtsp_url = camera.rtsp_main_stream or (
         f"rtsp://{host}:554/Streaming/Channels/{(camera.channel_id or 1) * 100 + 1}"
     )
@@ -6944,7 +7119,7 @@ async def get_report(
 @router.post("/{camera_id}/audio/start", response_model=AudioSessionResponse)
 async def start_audio_session(
     camera_id: UUID,
-    current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.ptz"))],
+    current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.manage_ptz"))],
     service: Annotated[CameraService, Depends(get_camera_service)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
@@ -6986,7 +7161,7 @@ async def start_audio_session(
 @router.post("/{camera_id}/audio/stop", response_model=AudioSessionStopResponse)
 async def stop_audio_session(
     camera_id: UUID,
-    current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.ptz"))],
+    current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.manage_ptz"))],
     service: Annotated[CameraService, Depends(get_camera_service)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
@@ -7096,7 +7271,23 @@ async def set_thermal_threshold(
                 kwargs["force"] = True
         except (TypeError, ValueError):
             pass
-        result = await adapter.set_thermal_threshold(**kwargs)
+        result = await write_through_staging(
+            session,
+            organization_id=camera.organization_id,
+            controller_id=None,
+            site_id=camera.site_id,
+            feature="camera.thermal_threshold",
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
+            operation="update",
+            target_id=str(camera.id),
+            payload={"min_temp": body.min_temp, "max_temp": body.max_temp},
+            perform=lambda: adapter.set_thermal_threshold(**kwargs),
+            force=_API_WRITE_FORCE,
+            actor_id=current_user.id,
+            return_failed_result=True,
+        )
+    except HTTPException:
+        raise
     except AttributeError:
         raise HTTPException(
             status_code=501,
@@ -7443,7 +7634,7 @@ async def get_auto_tracking(
 async def set_auto_tracking(
     camera_id: UUID,
     body: PTZAutoTrackingRequest,
-    current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.ptz"))],
+    current_user: Annotated[CurrentUser, Depends(require_permissions("cameras.manage_ptz"))],
     service: Annotated[CameraService, Depends(get_camera_service)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
@@ -7476,6 +7667,7 @@ async def set_auto_tracking(
             actor_id=current_user.id,
             organization_id=org_scope_or_platform(current_user),
             camera=camera,
+            slot_key=_camera_slot_key(camera, getattr(adapter, "host", None)),
             feature="auto_tracking",
             capture=lambda: adapter.get_auto_tracking(channel=channel),
             apply=_apply,
@@ -7529,9 +7721,14 @@ async def get_time_drift_summary(
             return None
         if not nvr.username or not nvr.password_encrypted:
             return None
+        try:
+            address = await _pinned_camera_address(nvr.ip_address)
+        except HTTPException:
+            logger.debug("Time drift check skipped for NVR %s: its host is refused", nvr.id)
+            return None
         password = decrypt_credential(nvr.password_encrypted)
         adapter = HikvisionAdapter(
-            host=nvr.ip_address,
+            host=address,
             username=nvr.username,
             password=password,
             port=nvr.port,

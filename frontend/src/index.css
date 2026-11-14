@@ -255,6 +255,11 @@
 /* Light Theme (Default) */
 :root,
 .light {
+  /* Native controls (checkboxes, radios, date and number inputs, select
+     popups, scrollbars) take their palette from color-scheme, not from our
+     tokens. Declare it per theme or they render light-on-dark. */
+  color-scheme: light;
+
   --background: 220 14% 96%;
   --foreground: 222 47% 11%;
 
@@ -317,6 +322,10 @@
 
 /* Dark Theme */
 .dark {
+  /* Dark is the default theme: without this, native checkboxes, date
+     pickers and scrollbars stayed white on the dark surface. */
+  color-scheme: dark;
+
   --background: 222 47% 8%;
   --foreground: 210 20% 98%;
 
@@ -398,6 +407,33 @@
 @layer base {
   * {
     @apply border-border;
+  }
+
+  /*
+    One keyboard focus indicator for everything focusable. Components that
+    draw their own ring (Button, Input, Checkbox, Tabs...) set
+    focus-visible:outline-none in the utilities layer, which wins over this
+    base rule, so they keep theirs. Everything else (plain links, native
+    buttons in menus and bars, clickable cards, raw selects) used to show the
+    browser default, or nothing where a reset removed it: now it shows the
+    theme's ring colour in both themes. :where() keeps specificity at zero.
+  */
+  :where(
+      a[href],
+      button,
+      summary,
+      select,
+      input,
+      textarea,
+      [role='button'],
+      [role='link'],
+      [role='tab'],
+      [role='menuitem'],
+      [role='option'],
+      [tabindex]:not([tabindex='-1'])
+    ):focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
   }
 
   /*

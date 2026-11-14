@@ -11,6 +11,7 @@ API endpoints for device-specific actions:
 - Device reboot
 """
 
+import asyncio
 import logging
 from typing import Annotated, Any
 from uuid import UUID
@@ -36,6 +37,7 @@ from app.db import get_session
 from app.models import Controller, Device, Site
 from app.models.devices import normalize_device_type
 from app.modules.cameras.models import Camera
+from app.services.device_writes import controller_scope, device_action, write_through_staging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -201,10 +203,17 @@ async def cycle_poe_port(
         await adapter.connect()
 
         try:
-            result = await adapter.cycle_poe_port(
-                device_id=str(device.external_id or device.id),
-                port=request.port,
-                duration=request.duration,
+            result = await device_action(
+                session,
+                device,
+                actor_id=current_user.id,
+                action="cycle_poe_port",
+                parameters={"port": request.port, "duration": request.duration},
+                perform=lambda: adapter.cycle_poe_port(
+                    device_id=str(device.external_id or device.id),
+                    port=request.port,
+                    duration=request.duration,
+                ),
             )
             # Honest failure (don't publish a success event / return success=true
             # when the switch refused the write).
@@ -276,7 +285,22 @@ async def toggle_ssid(
         await adapter.connect()
 
         try:
-            result = await adapter.toggle_ssid(request.ssid_name, request.enabled)
+            organization_id, site_id = await controller_scope(session, controller.id)
+            result = await write_through_staging(
+                session,
+                organization_id=organization_id,
+                controller_id=controller.id,
+                site_id=site_id,
+                feature="ssid.toggle",
+                operation="update",
+                target_id=request.ssid_name,
+                payload={"ssid": request.ssid_name, "enabled": request.enabled},
+                perform=lambda: adapter.toggle_ssid(request.ssid_name, request.enabled),
+                # This route has never taken a force flag; unchanged.
+                force=True,
+                actor_id=current_user.id,
+                return_failed_result=True,
+            )
             # Honest failure: the adapter returns AdapterResult(success=False) when
             # the controller refuses the write (read-only gate, rejection, auth/
             # timeout) WITHOUT raising. Don't report success=true in that case.
@@ -313,6 +337,8 @@ async def toggle_ssid(
         finally:
             await adapter.disconnect()
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("SSID toggle failed: %s", e, exc_info=True)
         raise HTTPException(
@@ -348,8 +374,16 @@ async def _resolve_camera_credentials(
             detail="No credentials available for this camera",
         )
 
+    # Connect to the address the stored-host check accepted, never the stored
+    # name, which the transport would resolve again (DNS rebinding).
+    from app.modules.cameras.host_guard import CameraHostRefused, check_stored_camera_host
+
+    try:
+        address = await asyncio.to_thread(check_stored_camera_host, camera.ip_address)
+    except CameraHostRefused as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return (
-        camera.ip_address,
+        address,
         camera.username or "admin",
         decrypt_credential(camera.password_encrypted),
     )
@@ -504,7 +538,14 @@ async def reboot_device(
         await adapter.connect()
 
         try:
-            result = await adapter.reboot_device(str(device.external_id or device.id))
+            result = await device_action(
+                session,
+                device,
+                actor_id=current_user.id,
+                action="reboot_device",
+                parameters={},
+                perform=lambda: adapter.reboot_device(str(device.external_id or device.id)),
+            )
             # Honest failure (don't publish a reboot event / return success=true
             # when the controller rejected/failed the reboot).
             if result is not None and not getattr(result, "success", True):

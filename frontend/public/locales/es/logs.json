@@ -106,7 +106,8 @@
       "ip": "IP:",
       "request": "Solicitud:",
       "device": "Dispositivo:",
-      "site": "Sitio:"
+      "site": "Sitio:",
+      "copyRequestId": "Copiar ID de solicitud"
     },
     "allLogs": {
       "loadError": "No se pudieron cargar los registros. Inténtalo de nuevo.",

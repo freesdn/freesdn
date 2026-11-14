@@ -145,11 +145,13 @@ class GatewayOpnsenseDiagnosticsService(GatewayServiceBase):
 
     # ── Direct probe helpers (NOT staged) ────────────────────────────
     #
-    # These three POST to the controller but do not change config — they
-    # trigger a one-shot probe and return its output. Endpoint layer
-    # gates them behind ``firewall:write``. Each passes ``force=True``
-    # to bypass the client's universal read-only gate; without that the
-    # probe would be refused at the bottom of the stack.
+    # Ping and traceroute POST to the controller but do not change config —
+    # they trigger a one-shot probe and return its output; the DNS lookup is a
+    # GET. Endpoint layer gates all three behind ``firewall:write``. The client
+    # classifies the two probe paths as reads (``_READ_ONLY_PROBE_POSTS``), so
+    # they work in read-only mode. ``force`` does not lift the read-only lock
+    # (it has not since 26.12), so the ``force=True`` below is not what lets
+    # them through.
 
     async def ping(
         self,

@@ -52,6 +52,7 @@ import { pendingChangesQueryKey } from '@/components/gateways/PendingChangesDraw
 import { cn } from '@/lib/utils';
 import { PBXTypeBadge } from './components';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import type {
   PBXSystem, PBXDashboard, Extension, RingGroup,
   Trunk, Queue, IVR, ActiveCall, VoicemailBox,
@@ -67,6 +68,7 @@ import { PBXActiveCallsTab } from './pbx-tabs/PBXActiveCallsTab';
 import { PBXConfigTab } from './pbx-tabs/PBXConfigTab';
 import { PBXOverviewTab } from './pbx-tabs/PBXOverviewTab';
 import { PBXSettingsTab } from './pbx-tabs/PBXSettingsTab';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 
 // =============================================================================
@@ -90,6 +92,18 @@ export default function PBXDetailPage() {
   const setActiveTab = (tab: string) => navigate(`/voip/pbx/${pbxId}/${tab}`, { replace: true });
 
   const { toast } = useToast();
+  const confirm = useConfirm();
+
+  // Every extension delete on this page is staged for review, so the dialog
+  // says so and its button names the staging rather than an immediate delete.
+  const confirmStagedExtensionDelete = (ext: Extension) =>
+    confirm({
+      title: t('PBXDetailPage.confirm.deleteExtension', { number: ext.extension_number }),
+      description: t('PBXDetailPage.editExt.description'),
+      items: [ext.display_name ? `${ext.extension_number} (${ext.display_name})` : ext.extension_number],
+      confirmLabel: t('PBXDetailPage.confirm.stageDelete'),
+      destructive: true,
+    });
 
   useEffect(() => {
     // Guard: only redirect if we are still on a PBX-detail route. Without this,
@@ -242,9 +256,9 @@ export default function PBXDetailPage() {
       });
       toast({ title: t('PBXDetailPage.sync.started'), description: d?.message ?? t('PBXDetailPage.sync.watchingProgress') });
     },
-    onError: () => {
+    onError: (err: unknown) => {
       setSyncStatus('failed');
-      toast({ title: t('PBXDetailPage.sync.failed'), variant: 'destructive' });
+      toast({ title: t('PBXDetailPage.sync.failed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -316,7 +330,7 @@ export default function PBXDetailPage() {
       }
       queryClient.invalidateQueries({ queryKey: ['pbx-dashboard', pbxId] });
     },
-    onError: () => toast({ title: t('PBXDetailPage.toast.connectionTestFailed'), variant: 'destructive' }),
+    onError: (err: unknown) => toast({ title: t('PBXDetailPage.toast.connectionTestFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const reloadMutation = useMutation({
@@ -327,7 +341,7 @@ export default function PBXDetailPage() {
       // "Apply Config to activate" banner disappears.
       queryClient.invalidateQueries({ queryKey: ['pbx-dashboard', pbxId] });
     },
-    onError: () => toast({ title: t('PBXDetailPage.toast.reloadFailed'), variant: 'destructive' }),
+    onError: (err: unknown) => toast({ title: t('PBXDetailPage.toast.reloadFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const hangupMutation = useMutation({
@@ -336,7 +350,7 @@ export default function PBXDetailPage() {
       toast({ title: t('PBXDetailPage.toast.callTerminated') });
       refetchCalls();
     },
-    onError: () => toast({ title: t('PBXDetailPage.toast.hangupFailed'), variant: 'destructive' }),
+    onError: (err: unknown) => toast({ title: t('PBXDetailPage.toast.hangupFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const deletePBXMutation = useMutation({
@@ -345,6 +359,8 @@ export default function PBXDetailPage() {
       toast({ title: t('PBXDetailPage.toast.pbxDeleted') });
       navigate('/voip/pbx');
     },
+    onError: (err: unknown) =>
+      toast({ title: t('PBXDetailPage.toast.pbxDeleteFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const updatePBXMutation = useMutation({
@@ -353,7 +369,7 @@ export default function PBXDetailPage() {
       toast({ title: t('PBXDetailPage.toast.settingsSaved') });
       queryClient.invalidateQueries({ queryKey: ['pbx', pbxId] });
     },
-    onError: () => toast({ title: t('PBXDetailPage.toast.settingsSaveFailed'), variant: 'destructive' }),
+    onError: (err: unknown) => toast({ title: t('PBXDetailPage.toast.settingsSaveFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   // ── Detail Sheet State ──
@@ -404,7 +420,7 @@ export default function PBXDetailPage() {
       queryClient.invalidateQueries({ queryKey: pendingChangesQueryKey('freepbx', pbxId!) });
       setPendingOpen(true);
     },
-    onError: (err: any) => toast({ title: err?.response?.data?.detail || t('PBXDetailPage.toast.extensionCreateFailed'), variant: 'destructive' }),
+    onError: (err: any) => toast({ title: getApiErrorMessage(err, t('PBXDetailPage.toast.extensionCreateFailed')), variant: 'destructive' }),
   });
 
   const deleteExtMutation = useMutation({
@@ -424,7 +440,7 @@ export default function PBXDetailPage() {
       queryClient.invalidateQueries({ queryKey: pendingChangesQueryKey('freepbx', pbxId!) });
       setPendingOpen(true);
     },
-    onError: (err: any) => toast({ title: err?.response?.data?.detail || t('PBXDetailPage.toast.extensionDeleteFailed'), variant: 'destructive' }),
+    onError: (err: any) => toast({ title: getApiErrorMessage(err, t('PBXDetailPage.toast.extensionDeleteFailed')), variant: 'destructive' }),
   });
 
   // Stage an extension UPDATE through the staged-write pipeline. This records
@@ -455,7 +471,7 @@ export default function PBXDetailPage() {
     onError: (err: any) =>
       toast({
         title: t('PBXDetailPage.editExt.stageFailed'),
-        description: err?.response?.data?.detail || err?.message,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       }),
   });
@@ -483,7 +499,7 @@ export default function PBXDetailPage() {
     onError: (err: any) =>
       toast({
         title: t('PBXDetailPage.editExt.stageFailed'),
-        description: err?.response?.data?.detail || err?.message,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       }),
   });
@@ -515,7 +531,7 @@ export default function PBXDetailPage() {
     onError: (err: any) =>
       toast({
         title: t('PBXDetailPage.editExt.stageFailed'),
-        description: err?.response?.data?.detail || err?.message,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       }),
   });
@@ -539,7 +555,7 @@ export default function PBXDetailPage() {
     onError: (err: any) =>
       toast({
         title: t('PBXDetailPage.editExt.stageFailed'),
-        description: err?.response?.data?.detail || err?.message,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       }),
   });
@@ -571,7 +587,7 @@ export default function PBXDetailPage() {
     onError: (err: any) =>
       toast({
         title: t('PBXDetailPage.editExt.stageFailed'),
-        description: err?.response?.data?.detail || err?.message,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       }),
   });
@@ -600,7 +616,7 @@ export default function PBXDetailPage() {
     onError: (err: any) =>
       toast({
         title: t('PBXDetailPage.editExt.stageFailed'),
-        description: err?.response?.data?.detail || err?.message,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       }),
   });
@@ -656,7 +672,7 @@ export default function PBXDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['pbx-dashboard', pbxId] });
     },
     onError: (err: any) => toast({
-      title: err?.response?.data?.detail || t('PBXDetailPage.toast.trunkUpdateFailed'),
+      title: getApiErrorMessage(err, t('PBXDetailPage.toast.trunkUpdateFailed')),
       variant: 'destructive',
     }),
   });
@@ -670,7 +686,7 @@ export default function PBXDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['pbx-dashboard', pbxId] });
     },
     onError: (err: any) => toast({
-      title: err?.response?.data?.detail || t('PBXDetailPage.toast.trunkDeleteFailed'),
+      title: getApiErrorMessage(err, t('PBXDetailPage.toast.trunkDeleteFailed')),
       variant: 'destructive',
     }),
   });
@@ -694,7 +710,7 @@ export default function PBXDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['pbx-dashboard', pbxId] });
     },
     onError: (err: any) => toast({
-      title: err?.response?.data?.detail || t('PBXDetailPage.toast.trunkCreateFailed'),
+      title: getApiErrorMessage(err, t('PBXDetailPage.toast.trunkCreateFailed')),
       variant: 'destructive',
     }),
   });
@@ -711,7 +727,7 @@ export default function PBXDetailPage() {
       setShowCallDialog(false);
       setCallForm({ extension: '', destination: '' });
     },
-    onError: (err: any) => toast({ title: err?.response?.data?.detail || t('PBXDetailPage.toast.callOriginateFailed'), variant: 'destructive' }),
+    onError: (err: any) => toast({ title: getApiErrorMessage(err, t('PBXDetailPage.toast.callOriginateFailed')), variant: 'destructive' }),
   });
 
   // ── Early return (after all hooks) ──
@@ -835,8 +851,8 @@ export default function PBXDetailPage() {
       cell: (row) => (
         <Button
           variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600"
-          onClick={() => {
-            if (confirm(t('PBXDetailPage.confirm.deleteExtension', { number: row.extension_number }))) {
+          onClick={async () => {
+            if (await confirmStagedExtensionDelete(row)) {
               deleteExtMutation.mutate(row.extension_number);
             }
           }}
@@ -1096,16 +1112,18 @@ export default function PBXDetailPage() {
           size="sm"
           className="h-7 w-7 p-0 text-destructive"
           aria-label={t('PBXDetailPage.common.delete')}
-          onClick={() => {
+          onClick={async () => {
             const ext = String(row.extension ?? '');
-            if (
-              ext &&
-              confirm(
-                t('PBXDetailPage.confirm.deleteInboundRoute', {
-                  route: row.extension || row.description || ext,
-                }),
-              )
-            ) {
+            if (!ext) return;
+            const route = String(row.extension || row.description || ext);
+            const ok = await confirm({
+              title: t('PBXDetailPage.confirm.deleteInboundRouteTitle', { route }),
+              description: t('PBXDetailPage.editExt.description'),
+              items: [row.description ? `${route} (${row.description})` : route],
+              confirmLabel: t('PBXDetailPage.confirm.stageDelete'),
+              destructive: true,
+            });
+            if (ok) {
               stageDidDelete.mutate({ extension: ext, cidnum: row.cidnum });
             }
           }}
@@ -2210,9 +2228,10 @@ export default function PBXDetailPage() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => {
-                    if (confirm(t('PBXDetailPage.confirm.deleteExtension', { number: selectedExtension.extension_number }))) {
-                      deleteExtMutation.mutate(selectedExtension.extension_number);
+                  onClick={async () => {
+                    const ext = selectedExtension;
+                    if (await confirmStagedExtensionDelete(ext)) {
+                      deleteExtMutation.mutate(ext.extension_number);
                       setSelectedExtension(null);
                     }
                   }}
@@ -2440,9 +2459,17 @@ export default function PBXDetailPage() {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => {
-                          if (confirm(t('PBXDetailPage.confirm.deleteTrunk', { name: trunkObj.name }))) {
-                            deleteTrunkMutation.mutate(String(trunkObj.trunkid ?? trunkObj.trunk_id ?? trunkObj.channelid));
+                        onClick={async () => {
+                          const trunkId = String(trunkObj.trunkid ?? trunkObj.trunk_id ?? trunkObj.channelid);
+                          const ok = await confirm({
+                            title: t('PBXDetailPage.confirm.deleteTrunkTitle', { name: trunkObj.name }),
+                            description: t('PBXDetailPage.confirm.deleteTrunkBody'),
+                            items: [trunkObj.name],
+                            confirmLabel: t('PBXDetailPage.confirm.deleteTrunkAction'),
+                            destructive: true,
+                          });
+                          if (ok) {
+                            deleteTrunkMutation.mutate(trunkId);
                           }
                         }}
                         disabled={deleteTrunkMutation.isPending}
@@ -2856,11 +2883,18 @@ export default function PBXDetailPage() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => {
+                  onClick={async () => {
                     const grp = String(
                       selectedRingGroup.group_number || selectedRingGroup.extension_number || '',
                     );
-                    if (confirm(t('PBXDetailPage.confirm.deleteRingGroup', { number: grp }))) {
+                    const ok = await confirm({
+                      title: t('PBXDetailPage.confirm.deleteRingGroupTitle', { number: grp }),
+                      description: t('PBXDetailPage.editExt.description'),
+                      items: [selectedRingGroup.name ? `${grp} (${selectedRingGroup.name})` : grp],
+                      confirmLabel: t('PBXDetailPage.confirm.stageDelete'),
+                      destructive: true,
+                    });
+                    if (ok) {
                       stageRgDelete.mutate(grp);
                       setSelectedRingGroup(null);
                     }

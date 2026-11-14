@@ -7,7 +7,7 @@
  * that integrate with FreeSDN via the OAuth2 Authorization Code flow.
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
@@ -15,8 +15,6 @@ import {
   AppWindow,
   Plus,
   Trash2,
-  Copy,
-  Check,
   AlertTriangle,
   RotateCcw,
   ExternalLink,
@@ -27,6 +25,7 @@ import { useToast } from '@/hooks/use-toast';
 import { safeExternalUrl } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { CopyButton } from '@/components/ui/copy-button';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   Dialog,
@@ -50,6 +49,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -101,12 +101,18 @@ function SecretRevealedDialog({
   onClose: () => void;
 }) {
   const { t } = useTranslation('settings');
-  const [copied, setCopied] = useState(false);
+  // The secret is shown only once, so a failed copy must be impossible to
+  // miss: the message stays until a later copy works, and the secret is
+  // selected so the operator can copy it by hand before closing the dialog.
+  const [copyFailed, setCopyFailed] = useState(false);
+  const secretInputRef = useRef<HTMLInputElement>(null);
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(app.client_secret);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyResult = (ok: boolean) => {
+    setCopyFailed(!ok);
+    if (!ok) {
+      secretInputRef.current?.focus();
+      secretInputRef.current?.select();
+    }
   };
 
   return (
@@ -134,17 +140,29 @@ function SecretRevealedDialog({
             </code>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">{t('OAuth2AppsTab.fields.clientSecret')}</Label>
+            <Label htmlFor="oauth2-client-secret-value" className="text-xs text-muted-foreground">{t('OAuth2AppsTab.fields.clientSecret')}</Label>
             <div className="flex gap-2">
               <Input
+                id="oauth2-client-secret-value"
+                ref={secretInputRef}
                 value={app.client_secret}
                 readOnly
                 className="font-mono text-xs"
               />
-              <Button variant="outline" size="icon" onClick={handleCopy}>
-                {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-              </Button>
+              <CopyButton
+                value={app.client_secret}
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                aria-label={t('OAuth2AppsTab.secretDialog.copySecret')}
+                onCopyResult={handleCopyResult}
+              />
             </div>
+            {copyFailed && (
+              <p role="alert" className="text-sm text-destructive">
+                {t('OAuth2AppsTab.secretDialog.copyFailed')}
+              </p>
+            )}
           </div>
         </div>
 
@@ -324,7 +342,7 @@ export function OAuth2AppsTab() {
     onError: (err: any) => {
       toast({
         title: t('common:error'),
-        description: err?.response?.data?.detail,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },
@@ -339,7 +357,7 @@ export function OAuth2AppsTab() {
     onError: (err: any) => {
       toast({
         title: t('common:error'),
-        description: err?.response?.data?.detail,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },

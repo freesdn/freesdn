@@ -2318,7 +2318,8 @@ class UniFiAdapter(BaseAdapter):
     # The distribution engine pushes a CANONICAL VLAN as vendor-neutral actions
     # (create_vlan_interface / create_dhcp_scope / create_alias / create_vlan /
     # delete_*) to each assigned device's adapter (see gateway.distribution_
-    # service._execute_step → getattr(adapter, action)(**params)). These methods
+    # service._plan_members, which calls each by name as one staged change
+    # group). These methods
     # let a UniFi gateway be a first-class distribution TARGET — i.e. a VLAN
     # authored from any vendor (e.g. Omada) lands on UniFi. UniFi folds the L3
     # SVI + L2 VLAN + DHCP into ONE networkconf object, so the tiered actions map

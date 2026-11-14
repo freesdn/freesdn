@@ -18,6 +18,7 @@ from unittest.mock import patch
 
 import pytest
 
+from app.adapters.apply_context import apply_window
 from app.adapters.exceptions import AdapterError
 from app.adapters.hikvision.adapter import (
     AdapterReadOnlyError,
@@ -215,18 +216,30 @@ class TestReadOnlyGate:
         "app.adapters.hikvision.adapter._is_adapter_read_only",
         lambda: True,
     )
-    async def test_force_true_opts_in(self) -> None:
-        """When the caller explicitly passes ``force=True`` the gate
-        is bypassed — verified by reaching the next guard (in this
-        case the connect/channel check) rather than the read-only
-        block-error."""
+    async def test_force_true_alone_does_not_lift_read_only(self) -> None:
+        """A config write with ``force=True`` outside an approved staged
+        apply is still refused while read-only is on (26.12.0)."""
+        adapter = _make_adapter()
+        with pytest.raises(AdapterReadOnlyError):
+            await adapter.set_motion_detection(
+                {"enabled": True}, channel=999, force=True,
+            )
+
+    @pytest.mark.asyncio
+    @patch(
+        "app.adapters.hikvision.adapter._is_adapter_read_only",
+        lambda: True,
+    )
+    async def test_staged_apply_window_reaches_the_next_guard(self) -> None:
+        """Inside an approved staged apply the gate lets the write through,
+        verified by reaching the next guard (the channel check) rather
+        than the read-only block-error."""
         adapter = _make_adapter()
         # Channel validation runs before the HTTP call so an
         # out-of-range channel surfaces an ``AdapterError`` (not
         # the ``AdapterReadOnlyError`` we'd see if the gate had
-        # refused). This is the cleanest signal that ``force=True``
-        # was respected.
-        with pytest.raises(AdapterError) as exc:
+        # refused).
+        with apply_window(), pytest.raises(AdapterError) as exc:
             await adapter.set_motion_detection(
                 {"enabled": True}, channel=999, force=True,
             )

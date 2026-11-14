@@ -39,7 +39,8 @@
     "settingsTab": {
       "title": "Configuración de la organización",
       "description": "Configura la facturación, los límites del plan, los proveedores de SSO y la habilitación de módulos para esta organización.",
-      "action": "Ir a Configuración"
+      "action": "Ir a Configuración",
+      "statusSuperAdminOnly": "Solo un superadministrador puede desactivar o reactivar una organización, porque al desactivarla se cierra la sesión de todos sus miembros."
     },
     "backToOrganizations": "Volver a Organizaciones",
     "error": {

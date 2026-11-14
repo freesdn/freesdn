@@ -247,18 +247,53 @@
         "labelWrite": "读写模式（管理）",
         "descReadOnly": "设备写入已禁用。关闭此模式即可管理和配置设备。",
         "descWrite": "设备写入已启用。开启此模式可将平台限制为仅监控。",
-        "toggleAria": "切换只读模式"
+        "toggleAria": "切换只读模式",
+        "labelUnknown": "当前模式未知",
+        "descError": "服务器未返回当前模式，因此此处不显示。在能够读取之前，开关保持禁用。",
+        "descLoading": "正在从服务器读取当前模式。",
+        "retry": "重试",
+        "descEnvEnforced": "只读模式由服务器环境中的 ADAPTER_READ_ONLY=true 设置，因此无法在此关闭。请在服务器的 .env 文件中设置 ADAPTER_READ_ONLY=false 并重启 FreeSDN，以允许写入设备。",
+        "descUnverified": "无法读取已保存的开关，因此在能够读取之前将拒绝所有设备写入。请稍后重试。"
       },
       "status": {
         "readOnly": "只读模式已开启。FreeSDN 不会向任何设备写入配置。",
-        "write": "写入权限已开启。FreeSDN 可以向受管设备应用更改。"
+        "write": "写入权限已开启。FreeSDN 可以向受管设备应用更改。",
+        "unknown": "服务器尚未确认当前模式。"
       },
       "toast": {
         "readOnlyTitle": "只读模式已启用",
         "readOnlyDesc": "整个平台的设备写入操作现已禁用。",
         "writeTitle": "写入权限已启用",
         "writeDesc": "现在可以管理和配置设备。",
-        "errorTitle": "无法更新模式"
+        "errorTitle": "无法更新模式",
+        "mismatchTitle": "模式未更改",
+        "mismatchStillReadOnly": "服务器仍保持只读模式，无法向设备写入。",
+        "mismatchStillWrite": "服务器仍保持写入权限开启。",
+        "notPropagatedTitle": "已保存",
+        "notPropagatedDesc": "更改已保存。部分 FreeSDN 进程可能需要最多 30 秒才会应用。"
+      },
+      "confirm": {
+        "title": "允许 FreeSDN 向设备写入？",
+        "description": "这将在整个平台关闭只读模式。之后，任何拥有写入权限的用户都可以将暂存的更改应用到交换机、防火墙、摄像头、电话和虚拟化主机。每次应用仍需单独确认。",
+        "cancel": "保持只读",
+        "confirm": "启用写入权限"
+      },
+      "sources": {
+        "title": "模式的来源",
+        "env": "服务器环境（ADAPTER_READ_ONLY）",
+        "setting": "设置开关",
+        "readOnly": "只读",
+        "envOff": "未强制",
+        "settingOff": "关闭",
+        "settingUnknown": "无法读取",
+        "inForce": "当前生效"
+      },
+      "enforcedBy": {
+        "environment": "只读，由服务器环境设置",
+        "setting": "只读，由设置开关设置",
+        "environment_and_setting": "只读，由服务器环境和设置开关共同设置",
+        "unverified": "只读，因为无法读取设置开关",
+        "none": "读写：两个来源均未强制只读"
       }
     }
   },
@@ -393,7 +428,9 @@
       "notShownAgain": "它将不会再次显示。",
       "storeSecurely": "请妥善保管此密钥。任何持有此密钥的人都可以使用您的权限访问 API。",
       "keyLabel": "您的新 API 密钥",
-      "copiedConfirm": "我已复制密钥"
+      "copiedConfirm": "我已复制密钥",
+      "copyKey": "复制 API 密钥",
+      "copyFailed": "无法将密钥复制到剪贴板。请在关闭此对话框之前，在上方字段中选中它并手动复制（Ctrl+C 或 Cmd+C）。它将不会再次显示。"
     },
     "create": {
       "title": "创建 API 密钥",
@@ -575,7 +612,7 @@
       "beta": "测试版",
       "missingDeps": "缺少依赖：{{deps}}",
       "comingSoon": "即将推出",
-      "comingSoonAria": "即将推出 — 尚不可用",
+      "comingSoonAria": "即将推出，尚不可用",
       "comingSoonTooltip": "此模块为预览版，暂时无法启用。",
       "capsCount_one": "{{count}} 项能力",
       "capsCount_other": "{{count}} 项能力"
@@ -767,7 +804,7 @@
   "OAuth2AppsTab": {
     "header": {
       "title": "OAuth2 应用",
-      "description": "注册第三方应用，通过 OAuth2 授权码流程（含 PKCE）进行集成。"
+      "description": "为采用 PKCE 的 OAuth2 授权码流程注册第三方应用。令牌端点尚未启用，因此已注册的应用无法获取令牌。目前请使用 API 密钥进行程序化访问。"
     },
     "actions": {
       "registerApp": "注册应用",
@@ -786,7 +823,7 @@
     },
     "empty": {
       "title": "尚未注册 OAuth2 应用",
-      "description": "注册你的第一个应用，以启用 OAuth2 集成并通过授权码流程授予编程访问权限。"
+      "description": "注册应用暂不授予访问权限：OAuth2 令牌端点尚未启用。请使用 API 密钥进行程序化访问。"
     },
     "fields": {
       "clientId": "客户端 ID",
@@ -822,7 +859,9 @@
       "copyNow": "请立即复制客户端密钥。",
       "notShownAgain": "该密钥将不再显示。",
       "storeSecurely": "请妥善保管此密钥，它无法恢复。",
-      "stored": "我已保存密钥"
+      "stored": "我已保存密钥",
+      "copySecret": "复制客户端密钥",
+      "copyFailed": "无法将客户端密钥复制到剪贴板。请在关闭此对话框之前，在上方字段中选中它并手动复制（Ctrl+C 或 Cmd+C）。它将不会再次显示。"
     },
     "registerDialog": {
       "title": "注册 OAuth2 应用",
@@ -971,6 +1010,13 @@
         "boolean": "布尔值",
         "null": "空值"
       }
+    },
+    "bulkUninstallDialog": {
+      "title_one": "卸载 {{count}} 个插件？",
+      "title_other": "卸载 {{count}} 个插件？",
+      "description": "这将调用每个插件的卸载钩子并删除其所有文件。它们已保存的设置（包括任何凭据）会保留，以便重新安装时继续使用。",
+      "action_one": "卸载插件",
+      "action_other": "卸载插件"
     }
   },
   "SSOSettingsPage": {
@@ -980,7 +1026,7 @@
     },
     "backToSecurity": "返回安全设置",
     "backToProviders": "返回提供商列表",
-    "confirmDelete": "确定要删除此 SSO 提供商吗？",
+    "confirmDelete": "删除 SSO 提供商“{{name}}”？",
     "status": {
       "active": "已启用",
       "disabled": "已禁用"
@@ -1067,6 +1113,8 @@
       "loadFailed": "加载 SSO 提供商失败",
       "saveFailed": "保存提供商失败",
       "deleteFailed": "删除提供商失败"
-    }
+    },
+    "confirmDeleteDescription": "删除后将无法再通过它登录。只要仍有账户与它关联，FreeSDN 就会拒绝删除。",
+    "confirmDeleteAction": "删除提供商"
   }
 }

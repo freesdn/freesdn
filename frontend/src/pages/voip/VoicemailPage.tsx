@@ -11,8 +11,9 @@ import { useTranslation } from 'react-i18next';
 import { useSiteStore } from '@/stores/siteStore';
 import {
   Voicemail, Download, Trash2, CheckCircle, Mail,
-  MailOpen, Clock, AlertTriangle,
+  MailOpen, Clock, AlertTriangle, Info,
 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,13 +21,16 @@ import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { voipApi } from '@/lib/api';
 import { PageHeader } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { formatDuration, formatTimeAgo } from './components';
 import type { VoicemailMessage } from './types';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 export default function VoicemailPage() {
   const { t } = useTranslation('voip');
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
 
   // Site context
   const selectedSiteId = useSiteStore((s) => s.selectedSiteId);
@@ -39,7 +43,11 @@ export default function VoicemailPage() {
     refetchInterval: 30_000,
   });
 
-  const voicemails: VoicemailMessage[] = vmRes?.data?.items ?? vmRes?.data ?? [];
+  const voicemails: VoicemailMessage[] = Array.isArray(vmRes?.data?.items)
+    ? vmRes.data.items
+    : Array.isArray(vmRes?.data)
+      ? vmRes.data
+      : [];
 
   const { data: statsRes, isError: statsError } = useQuery({
     queryKey: ['voip-voicemail-stats', { siteId: selectedSiteId }],
@@ -62,7 +70,7 @@ export default function VoicemailPage() {
       queryClient.invalidateQueries({ queryKey: ['voip-voicemail-stats'] });
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (err: any) => toast({ title: t('VoIPPage.toasts.markReadFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('VoIPPage.toasts.markReadFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const deleteMutation = useMutation({
@@ -72,7 +80,7 @@ export default function VoicemailPage() {
       queryClient.invalidateQueries({ queryKey: ['voip-voicemail-stats'] });
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (err: any) => toast({ title: t('VoIPPage.toasts.deleteVoicemailFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('VoIPPage.toasts.deleteVoicemailFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   // NOTE: playable audio is not available yet. The backend only stores the
@@ -159,8 +167,20 @@ export default function VoicemailPage() {
             <Download className="h-3.5 w-3.5" />
           </Button>
           <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" title={t('VoicemailPage.actions.delete')}
-            onClick={() => {
-              if (window.confirm(t('VoIPPage.confirm.deleteVoicemail'))) {
+            onClick={async () => {
+              const ts = row.message_date || row.created_at;
+              const label = [
+                row.caller_name || row.caller_id,
+                ts ? new Date(ts).toLocaleString() : '',
+              ].filter(Boolean).join(' · ');
+              const ok = await confirm({
+                title: t('VoIPPage.confirm.deleteVoicemail'),
+                description: t('VoIPPage.confirm.deleteVoicemailBody'),
+                items: label ? [label] : undefined,
+                confirmLabel: t('VoIPPage.confirm.deleteVoicemailAction'),
+                destructive: true,
+              });
+              if (ok) {
                 deleteMutation.mutate(row.id);
               }
             }}>
@@ -180,6 +200,15 @@ export default function VoicemailPage() {
         onRefresh={() => refetch()}
         refreshing={isLoading}
       />
+
+      {/* Nothing in the backend writes VoicemailMessage rows (no import task,
+          no sync, no webhook), so this inbox is empty on every real install.
+          Point at what does work instead of implying "no voicemail". */}
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertTitle>{t('VoicemailPage.collectionNotice.title')}</AlertTitle>
+        <AlertDescription>{t('VoicemailPage.collectionNotice.body')}</AlertDescription>
+      </Alert>
 
       {(vmError || statsError) && (
         <Card className="border-destructive">

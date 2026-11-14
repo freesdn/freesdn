@@ -247,18 +247,53 @@
         "labelWrite": "Modo de lectura y escritura (administración)",
         "descReadOnly": "Las escrituras en dispositivos están deshabilitadas. Desactiva este modo para administrar y configurar dispositivos.",
         "descWrite": "Las escrituras en dispositivos están habilitadas. Activa este modo para limitar la plataforma a la supervisión.",
-        "toggleAria": "Activar o desactivar el modo de solo lectura"
+        "toggleAria": "Activar o desactivar el modo de solo lectura",
+        "labelUnknown": "Modo actual desconocido",
+        "descError": "El servidor no informó el modo actual, por lo que no se muestra aquí. El interruptor permanece desactivado hasta que se pueda leer.",
+        "descLoading": "Leyendo el modo actual desde el servidor.",
+        "retry": "Reintentar",
+        "descEnvEnforced": "El modo de solo lectura está definido por ADAPTER_READ_ONLY=true en el entorno del servidor, así que no se puede desactivar aquí. Defina ADAPTER_READ_ONLY=false en el archivo .env del servidor y reinicie FreeSDN para permitir escrituras en los dispositivos.",
+        "descUnverified": "No se pudo leer el interruptor guardado, así que las escrituras en los dispositivos se rechazan hasta poder leerlo. Vuelva a intentarlo en un momento."
       },
       "status": {
         "readOnly": "El modo de solo lectura está ACTIVADO. FreeSDN no escribirá en ningún dispositivo.",
-        "write": "El acceso de escritura está ACTIVADO. FreeSDN puede aplicar cambios a los dispositivos administrados."
+        "write": "El acceso de escritura está ACTIVADO. FreeSDN puede aplicar cambios a los dispositivos administrados.",
+        "unknown": "El servidor aún no ha confirmado el modo actual."
       },
       "toast": {
         "readOnlyTitle": "Modo de solo lectura activado",
         "readOnlyDesc": "Las escrituras en dispositivos están deshabilitadas en toda la plataforma.",
         "writeTitle": "Acceso de escritura activado",
         "writeDesc": "Ahora se pueden administrar y configurar los dispositivos.",
-        "errorTitle": "No se pudo actualizar el modo"
+        "errorTitle": "No se pudo actualizar el modo",
+        "mismatchTitle": "Modo sin cambios",
+        "mismatchStillReadOnly": "El servidor mantuvo activo el modo de solo lectura. No es posible escribir en los dispositivos.",
+        "mismatchStillWrite": "El servidor mantuvo activo el acceso de escritura.",
+        "notPropagatedTitle": "Guardado",
+        "notPropagatedDesc": "El cambio está guardado. Algunos procesos de FreeSDN pueden tardar hasta 30 segundos en aplicarlo."
+      },
+      "confirm": {
+        "title": "¿Permitir que FreeSDN escriba en los dispositivos?",
+        "description": "Esto desactiva el modo de solo lectura en toda la plataforma. Cualquier persona con permiso de escritura podrá aplicar los cambios preparados a switches, firewalls, cámaras, teléfonos e hipervisores. Cada aplicación sigue necesitando su propia confirmación.",
+        "cancel": "Mantener solo lectura",
+        "confirm": "Activar acceso de escritura"
+      },
+      "sources": {
+        "title": "De dónde viene el modo",
+        "env": "Entorno del servidor (ADAPTER_READ_ONLY)",
+        "setting": "Interruptor de Ajustes",
+        "readOnly": "Solo lectura",
+        "envOff": "No impuesto",
+        "settingOff": "Desactivado",
+        "settingUnknown": "No se pudo leer",
+        "inForce": "En vigor"
+      },
+      "enforcedBy": {
+        "environment": "Solo lectura, definido por el entorno del servidor",
+        "setting": "Solo lectura, definido por el interruptor de Ajustes",
+        "environment_and_setting": "Solo lectura, definido por el entorno del servidor y el interruptor de Ajustes",
+        "unverified": "Solo lectura, porque no se pudo leer el interruptor de Ajustes",
+        "none": "Lectura y escritura: ninguna fuente impone solo lectura"
       }
     }
   },
@@ -393,7 +428,9 @@
       "notShownAgain": "No se volverá a mostrar.",
       "storeSecurely": "Guarda esta clave de forma segura. Cualquier persona con esta clave puede acceder a la API con tus permisos.",
       "keyLabel": "Tu nueva clave de API",
-      "copiedConfirm": "He copiado la clave"
+      "copiedConfirm": "He copiado la clave",
+      "copyKey": "Copiar la clave de API",
+      "copyFailed": "No se pudo copiar la clave al portapapeles. Selecciónala en el campo de arriba y cópiala manualmente (Ctrl+C o Cmd+C) antes de cerrar este cuadro de diálogo. No se volverá a mostrar."
     },
     "create": {
       "title": "Crear clave de API",
@@ -575,7 +612,7 @@
       "beta": "Beta",
       "missingDeps": "Dependencias faltantes: {{deps}}",
       "comingSoon": "Próximamente",
-      "comingSoonAria": "Próximamente — aún no disponible",
+      "comingSoonAria": "Próximamente, aún no disponible",
       "comingSoonTooltip": "Este módulo es una vista previa y aún no se puede habilitar.",
       "capsCount_one": "{{count}} capacidad",
       "capsCount_other": "{{count}} capacidades"
@@ -767,7 +804,7 @@
   "OAuth2AppsTab": {
     "header": {
       "title": "Aplicaciones OAuth2",
-      "description": "Registra aplicaciones de terceros para la integración con OAuth2 mediante el flujo de código de autorización con PKCE."
+      "description": "Registra aplicaciones de terceros para el flujo de código de autorización OAuth2 con PKCE. El endpoint de tokens aún no está activo, así que una aplicación registrada no puede obtener tokens. Por ahora, usa una clave de API para el acceso programático."
     },
     "actions": {
       "registerApp": "Registrar aplicación",
@@ -786,7 +823,7 @@
     },
     "empty": {
       "title": "No hay aplicaciones OAuth2 registradas",
-      "description": "Registra tu primera aplicación para habilitar integraciones OAuth2 y conceder acceso programático mediante el flujo de código de autorización."
+      "description": "Registrar una aplicación todavía no concede acceso: el endpoint de tokens OAuth2 no está activo. Usa una clave de API para el acceso programático."
     },
     "fields": {
       "clientId": "ID de cliente",
@@ -822,7 +859,9 @@
       "copyNow": "Copia el secreto de cliente ahora.",
       "notShownAgain": "No se volverá a mostrar.",
       "storeSecurely": "Guarda este secreto de forma segura. No se puede recuperar.",
-      "stored": "He guardado el secreto"
+      "stored": "He guardado el secreto",
+      "copySecret": "Copiar el secreto de cliente",
+      "copyFailed": "No se pudo copiar el secreto al portapapeles. Selecciónalo en el campo de arriba y cópialo manualmente (Ctrl+C o Cmd+C) antes de cerrar este cuadro de diálogo. No se volverá a mostrar."
     },
     "registerDialog": {
       "title": "Registrar aplicación OAuth2",
@@ -971,6 +1010,13 @@
         "boolean": "booleano",
         "null": "nulo"
       }
+    },
+    "bulkUninstallDialog": {
+      "title_one": "¿Desinstalar {{count}} complemento?",
+      "title_other": "¿Desinstalar {{count}} complementos?",
+      "description": "Esto llama al hook de desinstalación de cada complemento y elimina sus archivos en todas partes. Sus ajustes guardados, incluidas las credenciales, se conservan para que una reinstalación retome donde lo dejaste.",
+      "action_one": "Desinstalar complemento",
+      "action_other": "Desinstalar complementos"
     }
   },
   "SSOSettingsPage": {
@@ -980,7 +1026,7 @@
     },
     "backToSecurity": "Volver a Configuración de seguridad",
     "backToProviders": "Volver a proveedores",
-    "confirmDelete": "¿Estás seguro de que deseas eliminar este proveedor de SSO?",
+    "confirmDelete": "¿Eliminar el proveedor de SSO \"{{name}}\"?",
     "status": {
       "active": "Activo",
       "disabled": "Deshabilitado"
@@ -1067,6 +1113,8 @@
       "loadFailed": "Error al cargar los proveedores de SSO",
       "saveFailed": "Error al guardar el proveedor",
       "deleteFailed": "Error al eliminar el proveedor"
-    }
+    },
+    "confirmDeleteDescription": "Después nadie podrá iniciar sesión con él. FreeSDN rechaza la eliminación mientras alguna cuenta siga vinculada a él.",
+    "confirmDeleteAction": "Eliminar proveedor"
   }
 }

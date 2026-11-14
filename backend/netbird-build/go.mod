@@ -76,7 +76,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/netbirdio/go-nat v0.0.0-20260821095157-6b2c8c5c74e8 // indirect
 	github.com/netbirdio/ice/v4 v4.0.0-20261021152109-d0e5dfacb548 // indirect
-	github.com/netbirdio/netbird v0.82.0 // indirect
+	github.com/netbirdio/netbird v0.82.1 // indirect
 	github.com/netbirdio/wireguard-go v0.0.0-20261021152105-0de46b309cdb // indirect
 	github.com/petermattis/goid v0.0.0-20250303134427-723919f7f203 // indirect
 	github.com/pion/dtls/v2 v2.2.10 // indirect

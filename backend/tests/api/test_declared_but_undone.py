@@ -464,7 +464,10 @@ def test_a_failed_reboot_does_not_fail_a_written_config():
     tail = code[reboot_at:]
     assert "except (PhoneNotFoundError, VoIPError)" in tail
     assert 'result["rebooted"] = False' in tail
-    assert "raise HTTPException" not in tail.split("except ProvisioningError")[0]
+    # The reboot branch itself, up to its return: errors raised by the config
+    # write (a shared MAC, a provisioning failure) come before anything is
+    # written and are handled after it.
+    assert "raise HTTPException" not in tail.split("return result")[0]
 
 
 def test_provision_defaults_are_still_what_the_schema_declares():

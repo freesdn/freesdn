@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import {
   Shield,
   UserPlus,
@@ -55,6 +56,7 @@ const ACCESS_LEVELS = {
 export function CameraAccessPanel({ cameraId, cameraName }: CameraAccessPanelProps) {
   const { t } = useTranslation('common');
   const { toast } = useToast();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -152,8 +154,16 @@ export function CameraAccessPanel({ cameraId, cameraName }: CameraAccessPanelPro
                 key={grant.id}
                 grant={grant}
                 onUpdate={(data) => updateMut.mutate({ id: grant.id, data })}
-                onDelete={() => {
-                  if (confirm(t('CameraAccessPanel.confirmRevoke', { user: grant.user_email || grant.user_id }))) {
+                onDelete={async () => {
+                  const user = grant.user_email || grant.user_id;
+                  const ok = await confirm({
+                    title: t('CameraAccessPanel.confirmRevoke', { user }),
+                    description: t('CameraAccessPanel.confirmRevokeBody'),
+                    items: [cameraName ? `${user}: ${cameraName}` : user],
+                    confirmLabel: t('CameraAccessPanel.actions.revokeAccess'),
+                    destructive: true,
+                  });
+                  if (ok) {
                     deleteMut.mutate(grant.id);
                   }
                 }}

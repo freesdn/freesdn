@@ -26,7 +26,9 @@
     "status": {
       "online": "En línea",
       "offline": "Sin conexión",
-      "adopting": "Adoptando"
+      "adopting": "Adoptando",
+      "degraded": "Degradado",
+      "provisioning": "Aprovisionando"
     },
     "header": {
       "title": "Puntos de acceso",
@@ -54,7 +56,20 @@
       "clearFilters": "Limpiar filtros",
       "loading": "Cargando puntos de acceso...",
       "emptyTitle": "No se encontraron puntos de acceso",
-      "emptyDescription": "Ejecuta un descubrimiento para encontrar puntos de acceso en tu red."
+      "emptyDescription": "Ejecuta un descubrimiento para encontrar puntos de acceso en tu red.",
+      "itemName": "puntos de acceso",
+      "actionsFor": "Acciones para {{name}}",
+      "columns": {
+        "name": "Nombre",
+        "status": "Estado",
+        "ip": "Dirección IP",
+        "mac": "Dirección MAC",
+        "site": "Sitio",
+        "radios": "Radios",
+        "clients": "Clientes",
+        "uptime": "Tiempo activo",
+        "actions": "Acciones"
+      }
     },
     "card": {
       "clients": "Clientes",

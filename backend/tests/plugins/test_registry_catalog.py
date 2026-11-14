@@ -311,12 +311,19 @@ def test_the_published_catalogue_reproduces_from_source(tmp_path) -> None:
 
     catalog = json.loads(path.read_text(encoding="utf-8"))
     published = {p["plugin_id"]: p["checksum_sha256"] for p in catalog["plugins"]}
+    downloads = path.parent / "dl"
 
+    # Compressed bytes depend on the host's zlib (zlib-ng on Windows CPython
+    # 3.14, classic zlib on Linux), so "re-derivable" means what build.py now
+    # does: the published archive holds exactly the members the source packages
+    # to, and the catalogue advertises that archive's checksum.
     mismatched = []
     for src in _plugin_dirs():
         entry = builder.package_plugin(src, "https://example.invalid/", tmp_path)
         pid = entry["plugin_id"]
-        if pid in published and published[pid] != entry["checksum_sha256"]:
+        name = entry["download_url"].rsplit("/", 1)[-1]
+        digest = builder.adopt_published_archive(tmp_path / name, downloads / name)
+        if pid in published and published[pid] != (digest or entry["checksum_sha256"]):
             mismatched.append(pid)
 
     assert not mismatched, (
@@ -324,3 +331,36 @@ def test_the_published_catalogue_reproduces_from_source(tmp_path) -> None:
         "Either the source changed without a version bump, or packaging stopped "
         "being deterministic."
     )
+
+
+def test_a_rebuild_keeps_published_bytes_only_when_the_content_is_identical(tmp_path) -> None:
+    """A different zlib must not change a published checksum; a content change must."""
+    import hashlib
+    import zipfile
+
+    builder = _load_builder()
+    if builder is None:
+        pytest.skip("registry/ is absent in a backend-only checkout")
+    src = tmp_path / "src" / "adopt-fixture"
+    src.mkdir(parents=True)
+    (src / "plugin.yaml").write_text("id: adopt-fixture\nversion: 1.0.0\nname: Adopt\n")
+    (src / "plugin.py").write_text("# adopt fixture\n" * 50)
+    entry = builder.package_plugin(src, "https://example.invalid/", tmp_path / "built")
+    built = tmp_path / "built" / "adopt-fixture-1.0.0.zip"
+
+    # The "published" copy: same members, compressed at another level, which is
+    # what a different zlib implementation produces.
+    published = tmp_path / "published.zip"
+    with zipfile.ZipFile(built) as zin, zipfile.ZipFile(published, "w") as zout:
+        for info in zin.infolist():
+            zout.writestr(info, zin.read(info), compresslevel=1)
+    assert published.read_bytes() != built.read_bytes()
+    published_digest = hashlib.sha256(published.read_bytes()).hexdigest()
+
+    assert builder.adopt_published_archive(built, published) == published_digest
+    assert built.read_bytes() == published.read_bytes()
+    assert entry["checksum_sha256"] != published_digest  # it really was rebuilt
+
+    (src / "plugin.py").write_text("# changed without a version bump\n")
+    builder.package_plugin(src, "https://example.invalid/", tmp_path / "built")
+    assert builder.adopt_published_archive(built, published) is None

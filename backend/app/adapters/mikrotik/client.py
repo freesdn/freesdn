@@ -26,6 +26,7 @@ from typing import Any
 
 import httpx
 
+from app.adapters.apply_context import FORCE_DOES_NOT_LIFT_READ_ONLY, read_only_refuses_write
 from app.adapters.exceptions import (
     AdapterAuthenticationError,
     AdapterConnectionError,
@@ -70,6 +71,11 @@ def _validate_path(path: str) -> None:
 
 # HTTP methods that mutate state — subject to the dual-gate.
 _WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+# RouterOS REST runs these diagnostics as POSTs, but they change nothing on the
+# router. Classified as reads so they work in read-only mode without borrowing
+# ``force`` (which no longer lifts the read-only lock).
+_READ_POST_PATHS: frozenset[str] = frozenset({"/tool/ping", "/tool/traceroute"})
 
 
 def _is_adapter_read_only() -> bool:
@@ -254,12 +260,15 @@ class MikroTikClient:
 
         # Universal read-only gate. Default-on; refuses writes unless
         # the caller explicitly opted in via ``force=True``.
-        if method_upper in _WRITE_METHODS and _is_adapter_read_only() and not force:
+        is_write = method_upper in _WRITE_METHODS and not (
+            method_upper == "POST" and path in _READ_POST_PATHS
+        )
+        if is_write and read_only_refuses_write(_is_adapter_read_only()):
             _record_request_metric(method_upper, "read_only_blocked")
             raise AdapterError(
                 "ADAPTER_READ_ONLY is set — MikroTik write refused. Set "
                 "ADAPTER_READ_ONLY=false in the environment AND pass "
-                "force=true to override.",
+                "force=true to override." + (FORCE_DOES_NOT_LIFT_READ_ONLY if force else ""),
                 adapter_id="mikrotik",
             )
 
@@ -2021,11 +2030,12 @@ class MikroTikClient:
                 # with a bumped session timeout. The read timeout is
                 # set on the request itself.
                 _validate_path("/tool/torch")
-                if _is_adapter_read_only() and not force:
+                if read_only_refuses_write(_is_adapter_read_only()):
                     raise AdapterError(
                         "ADAPTER_READ_ONLY is set — MikroTik write refused. "
                         "Set ADAPTER_READ_ONLY=false in the environment AND "
-                        "pass force=true to override.",
+                        "pass force=true to override."
+                        + (FORCE_DOES_NOT_LIFT_READ_ONLY if force else ""),
                         adapter_id="mikrotik",
                     )
                 resp = await self._client.request(

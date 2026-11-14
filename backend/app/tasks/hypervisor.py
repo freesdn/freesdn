@@ -188,9 +188,13 @@ async def _read_cluster_status(adapter: Any) -> dict[str, Any] | None:
 
 
 async def _poll_hypervisor_health() -> dict[str, Any]:
+    from app.core.device_breaker import controller_breaker, controller_key
+    from app.core.device_poll import device_poll
+    from app.core.device_slot import controller_slot_key
+    from app.modules.poll_gate import orgs_with_module_disabled
     from app.services.adapter_proxmox_vm import build_proxmox_adapter
 
-    polled = 0
+    polled = skipped = 0
     emitted = 0
     pending_events: list[Any] = []
 
@@ -210,19 +214,43 @@ async def _poll_hypervisor_health() -> dict[str, Any]:
             .all()
         )
 
-        for ctrl in controllers:
-            polled += 1
-            org_id = await _org_for_controller(session, ctrl)
-            if org_id is None:
-                # No resolvable org → cannot org-scope the event. Skip (fail-closed).
+        orgs = {ctrl.id: await _org_for_controller(session, ctrl) for ctrl in controllers}
+        # An organization that switched the Hypervisor module off is not polled.
+        disabled = await orgs_with_module_disabled(session, "hypervisor", orgs.values())
+    # Leaving the block ends the read transaction before the first byte goes to
+    # a device: no database transaction or connection is held while one answers.
+
+    snapshots: dict[UUID, dict[str, Any]] = {}
+
+    for ctrl in controllers:
+        org_id = orgs.get(ctrl.id)
+        if org_id is None:
+            # No resolvable org → cannot org-scope the event. Skip (fail-closed).
+            continue
+        if org_id in disabled:
+            continue
+
+        cfg = ctrl.config or {}
+        prev = cfg.get(_SNAP_KEY) or {}
+
+        reachable = True
+        status: dict[str, Any] | None = None
+        adapter = None
+        # Shared breaker + the cluster endpoint's device slot: a Proxmox the
+        # health check found unreachable is probed by one poller, and one
+        # that discovery or a status sync is reading is left to the next
+        # cycle. A skipped cycle keeps the previous snapshot.
+        async with device_poll(
+            slot_key=controller_slot_key(ctrl),
+            breaker=controller_breaker,
+            breaker_key=controller_key(ctrl.id),
+            holder="Proxmox monitor",
+        ) as turn:
+            if turn.skipped:
+                skipped += 1
+                logger.info("Hypervisor poll: %s skipped: %s", ctrl.name, turn.reason)
                 continue
-
-            cfg = ctrl.config or {}
-            prev = cfg.get(_SNAP_KEY) or {}
-
-            reachable = True
-            status: dict[str, Any] | None = None
-            adapter = None
+            polled += 1
             try:
                 adapter = await build_proxmox_adapter(ctrl)
                 status = await _read_cluster_status(adapter)
@@ -230,6 +258,7 @@ async def _poll_hypervisor_health() -> dict[str, Any]:
                     reachable = False
             except Exception as exc:  # noqa: BLE001 — one bad cluster must not abort the rest
                 reachable = False
+                turn.failed(exc)
                 logger.warning(
                     "Hypervisor poll: %s (%s) unreachable: %s", ctrl.name, ctrl.host, exc
                 )
@@ -238,12 +267,23 @@ async def _poll_hypervisor_health() -> dict[str, Any]:
                     with contextlib.suppress(Exception):
                         await adapter.disconnect()
 
-            pending_events.extend(_transitions(prev, status, reachable, ctrl, org_id))
+        pending_events.extend(_transitions(prev, status, reachable, ctrl, org_id))
 
-            ctrl.config = {**cfg, _SNAP_KEY: _snapshot(reachable, status, prev)}
-            flag_modified(ctrl, "config")
+        snapshots[ctrl.id] = _snapshot(reachable, status, prev)
 
-        await session.commit()
+    # One short transaction for the new snapshots, merged into each row's
+    # CURRENT config, so a setting an operator saved during the poll is kept.
+    if snapshots:
+        async with CelerySessionLocal() as session:
+            rows = (
+                await session.execute(
+                    select(Controller).where(Controller.id.in_(list(snapshots))).with_for_update()
+                )
+            ).scalars()
+            for row in rows:
+                row.config = {**(row.config or {}), _SNAP_KEY: snapshots[row.id]}
+                flag_modified(row, "config")
+            await session.commit()
 
     # Publish AFTER the snapshot is durably committed (steady state never re-fires).
     for ev in pending_events:
@@ -255,13 +295,13 @@ async def _poll_hypervisor_health() -> dict[str, Any]:
         except Exception:
             logger.debug("hypervisor event publish skipped", exc_info=True)
 
-    return {"success": True, "polled": polled, "events_emitted": emitted}
+    return {"success": True, "polled": polled, "skipped": skipped, "events_emitted": emitted}
 
 
 @celery_app.task(bind=True, name="hypervisor.poll_health", soft_time_limit=240, time_limit=300)
 def poll_health(self) -> dict[str, Any]:
     """Periodic Proxmox health poll → hypervisor.* transition events."""
-    lock_token = acquire_solo_lock("hypervisor.poll_health", ttl_seconds=180)
+    lock_token = acquire_solo_lock("hypervisor.poll_health", ttl_seconds=300)
     if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:

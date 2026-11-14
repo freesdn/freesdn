@@ -39,7 +39,8 @@
     "settingsTab": {
       "title": "组织设置",
       "description": "为该组织配置计费、套餐限额、SSO 提供商和模块启用。",
-      "action": "前往设置"
+      "action": "前往设置",
+      "statusSuperAdminOnly": "只有超级管理员可以停用或重新启用组织，因为停用会让其所有成员退出登录。"
     },
     "backToOrganizations": "返回组织列表",
     "error": {

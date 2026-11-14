@@ -95,7 +95,10 @@ describe("SLA report operator controls", () => {
     renderWithProviders(<SLAReportsPanel policies={[]} />, {
       initialPath: "/sla/reports?report=report-id",
     });
-    expect(await screen.findByText("unknown")).toBeInTheDocument();
+    // The state is shown by its translated label, and the backend's code stays
+    // visible for relay-log correlation.
+    expect(await screen.findByText("Unknown")).toBeInTheDocument();
+    expect(screen.getByText("Code: worker_interrupted")).toBeInTheDocument();
     expect(
       screen.getByText(/does not prove inbox delivery/),
     ).toBeInTheDocument();
@@ -155,5 +158,17 @@ describe("SLA report operator controls", () => {
     expect(
       screen.queryByText("No reports have been generated."),
     ).not.toBeInTheDocument();
+  });
+
+  it("survives list envelopes without the expected arrays", async () => {
+    // A bare list (or any body missing `reports` / `schedules`) used to throw
+    // on `.length` during render and take the whole SLA page down.
+    mock.api.list.mockResolvedValue({ data: [] });
+    mock.api.schedules.mockResolvedValue({ data: { items: [] } });
+    renderWithProviders(<SLAReportsPanel policies={[]} />);
+    expect(
+      await screen.findByText("No reports have been generated."),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("No report schedules.")).toBeInTheDocument();
   });
 });

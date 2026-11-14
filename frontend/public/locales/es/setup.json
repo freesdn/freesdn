@@ -430,7 +430,7 @@
       "passLabel": "Frase de contraseña de la copia",
       "passPlaceholder": "La frase de contraseña con la que se creó la copia",
       "submit": "Restaurar esta instancia",
-      "failed": "La restauración falló — revisa el archivo y la frase de contraseña.",
+      "failed": "La restauración falló. Revisa el archivo y la frase de contraseña.",
       "unconfirmed": "La recuperación no se ha confirmado. Revise el estado del servidor antes de volver a intentarlo."
     },
     "hero": {

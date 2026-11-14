@@ -520,6 +520,22 @@ async def delete_agent(
 
     await logdb.commit()
     await session.commit()
+
+    # Its key is dead from here on, but a socket it already holds was
+    # authenticated once at connect and never again, so commands for the site
+    # could still be routed to it. Drop it. The registry is per process, so the
+    # other API processes are told to drop theirs too (websocket_pubsub).
+    if _agent_registry is not None:
+        try:
+            await _agent_registry.unregister_connection(str(agent_id))
+        except Exception:
+            logger.warning("Could not drop the live socket of deleted agent %s", agent_id)
+    try:
+        from app.services.websocket_pubsub import get_ws_pubsub
+
+        await get_ws_pubsub().publish_control({"kind": "agent_deleted", "agent_id": str(agent_id)})
+    except Exception:
+        logger.warning("Could not tell the other processes to drop deleted agent %s", agent_id)
     return MessageResponse(message="Agent deleted successfully")
 
 

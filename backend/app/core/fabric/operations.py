@@ -132,10 +132,20 @@ class Operation:
     provider_id: str = ""
     """Module id (native) or plugin id (plugin) that declared this operation."""
 
+    live_action: bool = False
+    """True ⇒ not a read, yet not staged: it acts on the real world the moment it
+    runs (e.g. placing a phone call). Such an op must refuse while
+    ADAPTER_READ_ONLY is on, and is never offered to the AI assistant, whose
+    tools may only read or stage for sign-off."""
+
     def __post_init__(self) -> None:
         validate_operation_id(self.id)
         if self.write and not self.feature:
             raise ValueError(f"Operation {self.id!r} is a write but declares no staging 'feature'")
+        if self.live_action and (self.write or not self.permission):
+            raise ValueError(
+                f"Operation {self.id!r}: a live action is never staged and must declare a permission"
+            )
         if self.write and not self.permission:
             # Every device-write capability MUST declare the RBAC grant the
             # negotiator will enforce — a permissionless write would otherwise
@@ -159,6 +169,7 @@ class Operation:
             "accepts": list(self.accepts),
             "permission": self.permission,
             "write": self.write,
+            "live_action": self.live_action,
             "feature": self.feature,
             "tier": self.tier.value,
             "provider_id": self.provider_id,

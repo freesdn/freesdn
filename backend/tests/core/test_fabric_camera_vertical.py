@@ -114,6 +114,9 @@ async def test_line_cross_triggers_snapshot_and_threads_image(tmp_path, monkeypa
     author = SimpleNamespace(
         id=uuid.uuid4(),
         organization_id=ORG,
+        # The stored author is loaded with its organization, which must exist
+        # and be active for it to act (app.core.organization_access).
+        organization=SimpleNamespace(id=ORG, deleted_at=None, is_active=True),
         role="org_admin",
         is_active=True,
         deleted_at=None,

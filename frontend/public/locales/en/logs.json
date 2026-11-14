@@ -106,7 +106,8 @@
       "ip": "IP:",
       "request": "Request:",
       "device": "Device:",
-      "site": "Site:"
+      "site": "Site:",
+      "copyRequestId": "Copy request ID"
     },
     "allLogs": {
       "loadError": "Failed to load log data. Please try again.",

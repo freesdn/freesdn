@@ -289,6 +289,9 @@ export default function AIAssistantPage() {
   const [inputValue, setInputValue] = useState('');
   const [provider, setProvider] = useState('openai');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  // Below md the conversation list and the chat take turns at full width; a
+  // fixed 16rem list beside the chat left the chat about 120px on a phone.
+  const [showList, setShowList] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -345,8 +348,11 @@ export default function AIAssistantPage() {
   });
 
   // Auto-scroll to latest message
+  // Only when there is a thread to follow: on an empty page this scrolled the
+  // whole layout and hid the chat header on a phone.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!activeConv?.messages?.length) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [activeConv?.messages]);
 
   // Keep the provider dropdown in sync with the active conversation's real
@@ -376,6 +382,7 @@ export default function AIAssistantPage() {
 
   const handleNewConversation = () => {
     setActiveConvId(null);
+    setShowList(false);
     inputRef.current?.focus();
   };
 
@@ -384,7 +391,12 @@ export default function AIAssistantPage() {
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
       {/* ── Sidebar ── */}
-      <div className="flex w-64 flex-shrink-0 flex-col border-r bg-background">
+      <div
+        className={cn(
+          'flex-col border-r bg-background md:flex md:w-64 md:flex-shrink-0',
+          showList ? 'flex w-full' : 'hidden',
+        )}
+      >
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <Brain className="h-4 w-4 text-violet-600" />
@@ -410,7 +422,10 @@ export default function AIAssistantPage() {
                 key={conv.id}
                 conv={conv}
                 isActive={conv.id === activeConvId}
-                onSelect={() => setActiveConvId(conv.id)}
+                onSelect={() => {
+                  setActiveConvId(conv.id);
+                  setShowList(false);
+                }}
                 onDelete={() => setDeleteTarget(conv.id)}
               />
             ))
@@ -441,17 +456,26 @@ export default function AIAssistantPage() {
       </div>
 
       {/* ── Main chat area ── */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className={cn('min-w-0 flex-1 flex-col overflow-hidden md:flex', showList ? 'hidden' : 'flex')}>
         {/* Header */}
-        <div className="flex items-center border-b px-6 py-3">
-          <div className="flex items-center gap-3">
-            <Brain className="h-5 w-5 text-primary" />
-            <div>
-              <h1 className="text-sm font-semibold">
+        <div className="flex items-center gap-2 border-b px-4 py-3 sm:px-6">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 shrink-0 md:hidden"
+            aria-label={t('AIAssistantPage.conversation.showList')}
+            onClick={() => setShowList(true)}
+          >
+            <MessageSquare className="h-4 w-4" />
+          </Button>
+          <div className="flex min-w-0 items-center gap-3">
+            <Brain className="h-5 w-5 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-semibold">
                 {activeConv?.title || t('AIAssistantPage.title')}
               </h1>
               {activeConv && (
-                <p className="text-xs text-muted-foreground">
+                <p className="truncate text-xs text-muted-foreground">
                   {activeConv.provider} · {activeConv.model} ·{' '}
                   {t('AIAssistantPage.header.tokens', {
                     count: activeConv.total_tokens,
@@ -464,7 +488,7 @@ export default function AIAssistantPage() {
         </div>
 
         {/* Messages */}
-        <ScrollArea className="flex-1 px-6 py-4">
+        <ScrollArea className="flex-1 px-4 py-4 sm:px-6">
           {isLoadingConv && activeConvId && (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -489,7 +513,7 @@ export default function AIAssistantPage() {
               <p className="mt-2 max-w-sm text-sm text-muted-foreground">
                 {t('AIAssistantPage.hero.description')}
               </p>
-              <div className="mt-6 grid grid-cols-2 gap-2 text-left">
+              <div className="mt-6 grid grid-cols-1 gap-2 text-left sm:grid-cols-2">
                 {[
                   t('AIAssistantPage.suggestions.offlineDevices'),
                   t('AIAssistantPage.suggestions.activeAlerts'),
@@ -499,7 +523,7 @@ export default function AIAssistantPage() {
                   <button
                     key={suggestion}
                     onClick={() => setInputValue(suggestion)}
-                    className="rounded-lg border px-3 py-2 text-xs text-muted-foreground hover:border-violet-300 hover:text-violet-700 transition-colors"
+                    className="rounded-lg border px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
                   >
                     {suggestion}
                   </button>
@@ -537,7 +561,7 @@ export default function AIAssistantPage() {
         </ScrollArea>
 
         {/* Input area */}
-        <div className="border-t px-6 py-4">
+        <div className="border-t px-4 py-4 sm:px-6">
           <div className="flex gap-2">
             <Input
               ref={inputRef}

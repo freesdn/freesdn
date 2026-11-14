@@ -49,10 +49,11 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, is_dataclass
+from collections.abc import Awaitable, Callable
+from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import case, func, or_, select, update
@@ -192,6 +193,15 @@ _CATASTROPHIC_EVENT_PREFIXES = (
 # user), and ``tests/services/gateway/test_overlay_vpn_writes.py`` asserts that every
 # prefix here is covered. Adding a family is a deliberate authz decision.
 CONTROLLERLESS_FEATURE_PREFIXES: tuple[str, ...] = ("overlay.",)
+
+#: Feature prefix of a change staged and applied in the same request
+#: (:meth:`AdapterStagingService.apply_now`): an endpoint or service that writes
+#: to a device when called with ``force=true``. The row is the ledger entry for
+#: that write (who, what, when, result). It has no stored applier, its payload
+#: is kept with secrets redacted, and it can never be applied from the queue.
+#: May target no controller (cameras, phones and PBXs are not controller rows);
+#: the request that wrote it did its own authorization.
+DIRECT_FEATURE_PREFIX = "direct."
 
 # Backstop on un-applied changes a single org can accumulate. A runaway Connection
 # / API loop staging writes (each also copies a durable artifact to disk) must not
@@ -564,6 +574,121 @@ def _validate_url_path_payload_keys(payload: dict[str, Any]) -> None:
                         )
 
 
+#: Substrings that mark a key as secret in a same-request ledger payload, on
+#: top of ``redact_secrets``' list. The payload is a description only (the write
+#: runs from the request), so erring towards masking costs nothing.
+_LEDGER_SECRET_MARKERS = (
+    "password",
+    "passwd",
+    "passphrase",
+    "psk",
+    "secret",
+    "token",
+    "private",
+    "credential",
+    "community",
+)
+
+
+def redact_for_ledger(value: Any, _depth: int = 0) -> Any:
+    """``redact_secrets``, plus any key whose name contains a secret marker."""
+    from app.core.redaction import redact_secrets
+
+    if _depth == 0:
+        value = redact_secrets(value)
+    if _depth > 20:
+        return "***"
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            name = str(key).lower()
+            if any(marker in name for marker in _LEDGER_SECRET_MARKERS) and item not in (
+                None,
+                "",
+            ):
+                out[key] = "***"
+            else:
+                out[key] = redact_for_ledger(item, _depth + 1)
+        return out
+    if isinstance(value, list):
+        return [redact_for_ledger(item, _depth + 1) for item in value]
+    return value
+
+
+async def controller_slot_key_for(db: AsyncSession, controller_id: UUID | None) -> str | None:
+    """The device slot (``app/core/device_slot.py``) of a controller row, or None."""
+    if controller_id is None:
+        return None
+    from types import SimpleNamespace
+
+    from app.core.device_slot import controller_slot_key
+    from app.db.models import Controller
+
+    # freesdn:include-deleted -- only the device's address is read, to name its
+    # slot; whether the controller may be written to is decided elsewhere.
+    row = (
+        await db.execute(
+            select(Controller.host, Controller.config).where(Controller.id == controller_id)
+        )
+    ).first()
+    if row is None or not isinstance(row[0], str):
+        return None
+    config = row[1] if isinstance(row[1], dict) else {}
+    return controller_slot_key(
+        SimpleNamespace(
+            id=controller_id, host=row[0], connection_mode=config.get("connection_mode", "local")
+        )
+    )
+
+
+@dataclass
+class GroupMember:
+    """One device's part of a change that spans several devices.
+
+    ``preflight`` runs, for every member, before any member is applied; it
+    returns a reason to refuse, or None. ``perform`` makes this member's
+    device write. ``compensate(result)`` undoes an applied member's write when
+    a later member fails; it is optional and runs through the chokepoint as
+    its own ledger row.
+    """
+
+    key: str
+    organization_id: UUID
+    controller_id: UUID | None
+    feature: str
+    operation: str
+    payload: dict[str, Any]
+    perform: Callable[[], Awaitable[Any]]
+    preflight: Callable[[], Awaitable[str | None]] | None = None
+    compensate: Callable[[Any], Awaitable[Any]] | None = None
+    site_id: UUID | None = None
+    target_id: str | None = None
+    #: The device's slot when the member has no controller row (see apply_change).
+    slot_key: str | None = None
+
+
+@dataclass
+class MemberOutcome:
+    key: str
+    change_id: UUID | None
+    #: applied | failed | not_applied | reconciliation_required | compensated
+    status: str
+    reason: str | None = None
+    result: Any = None
+
+
+@dataclass
+class GroupOutcome:
+    group_id: UUID
+    members: list[MemberOutcome] = field(default_factory=list)
+    preflight_refused: bool = False
+
+    @property
+    def applied(self) -> bool:
+        """True only when every member's write was accepted (and not undone)."""
+        return bool(self.members) and all(m.status == "applied" for m in self.members)
+
+
 class AdapterStagingService:
     """Centralised staging + apply for managed-controller writes."""
 
@@ -665,12 +790,22 @@ class AdapterStagingService:
         notes: str | None = None,
         actor_id: UUID | None = None,
         change_id: UUID | None = None,
+        group_id: UUID | None = None,
+        _in_request: bool = False,
     ) -> AdapterPendingChange:
         """Record a write intent. Does NOT touch the controller.
 
         Internal callers may supply a stable ID; a duplicate raises IntegrityError.
         This never updates or resets an existing operation.
         """
+        is_direct = feature.startswith(DIRECT_FEATURE_PREFIX)
+        if is_direct != _in_request:
+            # A ``direct.`` row has no applier; only apply_now may write one, and
+            # apply_now writes nothing else.
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=f"feature {feature!r} cannot be staged here",
+            )
         if feature.startswith("proxmox.sdn."):
             from app.adapters.proxmox.sdn import WRITE_BLOCKED
 
@@ -683,7 +818,11 @@ class AdapterStagingService:
         # (migration 004). Without this, a future non-overlay write staged with a NULL
         # controller would skip the controller-grant authz the apply path keys on
         # ``controller_id is not None``.
-        if controller_id is None and not feature.startswith(CONTROLLERLESS_FEATURE_PREFIXES):
+        if (
+            controller_id is None
+            and not is_direct
+            and not feature.startswith(CONTROLLERLESS_FEATURE_PREFIXES)
+        ):
             allowed = ", ".join(p + "*" for p in CONTROLLERLESS_FEATURE_PREFIXES)
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
@@ -711,9 +850,15 @@ class AdapterStagingService:
         # controller.
         from app.adapters.validation import validate_id
 
-        if target_id is not None:
-            validate_id(target_id, label="target_id")
-        _validate_url_path_payload_keys(payload or {})
+        if is_direct:
+            # A same-request row is a record only: no applier ever builds a URL
+            # from it, and the request already validated what it sent.
+            if target_id is not None:
+                target_id = str(target_id)[:128]
+        else:
+            if target_id is not None:
+                validate_id(target_id, label="target_id")
+            _validate_url_path_payload_keys(payload or {})
 
         # ``confirmed`` is a reserved APPLY-TIME control — the destructive-op
         # preflights read it, and apply_change overwrites it with the apply
@@ -730,16 +875,23 @@ class AdapterStagingService:
 
         # DoS hygiene: bound the un-applied (pending) backlog per org so a runaway
         # Connection / API loop can't fill the queue + durable-artifact volume.
+        # A same-request row leaves ``pending`` before the request returns, so it
+        # never adds to the backlog and is not refused because of it.
         pending_count = (
-            await self.db.execute(
-                select(func.count())
-                .select_from(AdapterPendingChange)
-                .where(
-                    AdapterPendingChange.organization_id == organization_id,
-                    AdapterPendingChange.status == "pending",
+            0
+            if is_direct
+            else (
+                await self.db.execute(
+                    select(func.count())
+                    .select_from(AdapterPendingChange)
+                    .where(
+                        AdapterPendingChange.organization_id == organization_id,
+                        AdapterPendingChange.status == "pending",
+                    )
                 )
-            )
-        ).scalar() or 0
+            ).scalar()
+            or 0
+        )
         if pending_count >= _MAX_PENDING_PER_ORG:
             # Legitimate quota/backpressure condition — surface as 429 (Too
             # Many Requests) so the caller can back off and apply/discard,
@@ -764,6 +916,7 @@ class AdapterStagingService:
             status="pending",
             notes=notes,
             created_by=actor_id,
+            group_id=group_id,
         )
         from app.services.hypervisor_firewall_operations import FEATURE as FIREWALL_FEATURE
         from app.services.hypervisor_firewall_operations import LEGACY_FEATURES as FIREWALL_LEGACY
@@ -1119,6 +1272,8 @@ class AdapterStagingService:
         confirmed: bool = False,
         applier: Any | None = None,
         actor_id: UUID | None = None,
+        _in_request: bool = False,
+        slot_key: str | None = None,
     ) -> AdapterPendingChange:
         """Push a staged change to the live controller.
 
@@ -1141,6 +1296,14 @@ class AdapterStagingService:
         the same change finds ``status != "pending"`` and 409s. This
         prevents a double-click from pushing a duplicate ``create``
         twice to the live controller.
+
+        Device turn: just before the row is claimed, the write waits briefly
+        for the device's slot (``app/core/device_slot.acquire_write_turn``) so
+        it never lands on a device a poller or another write is talking to. A
+        device that stays busy refuses the apply with 503 and the row is left
+        as it was. ``slot_key`` names the device for a change with no
+        controller row (a firewall gateway, a phone, a PBX); otherwise it is
+        the change's controller.
         """
         # True dual-gate: both conditions are independent hard locks.
         # Gate 1: env lock — no API caller can bypass this regardless of
@@ -1199,6 +1362,14 @@ class AdapterStagingService:
         # controller. 404 to avoid an existence oracle. No-op for
         # super_admin / org_admin / grant-less users and in system context.
         assert_site_access_for_request(change.site_id, detail="pending change not found")
+        if (change.feature or "").startswith(DIRECT_FEATURE_PREFIX) and not _in_request:
+            raise HTTPException(
+                409,
+                detail=(
+                    "this change was made directly by the request that recorded it; "
+                    "it cannot be applied from the pending-change queue"
+                ),
+            )
         if change.status != "pending":
             raise HTTPException(
                 409,
@@ -1335,10 +1506,22 @@ class AdapterStagingService:
 
         await guard_cluster_conflicts(self.db, change)
         await guard_guest_conflicts(self.db, change)
-        change.status = "applying"
-        change.updated_by = actor_id
-        await self.db.commit()
-        await self.db.refresh(change)
+        # The device's turn, taken before the row is claimed: a device that
+        # stays busy refuses here and nothing has changed.
+        from app.core.device_slot import acquire_write_turn
+
+        turn = await acquire_write_turn(
+            slot_key or await controller_slot_key_for(self.db, change.controller_id),
+            f"a change ({change.feature})",
+        )
+        try:
+            change.status = "applying"
+            change.updated_by = actor_id
+            await self.db.commit()
+            await self.db.refresh(change)
+        except BaseException:
+            await turn.release()
+            raise
 
         try:
             # Open the approved staged-apply window so adapter clients that gate
@@ -1357,7 +1540,10 @@ class AdapterStagingService:
                     if (change.feature or "").startswith("proxmox.")
                     else change
                 )
-                response = await applier(apply_change_view)
+                try:
+                    response = await applier(apply_change_view)
+                finally:
+                    await turn.release()
             # An applier may RETURN a failed AdapterResult (success=False) instead
             # of raising — e.g. the device/controller API rejected the write. Treat
             # that as a FAILED apply so the change is never recorded "applied"
@@ -1483,11 +1669,22 @@ class AdapterStagingService:
             # by request_id.
             import logging
 
-            logging.getLogger(__name__).exception(
-                "apply_change failed for change=%s feature=%s",
-                change_id,
-                change.feature,
-            )
+            if _in_request:
+                # The request that made this write re-raises the exception
+                # itself, and decides what to log; an adapter's message can
+                # carry device diagnostics that must not reach the log here.
+                logging.getLogger(__name__).warning(
+                    "apply_change failed for change=%s feature=%s (%s)",
+                    change_id,
+                    change.feature,
+                    type(exc).__name__,
+                )
+            else:
+                logging.getLogger(__name__).exception(
+                    "apply_change failed for change=%s feature=%s",
+                    change_id,
+                    change.feature,
+                )
             short = type(exc).__name__
             # A transport failure AFTER the request was sent (read timeout,
             # connection reset mid-response) does NOT mean the controller
@@ -1604,6 +1801,365 @@ class AdapterStagingService:
             extra={"provider_task": change.provider_task},
         )
         return change
+
+    # ── Stage and apply in one request (STAGING-MIGRATION option 2) ─────
+
+    async def apply_now[T](
+        self,
+        *,
+        organization_id: UUID,
+        controller_id: UUID | None,
+        feature: str,
+        operation: str,
+        payload: dict[str, Any],
+        perform: Callable[[], Awaitable[T]],
+        force: bool,
+        actor_id: UUID | None,
+        site_id: UUID | None = None,
+        omada_site_id: str | None = None,
+        target_id: str | None = None,
+        notes: str | None = None,
+        return_failed_result: bool = False,
+        slot_key: str | None = None,
+    ) -> T:
+        """Record a configuration write in the ledger and make it, in this request.
+
+        For an endpoint or service that writes to a device when it is called with
+        ``force=true``. The write goes through the same chokepoint as a reviewed
+        change: refused while read-only mode is on (``force`` does not lift it),
+        refused without ``force``, then staged as a ``direct.*`` row and applied
+        through :meth:`apply_change`, which records who, what, when and the
+        result. ``perform`` makes the device call; its return value is returned
+        unchanged, so the endpoint's response shape does not change.
+
+        ``payload`` describes the write for the ledger. It is stored with
+        secrets redacted: the write itself runs from ``perform`` in this request,
+        so the stored row never needs the secret, and it can never be applied
+        again from the queue.
+
+        Errors keep the meaning they had: an exception from ``perform`` is
+        recorded and then re-raised as it was, and a failed ``AdapterResult``
+        is recorded as ``failed`` and raised through
+        :func:`raise_for_adapter_result` (or, with ``return_failed_result``,
+        returned to a caller that reports failures in its response body).
+        A refusal before the device is contacted (a vendor preflight) is
+        recorded as ``failed`` with the reason, never left ``pending``.
+        """
+        if self.is_read_only():
+            from app.adapters.apply_context import FORCE_DOES_NOT_LIFT_READ_ONLY
+
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Read-only mode is on: device writes are refused."
+                    + (FORCE_DOES_NOT_LIFT_READ_ONLY if force else "")
+                ),
+            )
+        if not force:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail="force=true is required to write to the device",
+            )
+        if not feature.startswith(DIRECT_FEATURE_PREFIX):
+            feature = DIRECT_FEATURE_PREFIX + feature
+        stored_payload = redact_for_ledger(dict(payload or {}))
+        change = await self.stage_change(
+            organization_id=organization_id,
+            controller_id=controller_id,
+            site_id=site_id,
+            omada_site_id=omada_site_id,
+            feature=feature,
+            operation=operation,
+            target_id=target_id,
+            payload=stored_payload,
+            notes=notes or "made by the request that recorded it (force=true)",
+            actor_id=actor_id,
+            _in_request=True,
+        )
+        change_id = change.id
+        results: list[Any] = []
+        raised: list[BaseException] = []
+
+        async def _applier(_change: AdapterPendingChange) -> Any:
+            try:
+                result = await perform()
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raised.append(exc)
+                raise
+            results.append(result)
+            return result
+
+        try:
+            await self.apply_change(
+                change_id,
+                force=True,
+                # The request's force=true is the operator's explicit intent,
+                # as it was before this write was recorded here; the endpoints
+                # that need a per-action confirmation ask for it themselves.
+                confirmed=True,
+                applier=_applier,
+                actor_id=actor_id,
+                _in_request=True,
+                slot_key=slot_key,
+            )
+        except HTTPException as exc:
+            if raised:
+                raise raised[0] from None
+            if results and adapter_result_field(results[0], "success") is False:
+                if return_failed_result:
+                    return cast("T", results[0])
+                from app.core.adapter_result import raise_for_adapter_result
+
+                raise_for_adapter_result(results[0])
+            await self._fail_if_still_pending(change_id, exc, actor_id)
+            raise
+        return cast("T", results[0])
+
+    async def _fail_if_still_pending(
+        self, change_id: UUID, exc: HTTPException, actor_id: UUID | None
+    ) -> None:
+        """Close a same-request row that was refused before the device was asked."""
+        try:
+            await self.db.execute(
+                update(AdapterPendingChange)
+                .where(
+                    AdapterPendingChange.id == change_id,
+                    AdapterPendingChange.status == "pending",
+                )
+                .values(
+                    status="failed",
+                    failure_reason=f"refused before the device was contacted: {exc.detail}"[:1000],
+                    updated_by=actor_id,
+                )
+            )
+            await self.db.commit()
+        except Exception:  # pragma: no cover - bookkeeping must not mask the refusal
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "could not close same-request change %s after a refusal", change_id
+            )
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass
+
+    # ── A change to several devices: one group, preflighted first ───────
+
+    async def apply_group_now(
+        self,
+        members: list[GroupMember],
+        *,
+        force: bool,
+        actor_id: UUID | None,
+        notes: str | None = None,
+    ) -> GroupOutcome:
+        """Stage one row per device under one group, preflight all, then apply.
+
+        Read-only mode and ``force`` are checked first, as for
+        :meth:`apply_now`. Every member is staged (``direct.*``, one
+        ``group_id``) and preflighted before any is applied; a refused
+        preflight on any member applies nothing, and every row records why.
+        Members are then applied in order through :meth:`apply_change`. The
+        first failure stops the group: members not yet attempted are recorded
+        as not applied, and the members already applied are compensated when
+        they say how. The outcome reports every member.
+        """
+        if self.is_read_only():
+            from app.adapters.apply_context import FORCE_DOES_NOT_LIFT_READ_ONLY
+
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Read-only mode is on: device writes are refused."
+                    + (FORCE_DOES_NOT_LIFT_READ_ONLY if force else "")
+                ),
+            )
+        if not force:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail="force=true is required to write to the device",
+            )
+        group_id = uuid4()
+        outcome = GroupOutcome(group_id=group_id)
+        rows: list[AdapterPendingChange] = []
+        for member in members:
+            feature = member.feature
+            if not feature.startswith(DIRECT_FEATURE_PREFIX):
+                feature = DIRECT_FEATURE_PREFIX + feature
+            rows.append(
+                await self.stage_change(
+                    organization_id=member.organization_id,
+                    controller_id=member.controller_id,
+                    site_id=member.site_id,
+                    feature=feature,
+                    operation=member.operation,
+                    target_id=member.target_id,
+                    payload=redact_for_ledger(dict(member.payload or {})),
+                    notes=notes or f"part {member.key} of a change to {len(members)} devices",
+                    actor_id=actor_id,
+                    group_id=group_id,
+                    _in_request=True,
+                )
+            )
+
+        refusals: dict[str, str] = {}
+        for member in members:
+            if member.preflight is None:
+                continue
+            try:
+                reason = await member.preflight()
+            except Exception as exc:  # noqa: BLE001 - a preflight that cannot run refuses
+                reason = f"preflight could not run ({type(exc).__name__})"
+            if reason:
+                refusals[member.key] = str(reason)
+        if refusals:
+            outcome.preflight_refused = True
+            summary = "; ".join(f"{k}: {v}" for k, v in refusals.items())
+            for member, row in zip(members, rows, strict=True):
+                own = refusals.get(member.key)
+                reason = (
+                    f"preflight refused: {own}"
+                    if own
+                    else f"not applied: the preflight of another device refused ({summary})"
+                )
+                await self._close_unapplied(row.id, reason, actor_id)
+                outcome.members.append(
+                    MemberOutcome(member.key, row.id, "not_applied", reason=own or reason)
+                )
+            return outcome
+
+        applied: list[tuple[GroupMember, Any]] = []
+        failed_at: int | None = None
+        for index, (member, row) in enumerate(zip(members, rows, strict=True)):
+            member_outcome = await self._apply_member(member, row.id, actor_id)
+            outcome.members.append(member_outcome)
+            if member_outcome.status == "applied":
+                applied.append((member, member_outcome.result))
+                continue
+            failed_at = index
+            break
+        if failed_at is None:
+            return outcome
+
+        failed_key = members[failed_at].key
+        for member, row in list(zip(members, rows, strict=True))[failed_at + 1 :]:
+            reason = f"not applied: {failed_key} failed first"
+            await self._close_unapplied(row.id, reason, actor_id)
+            outcome.members.append(MemberOutcome(member.key, row.id, "not_applied", reason))
+        for member, result in applied:
+            if member.compensate is None:
+                continue
+
+            async def _undo(
+                undo: Callable[[Any], Awaitable[Any]] = member.compensate,
+                undo_result: Any = result,
+            ) -> Any:
+                return await undo(undo_result)
+
+            compensation = GroupMember(
+                key=member.key,
+                organization_id=member.organization_id,
+                controller_id=member.controller_id,
+                site_id=member.site_id,
+                target_id=member.target_id,
+                feature=f"{member.feature}.compensate",
+                operation="delete" if member.operation == "create" else "update",
+                payload={"undoes": member.key},
+                perform=_undo,
+                slot_key=member.slot_key,
+            )
+            staged = await self.stage_change(
+                organization_id=compensation.organization_id,
+                controller_id=compensation.controller_id,
+                site_id=compensation.site_id,
+                feature=DIRECT_FEATURE_PREFIX + compensation.feature
+                if not compensation.feature.startswith(DIRECT_FEATURE_PREFIX)
+                else compensation.feature,
+                operation=compensation.operation,
+                target_id=compensation.target_id,
+                payload=compensation.payload,
+                notes=f"undoes {member.key} because {failed_key} failed",
+                actor_id=actor_id,
+                group_id=group_id,
+                _in_request=True,
+            )
+            undone = await self._apply_member(compensation, staged.id, actor_id)
+            for existing in outcome.members:
+                if existing.key == member.key and existing.status == "applied":
+                    if undone.status == "applied":
+                        existing.status = "compensated"
+                        existing.reason = f"undone because {failed_key} failed"
+                    else:
+                        existing.reason = (
+                            f"still applied: undoing it failed ({undone.reason}); "
+                            "remove it on the device"
+                        )
+        return outcome
+
+    async def _apply_member(
+        self, member: GroupMember, change_id: UUID, actor_id: UUID | None
+    ) -> MemberOutcome:
+        results: list[Any] = []
+        raised: list[BaseException] = []
+        perform = member.perform
+
+        async def _applier(_change: AdapterPendingChange) -> Any:
+            try:
+                result = await perform()
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raised.append(exc)
+                raise
+            results.append(result)
+            return result
+
+        try:
+            await self.apply_change(
+                change_id,
+                force=True,
+                confirmed=True,
+                applier=_applier,
+                actor_id=actor_id,
+                _in_request=True,
+                slot_key=member.slot_key,
+            )
+        except HTTPException as exc:
+            await self._fail_if_still_pending(change_id, exc, actor_id)
+            row = await self.db.get(AdapterPendingChange, change_id)
+            if row is not None:
+                await self.db.refresh(row)
+            row_status = row.status if row is not None else "failed"
+            reason = (
+                adapter_result_field(results[0], "error")
+                if results
+                else (f"{type(raised[0]).__name__}" if raised else None)
+            ) or str(exc.detail)
+            return MemberOutcome(
+                member.key,
+                change_id,
+                "reconciliation_required"
+                if row_status == STATUS_RECONCILIATION_REQUIRED
+                else "failed",
+                reason=str(reason)[:500],
+                result=results[0] if results else None,
+            )
+        return MemberOutcome(member.key, change_id, "applied", result=results[0])
+
+    async def _close_unapplied(self, change_id: UUID, reason: str, actor_id: UUID | None) -> None:
+        """A grouped row that was never applied: nothing reached the device."""
+        await self.db.execute(
+            update(AdapterPendingChange)
+            .where(
+                AdapterPendingChange.id == change_id,
+                AdapterPendingChange.status == "pending",
+            )
+            .values(status="failed", failure_reason=reason[:1000], updated_by=actor_id)
+        )
+        await self.db.commit()
 
 
 # Deprecated alias. The class was renamed from ``OmadaStagingService``

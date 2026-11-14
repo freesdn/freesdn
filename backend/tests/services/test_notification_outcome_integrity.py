@@ -38,7 +38,6 @@ def result(success=True, status=DeliveryStatus.SENT):
         ([result(), result(True, DeliveryStatus.SKIPPED)], True, {"dispatched": 1, "skipped": 1}),
         ([result(True, DeliveryStatus.SKIPPED)], True, {"dispatched": 0, "skipped": 1}),
         ([result()], True, {"dispatched": 1}),
-        ([], True, {"dispatched": 0}),
     ],
 )
 async def test_fabric_reports_actual_delivery_outcomes(monkeypatch, outcomes, success, output):
@@ -282,3 +281,16 @@ async def test_scoped_inapp_recipient_requires_owned_active_user(monkeypatch, ca
         db.commit.assert_not_awaited()
         bus.publish.assert_not_awaited()
         assert CANARY not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("channels", [{}, {"slak": {"channel": "#ops"}}, {"email": {"to": []}}])
+async def test_fabric_notify_that_attempts_nothing_is_not_success(monkeypatch, channels):
+    """A Connection whose only job is to alert must not report success on a typo."""
+    send = AsyncMock(return_value=[])
+    monkeypatch.setattr(helpers, "dispatch_notifications", send)
+    response = await _notify_handler(
+        OperationContext(uuid4(), {"channels": channels}, db=MagicMock())
+    )
+    assert response.success is False
+    assert response.error_code == "NOTIFY_NO_TARGET"

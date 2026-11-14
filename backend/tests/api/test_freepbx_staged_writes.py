@@ -22,6 +22,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from app.adapters.apply_context import apply_window
 from app.adapters.base import AdapterResult
 from app.adapters.freepbx.adapter import FreePBXAdapter
 from app.services.adapter_freepbx_extensions import FreePBXExtensionsService
@@ -44,11 +45,13 @@ async def test_adapter_extension_writes_blocked_in_read_only_without_force():
 
 
 @pytest.mark.asyncio
-async def test_adapter_extension_writes_pass_gate_with_force():
-    """read-only + force=True ⇒ gate passes; the NEXT check (REST API
-    availability) is what stops it, proving the gate is not the blocker."""
+async def test_adapter_extension_writes_pass_gate_in_staged_apply():
+    """read-only + inside the staged-apply window ⇒ gate passes; the NEXT check
+    (REST API availability) is what stops it, proving the gate is not the
+    blocker. (force alone no longer passes it, since 26.12.0.)"""
     adapter = FreePBXAdapter(host="pbx.example.test", username="admin", password="x", read_only=True)
-    res = await adapter.update_extension("100", {"name": "X"}, force=True)
+    with apply_window():
+        res = await adapter.update_extension("100", {"name": "X"}, force=True)
     assert res.success is False
     # Past the read-only gate now — fails on transport availability instead.
     assert "read-only" not in (res.error or "").lower()
@@ -271,16 +274,24 @@ _GATED_WRITE_METHODS = [
 @pytest.mark.parametrize("method,args", _GATED_WRITE_METHODS)
 @pytest.mark.asyncio
 async def test_every_config_write_is_dual_gated(method, args):
-    """Every FreePBX config-write adapter method refuses in read-only mode
-    without force, and passes the gate (failing later on transport) with
-    force=True. Locks in the Phase-2 gating across all 6 features."""
+    """Every FreePBX write adapter method refuses in read-only mode without
+    force. Config writes are also refused WITH force outside a staged apply
+    (26.12.0) and pass the gate inside one (failing later on transport). Live
+    queue-member state keeps its documented operational exception: force alone
+    passes. Locks in the gating across all 6 features."""
     adapter = FreePBXAdapter(host="pbx.example.test", username="admin", password="x", read_only=True)
 
     blocked = await getattr(adapter, method)(*args, force=False)
     assert blocked.success is False
     assert "read-only" in (blocked.error or "").lower(), f"{method} not gated"
 
-    passed = await getattr(adapter, method)(*args, force=True)
+    if method.startswith("queue_"):
+        passed = await getattr(adapter, method)(*args, force=True)
+    else:
+        forced = await getattr(adapter, method)(*args, force=True)
+        assert "read-only" in (forced.error or "").lower(), f"{method}: force lifted read-only"
+        with apply_window():
+            passed = await getattr(adapter, method)(*args, force=True)
     assert passed.success is False  # no live transport in the test
     assert "read-only" not in (passed.error or "").lower(), f"{method} gate not bypassable by force"
 

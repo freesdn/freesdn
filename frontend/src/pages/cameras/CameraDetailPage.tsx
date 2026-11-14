@@ -73,9 +73,11 @@ import DetectionConfigPanel from '@/components/cameras/DetectionConfigPanel';
 import RecordingSchedulePanel from '@/components/cameras/RecordingSchedulePanel';
 import HolidaySchedulePanel from '@/components/cameras/HolidaySchedulePanel';
 import PTZToursPanel from '@/components/cameras/PTZToursPanel';
+import { useCameraControlPermissions } from '@/components/cameras/cameraPermissions';
 import CameraHealthPanel from '@/components/cameras/CameraHealthPanel';
 import { CameraAccessPanel } from '@/components/cameras/CameraAccessPanel';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -724,8 +726,11 @@ function StreamTab({ camera }: { camera: CameraDetail }) {
         <div className="relative aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center">
           {isOnline ? (
             <>
-              {/* MJPEG stream via <img> · browsers render multipart/x-mixed-replace natively */}
-              {!streamError && (
+              {/* MJPEG stream via <img> · browsers render multipart/x-mixed-replace natively.
+                  Rendered only once the tokenised URL exists: src="" makes the
+                  browser re-request the current page (React warns on it), and
+                  the spinner below already covers the wait. */}
+              {!streamError && streamUrl && (
                 <img
                   key={`${camera.id}-${quality}`}
                   src={streamUrl}
@@ -860,6 +865,10 @@ function PTZTab({ camera }: { camera: CameraDetail }) {
   const { toast } = useToast();
   const [speed, setSpeed] = useState(50);
   const isOnline = camera.status === 'online' || camera.status === 'recording';
+  // Moving and going to a preset are cameras.ptz; a viewer sees the pad
+  // disabled with the reason instead of a "PTZ command failed" toast.
+  const { canPtz } = useCameraControlPermissions();
+  const canMove = isOnline && canPtz;
 
   // Fetch presets
   const { data: presetsRes } = useQuery({
@@ -908,15 +917,19 @@ function PTZTab({ camera }: { camera: CameraDetail }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Direction pad */}
+            {!canPtz && (
+              <p className="text-xs text-muted-foreground">{t('CameraPermissions.needsPtz', { ns: 'common' })}</p>
+            )}
+            {/* Direction pad: always three columns, it is a compass */}
             <div className="flex justify-center">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5" role="group" aria-label={t('CameraDetailPage.ptz.control')}>
                 <div />
                 <Button
                   variant="secondary"
                   size="icon"
                   className="h-12 w-12"
-                  disabled={!isOnline}
+                  disabled={!canMove}
+                  aria-label={t('CameraLiveViewModal.ptz.panUp', { ns: 'common' })}
                   onMouseDown={() => handleMove('up')}
                   onMouseUp={handleStop}
                   onMouseLeave={handleStop}
@@ -928,7 +941,8 @@ function PTZTab({ camera }: { camera: CameraDetail }) {
                   variant="secondary"
                   size="icon"
                   className="h-12 w-12"
-                  disabled={!isOnline}
+                  disabled={!canMove}
+                  aria-label={t('CameraLiveViewModal.ptz.panLeft', { ns: 'common' })}
                   onMouseDown={() => handleMove('left')}
                   onMouseUp={handleStop}
                   onMouseLeave={handleStop}
@@ -939,7 +953,8 @@ function PTZTab({ camera }: { camera: CameraDetail }) {
                   variant="secondary"
                   size="icon"
                   className="h-12 w-12"
-                  disabled={!isOnline}
+                  disabled={!canMove}
+                  aria-label={t('PTZToursPanel.actions.stop', { ns: 'common' })}
                   onClick={handleStop}
                 >
                   <Square className="h-4 w-4" />
@@ -948,7 +963,8 @@ function PTZTab({ camera }: { camera: CameraDetail }) {
                   variant="secondary"
                   size="icon"
                   className="h-12 w-12"
-                  disabled={!isOnline}
+                  disabled={!canMove}
+                  aria-label={t('CameraLiveViewModal.ptz.panRight', { ns: 'common' })}
                   onMouseDown={() => handleMove('right')}
                   onMouseUp={handleStop}
                   onMouseLeave={handleStop}
@@ -960,7 +976,8 @@ function PTZTab({ camera }: { camera: CameraDetail }) {
                   variant="secondary"
                   size="icon"
                   className="h-12 w-12"
-                  disabled={!isOnline}
+                  disabled={!canMove}
+                  aria-label={t('CameraLiveViewModal.ptz.panDown', { ns: 'common' })}
                   onMouseDown={() => handleMove('down')}
                   onMouseUp={handleStop}
                   onMouseLeave={handleStop}
@@ -977,7 +994,8 @@ function PTZTab({ camera }: { camera: CameraDetail }) {
                 variant="outline"
                 size="icon"
                 className="h-10 w-10"
-                disabled={!isOnline}
+                disabled={!canMove}
+                aria-label={t('CameraLiveViewModal.ptz.zoomOut', { ns: 'common' })}
                 onMouseDown={() => handleMove('zoom_out')}
                 onMouseUp={handleStop}
                 onMouseLeave={handleStop}
@@ -989,7 +1007,8 @@ function PTZTab({ camera }: { camera: CameraDetail }) {
                 variant="outline"
                 size="icon"
                 className="h-10 w-10"
-                disabled={!isOnline}
+                disabled={!canMove}
+                aria-label={t('CameraLiveViewModal.ptz.zoomIn', { ns: 'common' })}
                 onMouseDown={() => handleMove('zoom_in')}
                 onMouseUp={handleStop}
                 onMouseLeave={handleStop}
@@ -1034,7 +1053,7 @@ function PTZTab({ camera }: { camera: CameraDetail }) {
                     variant="outline"
                     size="sm"
                     className="text-xs h-9 justify-start"
-                    disabled={!isOnline}
+                    disabled={!canMove}
                     onClick={() => handleGotoPreset(p.id)}
                   >
                     <span className="font-mono text-muted-foreground mr-1.5">{p.id}.</span>
@@ -1321,6 +1340,7 @@ function RecordingsTab({ camera }: { camera: CameraDetail }) {
   // ── Evidence holds (legal hold) ──
   const qc = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const { data: evidenceHolds } = useQuery({
     queryKey: ['evidence', camera.id],
     queryFn: () => evidenceApi.list(camera.id).then((r) => r.data.items),
@@ -1348,6 +1368,12 @@ function RecordingsTab({ camera }: { camera: CameraDetail }) {
   const deleteHoldMut = useMutation({
     mutationFn: (holdId: string) => evidenceApi.remove(holdId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['evidence', camera.id] }),
+    onError: (err) =>
+      toast({
+        title: t('CameraDetailPage.recordings.evidence.releaseFailed'),
+        description: getApiErrorMessage(err, ''),
+        variant: 'destructive',
+      }),
   });
   const exportSuccessTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -1548,12 +1574,12 @@ function RecordingsTab({ camera }: { camera: CameraDetail }) {
       {/* ── Recording List Card ── */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="text-base flex items-center gap-2">
               <HardDrive className="h-4 w-4" />
               {t('CameraDetailPage.recordings.list.title')}
             </CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Input
                 type="date"
                 value={startDate}
@@ -1677,8 +1703,17 @@ function RecordingsTab({ camera }: { camera: CameraDetail }) {
                       className="h-8 w-8 text-destructive"
                       title={t('CameraDetailPage.recordings.evidence.release')}
                       disabled={deleteHoldMut.isPending}
-                      onClick={() => {
-                        if (window.confirm(t('CameraDetailPage.recordings.evidence.confirmRelease'))) {
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: t('CameraDetailPage.recordings.evidence.confirmReleaseTitle'),
+                          description: t('CameraDetailPage.recordings.evidence.confirmReleaseBody'),
+                          items: [
+                            `${camera.name}: ${new Date(h.start_time).toLocaleString()} → ${new Date(h.end_time).toLocaleTimeString()}`,
+                          ],
+                          confirmLabel: t('CameraDetailPage.recordings.evidence.releaseAction'),
+                          destructive: true,
+                        });
+                        if (ok) {
                           deleteHoldMut.mutate(h.id);
                         }
                       }}

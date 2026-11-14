@@ -40,7 +40,9 @@ async def test_camera_ingestion_owner_persists_notifications_without_losing_inge
         organization_id=org_id,
         username="synthetic",
         password_encrypted="synthetic",
-        ip_address="127.0.0.1",
+        # A private address: the task refuses to send a stored login to
+        # loopback (app/modules/cameras/host_guard.py).
+        ip_address="10.0.0.10",
         port=1,
     )
     db.get = AsyncMock(return_value=nvr)

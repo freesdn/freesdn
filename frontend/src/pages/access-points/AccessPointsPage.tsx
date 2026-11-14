@@ -29,7 +29,6 @@ import {
   Smartphone,
   RotateCw,
   Shield,
-  MapPin,
   BarChart3,
   ShieldAlert,
   Sliders,
@@ -77,6 +76,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Progress } from '@/components/ui/progress';
 import {
   Table,
@@ -96,6 +96,8 @@ import type {
   APRadio,
   APClient,
 } from '@/lib/api';
+import { cn } from '@/lib/utils';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
 
@@ -271,6 +273,9 @@ export default function AccessPointsPage() {
   const [editingRadio, setEditingRadio] = useState<APRadio | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{ action: string; apId: string; apName: string } | null>(null);
+  // The detail Refresh only invalidated its queries: nothing on screen moved
+  // while they refetched, so it read as a dead button. Track the refetch.
+  const [detailRefreshing, setDetailRefreshing] = useState(false);
 
   // Site context
   const selectedSiteId = useSiteStore((s) => s.selectedSiteId);
@@ -280,7 +285,7 @@ export default function AccessPointsPage() {
   const {
     data: accessPoints,
     isLoading: apLoading,
-    isError: apError,
+    error: apError,
     refetch: refetchAPs,
   } = useQuery({
     queryKey: ['access-points', { siteId: selectedSiteId }],
@@ -389,7 +394,7 @@ export default function AccessPointsPage() {
   // ── Mutations ────────────────────────────────────────────────────────────
 
   const mutationErrorHandler = (err: any) => {
-    toast({ title: t('AccessPointsPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('AccessPointsPage.toast.operationFailed'), variant: "destructive" });
+    toast({ title: t('AccessPointsPage.toast.errorTitle'), description: getApiErrorMessage(err, t('AccessPointsPage.toast.operationFailed')), variant: "destructive" });
   };
 
   const rebootMutation = useMutation({
@@ -610,12 +615,18 @@ export default function AccessPointsPage() {
               <Button
                 variant="outline"
                 size="sm"
+                disabled={detailRefreshing}
+                aria-busy={detailRefreshing}
                 onClick={() => {
-                  queryClient.invalidateQueries({ queryKey: ['access-point-detail', selectedAP.id] });
-                  queryClient.invalidateQueries({ queryKey: ['access-point-clients', selectedAP.id] });
+                  setDetailRefreshing(true);
+                  Promise.allSettled([
+                    queryClient.invalidateQueries({ queryKey: ['access-point-detail', selectedAP.id] }),
+                    queryClient.invalidateQueries({ queryKey: ['access-point-clients', selectedAP.id] }),
+                    new Promise((resolve) => setTimeout(resolve, 400)),
+                  ]).then(() => setDetailRefreshing(false));
                 }}
               >
-                <RefreshCw className="mr-2 h-4 w-4" />
+                <RefreshCw className={cn('mr-2 h-4 w-4', detailRefreshing && 'animate-spin')} />
                 {t('AccessPointsPage.detail.refresh')}
               </Button>
               <DropdownMenu>
@@ -1775,6 +1786,117 @@ export default function AccessPointsPage() {
   // AP List View
   // ════════════════════════════════════════════════════════════════════════════
 
+  const statusLabel = (status: string) =>
+    ['online', 'offline', 'adopting', 'degraded', 'provisioning'].includes(status) ? t(`AccessPointsPage.status.${status}`) : status;
+  const statusVariant = (status: string): 'success' | 'destructive' | 'warning' | 'secondary' =>
+    status === 'online' ? 'success' : status === 'offline' ? 'destructive' : status === 'degraded' || status === 'adopting' || status === 'provisioning' ? 'warning' : 'secondary';
+  const apColumns: DataTableColumn<AccessPointSummary>[] = [
+    {
+      id: 'name',
+      header: t('AccessPointsPage.list.columns.name'),
+      accessorFn: (ap) => ap.name ?? '',
+      cell: (ap) => (
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className={cn('h-2 w-2 shrink-0 rounded-full', getStatusColor(ap.status))} aria-hidden="true" />
+          <div className="min-w-0">
+            <div className="font-medium truncate max-w-[16rem]" title={ap.name}>{ap.name}</div>
+            <div className="text-xs text-muted-foreground truncate max-w-[16rem]">{ap.model || '-'}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'status',
+      header: t('AccessPointsPage.list.columns.status'),
+      accessorFn: (ap) => ap.status ?? '',
+      cell: (ap) => <Badge variant={statusVariant(ap.status)} className="text-xs whitespace-nowrap">{statusLabel(ap.status)}</Badge>,
+    },
+    {
+      id: 'ip',
+      header: t('AccessPointsPage.list.columns.ip'),
+      accessorFn: (ap) => ap.ip_address ?? '',
+      cell: (ap) => <span className="font-mono text-xs">{ap.ip_address || '-'}</span>,
+    },
+    {
+      id: 'mac',
+      header: t('AccessPointsPage.list.columns.mac'),
+      accessorFn: (ap) => ap.mac_address ?? '',
+      cell: (ap) => <span className="font-mono text-xs text-muted-foreground">{ap.mac_address || '-'}</span>,
+    },
+    {
+      id: 'site',
+      header: t('AccessPointsPage.list.columns.site'),
+      accessorFn: (ap) => ap.site_name ?? '',
+      cell: (ap) => <span className="text-sm whitespace-nowrap">{ap.site_name || '-'}</span>,
+    },
+    {
+      id: 'radios',
+      header: t('AccessPointsPage.list.columns.radios'),
+      sortable: false,
+      cell: (ap) => ap.radios && ap.radios.length > 0 ? (
+        <div className="flex gap-1">
+          {ap.radios.map((r) => (
+            <Badge key={r.band} variant="outline" className="text-[10px] gap-1 whitespace-nowrap">
+              <BandIcon band={r.band} />{r.band} {t('AccessPointsPage.common.ch')} {r.channel === 0 ? t('AccessPointsPage.common.auto') : r.channel}
+            </Badge>
+          ))}
+        </div>
+      ) : <span className="text-muted-foreground">-</span>,
+    },
+    {
+      id: 'clients',
+      header: t('AccessPointsPage.list.columns.clients'),
+      accessorFn: (ap) => ap.clients ?? 0,
+      align: 'right',
+      cell: (ap) => <span className="font-medium">{ap.clients ?? 0}</span>,
+    },
+    {
+      id: 'uptime',
+      header: t('AccessPointsPage.list.columns.uptime'),
+      accessorFn: (ap) => ap.uptime ?? 0,
+      align: 'right',
+      cell: (ap) => <span className="text-sm">{formatUptime(ap.uptime)}</span>,
+    },
+    {
+      id: 'actions',
+      header: <span className="sr-only">{t('AccessPointsPage.list.columns.actions')}</span>,
+      sortable: false,
+      cell: (ap) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label={t('AccessPointsPage.list.actionsFor', { name: ap.name })}>
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuItem onClick={() => selectAP(ap)}>
+              <Eye className="mr-2 h-4 w-4" />
+              {t('AccessPointsPage.actions.viewDetails')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => locateMutation.mutate(ap.id)}>
+              <Locate className="mr-2 h-4 w-4" />
+              {t('AccessPointsPage.actions.locate')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => openConfirmDialog('reboot', ap.id, ap.name)}>
+              <RotateCw className="mr-2 h-4 w-4" />
+              {t('AccessPointsPage.actions.reboot')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openConfirmDialog('upgrade', ap.id, ap.name)}>
+              <ArrowUpCircle className="mr-2 h-4 w-4" />
+              {t('AccessPointsPage.actions.upgrade')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive" onClick={() => openConfirmDialog('forget', ap.id, ap.name)}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              {t('AccessPointsPage.actions.forget')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -1786,14 +1908,6 @@ export default function AccessPointsPage() {
         refreshing={apLoading}
         secondaryActions={[{ label: t('AccessPointsPage.header.export'), icon: Download, onClick: handleExport }]}
       />
-
-      {/* Query Error Banner */}
-      {apError && (
-        <ErrorState
-          message={t('AccessPointsPage.list.loadError')}
-          onRetry={() => refetchAPs()}
-        />
-      )}
 
       <StatsGrid
         columns={4}
@@ -1874,134 +1988,30 @@ export default function AccessPointsPage() {
         )}
       </PageToolbar>
 
-      {/* AP List */}
-      {apLoading ? (
-        <Card>
-          <CardContent noOffset className="py-12 text-center text-muted-foreground">
-            <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4" />
-            {t('AccessPointsPage.list.loading')}
-          </CardContent>
-        </Card>
-      ) : filteredAPs.length === 0 ? (
-        searchQuery ? (
+      {/* AP List: one compact row per access point, so a large fleet can be
+          scanned and sorted; the row opens the access point. */}
+      <DataTable<AccessPointSummary>
+        data={filteredAPs}
+        columns={apColumns}
+        isLoading={apLoading}
+        error={apError}
+        onRetry={() => { void refetchAPs(); }}
+        searchable={false}
+        density="compact"
+        itemName={t('AccessPointsPage.list.itemName')}
+        getRowLabel={(ap) => ap.name || ap.mac_address}
+        onRowClick={(ap) => selectAP(ap)}
+        skeletonRows={6}
+        emptyState={searchQuery ? (
           <NoResultsState searchQuery={searchQuery} onClear={() => setSearchQuery('')} />
         ) : (
           <EmptyState
             icon={Wifi}
             title={t('AccessPointsPage.list.emptyTitle')}
             description={t('AccessPointsPage.list.emptyDescription')}
-            variant="card"
           />
-        )
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filteredAPs.map((ap) => (
-            <Card
-              key={ap.id}
-              className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50"
-              onClick={() => selectAP(ap)}
-            >
-              <CardContent noOffset className="p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`rounded-full p-2 ${ap.status === 'online' ? 'bg-success/10' : 'bg-destructive/10'}`}>
-                      <Wifi className={`h-5 w-5 ${ap.status === 'online' ? 'text-success' : 'text-destructive'}`} />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold truncate">{ap.name}</h3>
-                      <p className="text-xs text-muted-foreground">{ap.model} • {ap.ip_address}</p>
-                    </div>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenuItem onClick={() => selectAP(ap)}>
-                        <Eye className="mr-2 h-4 w-4" />
-                        {t('AccessPointsPage.actions.viewDetails')}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => locateMutation.mutate(ap.id)}>
-                        <Locate className="mr-2 h-4 w-4" />
-                        {t('AccessPointsPage.actions.locate')}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => openConfirmDialog('reboot', ap.id, ap.name)}>
-                        <RotateCw className="mr-2 h-4 w-4" />
-                        {t('AccessPointsPage.actions.reboot')}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openConfirmDialog('upgrade', ap.id, ap.name)}>
-                        <ArrowUpCircle className="mr-2 h-4 w-4" />
-                        {t('AccessPointsPage.actions.upgrade')}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-destructive" onClick={() => openConfirmDialog('forget', ap.id, ap.name)}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {t('AccessPointsPage.actions.forget')}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                {/* Status + Site */}
-                <div className="flex items-center gap-2 mb-3 flex-wrap">
-                  <Badge variant={getStatusBadgeVariant(ap.status)} className="text-xs">
-                    <div className={`w-1.5 h-1.5 rounded-full mr-1.5 ${getStatusColor(ap.status)}`} />
-                    {ap.status}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">{ap.mac_address}</span>
-                  {ap.site_name && (
-                    <Badge variant="secondary" className="text-[10px] ml-auto">
-                      <MapPin className="h-2.5 w-2.5 mr-1" />
-                      {ap.site_name}
-                    </Badge>
-                  )}
-                </div>
-
-                {/* Stats row */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-center border-t pt-3">
-                  <div>
-                    <div className="flex items-center justify-center gap-1">
-                      <Users className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-lg font-semibold">{ap.clients}</span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">{t('AccessPointsPage.card.clients')}</p>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-center gap-1">
-                      <Radio className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-lg font-semibold">{ap.radios?.length || 0}</span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">{t('AccessPointsPage.card.radios')}</p>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-center gap-1">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-sm font-semibold">{formatUptime(ap.uptime)}</span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">{t('AccessPointsPage.card.uptime')}</p>
-                  </div>
-                </div>
-
-                {/* Radio bands */}
-                {ap.radios && ap.radios.length > 0 && (
-                  <div className="flex gap-1.5 mt-3 flex-wrap">
-                    {ap.radios.map((r) => (
-                      <Badge key={r.band} variant="outline" className="text-[10px] gap-1">
-                        <BandIcon band={r.band} />{r.band}, {t('AccessPointsPage.common.ch')} {r.channel === 0 ? t('AccessPointsPage.common.auto') : r.channel}
-                        {r.channel_width ? ` / ${r.channel_width}MHz` : ''}
-                        {r.clients > 0 && <span className="text-primary font-semibold">({r.clients})</span>}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+        )}
+      />
 
       {/* ── Confirm Dialog (List level) ──────────────────────────────────── */}
       <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>

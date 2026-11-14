@@ -53,6 +53,10 @@ class ProvisioningError(Exception):
     pass
 
 
+class SharedPhoneMACError(ProvisioningError):
+    """Another live phone has this phone's MAC; its text is safe to show."""
+
+
 class ProvisioningStorageError(ProvisioningError):
     """The config XML was rendered but could not be written to disk.
 
@@ -277,6 +281,7 @@ class ProvisioningService:
         phone = result.scalar_one_or_none()
         if not phone:
             raise ProvisioningError(f"Phone not found: {phone_id}")
+        await self._refuse_shared_mac(phone)
 
         if not phone.mac_address:
             raise ProvisioningError(f"Phone {phone_id} has no MAC address")
@@ -448,10 +453,14 @@ class ProvisioningService:
 
         Returns (xml_content, content_type) or None if not found.
         """
-        from app.modules.voip.models import Phone, ProvisionStatus
+        from app.modules.voip.models import ProvisionStatus
 
         normalized = mac_address.replace("-", "").replace(":", "").replace(".", "").lower()
         colon_mac = ":".join(normalized[i : i + 2] for i in range(0, 12, 2))
+
+        from sqlalchemy.exc import MultipleResultsFound
+
+        from app.modules.voip.models import Phone
 
         result = await self.db.execute(
             select(Phone).where(
@@ -459,7 +468,12 @@ class ProvisioningService:
                 Phone.deleted_at.is_(None),
             )
         )
-        phone = result.scalar_one_or_none()
+        try:
+            phone = result.scalar_one_or_none()
+        except MultipleResultsFound:
+            # Phones flagged by migration 032 share this MAC; serve neither.
+            logger.warning("Provisioning refused: more than one live phone has MAC %s", colon_mac)
+            return None
         if not phone:
             logger.debug("Provisioning request for unknown MAC: %s", mac_address)
             return None
@@ -682,6 +696,30 @@ class ProvisioningService:
     # File Management
     # -------------------------------------------------------------------------
 
+    async def _refuse_shared_mac(self, phone: Any) -> None:
+        """Refuse to provision a phone while another live phone has its MAC.
+
+        Both would be served the same cfg<mac>.xml, so either could receive the
+        other's SIP account and admin password. Migration 032 flags such pairs
+        (``mac_review``); the check here is on the live rows, so deleting one of
+        the pair is what clears it, and the survivor's flag is cleared with it.
+        """
+        from app.modules.voip.models import MAC_REVIEW_DUPLICATE
+        from app.modules.voip.provisioning_auth import live_phones_with_mac
+
+        if not phone.mac_address:
+            return
+        others = await live_phones_with_mac(self.db, phone.mac_address, exclude_id=phone.id)
+        if others:
+            names = ", ".join(f"{o.name!r} ({o.id})" for o in others)
+            raise SharedPhoneMACError(
+                f"Phone {phone.name!r} ({phone.id}) shares MAC {phone.mac_address} with "
+                f"phone {names}; delete one of them before provisioning either"
+            )
+        if phone.mac_review == MAC_REVIEW_DUPLICATE:
+            phone.mac_review = None
+            await self.db.flush()
+
     async def _write_config_file(self, mac_address: str, vendor: str, content: str) -> str:
         """Write config file to provisioning directory."""
         if len(content) > _MAX_CONFIG_SIZE:
@@ -689,6 +727,19 @@ class ProvisioningService:
                 f"Config file exceeds maximum size ({len(content)} > {_MAX_CONFIG_SIZE})"
             )
 
+        # The file is named after the normalised MAC, and get_config_for_mac
+        # serves whatever file carries that name to the phone whose stored MAC
+        # is the canonical form. A phone stored as "00:0B:82:..." or
+        # "000b82..." is never served itself, but writing would replace the
+        # config of the phone that IS stored canonically (possibly in another
+        # site). Refuse instead of overwriting.
+        from app.modules.voip.provisioning_auth import normalize_mac
+
+        if normalize_mac(mac_address or "") != mac_address:
+            raise ProvisioningError(
+                f"Phone MAC {mac_address!r} is not stored as aa:bb:cc:dd:ee:ff; "
+                "save the phone again to normalise it before provisioning"
+            )
         file_path = self._config_file_path(mac_address, vendor)
         # Containment assertion (defense-in-depth): the resolved path must stay
         # inside provision_dir, catching any future filename-construction bug.

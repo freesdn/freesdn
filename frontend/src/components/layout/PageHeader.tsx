@@ -31,7 +31,7 @@
  *   [Refresh] → [actions slot / secondaryActions] → [primaryAction]
  */
 
-import { ReactNode } from 'react';
+import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LucideIcon, MapPin, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -70,9 +70,13 @@ export interface PageHeaderProps { // exported for the deprecation shim in compo
   primaryAction?: PageHeaderAction;
   /** Secondary actions (v1 style) */
   secondaryActions?: PageHeaderAction[];
-  /** Show refresh button */
-  onRefresh?: () => void;
-  /** Refresh loading state */
+  /**
+   * Show refresh button. When the handler returns a promise (as
+   * `() => refetch()` does), the button spins and stays disabled until it
+   * settles, so a refetch of already-cached data still shows feedback.
+   */
+  onRefresh?: () => void | Promise<unknown>;
+  /** Refresh loading state (OR-ed with the pending promise above) */
   refreshing?: boolean;
   /** Optional small badge rendered next to the title — e.g. a capability
    *  maturity marker (Stable / Beta / Experimental). Additive: no effect when
@@ -106,19 +110,43 @@ export function PageHeader({
   // Determine if we have complex actions (v1 style)
   const hasComplexActions = onRefresh || secondaryActions.length > 0 || primaryAction;
 
+  // `refreshing` is usually wired to a query's `isLoading`, which is only true
+  // on the first load. A refetch of cached data never set it, so the refresh
+  // button looked dead on every list page. Track the handler's own promise.
+  const [refreshPending, setRefreshPending] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const handleRefresh = useCallback(() => {
+    const result = onRefresh?.();
+    if (!result || typeof (result as Promise<unknown>).then !== 'function') return;
+    setRefreshPending(true);
+    // A minimum spin so a sub-100ms refetch is still visible as feedback.
+    const minimum = new Promise((resolve) => setTimeout(resolve, 400));
+    Promise.allSettled([result, minimum]).then(() => {
+      if (mounted.current) setRefreshPending(false);
+    });
+  }, [onRefresh]);
+  const isRefreshing = refreshing || refreshPending;
+
   return (
     <div className={cn('flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4', className)}>
       <div className="space-y-1 min-w-0">
         {breadcrumbs && <div className="mb-2">{breadcrumbs}</div>}
         {currentSite && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <MapPin className="h-3 w-3" />
+            <MapPin className="h-3 w-3" aria-hidden="true" />
             <span>{currentSite.name}</span>
           </div>
         )}
         <h1 className="text-xl sm:text-2xl font-semibold tracking-tight flex items-center gap-2">
-          {Icon && <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-primary flex-shrink-0" />}
-          <span className="truncate">{title}</span>
+          {Icon && <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-primary flex-shrink-0" aria-hidden="true" />}
+          {/* A long title truncates; the full text stays available on hover. */}
+          <span className="truncate" title={title}>{title}</span>
           {titleBadge && <span className="flex-shrink-0">{titleBadge}</span>}
         </h1>
         {descriptionText && (
@@ -126,27 +154,32 @@ export function PageHeader({
         )}
       </div>
 
-      {/* Simple actions (v2 style) */}
+      {/* Simple actions (v2 style). Many pages pass their buttons inside a
+          single wrapper <div className="flex items-center gap-2">; that inner
+          row did not wrap, so on a phone the last buttons were pushed past the
+          edge of the screen and clipped (gateway and device detail headers at
+          390px). `[&>div]:flex-wrap` lets such a wrapper wrap too. */}
       {actions && !hasComplexActions && (
-        <div className="flex items-center gap-2 flex-wrap shrink-0 sm:justify-end">
+        <div className="flex items-center gap-2 flex-wrap shrink-0 max-w-full sm:justify-end [&>div]:flex-wrap">
           {actions}
         </div>
       )}
 
       {/* Complex actions (v1 style) */}
       {hasComplexActions && (
-        <div className="flex items-center gap-2 flex-wrap flex-shrink-0 sm:justify-end">
+        <div className="flex items-center gap-2 flex-wrap flex-shrink-0 max-w-full sm:justify-end [&>div]:flex-wrap">
           {/* Refresh button · always leftmost */}
           {onRefresh && (
             <Button
               variant="outline"
               size="icon"
-              onClick={onRefresh}
-              disabled={refreshing}
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              aria-busy={isRefreshing}
               title={t('PageHeader.actions.refresh')}
               aria-label={t('PageHeader.actions.refresh')}
             >
-              <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+              <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
             </Button>
           )}
 

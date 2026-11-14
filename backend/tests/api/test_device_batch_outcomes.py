@@ -15,7 +15,7 @@ from app.adapters.base import AdapterResult
 from app.adapters.exceptions import AdapterConfirmationRequiredError, AdapterReadOnlyError
 from app.api.v1.endpoints import devices as endpoint
 from app.core.dependencies import get_current_active_user
-from tests.api.test_device_action_site_caps import make_action_fixture
+from tests.api.test_device_action_site_caps import make_action_fixture, read_write
 
 MARKER = "owned-private-batch-diagnostic"
 CONTROLS = {
@@ -163,7 +163,7 @@ def batch_adapter_patch(f):
             raise RuntimeError(MARKER)
         return Adapter()
 
-    return patch.object(endpoint, "_get_adapter_for_device", factory)
+    return read_write(patch.object(endpoint, "_get_adapter_for_device", factory))
 
 
 async def invoke_cancelled_batch(f):

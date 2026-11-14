@@ -24,7 +24,7 @@
       "eventTypes": {
         "label": "Tipos de evento",
         "add": "Agregar",
-        "description": "Déjelo vacío para recibir todos los eventos"
+        "description": "Déjelo vacío para recibir todos los eventos excepto las actualizaciones de progreso. device.* coincide con todos los eventos de dispositivo."
       },
       "enabled": "Habilitado",
       "verifySsl": "Verificar TLS"
@@ -70,7 +70,10 @@
       "test": "Probar webhook",
       "viewDeliveries": "Ver entregas",
       "deleteConfirm": "¿Está seguro de que desea eliminar este webhook?",
-      "delete": "Eliminar"
+      "delete": "Eliminar",
+      "deleteTitle": "¿Eliminar el webhook \"{{name}}\"?",
+      "deleteBody": "FreeSDN deja de enviarle eventos y se elimina su historial de entregas. Esta acción no se puede deshacer.",
+      "deleteAction": "Eliminar webhook"
     },
     "header": {
       "title": "Webhooks",
@@ -122,7 +125,11 @@
       "delete": {
         "label": "Eliminar",
         "title": "Eliminación masiva",
-        "description": "Por seguridad, elimine los webhooks de forma individual."
+        "description": "Por seguridad, elimine los webhooks de forma individual.",
+        "confirmTitle_one": "¿Eliminar {{count}} webhook?",
+        "confirmTitle_other": "¿Eliminar {{count}} webhooks?",
+        "confirmBody": "FreeSDN deja de enviarles eventos y se elimina su historial de entregas. Esta acción no se puede deshacer.",
+        "confirmAction": "Eliminar webhooks"
       }
     }
   }

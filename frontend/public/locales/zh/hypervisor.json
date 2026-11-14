@@ -411,6 +411,12 @@
       "targetNodePlaceholder": "选择目标节点",
       "targetNodeRequired": "请选择目标节点",
       "onlineLabel": "在线迁移（仅限 QEMU 虚拟机）"
+    },
+    "confirmDetail": {
+      "start": "所选客户机将在其 Proxmox 节点上启动。请求会立即发送到主机。",
+      "shutdown": "将请求每台客户机的操作系统正常关机。忽略该请求的客户机会继续运行。",
+      "stop": "所选客户机将被立即断电，相当于拔掉电源线。其中尚未写入磁盘的数据将丢失。除非客户机已无响应，否则请优先使用关机。",
+      "reboot": "所选客户机将在其 Proxmox 节点上重启。在每台客户机恢复运行之前，其服务将不可用。"
     }
   },
   "EditConfigDialog": {

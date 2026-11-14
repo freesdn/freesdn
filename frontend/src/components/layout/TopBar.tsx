@@ -57,6 +57,7 @@ import { LanguageSwitcher } from '../ui/language-switcher';
 import { useAuthStore } from '../../stores/authStore';
 import { api, notificationApi } from '../../lib/api';
 import { SiteSelector } from './SiteSelector';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // NOTE: The backend returns these field names, ``body`` (not ``message``),
 // ``read`` (not ``is_read``), no ``icon``. The shared
@@ -254,7 +255,7 @@ export function TopBar({ connectionStatus }: TopBarProps) {
       }, 2000);
     } catch (err: unknown) {
       const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || t('TopBar.errors.updateEmailFailed'));
+      setError(getApiErrorMessage(axiosErr, t('TopBar.errors.updateEmailFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -294,7 +295,7 @@ export function TopBar({ connectionStatus }: TopBarProps) {
       }, 2000);
     } catch (err: unknown) {
       const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || t('TopBar.errors.changePasswordFailed'));
+      setError(getApiErrorMessage(axiosErr, t('TopBar.errors.changePasswordFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -315,7 +316,7 @@ export function TopBar({ connectionStatus }: TopBarProps) {
       navigate('/login');
     } catch (err: unknown) {
       const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || t('TopBar.errors.deleteAccountFailed'));
+      setError(getApiErrorMessage(axiosErr, t('TopBar.errors.deleteAccountFailed')));
       setIsLoading(false);
     }
   };

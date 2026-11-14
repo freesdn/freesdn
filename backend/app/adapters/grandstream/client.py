@@ -53,6 +53,7 @@ from urllib.parse import urlencode
 
 import aiohttp
 
+from app.adapters import io_policy
 from app.core.http_client import build_aiohttp_session
 
 from .constants import (
@@ -571,7 +572,9 @@ class GrandstreamPhoneClient:
                     # which outcome_is_unknown classifies as UNKNOWN rather than
                     # failed. That is the honest answer.
                     raise
-                if attempt < max_attempts:
+                # io_policy: only a dropped connection is replayed; a phone that
+                # timed out or refused the connection is not asked again.
+                if attempt < max_attempts and io_policy.may_retry_exception(exc, idempotent=True):
                     await asyncio.sleep(1.0)
                     continue
                 raise GrandstreamConnectionError(f"Phone request failed: {exc}") from exc

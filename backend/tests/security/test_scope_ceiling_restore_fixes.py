@@ -230,6 +230,7 @@ class TestActionsSuccessOnFailure:
                 return SimpleNamespace(success=False, error="controller is read-only", message=None)
 
         monkeypatch.setattr(actions_mod, "create_adapter", lambda _c: _FakeAdapter())
+        _no_chokepoint(monkeypatch, actions_mod)
 
         req = actions_mod.SSIDToggleRequest(
             controller_id=controller.id, ssid_name="net", enabled=False
@@ -278,3 +279,21 @@ class TestR5054RtspCredentialGate:
             uuid4(), operator, service, stream_type="main", protocol="rtsp"
         )
         assert result["protocol"] == "rtsp"
+
+
+async def _straight_through(_db, **kwargs):
+    """Stand-in for the staging chokepoint, which needs a real session.
+
+    These tests are about how the endpoint reads the adapter's answer; the
+    chokepoint (read-only refusal, the ledger row) is covered by
+    tests/api/test_direct_writes_are_staged.py.
+    """
+    return await kwargs["perform"]()
+
+
+def _no_chokepoint(monkeypatch, module):
+    from unittest.mock import AsyncMock as _AsyncMock
+    from uuid import uuid4 as _uuid4
+
+    monkeypatch.setattr(module, "write_through_staging", _straight_through)
+    monkeypatch.setattr(module, "controller_scope", _AsyncMock(return_value=(_uuid4(), _uuid4())))

@@ -16,7 +16,8 @@
  */
 import { Suspense } from 'react';
 import { Route } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 import { ProtectedRoute, ModuleGuard } from '@/components/auth';
 import { MainLayout } from '@/components/layout';
 import { moduleManifests } from '@/modules';
@@ -25,13 +26,16 @@ import { moduleManifests } from '@/modules';
  * Fallback component shown while a lazy-loaded module page is loading.
  */
 function ModuleLoadingFallback() {
+  // A page-shaped skeleton rather than a centred spinner (and an untranslated
+  // "Loading module…"): the layout does not jump when the page arrives.
+  const { t } = useTranslation('common');
   return (
-    <div className="flex items-center justify-center min-h-[40vh]">
-      <div className="flex flex-col items-center gap-3 text-muted-foreground">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <p className="text-sm">Loading module…</p>
-      </div>
-    </div>
+    <>
+      <span className="sr-only" role="status">
+        {t('loading')}
+      </span>
+      <PageSkeleton variant="list" />
+    </>
   );
 }
 

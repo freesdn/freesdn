@@ -121,6 +121,14 @@
         "username": "El nombre de usuario es obligatorio",
         "password": "La contraseña debe tener al menos 12 caracteres"
       }
+    },
+    "deleteDialog": {
+      "titleOne": "¿Eliminar usuario?",
+      "titleMany": "¿Eliminar {{count}} usuarios?",
+      "descriptionMany": "Se eliminarán estas {{count}} cuentas. Esta acción no se puede deshacer.",
+      "more": "y {{count}} más",
+      "confirmMany": "Eliminar {{count}} usuarios",
+      "cancel": "Cancelar"
     }
   }
 }

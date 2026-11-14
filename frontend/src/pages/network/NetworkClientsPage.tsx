@@ -62,11 +62,11 @@ import {
 import { StatsGrid } from '@/components/ui/stats-grid';
 import { StatusBadge } from '@/components/ui/status-indicator';
 import { BulkActionsBar } from '@/components/ui/bulk-actions-bar';
-import { ErrorState } from '@/components/ui/empty-state';
 import { PageHeader, PageToolbar } from '@/components/layout';
 import { networkApi, type NetworkClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { escapeCell } from '@/lib/csv';
 
 // ───────────────────────────────────────────────────────────────────
@@ -320,6 +320,7 @@ export default function NetworkClientsPage() {
   const [blockingClient, setBlockingClient] = useState<NetworkClient | undefined>();
   const [selected, setSelected] = useState<NetworkClient[]>([]);
 
+  const confirmAction = useConfirm();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['network-clients', { siteId: selectedSiteId }],
     queryFn: () => networkApi.clients.list({ site_id: selectedSiteId ?? undefined, limit: 500 }),
@@ -508,8 +509,9 @@ export default function NetworkClientsPage() {
     {
       id: 'traffic',
       header: t('NetworkClientsPage.columns.traffic'),
+      align: 'right',
       cell: (client) => (
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center justify-end gap-3 text-xs">
           <span className="flex items-center gap-1 text-success">
             <Download className="h-3 w-3" />
             {formatBytes(client.rx_bytes)}
@@ -569,21 +571,9 @@ export default function NetworkClientsPage() {
     },
   ];
 
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          icon={Users}
-          title={t('NetworkClientsPage.header.title')}
-          description={t('NetworkClientsPage.header.descriptionShort')}
-        />
-        <ErrorState
-          message={error instanceof Error ? error.message : t('NetworkClientsPage.error.loadFailed')}
-          onRetry={() => refetch()}
-        />
-      </div>
-    );
-  }
+  // A failed load with nothing on screen: the table shows the server's reason
+  // and a retry; the counters would only claim zero clients, so they wait.
+  const failedEmpty = !!error && allClients.length === 0;
 
   return (
     <div className="space-y-6">
@@ -598,6 +588,7 @@ export default function NetworkClientsPage() {
         ]}
       />
 
+      {!failedEmpty && (
       <StatsGrid
         columns={4}
         isLoading={isLoading}
@@ -637,6 +628,7 @@ export default function NetworkClientsPage() {
           },
         ]}
       />
+      )}
 
       <PageToolbar>
         <SearchBar
@@ -680,9 +672,14 @@ export default function NetworkClientsPage() {
         isLoading={isLoading}
         selectable
         onSelectionChange={setSelected}
+        selectedRows={selected}
         searchable={false}
         itemName={t('NetworkClientsPage.itemName.plural')}
         getRowId={(row) => row.id}
+        getRowLabel={(row) => row.display_name || row.hostname || row.mac_address}
+        density="compact"
+        error={error}
+        onRetry={() => refetch()}
       />
 
       <BulkActionsBar
@@ -694,10 +691,18 @@ export default function NetworkClientsPage() {
             label: t('NetworkClientsPage.actions.block'),
             icon: Ban,
             variant: 'destructive',
-            onClick: () => {
-              selected.forEach((c) =>
-                blockMutation.mutate({ id: c.id, block: true }),
-              );
+            onClick: async () => {
+              const targets = [...selected];
+              const ok = await confirmAction({
+                title: t('NetworkClientsPage.bulk.blockTitle', { count: targets.length }),
+                description: t('NetworkClientsPage.bulk.blockDescription'),
+                count: targets.length,
+                items: targets.map((c) => c.display_name || c.hostname || c.mac_address),
+                confirmLabel: t('NetworkClientsPage.bulk.blockConfirm'),
+                destructive: true,
+              });
+              if (!ok) return;
+              targets.forEach((c) => blockMutation.mutate({ id: c.id, block: true }));
               setSelected([]);
             },
           },

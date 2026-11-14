@@ -14,8 +14,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
-import httpx
-
+from app.core.http_client import build_async_client
 from app.modules.ai.providers.base import (
     BaseLLMProvider,
     LLMResponse,
@@ -35,7 +34,7 @@ class OllamaProvider(BaseLLMProvider):
 
     def __init__(self, api_key: str = "", base_url: str = DEFAULT_OLLAMA_URL):
         self.base_url = base_url.rstrip("/")
-        self._client = httpx.AsyncClient(
+        self._client = build_async_client(
             base_url=self.base_url,
             headers={"Content-Type": "application/json"},
             timeout=300.0,  # Local models can be slow on first load

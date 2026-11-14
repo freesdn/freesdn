@@ -78,9 +78,28 @@ OMDADA_ERROR_AUTH_CODE_ONLY: Final[int] = -44118  # endpoint requires authorizat
 # Omada API Error Codes
 # ============================================================================
 
+# What a real controller says, verified on an OC300 running 6.3.0.111 and against
+# TP-Link's Open API error table:
+#
+#   -1     "General error."               a server-side failure. On 6.2+ the
+#                                         unfiltered client list always answers it
+#                                         (the controller fails while scoring client
+#                                         health); ``filters.active=true`` avoids it.
+#   -1001  "Invalid request parameters."  the request shape is wrong, e.g. a list
+#                                         endpoint called without currentPage /
+#                                         currentPageSize. It is NOT a session error.
+#   -1600  "Unsupported request path."    this firmware has no such endpoint.
+#
+# An expired or unknown local session is not an errorCode at all: the controller
+# answers HTTP 302 to ``/{omadacId}/login``, which a redirect-following client sees
+# as a 200 HTML login page. A request without the right Csrf-Token gets the same
+# redirect, and a wrong token also ends that session on the controller.
 OMADA_SUCCESS: Final[int] = 0
 OMADA_ERROR_GENERIC: Final[int] = -1
-OMADA_ERROR_SESSION_EXPIRED: Final[int] = -1001
+OMADA_ERROR_INVALID_REQUEST: Final[int] = -1001
+OMADA_ERROR_UNSUPPORTED_PATH: Final[int] = -1600
+# Unverified on real hardware; kept as a session SUSPECT that is confirmed with
+# loginStatus before any re-login (local mode).
 OMADA_ERROR_CSRF_INVALID: Final[int] = -1002
 OMADA_ERROR_PERMISSION_DENIED: Final[int] = -1003
 OMADA_ERROR_LOGIN_FAILED: Final[int] = -30101
@@ -94,7 +113,8 @@ OMADA_ERROR_DEVICE_OFFLINE: Final[int] = -40005
 # Mapping from Omada error codes to domain exception class names.
 # Used by OmadaApiClient._handle_error_code() for structured translation.
 OMADA_ERROR_TO_DOMAIN: Final[dict[int, str]] = {
-    OMADA_ERROR_SESSION_EXPIRED: "OmadaSessionExpiredError",
+    OMADA_ERROR_INVALID_REQUEST: "OmadaInvalidRequestError",
+    OMADA_ERROR_UNSUPPORTED_PATH: "OmadaUnsupportedEndpointError",
     OMADA_ERROR_CSRF_INVALID: "OmadaSessionExpiredError",
     OMADA_ERROR_PERMISSION_DENIED: "OmadaAuthorizationError",
     OMADA_ERROR_LOGIN_FAILED: "OmadaAuthError",
@@ -109,11 +129,23 @@ OMADA_ERROR_TO_DOMAIN: Final[dict[int, str]] = {
 # Retryable HTTP status codes (gateway/server errors)
 RETRYABLE_HTTP_STATUS: Final[set[int]] = {429, 502, 503, 504}
 
-# Omada error codes that trigger automatic session refresh
-SESSION_EXPIRED_CODES: Final[set[int]] = {
-    OMADA_ERROR_SESSION_EXPIRED,
-    OMADA_ERROR_CSRF_INVALID,
-}
+# Open API (cloud) access-token errors, from TP-Link's published Open API error
+# table. A token refresh is the right answer to these and nothing else.
+OMADA_ERROR_CLOUD_TOKEN_EXPIRED: Final[int] = -44112
+OMADA_ERROR_CLOUD_TOKEN_INVALID: Final[int] = -44113
+
+# Cloud mode: error codes that mean "refresh the access token and replay".
+CLOUD_SESSION_EXPIRED_CODES: Final[frozenset[int]] = frozenset(
+    {OMADA_ERROR_CLOUD_TOKEN_EXPIRED, OMADA_ERROR_CLOUD_TOKEN_INVALID, OMADA_ERROR_CSRF_INVALID}
+)
+
+# Local mode: error codes that MIGHT mean the session is gone. The client asks
+# the controller (GET loginStatus, which never logs in) before it re-logs in, so a
+# code that turns out to mean something else on some firmware costs one cheap
+# read instead of a login and a fresh controller session.
+LOCAL_SESSION_SUSPECT_CODES: Final[frozenset[int]] = frozenset(
+    {OMADA_ERROR_GENERIC, OMADA_ERROR_CSRF_INVALID}
+)
 
 # ============================================================================
 # Device Type & Status Maps
@@ -169,9 +201,14 @@ DEVICE_TYPE_ENDPOINT: Final[dict[str, str]] = {
 PATH_INFO: Final[str] = "/api/info"
 PATH_LOGIN_TEMPLATE: Final[str] = "/{controller_id}/api/v2/login"
 PATH_LOGOUT_TEMPLATE: Final[str] = "/{controller_id}/api/v2/logout"
+# Answers {"login": bool} for the caller's session and never creates one, so it
+# is the cheap way to ask "is my session still alive?" (seen on 5.x and 6.3).
+PATH_LOGIN_STATUS: Final[str] = "/loginStatus"
 PATH_API_PREFIX_TEMPLATE: Final[str] = "/{controller_id}/api/v2"
 
-# Controller maintenance endpoints
+# Controller maintenance endpoints. These live under the controller API prefix
+# like everything else (``/{omadacId}/api/v2/maintenance/...``); the bare path
+# answers HTTP 404. ``sysInfo`` is not served by 6.3 (-1600).
 PATH_CONTROLLER_STATUS: Final[str] = "/maintenance/controllerStatus"
 PATH_SYSTEM_INFO: Final[str] = "/maintenance/sysInfo"
 
