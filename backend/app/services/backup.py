@@ -49,6 +49,7 @@ from app.core.backup_artifacts import (
 from app.core.backup_download_response import LocalDownloadSource
 from app.core.backup_downloads import DownloadSnapshot
 from app.core.backup_files import BackupFiles, BackupPublicationError
+from app.core.http_client import build_async_client
 from app.core.owned_async import complete_before_cancellation
 from app.core.remote_write_plan import RemotePublicationError, RemoteSavePlan
 from app.core.security_utils import MAX_BACKUP_IMPORT_BYTES, escape_like, resolve_and_pin_host
@@ -61,8 +62,11 @@ from app.modules.backup.models import (
     StorageLocation,
 )
 from app.services.backup_transport import (
+    LOCAL_PATH_STORAGE_TYPES,
+    LocalBackupPathError,
     StorageConfigurationError,
     StorageConfigurationView,
+    confine_local_backup_path,
     ftps_connection,
     remote_path,
     sftp_connection,
@@ -87,9 +91,42 @@ def backup_failure_detail(error: Exception, fallback: str) -> str:
     can include connection strings or decrypted input. Only our explicit
     diagnostic types carry reviewed operator messages.
     """
-    if isinstance(error, (BackupInputError, BackupRecoveryError)):
+    if isinstance(error, (BackupInputError, BackupRecoveryError, LocalBackupPathError)):
         return str(error)
     return fallback
+
+
+async def _publish_local_path_refused(backup: Any, error: LocalBackupPathError) -> None:
+    """Raise the alarm when a backup is refused for its storage path.
+
+    The backup row already carries the reason (``error_message``); this makes
+    sure a scheduled run that nobody is watching reaches alert rules and the
+    event stream too, rather than failing quietly every night. Best effort: a
+    bus failure must not mask the backup failure itself.
+    """
+    try:
+        from app.core.events import Event, EventCategory, EventPriority, get_event_bus
+
+        org = str(backup.organization_id) if backup.organization_id else None
+        await get_event_bus().publish(
+            Event(
+                event_type="backup.storage.path_refused",
+                category=EventCategory.SYSTEM,
+                priority=EventPriority.HIGH,
+                payload={
+                    "organization_id": org,
+                    "backup_id": str(backup.id),
+                    "storage_location_id": (
+                        str(backup.storage_location_id) if backup.storage_location_id else None
+                    ),
+                    "schedule_id": str(backup.schedule_id) if backup.schedule_id else None,
+                    "reason": str(error),
+                },
+                organization_id=org,
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 - must not mask the backup failure
+        logger.warning("Could not publish backup.storage.path_refused (%s)", type(exc).__name__)
 
 
 def _must_force_encryption(is_encrypted: bool, environment: str, allow_plaintext: bool) -> bool:
@@ -412,7 +449,10 @@ class LocalStorageBackend(BackupStorageBackend):
     """Store backups on local filesystem."""
 
     def __init__(self, config: dict[str, Any]):
-        self.base_path = Path(config.get("path", "/data/backups"))
+        # Refused here, not only at save time, so every use of a location whose
+        # path is outside the allowed roots (scheduled job, manual run, test,
+        # download, restore) fails with the reason instead of writing there.
+        self.base_path = Path(confine_local_backup_path(config.get("path", "/data/backups")))
 
     def _files(self) -> BackupFiles:
         return BackupFiles(self.base_path, MAX_BACKUP_IMPORT_BYTES)
@@ -1255,12 +1295,11 @@ class WebDAVStorageBackend(BackupStorageBackend):
 
     @contextlib.asynccontextmanager
     async def _session(self):
-        import httpx
 
         if self._closed:
             raise ValueError("WebDAV backend is closed")
         deadline = time.monotonic() + self._OPERATION_SECONDS
-        client = httpx.AsyncClient(**self._client_options)
+        client = build_async_client(**self._client_options)
         try:
             # A slow peer must not extend the operation indefinitely by sending
             # a byte before each per-read timeout. Mandatory close is outside
@@ -3364,6 +3403,8 @@ class BackupService:
             backup.completed_at = datetime.now(UTC)
             await self.db.commit()
             logger.error("Backup %s failed (%s)", backup.id, type(e).__name__)
+            if isinstance(e, LocalBackupPathError):
+                await _publish_local_path_refused(backup, e)
             if isinstance(e, BackupArtifactError):
                 raise BackupInputError(str(e)) from None
             raise
@@ -5286,6 +5327,8 @@ class BackupService:
         storage_type = (kwargs.get("storage_type") or "").lower()
         _ssrf_validate_storage_cfg(storage_type, cfg)
         validate_policy(storage_type, cfg, creating=True)
+        if storage_type in LOCAL_PATH_STORAGE_TYPES:
+            confine_local_backup_path(cfg.get("path"))
 
         public, sensitive = self._extract_sensitive(cfg)
         kwargs["config"] = public
@@ -5328,6 +5371,8 @@ class BackupService:
             config = {**(loc.config or {}), **kwargs["config"]}
             _ssrf_validate_storage_cfg(storage_type, config)
             validate_policy(storage_type, config)
+            if storage_type in LOCAL_PATH_STORAGE_TYPES:
+                confine_local_backup_path(config.get("path"))
             kwargs["config"] = config
 
         # If config is being updated, split out sensitive keys and

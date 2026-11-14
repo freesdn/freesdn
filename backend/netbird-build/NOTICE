@@ -1,11 +1,11 @@
-FreeSDN NetBird 0.82.0 security rebuild, 2026-11-11.
+FreeSDN NetBird 0.82.1 security rebuild, 2026-11-13.
 This is a modified FreeSDN build, not an upstream NetBird binary.
 Source checksums and dependency versions are recorded in go.mod/go.sum.
 DTLS 3.1.9 / STUN 3.1.7, TURN 4.1.1; Go 1.27.4.
 The relay probe uses TURN v4, a NetBird network-to-STUN transport adapter,
 and buffered STUN callback results. prepare.go verifies the original source
 hash before applying the reviewed files in patches/ to a private vendor tree.
-NetBird 0.82.0 imports its ICE and WireGuard forks directly; its remaining
+NetBird 0.82.1 imports its ICE and WireGuard forks directly; its remaining
 module replacements (circl, easyjson, wails) are retained unchanged.
 TURN 4.1.4 / 5.1.2 require a separate ICE transport migration and are not used.
 Legacy DTLS v2 and STUN v2 are absent from the compiled client inventory.
@@ -8034,14 +8034,14 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ========================================================================
-github.com/netbirdio/netbird v0.82.0 / AUTHORS
+github.com/netbirdio/netbird v0.82.1 / AUTHORS
 
 Mikhail Bragin (https://github.com/braginini)
 Maycon Santos (https://github.com/mlsmaycon)
 NetBird GmbH
 
 ========================================================================
-github.com/netbirdio/netbird v0.82.0 / LICENSE
+github.com/netbirdio/netbird v0.82.1 / LICENSE
 
 This BSD-3-Clause license applies to all parts of the repository except for the directories management/, signal/, relay/ and combined/.
 Those directories are licensed under the GNU Affero General Public License version 3.0 (AGPLv3). See the respective LICENSE files inside each directory.
@@ -8061,7 +8061,7 @@ Redistribution and use in source and binary forms, with or without modification,
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ========================================================================
-github.com/netbirdio/netbird v0.82.0 / combined/LICENSE
+github.com/netbirdio/netbird v0.82.1 / combined/LICENSE
 
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
@@ -8726,7 +8726,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
 
 ========================================================================
-github.com/netbirdio/netbird v0.82.0 / management/LICENSE
+github.com/netbirdio/netbird v0.82.1 / management/LICENSE
 
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
@@ -9391,7 +9391,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
 
 ========================================================================
-github.com/netbirdio/netbird v0.82.0 / proxy/LICENSE
+github.com/netbirdio/netbird v0.82.1 / proxy/LICENSE
 
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
@@ -10056,7 +10056,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
 
 ========================================================================
-github.com/netbirdio/netbird v0.82.0 / relay/LICENSE
+github.com/netbirdio/netbird v0.82.1 / relay/LICENSE
 
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
@@ -10721,7 +10721,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
 
 ========================================================================
-github.com/netbirdio/netbird v0.82.0 / signal/LICENSE
+github.com/netbirdio/netbird v0.82.1 / signal/LICENSE
 
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
@@ -11386,7 +11386,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
 
 ========================================================================
-github.com/netbirdio/netbird v0.82.0 / tools/idp-migrate/LICENSE
+github.com/netbirdio/netbird v0.82.1 / tools/idp-migrate/LICENSE
 
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007

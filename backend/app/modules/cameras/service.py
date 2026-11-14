@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +29,7 @@ from app.adapters.exceptions import (
     AdapterConnectionError,
 )
 from app.core.crypto import decrypt_credential
+from app.core.device_slot import host_slot_key
 from app.core.events import Event, EventCategory, EventPriority, get_event_bus
 from app.core.owned_child import owned_child_command
 
@@ -687,40 +689,30 @@ class StreamService:
         at a single chokepoint for every vendor. (Private RFC1918 subnets stay
         allowed — cameras/NVRs live on private networks.)
         """
-        from app.modules.cameras.schemas import _validate_host_not_ssrf
+        # Shared with the camera Celery tasks (app/modules/cameras/host_guard.py):
+        # the SSRF validator above plus "the stored camera login only goes to a
+        # private address". A cameras.manage holder (site_admin) who points
+        # ip_address at a public address must not be able to exfiltrate the
+        # stored camera secret, which the ONVIF Basic-auth 401 fallback would
+        # send in clear (sibling of the firewall/credentials/controller
+        # stored-secret-egress fix).
+        from app.modules.cameras.host_guard import CameraHostRefused, check_stored_camera_host
 
         try:
-            _validate_host_not_ssrf(str(host))
-        except ValueError as exc:
+            address = check_stored_camera_host(host)
+        except CameraHostRefused as exc:
             raise CameraError(str(exc)) from exc
-
-        # this read path decrypts the stored camera credential and (for the
-        # ONVIF Basic-auth 401 fallback) sends it as plaintext Basic auth to ``host``.
-        # Cameras/NVRs live on private networks, so refuse to send the credential to
-        # a PUBLIC host — a cameras.manage holder (site_admin) who points ip_address
-        # at a public address must not be able to exfiltrate the stored camera secret
-        # (sibling of the firewall/credentials/controller stored-secret-egress fix).
-        from app.core.security_utils import is_private_ip, resolve_and_pin_host
-
-        try:
-            _pinned = resolve_and_pin_host(str(host), allow_private=True)
-        except ValueError as exc:
-            raise CameraError(str(exc)) from exc
-        if not is_private_ip(_pinned):
-            raise CameraError(
-                f"Camera host {host!r} resolves to a PUBLIC address. Cameras and NVRs "
-                "must live on a private/on-prem network — FreeSDN refuses to send the "
-                "stored camera credentials to a public-internet host. Set the camera's "
-                "IP/host to its on-prem (RFC1918) address."
-            )
 
         vendor_lower = (vendor or "").lower().strip()
 
+        # Hikvision (ISAPI over HTTP) and ONVIF (no certificate verification)
+        # connect to the checked address, never the stored name, which the
+        # transport would resolve again.
         if vendor_lower == "hikvision":
             from app.adapters.hikvision.adapter import HikvisionAdapter
 
             return HikvisionAdapter(
-                host=host,
+                host=address,
                 username=username,
                 password=password,
                 port=port,
@@ -728,7 +720,9 @@ class StreamService:
 
         # UniFi Protect — runs alongside UniFi Network on the same UOS
         # host. The same credentials work for both apps. Accept any of
-        # the common vendor strings.
+        # the common vendor strings. It keeps the stored name: it verifies the
+        # TLS certificate, which names the host, and a re-resolved name that
+        # points elsewhere fails that check before the login is sent.
         if vendor_lower in ("unifi", "unifi_protect", "ubiquiti"):
             from app.adapters.unifi_protect.adapter import (
                 UniFiProtectAdapter,
@@ -747,10 +741,11 @@ class StreamService:
         from app.adapters.onvif.adapter import ONVIFAdapter
 
         return ONVIFAdapter(
-            host=host,
+            host=address,
             username=username,
             password=password,
             port=port,
+            host_pinned=True,
         )
 
 
@@ -1506,7 +1501,26 @@ class PTZService:
                     kwargs["force"] = True
             except (TypeError, ValueError):
                 pass
-            ptz_result = await adapter.set_preset(**kwargs)
+            from app.services.device_writes import request_actor_id, write_through_staging
+
+            ptz_result = await write_through_staging(
+                self.db,
+                organization_id=camera.organization_id,
+                controller_id=None,
+                site_id=camera.site_id,
+                # No controller row: the camera's own turn.
+                slot_key=host_slot_key(camera.ip_address, fallback=f"camera:{camera.id}"),
+                feature="camera.ptz_preset",
+                operation="update",
+                target_id=str(camera.id),
+                payload={"preset": preset, "name": name},
+                perform=lambda: adapter.set_preset(**kwargs),
+                force=True,
+                actor_id=request_actor_id(),
+                return_failed_result=True,
+            )
+        except HTTPException:
+            raise
         except Exception as exc:
             logger.error("Set preset failed for camera %s: %s", camera_id, exc)
             raise CameraError("Preset save failed on the camera") from exc
@@ -2423,11 +2437,19 @@ class NVRDiscoveryService:
 
         if not nvr.password_encrypted:
             raise CameraError("NVR has no stored credentials for sync")
+        # The stored login is about to go to the stored host: same point-of-use
+        # check as the snapshot path and the camera tasks.
+        from app.modules.cameras.host_guard import CameraHostRefused, check_stored_camera_host
+
+        try:
+            address = await asyncio.to_thread(check_stored_camera_host, nvr.ip_address)
+        except CameraHostRefused as exc:
+            raise CameraError(str(exc)) from exc
         password = decrypt_credential(nvr.password_encrypted)
 
-        # 2. Discover current state
+        # 2. Discover current state, at the checked address (not the stored name)
         discovery = await self.discover_channels(
-            nvr.ip_address,
+            address,
             nvr.port or 80,
             nvr.username or "",
             password,
@@ -3788,11 +3810,29 @@ class ThermalService:
         )
         try:
             await adapter.connect()
-            await adapter.set_thermal_threshold(
-                channel=channel,
-                min_temp=min_temp,
-                max_temp=max_temp,
+            from app.services.device_writes import request_actor_id, write_through_staging
+
+            await write_through_staging(
+                self.db,
+                organization_id=camera.organization_id,
+                controller_id=None,
+                site_id=camera.site_id,
+                # No controller row: the turn of the device reached (camera or NVR).
+                slot_key=host_slot_key(host, fallback=f"camera:{camera.id}"),
+                feature="camera.thermal_threshold",
+                operation="update",
+                target_id=str(camera.id),
+                payload={"min_temp": min_temp, "max_temp": max_temp},
+                perform=lambda: adapter.set_thermal_threshold(
+                    channel=channel,
+                    min_temp=min_temp,
+                    max_temp=max_temp,
+                ),
+                force=True,
+                actor_id=request_actor_id(),
             )
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error("Failed to set thermal threshold for camera %s: %s", camera_id, e)
             raise CameraError("Failed to set thermal threshold on device")

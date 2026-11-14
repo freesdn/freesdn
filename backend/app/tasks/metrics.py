@@ -17,29 +17,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.celery_app import celery_app
-from app.core.crypto import decrypt_credential, is_encrypted
 from app.db.session import CelerySessionLocal as AsyncSessionLocal
-from app.services.adapter_factory import get_adapter
+from app.services.adapter_factory import adapter_device_id, build_adapter_for_controller
 from app.tasks.base import FreeSDNTask
 
 logger = logging.getLogger(__name__)
-
-
-def _decrypt_if_needed(value: str | None) -> str:
-    """Return plaintext for encrypted controller secrets.
-
-    Raises ValueError if decryption fails — callers should handle this
-    to avoid connecting with empty/invalid credentials.
-    """
-    if not value:
-        return ""
-    if not is_encrypted(value):
-        return value
-    try:
-        return decrypt_credential(value)
-    except ValueError:
-        logger.error("Failed to decrypt credential — encryption key may have changed")
-        raise
 
 
 # ===========================================
@@ -70,29 +52,17 @@ async def _collect_device_metrics(device_id: str) -> dict[str, Any]:
 
         try:
             controller = device.controller
-            cloud_kwargs = {}
-            if controller.connection_mode == "cloud":
-                cloud_kwargs = {
-                    "client_id": controller.client_id or "",
-                    "client_secret": _decrypt_if_needed(controller.client_secret),
-                    "omada_id": controller.omada_id or "",
-                    "cloud_region": controller.cloud_region or "us",
-                }
-            adapter = get_adapter(
-                controller_type=controller.controller_type,
-                host=controller.host,
-                username=controller.username or "",
-                password=_decrypt_if_needed(controller.password),
-                port=controller.port,
-                use_ssl=controller.use_ssl,
-                verify_ssl=controller.verify_ssl,
-                mode=controller.connection_mode or "local",
-                **cloud_kwargs,
-            )
+            # build_adapter_for_controller carries the Proxmox API token and
+            # the TrueNAS key that this hand-built copy dropped.
+            adapter = build_adapter_for_controller(controller)
+
+            ident = adapter_device_id(device, controller.controller_type)
+            if ident is None:
+                return {"success": False, "error": "Device has no adapter identifier"}
 
             async with adapter:
                 # Get device metrics
-                metrics = await adapter.get_device_metrics(device.mac_address)
+                metrics = await adapter.get_device_metrics(ident)
 
             if metrics:
                 # Store metrics in TimescaleDB (if metrics table exists)
@@ -143,25 +113,7 @@ async def _collect_controller_metrics(controller_id: str) -> dict[str, Any]:
             return {"success": False, "error": "Controller is disabled"}
 
         try:
-            cloud_kwargs = {}
-            if controller.connection_mode == "cloud":
-                cloud_kwargs = {
-                    "client_id": controller.client_id or "",
-                    "client_secret": _decrypt_if_needed(controller.client_secret),
-                    "omada_id": controller.omada_id or "",
-                    "cloud_region": controller.cloud_region or "us",
-                }
-            adapter = get_adapter(
-                controller_type=controller.controller_type,
-                host=controller.host,
-                username=controller.username or "",
-                password=_decrypt_if_needed(controller.password),
-                port=controller.port,
-                use_ssl=controller.use_ssl,
-                verify_ssl=controller.verify_ssl,
-                mode=controller.connection_mode or "local",
-                **cloud_kwargs,
-            )
+            adapter = build_adapter_for_controller(controller)
 
             async with adapter:
                 # Get system info/metrics from controller
@@ -211,7 +163,7 @@ def collect_all_device_metrics(self: Any) -> dict[str, Any]:
     """
     from app.core.celery_app import acquire_solo_lock, release_solo_lock
 
-    lock_token = acquire_solo_lock("collect_all_device_metrics", ttl_seconds=300)
+    lock_token = acquire_solo_lock("collect_all_device_metrics", ttl_seconds=360)
     if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:

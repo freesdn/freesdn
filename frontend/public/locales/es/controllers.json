@@ -12,7 +12,8 @@
       "disconnected": "Desconectado",
       "error": "Error",
       "syncing": "Sincronizando",
-      "unknown": "Desconocido"
+      "unknown": "Desconocido",
+      "unreachable": "Inaccesible"
     },
     "error": {
       "notFound": "Controlador no encontrado",
@@ -150,8 +151,13 @@
       "title": "Zona de peligro",
       "description": "Eliminar este controlador también eliminará todos los dispositivos asociados de FreeSDN.",
       "confirm": "¿Eliminar el controlador \"{{name}}\"? Esto también eliminará los {{count}} dispositivos gestionados.",
-      "delete": "Eliminar controlador"
-    }
+      "delete": "Eliminar controlador",
+      "confirmTitle": "¿Eliminar el controlador \"{{name}}\"?",
+      "confirmBody_one": "FreeSDN deja de gestionarlo y elimina de FreeSDN su {{count}} dispositivo. No se cambia nada en el propio controlador.",
+      "confirmBody_other": "FreeSDN deja de gestionarlo y elimina de FreeSDN sus {{count}} dispositivos. No se cambia nada en el propio controlador.",
+      "confirmBodyNoCount": "FreeSDN deja de gestionarlo y elimina de FreeSDN todos los dispositivos que gestiona. No se cambia nada en el propio controlador."
+    },
+    "copyValue": "Copiar {{label}}"
   },
   "ControllersPage": {
     "header": {

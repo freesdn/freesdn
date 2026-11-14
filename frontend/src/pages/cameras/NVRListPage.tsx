@@ -74,6 +74,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -333,7 +334,7 @@ export default function NVRListPage() {
     onError: (err) =>
       toast({
         title: t('NVRListPage.toasts.syncFailed'),
-        description: (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       }),
     onSettled: () => {
@@ -354,7 +355,7 @@ export default function NVRListPage() {
     onError: (err) =>
       toast({
         title: t('NVRListPage.toasts.deleteFailed'),
-        description: (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       }),
   });
@@ -441,7 +442,7 @@ export default function NVRListPage() {
     onError: (err) =>
       toast({
         title: t('CamerasPage.toasts.deleteCamerasFailed'),
-        description: (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       }),
   });

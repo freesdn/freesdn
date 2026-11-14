@@ -1,22 +1,47 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
 /**
- * FreeSDN - Access Control Management Page
+ * FreeSDN - Access Control Page
  *
- * Physical access control · coming in a future release.
+ * Says exactly what the capability record (`access_control` in
+ * backend/app/core/capability_maturity.py) says, and nothing more:
+ * Experimental; door and credential records work through the API; physical
+ * door control is refused with HTTP 501 because no door-controller adapter
+ * exists; the module ships disabled. This page has no management screens, so
+ * it says so instead of advertising features (real-time door control,
+ * biometrics, anti-passback) that no code path implements.
+ * `AccessControlPage.test.tsx` fails if the record moves on without this page.
  */
 
 import { useTranslation } from 'react-i18next';
-import { Lock, DoorOpen, CreditCard, History } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { CheckCircle2, DoorClosed, Info, XCircle, type LucideIcon } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CapabilityMaturityBadge } from '@/components/ui/capability-maturity-badge';
 import { PageHeader } from '@/components/layout';
 
-const PLANNED_FEATURES = [
-  { icon: DoorOpen, titleKey: 'features.doorManagement.title', descKey: 'features.doorManagement.desc' },
-  { icon: CreditCard, titleKey: 'features.cardholders.title', descKey: 'features.cardholders.desc' },
-  { icon: History, titleKey: 'features.eventHistory.title', descKey: 'features.eventHistory.desc' },
-  { icon: Lock, titleKey: 'features.accessPolicies.title', descKey: 'features.accessPolicies.desc' },
-];
+function StatusItem({
+  icon: Icon,
+  tone,
+  title,
+  children,
+}: {
+  icon: LucideIcon;
+  tone: 'success' | 'destructive' | 'muted';
+  title: string;
+  children: React.ReactNode;
+}) {
+  const iconClass =
+    tone === 'success' ? 'text-success' : tone === 'destructive' ? 'text-destructive' : 'text-muted-foreground';
+  return (
+    <div className="flex items-start gap-3">
+      <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${iconClass}`} aria-hidden="true" />
+      <div className="min-w-0 space-y-1">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <div className="text-sm text-muted-foreground">{children}</div>
+      </div>
+    </div>
+  );
+}
 
 export default function AccessControlPage() {
   const { t } = useTranslation('access');
@@ -24,33 +49,32 @@ export default function AccessControlPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={DoorClosed}
         title={t('AccessControlPage.title')}
+        titleBadge={<CapabilityMaturityBadge capabilityId="access_control" />}
         description={t('AccessControlPage.description')}
       />
 
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="rounded-full bg-muted p-4 mb-4">
-          <Lock className="h-8 w-8 text-muted-foreground" />
-        </div>
-        <h2 className="text-xl font-semibold mb-2">{t('AccessControlPage.comingSoon')}</h2>
-        <p className="text-muted-foreground max-w-md mb-10">
-          {t('AccessControlPage.comingSoonDescription')}
-        </p>
-
-        <div className="grid gap-4 sm:grid-cols-2 max-w-2xl w-full">
-          {PLANNED_FEATURES.map((f) => (
-            <Card key={f.titleKey} className="text-left">
-              <CardContent noOffset className="flex items-start gap-3">
-                <f.icon className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-sm">{t(`AccessControlPage.${f.titleKey}`)}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{t(`AccessControlPage.${f.descKey}`)}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t('AccessControlPage.status.title')}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <StatusItem icon={CheckCircle2} tone="success" title={t('AccessControlPage.status.records.title')}>
+            <p>{t('AccessControlPage.status.records.body')}</p>
+            <p className="mt-1">
+              {t('AccessControlPage.status.records.where')}{' '}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">/api/v1/access</code>
+            </p>
+          </StatusItem>
+          <StatusItem icon={XCircle} tone="destructive" title={t('AccessControlPage.status.doorControl.title')}>
+            <p>{t('AccessControlPage.status.doorControl.body')}</p>
+          </StatusItem>
+          <StatusItem icon={Info} tone="muted" title={t('AccessControlPage.status.module.title')}>
+            <p>{t('AccessControlPage.status.module.body')}</p>
+          </StatusItem>
+        </CardContent>
+      </Card>
     </div>
   );
 }

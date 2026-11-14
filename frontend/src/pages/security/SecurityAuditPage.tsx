@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/dialog';
 import { Shield, Download, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // Severity badge colors
 const severityColors: Record<string, string> = {
@@ -310,7 +311,7 @@ export default function SecurityAuditPage() {
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
-      toast({ title: t('SecurityAuditPage.toast.errorTitle'), description: t('SecurityAuditPage.toast.exportFailed', { error: err.response?.data?.detail || err.message }), variant: "destructive" });
+      toast({ title: t('SecurityAuditPage.toast.errorTitle'), description: t('SecurityAuditPage.toast.exportFailed', { error: getApiErrorMessage(err) }), variant: "destructive" });
     },
   });
 
@@ -367,8 +368,7 @@ export default function SecurityAuditPage() {
             <AlertTriangle className="h-5 w-5 text-destructive" />
             <span className="text-sm">
               {eventsError
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                ? (eventsError as any).response?.data?.detail || t('SecurityAuditPage.errors.loadEvents')
+                ? getApiErrorMessage(eventsError, t('SecurityAuditPage.errors.loadEvents'))
                 : t('SecurityAuditPage.errors.partialLoad')}
             </span>
           </CardContent>

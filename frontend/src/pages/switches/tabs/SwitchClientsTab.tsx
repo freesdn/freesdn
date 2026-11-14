@@ -20,9 +20,12 @@ import { formatActivity, formatBytes, formatTimeAgo, formatUptime } from './_for
 export interface SwitchClientsTabProps {
   clients: SwitchClient[];
   isLoading: boolean;
+  /** The clients query's error; the table shows the server's reason and a retry. */
+  error?: unknown;
+  onRetry?: () => void;
 }
 
-export function SwitchClientsTab({ clients, isLoading }: SwitchClientsTabProps) {
+export function SwitchClientsTab({ clients, isLoading, error, onRetry }: SwitchClientsTabProps) {
   const { t } = useTranslation('switches');
   const [connectionFilter, setConnectionFilter] = useState<'all' | 'wired' | 'wireless'>('all');
 
@@ -130,6 +133,7 @@ export function SwitchClientsTab({ clients, isLoading }: SwitchClientsTabProps) 
       {
         id: 'vlan_id',
         header: t('SwitchClientsTab.columns.vlan'),
+        align: 'right',
         accessorKey: 'vlan_id',
         cell: (row) => <span className="text-sm">{row.vlan_id ?? '-'}</span>,
         sortable: true,
@@ -137,6 +141,7 @@ export function SwitchClientsTab({ clients, isLoading }: SwitchClientsTabProps) 
       {
         id: 'signal',
         header: t('SwitchClientsTab.columns.signal'),
+        align: 'right',
         accessorFn: (row) => row.rssi ?? row.signal ?? -999,
         cell: (row) => {
           if (row.connection_type !== 'wireless') return <span className="text-xs text-muted-foreground">-</span>;
@@ -151,7 +156,7 @@ export function SwitchClientsTab({ clients, isLoading }: SwitchClientsTabProps) 
                   ? 'text-orange-500'
                   : 'text-red-500';
           return (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center justify-end gap-1.5">
               <Signal className={`h-3.5 w-3.5 ${quality}`} />
               <span className={`text-xs font-medium ${quality}`}>{t('SwitchClientsTab.dbm', { value: rssi })}</span>
             </div>
@@ -162,6 +167,7 @@ export function SwitchClientsTab({ clients, isLoading }: SwitchClientsTabProps) 
       {
         id: 'activity',
         header: t('SwitchClientsTab.columns.activity'),
+        align: 'right',
         accessorFn: (row) => row.activity || 0,
         cell: (row) => <span className="text-xs tabular-nums">{formatActivity(row.activity)}</span>,
         sortable: true,
@@ -169,6 +175,7 @@ export function SwitchClientsTab({ clients, isLoading }: SwitchClientsTabProps) 
       {
         id: 'traffic',
         header: t('SwitchClientsTab.columns.traffic'),
+        align: 'right',
         accessorFn: (row) => (row.download || 0) + (row.upload || 0),
         cell: (row) => {
           const dl = row.download || 0;
@@ -176,11 +183,11 @@ export function SwitchClientsTab({ clients, isLoading }: SwitchClientsTabProps) 
           if (!dl && !ul) return <span className="text-xs text-muted-foreground">-</span>;
           return (
             <div className="text-xs tabular-nums space-y-0.5">
-              <div className="flex items-center gap-1 text-blue-500">
+              <div className="flex items-center justify-end gap-1 text-blue-500">
                 <ArrowDownToLine className="h-3 w-3" />
                 {formatBytes(dl)}
               </div>
-              <div className="flex items-center gap-1 text-emerald-500">
+              <div className="flex items-center justify-end gap-1 text-emerald-500">
                 <ArrowUpFromLine className="h-3 w-3" />
                 {formatBytes(ul)}
               </div>
@@ -192,6 +199,7 @@ export function SwitchClientsTab({ clients, isLoading }: SwitchClientsTabProps) 
       {
         id: 'uptime',
         header: t('SwitchClientsTab.columns.uptime'),
+        align: 'right',
         accessorFn: (row) => row.uptime || 0,
         cell: (row) => <span className="text-xs text-muted-foreground">{formatUptime(row.uptime)}</span>,
         sortable: true,
@@ -207,10 +215,15 @@ export function SwitchClientsTab({ clients, isLoading }: SwitchClientsTabProps) 
     [t],
   );
 
+  // A failed load with nothing to show: the table says why; zero counters and
+  // filter chips would only claim the switch has no clients.
+  const failedEmpty = !!error && clients.length === 0;
+
   return (
     <div className="space-y-4">
-      <StatsGrid stats={stats} columns={4} isLoading={isLoading} />
+      {!failedEmpty && <StatsGrid stats={stats} columns={4} isLoading={isLoading} />}
 
+      {!failedEmpty && (
       <div className="flex items-center gap-2">
         {(
           [
@@ -234,6 +247,7 @@ export function SwitchClientsTab({ clients, isLoading }: SwitchClientsTabProps) 
           </Button>
         ))}
       </div>
+      )}
 
       <DataTable
         data={filteredClients}
@@ -245,6 +259,10 @@ export function SwitchClientsTab({ clients, isLoading }: SwitchClientsTabProps) 
         defaultPageSize={25}
         itemName={t('SwitchClientsTab.itemName')}
         getRowId={(row) => row.mac_address}
+        getRowLabel={(row) => row.name || row.hostname || row.mac_address}
+        density="compact"
+        error={error}
+        onRetry={onRetry}
         emptyState={
           <EmptyState
             icon={Users}

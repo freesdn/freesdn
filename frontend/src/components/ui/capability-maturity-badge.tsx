@@ -7,14 +7,15 @@
  *
  * The whole point is to NOT oversell: a capability reads "Experimental" until it
  * has been proven end-to-end against real infrastructure — mirroring the adapter
- * Verified/Experimental badge. (Labels are English for now; i18n is a follow-up —
- * the honesty does not depend on translation.)
+ * Verified/Experimental badge. Labels and the fallback note are translated
+ * (common:CapabilityMaturityBadge); notes from the backend are shown as sent.
  *
  * Pass `capabilityId` (it resolves itself via the hook) or a pre-fetched `info`:
  *   <CapabilityMaturityBadge capabilityId="sso" />
  */
 
 import { AlertTriangle, Info, ShieldCheck } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import {
   Tooltip,
@@ -25,9 +26,6 @@ import {
 import { useCapabilityMaturity } from '@/hooks/useCapabilityMaturity';
 import type { CapabilityMaturityInfo } from '@/lib/api/capabilities';
 import { cn } from '@/lib/utils';
-
-const EXPERIMENTAL_DEFAULT =
-  'Built but not yet verified end-to-end against real infrastructure — treat as experimental.';
 
 const EXPERIMENTAL_INFO: CapabilityMaturityInfo = {
   maturity: 'experimental',
@@ -46,6 +44,7 @@ export function CapabilityMaturityBadge({
   info?: CapabilityMaturityInfo;
   className?: string;
 }) {
+  const { t } = useTranslation('common');
   const { maturityFor } = useCapabilityMaturity();
   const resolved: CapabilityMaturityInfo = capabilityId
     ? maturityFor(capabilityId)
@@ -64,8 +63,8 @@ export function CapabilityMaturityBadge({
           className,
         )}
       >
-        <ShieldCheck className="h-3 w-3" />
-        Stable
+        <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+        {t('CapabilityMaturityBadge.stable')}
       </span>
     );
     if (!resolved.notes) return badge;
@@ -83,7 +82,7 @@ export function CapabilityMaturityBadge({
   // tooltip so the operator knows exactly what they're relying on.
   const isBeta = resolved.maturity === 'beta';
   const Icon = isBeta ? Info : AlertTriangle;
-  const label = isBeta ? 'Beta' : 'Experimental';
+  const label = isBeta ? t('CapabilityMaturityBadge.beta') : t('CapabilityMaturityBadge.experimental');
   const color = isBeta
     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
     : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
@@ -93,12 +92,12 @@ export function CapabilityMaturityBadge({
       <Tooltip>
         <TooltipTrigger asChild>
           <span className={cn(base, 'cursor-help', color, className)}>
-            <Icon className="h-3 w-3" />
+            <Icon className="h-3 w-3" aria-hidden="true" />
             {label}
           </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-xs text-xs">
-          {resolved.notes || EXPERIMENTAL_DEFAULT}
+          {resolved.notes || t('CapabilityMaturityBadge.experimentalNote')}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

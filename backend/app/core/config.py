@@ -489,6 +489,14 @@ class Settings(BaseSettings):
     # NVRs stream alerts; a daily task prunes rows older than this.
     CAMERA_EVENT_RETENTION_DAYS: int = 90
 
+    # Platform event history (events.event_records in the LogDB) and webhook
+    # delivery records (core.webhook_deliveries and core.webhook_dead_letters):
+    # a daily task deletes rows older than this many days (1-36500). Owner
+    # decision 2026-11-13: 30 days. The LogDB also has its own Timescale drop
+    # policy on event_records (180 days, scripts/migrate_logdb.py), so on an
+    # install where that policy exists a value above 180 keeps events for 180.
+    EVENT_RETENTION_DAYS: int = 30
+
     # Evidence archive (legal hold): durable on-disk store for exported clips kept
     # off the NVR with a SHA-256 integrity hash. Mount a persistent volume here.
     EVIDENCE_DIR: str = "/data/evidence"
@@ -544,6 +552,18 @@ class Settings(BaseSettings):
     # endpoints stay unreachable regardless of what is listed here.
     # Example: "gotify.internal,ntfy.lan,10.0.0.50"
     NOTIFICATION_ALLOWED_HOSTS: str = ""
+
+    # Webhook targets the deploy owner trusts on a private network. Same
+    # contract again, applied to the Webhooks / Integrations delivery engine
+    # (event deliveries, retries, test sends). The usual receiver of a FreeSDN
+    # webhook is an n8n, Node-RED or Home Assistant on the same LAN or tailnet,
+    # which the SSRF guard refuses unless it is listed here.
+    #
+    # Deploy-owner controlled, not reachable from per-org or operator input.
+    # Entries are still DNS-pinned and TLS-verified, and loopback, link-local and
+    # cloud-metadata addresses stay unreachable regardless of what is listed.
+    # Example: "n8n.lan,10.0.0.50"
+    WEBHOOK_ALLOWED_HOSTS: str = ""
 
     # Optional shared secret for signing outbound ``fabric.webhook`` bodies. When
     # set, every fabric.webhook POST carries ``X-Fabric-Signature: sha256=<hmac>``
@@ -641,6 +661,75 @@ class Settings(BaseSettings):
     # touching the live device. OMADA_READ_ONLY is kept as an alias for clarity.
     ADAPTER_READ_ONLY: bool = True
 
+    # ── Gentle polling of production gear ────────────────────────────────────
+    # Floor for the periodic FULL gateway sync (rules, NAT, VPN, interfaces,
+    # leases: a dozen API calls). A gateway's own sync_interval_seconds is
+    # respected above this floor. 30 min by default: the 2-minute health poll
+    # already covers reachability and WAN state, and a 5-minute full sync helped
+    # exhaust an OPNsense PHP pool on the 2026-11 soak. Lower it (>= 300) only
+    # for a box that can take it.
+    GATEWAY_SYNC_MIN_INTERVAL_SECONDS: int = Field(default=1800, ge=300, le=86400)
+    # How often the full sync may download the whole config.xml to read legacy
+    # (non-MVC) firewall rules. Between downloads the last imported rules stand.
+    GATEWAY_CONFIG_XML_REFRESH_SECONDS: int = Field(default=21600, ge=1800, le=604800)
+
+    # ── Polling budgets (owner decision 2026-11-13) ──────────────────────────
+    # How often each scheduled poller contacts a device. Every one of them also
+    # takes the device's slot (app/core/device_slot.py), so two pollers never
+    # talk to one box at once, and skips a device whose shared breaker is open.
+    # Light firewall health (connect + gateway status + IDS): 2-5 min.
+    FIREWALL_HEALTH_INTERVAL_SECONDS: int = Field(default=300, ge=120, le=900)
+    # Controllers (Omada, UniFi, Proxmox-as-controller, ...): discovery plus the
+    # deep sync no more often than this, whatever a controller's own interval.
+    CONTROLLER_SYNC_MIN_INTERVAL_SECONDS: int = Field(default=600, ge=300, le=86400)
+    # Per-device status read through each controller (was every minute).
+    DEVICE_STATUS_INTERVAL_SECONDS: int = Field(default=300, ge=60, le=3600)
+    # Controller reachability. Omada keeps its session between probes and asks
+    # loginStatus; types that authenticate every request (OPNsense, pfSense,
+    # MikroTik, Hikvision, Proxmox with an API token) open no session. Those are
+    # probed every run.
+    CONTROLLER_HEALTH_INTERVAL_SECONDS: int = Field(default=120, ge=60, le=900)
+    # Types whose probe is a login (UniFi, OpenWrt, Omada cloud, Proxmox with a
+    # password, TrueNAS, FreePBX, ONVIF) are probed at most this often.
+    CONTROLLER_LOGIN_PROBE_INTERVAL_SECONDS: int = Field(default=300, ge=60, le=3600)
+    # Omada controller alert monitor.
+    OMADA_MONITOR_INTERVAL_SECONDS: int = Field(default=300, ge=120, le=900)
+    # NVRs and phones: 5 min.
+    CAMERA_HEALTH_INTERVAL_SECONDS: int = Field(default=300, ge=60, le=3600)
+    VOIP_HEALTH_INTERVAL_SECONDS: int = Field(default=300, ge=120, le=3600)
+    # NVR alert ingest reads the recorder's CURRENTLY buffered events, so a long
+    # interval loses events between polls. It takes the NVR's slot like every
+    # other poller and skips while the NVR's breaker is open.
+    CAMERA_ALERT_POLL_INTERVAL_SECONDS: int = Field(default=30, ge=15, le=900)
+    # Proxmox and TrueNAS (and other storage) monitors: 2-5 min.
+    HYPERVISOR_HEALTH_INTERVAL_SECONDS: int = Field(default=120, ge=60, le=900)
+    STORAGE_HEALTH_INTERVAL_SECONDS: int = Field(default=120, ge=60, le=900)
+    # Device configuration backups (OPNsense config.xml, OpenWrt sysupgrade):
+    # the interval given to newly discovered backup targets, in hours.
+    CONFIG_BACKUP_INTERVAL_HOURS: int = Field(default=24, ge=6, le=168)
+    # Desired-vs-pushed config reconciliation. Database only (no device I/O).
+    RECONCILE_INTERVAL_SECONDS: int = Field(default=900, ge=300, le=86400)
+
+    # ── Interactive (UI) reads of a device ───────────────────────────────────
+    # How long a page's live read waits for the device's slot before it serves
+    # the last data read from the device, with its "as of" time.
+    DEVICE_UI_READ_WAIT_SECONDS: float = Field(default=2.0, ge=0.0, le=30.0)
+    # With nothing cached yet, how long in total it may wait before answering
+    # 503 "device busy" (with Retry-After) instead of piling on.
+    DEVICE_UI_READ_MAX_WAIT_SECONDS: float = Field(default=15.0, ge=0.0, le=120.0)
+    # UI reads one device may run at once (background pollers are exclusive).
+    DEVICE_UI_READ_CONCURRENCY: int = Field(default=2, ge=1, le=8)
+    # How long the last live answer is kept to serve while the device is busy.
+    DEVICE_UI_READ_CACHE_SECONDS: int = Field(default=86400, ge=60, le=604800)
+    # How long a write waits for the device's slot (a poll or another write in
+    # progress) before it is refused with "device busy"; nothing is sent then.
+    DEVICE_WRITE_SLOT_WAIT_SECONDS: float = Field(default=5.0, ge=0.0, le=60.0)
+
+    # ── Celery queue heartbeats ──────────────────────────────────────────────
+    # A queue whose heartbeat task has not run for this long is reported
+    # stalled in /health/detail and freesdn_celery_queue_stalled.
+    CELERY_QUEUE_STALE_SECONDS: int = Field(default=180, ge=60, le=3600)
+
     # ── VPN / connectivity mode ────────────────────────────────────────────────
     # FreeSDN is a controller, not a firewall OS — it is CAPLESS by default.
     #   off       - no VPN (default; no privileged container, matches Omada/UniFi)
@@ -663,6 +752,13 @@ class Settings(BaseSettings):
     # to encrypted (fail-closed) unless an operator explicitly opts into the risk
     # here — e.g. for portability to a host without this SECRET_KEY.
     BACKUP_ALLOW_PLAINTEXT: bool = False
+
+    # A local/NFS backup storage location must resolve inside /data/backups
+    # (the backup_data volume) or inside one of these extra roots:
+    # comma-separated absolute paths, e.g. "/mnt/nas-backups,/srv/backups".
+    # Server configuration ONLY (environment / .env); the web UI and API cannot
+    # widen it. Mount each extra root into api, worker and worker-io.
+    BACKUP_LOCAL_EXTRA_ROOTS: str = ""
 
     # Disk-backed shared transfer pool, independent of an archive's NFS/provider
     # root. All API processes using this path must use the same policy. /tmp in

@@ -24,6 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 import { hypervisorApi } from '@/lib/api';
 import type { HypervisorTabProps } from './types';
 import type { HypervisorVM } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 export function TemplatesTab({ controllerId, nodes, queryClient }: HypervisorTabProps) {
   const { t } = useTranslation('hypervisor');
@@ -78,7 +79,7 @@ export function TemplatesTab({ controllerId, nodes, queryClient }: HypervisorTab
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
-      toast({ title: t('TemplatesTab.toast.deployFailed.title'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('TemplatesTab.toast.deployFailed.title'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 

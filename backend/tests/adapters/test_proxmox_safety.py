@@ -27,6 +27,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.adapters.apply_context import apply_window
 from app.adapters.exceptions import (
     AdapterConfirmationRequiredError,
     AdapterError,
@@ -137,9 +138,9 @@ class TestReadOnlyGate:
 
     @pytest.mark.asyncio
     @patch("app.adapters.proxmox.client._is_adapter_read_only", lambda: True)
-    async def test_allows_writes_when_force_true(self) -> None:
-        """The sanctioned write path: applier passes force=True only
-        after the apply endpoint clears its own dual-gate."""
+    async def test_allows_writes_inside_staged_apply_window(self) -> None:
+        """The sanctioned write path: apply_change opens the window after its
+        own dual-gate, then the applier passes force=True."""
         client = _make_client()
         mock_response = MagicMock(status_code=200, text='{"data": null}')
         mock_response.json.return_value = {"data": None}
@@ -148,12 +149,13 @@ class TestReadOnlyGate:
         client._http.is_closed = False
         client._http.request = AsyncMock(return_value=mock_response)
         client._authenticated = True
-        # force=True satisfies the client-layer gate (the env+force dual-gate is enforced upstream). Should not raise.
-        result = await client._request(
-            "POST",
-            "/nodes/pve1/qemu/100/status/start",
-            force=True,
-        )
+        # Inside the window the client gate passes. Should not raise.
+        with apply_window():
+            result = await client._request(
+                "POST",
+                "/nodes/pve1/qemu/100/status/start",
+                force=True,
+            )
         assert result is None  # data was None
 
     @pytest.mark.asyncio
@@ -261,11 +263,23 @@ class TestConfirmedDirectDeleteHonorsReadOnly:
 
     @pytest.mark.asyncio
     @patch("app.adapters.proxmox.client._is_adapter_read_only", lambda: True)
-    async def test_staging_force_still_bypasses_read_only(self) -> None:
-        """The sanctioned staging path (force=True) is unchanged — it writes even
-        under read-only because the apply chokepoint enforces read-only upstream."""
+    async def test_force_alone_no_longer_bypasses_read_only(self) -> None:
+        """26.12.0: the hypervisor UI sends force=True on delete, so force alone
+        must not reach the cluster while read-only is on."""
         adapter, client = _make_connected_adapter()
-        result = await adapter.delete_vm("pve1", 100, "qemu", force=True)
+        with pytest.raises(AdapterReadOnlyError):
+            await adapter.delete_vm("pve1", 100, "qemu", force=True, confirmed=True)
+        client._http.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("app.adapters.proxmox.client._is_adapter_read_only", lambda: True)
+    async def test_staging_apply_window_still_writes_under_read_only(self) -> None:
+        """The sanctioned staging path is unchanged: inside the apply window it
+        writes even under read-only, because apply_change enforces read-only
+        upstream. force=True alone (no window) is refused since 26.12.0."""
+        adapter, client = _make_connected_adapter()
+        with apply_window():
+            result = await adapter.delete_vm("pve1", 100, "qemu", force=True)
         assert result.success
         client._http.request.assert_awaited_once()
 
@@ -309,9 +323,10 @@ class TestConfirmedNodePowerHonorsReadOnly:
 
     @pytest.mark.asyncio
     @patch("app.adapters.proxmox.client._is_adapter_read_only", lambda: True)
-    async def test_staging_force_reboot_still_bypasses_read_only(self) -> None:
+    async def test_staging_apply_window_reboot_still_writes_under_read_only(self) -> None:
         adapter, client = _make_connected_adapter()
-        result = await adapter.reboot_node("pve1", force=True)
+        with apply_window():
+            result = await adapter.reboot_node("pve1", force=True)
         assert result.success
         client._http.request.assert_awaited_once()
 
@@ -355,9 +370,10 @@ class TestConfirmedGuestAgentHonorsReadOnly:
 
     @pytest.mark.asyncio
     @patch("app.adapters.proxmox.client._is_adapter_read_only", lambda: True)
-    async def test_staging_force_exec_still_bypasses_read_only(self) -> None:
+    async def test_staging_apply_window_exec_still_writes_under_read_only(self) -> None:
         adapter, client = _make_connected_adapter()
-        result = await adapter.agent_exec("pve1", 100, "ls /", force=True)
+        with apply_window():
+            result = await adapter.agent_exec("pve1", 100, "ls /", force=True)
         assert result.success
         client._http.request.assert_awaited_once()
 

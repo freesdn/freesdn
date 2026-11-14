@@ -118,6 +118,14 @@ class _ProxmoxProvider:
         pools: list[Any] = []
         try:
             nodes_result = await adapter.get_nodes()
+            # The adapter reports timeouts, transport errors and an open breaker
+            # as AdapterResult.fail rather than raising. Treating that as "no
+            # nodes" summarised an unreachable cluster as healthy (and the
+            # monitor never emitted storage.appliance.unreachable). Raise, so
+            # read_controller_storage counts it as an appliance that did not
+            # answer. Fixed text only: adapter errors can carry URLs.
+            if getattr(nodes_result, "success", False) is not True:
+                raise RuntimeError("Proxmox node listing failed")
             nodes = getattr(nodes_result, "data", None) or []
             for node in nodes:
                 node_name = getattr(node, "node", None) or (
@@ -126,6 +134,17 @@ class _ProxmoxProvider:
                 if not node_name:
                     continue
                 result = await adapter.get_storage(str(node_name))
+                if getattr(result, "success", False) is not True:
+                    # One node not answering is a degraded cluster, not an empty
+                    # one: report its storage as unavailable instead of absent.
+                    pools.append(
+                        _Pool(
+                            name=f"{node_name}/*",
+                            status="UNAVAIL",
+                            usage=_Usage(size=0, allocated=0),
+                        )
+                    )
+                    continue
                 for row in getattr(result, "data", None) or []:
                     pools.append(self._to_pool(str(node_name), row))
         finally:

@@ -21,6 +21,7 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -271,7 +272,25 @@ class VPNKeyExchangeService:
             if push_config.get("private_key"):
                 push_config["private_key"] = _safe_decrypt(push_config["private_key"])
 
-            result = await adapter.configure_wireguard(push_config)
+            from app.services.device_writes import request_actor_id, write_through_staging
+
+            # Recorded in the staging ledger; the ledger keeps the config with
+            # its private key masked.
+            result = await write_through_staging(
+                self.db,
+                organization_id=tunnel.organization_id,
+                controller_id=device.controller_id,
+                site_id=device.site_id,
+                feature="vpn.s2s.wireguard",
+                operation="update",
+                target_id=str(tunnel_id),
+                payload={"tunnel_id": str(tunnel_id), "side": side, "config": dict(config)},
+                perform=lambda: adapter.configure_wireguard(push_config),
+                # This route has never taken a force flag; unchanged.
+                force=True,
+                actor_id=request_actor_id(),
+                return_failed_result=True,
+            )
 
             if getattr(result, "success", True):
                 logger.info(
@@ -292,6 +311,13 @@ class VPNKeyExchangeService:
                     "message": msg,
                     "device_id": str(device_id),
                 }
+        except HTTPException as exc:
+            # Read-only mode: refused before the gateway was contacted.
+            return {
+                "success": False,
+                "message": str(exc.detail),
+                "device_id": str(device_id),
+            }
         except Exception:
             logger.exception(
                 "Error pushing WireGuard config to device %s",

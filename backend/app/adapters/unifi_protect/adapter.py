@@ -58,6 +58,7 @@ from app.adapters.exceptions import (
     AdapterAuthenticationError,
     AdapterConnectionError,
 )
+from app.core.http_client import build_async_client
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +148,7 @@ class UniFiProtectAdapter(BaseAdapter):
 
         scheme = "https"
         self.base_url = f"{scheme}://{host}:{port}"
-        self._client = httpx.AsyncClient(
+        self._client = build_async_client(
             base_url=self.base_url,
             verify=appliance_tls_context(verify_ssl, adapter_id="unifi_protect"),
             trust_env=False,

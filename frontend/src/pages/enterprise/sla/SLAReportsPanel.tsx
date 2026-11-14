@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
 import { notificationApi, type SLAPolicy } from "@/lib/api";
 import {
   slaReportsApi,
@@ -14,10 +15,13 @@ import { useAuthStore } from "@/stores/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 const PAGE_SIZE = 25;
 const stamp = (value?: string | null) =>
-  value ? new Date(value).toLocaleString() : "—";
+  value ? new Date(value).toLocaleString() : "-";
 const emptySchedule = (): ReportScheduleInput => ({
   name: "",
   frequency: "monthly",
@@ -32,16 +36,50 @@ const emptySchedule = (): ReportScheduleInput => ({
   delivery_provider_id: null,
 });
 
-function errorMessage(error: unknown): string {
-  if (
-    axios.isAxiosError(error) &&
-    typeof error.response?.data?.detail === "string"
-  )
-    return error.response.data.detail;
-  return error instanceof Error
-    ? error.message
-    : "The request failed. Refresh and try again.";
+function errorMessage(error: unknown, fallback: string): string {
+  return getApiErrorMessage(error, fallback);
 }
+
+// Delivery states the backend records (app/services/sla_report_delivery.py);
+// anything else is shown as sent.
+const DELIVERY_STATES = new Set([
+  "pending",
+  "sending",
+  "retry",
+  "accepted",
+  "unknown",
+  "failed",
+  "skipped",
+  "cancelled",
+]);
+const FREQUENCIES = new Set(["weekly", "monthly", "quarterly"]);
+// The backend counts day_of_week from 0 = Monday.
+const WEEKDAYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
+
+function deliveryStateLabel(t: TFunction, state: string): string {
+  return DELIVERY_STATES.has(state)
+    ? t(`SLAReportsPanel.deliveryStates.${state}`)
+    : state;
+}
+
+function frequencyLabel(t: TFunction, frequency: string): string {
+  return FREQUENCIES.has(frequency)
+    ? t(`SLAReportsPanel.frequencies.${frequency}`)
+    : frequency;
+}
+
+// Native controls get the theme's surface and text colours explicitly; a bare
+// <select> keeps the browser's light popup in the default dark theme.
+const selectClass =
+  "block rounded-md border border-input bg-background p-2 text-sm text-foreground";
 
 function Pagination({
   offset,
@@ -52,32 +90,40 @@ function Pagination({
   total: number;
   change: (n: number) => void;
 }) {
+  const { t } = useTranslation("enterprise");
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3 text-sm">
       <Button
         variant="outline"
         disabled={offset === 0}
         onClick={() => change(Math.max(0, offset - PAGE_SIZE))}
       >
-        Previous
+        {t("SLAReportsPanel.pagination.previous")}
       </Button>
-      <span>
+      <span className="text-muted-foreground">
         {total === 0
-          ? "0 results"
-          : `${offset + 1}–${Math.min(offset + PAGE_SIZE, total)} of ${total}`}
+          ? t("SLAReportsPanel.pagination.none")
+          : t("SLAReportsPanel.pagination.range", {
+              from: offset + 1,
+              to: Math.min(offset + PAGE_SIZE, total),
+              total,
+            })}
       </span>
       <Button
         variant="outline"
         disabled={offset + PAGE_SIZE >= total}
         onClick={() => change(offset + PAGE_SIZE)}
       >
-        Next
+        {t("SLAReportsPanel.pagination.next")}
       </Button>
     </div>
   );
 }
 
 export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
+  const { t } = useTranslation("enterprise");
+  const enabledId = useId();
+  const deliveryId = useId();
   const client = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const canWrite = useAuthStore((s) => s.hasPermission("config:write"));
@@ -117,6 +163,15 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
     enabled: !!selectedReport && canWrite,
     refetchInterval: 10000,
   });
+  // The list envelopes are read defensively: a response without the expected
+  // array (an older backend, a proxy error page parsed as JSON, the demo's
+  // generic stub) used to throw on `.length` and take the whole SLA page down
+  // with the route error boundary, hiding policies and breaches with it.
+  const reportRows = Array.isArray(reports.data?.reports) ? reports.data.reports : [];
+  const scheduleRows = Array.isArray(schedules.data?.schedules)
+    ? schedules.data.schedules
+    : [];
+  const deliveryRows = Array.isArray(deliveries.data) ? deliveries.data : [];
   const refresh = () => client.invalidateQueries({ queryKey: key });
   const save = useMutation({
     mutationFn: (data: ReportScheduleInput) =>
@@ -189,7 +244,7 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
       anchor.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {
-      setDownloadError(errorMessage(error));
+      setDownloadError(errorMessage(error, t("SLAReportsPanel.errors.fallback")));
     }
   }
   function submitSchedule(event: FormEvent) {
@@ -220,14 +275,11 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Reports follow your organization and site permissions. Date inputs use
-        UTC; displayed timestamps use your browser's timezone. Scheduled runs
-        use their configured timezone and run during the next hourly generation
-        pass.
+        {t("SLAReportsPanel.intro")}
       </p>
       {errors.map((error, i) => (
         <p role="alert" className="text-destructive" key={i}>
-          {errorMessage(error)}
+          {errorMessage(error, t("SLAReportsPanel.errors.fallback"))}
         </p>
       ))}
       {downloadError && (
@@ -238,7 +290,7 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
       {canWrite && (
         <Card>
           <CardHeader>
-            <CardTitle>Generate a report</CardTitle>
+            <CardTitle>{t("SLAReportsPanel.generate.title")}</CardTitle>
           </CardHeader>
           <CardContent>
             <form
@@ -248,20 +300,20 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
                 generate.mutate();
               }}
             >
-              <label>
-                Start (inclusive)
+              <label className="text-sm">
+                {t("SLAReportsPanel.generate.start")}
                 <Input
-                  aria-label="Report start"
+                  aria-label={t("SLAReportsPanel.generate.startAria")}
                   type="date"
                   required
                   value={start}
                   onChange={(e) => setStart(e.target.value)}
                 />
               </label>
-              <label>
-                End (exclusive)
+              <label className="text-sm">
+                {t("SLAReportsPanel.generate.end")}
                 <Input
-                  aria-label="Report end"
+                  aria-label={t("SLAReportsPanel.generate.endAria")}
                   type="date"
                   required
                   min={start}
@@ -269,11 +321,11 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
                   onChange={(e) => setEnd(e.target.value)}
                 />
               </label>
-              <label>
-                Policies
+              <label className="text-sm">
+                {t("SLAReportsPanel.generate.policies")}
                 <select
-                  aria-label="Report policies"
-                  className="block rounded border bg-background p-2"
+                  aria-label={t("SLAReportsPanel.generate.policiesAria")}
+                  className={selectClass}
                   multiple
                   value={policyIds}
                   onChange={(e) =>
@@ -288,15 +340,15 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
                     </option>
                   ))}
                 </select>
-                <span className="text-xs">
-                  No selection means all accessible policies.
+                <span className="block text-xs text-muted-foreground">
+                  {t("SLAReportsPanel.generate.policiesHint")}
                 </span>
               </label>
-              <label>
-                Format
+              <label className="text-sm">
+                {t("SLAReportsPanel.generate.format")}
                 <select
-                  aria-label="Report format"
-                  className="block rounded border bg-background p-2"
+                  aria-label={t("SLAReportsPanel.generate.formatAria")}
+                  className={selectClass}
                   value={format}
                   onChange={(e) => setFormat(e.target.value)}
                 >
@@ -307,7 +359,7 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
               <Button
                 disabled={generate.isPending || !start || !end || end <= start}
               >
-                Generate
+                {t("SLAReportsPanel.generate.submit")}
               </Button>
             </form>
           </CardContent>
@@ -315,19 +367,24 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
       )}
       <Card>
         <CardHeader>
-          <CardTitle>Report archive</CardTitle>
+          <CardTitle>{t("SLAReportsPanel.archive.title")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Last refreshed:{" "}
-            {reports.dataUpdatedAt
-              ? stamp(new Date(reports.dataUpdatedAt).toISOString())
-              : "Waiting for response"}
+            {t("SLAReportsPanel.archive.lastRefreshed", {
+              time: reports.dataUpdatedAt
+                ? stamp(new Date(reports.dataUpdatedAt).toISOString())
+                : t("SLAReportsPanel.archive.waiting"),
+            })}
           </p>
           {reports.isPending ? (
-            <p>Loading reports…</p>
-          ) : reports.data?.reports.length === 0 ? (
-            <p>No reports have been generated.</p>
+            <p className="text-sm text-muted-foreground">
+              {t("SLAReportsPanel.archive.loading")}
+            </p>
+          ) : reports.isSuccess && reportRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {t("SLAReportsPanel.archive.empty")}
+            </p>
           ) : null}
           {selectedReport && (
             <Button
@@ -336,26 +393,34 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
                 void download({ id: selectedReport, format: "pdf" })
               }
             >
-              Download linked report
+              {t("SLAReportsPanel.archive.downloadLinked")}
             </Button>
           )}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr>
-                  <th>Report</th>
-                  <th>Generated</th>
-                  <th>Actions</th>
+                <tr className="text-xs text-muted-foreground">
+                  <th className="py-2 font-medium">
+                    {t("SLAReportsPanel.archive.columns.report")}
+                  </th>
+                  <th className="py-2 font-medium">
+                    {t("SLAReportsPanel.archive.columns.generated")}
+                  </th>
+                  <th className="py-2 font-medium">
+                    {t("SLAReportsPanel.archive.columns.actions")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {reports.data?.reports.map((report) => (
+                {reportRows.map((report) => (
                   <tr key={report.id} className="border-t">
                     <td className="py-3">
                       {report.title}
-                      <p className="text-xs">
-                        {stamp(report.period_start)} –{" "}
-                        {stamp(report.period_end)}
+                      <p className="text-xs text-muted-foreground">
+                        {t("SLAReportsPanel.archive.period", {
+                          start: stamp(report.period_start),
+                          end: stamp(report.period_end),
+                        })}
                       </p>
                     </td>
                     <td>{stamp(report.generated_at)}</td>
@@ -364,14 +429,16 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
                         variant="outline"
                         onClick={() => void download(report)}
                       >
-                        Download {report.format.toUpperCase()}
+                        {t("SLAReportsPanel.archive.download", {
+                          format: report.format.toUpperCase(),
+                        })}
                       </Button>
                       {canWrite && (
                         <Button
                           variant="ghost"
                           onClick={() => setParams({ report: report.id })}
                         >
-                          Delivery status
+                          {t("SLAReportsPanel.archive.deliveryStatus")}
                         </Button>
                       )}
                     </td>
@@ -390,36 +457,48 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
       {selectedReport && canWrite && (
         <Card>
           <CardHeader>
-            <CardTitle>Email delivery status</CardTitle>
+            <CardTitle>{t("SLAReportsPanel.delivery.title")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm">
-              Accepted means the SMTP server accepted the notice; it does not
-              prove inbox delivery. Unknown means acceptance could not be
-              confirmed. Check relay logs using the delivery ID; FreeSDN will
-              not automatically resend it.
-            </p>
-            {deliveries.isPending && <p>Loading delivery status…</p>}
-            {deliveries.data?.length === 0 && (
-              <p>No email deliveries were scheduled for this report.</p>
+            <p className="text-sm">{t("SLAReportsPanel.delivery.explain")}</p>
+            {deliveries.isPending && (
+              <p className="text-sm text-muted-foreground">
+                {t("SLAReportsPanel.delivery.loading")}
+              </p>
             )}
-            {deliveries.data?.map((d) => (
+            {deliveries.isSuccess && deliveryRows.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                {t("SLAReportsPanel.delivery.empty")}
+              </p>
+            )}
+            {deliveryRows.map((d) => (
               <div key={d.id} className="rounded border p-3 text-sm">
                 <p>
-                  {d.recipient_email}: <strong>{d.state}</strong> · {d.attempts}{" "}
-                  attempts
+                  {d.recipient_email}:{" "}
+                  <strong>{deliveryStateLabel(t, d.state)}</strong> ·{" "}
+                  {t("SLAReportsPanel.delivery.attempts", { count: d.attempts })}
                 </p>
-                <p className="break-all text-xs">Delivery ID: {d.id}</p>
-                {d.error_code && <p>{d.error_code}</p>}
+                <p className="break-all text-xs text-muted-foreground">
+                  {t("SLAReportsPanel.delivery.id", { id: d.id })}
+                </p>
+                {d.error_code && (
+                  <p className="font-mono text-xs">
+                    {t("SLAReportsPanel.delivery.code", { code: d.error_code })}
+                  </p>
+                )}
                 {(d.state === "pending" || d.state === "retry") && (
                   <>
-                    <p>Next attempt: {stamp(d.next_attempt_at)}</p>
+                    <p>
+                      {t("SLAReportsPanel.delivery.nextAttempt", {
+                        time: stamp(d.next_attempt_at),
+                      })}
+                    </p>
                     <Button
                       variant="outline"
                       disabled={cancel.isPending}
                       onClick={() => cancel.mutate(d.id)}
                     >
-                      Cancel pending delivery
+                      {t("SLAReportsPanel.delivery.cancel")}
                     </Button>
                   </>
                 )}
@@ -430,40 +509,62 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
       )}
       <Card>
         <CardHeader>
-          <CardTitle>Report schedules</CardTitle>
+          <CardTitle>{t("SLAReportsPanel.schedules.title")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {schedules.isPending && <p>Loading schedules…</p>}
-          {schedules.data?.schedules.length === 0 && (
-            <p>No report schedules.</p>
+          {schedules.isPending && (
+            <p className="text-sm text-muted-foreground">
+              {t("SLAReportsPanel.schedules.loading")}
+            </p>
           )}
-          {schedules.data?.schedules.map((s) => (
+          {schedules.isSuccess && scheduleRows.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              {t("SLAReportsPanel.schedules.empty")}
+            </p>
+          )}
+          {scheduleRows.map((s) => (
             <div key={s.id} className="rounded border p-3 text-sm">
               <p>
-                <strong>{s.name}</strong> · {s.enabled ? "Enabled" : "Paused"} ·{" "}
-                {s.frequency} at {s.time_of_day} ({s.timezone})
+                <strong>{s.name}</strong> ·{" "}
+                {s.enabled
+                  ? t("SLAReportsPanel.schedules.enabled")
+                  : t("SLAReportsPanel.schedules.paused")}{" "}
+                ·{" "}
+                {t("SLAReportsPanel.schedules.cadence", {
+                  frequency: frequencyLabel(t, s.frequency),
+                  time: s.time_of_day,
+                  timezone: s.timezone,
+                })}
               </p>
-              <p>
-                Next: {stamp(s.next_run_at)} · Last generated:{" "}
-                {stamp(s.last_generated_at)} · Email:{" "}
-                {s.delivery_enabled ? "Opted in" : "Off"}
+              <p className="text-muted-foreground">
+                {t("SLAReportsPanel.schedules.runs", {
+                  next: stamp(s.next_run_at),
+                  last: stamp(s.last_generated_at),
+                  email: s.delivery_enabled
+                    ? t("SLAReportsPanel.schedules.emailOn")
+                    : t("SLAReportsPanel.schedules.emailOff"),
+                })}
               </p>
               {s.execution_error && (
                 <p className="text-destructive">
-                  Needs review: {s.execution_error}
+                  {t("SLAReportsPanel.schedules.needsReview", {
+                    error: s.execution_error,
+                  })}
                 </p>
               )}
               {canWrite && (
                 <>
                   <Button variant="ghost" onClick={() => edit(s)}>
-                    Edit and review
+                    {t("SLAReportsPanel.schedules.edit")}
                   </Button>
                   <Button
                     variant="outline"
                     disabled={toggle.isPending}
                     onClick={() => toggle.mutate(s)}
                   >
-                    {s.enabled ? "Pause" : "Reapprove and enable"}
+                    {s.enabled
+                      ? t("SLAReportsPanel.schedules.pause")
+                      : t("SLAReportsPanel.schedules.reapprove")}
                   </Button>
                 </>
               )}
@@ -480,13 +581,15 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
         <Card>
           <CardHeader>
             <CardTitle>
-              {editing ? "Review schedule" : "Create schedule"}
+              {editing
+                ? t("SLAReportsPanel.form.reviewTitle")
+                : t("SLAReportsPanel.form.createTitle")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={submitSchedule} className="space-y-3">
-              <label className="block">
-                Name
+              <label className="block text-sm">
+                {t("SLAReportsPanel.form.name")}
                 <Input
                   required
                   maxLength={255}
@@ -495,27 +598,31 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
                 />
               </label>
               <div className="flex flex-wrap gap-3">
-                <label>
-                  Frequency
+                <label className="text-sm">
+                  {t("SLAReportsPanel.form.frequency")}
                   <select
-                    className="block rounded border bg-background p-2"
+                    className={selectClass}
                     value={form.frequency}
                     onChange={(e) =>
                       setForm({ ...form, frequency: e.target.value })
                     }
                   >
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                    <option value="quarterly">Quarterly</option>
+                    <option value="weekly">
+                      {t("SLAReportsPanel.frequencies.weekly")}
+                    </option>
+                    <option value="monthly">
+                      {t("SLAReportsPanel.frequencies.monthly")}
+                    </option>
+                    <option value="quarterly">
+                      {t("SLAReportsPanel.frequencies.quarterly")}
+                    </option>
                   </select>
                 </label>
                 {form.frequency === "weekly" ? (
-                  <label>
-                    Day (0 Monday – 6 Sunday)
-                    <Input
-                      type="number"
-                      min={0}
-                      max={6}
+                  <label className="text-sm">
+                    {t("SLAReportsPanel.form.dayOfWeek")}
+                    <select
+                      className={selectClass}
                       required
                       value={form.day_of_week ?? 0}
                       onChange={(e) =>
@@ -524,11 +631,17 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
                           day_of_week: Number(e.target.value),
                         })
                       }
-                    />
+                    >
+                      {WEEKDAYS.map((day, index) => (
+                        <option key={day} value={index}>
+                          {t(`SLAReportsPanel.weekdays.${day}`)}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 ) : (
-                  <label>
-                    Day of month
+                  <label className="text-sm">
+                    {t("SLAReportsPanel.form.dayOfMonth")}
                     <Input
                       type="number"
                       min={1}
@@ -544,8 +657,8 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
                     />
                   </label>
                 )}
-                <label>
-                  Timezone
+                <label className="text-sm">
+                  {t("SLAReportsPanel.form.timezone")}
                   <Input
                     required
                     value={form.timezone}
@@ -554,8 +667,8 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
                     }
                   />
                 </label>
-                <label>
-                  Local time
+                <label className="text-sm">
+                  {t("SLAReportsPanel.form.localTime")}
                   <Input
                     type="time"
                     required
@@ -566,56 +679,54 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
                   />
                 </label>
               </div>
-              <label className="block">
-                Policy IDs (comma-separated; blank means all policies)
+              <label className="block text-sm">
+                {t("SLAReportsPanel.form.policyIds")}
                 <Input
                   value={schedulePolicies}
                   onChange={(e) => setSchedulePolicies(e.target.value)}
                 />
               </label>
               <p className="text-xs text-muted-foreground">
-                Site-limited operators must choose explicit policies. Editing a
-                schedule replaces its delivery approval; old pending notices
-                will be cancelled when processed.
+                {t("SLAReportsPanel.form.policyHint")}
               </p>
-              <label className="flex gap-2">
-                <input
-                  type="checkbox"
+              {/* The shared Checkbox: a native box is a bright white square in the dark theme. */}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={enabledId}
                   checked={form.enabled}
-                  onChange={(e) =>
-                    setForm({ ...form, enabled: e.target.checked })
+                  onCheckedChange={(checked) =>
+                    setForm({ ...form, enabled: checked === true })
                   }
                 />
-                Enable report generation
-              </label>
-              <label className="flex gap-2">
-                <input
-                  type="checkbox"
+                <Label htmlFor={enabledId} className="font-normal">
+                  {t("SLAReportsPanel.form.enableGeneration")}
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={deliveryId}
                   checked={form.delivery_enabled}
-                  onChange={(e) =>
-                    setForm({ ...form, delivery_enabled: e.target.checked })
+                  onCheckedChange={(checked) =>
+                    setForm({ ...form, delivery_enabled: checked === true })
                   }
                 />
-                Send email notices for future scheduled reports
-              </label>
-              <p className="text-sm">
-                Email is off by default. Notices contain a sign-in link, not an
-                attachment. Recipients must be active users in this organization
-                with access to the report. Configure an HTTPS FRONTEND_URL and
-                verify your SMTP provider first.
-              </p>
-              <label className="block">
-                Recipients (comma-separated)
+                <Label htmlFor={deliveryId} className="font-normal">
+                  {t("SLAReportsPanel.form.sendEmail")}
+                </Label>
+              </div>
+              <p className="text-sm">{t("SLAReportsPanel.form.emailExplain")}</p>
+              <label className="block text-sm">
+                {t("SLAReportsPanel.form.recipients")}
                 <Input
                   value={recipients}
                   onChange={(e) => setRecipients(e.target.value)}
                   required={form.delivery_enabled}
                 />
               </label>
-              <label className="block">
-                Verified SMTP provider
+              <label className="block text-sm">
+                {t("SLAReportsPanel.form.provider")}
                 <select
-                  className="block rounded border bg-background p-2"
+                  className={selectClass}
                   value={form.delivery_provider_id ?? ""}
                   onChange={(e) =>
                     setForm({
@@ -625,7 +736,9 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
                   }
                   required={form.delivery_enabled}
                 >
-                  <option value="">Choose a provider</option>
+                  <option value="">
+                    {t("SLAReportsPanel.form.providerPlaceholder")}
+                  </option>
                   {providers.data
                     ?.filter(
                       (p) =>
@@ -642,7 +755,9 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
               </label>
               <div className="flex gap-3">
                 <Button disabled={save.isPending}>
-                  {editing ? "Save and reapprove" : "Create schedule"}
+                  {editing
+                    ? t("SLAReportsPanel.form.saveReapprove")
+                    : t("SLAReportsPanel.form.create")}
                 </Button>
                 {editing && (
                   <Button
@@ -655,7 +770,7 @@ export function SLAReportsPanel({ policies }: { policies: SLAPolicy[] }) {
                       setSchedulePolicies("");
                     }}
                   >
-                    Cancel edit
+                    {t("SLAReportsPanel.form.cancelEdit")}
                   </Button>
                 )}
               </div>

@@ -24,6 +24,8 @@ using ``aiohttp`` need ``aiohttp-socks`` separately — out of scope for this fa
 
 from __future__ import annotations
 
+import importlib.util
+import logging
 import os
 from typing import Any
 
@@ -31,9 +33,38 @@ import httpx
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 # kwargs that already define how the client connects — if an adapter set any of
 # these we never override its routing.
 _ROUTING_KWARGS = ("proxy", "proxies", "mounts", "transport")
+
+#: SOCKS support packages already reported missing (logged once per process).
+_MISSING_SOCKS_REPORTED: set[str] = set()
+
+
+def _socks_support(package: str, client: str) -> bool:
+    """Whether ``package`` (the SOCKS transport for ``client``) is installed.
+
+    Neither httpx's ``socks`` extra (socksio) nor aiohttp-socks ships in the
+    image, so with VPN_MODE=userspace every client this module built raised at
+    construction (httpx: ImportError) or at the first request: every device
+    became unreachable, LAN devices included, not only tailnet ones. Without
+    the package the client now connects directly, as with VPN_MODE=off, and
+    the gap is reported once at ERROR instead of failing every device.
+    """
+    if importlib.util.find_spec(package) is not None:
+        return True
+    if package not in _MISSING_SOCKS_REPORTED:
+        _MISSING_SOCKS_REPORTED.add(package)
+        logger.error(
+            "VPN_MODE=userspace, but %s is not installed, so %s clients cannot use "
+            "the overlay SOCKS5 proxy: they connect directly and tailnet addresses "
+            "are unreachable",
+            package,
+            client,
+        )
+    return False
 
 
 def overlay_socks_proxy() -> str | None:
@@ -94,7 +125,11 @@ def build_async_client(**kwargs: Any) -> httpx.AsyncClient:
     already bounds connect.
     """
     proxy = overlay_socks_proxy()
-    if proxy and not any(k in kwargs for k in _ROUTING_KWARGS):
+    if (
+        proxy
+        and not any(k in kwargs for k in _ROUTING_KWARGS)
+        and _socks_support("socksio", "httpx")
+    ):
         kwargs["proxy"] = proxy
     if "timeout" in kwargs:
         kwargs["timeout"] = _cap_connect_timeout(kwargs["timeout"])
@@ -113,13 +148,8 @@ def build_aiohttp_session(**kwargs: Any):
     import aiohttp
 
     proxy = overlay_socks_proxy()
-    if proxy and "connector" not in kwargs:
-        try:
-            from aiohttp_socks import ProxyConnector
-        except ImportError as exc:  # pragma: no cover - only in userspace mode
-            raise RuntimeError(
-                "userspace overlay mode needs the 'aiohttp-socks' package to route "
-                "aiohttp clients through the overlay SOCKS5 proxy"
-            ) from exc
+    if proxy and "connector" not in kwargs and _socks_support("aiohttp_socks", "aiohttp"):
+        from aiohttp_socks import ProxyConnector
+
         kwargs["connector"] = ProxyConnector.from_url(proxy)
     return aiohttp.ClientSession(**kwargs)

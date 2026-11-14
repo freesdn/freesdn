@@ -51,6 +51,7 @@ import { ErrorState } from '@/components/ui/empty-state';
 import { SearchBar } from '@/components/ui/search-bar';
 import { enterpriseApi, type BulkOperation } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // Map bulk-op status → canonical StatusBadge variant
 const STATUS_VARIANT: Record<string, StatusVariant> = {
@@ -122,9 +123,7 @@ export default function BulkOperationsPage() {
   });
 
   const errToast = (title: string) => (err: unknown) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const detail = (err as any)?.response?.data?.detail
-      || (err instanceof Error ? err.message : t('BulkOperationsPage.toasts.unknownError'));
+    const detail = getApiErrorMessage(err, t('BulkOperationsPage.toasts.unknownError'));
     toast({ variant: 'destructive', title, description: String(detail) });
   };
 

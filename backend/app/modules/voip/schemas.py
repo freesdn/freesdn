@@ -27,9 +27,14 @@ _MAC_ADDRESS_RE = re.compile(r"^(?:[0-9a-fA-F]{2}([:-]?)){5}[0-9a-fA-F]{2}$|^[0-
 def _validate_mac_address(v: str | None) -> str | None:
     if v is None or v == "":
         return v
-    if not _MAC_ADDRESS_RE.match(v):
+    if not _MAC_ADDRESS_RE.fullmatch(v):
         raise ValueError("mac_address must be 12 hex digits (optional ':'/'-' separators)")
-    return v
+    # Store one spelling. Provisioning looks phones up, and names their config
+    # file, by the lowercase colon form; a MAC kept as typed was never served
+    # and shared a config file with any phone spelled differently. One
+    # spelling also lets the unique index on mac_address catch the duplicate.
+    clean = re.sub(r"[^0-9a-fA-F]", "", v).lower()
+    return ":".join(clean[i : i + 2] for i in range(0, 12, 2))
 
 
 def _validate_firmware_url_ssrf(url: str | None) -> str | None:
@@ -99,6 +104,12 @@ class ConnectionStatus(StrEnum):
 # =============================================================================
 
 
+def _blank_to_none(v: str | None) -> str | None:
+    if v is None:
+        return None
+    return v.strip() or None
+
+
 class PBXCreate(BaseModel):
     """Schema for creating a new PBX connection."""
 
@@ -132,6 +143,14 @@ class PBXCreate(BaseModel):
     # ``service._adapter_from_pbx``; this flag is audit-logged.
     tls_verify_disabled_acknowledged: bool = False
 
+    @field_validator("api_username")
+    @classmethod
+    def _blank_username_is_none(cls, v: str | None) -> str | None:
+        # A blank username means "none given" (FreePBX's default login); it is
+        # never stored or sent as "". An edit that blanks it is handled in
+        # VoIPService.update_pbx, where None has to keep meaning "unchanged".
+        return _blank_to_none(v)
+
 
 class PBXUpdate(BaseModel):
     """Schema for updating a PBX connection."""
@@ -164,6 +183,14 @@ class PBXTestConnection(BaseModel):
     api_client_id: str | None = None
     api_client_secret: str | None = None
     verify_ssl: bool = True
+
+    @field_validator("api_username")
+    @classmethod
+    def _blank_username_is_none(cls, v: str | None) -> str | None:
+        # A blank username means "none given" (FreePBX's default login); it is
+        # never stored or sent as "". An edit that blanks it is handled in
+        # VoIPService.update_pbx, where None has to keep meaning "unchanged".
+        return _blank_to_none(v)
 
 
 class PBXTestResult(BaseModel):
@@ -643,8 +670,11 @@ class PhoneProvisionRequest(BaseModel):
 class PhoneCredentials(BaseModel):
     """Credentials for authenticating to phone web UIs during discovery."""
 
-    username: str = Field(default="admin", max_length=64)
-    password: str = Field(default="admin", max_length=128)
+    # Both required: an omitted field used to become admin/admin, which a scan
+    # then tried against every phone it found. The factory default login is an
+    # explicit opt-in (DiscoveryScanRequest.try_default_credentials).
+    username: str = Field(..., min_length=1, max_length=64)
+    password: str = Field(..., min_length=1, max_length=128)
 
 
 class PhoneConnectionTestRequest(BaseModel):
@@ -654,8 +684,9 @@ class PhoneConnectionTestRequest(BaseModel):
         default=None,
         description="Phone IP address. If omitted, uses the phone's stored IP.",
     )
-    username: str = Field(default="admin", max_length=64)
-    password: str = Field(default="admin", max_length=128)
+    # No defaults: the operator states the login to try (it may be blank).
+    username: str = Field(..., max_length=64)
+    password: str = Field(..., max_length=128)
     save_credentials: bool = Field(
         default=False,
         description="Save credentials to the phone record on success.",
@@ -713,8 +744,13 @@ class DiscoveryScanRequest(BaseModel):
     )
     credentials: PhoneCredentials | None = Field(
         default=None,
-        description="Credentials for phone web UI login during discovery. "
-        "Defaults to admin/admin if omitted.",
+        description="Credentials for phone web UI login during discovery. Without "
+        "them the scan only identifies phones and never attempts a login.",
+    )
+    try_default_credentials: bool = Field(
+        default=False,
+        description="Also try the phones' factory default login (admin/admin). Off by "
+        "default: a failed login counts toward the phone's admin lockout.",
     )
 
     model_config = {"populate_by_name": True}
@@ -969,8 +1005,9 @@ class BulkFirmwareRequest(BulkOperationRequest):
 class BulkConnectRequest(BulkOperationRequest):
     """Bulk connect — set credentials and fully connect selected phones."""
 
-    username: str = Field(default="admin", max_length=64)
-    password: str = Field(default="admin", max_length=128)
+    # No defaults: a bulk connect would otherwise try admin/admin on every phone.
+    username: str = Field(..., min_length=1, max_length=64)
+    password: str = Field(..., max_length=128)
 
 
 class BulkOperationResponse(BaseModel):

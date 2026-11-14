@@ -25,10 +25,17 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.unifi import UniFiAdapter
-from app.api.v1.deps import CurrentUser, require_min_role, require_permissions
+from app.api.v1.deps import CurrentUser, get_session, require_min_role, require_permissions
 from app.api.v1.endpoints.unifi_deps import get_adapter_for_controller
+from app.services.adapter_staging import controller_slot_key_for
+from app.services.device_writes import (
+    audited_device_action,
+    controller_scope,
+    write_through_staging,
+)
 
 router = APIRouter(prefix="/unifi", tags=["UniFi"])
 
@@ -206,9 +213,25 @@ async def restart_device(
     body: Annotated[_RestartBody, Body()],
     user: Annotated[CurrentUser, Depends(require_min_role("site_admin"))],
     adapter: Annotated[UniFiAdapter, Depends(get_adapter_for_controller)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UniFiWriteResponse:
     try:
-        detail = await adapter.restart_device(site, mac, force=body.force)
+        organization_id, site_id = await controller_scope(session, controller_id)
+        detail = await audited_device_action(
+            session,
+            action="restart_device",
+            slot_key=await controller_slot_key_for(session, controller_id),
+            target_type="device",
+            target_id=mac,
+            target_name=mac,
+            organization_id=organization_id,
+            site_id=site_id,
+            actor_id=user.id,
+            parameters={"site": site},
+            perform=lambda: adapter.restart_device(site, mac, force=body.force),
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         # ReadOnly + invalid-MAC + connection errors all funnel here.
         raise HTTPException(400, detail=str(exc)) from exc
@@ -234,14 +257,30 @@ async def disable_device(
     body: Annotated[_DisableBody, Body()],
     user: Annotated[CurrentUser, Depends(require_min_role("site_admin"))],
     adapter: Annotated[UniFiAdapter, Depends(get_adapter_for_controller)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UniFiWriteResponse:
     try:
-        detail = await adapter.disable_device(
-            site,
-            mac,
-            body.disabled,
+        organization_id, site_id = await controller_scope(session, controller_id)
+        detail = await write_through_staging(
+            session,
+            organization_id=organization_id,
+            controller_id=controller_id,
+            site_id=site_id,
+            feature="unifi.devices.disable",
+            operation="update",
+            target_id=mac,
+            payload={"site": site, "mac": mac, "disabled": body.disabled},
+            perform=lambda: adapter.disable_device(
+                site,
+                mac,
+                body.disabled,
+                force=body.force,
+            ),
             force=body.force,
+            actor_id=user.id,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(400, detail=str(exc)) from exc
     finally:
@@ -267,15 +306,31 @@ async def update_port_profile(
     body: Annotated[_PortProfileBody, Body()],
     user: Annotated[CurrentUser, Depends(require_min_role("site_admin"))],
     adapter: Annotated[UniFiAdapter, Depends(get_adapter_for_controller)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UniFiWriteResponse:
     try:
-        detail = await adapter.update_port_override(
-            site,
-            mac,
-            port_idx,
-            body.profile_id,
+        organization_id, site_id = await controller_scope(session, controller_id)
+        detail = await write_through_staging(
+            session,
+            organization_id=organization_id,
+            controller_id=controller_id,
+            site_id=site_id,
+            feature="unifi.devices.port_profile",
+            operation="update",
+            target_id=mac,
+            payload={"site": site, "mac": mac, "port_idx": port_idx, "profile_id": body.profile_id},
+            perform=lambda: adapter.update_port_override(
+                site,
+                mac,
+                port_idx,
+                body.profile_id,
+                force=body.force,
+            ),
             force=body.force,
+            actor_id=user.id,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(400, detail=str(exc)) from exc
     finally:
@@ -301,15 +356,31 @@ async def set_port_poe(
     body: Annotated[_PortPoeBody, Body()],
     user: Annotated[CurrentUser, Depends(require_min_role("site_admin"))],
     adapter: Annotated[UniFiAdapter, Depends(get_adapter_for_controller)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UniFiWriteResponse:
     try:
-        detail = await adapter.set_port_poe_on_site(
-            site,
-            mac,
-            port_idx,
-            body.poe_mode,
+        organization_id, site_id = await controller_scope(session, controller_id)
+        detail = await write_through_staging(
+            session,
+            organization_id=organization_id,
+            controller_id=controller_id,
+            site_id=site_id,
+            feature="unifi.devices.port_poe",
+            operation="update",
+            target_id=mac,
+            payload={"site": site, "mac": mac, "port_idx": port_idx, "poe_mode": body.poe_mode},
+            perform=lambda: adapter.set_port_poe_on_site(
+                site,
+                mac,
+                port_idx,
+                body.poe_mode,
+                force=body.force,
+            ),
             force=body.force,
+            actor_id=user.id,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(400, detail=str(exc)) from exc
     finally:

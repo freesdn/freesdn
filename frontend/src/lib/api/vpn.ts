@@ -297,7 +297,7 @@ export const vpnApi = {
       api.post<SiteToSiteTunnel[]>('/vpn/tunnels/mesh', data),
 
     tunnelAction: (id: string, action: 'enable' | 'disable' | 'reprovision') =>
-      api.post<{ success: boolean; message: string; tunnel_id: string; new_status: string }>(`/vpn/tunnels/${encodeURIComponent(id)}/action`, { action }),
+      api.post<{ success: boolean; message: string; tunnel_id: string; new_status: string; error_message?: string | null }>(`/vpn/tunnels/${encodeURIComponent(id)}/action`, { action }),
 
     teardownTunnel: (id: string) =>
       api.delete(`/vpn/tunnels/${encodeURIComponent(id)}`),

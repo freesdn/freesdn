@@ -26,6 +26,10 @@ import { PageHeader } from '@/components/layout';
 import { CallDirectionBadge, CallStatusBadge, formatDuration } from './components';
 import type { CallLog } from './types';
 
+// The list endpoint is asked for at most this many rows; the counts below are
+// computed from what came back, so they must say when they hit the cap.
+const CALL_LOG_LIMIT = 500;
+
 export default function CallLogsPage() {
   const { t } = useTranslation('voip');
   const [filterDirection, setFilterDirection] = useState('all');
@@ -40,7 +44,7 @@ export default function CallLogsPage() {
   const { data: logsRes, isLoading, isError, refetch } = useQuery({
     queryKey: ['voip-call-logs', filterDirection, filterStatus, { siteId: selectedSiteId }],
     queryFn: () => voipApi.getCallLogs({
-      limit: 500,
+      limit: CALL_LOG_LIMIT,
       direction: filterDirection !== 'all' ? filterDirection : undefined,
       call_status: filterStatus !== 'all' ? filterStatus : undefined,
       ...(selectedSiteId ? { site_id: selectedSiteId } : {}),
@@ -48,7 +52,12 @@ export default function CallLogsPage() {
     refetchInterval: 30_000,
   });
 
-  const allLogs: CallLog[] = useMemo(() => logsRes?.data?.items ?? logsRes?.data ?? [], [logsRes?.data]);
+  const allLogs: CallLog[] = useMemo(() => {
+    const body = logsRes?.data;
+    if (Array.isArray(body?.items)) return body.items;
+    return Array.isArray(body) ? body : [];
+  }, [logsRes?.data]);
+  const capped = allLogs.length >= CALL_LOG_LIMIT;
 
   const logs = useMemo(() => {
     if (!search) return allLogs;
@@ -77,11 +86,13 @@ export default function CallLogsPage() {
     {
       id: 'direction',
       header: t('CallLogsPage.columns.direction'),
+      accessorFn: (row) => row.direction ?? '',
       cell: (row) => <CallDirectionBadge direction={row.direction} />,
     },
     {
       id: 'caller',
       header: t('CallLogsPage.columns.caller'),
+      accessorFn: (row) => row.caller_name || row.caller_number || row.caller || '',
       cell: (row) => {
         const caller = row.caller_number || row.caller;
         return (
@@ -97,6 +108,7 @@ export default function CallLogsPage() {
     {
       id: 'callee',
       header: t('CallLogsPage.columns.destination'),
+      accessorFn: (row) => row.callee_name || row.callee_number || row.callee || '',
       cell: (row) => {
         const callee = row.callee_number || row.callee;
         return (
@@ -112,16 +124,23 @@ export default function CallLogsPage() {
     {
       id: 'status',
       header: t('CallLogsPage.columns.status'),
+      accessorFn: (row) => row.status ?? '',
       cell: (row) => <CallStatusBadge status={row.status} />,
     },
     {
       id: 'duration',
       header: t('CallLogsPage.columns.duration'),
+      accessorFn: (row) => row.duration_seconds ?? row.duration ?? 0,
       cell: (row) => <span className="text-sm font-mono">{formatDuration(row.duration_seconds ?? row.duration ?? 0)}</span>,
     },
     {
       id: 'started_at',
       header: t('CallLogsPage.columns.dateTime'),
+      accessorFn: (row) => {
+        const ts = row.start_time || row.started_at;
+        const ms = ts ? new Date(ts).getTime() : NaN;
+        return Number.isFinite(ms) ? ms : 0;
+      },
       cell: (row) => {
         const ts = row.start_time || row.started_at;
         if (!ts) return <span className="text-muted-foreground">-</span>;
@@ -137,6 +156,7 @@ export default function CallLogsPage() {
     {
       id: 'pbx',
       header: t('CallLogsPage.columns.pbx'),
+      accessorFn: (row) => row.pbx_system_name ?? '',
       cell: (row) => <span className="text-xs text-muted-foreground">{row.pbx_system_name || '-'}</span>,
     },
   ];
@@ -146,7 +166,11 @@ export default function CallLogsPage() {
       <PageHeader
         icon={PhoneCall}
         title={t('CallLogsPage.title')}
-        subtitle={t('CallLogsPage.subtitle', { count: totalCalls })}
+        subtitle={
+          capped
+            ? t('CallLogsPage.subtitleCapped', { count: totalCalls })
+            : t('CallLogsPage.subtitle', { count: totalCalls })
+        }
         onRefresh={() => refetch()}
         refreshing={isLoading}
       />
@@ -167,7 +191,7 @@ export default function CallLogsPage() {
             <div className="flex items-center gap-3">
               <div className="p-2 bg-primary/10 rounded-lg"><PhoneCall className="h-5 w-5 text-primary" /></div>
               <div>
-                <p className="text-2xl font-bold">{totalCalls}</p>
+                <p className="text-2xl font-bold">{capped ? `${totalCalls}+` : totalCalls}</p>
                 <p className="text-xs text-muted-foreground">{t('CallLogsPage.stats.totalCalls')}</p>
               </div>
             </div>
@@ -222,9 +246,9 @@ export default function CallLogsPage() {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <Input placeholder={t('CallLogsPage.filters.searchPlaceholder')} value={search}
-          onChange={(e) => setSearch(e.target.value)} className="w-64" />
+          onChange={(e) => setSearch(e.target.value)} className="w-full sm:w-64" />
         <Select value={filterDirection} onValueChange={setFilterDirection}>
-          <SelectTrigger className="w-36"><SelectValue placeholder={t('CallLogsPage.filters.directionPlaceholder')} /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder={t('CallLogsPage.filters.directionPlaceholder')} /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t('CallLogsPage.filters.allDirections')}</SelectItem>
             <SelectItem value="inbound">{t('CallLogsPage.filters.inbound')}</SelectItem>
@@ -233,7 +257,7 @@ export default function CallLogsPage() {
           </SelectContent>
         </Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-36"><SelectValue placeholder={t('CallLogsPage.filters.statusPlaceholder')} /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder={t('CallLogsPage.filters.statusPlaceholder')} /></SelectTrigger>
           <SelectContent>
             {/* Values MUST match the vocabulary the CDR normalizer stores
                 (service._normalize_and_store_cdr): an answered call is stored
@@ -255,6 +279,10 @@ export default function CallLogsPage() {
         columns={columns}
         isLoading={isLoading}
         itemName={t('CallLogsPage.itemName')}
+        // The page has its own caller/destination search above; the table's
+        // built-in box searched the same rows a second time, so two search
+        // fields sat on top of each other.
+        searchable={false}
         paginated
         defaultPageSize={25}
         emptyState={

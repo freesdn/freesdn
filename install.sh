@@ -232,6 +232,17 @@ fi
 echo
 echo "  First-run wizard: open the URL above to create the admin user."
 echo
+# pg-backup refuses plaintext, so without a key a fresh install has NO database
+# backups. Say so at the end, where it is read. (-s is also true for the directory
+# Docker makes of a missing path; install_config.py already warned about that.)
+KEY_PATH="$(get_env BACKUP_GPG_PUBLIC_KEY_PATH)"
+if ! $DEV && [[ -n "$KEY_PATH" && ! -s "$KEY_PATH" ]]; then
+    warn "Database backups are OFF: there is no GPG public key in $KEY_PATH yet."
+    echo "  Create the key pair now. The private key is handed to you once; keep it OFF this host:"
+    echo "    ./scripts/backup-keygen.sh --env-file $ENV_NAME > /path/off/this/host/freesdn-backup-private.asc"
+    echo "  pg-backup picks the public key up within a minute, no restart needed."
+    echo
+fi
 echo "  Useful commands:"
 echo "    docker compose ${COMPOSE_ARGS[*]} logs -f      # tail logs"
 echo "    docker compose ${COMPOSE_ARGS[*]} ps           # container status"

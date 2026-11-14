@@ -905,6 +905,48 @@ def setup_exception_handlers(app: FastAPI) -> None:
             },
         )
 
+    from app.modules.enablement import ModuleDisabledError
+
+    @app.exception_handler(ModuleDisabledError)
+    async def module_disabled_handler(request: Request, exc: ModuleDisabledError) -> JSONResponse:
+        """A route of a module this organization disabled -> 403 ``module_disabled``.
+
+        Same envelope as every other HTTP error, plus ``type`` and
+        ``module_id``, so the UI can tell "module switched off" from "missing
+        permission" (both 403) without matching the sentence. More specific
+        than the HTTPException handler below, so FastAPI routes it here.
+        """
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "error": {
+                    "code": exc.status_code,
+                    "type": exc.error_type,
+                    "module_id": exc.module_id,
+                    "message": exc.detail,
+                    "request_id": getattr(request.state, "request_id", None),
+                }
+            },
+            headers=exc.headers,
+        )
+
+    from app.services.device_live_read import DeviceBusyError, busy_envelope
+
+    @app.exception_handler(DeviceBusyError)
+    async def device_busy_handler(request: Request, exc: DeviceBusyError) -> JSONResponse:
+        """A device stayed busy and nothing earlier is remembered -> 503 ``device_busy``.
+
+        Same envelope as every other HTTP error, plus ``type``, so the UI tells
+        "the device is busy, retry" from any other 503 without matching the
+        sentence; ``Retry-After`` says when. The live reads that take their
+        turn in DeviceReadTurnMiddleware answer with the same body.
+        """
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=busy_envelope(str(exc.detail), getattr(request.state, "request_id", None)),
+            headers=exc.headers,
+        )
+
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
         """Handle HTTP exceptions with consistent format."""

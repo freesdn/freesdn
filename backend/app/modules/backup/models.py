@@ -23,10 +23,14 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
+    UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.backup_artifacts import ArtifactState, artifact_state
@@ -131,6 +135,29 @@ class StorageLocation(Base, UUIDMixin, TimestampMixin):
         try:
             validate_policy(self.storage_type, dict(self.config or {}))
         except StorageConfigurationError:
+            return True
+        return False
+
+    @property
+    def local_path_review_required(self) -> bool:
+        """A local/NFS path outside the allowed backup roots ("needs attention").
+
+        Kept rather than deleted, so nothing is lost on upgrade; every backup,
+        test or restore through it is refused with the reason until its path is
+        moved under /data/backups or the server allows its root
+        (BACKUP_LOCAL_EXTRA_ROOTS).
+        """
+        from app.services.backup_transport import (
+            LOCAL_PATH_STORAGE_TYPES,
+            LocalBackupPathError,
+            confine_local_backup_path,
+        )
+
+        if (self.storage_type or "").lower() not in LOCAL_PATH_STORAGE_TYPES:
+            return False
+        try:
+            confine_local_backup_path((self.config or {}).get("path"))
+        except LocalBackupPathError:
             return True
         return False
 
@@ -466,3 +493,95 @@ class RestoreJob(Base, UUIDMixin, TimestampMixin):
 
     def __repr__(self) -> str:
         return f"<RestoreJob {self.id} - {self.status}>"
+
+
+# =============================================================================
+# Network device configuration backup (Oxidized-style, read-only)
+# =============================================================================
+
+
+class DeviceConfigBackupTarget(Base, UUIDMixin, TimestampMixin):
+    """One device whose running configuration FreeSDN exports on a schedule.
+
+    ``source_kind`` + ``source_id`` name the managed object (today a
+    ``firewall.gateway_connections`` row); the row carries the schedule, the
+    single-flight lease and the last outcome. Exports are READ-ONLY, at most one
+    at a time per target, daily by default, and never part of a sync.
+    """
+
+    __tablename__ = "device_config_targets"
+    __table_args__ = (
+        UniqueConstraint("source_kind", "source_id", name="uq_bak_cfg_target_source"),
+        Index("ix_bak_cfg_target_org", "organization_id"),
+        Index("ix_bak_cfg_target_due", "enabled", "next_due_at"),
+        {"schema": "backup"},
+    )
+
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("core.organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    site_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("core.sites.id", ondelete="SET NULL"), nullable=True
+    )
+    source_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    vendor: Mapped[str] = mapped_column(String(32), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    interval_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
+    retention_versions: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+
+    next_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_token: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # never | changed | unchanged | failed | paused | unsupported | source_removed
+    last_status: Mapped[str] = mapped_column(String(32), nullable=False, default="never")
+    # A fixed code, never device-supplied text (device errors can echo secrets).
+    last_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class DeviceConfigSnapshot(Base, UUIDMixin):
+    """One distinct configuration of a target, encrypted at rest.
+
+    A new version is stored only when the content changed. ``ciphertext`` is
+    Fernet (instance SECRET_KEY) over zlib(raw export) and holds every secret
+    the device exports, so it is never logged, never listed, and only shown
+    after redaction; ``content_digest`` is a keyed HMAC, not a plain hash.
+    """
+
+    __tablename__ = "device_config_snapshots"
+    __table_args__ = (
+        UniqueConstraint("target_id", "version", name="uq_bak_cfg_snapshot_version"),
+        Index("ix_bak_cfg_snapshot_org_target", "organization_id", "target_id"),
+        {"schema": "backup"},
+    )
+
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("core.organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    site_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("core.sites.id", ondelete="SET NULL"), nullable=True
+    )
+    target_id: Mapped[UUID] = mapped_column(
+        ForeignKey("backup.device_config_targets.id", ondelete="CASCADE"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    format: Mapped[str] = mapped_column(String(32), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    trigger: Mapped[str] = mapped_column(String(16), nullable=False, default="scheduled")
+    created_by_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("core.users.id", ondelete="SET NULL"), nullable=True
+    )
+    # Line counts vs the previous version, computed on REDACTED renderings.
+    summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

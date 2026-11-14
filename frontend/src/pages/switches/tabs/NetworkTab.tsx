@@ -9,6 +9,7 @@
  */
 import { Globe, Monitor, Network, Router } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useConfigValueFormatter } from '@/lib/format-value';
 import { Badge } from '@/components/ui/badge';
 import {
   Card,
@@ -40,6 +41,7 @@ export interface NetworkTabProps {
 
 export function NetworkTab({ lldpNeighbors, staticRoutes, dhcpConfig, macTable }: NetworkTabProps) {
   const { t } = useTranslation('switches');
+  const formatValue = useConfigValueFormatter();
   return (
     <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -137,9 +139,12 @@ export function NetworkTab({ lldpNeighbors, staticRoutes, dhcpConfig, macTable }
             {dhcpConfig ? (
               <div className="space-y-2 text-sm">
                 {Object.entries(dhcpConfig as Record<string, unknown>).slice(0, 10).map(([key, val]) => (
-                  <div key={key} className="flex justify-between">
-                    <span className="text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</span>
-                    <span className="font-medium">{String(val)}</span>
+                  <div key={key} className="flex justify-between gap-4">
+                    <span className="text-muted-foreground capitalize shrink-0">{key.replace(/_/g, ' ')}</span>
+                    {/* String(val) printed nested lease lists as "[object Object],..." */}
+                    <span className="font-medium text-right truncate" title={formatValue(val)}>
+                      {formatValue(val)}
+                    </span>
                   </div>
                 ))}
               </div>

@@ -36,8 +36,11 @@ const AlertDialogContent = React.forwardRef<
     <AlertDialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4',
-        'border bg-background p-6 shadow-xl rounded-lg',
+        // Same frame as Dialog: a margin at phone width instead of touching
+        // both screen edges, and scrollable rather than cut off when tall.
+        'fixed left-[50%] top-[50%] z-50 grid w-[calc(100vw-1rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4',
+        'border border-border bg-card p-4 sm:p-6 shadow-xl rounded-lg',
+        'max-h-[calc(100dvh-1rem)] overflow-y-auto',
         'dialog-content',
         className
       )}

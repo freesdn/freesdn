@@ -35,11 +35,11 @@ function healthDotColor(
   onlineDevices: number,
   criticalAlerts: number
 ): string {
-  if (totalDevices === 0) return 'bg-muted-foreground'; // gray
-  if (criticalAlerts > 0 || onlineDevices < totalDevices * 0.5)
-    return 'bg-red-500'; // red
-  if (onlineDevices < totalDevices) return 'bg-yellow-500'; // yellow
-  return 'bg-green-500'; // green
+  // Theme status tokens, so the dots follow the palette in both themes.
+  if (totalDevices === 0) return 'bg-muted-foreground';
+  if (criticalAlerts > 0 || onlineDevices < totalDevices * 0.5) return 'bg-destructive';
+  if (onlineDevices < totalDevices) return 'bg-warning';
+  return 'bg-success';
 }
 
 export function SiteSelector() {

@@ -39,6 +39,7 @@ from app.adapters.omada.exceptions import (
     OmadaRateLimitError,
     OmadaSessionExpiredError,
     OmadaTimeoutError,
+    OmadaUnsupportedEndpointError,
     OmadaValidationError,
 )
 from app.adapters.omada.exceptions import (
@@ -151,7 +152,7 @@ class OmadaAdapter(BaseAdapter):
         # 6.2 validated live against an OC300; the 6.x line shares the same
         # core API surface (a few advanced endpoints differ across versions —
         # the client degrades gracefully on those). 5.9–5.14 remain supported.
-        supported_versions=["5.9", "5.12", "5.13", "5.14", "6.0", "6.1", "6.2"],
+        supported_versions=["5.9", "5.12", "5.13", "5.14", "6.0", "6.1", "6.2", "6.3"],
         device_types={
             "switch": DeviceTypeCapabilities(
                 module="network",
@@ -1003,17 +1004,30 @@ class OmadaAdapter(BaseAdapter):
     @staticmethod
     def _normalize_port_profile(raw: dict[str, Any]) -> NormalizedPortProfile:
         """Normalize a single Omada port profile dict."""
+
+        def _flag(*keys: str) -> bool | None:
+            # Only a real boolean is a yes/no. 6.x profiles carry ``poe`` as a
+            # mode number and the model would reject it outright, which threw
+            # away every profile on the page.
+            for key in keys:
+                value = raw.get(key)
+                if isinstance(value, bool):
+                    return value
+            return None
+
+        profile_type = raw.get("type")
+        bandwidth = raw.get("bandwidthLimit") or raw.get("rateLimit")
         return NormalizedPortProfile(
             id=raw.get("id") or raw.get("profileId"),
             name=raw.get("name"),
             native_vlan=raw.get("nativeVlan") or raw.get("pvid"),
             tagged_vlans=raw.get("taggedVlans", []),
             untagged_vlans=raw.get("untaggedVlans", []),
-            type=raw.get("type"),
-            poe_enabled=raw.get("poe") if raw.get("poe") is not None else raw.get("poeEnable"),
-            stp_enabled=raw.get("stpEnable"),
-            lldp_enabled=raw.get("lldpMedEnable"),
-            bandwidth_limit=raw.get("bandwidthLimit") or raw.get("rateLimit"),
+            type=None if profile_type is None else str(profile_type),
+            poe_enabled=_flag("poe", "poeEnable"),
+            stp_enabled=_flag("stpEnable", "spanningTreeEnable"),
+            lldp_enabled=_flag("lldpMedEnable"),
+            bandwidth_limit=bandwidth if isinstance(bandwidth, dict) else None,
         )
 
     @staticmethod
@@ -2461,6 +2475,10 @@ class OmadaAdapter(BaseAdapter):
         try:
             rows = await self._client.get_port_profiles(site_id)
             return [self._normalize_port_profile(r).model_dump() for r in rows]
+        except OmadaUnsupportedEndpointError as e:
+            # The client already logged this once at INFO and stopped asking.
+            logger.debug("Port profiles not served by this controller: %s", e)
+            return []
         except Exception as e:
             logger.error("Failed to get port profiles: %s", e)
             return []
@@ -4455,6 +4473,9 @@ class OmadaAdapter(BaseAdapter):
         """Get Omada controller health / status (no site required)."""
         try:
             return await self._client.get_controller_status()
+        except OmadaUnsupportedEndpointError as e:
+            logger.debug("Controller status not served by this controller: %s", e)
+            return {}
         except Exception as e:
             logger.error("Failed to get controller status: %s", e)
             return {}
@@ -4463,6 +4484,9 @@ class OmadaAdapter(BaseAdapter):
         """Get Omada controller system information (version, uptime, etc.)."""
         try:
             return await self._client.get_system_info()
+        except OmadaUnsupportedEndpointError as e:
+            logger.debug("System info not served by this controller: %s", e)
+            return {}
         except Exception as e:
             logger.error("Failed to get system info: %s", e)
             return {}

@@ -11,6 +11,7 @@ import { Lock, Shield, FolderOpen, Key, type LucideIcon } from 'lucide-react';
 import { ssoApi, type SSOProviderPublic } from '@/lib/ssoApi';
 import { useAuthStore } from '@/stores/authStore';
 import { isDemoMode } from '@/demo/mode';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 const protocolIcons: Record<string, LucideIcon> = {
   oidc: Lock,
@@ -90,7 +91,7 @@ export default function SSOLoginButtons({ onError }: Props) {
       window.location.href = data.authorize_url;
     } catch (e: unknown) {
       const axiosErr = e as import('axios').AxiosError<{ detail?: string }>;
-      onError?.(axiosErr.response?.data?.detail || t('ssoError'));
+      onError?.(getApiErrorMessage(axiosErr, t('ssoError')));
       setLoading(null);
     }
   };
@@ -109,7 +110,7 @@ export default function SSOLoginButtons({ onError }: Props) {
       window.location.href = data.authorize_url;
     } catch (e: unknown) {
       const axiosErr = e as import('axios').AxiosError<{ detail?: string }>;
-      onError?.(axiosErr.response?.data?.detail || t('ssoError'));
+      onError?.(getApiErrorMessage(axiosErr, t('ssoError')));
       setLoading(null);
     }
   };
@@ -128,7 +129,7 @@ export default function SSOLoginButtons({ onError }: Props) {
       navigate('/dashboard');
     } catch (e: unknown) {
       const axiosErr = e as import('axios').AxiosError<{ detail?: string }>;
-      onError?.(axiosErr.response?.data?.detail || t('ldapError'));
+      onError?.(getApiErrorMessage(axiosErr, t('ldapError')));
       setLoading(null);
     }
   };

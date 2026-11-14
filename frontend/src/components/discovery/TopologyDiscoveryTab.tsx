@@ -57,52 +57,55 @@ interface SubnetNodeData {
   [key: string]: unknown;
 }
 
-function HostNodeView({ data }: NodeProps) {
+export function HostNodeView({ data }: NodeProps) {
   const { t } = useTranslation('common');
   const host = (data as HostNodeData).host;
   const adopted = host.is_adopted;
   return (
     <div
-      className={`px-3 py-2 rounded border shadow-sm text-xs min-w-[150px] ${
+      // Theme tokens: the node was bg-white with the page's text colour, so
+      // in dark mode (the default) its address was light text on white.
+      className={`px-3 py-2 rounded border shadow-sm text-xs min-w-[150px] text-card-foreground ${
         adopted
-          ? 'bg-emerald-50 border-emerald-400'
-          : 'bg-white border-slate-300'
+          ? 'bg-emerald-500/10 border-emerald-500/60'
+          : 'bg-card border-border'
       }`}
+      data-testid="discovery-host-node"
     >
-      <Handle type="target" position={Position.Top} className="!bg-slate-400" />
+      <Handle type="target" position={Position.Top} className="!bg-muted-foreground" />
       <div className="flex items-center gap-1.5 font-mono font-medium">
         {adopted ? (
-          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+          <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
         ) : (
-          <Server className="h-3 w-3 text-slate-500" />
+          <Server className="h-3 w-3 text-muted-foreground" />
         )}
         {host.ip_address}
       </div>
       {host.hostname ? (
-        <div className="text-slate-500 truncate max-w-[140px]">
+        <div className="text-muted-foreground truncate max-w-[140px]">
           {host.hostname}
         </div>
       ) : host.vendor ? (
-        <div className="text-slate-500 truncate max-w-[140px]">{host.vendor}</div>
+        <div className="text-muted-foreground truncate max-w-[140px]">{host.vendor}</div>
       ) : null}
       {adopted && host.adopted_device_id ? (
         <Link
           to={`/devices/${host.adopted_device_id}`}
-          className="text-[10px] text-emerald-700 hover:underline"
+          className="text-[10px] text-emerald-700 dark:text-emerald-400 hover:underline"
         >
           {t('TopologyDiscoveryTab.host.managedLink')}
         </Link>
       ) : null}
-      <Handle type="source" position={Position.Bottom} className="!bg-slate-400" />
+      <Handle type="source" position={Position.Bottom} className="!bg-muted-foreground" />
     </div>
   );
 }
 
-function SubnetNodeView({ data }: NodeProps) {
+export function SubnetNodeView({ data }: NodeProps) {
   const { t } = useTranslation('common');
   const subnet = (data as SubnetNodeData).subnet;
   return (
-    <div className="px-4 py-3 rounded-lg border-2 border-sky-500 bg-sky-50 shadow text-xs min-w-[200px]">
+    <div className="px-4 py-3 rounded-lg border-2 border-sky-500 bg-sky-500/10 text-card-foreground shadow text-xs min-w-[200px]" data-testid="discovery-subnet-node">
       <Handle
         type="target"
         position={Position.Top}
@@ -114,11 +117,11 @@ function SubnetNodeView({ data }: NodeProps) {
         className="!bg-sky-500"
       />
       <div className="flex items-center gap-2 font-semibold">
-        <Network className="h-4 w-4 text-sky-600" />
+        <Network className="h-4 w-4 text-sky-600 dark:text-sky-400" />
         {subnet.label}
       </div>
-      <div className="text-slate-600 font-mono mt-0.5">{subnet.cidr}</div>
-      <div className="text-slate-500 mt-1 flex items-center gap-2">
+      <div className="text-muted-foreground font-mono mt-0.5">{subnet.cidr}</div>
+      <div className="text-muted-foreground mt-1 flex items-center gap-2">
         <span>{t('TopologyDiscoveryTab.subnet.hostCount', { count: subnet.host_count })}</span>
         {subnet.vlan_id ? (
           <Badge variant="outline">
@@ -282,11 +285,11 @@ export function TopologyDiscoveryTab({ siteId }: Props) {
           <div className="flex items-center gap-2">
             <div className="text-xs text-muted-foreground flex items-center gap-3">
               <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded bg-emerald-50 border border-emerald-400" />
+                <span className="inline-block w-3 h-3 rounded bg-emerald-500/10 border border-emerald-500/60" />
                 {t('TopologyDiscoveryTab.legend.adopted')}
               </span>
               <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded bg-white border border-slate-300" />
+                <span className="inline-block w-3 h-3 rounded bg-card border border-border" />
                 {t('TopologyDiscoveryTab.legend.discovered')}
               </span>
               <span className="flex items-center gap-1">

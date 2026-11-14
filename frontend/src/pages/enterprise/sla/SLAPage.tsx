@@ -41,6 +41,8 @@ import {
   Check,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 const SEVERITY_VARIANT: Record<string, StatusVariant> = {
   critical: 'severity_critical',
@@ -67,6 +69,7 @@ export default function SLAPage() {
   const { t } = useTranslation('enterprise');
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const { tab: urlTab } = useParams<{ tab?: string }>();
   const activeTab = SLA_TABS.includes(urlTab as any) ? urlTab! : 'overview';
@@ -124,7 +127,7 @@ export default function SLAPage() {
       queryClient.invalidateQueries({ queryKey: ['sla-summary'] });
     },
     onError: (err: any) => {
-      toast({ title: t('SLAPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('SLAPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('SLAPage.toast.errorTitle'), description: getApiErrorMessage(err, t('SLAPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
@@ -132,7 +135,15 @@ export default function SLAPage() {
   // toast (n ok / m failed) so partial failures aren't masked as success.
   const handleBulkDeletePolicies = async () => {
     if (selectedPolicies.length === 0) return;
-    if (!window.confirm(t('SLAPage.actions.delete') + ` (${selectedPolicies.length})`)) return;
+    const confirmed = await confirm({
+      title: t('SLAPage.confirm.deleteMany.title'),
+      description: t('SLAPage.confirm.deleteMany.description'),
+      count: selectedPolicies.length,
+      items: selectedPolicies.map((p) => p.name),
+      confirmLabel: t('SLAPage.confirm.deleteMany.confirmLabel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
     const results = await Promise.allSettled(
       selectedPolicies.map((p) => slaApi.deletePolicy(p.id)),
     );
@@ -148,8 +159,15 @@ export default function SLAPage() {
     });
   };
 
-  const handleDeletePolicy = (policy: SLAPolicy) => {
-    if (!window.confirm(t('SLAPage.actions.delete') + `, ${policy.name}`)) return;
+  const handleDeletePolicy = async (policy: SLAPolicy) => {
+    const ok = await confirm({
+      title: t('SLAPage.confirm.deleteOne.title', { name: policy.name }),
+      description: t('SLAPage.confirm.deleteOne.description'),
+      items: [policy.name],
+      confirmLabel: t('SLAPage.confirm.deleteOne.confirmLabel'),
+      destructive: true,
+    });
+    if (!ok) return;
     deletePolicyMutation.mutate(policy.id, {
       onSuccess: () => setSelectedPolicy(null),
     });
@@ -159,7 +177,7 @@ export default function SLAPage() {
     mutationFn: (breachId: string) => slaApi.acknowledgeBreach(breachId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sla-breaches'] }),
     onError: (err: any) => {
-      toast({ title: t('SLAPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('SLAPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('SLAPage.toast.errorTitle'), description: getApiErrorMessage(err, t('SLAPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
@@ -181,7 +199,7 @@ export default function SLAPage() {
       });
     },
     onError: (err: any) => {
-      toast({ title: t('SLAPage.toast.errorTitle'), description: err?.response?.data?.detail || err?.message || t('SLAPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('SLAPage.toast.errorTitle'), description: getApiErrorMessage(err, t('SLAPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
@@ -401,7 +419,7 @@ export default function SLAPage() {
       />
 
       <p className="text-sm text-muted-foreground" role="status">
-        {t('SLAPage.measurementScope', { defaultValue: 'Compliance requires data for every configured target. Site and organization policies currently measure device health; sampled uptime is available for camera and NVR policies. Missing observations show N/A, not success. Historical reports are not a contractual availability guarantee.' })}
+        {t('SLAPage.measurementScope')}
       </p>
 
       <StatsGrid
@@ -420,7 +438,7 @@ export default function SLAPage() {
           <TabsTrigger value="overview">{t('SLAPage.tabs.overview')}</TabsTrigger>
           <TabsTrigger value="policies">{t('SLAPage.tabs.policies', { count: allPolicies.length })}</TabsTrigger>
           <TabsTrigger value="breaches">{t('SLAPage.tabs.breaches', { count: allBreaches.length })}</TabsTrigger>
-          <TabsTrigger value="reports">Reports</TabsTrigger>
+          <TabsTrigger value="reports">{t('SLAPage.tabs.reports')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="reports"><SLAReportsPanel policies={allPolicies} /></TabsContent>

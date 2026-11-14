@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,66 @@ def _sanitize_webhook_error(msg: str | None) -> str | None:
     if msg is None:
         return None
     return re.sub(r"https?://\S+", "<redacted-url>", msg)[:1024]
+
+
+def webhook_allowed_hosts() -> frozenset[str]:
+    """Hosts the deploy owner trusts as webhook targets even on a private network.
+
+    ``WEBHOOK_ALLOWED_HOSTS`` (comma-separated). Without an entry, a webhook can
+    only reach public addresses, which rules out the most common target of all
+    on a self-hosted controller: the n8n / Node-RED / Home Assistant on the same
+    LAN or tailnet. Entries are still DNS-pinned and TLS-verified at delivery,
+    and loopback, link-local and cloud-metadata addresses stay unreachable. Read
+    per call so an operator does not have to restart to add a host.
+    """
+    from app.core.config import settings as _settings
+
+    raw = getattr(_settings, "WEBHOOK_ALLOWED_HOSTS", "") or ""
+    return frozenset(h.strip().lower() for h in raw.split(",") if h.strip())
+
+
+def _validate_webhook_target(url: str) -> None:
+    """Form-field SSRF check at create/update time (delivery re-checks, pinned).
+
+    A host on the deploy owner's allow-list may resolve to a private address;
+    every other host must be public. Cloud-metadata hosts are refused either way.
+    """
+    from urllib.parse import urlparse
+
+    from app.core.security_utils import validate_url_ssrf
+
+    host = (urlparse(url).hostname or "").lower()
+    validate_url_ssrf(url, allow_private=bool(host) and host in webhook_allowed_hosts())
+
+
+# Event deliveries to an endpoint that has failed this many attempted
+# deliveries in a row, the newest within the pause window, are not attempted:
+# they go straight to the dead-letter queue, where they can be replayed. A dead
+# receiver otherwise costs one HTTP timeout per event on the shared "default"
+# Celery lane, which every heartbeat and notification also waits behind.
+CIRCUIT_FAILURE_THRESHOLD = 5
+CIRCUIT_PAUSE_SECONDS = 300
+EVENT_DELIVERY_TIMEOUT_SECONDS = 10.0
+
+# A delivery still pending or retrying this long after its row last changed has
+# lost its task (a worker died before acknowledging, the broker refused the
+# retry, a replay's enqueue failed). The sweeper requeues it. Longer than the
+# longest retry countdown (240 s) plus the retry task's time limit, so a
+# delivery that is merely waiting for its next attempt is never touched.
+STALLED_DELIVERY_SECONDS = 900
+
+
+def _subscriptions_changed() -> None:
+    """Make this process's event forwarder re-read the webhook map.
+
+    Other API workers pick the change up within ``SUBSCRIPTION_CACHE_SECONDS``.
+    """
+    try:
+        from app.services.webhook_events import webhook_event_forwarder
+
+        webhook_event_forwarder.invalidate()
+    except Exception:  # noqa: BLE001 - a cache hint must never fail a CRUD call
+        logger.debug("webhook forwarder invalidate failed", exc_info=True)
 
 
 class PersistentWebhookService:
@@ -103,7 +163,6 @@ class PersistentWebhookService:
     async def create_webhook(
         session: AsyncSession, data: dict[str, Any], user_id: UUID | None = None
     ) -> Any:
-        from app.core.security_utils import validate_url_ssrf
         from app.models.webhooks import Webhook
 
         # F-1: require organization_id at service layer to prevent tenant-less
@@ -117,7 +176,7 @@ class PersistentWebhookService:
         # and pins the IP. See security_utils.validate_url_ssrf docstring.
         url = data.get("url")
         if url:
-            validate_url_ssrf(url)  # raises ValueError on SSRF
+            _validate_webhook_target(url)  # raises ValueError on SSRF
 
         # D-4: explicit field allowlist prevents mass-assignment of internal counters
         _CREATE_FIELDS = {
@@ -144,6 +203,7 @@ class PersistentWebhookService:
         session.add(wh)
         await session.flush()
         await session.refresh(wh)
+        _subscriptions_changed()
         return wh
 
     @staticmethod
@@ -153,8 +213,6 @@ class PersistentWebhookService:
         data: dict[str, Any],
         organization_id: UUID | None = None,
     ) -> Any:
-        from app.core.security_utils import validate_url_ssrf
-
         wh = await PersistentWebhookService.get_webhook(
             session, webhook_id, organization_id=organization_id
         )
@@ -163,7 +221,7 @@ class PersistentWebhookService:
 
         # Validate new URL if being changed
         if "url" in data and data["url"]:
-            validate_url_ssrf(data["url"])
+            _validate_webhook_target(data["url"])
 
         # D-3: use key-presence check (not `v is not None`) so callers can
         # explicitly clear nullable fields like `secret` by passing None.
@@ -190,6 +248,7 @@ class PersistentWebhookService:
         wh.updated_at = datetime.now(UTC)
         await session.flush()
         await session.refresh(wh)
+        _subscriptions_changed()
         return wh
 
     @staticmethod
@@ -206,6 +265,7 @@ class PersistentWebhookService:
             return False
         await session.delete(wh)
         await session.flush()
+        _subscriptions_changed()
         return True
 
     @staticmethod
@@ -222,6 +282,7 @@ class PersistentWebhookService:
         wh.updated_at = datetime.now(UTC)
         await session.flush()
         await session.refresh(wh)
+        _subscriptions_changed()
         return wh
 
     @staticmethod
@@ -238,6 +299,7 @@ class PersistentWebhookService:
         wh.updated_at = datetime.now(UTC)
         await session.flush()
         await session.refresh(wh)
+        _subscriptions_changed()
         return wh
 
     # =====================================================================
@@ -338,23 +400,40 @@ class PersistentWebhookService:
         event_id: str | None = None,
         *,
         _webhook: Any = None,  # D-5: pre-loaded Webhook to avoid N+1 re-fetch
+        timeout: float = 30.0,
+        durable: bool = False,
     ) -> Any:
-        """Send a webhook delivery."""
+        """Send a webhook delivery.
+
+        ``durable=True`` (event deliveries, see ``dispatch_event``) commits the
+        pending row BEFORE the POST and the outcome right after it, and only then
+        enqueues a retry. Without it the row, the outcome and the retry all
+        rode on the caller's single commit at the end of the task: a commit that
+        failed after a POST had been sent, or had failed, left no record and a
+        retry task with nothing to find, and the event was lost. Now the worst
+        case is a pending row with no task, which ``requeue_stalled_deliveries``
+        sends again: a duplicate, never a loss (at-least-once, deduplicated by
+        ``X-Webhook-Event-Id``).
+        """
         from app.models.webhooks import DeliveryStatus, WebhookDelivery
 
         wh = _webhook or await PersistentWebhookService.get_webhook(session, webhook_id)
         if not wh or not wh.enabled:
             return None
 
+        body_id = payload.get("id") if isinstance(payload, dict) else None
         delivery = WebhookDelivery(
             webhook_id=webhook_id,
-            event_id=event_id or str(uuid4()),
+            # The header must equal the body's ``id`` whenever the body has one.
+            event_id=event_id or (str(body_id)[:64] if body_id else None) or str(uuid4()),
             event_type=event_type,
             status=DeliveryStatus.PENDING,
             payload=payload,
         )
         session.add(delivery)
         await session.flush()
+        if durable:
+            await session.commit()
 
         # Attempt HTTP delivery
         # safe_http_request applies DNS-rebinding-safe SSRF guard
@@ -365,6 +444,9 @@ class PersistentWebhookService:
             "Content-Type": "application/json",
             "X-Webhook-Event": event_type,
             "X-Webhook-Delivery": str(delivery.id),
+            # Stable across retries and replays of the same event, so a
+            # receiver can drop a duplicate (delivery is at-least-once).
+            "X-Webhook-Event-Id": delivery.event_id,
         }
 
         body = json.dumps(payload, default=str)
@@ -388,7 +470,8 @@ class PersistentWebhookService:
                 content=body,
                 headers=headers,
                 verify_tls=wh.verify_ssl,
-                timeout=30.0,
+                timeout=timeout,
+                allow_hosts=webhook_allowed_hosts(),
             )
 
             elapsed = (time.monotonic() - start_time) * 1000
@@ -430,18 +513,22 @@ class PersistentWebhookService:
 
         wh.last_triggered = datetime.now(UTC)
         wh.retry_count += 1 if delivery.status == DeliveryStatus.FAILED else 0
+        if delivery.status == DeliveryStatus.FAILED and wh.max_retries > 0:
+            # Recorded as retrying before the retry is queued, so the row says
+            # what will happen even if the enqueue below fails (the sweeper then
+            # requeues it).
+            delivery.status = DeliveryStatus.RETRYING
         await session.flush()
+        if durable:
+            await session.commit()
         await session.refresh(delivery)
 
         # C-3: On initial failure, enqueue retry AFTER flush so the delivery row
-        # is at minimum written (and will be committed by the caller).  If the
-        # parent transaction subsequently rolls back, the Celery task will not
-        # find the delivery and will log a warning — preferable to never
-        # persisting the delivery at all.
-        if delivery.status == DeliveryStatus.FAILED and wh.max_retries > 0:
+        # is at minimum written (and, for a durable delivery, committed). For a
+        # non-durable delivery the caller commits; if that transaction rolls back
+        # the Celery task does not find the delivery and logs a warning.
+        if delivery.status == DeliveryStatus.RETRYING:
             try:
-                delivery.status = DeliveryStatus.RETRYING
-                await session.flush()  # write before enqueue so delivery exists
                 from app.tasks.webhooks import retry_webhook_delivery
 
                 # No queue= here: an explicit queue kwarg on apply_async overrides
@@ -462,7 +549,10 @@ class PersistentWebhookService:
     @staticmethod
     async def test_webhook(session: AsyncSession, webhook_id: UUID) -> dict[str, Any]:
         """Send a test payload to a webhook."""
+        event_id = str(uuid4())
         test_payload = {
+            # Same id as X-Webhook-Event-Id, like every real delivery.
+            "id": event_id,
             "event": "webhook.test",
             "timestamp": datetime.now(UTC).isoformat(),
             "message": "This is a test webhook delivery from FreeSDN",
@@ -474,6 +564,7 @@ class PersistentWebhookService:
             webhook_id,
             event_type="webhook.test",
             payload=test_payload,
+            event_id=event_id,
         )
 
         if not delivery:
@@ -505,58 +596,164 @@ class PersistentWebhookService:
         organization_id: UUID | None = None,
     ) -> int:
         """
-        Dispatch an event to all subscribed webhooks for the given organization.
+        Deliver one event to every enabled webhook of its organization that wants it.
+
+        Called by the ``app.tasks.webhooks.deliver_event`` task, which the
+        event-bus forwarder (``app.services.webhook_events``) enqueues.
 
         Args:
-            session: DB session
-            event_type: The event type string (e.g. "device.status.changed")
-            payload: Event data payload
-            event_id: Optional unique event ID for dedup/logging
-            organization_id: Scope delivery to this org's webhooks only.
-                             Passing None will dispatch to ALL enabled webhooks
-                             (super-admin use case). Always pass org_id from
-                             user-facing code to prevent cross-org delivery.
+            session: DB session (the caller commits).
+            event_type: The event type string (e.g. "device.status.changed").
+            payload: The JSON body to send (see ``webhook_events.build_envelope``).
+            event_id: The bus event id. A webhook that already has a delivery
+                for it is skipped, so a redelivered task does not post twice.
+            organization_id: REQUIRED. ``None`` delivers to nobody: an event
+                that belongs to no tenant must not reach every tenant's hooks.
 
         Returns:
-            Number of webhooks notified.
+            Number of webhooks a delivery was recorded for.
         """
-        from app.models.webhooks import Webhook
+        from app.models.webhooks import Webhook, WebhookDelivery
+        from app.services.webhook_events import webhook_wants
 
-        # SECURITY: always scope to the org that owns the event when provided.
-        # Without this, a device.offline event for org A could fire org B's webhooks.
-        q = select(Webhook).where(Webhook.enabled.is_(True))
-        if organization_id is not None:
-            q = q.where(Webhook.organization_id == organization_id)
-        webhooks = (await session.execute(q)).scalars().all()
+        if organization_id is None:
+            return 0
+
+        webhooks = (
+            (
+                await session.execute(
+                    select(Webhook).where(
+                        Webhook.enabled.is_(True),
+                        Webhook.organization_id == organization_id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
 
         count = 0
         for wh in webhooks:
-            # Check if webhook is subscribed to this event type
-            if wh.event_types and event_type not in wh.event_types:
+            if not webhook_wants(wh.event_types, event_type):
                 continue
 
-            # D-5: pass the already-loaded wh object to avoid an N+1 re-fetch
+            if event_id:
+                already = await session.scalar(
+                    select(func.count(WebhookDelivery.id)).where(
+                        WebhookDelivery.webhook_id == wh.id,
+                        WebhookDelivery.event_id == event_id,
+                    )
+                )
+                if already:
+                    continue
+
+            if await PersistentWebhookService._circuit_open(session, wh.id):
+                await PersistentWebhookService._dead_letter_unsent(
+                    session, wh, event_type, payload, event_id
+                )
+                # Per webhook, like the durable send below: a later webhook's
+                # failure must not roll this record back.
+                await session.commit()
+                count += 1
+                continue
+
+            # D-5: pass the already-loaded wh object to avoid an N+1 re-fetch.
+            # durable: each webhook's delivery is committed on its own, so a
+            # redelivered task skips the webhooks already recorded (the check
+            # above) instead of losing or repeating all of them together.
             await PersistentWebhookService.dispatch_webhook(
-                session, wh.id, event_type, payload, event_id, _webhook=wh
+                session,
+                wh.id,
+                event_type,
+                payload,
+                event_id,
+                _webhook=wh,
+                timeout=EVENT_DELIVERY_TIMEOUT_SECONDS,
+                durable=True,
             )
             count += 1
 
         return count
 
-    # =====================================================================
-    # Cleanup
-    # =====================================================================
-
     @staticmethod
-    async def cleanup_old_deliveries(session: AsyncSession, days: int = 30) -> int:
-        """Clean up old delivery log entries."""
+    async def _circuit_open(session: AsyncSession, webhook_id: UUID) -> bool:
+        """True when the last N ATTEMPTED deliveries all failed, newest recently.
+
+        Only attempted deliveries (``sent_at`` set) count, so the deliveries
+        this skips do not keep the circuit open: once the newest attempt is
+        older than the pause window, the next event is tried again.
+        """
         from datetime import timedelta
 
-        from app.models.webhooks import WebhookDelivery
+        from app.models.webhooks import DeliveryStatus, WebhookDelivery
 
-        cutoff = datetime.now(UTC) - timedelta(days=days)
-        result = await session.execute(
-            delete(WebhookDelivery).where(WebhookDelivery.created_at < cutoff)
+        recent = (
+            await session.execute(
+                select(WebhookDelivery.status, WebhookDelivery.sent_at)
+                .where(
+                    WebhookDelivery.webhook_id == webhook_id,
+                    WebhookDelivery.sent_at.isnot(None),
+                )
+                .order_by(WebhookDelivery.sent_at.desc())
+                .limit(CIRCUIT_FAILURE_THRESHOLD)
+            )
+        ).all()
+        if len(recent) < CIRCUIT_FAILURE_THRESHOLD:
+            return False
+        if any(
+            str(status) not in (DeliveryStatus.FAILED, DeliveryStatus.RETRYING)
+            for status, _ in recent
+        ):
+            return False
+        newest: datetime | None = recent[0][1]
+        if newest is None:
+            return False
+        return newest >= datetime.now(UTC) - timedelta(seconds=CIRCUIT_PAUSE_SECONDS)
+
+    @staticmethod
+    async def _dead_letter_unsent(
+        session: AsyncSession,
+        wh: Any,
+        event_type: str,
+        payload: dict[str, Any],
+        event_id: str | None,
+    ) -> None:
+        """Record an event that was not sent because the endpoint is failing.
+
+        It is visible in the delivery log as failed and sits in the dead-letter
+        queue, so the operator can replay it once the receiver is back.
+        """
+        from app.models.webhooks import DeliveryStatus, WebhookDeadLetter, WebhookDelivery
+
+        reason = (
+            f"Not sent: the last {CIRCUIT_FAILURE_THRESHOLD} deliveries to this endpoint "
+            f"failed, so deliveries are paused for {CIRCUIT_PAUSE_SECONDS // 60} minutes. "
+            "Replay this from the dead-letter queue once the receiver is back."
         )
+        now = datetime.now(UTC)
+        delivery = WebhookDelivery(
+            webhook_id=wh.id,
+            event_id=event_id or str(uuid4()),
+            event_type=event_type,
+            status=DeliveryStatus.FAILED,
+            payload=payload,
+            attempt_number=0,
+            error_message=reason,
+        )
+        session.add(delivery)
         await session.flush()
-        return result.rowcount or 0  # type: ignore[attr-defined]
+        session.add(
+            WebhookDeadLetter(
+                webhook_id=wh.id,
+                delivery_id=delivery.id,
+                organization_id=wh.organization_id,
+                event_type=event_type,
+                payload=payload,
+                failure_reason=reason,
+                attempt_count=0,
+                final_attempt_at=now,
+            )
+        )
+        wh.failure_count += 1
+        wh.last_failure = now
+        await session.flush()

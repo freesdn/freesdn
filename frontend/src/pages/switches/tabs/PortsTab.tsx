@@ -5,13 +5,13 @@
  * switch detail view.
  *
  * Extracted from SwitchesPage as part of the monolith breakup. Owns the
- * search/selection UI-local state plus the TanStack Virtualizer for the
- * port table; the parent owns the port-edit + apply-profile dialogs and
+ * search/selection UI-local state; the port table is the shared DataTable
+ * (compact rows, right-aligned figures, the server's reason when the ports
+ * fail to load). The parent owns the port-edit + apply-profile dialogs and
  * passes openers as callbacks, plus the four port-control mutations.
  */
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   ArrowUpFromLine,
   Copy,
@@ -36,7 +36,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { cn } from '@/lib/utils';
+import { DisabledReason } from '@/components/ui/disabled-reason';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,14 +47,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SearchBar } from '@/components/ui/search-bar';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Tooltip,
   TooltipContent,
@@ -152,6 +146,12 @@ export interface PortsTabProps {
   poeToggleMutation: PortToggleMutationHandle;
   onPortEdit: (port: PortsTabPort) => void;
   onApplyProfile: (selectedPortIds: string[]) => void;
+  /** The ports are still loading (the table shows its skeleton). */
+  isLoading?: boolean;
+  /** The ports query failed: the table shows the server's reason. */
+  error?: unknown;
+  /** Retry the ports query. */
+  onRetry?: () => void;
 }
 
 export function PortsTab({
@@ -166,6 +166,9 @@ export function PortsTab({
   poeToggleMutation,
   onPortEdit,
   onApplyProfile,
+  isLoading = false,
+  error,
+  onRetry,
 }: PortsTabProps) {
   const { t } = useTranslation('switches');
   const [searchQuery, setSearchQuery] = useState('');
@@ -182,13 +185,240 @@ export function PortsTab({
     return true;
   });
 
-  const portTableContainerRef = useRef<HTMLDivElement>(null);
-  const portVirtualizer = useVirtualizer({
-    count: filteredPorts.length,
-    getScrollElement: () => portTableContainerRef.current,
-    estimateSize: () => 52,
-    overscan: 10,
-  });
+  const trafficCell = (port: PortsTabPort, direction: 'tx' | 'rx') => {
+    const bytes = direction === 'tx' ? port.tx_bytes : port.rx_bytes;
+    const packets = direction === 'tx' ? port.tx_packets : port.rx_packets;
+    const errors = direction === 'tx' ? port.tx_errors : port.rx_errors;
+    const utilization = direction === 'tx' ? port.tx_utilization : port.rx_utilization;
+    const arrow = direction === 'tx' ? '↑' : '↓';
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="ml-auto cursor-default">
+              {bytes > 0 ? (
+                <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                  <span className="text-xs tabular-nums">{arrow} {formatBytes(bytes)}</span>
+                  {utilization > 0 && (
+                    // A thin inline meter: the row stays one line per direction.
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-6 rounded-full bg-muted overflow-hidden" aria-hidden="true">
+                        <span
+                          className={`block h-full rounded-full ${getUtilizationColor(utilization)}`}
+                          style={{ width: `${Math.max(0, Math.min(utilization, 100))}%` }}
+                        />
+                      </span>
+                      <span className="text-[10px] tabular-nums text-muted-foreground w-6 text-right">{utilization.toFixed(0)}%</span>
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span className="text-muted-foreground text-xs">{arrow} 0</span>
+              )}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            <div className="text-xs space-y-1">
+              <div>{t(`PortsTab.traffic.${direction}Bytes`)}: {formatBytes(bytes)}</div>
+              <div>{t(`PortsTab.traffic.${direction}Packets`)}: {packets.toLocaleString()}</div>
+              {errors > 0 && <div className="text-destructive">{t(`PortsTab.traffic.${direction}Errors`)}: {errors.toLocaleString()}</div>}
+              {utilization > 0 && <div>{t('PortsTab.traffic.utilization')}: {utilization.toFixed(1)}%</div>}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  const portColumns: DataTableColumn<PortsTabPort>[] = [
+    {
+      id: 'port',
+      header: t('PortsTab.table.port'),
+      accessorFn: (port) => port.port_index,
+      cell: (port) => (
+        <div className="flex items-center gap-2 font-medium min-w-0">
+          <div className={`h-2.5 w-2.5 shrink-0 rounded-sm ${getPortSpeedColor(port).border.replace('border-', 'bg-')}`} aria-hidden="true" />
+          {/* One line per port: long port names (often the attached device)
+              truncate, with the full name on hover. */}
+          <span className="truncate max-w-[9rem]" title={port.port_name}>{port.port_name}</span>
+          {port.port_type === 'sfp' && (
+            <span className="text-[10px] font-semibold px-1 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 leading-none">SFP+</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'status',
+      header: t('PortsTab.table.status'),
+      accessorFn: (port) => port.link_status,
+      cell: (port) => (
+        <div className="flex items-center gap-2 whitespace-nowrap">
+          <div className={`h-2 w-2 rounded-full ${getStatusColor(port.link_status)}`} aria-hidden="true" />
+          <span className="capitalize">{port.link_status}</span>
+        </div>
+      ),
+    },
+    {
+      id: 'connection',
+      header: t('PortsTab.table.connection'),
+      accessorFn: (port) => port.neighbor_device ?? '',
+      cell: (port) => port.neighbor_device ? (
+        <div className="text-sm min-w-0">
+          <div className="font-medium truncate max-w-[8rem]" title={port.neighbor_device}>{port.neighbor_device}</div>
+          {port.neighbor_port && <div className="text-muted-foreground text-xs truncate max-w-[8rem]">{port.neighbor_port}</div>}
+        </div>
+      ) : (
+        <span className="text-muted-foreground">-</span>
+      ),
+    },
+    {
+      id: 'speed',
+      header: t('PortsTab.table.speed'),
+      accessorFn: (port) => port.link_speed ?? 0,
+      align: 'right',
+      cell: (port) => (
+        <span className={cn('whitespace-nowrap', port.link_speed && port.link_speed >= 1000 && 'font-medium')}>
+          {formatSpeed(port.link_speed)}
+        </span>
+      ),
+    },
+    {
+      id: 'type',
+      header: t('PortsTab.table.type'),
+      accessorFn: (port) => port.vlan_mode,
+      sortable: false,
+      cell: (port) => (
+        <Badge variant="outline" className="text-xs capitalize">
+          {port.vlan_mode === 'trunk' ? t('PortsTab.table.trunk') : t('PortsTab.table.access')}
+        </Badge>
+      ),
+    },
+    {
+      id: 'vlan',
+      header: 'VLAN',
+      accessorFn: (port) => port.native_vlan,
+      align: 'right',
+      cell: (port) => (
+        <div className="flex items-center justify-end gap-1">
+          <Badge variant="outline" className="text-xs">{port.native_vlan}</Badge>
+          {port.vlan_mode === 'trunk' && port.tagged_vlans.length > 0 && (
+            <span className="text-xs text-muted-foreground">+{port.tagged_vlans.length}</span>
+          )}
+          {port.voice_vlan && (
+            <Badge variant="secondary" className="text-xs">voice:{port.voice_vlan}</Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'poe',
+      header: 'PoE',
+      accessorFn: (port) => (port.poe_enabled ? port.poe_power_draw ?? 0 : -1),
+      align: 'right',
+      cell: (port) => port.poe_enabled ? (
+        <div className="flex items-center justify-end gap-1.5">
+          <Zap className={`h-4 w-4 ${port.poe_status === 'delivering' ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'}`} aria-hidden="true" />
+          {port.poe_power_draw !== undefined && port.poe_power_draw > 0 ? (
+            // The PoE class (802.3af/at/bt) is in the tooltip: as a badge it
+            // pushed the actions column out of view at desktop width.
+            <span className="text-sm font-medium whitespace-nowrap" title={getPoeClassLabel(port.poe_class) || undefined}>{port.poe_power_draw.toFixed(1)}W</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">{t('PortsTab.poe.enabled')}</span>
+          )}
+        </div>
+      ) : (
+        <span className="text-xs text-muted-foreground">{t('PortsTab.poe.off')}</span>
+      ),
+    },
+    {
+      // Sent and received in one column (one line each), so the actions
+      // column stays in view at desktop width.
+      id: 'traffic',
+      header: t('PortsTab.table.traffic'),
+      accessorFn: (port) => port.tx_bytes + port.rx_bytes,
+      align: 'right',
+      cell: (port) => (
+        <div className="space-y-0.5">
+          {trafficCell(port, 'tx')}
+          {trafficCell(port, 'rx')}
+        </div>
+      ),
+    },
+    {
+      id: 'actions',
+      header: <span className="sr-only">{t('PortsTab.table.actions')}</span>,
+      sortable: false,
+      cell: (port) => showPortControls ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label={t('PortsTab.actions.menuFor', { port: port.port_name })}>
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onPortEdit(port)}>
+              <Settings className="mr-2 h-4 w-4" />
+              {t('PortsTab.actions.configure')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => selectedSwitchId && portBounceMutation.mutate({ switchId: selectedSwitchId, portIndex: port.port_index })}
+              disabled={portBounceMutation.isPending}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              {t('PortsTab.actions.bouncePort')}
+            </DropdownMenuItem>
+            {port.poe_enabled !== undefined && showPoeControls && (
+              <DropdownMenuItem
+                onClick={() => selectedSwitchId && poeCycleMutation.mutate({ switchId: selectedSwitchId, portIndex: port.port_index })}
+                disabled={poeCycleMutation.isPending}
+              >
+                <Power className="mr-2 h-4 w-4" />
+                {t('PortsTab.actions.poePowerCycle')}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => selectedSwitchId && portToggleMutation.mutate({ switchId: selectedSwitchId, portIndex: port.port_index, enabled: !port.enabled })}
+              disabled={portToggleMutation.isPending}
+            >
+              {port.enabled ? (
+                <>
+                  <ToggleLeft className="mr-2 h-4 w-4" />
+                  {t('PortsTab.actions.disable')}
+                </>
+              ) : (
+                <>
+                  <ToggleRight className="mr-2 h-4 w-4" />
+                  {t('PortsTab.actions.enable')}
+                </>
+              )}
+            </DropdownMenuItem>
+            {/* PoE toggle only if PoE capable port and control is supported */}
+            {port.poe_enabled !== undefined && showPoeControls && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => selectedSwitchId && poeToggleMutation.mutate({ switchId: selectedSwitchId, portIndex: port.port_index, enabled: !port.poe_enabled })}
+                  disabled={poeToggleMutation.isPending}
+                >
+                  <Zap className="mr-2 h-4 w-4" />
+                  {port.poe_enabled ? t('PortsTab.actions.disablePoe') : t('PortsTab.actions.enablePoe')}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        // A disabled button gets no pointer or focus events: the shared
+        // wrapper carries the reason so it can actually be read.
+        <DisabledReason reason={portDisabledReason || t('PortsTab.actions.controlNotSupported')}>
+          <Button variant="ghost" size="icon" disabled aria-label={portDisabledReason || t('PortsTab.actions.controlNotSupported')}>
+            <Info className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        </DisabledReason>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -221,7 +451,8 @@ export function PortsTab({
         </div>
       </div>
 
-      {/* Port Grid */}
+      {/* Port Grid (front panel), once the ports are in */}
+      {!isLoading && !error && (
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">{t('PortsTab.portStatus.title')}</CardTitle>
@@ -377,296 +608,26 @@ export function PortsTab({
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Ports Table */}
-      <Card>
-        <div ref={portTableContainerRef} className="max-h-[600px] overflow-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">
-                  <Checkbox
-                    checked={selectedPorts.length === filteredPorts.length}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setSelectedPorts(filteredPorts.map((p) => p.id));
-                      } else {
-                        setSelectedPorts([]);
-                      }
-                    }}
-                  />
-                </TableHead>
-                <TableHead>{t('PortsTab.table.port')}</TableHead>
-                <TableHead>{t('PortsTab.table.status')}</TableHead>
-                <TableHead>{t('PortsTab.table.connection')}</TableHead>
-                <TableHead>{t('PortsTab.table.speed')}</TableHead>
-                <TableHead>{t('PortsTab.table.type')}</TableHead>
-                <TableHead>VLAN</TableHead>
-                <TableHead>PoE</TableHead>
-                <TableHead>{t('PortsTab.table.txSum')}</TableHead>
-                <TableHead>{t('PortsTab.table.rxSum')}</TableHead>
-                <TableHead className="text-right">{t('PortsTab.table.actions')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {portVirtualizer.getVirtualItems().map((virtualRow) => {
-                const port = filteredPorts[virtualRow.index];
-                return (
-                  <TableRow
-                    key={port.id}
-                    data-index={virtualRow.index}
-                    ref={portVirtualizer.measureElement}
-                    style={{ height: `${virtualRow.size}px` }}
-                  >
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedPorts.includes(port.id)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedPorts([...selectedPorts, port.id]);
-                          } else {
-                            setSelectedPorts(selectedPorts.filter((id) => id !== port.id));
-                          }
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <div className={`h-2.5 w-2.5 rounded-sm ${getPortSpeedColor(port).border.replace('border-', 'bg-')}`} />
-                        {port.port_name}
-                        {port.port_type === 'sfp' && (
-                          <span className="text-[10px] font-semibold px-1 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 leading-none">SFP+</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className={`h-2 w-2 rounded-full ${getStatusColor(port.link_status)}`} />
-                        <span className="capitalize">{port.link_status}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {port.neighbor_device ? (
-                        <div className="text-sm">
-                          <div className="font-medium">{port.neighbor_device}</div>
-                          {port.neighbor_port && <div className="text-muted-foreground text-xs">{port.neighbor_port}</div>}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">·</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <span className={port.link_speed && port.link_speed >= 1000 ? 'font-medium' : ''}>
-                        {formatSpeed(port.link_speed)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs capitalize">
-                        {port.vlan_mode === 'trunk' ? t('PortsTab.table.trunk') : t('PortsTab.table.access')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Badge variant="outline" className="text-xs">
-                          {port.native_vlan}
-                        </Badge>
-                        {port.vlan_mode === 'trunk' && port.tagged_vlans.length > 0 && (
-                          <span className="text-xs text-muted-foreground">+{port.tagged_vlans.length}</span>
-                        )}
-                        {port.voice_vlan && (
-                          <Badge variant="secondary" className="text-xs">
-                            voice:{port.voice_vlan}
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {port.poe_enabled ? (
-                        <div className="flex items-center gap-1.5">
-                          <Zap className={`h-4 w-4 ${port.poe_status === 'delivering' ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'}`} />
-                          {port.poe_power_draw !== undefined && port.poe_power_draw > 0 ? (
-                            <>
-                              <span className="text-sm font-medium">{port.poe_power_draw.toFixed(1)}W</span>
-                              {getPoeClassLabel(port.poe_class) && (
-                                <span className="text-[10px] px-1 py-0.5 rounded bg-yellow-500/10 text-yellow-600 font-medium">{getPoeClassLabel(port.poe_class)}</span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">{t('PortsTab.poe.enabled')}</span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">{t('PortsTab.poe.off')}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="cursor-default min-w-[100px]">
-                              {port.tx_bytes > 0 ? (
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs tabular-nums">↑ {formatBytes(port.tx_bytes)}</span>
-                                    {port.tx_utilization > 0 && (
-                                      <span className="text-[10px] tabular-nums text-muted-foreground">{port.tx_utilization.toFixed(0)}%</span>
-                                    )}
-                                  </div>
-                                  {port.tx_utilization > 0 && (
-                                    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                                      <div
-                                        className={`h-full rounded-full transition-all ${getUtilizationColor(port.tx_utilization)}`}
-                                        style={{ width: `${Math.max(0, Math.min(port.tx_utilization, 100))}%` }}
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground text-xs">↑ 0</span>
-                              )}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <div className="text-xs space-y-1">
-                              <div>{t('PortsTab.traffic.txBytes')}: {formatBytes(port.tx_bytes)}</div>
-                              <div>{t('PortsTab.traffic.txPackets')}: {port.tx_packets.toLocaleString()}</div>
-                              {port.tx_errors > 0 && <div className="text-red-400">{t('PortsTab.traffic.txErrors')}: {port.tx_errors.toLocaleString()}</div>}
-                              {port.tx_utilization > 0 && <div>{t('PortsTab.traffic.utilization')}: {port.tx_utilization.toFixed(1)}%</div>}
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </TableCell>
-                    <TableCell>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="cursor-default min-w-[100px]">
-                              {port.rx_bytes > 0 ? (
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs tabular-nums">↓ {formatBytes(port.rx_bytes)}</span>
-                                    {port.rx_utilization > 0 && (
-                                      <span className="text-[10px] tabular-nums text-muted-foreground">{port.rx_utilization.toFixed(0)}%</span>
-                                    )}
-                                  </div>
-                                  {port.rx_utilization > 0 && (
-                                    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                                      <div
-                                        className={`h-full rounded-full transition-all ${getUtilizationColor(port.rx_utilization)}`}
-                                        style={{ width: `${Math.max(0, Math.min(port.rx_utilization, 100))}%` }}
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground text-xs">↓ 0</span>
-                              )}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <div className="text-xs space-y-1">
-                              <div>{t('PortsTab.traffic.rxBytes')}: {formatBytes(port.rx_bytes)}</div>
-                              <div>{t('PortsTab.traffic.rxPackets')}: {port.rx_packets.toLocaleString()}</div>
-                              {port.rx_errors > 0 && <div className="text-red-400">{t('PortsTab.traffic.rxErrors')}: {port.rx_errors.toLocaleString()}</div>}
-                              {port.rx_utilization > 0 && <div>{t('PortsTab.traffic.utilization')}: {port.rx_utilization.toFixed(1)}%</div>}
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {showPortControls ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => onPortEdit(port)}>
-                              <Settings className="mr-2 h-4 w-4" />
-                              {t('PortsTab.actions.configure')}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => selectedSwitchId && portBounceMutation.mutate({ switchId: selectedSwitchId, portIndex: port.port_index })}
-                              disabled={portBounceMutation.isPending}
-                            >
-                              <RefreshCw className="mr-2 h-4 w-4" />
-                              {t('PortsTab.actions.bouncePort')}
-                            </DropdownMenuItem>
-                            {port.poe_enabled !== undefined && showPoeControls && (
-                              <DropdownMenuItem
-                                onClick={() => selectedSwitchId && poeCycleMutation.mutate({ switchId: selectedSwitchId, portIndex: port.port_index })}
-                                disabled={poeCycleMutation.isPending}
-                              >
-                                <Power className="mr-2 h-4 w-4" />
-                                {t('PortsTab.actions.poePowerCycle')}
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => selectedSwitchId && portToggleMutation.mutate({ switchId: selectedSwitchId, portIndex: port.port_index, enabled: !port.enabled })}
-                              disabled={portToggleMutation.isPending}
-                            >
-                              {port.enabled ? (
-                                <>
-                                  <ToggleLeft className="mr-2 h-4 w-4" />
-                                  {t('PortsTab.actions.disable')}
-                                </>
-                              ) : (
-                                <>
-                                  <ToggleRight className="mr-2 h-4 w-4" />
-                                  {t('PortsTab.actions.enable')}
-                                </>
-                              )}
-                            </DropdownMenuItem>
-                            {/* PoE toggle only if PoE capable port and control is supported */}
-                            {port.poe_enabled !== undefined && showPoeControls && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() => selectedSwitchId && poeToggleMutation.mutate({ switchId: selectedSwitchId, portIndex: port.port_index, enabled: !port.poe_enabled })}
-                                  disabled={poeToggleMutation.isPending}
-                                >
-                                  {port.poe_enabled ? (
-                                    <>
-                                      <Zap className="mr-2 h-4 w-4" />
-                                      {t('PortsTab.actions.disablePoe')}
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Zap className="mr-2 h-4 w-4" />
-                                      {t('PortsTab.actions.enablePoe')}
-                                    </>
-                                  )}
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" disabled>
-                                <Info className="h-4 w-4 text-muted-foreground" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>{portDisabledReason || t('PortsTab.actions.controlNotSupported')}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      </Card>
+      <DataTable<PortsTabPort>
+        data={filteredPorts}
+        columns={portColumns}
+        isLoading={isLoading}
+        error={error}
+        onRetry={onRetry}
+        searchable={false}
+        density="compact"
+        selectable
+        selectedRows={ports.filter((port) => selectedPorts.includes(port.id))}
+        onSelectionChange={(rows) => setSelectedPorts(rows.map((row) => row.id))}
+        getRowLabel={(port) => port.port_name}
+        itemName={t('PortsTab.table.itemName')}
+        defaultPageSize={50}
+        pageSizeOptions={[25, 50, 100]}
+        skeletonRows={8}
+      />
     </>
   );
 }

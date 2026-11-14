@@ -74,6 +74,15 @@ async def test_unsupported_backup_capability_is_explicit_without_operation_io(
     monkeypatch.setattr(settings, "ADAPTER_READ_ONLY", read_only)
     before = await snapshot(f)
     response = await request(f, operation)
+    if read_only and operation == "create":
+        # Creating a backup is a gateway action, and read-only mode now refuses
+        # every gateway action before the gateway is contacted, so whether the
+        # vendor supports it is never asked.
+        assert response.status_code == 403
+        assert "Read-only mode is on" in response.json()["error"]["message"]
+        assert not f.requests and f.calls == []
+        assert await snapshot(f) == before
+        return
     assert response.status_code == 501
     assert response.json() == {
         "error": {

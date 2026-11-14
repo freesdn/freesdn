@@ -154,6 +154,12 @@ async def get_adapter_for_controller(
         from app.services.adapter_unifi_common import enforce_unifi_site_grant
 
         enforce_unifi_site_grant(controller, site_slug)
+    # A page's live read waits briefly for the controller's turn, or is answered
+    # with its last response (app/services/device_live_read.py).
+    from app.core.device_slot import controller_slot_key
+    from app.services.device_live_read import take_device_turn
+
+    await take_device_turn(controller_slot_key(controller))
     cfg: dict[str, Any] = controller.config or {}
     common_kwargs: dict[str, Any] = {
         "port": controller.port or 8443,

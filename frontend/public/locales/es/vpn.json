@@ -14,6 +14,10 @@
         "label": "Requiere autenticación",
         "description": "El demonio de Tailscale se está ejecutando pero no está autenticado. Inicie sesión para unirse a su tailnet."
       },
+      "disconnected": {
+        "label": "Desconectado",
+        "description": "Tailscale se está ejecutando y tiene la sesión iniciada, pero este nodo está desconectado de la tailnet."
+      },
       "awaiting_auth": {
         "label": "Esperando autorización",
         "description": "Abra la URL de autorización en su navegador para completar el inicio de sesión."
@@ -123,6 +127,11 @@
       "starting": "Iniciando demonio...",
       "start": "Iniciar el demonio de Tailscale"
     },
+    "disconnected": {
+      "title": "Tailscale está desconectado",
+      "description": "Este nodo se desconectó de la tailnet. Vuelva a conectarlo para recuperarlo con su nombre, rutas y ajustes guardados. No hace falta iniciar sesión de nuevo.",
+      "reconnecting": "Reconectando..."
+    },
     "unexpectedState": {
       "title": "Estado inesperado",
       "descriptionPrefix": "Tailscale está en el estado"
@@ -135,13 +144,17 @@
     },
     "confirm": {
       "disconnect": "¿Desconectar de la red de Tailscale?",
-      "logout": "Cerrar sesión desautorizará este nodo de su tailnet. ¿Continuar?"
+      "logout": "Cerrar sesión desautorizará este nodo de su tailnet. ¿Continuar?",
+      "disconnectBody": "Este nodo sale del tailnet hasta que lo vuelva a conectar. Sigue autorizado, así que reconectarlo no requiere un nuevo inicio de sesión. Si accede a FreeSDN a través de Tailscale, esa conexión se cortará.",
+      "logoutTitle": "¿Cerrar sesión en Tailscale?",
+      "logoutBody": "Este nodo se desautoriza de su tailnet. Para volver a unirse se necesita un nuevo inicio de sesión o una clave de autenticación. Si accede a FreeSDN a través de Tailscale, esa conexión se cortará."
     },
     "actions": {
       "copy": "Copiar",
       "retry": "Reintentar",
       "refresh": "Actualizar",
-      "reconnect": "Reconectar"
+      "reconnect": "Reconectar",
+      "copyField": "Copiar {{label}}"
     },
     "toast": {
       "copied": {
@@ -217,7 +230,8 @@
       "editAria": "Editar conexión",
       "deleteAria": "Eliminar conexión",
       "hideHealth": "Ocultar historial de estado",
-      "showHealth": "Mostrar historial de estado"
+      "showHealth": "Mostrar historial de estado",
+      "disconnectBody": "Esto desactiva el túnel en el servidor de FreeSDN de inmediato. Los sitios y dispositivos a los que se llega a través de él dejan de responder hasta que vuelvas a conectarlo. Si accedes a FreeSDN a través de este túnel, perderás el acceso."
     },
     "connectionForm": {
       "updatedToast": "Conexión actualizada",
@@ -410,7 +424,11 @@
       "allConnections": "Todas las conexiones VPN",
       "emptyTitle": "Sin conexiones VPN",
       "emptyDescription": "Aún no hay conexiones VPN configuradas. Cree su primera conexión para empezar a gestionar el acceso a la red remota.",
-      "emptyAction": "Crear primera conexión"
+      "emptyAction": "Crear primera conexión",
+      "disconnectedHint": "Este nodo está desconectado de la tailnet.",
+      "reconnect": "Reconectar",
+      "reconnected": "Tailscale reconectado",
+      "reconnectFailed": "No se pudo reconectar Tailscale"
     },
     "actions": {
       "newConnection": "Nueva conexión",
@@ -515,7 +533,7 @@
       "activeTunnels": "Túneles activos",
       "enable": "Habilitar",
       "disable": "Deshabilitar",
-      "disableConfirm": "¿Deshabilitar este túnel? El tráfico dejará de fluir.",
+      "disableConfirm": "¿Marcar este túnel como deshabilitado? FreeSDN deja de comprobar su estado. Los gateways conservan su configuración, así que el tráfico sigue fluyendo hasta que elimines el túnel.",
       "teardownConfirm": "¿Desmantelar el túnel entre {{siteA}} y {{siteB}}?",
       "siteA": "Sitio A",
       "siteB": "Sitio B",
@@ -523,7 +541,12 @@
       "provisioned": "Aprovisionado el {{date}}",
       "lastCheck": "Última comprobación {{date}}",
       "emptyTitle": "Sin túneles de sitio a sitio",
-      "emptyDescription": "Cree primero una plantilla de túnel y luego aprovisione túneles entre sus sitios."
+      "emptyDescription": "Cree primero una plantilla de túnel y luego aprovisione túneles entre sus sitios.",
+      "disableTitle": "¿Deshabilitar el túnel entre {{siteA}} y {{siteB}}?",
+      "disableBody": "FreeSDN deja de comprobar su estado. Los gateways conservan su configuración, así que el tráfico sigue fluyendo hasta que desmanteles el túnel.",
+      "disableAction": "Deshabilitar túnel",
+      "teardownBody": "FreeSDN pide de inmediato a ambos gateways que eliminen la configuración de este túnel y después elimina el túnel. Si un gateway no puede eliminarla, el túnel se elimina igualmente aquí y su configuración permanece en ese gateway, así que revisa ambos gateways después.",
+      "teardownAction": "Desmantelar túnel"
     },
     "conflictsTab": {
       "loadError": "No se pudieron cargar los datos de conflictos de rutas.",

@@ -75,6 +75,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from './dialog';
+import { getApiErrorMessage } from '@/lib/api/errors';
 import { Button } from './button';
 import { Form } from './form';
 import { cn } from '../../lib/utils';
@@ -439,14 +440,8 @@ function ErrorBanner({ message }: { message: string }) {
 }
 
 function extractErrorMessage(err: unknown, t: (key: string) => string): string {
-  if (!err) return t('WizardDialog.errors.unexpected');
-  if (typeof err === 'object' && err !== null && 'response' in err) {
-    const r = (err as { response?: { data?: { detail?: unknown; message?: unknown } } }).response;
-    const detail = r?.data?.detail;
-    if (typeof detail === 'string') return detail;
-    const message = r?.data?.message;
-    if (typeof message === 'string') return message;
-  }
-  if (err instanceof Error) return err.message;
-  return String(err);
+  // The shared reader covers the backend's { error: { message } } envelope,
+  // 422 field lists and network failures; reading only ``detail`` missed the
+  // envelope and showed a generic message for most server errors.
+  return getApiErrorMessage(err, t('WizardDialog.errors.unexpected'));
 }

@@ -5,6 +5,8 @@
  *
  * Lets users view, create, edit, start/stop PTZ patrol tours.
  * Each tour has an ordered list of preset stops with dwell time and speed.
+ * Running and stopping a tour needs `cameras.ptz`; editing and deleting one
+ * needs `cameras.manage_ptz` (see ./cameraPermissions).
  */
 
 import { useState, useEffect, useMemo } from "react";
@@ -22,6 +24,18 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { FormFieldArray } from "@/components/ui/form-field-array";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useCameraControlPermissions } from "./cameraPermissions";
+import { DisabledReason } from "@/components/ui/disabled-reason";
 import {
   Route,
   Play,
@@ -64,8 +78,12 @@ function TourCard({
 }) {
   const { t } = useTranslation("common");
   const qc = useQueryClient();
+  const { canPtz, canManagePtz } = useCameraControlPermissions();
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const runReason = canPtz ? undefined : t("CameraPermissions.needsPtzTour");
+  const manageReason = canManagePtz ? undefined : t("CameraPermissions.needsManagePtzTour");
 
   const tourForm = useForm<TourFormValues>({
     defaultValues: {
@@ -164,57 +182,87 @@ function TourCard({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* Start/Stop */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs gap-1"
-            disabled={!isOnline || !tour.enabled}
-            onClick={() => startMutation.mutate()}
-          >
-            {startMutation.isPending ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Play className="h-3 w-3" />
-            )}
-            {t("PTZToursPanel.actions.start")}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs gap-1"
-            disabled={!isOnline}
-            onClick={() => stopMutation.mutate()}
-          >
-            <Square className="h-3 w-3" />
-            {t("PTZToursPanel.actions.stop")}
-          </Button>
+          {/* Start/Stop: cameras.ptz */}
+          <DisabledReason reason={runReason}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              disabled={!isOnline || !tour.enabled || !canPtz}
+              onClick={() => startMutation.mutate()}
+            >
+              {startMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Play className="h-3 w-3" />
+              )}
+              {t("PTZToursPanel.actions.start")}
+            </Button>
+          </DisabledReason>
+          <DisabledReason reason={runReason}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              disabled={!isOnline || !canPtz}
+              onClick={() => stopMutation.mutate()}
+            >
+              <Square className="h-3 w-3" />
+              {t("PTZToursPanel.actions.stop")}
+            </Button>
+          </DisabledReason>
 
-          {/* Edit toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => setEditing(!editing)}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-
-          {/* Delete */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-destructive"
-            onClick={() => {
-              if (confirm(t("PTZToursPanel.confirmDelete"))) deleteMutation.mutate();
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          {/* Edit and delete change the tour for every viewer: cameras.manage_ptz */}
+          <DisabledReason reason={manageReason}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              disabled={!canManagePtz}
+              aria-label={t("PTZToursPanel.actions.edit")}
+              onClick={() => setEditing(!editing)}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          </DisabledReason>
+          <DisabledReason reason={manageReason}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-destructive"
+              disabled={!canManagePtz}
+              aria-label={t("PTZToursPanel.actions.delete")}
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </DisabledReason>
         </div>
       </CardHeader>
 
-      {editing && (
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("PTZToursPanel.confirmDelete")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("PTZToursPanel.confirmDeleteDescription", {
+                name: tour.name || t("PTZToursPanel.tourFallbackName", { id: tour.id }),
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteMutation.mutate()}
+            >
+              {t("PTZToursPanel.actions.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {editing && canManagePtz && (
         <CardContent className="space-y-3 pt-0">
           <div className="flex items-center gap-3">
             <Controller
@@ -356,7 +404,7 @@ function TourCard({
           <div className="flex items-center justify-end pt-2">
             <div className="flex items-center gap-2">
               {saveStatus === "success" && (
-                <span className="flex items-center gap-1 text-xs text-green-600">
+                <span className="flex items-center gap-1 text-xs text-success">
                   <CheckCircle2 className="h-3.5 w-3.5" /> {t("PTZToursPanel.status.saved")}
                 </span>
               )}

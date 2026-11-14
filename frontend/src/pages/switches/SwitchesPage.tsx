@@ -96,6 +96,7 @@ import { OverviewTab } from './tabs/OverviewTab';
 import { PortsTab } from './tabs/PortsTab';
 import { VlansTab } from './tabs/VlansTab';
 import { ConfigTab } from './tabs/ConfigTab';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // Types
 interface SwitchDevice {
@@ -332,7 +333,8 @@ export default function SwitchesPage() {
     data: portsData,
     isLoading: portsLoading,
     isError: portsError,
-    refetch: _refetchPorts,
+    error: portsLoadError,
+    refetch: refetchPorts,
   } = useQuery({
     queryKey: ['switch-ports', selectedSwitch?.id],
     queryFn: async () => {
@@ -517,7 +519,12 @@ export default function SwitchesPage() {
     staleTime: 15000,
   });
 
-  const { data: switchClients, isLoading: isClientsLoading, isError: isClientsError } = useQuery({
+  const {
+    data: switchClients,
+    isLoading: isClientsLoading,
+    error: clientsError,
+    refetch: refetchClients,
+  } = useQuery({
     queryKey: ['switch-clients', selectedSwitch?.id],
     queryFn: async () => {
       if (!selectedSwitch) return [];
@@ -530,7 +537,7 @@ export default function SwitchesPage() {
 
   // Aggregate error flags for the Config and Network tabs. If any of the
   // per-feature queries fail, surface a single ErrorState (with retry) for
-  // that tab, mirroring the isClientsError pattern.
+  // that tab, as the Clients tab does through its table.
   const configError = stpError || aclError || igmpError || mirrorError || qosError || dhcpSnoopingError;
   const networkError = staticRoutesError || dhcpError || lldpError || macTableError;
 
@@ -689,7 +696,7 @@ export default function SwitchesPage() {
       setLagForm({ name: '', mode: 'lacp', member_ports: [], lacp_mode: 'active', lacp_timeout: 'long' });
       toast({ title: t('SwitchesPage.toast.lagCreated') });
     },
-    onError: (err: any) => toast({ title: err?.response?.data?.detail || t('SwitchesPage.toast.lagCreateFailed'), variant: 'destructive' }),
+    onError: (err: any) => toast({ title: getApiErrorMessage(err, t('SwitchesPage.toast.lagCreateFailed')), variant: 'destructive' }),
   });
 
   const lagUpdateMutation = useMutation({
@@ -700,7 +707,7 @@ export default function SwitchesPage() {
       setEditingLag(null);
       toast({ title: t('SwitchesPage.toast.lagUpdated') });
     },
-    onError: (err: any) => toast({ title: err?.response?.data?.detail || t('SwitchesPage.toast.lagUpdateFailed'), variant: 'destructive' }),
+    onError: (err: any) => toast({ title: getApiErrorMessage(err, t('SwitchesPage.toast.lagUpdateFailed')), variant: 'destructive' }),
   });
 
   const lagDeleteMutation = useMutation({
@@ -710,7 +717,7 @@ export default function SwitchesPage() {
       setLagDeleteConfirm(null);
       toast({ title: t('SwitchesPage.toast.lagDeleted') });
     },
-    onError: (err: any) => toast({ title: err?.response?.data?.detail || t('SwitchesPage.toast.lagDeleteFailed'), variant: 'destructive' }),
+    onError: (err: any) => toast({ title: getApiErrorMessage(err, t('SwitchesPage.toast.lagDeleteFailed')), variant: 'destructive' }),
   });
 
   // Port profile create/edit/duplicate/delete (DB-backed /switches/profiles).
@@ -745,7 +752,7 @@ export default function SwitchesPage() {
       toast({ title: t('ProfilesTab.actions.createProfile') });
     },
     onError: (err: any) =>
-      toast({ title: err?.response?.data?.detail || err?.response?.data?.error?.message || t('common:error', { ns: 'common' }), variant: 'destructive' }),
+      toast({ title: getApiErrorMessage(err, t('common:error', { ns: 'common' })), variant: 'destructive' }),
   });
 
   const profileUpdateMutation = useMutation({
@@ -759,7 +766,7 @@ export default function SwitchesPage() {
       toast({ title: t('common:save', { ns: 'common' }) });
     },
     onError: (err: any) =>
-      toast({ title: err?.response?.data?.detail || err?.response?.data?.error?.message || t('common:error', { ns: 'common' }), variant: 'destructive' }),
+      toast({ title: getApiErrorMessage(err, t('common:error', { ns: 'common' })), variant: 'destructive' }),
   });
 
   const profileDeleteMutation = useMutation({
@@ -770,7 +777,7 @@ export default function SwitchesPage() {
       toast({ title: t('common:delete', { ns: 'common' }) });
     },
     onError: (err: any) =>
-      toast({ title: err?.response?.data?.detail || err?.response?.data?.error?.message || t('common:error', { ns: 'common' }), variant: 'destructive' }),
+      toast({ title: getApiErrorMessage(err, t('common:error', { ns: 'common' })), variant: 'destructive' }),
   });
 
   // Apply a DB-backed profile to the ports the user selected in PortsTab.
@@ -786,7 +793,7 @@ export default function SwitchesPage() {
       toast({ title: t('SwitchesPage.toast.profileApplied', { count: res?.data?.ports_updated ?? selectedPortIdsForProfile.length }) });
     },
     onError: (err: any) =>
-      toast({ title: err?.response?.data?.detail || err?.response?.data?.error?.message || t('common:error', { ns: 'common' }), variant: 'destructive' }),
+      toast({ title: getApiErrorMessage(err, t('common:error', { ns: 'common' })), variant: 'destructive' }),
   });
 
   const openCreateProfile = () => {
@@ -836,7 +843,7 @@ export default function SwitchesPage() {
       queryClient.invalidateQueries({ queryKey: ['switch-ports', selectedSwitch?.id] });
       toast({ title: t('SwitchesPage.toast.vlanAssignmentsUpdated') });
     },
-    onError: (err: any) => toast({ title: err?.response?.data?.detail || t('SwitchesPage.toast.vlanAssignmentsFailed'), variant: 'destructive' }),
+    onError: (err: any) => toast({ title: getApiErrorMessage(err, t('SwitchesPage.toast.vlanAssignmentsFailed')), variant: 'destructive' }),
   });
 
   // Port form state
@@ -1263,33 +1270,27 @@ export default function SwitchesPage() {
 
           {/* ═══ Ports Tab ═══ */}
           <TabsContent value="ports" className="space-y-4">
-            {portsError ? (
-              <ErrorState
-                message={t('SwitchesPage.errorState.message')}
-                onRetry={() => queryClient.invalidateQueries({ queryKey: ['switch-ports', selectedSwitch?.id] })}
-              />
-            ) : portsLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <PortsTab
-                ports={ports}
-                selectedSwitchId={selectedSwitch?.id}
-                showPortControls={showPortControls}
-                showPoeControls={showPoeControls}
-                portDisabledReason={portDisabledReason}
-                portBounceMutation={portBounceMutation}
-                poeCycleMutation={poeCycleMutation}
-                portToggleMutation={portToggleMutation}
-                poeToggleMutation={poeToggleMutation}
-                onPortEdit={handlePortEdit}
-                onApplyProfile={(selected) => {
-                  setSelectedPortIdsForProfile(selected);
-                  setApplyProfileDialogOpen(true);
-                }}
-              />
-            )}
+            {/* The table shows its own skeleton, and the server's reason
+                with a retry when the ports fail to load. */}
+            <PortsTab
+              ports={ports}
+              selectedSwitchId={selectedSwitch?.id}
+              showPortControls={showPortControls}
+              showPoeControls={showPoeControls}
+              portDisabledReason={portDisabledReason}
+              portBounceMutation={portBounceMutation}
+              poeCycleMutation={poeCycleMutation}
+              portToggleMutation={portToggleMutation}
+              poeToggleMutation={poeToggleMutation}
+              onPortEdit={handlePortEdit}
+              onApplyProfile={(selected) => {
+                setSelectedPortIdsForProfile(selected);
+                setApplyProfileDialogOpen(true);
+              }}
+              isLoading={portsLoading}
+              error={portsLoadError}
+              onRetry={() => { void refetchPorts(); }}
+            />
           </TabsContent>
 
           {/* ═══ VLANs Tab ═══ */}
@@ -1421,24 +1422,12 @@ export default function SwitchesPage() {
 
           {/* ═══ Clients Tab ═══ */}
           <TabsContent value="clients" className="space-y-4">
-            {isClientsError ? (
-              <Card>
-                <CardContent noOffset className="py-12">
-                  <EmptyState
-                    icon={AlertTriangle}
-                    title={t('SwitchesPage.clients.loadFailedTitle')}
-                    description={t('SwitchesPage.clients.loadFailedDesc')}
-                    variant="default"
-                    action={{ label: t('SwitchesPage.actions.retry'), onClick: () => queryClient.invalidateQueries({ queryKey: ['switch-clients', selectedSwitch?.id] }) }}
-                  />
-                </CardContent>
-              </Card>
-            ) : (
-              <SwitchClientsTab
-                clients={(switchClients as SwitchClient[] | undefined) || []}
-                isLoading={isClientsLoading}
-              />
-            )}
+            <SwitchClientsTab
+              clients={(switchClients as SwitchClient[] | undefined) || []}
+              isLoading={isClientsLoading}
+              error={clientsError}
+              onRetry={() => void refetchClients()}
+            />
           </TabsContent>
 
           {/* ═══ Diagnostics Tab ═══ */}
@@ -2110,28 +2099,31 @@ export default function SwitchesPage() {
             >
               <CollapsibleTrigger asChild>
                 <CardHeader className="cursor-pointer hover:bg-muted/50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                  {/* At phone width the name and model take the full row and
+                      the status and Manage go below; side by side, the name
+                      wrapped one word per line and the card clipped Manage. */}
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-testid="switch-row-header">
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                       {expandedSwitches.includes(sw.id) ? (
-                        <ChevronDown className="h-5 w-5" />
+                        <ChevronDown className="h-5 w-5 shrink-0" />
                       ) : (
-                        <ChevronRight className="h-5 w-5" />
+                        <ChevronRight className="h-5 w-5 shrink-0" />
                       )}
-                      <Network className="h-8 w-8 text-muted-foreground" />
-                      <div>
-                        <CardTitle className="text-xl">{sw.name}</CardTitle>
-                        <CardDescription>
+                      <Network className="hidden sm:block h-8 w-8 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <CardTitle className="text-base sm:text-xl truncate" title={sw.name}>{sw.name}</CardTitle>
+                        <CardDescription className="truncate">
                           {sw.vendor} {sw.model} • {sw.site_name}
                         </CardDescription>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-4 pl-8 sm:pl-0 shrink-0">
+                      <div className="sm:text-right">
+                        <div className="flex items-center gap-2 sm:justify-end">
                           <div className={`h-2 w-2 rounded-full ${getStatusColor(sw.status)}`} />
                           <span className="capitalize">{sw.status}</span>
                         </div>
-                        <div className="text-sm text-muted-foreground">
+                        <div className="text-sm text-muted-foreground whitespace-nowrap">
                           {t('SwitchesPage.list.portsUp', { up: sw.ports_up, total: sw.total_ports })}
                         </div>
                       </div>

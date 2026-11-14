@@ -1,25 +1,21 @@
 {
   "AccessControlPage": {
-    "title": "访问控制",
-    "description": "物理访问控制管理",
-    "comingSoon": "即将推出",
-    "comingSoonDescription": "物理访问控制集成计划在未来版本中推出。届时此处将提供门禁控制器、持卡人和事件管理功能。",
-    "features": {
-      "doorManagement": {
-        "title": "门禁管理",
-        "desc": "实时监控并控制门、闸门和栏杆。"
+    "title": "门禁控制",
+    "description": "物理门禁控制：门和凭证。",
+    "status": {
+      "title": "此模块目前能做什么",
+      "records": {
+        "title": "门和凭证记录可用",
+        "body": "FreeSDN 可以保存门和凭证记录：创建、编辑和删除，PIN 只以单向哈希保存。此页面暂时没有管理它们的界面。",
+        "where": "可通过以下 API 管理："
       },
-      "cardholders": {
-        "title": "持卡人与凭证",
-        "desc": "管理门禁卡、PIN 和生物识别凭证。"
+      "doorControl": {
+        "title": "物理门控制不可用",
+        "body": "在加入真正的门禁控制器适配器之前，锁门或开门请求都会被拒绝（API 返回 501），而目前还没有任何适配器。FreeSDN 无法开门或锁门。"
       },
-      "eventHistory": {
-        "title": "事件历史",
-        "desc": "完整的访问事件审计记录，支持搜索和导出。"
-      },
-      "accessPolicies": {
-        "title": "访问策略",
-        "desc": "基于时间的计划、防尾随和多因素规则。"
+      "module": {
+        "title": "默认关闭",
+        "body": "门禁控制模块默认关闭，并且是预览版：在出现门禁控制器适配器之前，无法为组织启用。其成熟度为“实验性”：功能已开发，但尚未在真实的门禁硬件上验证。"
       }
     }
   }

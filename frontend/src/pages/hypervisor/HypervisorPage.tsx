@@ -130,6 +130,7 @@ import { controllersApi, hypervisorApi } from '@/lib/api';
 //   - Dialog components in ./components/dialogs/* (must be ready
 //     synchronously when an action button fires)
 import { lazy, Suspense } from 'react';
+import { getApiErrorMessage } from '@/lib/api/errors';
 const MonitoringTab = lazy(() =>
   import('./components/MonitoringTab').then((m) => ({ default: m.MonitoringTab }))
 );
@@ -249,7 +250,9 @@ const NodesTab = ({
   if (nodes.length === 0) return <EmptyState icon={Server} title={t('HypervisorPage.nodes.emptyTitle')} />;
 
   return (
-    <div className="grid gap-4">
+    // grid-cols-1 bounds the track: an implicit auto column grew to the
+    // untruncated CPU model and pushed the status badge and memory off a phone.
+    <div className="grid grid-cols-1 gap-4">
       {nodes.map((node) => {
         const isExpanded = expandedNode === node.node;
         const nodeGuests = allGuests.filter((g) => g.node === node.node);
@@ -1063,13 +1066,13 @@ const StorageTab = ({
     <div className="space-y-4">
       {deletion && <StorageOperationDialog controllerId={controllerId} node={deletion.node} storage={deletion.storage} volume={deletion.volume} action="delete" onClose={() => setDeletion(null)} onTracked={() => { setDeletion(null); onTracked(); }} />}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {nodes.length > 1 && (
             <>
               <Label className="text-sm">{t('HypervisorPage.common.nodeLabel')}</Label>
               <Select value={activeStorageNode} onValueChange={setStorageNode}>
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-[200px] max-w-[60vw]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1863,7 +1866,7 @@ export function HypervisorPage() {
     },
     onError: (err: any) => {
       setPendingChangesOpen(true);
-      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.powerResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.powerResponseLost') + ' ' + (getApiErrorMessage(err)), variant: 'destructive' });
     },
   });
 
@@ -1900,7 +1903,7 @@ export function HypervisorPage() {
     },
     onError: (err: any) => {
       setPendingChangesOpen(true);
-      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.operationResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.operationResponseLost') + ' ' + (getApiErrorMessage(err)), variant: 'destructive' });
     },
   });
 
@@ -1934,7 +1937,7 @@ export function HypervisorPage() {
     },
     onError: (err: any) => {
       setPendingChangesOpen(true);
-      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.operationResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.operationResponseLost') + ' ' + (getApiErrorMessage(err)), variant: 'destructive' });
     },
   });
 
@@ -1968,7 +1971,7 @@ export function HypervisorPage() {
     },
     onError: (err: any) => {
       setPendingChangesOpen(true);
-      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.operationResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.operationResponseLost') + ' ' + (getApiErrorMessage(err)), variant: 'destructive' });
     },
   });
 
@@ -2001,7 +2004,7 @@ export function HypervisorPage() {
     },
     onError: (err: any) => {
       setPendingChangesOpen(true);
-      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (getApiErrorMessage(err)), variant: 'destructive' });
     },
   });
 
@@ -2032,7 +2035,7 @@ export function HypervisorPage() {
     },
     onError: (err: any) => {
       setPendingChangesOpen(true);
-      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (getApiErrorMessage(err)), variant: 'destructive' });
     },
   });
 
@@ -2052,7 +2055,7 @@ export function HypervisorPage() {
     },
     onError: (err: any) => {
       setPendingChangesOpen(true);
-      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (getApiErrorMessage(err)), variant: 'destructive' });
     },
   });
 
@@ -2099,7 +2102,7 @@ export function HypervisorPage() {
     },
     onError: (err: any) => {
       setPendingChangesOpen(true);
-      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (getApiErrorMessage(err)), variant: 'destructive' });
     },
   });
 
@@ -2120,9 +2123,11 @@ export function HypervisorPage() {
   };
   const clearSelection = () => setSelectedVMs(new Set());
 
-  const selectedTargets: BulkTarget[] = Array.from(selectedVMs).map((k) => {
+  const selectedTargets: Array<BulkTarget & { name?: string }> = Array.from(selectedVMs).map((k) => {
     const [node, vm_type, vmidStr] = k.split(':');
-    return { node, vm_type, vmid: parseInt(vmidStr) };
+    // The name only labels the guest in the bulk confirmation.
+    const name = (vm_type === 'lxc' ? containers : vms).find((g) => vmKey(g) === k)?.name;
+    return { node, vm_type, vmid: parseInt(vmidStr), name };
   });
 
   // ── Edit config dialog state ─────────────────────────────────────────
@@ -2181,7 +2186,7 @@ export function HypervisorPage() {
     },
     onError: (err: any) => {
       setPendingChangesOpen(true);
-      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (err?.response?.data?.detail || err.message), variant: 'destructive' });
+      toast({ title: t('HypervisorPage.toast.actionNeedsReview'), description: t('HypervisorPage.toast.recoveryResponseLost') + ' ' + (getApiErrorMessage(err)), variant: 'destructive' });
     },
   });
 

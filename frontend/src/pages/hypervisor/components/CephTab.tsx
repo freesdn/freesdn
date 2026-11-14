@@ -221,7 +221,8 @@ export function CephTab({ controllerId, nodes }: CephTabProps) {
                     <TableHead>{t('CephTab.osds.columns.crushWeight')}</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>                  {osds.map((osd: any) => {
+                <TableBody>
+                  {osds.map((osd: any) => {
                     const osdId = osd.id ?? osd.osd;
                     const totalBytes = osd.total_bytes || osd.kb * 1024 || 0;
                     const usedBytes = osd.used_bytes || osd.kb_used * 1024 || 0;
@@ -294,7 +295,8 @@ export function CephTab({ controllerId, nodes }: CephTabProps) {
                   <TableHead>{t('CephTab.pools.columns.usage')}</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>                {pools.map((pool: any) => (
+              <TableBody>
+                {pools.map((pool: any) => (
                   <TableRow key={pool.pool_name || pool.pool}>
                     <TableCell className="font-medium text-sm">
                       {pool.pool_name || pool.pool}
@@ -336,7 +338,8 @@ export function CephTab({ controllerId, nodes }: CephTabProps) {
                   <TableHead>{t('CephTab.monitors.columns.rank')}</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>                {mons.map((mon: any) => (
+              <TableBody>
+                {mons.map((mon: any) => (
                   <TableRow key={mon.name}>
                     <TableCell className="font-medium text-sm">{mon.name}</TableCell>
                     <TableCell className="font-mono text-xs">

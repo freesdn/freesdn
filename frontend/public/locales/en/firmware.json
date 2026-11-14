@@ -225,6 +225,13 @@
       "upgradeFailed": "Upgrade failed",
       "unknownError": "Unknown error"
     },
-    "catalogExecutionUnavailable": "This catalog stores firmware images and job history. Catalog deployment, automatic backup and rollback are unavailable. Use the controller-specific staged firmware workflow for supported upgrades. Historical catalog completions were not verified against hardware."
+    "catalogExecutionUnavailable": "This catalog stores firmware images and job history. Catalog deployment, automatic backup and rollback are unavailable. Use the controller-specific staged firmware workflow for supported upgrades. Historical catalog completions were not verified against hardware.",
+    "confirm": {
+      "deleteSchedule": {
+        "title": "Delete schedule \"{{name}}\"?",
+        "description": "Only the schedule is removed. Devices keep their current firmware.",
+        "confirmLabel": "Delete schedule"
+      }
+    }
   }
 }

@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { useSiteStore } from '@/stores/siteStore';
 import { z } from 'zod';
 import {
@@ -45,6 +46,7 @@ import { BulkActionsBar } from '@/components/ui/bulk-actions-bar';
 import { ErrorState } from '@/components/ui/empty-state';
 import { SearchBar } from '@/components/ui/search-bar';
 import { enterpriseApi, type SiteGroup, type DeviceGroup } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 const GROUP_TABS = ['site-groups', 'device-groups'] as const;
 
@@ -65,15 +67,14 @@ export default function SiteGroupsPage() {
   const [selectedDGs, setSelectedDGs] = useState<DeviceGroup[]>([]);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const selectedSiteId = useSiteStore((s) => s.selectedSiteId);
 
   // Surface backend 4xx through a toast, none of the 6 mutations below
   // had ``onError``, so destructive failures (delete denied, name
   // collision, parent_id cycle) used to look like a success to the user.
   const errToast = (title: string) => (err: unknown) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const detail = (err as any)?.response?.data?.detail
-      || (err instanceof Error ? err.message : t('SiteGroupsPage.errors.unknown'));
+    const detail = getApiErrorMessage(err, t('SiteGroupsPage.errors.unknown'));
     toast({ variant: 'destructive', title, description: String(detail) });
   };
 
@@ -237,12 +238,17 @@ export default function SiteGroupsPage() {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-destructive"
-            onClick={() => {
-              // Bulk Delete (line ~352) confirms; row-level was a single
-              // click. Mirror so a misclick can't wipe a group silently.
-              if (window.confirm(t('SiteGroupsPage.confirm.deleteSiteGroup', { name: r.name }))) {
-                deleteSG.mutate(r.id);
-              }
+            onClick={async () => {
+              // Bulk Delete confirms; row-level was a single click. Mirror
+              // so a misclick can't wipe a group silently.
+              const ok = await confirm({
+                title: t('SiteGroupsPage.confirm.deleteSiteGroup', { name: r.name }),
+                description: t('SiteGroupsPage.confirm.deleteSiteGroupDescription'),
+                items: [r.name],
+                confirmLabel: t('SiteGroupsPage.confirm.deleteSiteGroupAction'),
+                destructive: true,
+              });
+              if (ok) deleteSG.mutate(r.id);
             }}
           >
             <Trash2 className="h-4 w-4" />
@@ -284,10 +290,15 @@ export default function SiteGroupsPage() {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-destructive"
-            onClick={() => {
-              if (window.confirm(t('SiteGroupsPage.confirm.deleteDeviceGroup', { name: r.name }))) {
-                deleteDG.mutate(r.id);
-              }
+            onClick={async () => {
+              const ok = await confirm({
+                title: t('SiteGroupsPage.confirm.deleteDeviceGroup', { name: r.name }),
+                description: t('SiteGroupsPage.confirm.deleteDeviceGroupDescription'),
+                items: [r.name],
+                confirmLabel: t('SiteGroupsPage.confirm.deleteDeviceGroupAction'),
+                destructive: true,
+              });
+              if (ok) deleteDG.mutate(r.id);
             }}
           >
             <Trash2 className="h-4 w-4" />
@@ -379,8 +390,16 @@ export default function SiteGroupsPage() {
                 label: t('SiteGroupsPage.actions.delete'),
                 icon: Trash2,
                 variant: 'destructive',
-                onClick: () => {
-                  if (confirm(t('SiteGroupsPage.confirm.bulkDeleteSiteGroups', { count: selectedSGs.length }))) {
+                onClick: async () => {
+                  const ok = await confirm({
+                    title: t('SiteGroupsPage.confirm.bulkDeleteSiteGroups', { count: selectedSGs.length }),
+                    description: t('SiteGroupsPage.confirm.bulkDeleteSiteGroupsDescription'),
+                    count: selectedSGs.length,
+                    items: selectedSGs.map((sg) => sg.name),
+                    confirmLabel: t('SiteGroupsPage.confirm.bulkDeleteSiteGroupsAction'),
+                    destructive: true,
+                  });
+                  if (ok) {
                     selectedSGs.forEach((sg) => deleteSG.mutate(sg.id));
                     setSelectedSGs([]);
                   }
@@ -424,8 +443,16 @@ export default function SiteGroupsPage() {
                 label: t('SiteGroupsPage.actions.delete'),
                 icon: Trash2,
                 variant: 'destructive',
-                onClick: () => {
-                  if (confirm(t('SiteGroupsPage.confirm.bulkDeleteDeviceGroups', { count: selectedDGs.length }))) {
+                onClick: async () => {
+                  const ok = await confirm({
+                    title: t('SiteGroupsPage.confirm.bulkDeleteDeviceGroups', { count: selectedDGs.length }),
+                    description: t('SiteGroupsPage.confirm.bulkDeleteDeviceGroupsDescription'),
+                    count: selectedDGs.length,
+                    items: selectedDGs.map((dg) => dg.name),
+                    confirmLabel: t('SiteGroupsPage.confirm.bulkDeleteDeviceGroupsAction'),
+                    destructive: true,
+                  });
+                  if (ok) {
                     selectedDGs.forEach((dg) => deleteDG.mutate(dg.id));
                     setSelectedDGs([]);
                   }

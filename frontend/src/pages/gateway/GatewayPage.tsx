@@ -25,6 +25,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -199,6 +200,7 @@ export default function GatewayPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
 
   // ── Site context (global) ────────────────────────────────────────────
   const selectedSiteId = useSiteStore((s) => s.selectedSiteId);
@@ -648,8 +650,15 @@ export default function GatewayPage() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive"
-                onClick={() => {
-                  if (confirm(t('GatewayPage.vlanActions.deleteConfirm'))) {
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: t('GatewayPage.vlanActions.deleteTitle', { vlanId: row.vlan_id, name: row.name }),
+                    description: t('GatewayPage.vlanActions.deleteBody'),
+                    items: [`${row.vlan_id} ${row.name}`],
+                    confirmLabel: t('GatewayPage.vlanActions.deleteAction'),
+                    destructive: true,
+                  });
+                  if (ok) {
                     deleteVlanMutation.mutate(row.id);
                   }
                 }}
@@ -662,7 +671,7 @@ export default function GatewayPage() {
         ),
       },
     ],
-    [t, triggerDistMutation, deleteVlanMutation],
+    [t, confirm, triggerDistMutation, deleteVlanMutation],
   );
 
   function renderVlans() {
@@ -1086,8 +1095,15 @@ export default function GatewayPage() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive"
-                onClick={() => {
-                  if (confirm(t('GatewayPage.templateActions.deleteConfirm'))) {
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: t('GatewayPage.templateActions.deleteTitle', { name: row.name }),
+                    description: t('GatewayPage.templateActions.deleteBody'),
+                    items: [row.name],
+                    confirmLabel: t('GatewayPage.templateActions.deleteAction'),
+                    destructive: true,
+                  });
+                  if (ok) {
                     deleteTemplateMutation.mutate(row.id);
                   }
                 }}
@@ -1100,7 +1116,7 @@ export default function GatewayPage() {
         ),
       },
     ],
-    [t, deleteTemplateMutation],
+    [t, confirm, deleteTemplateMutation],
   );
 
   function renderTemplates() {

@@ -202,13 +202,15 @@ def _change(feature: str, operation: str, payload: dict) -> AdapterPendingChange
 
 
 def _session_for(change: AdapterPendingChange, controller_type: str) -> MagicMock:
-    """Mock session: 1st execute = the row claim, 2nd = the controller_type lookup."""
+    """Mock session: 1st execute = the row claim, 2nd = the controller_type lookup,
+    3rd = the device-slot lookup (no row: no slot is taken)."""
     session = MagicMock()
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
     claim = MagicMock(scalar_one_or_none=MagicMock(return_value=change))
     ctype = MagicMock(scalar_one_or_none=MagicMock(return_value=controller_type))
-    session.execute = AsyncMock(side_effect=[claim, ctype])
+    slot = MagicMock(first=MagicMock(return_value=None))
+    session.execute = AsyncMock(side_effect=[claim, ctype, slot])
     return session
 
 

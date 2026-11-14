@@ -120,13 +120,20 @@
       "trunkCreated": "Trunk created",
       "trunkCreateFailed": "Failed to create trunk · write API may not be available",
       "callOriginated": "Call originated",
-      "callOriginateFailed": "Failed to originate call"
+      "callOriginateFailed": "Failed to originate call",
+      "pbxDeleteFailed": "Could not delete the PBX"
     },
     "confirm": {
       "deleteExtension": "Delete extension {{number}}?",
       "deleteRingGroup": "Delete ring group {{number}}? This stages a delete for review.",
       "deleteInboundRoute": "Delete inbound route {{route}}? This stages a delete for review.",
-      "deleteTrunk": "Delete trunk \"{{name}}\"? This cannot be undone."
+      "deleteTrunk": "Delete trunk \"{{name}}\"? This cannot be undone.",
+      "stageDelete": "Stage delete",
+      "deleteInboundRouteTitle": "Delete inbound route {{route}}?",
+      "deleteRingGroupTitle": "Delete ring group {{number}}?",
+      "deleteTrunkTitle": "Delete trunk \"{{name}}\"?",
+      "deleteTrunkBody": "The trunk is deleted on the PBX itself, without a review step. This cannot be undone.",
+      "deleteTrunkAction": "Delete trunk"
     },
     "columns": {
       "extension": "Extension",
@@ -229,7 +236,7 @@
       "viewDescription": "Trunk registration and configuration details",
       "activeChannels": "Active channels",
       "editSettings": "Edit Settings",
-      "readOnlyNote": "Trunks are read-only here — FreePBX exposes no trunk write API. Manage trunks in the FreePBX admin UI."
+      "readOnlyNote": "Trunks are read-only here: FreePBX exposes no trunk write API. Manage trunks in the FreePBX admin UI."
     },
     "reloadBanner": {
       "message": "Configuration changes are staged on the PBX but not yet live. Apply Config to activate them (this reloads Asterisk)."
@@ -635,7 +642,8 @@
       "syncNow": "Sync Now",
       "viewExtensions": "View Extensions",
       "openWebUI": "Open Web UI",
-      "delete": "Delete"
+      "delete": "Delete",
+      "menuFor": "Actions for {{name}}"
     },
     "itemName": "PBX system",
     "itemNamePlural": "PBX systems",
@@ -723,6 +731,18 @@
       "tls": {
         "label": "Allow self-signed / expired TLS certificate",
         "help": "Check this only if your PBX uses a self-signed or expired cert. Default is strict verification. The override is per-PBX and audit-logged."
+      }
+    },
+    "confirm": {
+      "bulkDelete": {
+        "title_one": "Delete {{count}} PBX system?",
+        "title_other": "Delete {{count}} PBX systems?",
+        "body": "FreeSDN stops managing them and removes their connection settings. Nothing on the PBX systems themselves is changed.",
+        "action": "Delete PBX systems"
+      },
+      "delete": {
+        "title": "Delete {{name}}?",
+        "action": "Delete PBX"
       }
     }
   },
@@ -812,6 +832,20 @@
       "disableVoicemail": "Disabled voicemail for {{count}} extensions.",
       "deleteExtensionsSafety": "Delete extensions individually for safety.",
       "deleteRingGroupsSafety": "Delete ring groups individually for safety."
+    },
+    "confirm": {
+      "bulkDeleteExtensions": {
+        "title_one": "Delete {{count}} extension?",
+        "title_other": "Delete {{count}} extensions?",
+        "body": "Each extension is deleted on its PBX directly, without a review step.",
+        "action": "Delete extensions"
+      },
+      "bulkDeleteRingGroups": {
+        "title_one": "Delete {{count}} ring group?",
+        "title_other": "Delete {{count}} ring groups?",
+        "body": "Each ring group is deleted on its PBX directly, without a review step.",
+        "action": "Delete ring groups"
+      }
     }
   },
   "components": {
@@ -1020,7 +1054,7 @@
     "dataLoadError": "Some data failed to load. Results may be incomplete.",
     "unknown": "Unknown",
     "urgent": "Urgent",
-    "empty": "No voicemail messages",
+    "empty": "No voicemail messages stored. FreeSDN does not copy voicemail from the PBX yet: listen on the phone or in FreePBX.",
     "itemName": "voicemails",
     "columns": {
       "from": "From",
@@ -1038,6 +1072,10 @@
       "totalMessages": "Total Messages",
       "unread": "Unread",
       "urgent": "Urgent"
+    },
+    "collectionNotice": {
+      "title": "Voicemail messages are not imported yet",
+      "body": "FreeSDN does not yet copy voicemail messages from your PBX, so this inbox stays empty even when callers leave messages. Listen to messages on the phone or on the PBX. The mailboxes themselves are listed on each PBX's Voicemail tab under PBX Systems."
     }
   },
   "PBXExtensionsTab": {
@@ -1194,7 +1232,15 @@
     "confirm": {
       "deletePhone": "Delete phone \"{{name}}\"?",
       "deletePbx": "Delete PBX \"{{name}}\"? This cannot be undone.",
-      "deleteVoicemail": "Delete this voicemail?"
+      "deleteVoicemail": "Delete this voicemail?",
+      "deletePhoneBody": "The phone is removed from FreeSDN. The phone itself is not reset or changed.",
+      "deletePbxTitle": "Delete PBX \"{{name}}\"?",
+      "deletePbxBody": "FreeSDN stops managing this PBX and removes its connection settings. Nothing on the PBX itself is changed.",
+      "deleteRingGroupTitle": "Delete ring group \"{{name}}\"?",
+      "deleteRingGroupBody": "The ring group is deleted on the PBX itself, without a review step.",
+      "deleteRingGroupAction": "Delete ring group",
+      "deleteVoicemailBody": "It is removed from FreeSDN only. The message stays in the mailbox on the PBX.",
+      "deleteVoicemailAction": "Delete voicemail"
     },
     "phoneColumns": {
       "phone": "Phone",
@@ -1448,7 +1494,8 @@
       "maintenanceMode": "Maintenance Mode",
       "exitMaintenance": "Exit Maintenance",
       "decommission": "Decommission",
-      "delete": "Delete"
+      "delete": "Delete",
+      "menuFor": "Actions for {{name}}"
     },
     "itemName": {
       "phones": "phones",
@@ -1551,6 +1598,29 @@
           "noSip": "No discoverable phones with SIP info"
         },
         "failed": "Auto-link failed"
+      }
+    },
+    "confirm": {
+      "bulkDelete": {
+        "title_one": "Delete {{count}} phone?",
+        "title_other": "Delete {{count}} phones?",
+        "body": "They are removed from FreeSDN. The phones themselves are not reset or changed.",
+        "action": "Delete phones"
+      },
+      "bulkReboot": {
+        "title_one": "Reboot {{count}} phone?",
+        "title_other": "Reboot {{count}} phones?",
+        "body": "Each phone restarts now and drops any call in progress.",
+        "action": "Reboot phones"
+      },
+      "delete": {
+        "title": "Delete {{name}}?",
+        "action": "Delete phone"
+      },
+      "decommission": {
+        "title": "Decommission {{name}}?",
+        "body": "FreeSDN stops managing this phone and clears its PBX, extension and config template links. Nothing is sent to the phone: it keeps its current settings and registration. You can onboard it again later.",
+        "action": "Decommission phone"
       }
     }
   },
@@ -1695,9 +1765,11 @@
     "credentials": {
       "label": "Phone Login Credentials",
       "custom": "Custom credentials for phone web UI login",
-      "default": "Uses default admin/admin",
+      "default": "Off: phones are identified but never logged into",
       "username": "Username",
-      "password": "Password"
+      "password": "Password",
+      "tryDefault": "Try factory default login (admin/admin)",
+      "tryDefaultWarning": "Each wrong guess counts toward a phone's admin lockout, and the default password is sent to every phone the scan finds. Use only on a network you manage."
     },
     "history": {
       "title": "Scan History",
@@ -1871,8 +1943,9 @@
       "failed": "Failed"
     },
     "empty": {
-      "noRecords": "No call records found"
-    }
+      "noRecords": "No call records stored. Call history is imported from each PBX every 15 minutes, and only from a PBX connected with a FreePBX Admin API (OAuth2) application."
+    },
+    "subtitleCapped": "Showing the newest {{count}} call records"
   },
   "PBXConfigTab": {
     "heading": "PBX Configuration Snapshot",

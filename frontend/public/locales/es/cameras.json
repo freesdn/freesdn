@@ -187,7 +187,11 @@
         "download": "Descargar copia sellada",
         "release": "Liberar retención (eliminar archivo)",
         "confirmRelease": "¿Liberar esta retención de evidencia? La copia archivada y su hash se eliminarán permanentemente.",
-        "hint": "Las retenciones son copias duraderas del lado del servidor, selladas con un hash SHA-256 para la cadena de custodia. Sobreviven a la rotación de retención del NVR y quedan registradas en la auditoría."
+        "hint": "Las retenciones son copias duraderas del lado del servidor, selladas con un hash SHA-256 para la cadena de custodia. Sobreviven a la rotación de retención del NVR y quedan registradas en la auditoría.",
+        "confirmReleaseTitle": "¿Liberar esta retención de evidencia?",
+        "confirmReleaseBody": "La copia sellada y su hash SHA-256 se eliminan permanentemente. Si el NVR ya sobrescribió este intervalo, no quedará ninguna copia.",
+        "releaseAction": "Liberar retención",
+        "releaseFailed": "No se pudo liberar la retención de evidencia"
       },
       "list": {
         "title": "Grabaciones",

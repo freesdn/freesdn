@@ -7,6 +7,17 @@ import { lazy } from 'react';
 import { Network, Layers, Wifi, Plug, Globe, Server, Radio } from 'lucide-react';
 import type { FrontendModuleManifest } from '../types';
 
+// One lazy component per page, shared by every route that renders it. A
+// separate `lazy()` per route gave sibling routes (/switches/:id and
+// /switches/:id/:tab) different component types, so React remounted the whole
+// page, and showed the full-page "Loading module" fallback, on every tab click.
+const VlansPage = lazy(() => import('@/pages/network/VlansPage'));
+const WifiNetworksPage = lazy(() => import('@/pages/network/WifiNetworksPage'));
+const SwitchesPage = lazy(() => import('@/pages/switches/SwitchesPage'));
+const AccessPointsPage = lazy(() => import('@/pages/access-points/AccessPointsPage'));
+const PoEPage = lazy(() => import('@/pages/poe/PoEPage'));
+const VPNPage = lazy(() => import('@/pages/vpn/VPNPage'));
+
 export const networkModule: FrontendModuleManifest = {
   id: 'network',
   name: 'Network',
@@ -21,32 +32,32 @@ export const networkModule: FrontendModuleManifest = {
     },
     {
       path: '/vlans',
-      component: lazy(() => import('@/pages/network/VlansPage')),
+      component: VlansPage,
       title: 'VLANs',
     },
     {
       path: '/vlans/:tab',
-      component: lazy(() => import('@/pages/network/VlansPage')),
+      component: VlansPage,
       title: 'VLANs',
     },
     {
       path: '/network/vlans',
-      component: lazy(() => import('@/pages/network/VlansPage')),
+      component: VlansPage,
       title: 'VLANs',
     },
     {
       path: '/network/vlans/:tab',
-      component: lazy(() => import('@/pages/network/VlansPage')),
+      component: VlansPage,
       title: 'VLANs',
     },
     {
       path: '/wifi',
-      component: lazy(() => import('@/pages/network/WifiNetworksPage')),
+      component: WifiNetworksPage,
       title: 'WiFi Networks',
     },
     {
       path: '/network/wifi',
-      component: lazy(() => import('@/pages/network/WifiNetworksPage')),
+      component: WifiNetworksPage,
       title: 'WiFi Networks',
     },
     {
@@ -61,52 +72,52 @@ export const networkModule: FrontendModuleManifest = {
     },
     {
       path: '/switches',
-      component: lazy(() => import('@/pages/switches/SwitchesPage')),
+      component: SwitchesPage,
       title: 'Switches',
     },
     {
       path: '/switches/:deviceId',
-      component: lazy(() => import('@/pages/switches/SwitchesPage')),
+      component: SwitchesPage,
       title: 'Switches',
     },
     {
       path: '/switches/:deviceId/:tab',
-      component: lazy(() => import('@/pages/switches/SwitchesPage')),
+      component: SwitchesPage,
       title: 'Switches',
     },
     {
       path: '/access-points',
-      component: lazy(() => import('@/pages/access-points/AccessPointsPage')),
+      component: AccessPointsPage,
       title: 'Access Points',
     },
     {
       path: '/access-points/:deviceId',
-      component: lazy(() => import('@/pages/access-points/AccessPointsPage')),
+      component: AccessPointsPage,
       title: 'Access Points',
     },
     {
       path: '/access-points/:deviceId/:tab',
-      component: lazy(() => import('@/pages/access-points/AccessPointsPage')),
+      component: AccessPointsPage,
       title: 'Access Points',
     },
     {
       path: '/poe',
-      component: lazy(() => import('@/pages/poe/PoEPage')),
+      component: PoEPage,
       title: 'PoE',
     },
     {
       path: '/poe/:tab',
-      component: lazy(() => import('@/pages/poe/PoEPage')),
+      component: PoEPage,
       title: 'PoE',
     },
     {
       path: '/vpn',
-      component: lazy(() => import('@/pages/vpn/VPNPage')),
+      component: VPNPage,
       title: 'VPN',
     },
     {
       path: '/vpn/:tab',
-      component: lazy(() => import('@/pages/vpn/VPNPage')),
+      component: VPNPage,
       title: 'VPN',
     },
   ],

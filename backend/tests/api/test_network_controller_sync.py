@@ -158,6 +158,7 @@ async def test_push_wifi_reports_synced_on_success(monkeypatch):
     )
     session.flush = AsyncMock()
     monkeypatch.setattr(net, "_get_adapter_for_controller", AsyncMock(return_value=_FakeAdapter()))
+    _no_chokepoint(monkeypatch, net)
 
     out = await net._push_wifi_to_controller(session, wifi, action="delete")
     assert out == {"controller_synced": True, "controller_warning": None}
@@ -169,3 +170,21 @@ async def test_push_wifi_noop_when_no_controller():
     session = MagicMock()
     out = await net._push_wifi_to_controller(session, wifi, action="delete")
     assert out == {"controller_synced": True, "controller_warning": None}
+
+
+async def _straight_through(_db, **kwargs):
+    """Stand-in for the staging chokepoint, which needs a real session.
+
+    These tests are about how the endpoint reads the adapter's answer; the
+    chokepoint (read-only refusal, the ledger row) is covered by
+    tests/api/test_direct_writes_are_staged.py.
+    """
+    return await kwargs["perform"]()
+
+
+def _no_chokepoint(monkeypatch, module):
+    from unittest.mock import AsyncMock as _AsyncMock
+    from uuid import uuid4 as _uuid4
+
+    monkeypatch.setattr(module, "write_through_staging", _straight_through)
+    monkeypatch.setattr(module, "controller_scope", _AsyncMock(return_value=(_uuid4(), _uuid4())))

@@ -795,6 +795,15 @@ class EventType(StrEnum):
     CONTROLLER_SYNC_STARTED = "controller.sync.started"
     CONTROLLER_SYNC_COMPLETED = "controller.sync.completed"
     CONTROLLER_SYNC_FAILED = "controller.sync.failed"
+    # Reachability transitions from sync.check_controller_health (every 2 min).
+    # Published once per transition, not on every failed probe.
+    CONTROLLER_UNREACHABLE = "controller.unreachable"
+    CONTROLLER_RECOVERED = "controller.recovered"
+
+    # Gateway (firewall/router) periodic sync outcome, from the gateway module's
+    # SyncService. Carries organization_id, so webhooks can receive it.
+    GATEWAY_SYNC_COMPLETED = "gateway.sync.completed"
+    GATEWAY_SYNC_FAILED = "gateway.sync.failed"
 
     # Observability events. The collector publishes these after storing a
     # syslog message or SNMP trap, gated by severity and rate -- see

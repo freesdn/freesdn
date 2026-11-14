@@ -12,6 +12,7 @@ from app.adapters.base import AdapterResult
 from app.adapters.openwrt.adapter import OpenWRTAdapter
 from app.modules.firewall.gateway_service import adapter_registry
 from tests.modules import test_gateway_aggregate_availability as helpers
+from tests.modules.test_gateway_aggregate_availability import _without_as_of
 
 trigger = helpers.trigger
 aggregate_inventory = helpers.aggregate_inventory
@@ -65,7 +66,7 @@ async def test_actual_openwrt_summary_is_not_rejected(
     before = await snapshot(f)
     response = await request(f, "device-summary")
     assert response.status_code == 200
-    assert response.json() == {
+    assert _without_as_of(response.json()) == {
         "gateway_id": str(f.gateway.id),
         "vendor": "openwrt",
         "summary": {

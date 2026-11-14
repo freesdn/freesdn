@@ -7,7 +7,7 @@
  * expandable row detail, and CSV export.
  */
 
-import { useState, useCallback } from 'react';
+import { Fragment, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -51,6 +51,8 @@ import { Label } from '@/components/ui/label';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/layout';
+import { CapabilityMaturityBadge } from '@/components/ui/capability-maturity-badge';
+import { SeverityBadge } from './severity';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,35 +95,6 @@ interface Filters {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-const SEVERITY_COLORS: Record<string, string> = {
-  emergency: 'bg-red-600 text-white',
-  alert: 'bg-red-500 text-white',
-  critical: 'bg-red-400 text-white',
-  error: 'bg-orange-500 text-white',
-  warning: 'bg-yellow-500 text-black',
-  notice: 'bg-blue-500 text-white',
-  // Both spellings on purpose. The receivers store the RFC 5424 name
-  // ('informational' -- SEVERITY_NAMES in
-  // backend/app/modules/collector/services/syslog.py), while the filter
-  // dropdown, the API description and every syslog shorthand say 'info'.
-  // Keyed on 'info' alone, every stored row fell through to the default
-  // below and rendered as an un-tokenized light-grey pill in a dark-mode
-  // -default UI -- the single most common severity in the table.
-  informational: 'bg-blue-400 text-white',
-  info: 'bg-blue-400 text-white',
-  debug: 'bg-gray-400 text-white',
-};
-
-function SeverityBadge({ severity }: { severity: string | null }) {
-  if (!severity) return <Badge variant="outline">-</Badge>;
-  const cls = SEVERITY_COLORS[severity.toLowerCase()] ?? 'bg-gray-300 text-black';
-  return (
-    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>
-      {severity}
-    </span>
-  );
-}
 
 // ISO string for datetime-local inputs
 function toInputDatetime(iso: string): string {
@@ -303,6 +276,7 @@ export default function LogExplorerPage() {
       <PageHeader
         icon={ScrollText}
         title={t('LogExplorerPage.header.title')}
+        titleBadge={<CapabilityMaturityBadge capabilityId="collector" />}
         description={t('LogExplorerPage.header.description')}
       />
 
@@ -472,9 +446,8 @@ export default function LogExplorerPage() {
                 </TableHeader>
                 <TableBody>
                   {data.logs.map((log) => (
-                    <>
+                    <Fragment key={log.id}>
                       <TableRow
-                        key={log.id}
                         className="cursor-pointer hover:bg-muted/50"
                         onClick={() =>
                           setExpandedId(expandedId === log.id ? null : log.id)
@@ -508,8 +481,8 @@ export default function LogExplorerPage() {
                           <span className="text-muted-foreground">{log.message}</span>
                         </TableCell>
                       </TableRow>
-                      {expandedId === log.id && <LogDetailRow key={`${log.id}-detail`} log={log} />}
-                    </>
+                      {expandedId === log.id && <LogDetailRow log={log} />}
+                    </Fragment>
                   ))}
                 </TableBody>
               </Table>

@@ -123,6 +123,15 @@ def _validate_url_not_ssrf(url: str | None) -> str | None:
     return s
 
 
+# A DNS name (labels of letters, digits, hyphen; underscore tolerated because LAN
+# names use it), at most 253 characters, optional trailing dot.
+_HOSTNAME_RE = re.compile(
+    r"(?=.{1,254}\Z)"
+    r"(?:[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?\.)*"
+    r"[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?\.?"
+)
+
+
 def _validate_host_not_ssrf(host: str) -> str:
     """Block SSRF-dangerous hosts (loopback, metadata, link-local).
 
@@ -139,6 +148,16 @@ def _validate_host_not_ssrf(host: str) -> str:
     host = host.strip()
     if not host:
         raise ValueError("Host cannot be empty")
+    # A bracketed IPv6 literal is an address, not a hostname: check the address.
+    # Without this it failed the IP parse, failed DNS, and was let through.
+    if host.startswith("[") and host.endswith("]"):
+        inner = host[1:-1]
+        try:
+            ipaddress.ip_address(inner)
+        except ValueError:
+            raise ValueError(f"Host '{host}' is not a valid address") from None
+        _validate_host_not_ssrf(inner)
+        return host
     # Block common metadata hostnames
     _blocked_hostnames = {
         "localhost",
@@ -157,7 +176,14 @@ def _validate_host_not_ssrf(host: str) -> str:
     except ValueError as ve:
         if "blocked" in str(ve) or "not allowed" in str(ve):
             raise
-        # Not an IP — treat as hostname; block obvious internal patterns
+        # Not an IP, so it must be a plain hostname. This value is pasted into
+        # URLs (``rtsp://{host}:554/…``, ``http://{host}``), so a port, path,
+        # userinfo or fragment character would let it re-point the URL at a host
+        # this check never saw; and such a string never resolves, which the DNS
+        # step below treats as a pass.
+        if not _HOSTNAME_RE.fullmatch(host):
+            raise ValueError(f"Host '{host}' must be a hostname or IP address")
+        # Block obvious internal patterns
         if re.match(r"^internal[.-]|^localhost[.-]|^127\.", host, re.IGNORECASE):
             raise ValueError(f"Host '{host}' is not allowed")
         # Resolve DNS and validate all resolved addresses

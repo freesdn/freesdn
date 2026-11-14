@@ -185,6 +185,7 @@ class ConnectionInfo(BaseModel):
     connected_at: datetime = datetime.now(UTC)
     token_version: int = 0  # SECURITY: track for mid-session revocation
     access_jti: str | None = None  # SECURITY: per-device session revocation (W03/WS)
+    role: str | None = None  # a super admin's socket outlives its home org's retirement
     last_revalidated: datetime = datetime.now(UTC)
 
     class Config:
@@ -510,6 +511,53 @@ class ConnectionManager:
         # Check optional client-set site filter
         return not (info.site_ids and event_site_id and event_site_id not in info.site_ids)
 
+    async def close_organization_local(self, organization_id: str) -> int:
+        """Close the sockets this process holds for a retired organization.
+
+        Members of an organization that was deleted or deactivated are refused
+        everywhere else at once; their live sockets used to stay open until
+        the next revalidation, up to five minutes later. Super admins keep
+        theirs, as the admission rule in ``app.core.organization_access`` does.
+        Returns the number of sockets closed.
+        """
+        from app.core.organization_access import is_super_admin
+
+        closed = 0
+        for cid, info in list(self._connections.items()):
+            if str(info.organization_id) != organization_id or is_super_admin(info):
+                continue
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(
+                    info.websocket.send_json(
+                        {"type": "session_revoked", "message": "Your session has been revoked."}
+                    ),
+                    timeout=self._BROADCAST_SEND_TIMEOUT_SECONDS,
+                )
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(
+                    info.websocket.close(code=status.WS_1008_POLICY_VIOLATION),
+                    timeout=self._BROADCAST_SEND_TIMEOUT_SECONDS,
+                )
+            await self.disconnect(cid)
+            closed += 1
+        if closed:
+            logger.info(
+                "Closed %d realtime socket(s) of retired organization %s", closed, organization_id
+            )
+        return closed
+
+    async def close_organization(self, organization_id: str) -> None:
+        """Close a retired organization's member sockets on EVERY API process."""
+        await self.close_organization_local(organization_id)
+        try:
+            from app.services.websocket_pubsub import get_ws_pubsub
+
+            await get_ws_pubsub().publish_control(
+                {"kind": "organization_retired", "organization_id": organization_id}
+            )
+        except Exception:
+            logger.exception("Could not tell the other processes to close org %s", organization_id)
+
     @property
     def active_connections(self) -> int:
         return len(self._connections)
@@ -519,13 +567,34 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+async def handle_ws_control(payload: dict[str, Any]) -> None:
+    """Carry out a control order another process published (websocket_pubsub).
+
+    Every API process holds its own sockets, so a retirement or a deletion
+    handled by one process has to reach the others to close theirs.
+    """
+    kind = payload.get("kind")
+    if kind == "organization_retired" and payload.get("organization_id"):
+        await manager.close_organization_local(str(payload["organization_id"]))
+    elif kind == "agent_deleted" and payload.get("agent_id"):
+        from app.api.v1.endpoints import agents as agents_endpoint
+
+        registry = agents_endpoint._agent_registry
+        if registry is not None:
+            await registry.unregister_connection(str(payload["agent_id"]))
+
+
 async def _revalidate_ws_session(info: ConnectionInfo) -> bool:
     """Check if the user is still active and their token_version hasn't changed.
+
+    Also closes the socket of a member whose organization has been deleted or
+    deactivated, like the REST chokepoint does.
 
     Returns True if the session is still valid, False if it should be closed.
     """
     from sqlalchemy import select
 
+    from app.core.organization_access import organization_admits
     from app.db import async_session_factory
     from app.models import User
 
@@ -552,10 +621,21 @@ async def _revalidate_ws_session(info: ConnectionInfo) -> bool:
 
                 if await is_session_revoked_for_access_jti(session, info.access_jti):
                     return False
+            membership = (
+                await session.execute(
+                    select(User.role, User.organization_id).where(User.id == UUID(info.user_id))
+                )
+            ).one_or_none()
+            if membership is None or not await organization_admits(session, membership):
+                return False
         return True
     except Exception:
+        # Fail closed. This used to keep the socket open on any error, so a
+        # retired organization's member (or a revoked session) stayed connected
+        # for as long as the database could not be read. A closed socket costs
+        # a reconnect, which authenticates again; that is the safe direction.
         logger.warning("WebSocket revalidation failed for %s", info.user_id, exc_info=True)
-        return True  # fail-open on transient DB errors to avoid mass disconnects
+        return False
 
 
 # ===========================================
@@ -1102,6 +1182,7 @@ async def websocket_endpoint(
         # whose manager.connect() does not set them) then fail closed on revoke.
         _ci.token_version = auth.get("token_version", 0)
         _ci.access_jti = auth.get("access_jti")
+        _ci.role = auth.get("role")
         if not await _revalidate_ws_session(_ci):
             with contextlib.suppress(Exception):
                 await websocket.send_json(

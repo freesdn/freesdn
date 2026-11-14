@@ -71,7 +71,14 @@
       "typeCountPlural": "{{n}} types"
     },
     "confirm": {
-      "delete": "Delete this integration? This also removes all delivery history."
+      "delete": "Delete this integration? This also removes all delivery history.",
+      "deleteTitle": "Delete integration \"{{name}}\"?",
+      "deleteBody": "FreeSDN stops sending events to it, and all of its delivery history is removed. This cannot be undone.",
+      "deleteAction": "Delete integration",
+      "bulkDeleteTitle_one": "Delete {{count}} integration?",
+      "bulkDeleteTitle_other": "Delete {{count}} integrations?",
+      "bulkDeleteBody": "FreeSDN stops sending events to them, and all of their delivery history is removed. This cannot be undone.",
+      "bulkDeleteAction": "Delete integrations"
     },
     "toasts": {
       "createFailed": "Failed to create integration",

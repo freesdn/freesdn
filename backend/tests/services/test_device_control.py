@@ -23,6 +23,21 @@ def organization_id():
     return uuid.uuid4()
 
 
+@pytest.fixture(autouse=True)
+def _straight_through_chokepoint(monkeypatch):
+    """The database here is a mock, so the staging chokepoint and the action
+    audit run straight through. These tests are about dispatch and outcome
+    mapping; the chokepoint itself is covered by
+    tests/api/test_direct_writes_are_staged.py."""
+    import app.services.device_writes as device_writes
+
+    async def _through(_db, _device, **kwargs):
+        return await kwargs["perform"]()
+
+    monkeypatch.setattr(device_writes, "write_device_config", _through)
+    monkeypatch.setattr(device_writes, "device_action", _through)
+
+
 @pytest.fixture
 def mock_db(organization_id):
     """Async execute returns the synchronous SQLAlchemy result interface."""

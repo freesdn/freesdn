@@ -51,6 +51,7 @@ import { useToast } from '@/hooks/use-toast';
 import { hypervisorApi } from '@/lib/api';
 import { formatBytes, formatTimestamp } from './helpers';
 import type { HypervisorNode, HypervisorStorage } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface PBSTabProps {
   controllerId: string;
@@ -156,7 +157,7 @@ export function PBSTab({ controllerId, nodes }: PBSTabProps) {
     <div className="space-y-4">
       {storageError && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {t('PBSTab.storageError.prefix')}{String((storageErr as any)?.response?.data?.detail || (storageErr as any)?.message || t('PBSTab.storageError.unknown'))}.
+          {t('PBSTab.storageError.prefix')}{String(getApiErrorMessage(storageErr, t('PBSTab.storageError.unknown')))}.
           {' '}{t('PBSTab.storageError.suffix')}
         </div>
       )}

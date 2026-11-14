@@ -24,7 +24,8 @@
       "close": "关闭",
       "previewChanges": "预览更改",
       "restoreNow": "立即还原",
-      "selectItem": "选择 {{name}}"
+      "selectItem": "选择 {{name}}",
+      "menuFor": "{{name}} 的操作"
     },
     "common": {
       "encrypted": "已加密"
@@ -330,7 +331,9 @@
     },
     "bulk": {
       "itemName": "备份",
-      "deleteConfirm": "删除 {{count}} 个备份？"
+      "deleteConfirm": "删除 {{count}} 个备份？",
+      "deleteBody": "每个备份及其归档文件都将被删除。此操作无法撤销。",
+      "deleteAction": "删除备份"
     },
     "validation": {
       "nameRequired": "备份名称为必填项"
@@ -589,5 +592,105 @@
     "individual": "请逐个下载保管库存档。每个存档均需单独确认账户。",
     "downloadDispatched": "保管库下载已开始",
     "verifySaved": "请检查已保存的文件。浏览器发起下载请求不代表文件已保存。"
+  },
+  "DatabaseBackupStatus": {
+    "title": {
+      "healthy": "数据库备份：正常",
+      "unencrypted": "数据库备份：正常，但未加密",
+      "pending": "数据库备份：首次备份进行中",
+      "unknown": "数据库备份：状态未知",
+      "disabled": "数据库备份：已关闭",
+      "failing": "数据库备份：上次运行失败",
+      "stale": "数据库备份：已过期"
+    },
+    "body": {
+      "healthy": "pg-backup 按计划为两个数据库写入加密转储。这是本实例的灾难恢复备份；本页的配置快照不是。",
+      "unencrypted": "由于 BACKUP_ALLOW_PLAINTEXT=1，转储未加密。任何能读取备份卷的人都能读取所有已保存的凭据。",
+      "pending": "已配置加密；首次转储尚未完成。",
+      "unknown": "FreeSDN 无法读取 pg-backup 的状态（此服务未挂载 pg_backups 卷，或 pg-backup 尚未启动）。",
+      "disabled": "此 FreeSDN 没有任何数据库备份。pg-backup 拒绝写入未加密的转储，且未安装可用的 GPG 公钥。",
+      "failing": "上次 pg-backup 运行失败。请查看容器日志（docker compose logs pg-backup）。",
+      "stale": "在预期间隔内没有完成任何数据库备份。pg-backup 容器是否在运行？"
+    },
+    "reason": {
+      "no_key": "尚未安装公钥。",
+      "key_path_is_directory": "密钥路径是 Docker 在文件缺失时创建的目录。请在主机上删除它（sudo rmdir），运行下面的命令，然后重新创建 pg-backup 容器。",
+      "no_public_key": "密钥文件中没有 OpenPGP 公钥。",
+      "import_failed": "无法导入公钥。",
+      "ambiguous_key": "密钥文件包含多个密钥：请将 BACKUP_GPG_RECIPIENT 设置为要使用的指纹。",
+      "recipient_unusable": "无法为配置的接收者加密（没有匹配的密钥、已过期或已吊销）。将 BACKUP_GPG_RECIPIENT 留空即可使用文件中的密钥。"
+    },
+    "lastSuccess": "上次完成的备份：{{when}}",
+    "setupHint": "在 FreeSDN 主机上运行此命令以创建密钥对。它会为 pg-backup 安装公钥，一分钟内即开始备份：",
+    "privateKeyWarning": "私钥只交给您一次，FreeSDN 从不保存。请将其保存在此主机之外：没有它，任何备份都无法恢复。"
+  },
+  "DeviceConfigBackups": {
+    "title": "网络设备配置历史",
+    "description": "按计划以只读方式导出每台 OPNsense 和 OpenWrt 的配置（默认每天一次，可修改），仅在配置变化时保留并加密存储。机密信息始终以脱敏形式显示。",
+    "empty": "暂无可导出的设备。OPNsense 和 OpenWrt 网关会自动显示在这里。",
+    "disabled": "已停用",
+    "columns": {
+      "device": "设备",
+      "status": "上次导出",
+      "lastSuccess": "上次成功",
+      "versions": "版本数",
+      "nextRun": "下次运行",
+      "schedule": "计划"
+    },
+    "status": {
+      "changed": "已变更",
+      "unchanged": "无变化",
+      "failed": "失败",
+      "paused": "已暂停（轮询关闭）",
+      "never": "尚未导出",
+      "unsupported": "不支持",
+      "source_removed": "设备已删除"
+    },
+    "error": {
+      "timeout": "超时",
+      "auth_failed": "认证失败",
+      "unreachable": "无法访问",
+      "invalid_content": "导出内容无效",
+      "export_failed": "导出失败",
+      "unsupported": "不支持"
+    },
+    "actions": {
+      "history": "历史",
+      "capture": "立即备份",
+      "schedule": "计划"
+    },
+    "capture": {
+      "queued": "导出已排队",
+      "refused": "导出未开始"
+    },
+    "history": {
+      "title": "{{name}}：配置历史",
+      "redactedNote": "与上一版本相比的变化。机密值以指纹代替：指纹变化表示该机密已更改。",
+      "versions": "版本",
+      "none": "暂无版本。",
+      "noChanges": "没有差异。",
+      "summary": "新增 {{added}} 行，删除 {{removed}} 行",
+      "truncated": "（已截断）"
+    },
+    "permission": {
+      "manage": "更改计划和发起备份需要 firewall.manage_rules 权限，站点管理员及以上角色拥有该权限。",
+      "unschedulable": "此设备已无法导出，因此没有可更改的计划。"
+    },
+    "schedule": {
+      "title": "{{name}}：备份计划",
+      "description": "FreeSDN 导出此设备配置的频率。导出只从设备读取，从不写入设备；只有配置发生变化时才保留新版本。",
+      "enabled": "计划备份",
+      "enabledOn": "开启：FreeSDN 按此计划导出配置。",
+      "enabledOff": "关闭：不进行计划导出。“立即备份”仍可使用。",
+      "interval": "间隔",
+      "intervalHelp": "介于 {{min}} 到 {{max}} 小时之间。",
+      "everyHours": "每 {{hours}} 小时",
+      "daily": "每天（每 24 小时）",
+      "weekly": "每周（每 168 小时）",
+      "save": "保存计划",
+      "cancel": "取消",
+      "saved": "已保存 {{name}} 的计划",
+      "failed": "计划未保存"
+    }
   }
 }

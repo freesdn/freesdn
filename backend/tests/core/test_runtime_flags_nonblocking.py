@@ -18,6 +18,12 @@ inline through ``get_sync_redis()``, which:
 
 The safety semantics must NOT change: the gate still fails safe, and the first
 read in a process still consults Redis before answering.
+
+Since 26.12 Valkey caches a switch stored in Postgres. These tests are about the
+Valkey read, so the Postgres read is replaced by an instant "never saved", and
+the environment default is read-write (the shipped compose file), because an
+environment that enforces read-only now wins over the switch and would hide
+every change these tests make.
 """
 
 import asyncio
@@ -46,6 +52,13 @@ class _FakeRedis:
             time.sleep(self.delay)
         return self.value
 
+    def mget(self, keys: list[str]) -> list[str | None]:
+        # One round trip, like GET; the value key only (a pre-26.12 value).
+        return [self.get(keys[0]), None]
+
+    def eval(self, *_args: Any) -> int:
+        return 0
+
     def set(self, key: str, value: str, **kwargs: Any) -> bool:
         self.set_calls += 1
         if self.delay:
@@ -70,6 +83,13 @@ def clean_flag_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setattr(rf, "_cache", (None, 0.0))
     monkeypatch.setattr(rf, "_cache_primed", False)
     monkeypatch.setattr(rf, "_refresh_in_flight", False)
+    monkeypatch.setattr(rf, "_db_state", None)
+    monkeypatch.setattr(rf, "_db_read_at", None)
+    monkeypatch.setattr(rf, "_read_db", lambda: rf._NO_ROW)
+    # These tests' Postgres is a stand-in, so a cached value is never copied
+    # into the real database behind it.
+    monkeypatch.setattr(rf, "_promote_cached", lambda _cached: rf._NO_ROW)
+    monkeypatch.setattr(rf, "_env_default", lambda: False)
     yield
     deadline = time.monotonic() + 5.0
     while rf._refresh_in_flight and time.monotonic() < deadline:
@@ -77,6 +97,12 @@ def clean_flag_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     rf._cache = (None, 0.0)
     rf._cache_primed = False
     rf._client = None
+    rf._db_state = None
+    rf._db_read_at = None
+
+
+def _stored(read_only: bool) -> rf.StoredSwitch:
+    return rf.StoredSwitch(read_only, 0, "legacy_cache")
 
 
 def _install(monkeypatch: pytest.MonkeyPatch, fake: _FakeRedis) -> dict[str, Any]:
@@ -117,7 +143,7 @@ async def test_warm_refresh_does_not_block_the_event_loop(
     assert fake.get_calls == 1
 
     # Expire the cache, keeping the primed value.
-    monkeypatch.setattr(rf, "_cache", (True, 0.0))
+    monkeypatch.setattr(rf, "_cache", (_stored(True), 0.0))
 
     started = time.monotonic()
     result = rf.is_adapter_read_only()
@@ -148,7 +174,7 @@ async def test_concurrent_gate_checks_start_only_one_refresh(
     _install(monkeypatch, fake)
 
     await _prime_off_loop()
-    monkeypatch.setattr(rf, "_cache", (False, 0.0))
+    monkeypatch.setattr(rf, "_cache", (_stored(False), 0.0))
 
     for _ in range(20):
         rf.is_adapter_read_only()
@@ -201,7 +227,7 @@ async def test_stale_value_is_served_not_the_env_default(
     monkeypatch.setattr(rf, "_env_default", lambda: False)
 
     await _prime_off_loop()
-    monkeypatch.setattr(rf, "_cache", (True, 0.0))
+    monkeypatch.setattr(rf, "_cache", (_stored(True), 0.0))
 
     assert rf.is_adapter_read_only() is True
 
@@ -218,7 +244,7 @@ def test_sync_caller_still_reads_inline(
     _install(monkeypatch, fake)
 
     assert rf.is_adapter_read_only() is True
-    monkeypatch.setattr(rf, "_cache", (True, 0.0))
+    monkeypatch.setattr(rf, "_cache", (_stored(True), 0.0))
     fake.value = "false"
 
     assert rf.is_adapter_read_only() is False, "sync caller got a stale value"
@@ -243,7 +269,7 @@ def test_client_is_built_once_and_reused(
     captured = _install(monkeypatch, fake)
 
     rf.is_adapter_read_only()
-    monkeypatch.setattr(rf, "_cache", (True, 0.0))
+    monkeypatch.setattr(rf, "_cache", (_stored(True), 0.0))
     rf.is_adapter_read_only()
 
     assert fake.get_calls == 2

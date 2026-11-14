@@ -29,7 +29,7 @@ import hmac
 import json
 import logging
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -1384,6 +1384,7 @@ class AgentRegistryService:
         site_id: UUID,
         *,
         url: str,
+        allowed_hosts: Iterable[str] | None = None,
         method: str = "GET",
         headers: dict[str, str] | None = None,
         body: str | None = None,
@@ -1399,13 +1400,28 @@ class AgentRegistryService:
         request and returns the response. Pairs with the agent-side ``proxy_http``
         handler. Raises ``AgentNotFoundError`` if no agent is connected for the
         site. See docs.freesdn.org.
+
+        The single chokepoint for every proxied request (``AgentHTTPTransport``
+        and ``reach_device_http`` both end here), so the policy in
+        ``app.services.agent_proxy_policy`` is applied here, before anything is
+        sent: ``url`` must name one of ``allowed_hosts`` (the device the caller
+        means to reach; no allow-list means nothing is allowed), never loopback,
+        link-local or metadata, and FreeSDN's own credentials are stripped from
+        ``headers``. A request-scoped site-limited caller must also hold a grant
+        on ``site_id``. Raises ``AgentProxyRefused`` (a ``ValueError``) when the
+        policy refuses.
         """
+        from app.core.site_access import assert_site_access_for_request
+        from app.services.agent_proxy_policy import check_proxy_target, scrub_request_headers
+
+        check_proxy_target(url, allowed_hosts)
+        assert_site_access_for_request(site_id, detail="Site not found")
         command = AgentCommand(
             type=AgentCommandType.PROXY_HTTP,
             payload={
                 "url": url,
                 "method": method,
-                "headers": headers or {},
+                "headers": scrub_request_headers(headers),
                 "body": body,
                 "username": username,
                 "password": password,
@@ -1670,7 +1686,13 @@ class PersistentAgentService:
         agent_id: UUID,
         api_key: str,
     ) -> "RemoteAgent | None":
-        """Verify agent credentials. Returns agent if valid."""
+        """Verify agent credentials. Returns agent if valid.
+
+        An agent of a deleted or deactivated organization is refused like a
+        wrong key: the organization's users are signed out, and its machines
+        stop too.
+        """
+        from app.core.organization_access import organization_admits
         from app.models.agents import RemoteAgent
 
         key_hash = hashlib.sha256(api_key.encode()).hexdigest()
@@ -1681,7 +1703,10 @@ class PersistentAgentService:
                 RemoteAgent.deleted_at.is_(None),
             )
         )
-        return result.scalar_one_or_none()
+        agent = result.scalar_one_or_none()
+        if agent is None or not await organization_admits(self.db, agent):
+            return None
+        return agent
 
     async def get_agent(self, agent_id: UUID) -> "RemoteAgent | None":
         """Get agent by ID."""
@@ -1793,29 +1818,22 @@ class PersistentAgentService:
         agent_id: UUID,
         logdb_session: "AsyncSession | None" = None,
     ) -> bool:
-        """Soft-delete an agent, purge heartbeats, AND revoke any WireGuard
-        peer config bound to the agent's site.
+        """Soft-delete an agent and purge its heartbeats.
 
-        NOTE: the previous implementation only tombstoned the row
-        and deleted heartbeats — the agent's WireGuard peer remained active
-        on the brain gateway, so a leaked agent key + private key could
-        still authenticate and reach the site network. We now look up any
-        WireGuard-backed ``SiteVPNConfiguration`` for the agent's site and
-        try to revoke it. If the brain-gateway integration isn't reachable
-        from this code path (it lives in ``app.services.adapter_omada_vpn`` /
-        ``app.services.brain_vpn`` and requires a controller connection),
-        we still:
+        Revokes this agent's own access and nothing else: ``deleted_at`` makes
+        ``verify_credentials`` refuse its key on every path (REST, the agent
+        WebSocket, update checks). The caller drops its live socket.
 
-          1. Clear ``wireguard_peer_public_key`` / ``wireguard_endpoint`` /
-             ``wireguard_allowed_ips`` on the DB row so the peer cannot be
-             re-provisioned by an automation,
-          2. Mark the VPN config status as ``revoked``,
-          3. Emit a WARN log instructing operators to manually run
-             ``wg set <iface> peer <key> remove`` on the brain.
-
-        This is fail-open by design: a transient gateway outage must NOT
-        block agent deletion — the audit trail records that the delete
-        happened, and the DB-side revocation prevents key reuse.
+        It deliberately leaves the site's ``SiteVPNConfiguration`` rows alone.
+        This used to tombstone every WireGuard config at the agent's site
+        (peer key, endpoint and allowed IPs cleared, disabled, status
+        "revoked"), but that row is the site's VPN connection, not the agent's.
+        Nothing binds a WireGuard config to an agent (the agent has no WireGuard
+        key, ``/vpn/wireguard/provision-agent`` takes no agent id, and a
+        brain-VPN import stores the brain server's key in the same column), so
+        deleting any one agent switched the whole site's WireGuard link off for
+        every other agent and for FreeSDN. It never touched the gateway either:
+        a peer added there by hand has to be removed there by hand.
         """
         agent = await self.get_agent(agent_id)
         if not agent:
@@ -1831,61 +1849,6 @@ class PersistentAgentService:
         await logdb_session.execute(
             delete(AgentHeartbeat).where(AgentHeartbeat.agent_id == agent_id)
         )
-
-        # NOTE: WireGuard peer revocation. Find any WireGuard VPN
-        # config bound to this agent's site and tombstone the peer fields.
-        # Production deployments should also push ``wg set <iface> peer
-        # <pubkey> remove`` to the brain gateway — that path lives in
-        # ``gateway_vpn``/``brain_vpn`` and is gated on a controller
-        # connection, so we only attempt best-effort here and log a WARN
-        # if the actual gateway push isn't possible from this context.
-        if agent.site_id is not None:
-            try:
-                from app.models.vpn import SiteVPNConfiguration, VPNType
-
-                vpn_result = await self.db.execute(
-                    select(SiteVPNConfiguration).where(
-                        SiteVPNConfiguration.site_id == agent.site_id,
-                        SiteVPNConfiguration.vpn_type == VPNType.WIREGUARD,
-                    )
-                )
-                wg_configs = list(vpn_result.scalars().all())
-                for wg in wg_configs:
-                    revoked_pubkey = wg.wireguard_peer_public_key
-                    # Tombstone the peer: clear key/endpoint/allowed-ips so
-                    # the agent cannot reauthenticate even if its private
-                    # key leaks AND no automation can silently re-publish
-                    # the same peer config.
-                    wg.wireguard_peer_public_key = None
-                    wg.wireguard_endpoint = None
-                    wg.wireguard_allowed_ips = []
-                    wg.status = "revoked"
-                    wg.enabled = False
-                    logger.warning(
-                        "Agent %s soft-deleted: revoked WireGuard peer "
-                        "(pubkey=%s) on site %s vpn_config=%s. "
-                        "Operator MUST manually run `wg set <iface> peer "
-                        "%s remove` on the brain gateway to complete the "
-                        "revocation. The DB-side fields are cleared so the "
-                        "peer cannot be re-provisioned by automation.",
-                        agent_id,
-                        revoked_pubkey[:16] + "..." if revoked_pubkey else "<none>",
-                        agent.site_id,
-                        wg.id,
-                        revoked_pubkey or "<unknown>",
-                    )
-            except Exception:
-                # WG revocation failure must never block agent delete —
-                # the agent_key is already invalidated by deleted_at below,
-                # so the agent cannot reauthenticate via the WS path. Log
-                # loudly so operators can clean up manually.
-                logger.exception(
-                    "Agent %s soft-delete: WireGuard peer revocation failed "
-                    "(non-fatal). Operator must manually remove peer from "
-                    "brain gateway for site %s.",
-                    agent_id,
-                    agent.site_id,
-                )
 
         agent.deleted_at = datetime.now(UTC)
         agent.status = "offline"

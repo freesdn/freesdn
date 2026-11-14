@@ -46,11 +46,13 @@ import {
 } from '@/components/ui/table';
 import { DestructiveConfirmDialog } from '@/components/ui/destructive-confirm-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { hypervisorApi } from '@/lib/api';
 import type { HypervisorVM } from '@/lib/api';
 import { FirewallPanel } from './FirewallPanel';
 import { formatBytes, formatUptime } from './helpers';
 import { statusBadge } from './StatusBadge';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface GuestDetailDrawerProps {
   vm: HypervisorVM;
@@ -71,8 +73,23 @@ export function GuestDetailDrawer({
 }: GuestDetailDrawerProps) {
   const { t } = useTranslation('hypervisor');
   const { toast } = useToast();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<Section>('overview');
+
+  // Shutdown and reboot reach the Proxmox host as soon as they are confirmed.
+  const confirmPowerAction = async (action: 'shutdown' | 'reboot') => {
+    const kind = vm.vm_type === 'lxc' ? t('GuestDetailDrawer.header.ct') : t('GuestDetailDrawer.header.vm');
+    const name = vm.name || t('GuestDetailDrawer.header.vmFallback', { vmid: vm.vmid });
+    const ok = await confirm({
+      title: t(`GuestDetailDrawer.confirms.${action}`, { kind, vmid: vm.vmid }),
+      description: t(`HypervisorPage.vmConfirm.${action}.description`, { name, kind, vmid: vm.vmid, node: vm.node }),
+      items: [name],
+      confirmLabel: t(`GuestDetailDrawer.actions.${action}`),
+      destructive: true,
+    });
+    if (ok) onAction({ node: vm.node, vmType: vm.vm_type, vmid: vm.vmid, action });
+  };
 
   // ── Config ───────────────────────────────────────────────────────────
   const { data: configResp, isLoading: configLoading, isError: configError } = useQuery({
@@ -149,7 +166,7 @@ export function GuestDetailDrawer({
       queryClient.invalidateQueries({ queryKey: ['hypervisor', 'cloudinit'] });
     },
     onError: (err: any) => {
-      toast({ title: t('GuestDetailDrawer.toasts.saveFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('GuestDetailDrawer.toasts.saveFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -160,7 +177,7 @@ export function GuestDetailDrawer({
       queryClient.invalidateQueries({ queryKey: ['hypervisor', 'cloudinit'] });
     },
     onError: (err: any) => {
-      toast({ title: t('GuestDetailDrawer.toasts.regenerateFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('GuestDetailDrawer.toasts.regenerateFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -233,30 +250,14 @@ export function GuestDetailDrawer({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  if (confirm(t('GuestDetailDrawer.confirms.shutdown', { kind: vm.vm_type === 'lxc' ? t('GuestDetailDrawer.header.ct') : t('GuestDetailDrawer.header.vm'), vmid: vm.vmid })))
-                    onAction({
-                      node: vm.node,
-                      vmType: vm.vm_type,
-                      vmid: vm.vmid,
-                      action: 'shutdown',
-                    });
-                }}
+                onClick={() => confirmPowerAction('shutdown')}
               >
                 <Power className="h-3 w-3 mr-1" /> {t('GuestDetailDrawer.actions.shutdown')}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  if (confirm(t('GuestDetailDrawer.confirms.reboot', { kind: vm.vm_type === 'lxc' ? t('GuestDetailDrawer.header.ct') : t('GuestDetailDrawer.header.vm'), vmid: vm.vmid })))
-                    onAction({
-                      node: vm.node,
-                      vmType: vm.vm_type,
-                      vmid: vm.vmid,
-                      action: 'reboot',
-                    });
-                }}
+                onClick={() => confirmPowerAction('reboot')}
               >
                 <RotateCcw className="h-3 w-3 mr-1" /> {t('GuestDetailDrawer.actions.reboot')}
               </Button>

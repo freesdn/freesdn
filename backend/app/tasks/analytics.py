@@ -16,7 +16,7 @@ Background tasks for the analytics module:
 import asyncio
 import contextlib
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -41,6 +41,90 @@ def _get_logdb():
     return _logdb_factory
 
 
+# A device row's resource columns are a snapshot from the last controller sync
+# or discovery. Only devices seen within this window get resource points, so a
+# value the controller stopped reporting is not re-stamped as current forever.
+_FRESH_FOR = timedelta(minutes=15)
+
+# metric name -> Device column. Units: percent, percent, seconds, Celsius.
+_RESOURCE_COLUMNS = (
+    ("device.cpu_usage", "cpu_usage_percent"),
+    ("device.memory_usage", "memory_usage_percent"),
+    ("device.uptime", "uptime_seconds"),
+    ("device.temperature", "temperature_celsius"),
+)
+
+# Every metric name this collector writes. Readers must use one of these or a
+# name explicitly recorded as not yet collected (tests/tasks/test_metric_names_agree.py).
+COLLECTED_METRICS = frozenset(
+    {"device.status", "device.clients", *(name for name, _ in _RESOURCE_COLUMNS)}
+)
+
+# Device types whose client count means something (APs, switches, gateways).
+_CLIENT_SERVING_TYPES = frozenset({"access_point", "switch", "router", "gateway", "firewall"})
+
+
+async def _resource_points(
+    session: Any, online_ids: list[Any], online_rows: list[Any]
+) -> list[dict[str, Any]]:
+    """Build resource metric points for online devices from their synced rows."""
+    if not online_ids:
+        return []
+    from sqlalchemy import func
+
+    from app.models.devices import Device, DeviceClient
+
+    now = datetime.now(UTC)
+    fresh_after = now - _FRESH_FOR
+    org_by_device = {row[0]: (row[1], row[2]) for row in online_rows}
+
+    devices = (
+        await session.execute(
+            select(
+                Device.id,
+                Device.device_type,
+                Device.last_seen,
+                *(getattr(Device, column) for _, column in _RESOURCE_COLUMNS),
+            ).where(Device.id.in_(online_ids), Device.deleted_at.is_(None))
+        )
+    ).all()
+    clients = dict(
+        (
+            await session.execute(
+                select(DeviceClient.device_id, func.count(DeviceClient.id))
+                .where(
+                    DeviceClient.device_id.in_(online_ids),
+                    DeviceClient.is_online.is_(True),
+                    DeviceClient.last_seen >= fresh_after,
+                )
+                .group_by(DeviceClient.device_id)
+            )
+        ).all()
+    )
+
+    points: list[dict[str, Any]] = []
+    for row in devices:
+        device_id, device_type, last_seen = row[0], row[1], row[2]
+        if last_seen is None or last_seen < fresh_after:
+            continue
+        site_id, organization_id = org_by_device[device_id]
+        base = {
+            "labels": {"device_id": str(device_id), "site_id": str(site_id)},
+            "organization_id": organization_id,
+            "site_id": site_id,
+            "device_id": device_id,
+            "timestamp": now,
+        }
+        for (metric_name, _column), value in zip(_RESOURCE_COLUMNS, row[3:], strict=True):
+            if value is not None:
+                points.append({**base, "metric_name": metric_name, "value": float(value)})
+        if str(getattr(device_type, "value", device_type)) in _CLIENT_SERVING_TYPES:
+            points.append(
+                {**base, "metric_name": "device.clients", "value": float(clients.get(device_id, 0))}
+            )
+    return points
+
+
 @celery_app.task(
     bind=True,
     base=FreeSDNTask,
@@ -50,8 +134,20 @@ def _get_logdb():
 )
 def collect_device_metrics(self) -> dict[str, Any]:
     """
-    Collect CPU, memory, uptime metrics for all online devices
-    and insert into the analytics.metric_data hypertable.
+    Record device status and resource metrics in the analytics.metric_data hypertable.
+
+    Every device: ``device.status`` (1 online / 0 offline). Every ONLINE device
+    seen in the last ``_FRESH_FOR``: ``device.cpu_usage``, ``device.memory_usage``,
+    ``device.uptime`` and ``device.temperature`` where the controller reports
+    them, and ``device.clients`` for devices that serve clients.
+
+    The values come from the device rows that controller sync and discovery
+    keep current. Nothing here contacts a device: the earlier per-device
+    collector (``app.tasks.metrics.collect_all_device_metrics``) logged into a
+    device's controller once per device every five minutes and then discarded
+    what it fetched, while the health score, device detail and anomaly rules
+    read ``device.cpu_usage`` / ``device.memory_usage`` / ``device.uptime``
+    that nothing ever wrote. One series per device per metric.
     """
 
     async def _run() -> dict[str, Any]:
@@ -94,6 +190,9 @@ def collect_device_metrics(self) -> dict[str, Any]:
             online_devices = list(result.all())
             result_offline = await session.execute(_devices_with(DeviceStatus.OFFLINE))
             offline_devices = list(result_offline.all())
+            resource_points = await _resource_points(
+                session, [row[0] for row in online_devices], online_devices
+            )
 
         # Write metrics to LogDB (time-series database)
         async with _get_logdb()() as logdb:
@@ -126,6 +225,17 @@ def collect_device_metrics(self) -> dict[str, Any]:
                     )
 
             await logdb.commit()
+
+            # Separate transaction: a failed resource batch must not take the
+            # status points above down with it.
+            if resource_points:
+                try:
+                    collected += await svc.record_metrics_batch(logdb, resource_points)
+                    await logdb.commit()
+                except SQLAlchemyError as e:
+                    await logdb.rollback()
+                    logger.warning("Could not record device resource metrics: %s", e)
+                    errors += len(resource_points)
 
         return {
             "collected": collected,

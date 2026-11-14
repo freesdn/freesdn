@@ -191,6 +191,18 @@ class AnomalyResult:
 # Standard Metrics
 # =============================================================================
 
+# Per-device traffic series. The traffic endpoint and the AI bandwidth tool
+# read these names; NOTHING WRITES THEM YET (no adapter reports a per-interval
+# byte/packet count, only cumulative counters since boot, and turning those into
+# rates needs per-device state the collector does not keep). They are not in
+# STANDARD_METRICS, which lists what an operator can actually query, and
+# tests/tasks/test_metric_names_agree.py keeps every other read name honest.
+DEVICE_RX_BYTES = "device.rx_bytes"
+DEVICE_TX_BYTES = "device.tx_bytes"
+DEVICE_RX_PACKETS = "device.rx_packets"
+DEVICE_TX_PACKETS = "device.tx_packets"
+DEVICE_TRAFFIC_METRICS = (DEVICE_RX_BYTES, DEVICE_TX_BYTES, DEVICE_RX_PACKETS, DEVICE_TX_PACKETS)
+
 STANDARD_METRICS: dict[str, MetricDefinition] = {
     # Device metrics
     "device.status": MetricDefinition(
@@ -218,6 +230,19 @@ STANDARD_METRICS: dict[str, MetricDefinition] = {
         metric_type=MetricType.GAUGE,
         description="Device uptime in seconds",
         unit="seconds",
+        labels=["device_id", "site_id"],
+    ),
+    "device.temperature": MetricDefinition(
+        name="device.temperature",
+        metric_type=MetricType.GAUGE,
+        description="Device temperature as reported by its controller",
+        unit="celsius",
+        labels=["device_id", "site_id"],
+    ),
+    "device.clients": MetricDefinition(
+        name="device.clients",
+        metric_type=MetricType.GAUGE,
+        description="Clients connected to an access point, switch or gateway",
         labels=["device_id", "site_id"],
     ),
     # Network metrics
@@ -1570,7 +1595,7 @@ class PersistentAnalyticsService:
         if site_id:
             stmt = stmt.where(Device.site_id == site_id)
         if device_type:
-            stmt = stmt.where(Device.type == device_type)
+            stmt = stmt.where(Device.device_type == device_type)
         stmt = stmt.limit(limit)
 
         result = await session.execute(stmt)

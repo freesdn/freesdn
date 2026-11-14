@@ -253,10 +253,13 @@ def test_the_tailscale_action_calls_the_real_service() -> None:
 
 def test_reconnect_re_passes_the_netfilter_mode() -> None:
     """
-    ``reconnect`` uses ``tailscale up --reset``, which wipes unspecified
-    prefs. Dropping --netfilter-mode silently reverts NetBird coexistence to
-    the default and breaks the overlay sharing 100.64.0.0/10. The resolver for
-    it already lives in this module.
+    The endpoint resolves the NetBird-coexistence netfilter mode and hands it
+    to ``reconnect``, which applies it with ``tailscale set`` on top of the
+    node's kept preferences: a NetBird connection added after the login still
+    gets --netfilter-mode=off, without which the two overlays fight over
+    100.64.0.0/10. (``reconnect`` no longer runs ``up --reset``, which wiped
+    every unspecified preference; see test_tailscale_reconnect_keeps_prefs.py.)
+    The resolver for it already lives in this module.
     """
     from app.api.v1.endpoints import vpn as vpn_api
 

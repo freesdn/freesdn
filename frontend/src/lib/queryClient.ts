@@ -8,6 +8,7 @@
 // from briefly surfacing for the next user on a shared browser.
 import { MutationCache, QueryClient } from '@tanstack/react-query';
 import { emitMutationError } from './toastBridge';
+import { liveReadRetryDelay, retryWhenDeviceBusy } from './api/liveRead';
 
 // every per-tab stage mutation
 // invalidates only its own list key. The Pending Changes badge + drawer
@@ -77,7 +78,12 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutes
-      retry: 1,
+      // One retry for an ordinary failure, as before. A device-busy 503 (a
+      // live read that found the device busy with nothing remembered yet) is
+      // waited out after its Retry-After instead of shown as an error; see
+      // src/lib/api/liveRead.ts.
+      retry: retryWhenDeviceBusy(1),
+      retryDelay: liveReadRetryDelay,
       refetchOnWindowFocus: false,
     },
   },
