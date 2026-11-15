@@ -3,7 +3,7 @@ module freesdn.org/build/caddy
 go 1.27.1
 
 require (
-	cel.dev/cel-go v0.32.0
+	cel.dev/cel-go v0.33.2
 	github.com/caddyserver/caddy/v2 v2.11.9
 )
 
